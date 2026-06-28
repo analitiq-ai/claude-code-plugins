@@ -176,8 +176,10 @@ fan-out and returned as `EndpointFacts` (below).
 
 ## EndpointFacts (per-resource field schema — API fan-out only)
 
-One `EndpointFacts` object per data resource, produced by the researcher's
-**per-endpoint** pass in the fan-out and consumed by `endpoint-creator`. This
+One `EndpointFacts` object per data resource: the researcher's
+**per-endpoint** pass in the fan-out grounds the researched fields, the
+orchestrator injects the connector-level `pagination` (echoed from
+`ProviderFacts.pagination`), and `endpoint-creator` consumes it. This
 is the category that `ProviderFacts` deliberately does **not** carry: the
 field-level truths about one resource's response — including the datetime
 zone-awareness that was previously guessed (issue #12). Every field fact is

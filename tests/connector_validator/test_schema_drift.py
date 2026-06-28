@@ -191,16 +191,36 @@ def _dsn_doc(encoding: str) -> dict:
     }
 
 
+def _dsn_doc_multi(enc_a: str, enc_b: str) -> dict:
+    """Two-binding doc, to prove the offline warning fires once, not per binding."""
+    return {
+        "transports": {
+            "main": {
+                "dsn": {
+                    "kind": "url_template",
+                    "template": "postgresql://{user}:{pw}@host/db",
+                    "bindings": {
+                        "user": {"value": {"ref": "secrets.user"}, "encoding": enc_a},
+                        "pw": {"value": {"ref": "secrets.pw"}, "encoding": enc_b},
+                    },
+                }
+            }
+        }
+    }
+
+
 def test_fallback_set_equals_expected() -> None:
     # The offline fallback must not drift from the contract on its own.
     assert v._FALLBACK_ENCODINGS == EXPECTED_DSN_ENCODINGS
 
 
 def test_enum_at_returns_none_on_broken_paths() -> None:
-    schema = {"a": {"b": {"enum": ["x", "y"]}}, "c": {"enum": "notalist"}}
+    schema = {"a": {"b": {"enum": ["x", "y"]}}, "c": {"enum": "notalist"}, "s": "str"}
     assert v._enum_at(schema, "a", "b") == {"x", "y"}
-    assert v._enum_at(schema, "a", "missing") is None  # key absent
-    assert v._enum_at(schema, "a", "b", "deeper") is None  # node is not a dict
+    assert v._enum_at(schema, "a", "missing") is None  # key absent (shallow)
+    assert v._enum_at(schema, "a", "b", "deeper") is None  # key absent (deeper level)
+    assert v._enum_at(schema, "s", "x") is None  # mid-traversal node is not a dict
+    assert v._enum_at(schema, "s") is None  # final node is not a dict
     assert v._enum_at(schema, "c") is None  # enum present but not a list
     assert v._enum_at({}, "x") is None
 
@@ -263,3 +283,39 @@ def test_dsn_binding_warns_but_accepts_valid_encoding_offline(
         and "could not be derived from the live" in f["message"]
     ]
     assert len(warnings) == 1, "exactly one offline-fallback warning expected"
+
+
+def test_offline_warning_emitted_once_across_multiple_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The `offline_encoding_warned` guard must dedupe: one warning for the doc,
+    # not one per encoded binding.
+    def boom(*_a, **_k):
+        raise urllib.error.URLError("offline")
+
+    monkeypatch.setattr(v, "fetch_schema", boom)
+    findings = v.check_dsn_bindings(_dsn_doc_multi("url_userinfo", "url_query_value"))
+    warnings = [
+        f for f in findings if "could not be derived from the live" in f["message"]
+    ]
+    assert len(warnings) == 1, "warn once per document, not per binding"
+
+
+def test_no_offline_warning_when_derived_from_live(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # When the enum IS derived from the (mocked) live schema, no fallback warning.
+    live = {
+        "$defs": {
+            "DsnBinding": {
+                "properties": {"encoding": {"enum": sorted(EXPECTED_DSN_ENCODINGS)}}
+            }
+        }
+    }
+    monkeypatch.setattr(v, "fetch_schema", lambda *_a, **_k: live)
+    enum, derived_from_live = v.known_encodings()
+    assert derived_from_live is True
+    findings = v.check_dsn_bindings(_dsn_doc("url_userinfo"))
+    assert not [
+        f for f in findings if "could not be derived from the live" in f["message"]
+    ]
