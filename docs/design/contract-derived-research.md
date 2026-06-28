@@ -74,6 +74,8 @@ also ends the `io-contracts.md` drift problem.
 
 Chosen approach (of the three considered, see §7):
 
+### 3.1 The branch (unit of work)
+
 ```mermaid
 sequenceDiagram
     actor User
@@ -109,6 +111,60 @@ Optional determinism aid: the orchestrator may pre-derive an explicit
 checklist by walking the schema and pass it to the researcher. **The
 schema-walk lives in the orchestrator, never the creator** — a creator
 planning research would blur its one job (write from facts).
+
+### 3.2 Fan-out — domain first, then endpoints in parallel
+
+One branch is the unit of work. For an API with many endpoints the
+orchestrator runs branches **concurrently**, with a **barrier** between two
+stages:
+
+1. **Domain branch first — and it must validate clean.** Research the
+   connector-level facts (auth, transports, pagination, rate limits, base
+   URLs) and the *endpoint list* → `api-creator` / `db-creator` authors the
+   connector body + type maps → `validator`. Endpoints reference the
+   connector's transports/auth, so the domain must be authored and clean
+   **before** any endpoint branch starts.
+2. **Enumerate endpoints into a worklist.** From the domain research's
+   resource list, record every endpoint as a TODO item with a state
+   (`pending → running → done · failed`). This is how the orchestrator tracks
+   the fan-out without dropping endpoints.
+3. **Endpoint branches in parallel, bounded.** Each endpoint is its own
+   `researcher → endpoint-creator → validator` branch — research that
+   endpoint's response schema (field types incl. datetime zone-awareness),
+   author the endpoint document, validate it. Run at most **N branches
+   concurrently** (default **10**); as one finishes, pull the next `pending`
+   item.
+4. **Join, then finish.** When the worklist is drained, proceed to drift +
+   write.
+
+```mermaid
+flowchart TD
+    R0[Domain research<br/>auth · transports · pagination · endpoint list] --> DC[api / db creator<br/>connector body + type maps]
+    DC --> DV[validator]
+    DV -->|fails| HALT[Halt — fix domain before fan-out]
+    DV -->|clean| TODO[(Endpoint worklist<br/>pending · running · done · failed)]
+    TODO --> POOL{{Pool: ≤ N concurrent}}
+    POOL --> B1[endpoint branch<br/>research → create → validate]
+    POOL --> B2[endpoint branch<br/>…]
+    POOL --> BN[endpoint branch<br/>…]
+    B1 --> J((join))
+    B2 --> J
+    BN --> J
+    J --> FIN[drift → write]
+```
+
+- **Database connectors don't fan out** — they author no endpoint files
+  (resources are connection-scoped, discovered at runtime), so the domain
+  branch is the whole job.
+- **No write conflicts:** each endpoint branch authors a *different* file;
+  the domain `connector.json` is read-only to them (transport refs).
+- **Failure is isolated:** an endpoint branch that can't pass validation is
+  marked `failed` in the worklist and surfaced — it doesn't block siblings,
+  and the orchestrator reports partial results rather than silently dropping
+  the endpoint.
+- **This amortizes the §8 cost:** per-resource field-schema research is the
+  expensive part; fanning it across endpoints spreads it instead of
+  serializing one giant research pass.
 
 ---
 
@@ -175,6 +231,7 @@ is **only** the researcher's — the *capability* that defines the boundary.
 | Endpoint documents | `endpoint-creator` |
 | Pass/fail against the contract | `validator` |
 | Phase sequencing + dispatch | orchestrator |
+| Endpoint fan-out: worklist + concurrency cap | orchestrator |
 
 ### 5.3 Boundary
 
@@ -270,6 +327,9 @@ opt-in extra.
    here).
 4. **Creators** — keep the existing `ProviderFacts` hard gate; "facts" now
    includes per-resource field schemas.
+5. **Orchestrator** — author + validate the domain branch first, then fan out
+   bounded parallel endpoint branches (each `researcher → endpoint-creator →
+   validator`) off a worklist, default cap 10.
 
 > Not implemented by this document — this is the design of record for the
 > change.
