@@ -78,8 +78,6 @@ also ends the `io-contracts.md` drift problem.
 
 ## 3. Mechanism — researcher reads the contract schema
 
-Chosen approach (of the three considered, see §7):
-
 ### 3.1 The branch (unit of work)
 
 ```mermaid
@@ -172,8 +170,8 @@ flowchart TD
   endpoint gets a dedicated pass focused on its own docs, so its field schema
   (datetime zone-awareness, enums, nullability) is grounded on evidence
   rather than a thin slice of one sprawling pass. The bounded parallelism is
-  a side benefit; it never justifies coarsening research. (This is the
-  accuracy-over-cost priority applied: see §8.)
+  a side benefit; it never justifies coarsening research (the
+  accuracy-over-cost priority applied — see the note up top).
 - **Type vocabulary stays connector-level.** The domain branch researches the
   connector-wide native-type vocabulary so `type-map-read` is authored
   complete *before* fan-out; each endpoint's fields must resolve through that
@@ -295,57 +293,10 @@ flowchart TD
     G -->|no| STOP[Creator refuses — no authoring]
     G -->|yes| C[creator authors from fresh facts]
     C --> V[validate against contract]
-    V --> D[drift classifier → version bump]
+    V --> D[drift-classifier → version bump]
     D --> W[regenerate tree · review via git diff]
 ```
 
 Because the research scope is now *derived from the contract*, a field-level
 correction (e.g. datetime zone-awareness) is part of what research must
 cover — it can no longer fall through to a guess.
-
----
-
-## 7. Alternatives considered
-
-| Option | What | Verdict |
-|---|---|---|
-| **3 — researcher reads the schema** | Researcher derives its own mission from the live contract | **Chosen.** Cleanest fit for the research/author boundary; no per-field decisions |
-| 2 — orchestrator builds a checklist | Orchestrator walks the schema → checklist → researcher fills it | Fine as a determinism aid **inside the orchestrator** only |
-| 1 — creator requests facts piece by piece | Authoring agent drives research interactively | **Rejected** — makes the author drive research, reintroducing the coupling we want gone |
-| 0 — per-field `x-source` tags | Tag each schema field provider/author | **Rejected** — manual, unscalable; everything researchable should be researched |
-
----
-
-## 8. Cost — accepted for accuracy
-
-Deriving the research scope from the **endpoint** contract means the
-researcher must now produce **per-resource field schemas** — including the
-evidence (a sample wire value) that decides datetime zone-awareness, plus
-enum domains, nullability, and formats. That is more research work than
-today's skeleton-only pass.
-
-Per the priority note up top, **accuracy wins**: this cost is *accepted, not
-optimized away*. It is the price of field-level facts being **researched
-instead of guessed**, and it falls out of the contract automatically. The
-plugin spends the extra research to be surgical and precise — that is the
-intended trade, not a regrettable one.
-
----
-
-## 9. Concrete changes (when implemented)
-
-1. **`io-contracts.md`** — `ProviderFacts` stops hand-curating field shapes;
-   it becomes a contract-coverage object (mirrors / `$ref`s the live
-   `connector`, `api-endpoint`, `type-map-read` schemas).
-2. **`researcher`** — granted read access to the contract
-   schemas; mission reframed to "cover the contract for this system."
-3. **Orchestrator** — optionally derive + pass a checklist (schema-walk stays
-   here).
-4. **Creators** — keep the existing `ProviderFacts` hard gate; "facts" now
-   includes per-resource field schemas.
-5. **Orchestrator** — author + validate the domain branch first, then fan out
-   bounded parallel endpoint branches (each `researcher → endpoint-creator →
-   validator`) off a worklist, default cap 10.
-
-> Not implemented by this document — this is the design of record for the
-> change.
