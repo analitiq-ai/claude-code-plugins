@@ -20,6 +20,12 @@ The agent boundary is unchanged: the researcher researches online, the
 creator writes from facts. Both **read** the contract schemas as shared
 *vocabulary*; neither gains the other's *capability*.
 
+> **Priority: accuracy over cost.** This plugin is surgical and precise.
+> Where precision trades off against cost or speed, choose precision —
+> research deeper, validate more, and never coarsen facts to save work. Every
+> design choice below is settled on accuracy first; cost is accepted, not
+> optimized.
+
 ---
 
 ## 1. Why (the gap this closes)
@@ -162,9 +168,18 @@ flowchart TD
   marked `failed` in the worklist and surfaced — it doesn't block siblings,
   and the orchestrator reports partial results rather than silently dropping
   the endpoint.
-- **This amortizes the §8 cost:** per-resource field-schema research is the
-  expensive part; fanning it across endpoints spreads it instead of
-  serializing one giant research pass.
+- **Per-endpoint research is the *precise* choice, not a cost trick.** Each
+  endpoint gets a dedicated pass focused on its own docs, so its field schema
+  (datetime zone-awareness, enums, nullability) is grounded on evidence
+  rather than a thin slice of one sprawling pass. The bounded parallelism is
+  a side benefit; it never justifies coarsening research. (This is the
+  accuracy-over-cost priority applied: see §8.)
+- **Type vocabulary stays connector-level.** The domain branch researches the
+  connector-wide native-type vocabulary so `type-map-read` is authored
+  complete *before* fan-out; each endpoint's fields must resolve through that
+  map. A genuinely new native surfaced by an endpoint is a *domain-level*
+  type-map addition (re-validate the domain), never an endpoint-local one —
+  this keeps canonical types consistent across endpoints.
 
 ---
 
@@ -301,7 +316,7 @@ cover — it can no longer fall through to a guess.
 
 ---
 
-## 8. Cost (real, and intentional)
+## 8. Cost — accepted for accuracy
 
 Deriving the research scope from the **endpoint** contract means the
 researcher must now produce **per-resource field schemas** — including the
@@ -309,10 +324,11 @@ evidence (a sample wire value) that decides datetime zone-awareness, plus
 enum domains, nullability, and formats. That is more research work than
 today's skeleton-only pass.
 
-This cost is **unavoidable under contract-derivation, and that is the
-point**: it is the price of field-level facts being *researched instead of
-guessed*. It falls out of the contract automatically rather than being an
-opt-in extra.
+Per the priority note up top, **accuracy wins**: this cost is *accepted, not
+optimized away*. It is the price of field-level facts being **researched
+instead of guessed**, and it falls out of the contract automatically. The
+plugin spends the extra research to be surgical and precise — that is the
+intended trade, not a regrettable one.
 
 ---
 
