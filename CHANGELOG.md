@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.1](https://github.com/analitiq-ai/claude-plugin-connector/compare/v0.1.0...v0.1.1) (2026-06-29)
+
+
+### Features
+
+* contract-derived research + endpoint fan-out (ProviderFacts from published schemas) ([4dbb381](https://github.com/analitiq-ai/claude-plugin-connector/commit/4dbb381e4470a5c9a516dc8d27e20b2ddbe0bbf6))
+* implement contract-derived research + endpoint fan-out, fix drift surfaces ([04a9f6a](https://github.com/analitiq-ai/claude-plugin-connector/commit/04a9f6a7f28f9fc5214c29d40dfd2bf3ddf1d340))
+* type-map rule — schemaless/container natives must map to a container canonical ([fe1018b](https://github.com/analitiq-ai/claude-plugin-connector/commit/fe1018be4666640e35f1b9d863ac915d21ba91d7))
+
+
+### Bug Fixes
+
+* address PR [#14](https://github.com/analitiq-ai/claude-plugin-connector/issues/14) review — validator error-handling, test coverage, prompt wiring ([71f0350](https://github.com/analitiq-ai/claude-plugin-connector/commit/71f0350e5e7d8adc06dc009a97bc50b62851f6c1))
+* drop unconditional tz-aware API date-time row in spec-type-maps ([#16](https://github.com/analitiq-ai/claude-plugin-connector/issues/16)) ([00e4bed](https://github.com/analitiq-ai/claude-plugin-connector/commit/00e4bedee8b1c04f7959e6678e6f1761cbcdb420)), closes [#12](https://github.com/analitiq-ai/claude-plugin-connector/issues/12)
+
 ## [unreleased]
 
 ### Fixed
