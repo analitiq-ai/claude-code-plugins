@@ -118,9 +118,12 @@ def test_layer1_malformed_write_map_rejected_against_live_schema(tmp_path):
 
 
 def test_db_example_maps_present():
-    """Guard against the network parametrize collapsing to zero cases."""
-    assert len(EXAMPLE_READ_MAPS) >= 3, f"expected ≥ 3 example read maps, found {EXAMPLE_READ_MAPS}"
-    assert len(EXAMPLE_WRITE_MAPS) >= 3, f"expected ≥ 3 example write maps, found {EXAMPLE_WRITE_MAPS}"
+    """Guard against the network parametrize collapsing to zero cases. The
+    examples are a small set of diverse archetypes (sqlalchemy + adbc), not one
+    per provider — per-provider maps are derived from research at authoring
+    time (see spec-type-maps.md)."""
+    assert len(EXAMPLE_READ_MAPS) >= 2, f"expected ≥ 2 example read maps, found {EXAMPLE_READ_MAPS}"
+    assert len(EXAMPLE_WRITE_MAPS) >= 2, f"expected ≥ 2 example write maps, found {EXAMPLE_WRITE_MAPS}"
 
 
 def test_schema_fetch_failure_is_diagnosed():
@@ -149,8 +152,10 @@ def test_reference_example_passes_semantic_validation(example):
 
 
 def test_examples_glob_is_non_empty():
-    """Guard against the parametrize collapsing to zero cases silently."""
-    assert len(EXAMPLES_GLOB) >= 10, f"expected ≥ 10 reference examples, found {len(EXAMPLES_GLOB)}"
+    """Guard against the parametrize collapsing to zero cases silently. The
+    reference set is a small group of diverse archetypes (api_key /
+    oauth2_authorization_code / jwt; sqlalchemy / adbc), not one per provider."""
+    assert len(EXAMPLES_GLOB) >= 5, f"expected ≥ 5 reference examples, found {len(EXAMPLES_GLOB)}"
 
 
 @pytest.mark.network
@@ -176,8 +181,8 @@ def test_endpoint_example_passes_against_live_schema(endpoint):
 
 def test_endpoint_examples_glob_is_non_empty():
     """Guard against the endpoint parametrize collapsing to zero cases."""
-    assert len(ENDPOINT_EXAMPLES_GLOB) >= 5, (
-        f"expected ≥ 5 endpoint examples, found {len(ENDPOINT_EXAMPLES_GLOB)}"
+    assert len(ENDPOINT_EXAMPLES_GLOB) >= 3, (
+        f"expected ≥ 3 endpoint examples, found {len(ENDPOINT_EXAMPLES_GLOB)}"
     )
 
 

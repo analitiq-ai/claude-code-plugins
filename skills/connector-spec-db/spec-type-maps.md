@@ -126,6 +126,24 @@ appear as a type-map `canonical`. The endpoint walker accepts a field
 typed `Object` or `List` as a valid narrowing of a `Json` read-map
 rule; the validator does not treat that as a mismatch.
 
+## Non-obvious natives (derive, don't guess)
+
+When researching a new system's natives, these are the calls that aren't
+mechanical — the same judgment transfers across providers:
+
+- **Semi-structured / container** (`JSON`, `JSONB`, `VARIANT`, `OBJECT`,
+  `ARRAY`, `MAP`, `STRUCT`, `…[]`) → a container canonical (`Json`), never a
+  scalar (enforced — see "Schemaless / JSON-shaped natives").
+- **Opaque scalar types with no Arrow equivalent** (`INTERVAL`, `MONEY`,
+  network types `INET`/`CIDR`/`MACADDR`, `UUID`, `ENUM(...)`, `XML`) →
+  `Utf8`. They are atomic strings on the wire; don't invent a numeric/Decimal
+  canonical.
+- **Zoned time-of-day** (`TIME WITH TIME ZONE` / `TIMETZ`) → `Time64`
+  (the zone is dropped — a bare time-of-day carries no instant). Contrast
+  `TIMESTAMP WITH TIME ZONE` → `Timestamp(<unit>, UTC)`.
+- **Bare vs zoned timestamp**: choose the tz-aware canonical only when the
+  native (or, for APIs, the sample value) actually carries a zone.
+
 ## API coverage (read map)
 
 For API connectors, the validator walks every endpoint file under

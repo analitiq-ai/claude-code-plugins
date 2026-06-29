@@ -75,7 +75,7 @@ These cannot drift from the schema because the schema never defined them.
 
 | # | Surface | Disposition |
 |---|---|---|
-| 1 | Example documents | **Deferred (cross-repo).** Moving canonical examples into `analitiq-infra` + referencing them can't be done from this repo; the examples stay until the schema repo hosts them. The drift **policy** (CLAUDE.md) now forbids adding new restated shape. |
+| 1 | Example documents | **Addressed by reduction (not relocation).** Per best-practice research (3–5 *diverse* few-shot examples; SSOT; golden-file CI validation), the example set was cut from 10 multi-purpose dirs to **5 diverse archetypes** (api_key / oauth2_authorization_code / jwt; sqlalchemy / adbc), all CI-validated against the live schema. Per-provider **type-map data is derived from research** at authoring time (one postgres kitchen-sink + the "non-obvious natives" craft table; the adbc map is a trimmed stub). Distinctive craft of dropped dirs migrated into the specs (oauth2_cc block, dynamic-host, ssl_mode/VARIANT). No cross-repo move needed. |
 | 2 | Auth-type enum | **Guarded by CI.** `test_schema_drift.py::test_auth_types_match_schema` pins the set to the live `*Auth` `$defs`; `enum-mappers.md` reframed as schema-derived logic. |
 | 3 | Driver enum | **Guarded by CI.** `test_adbc_drivers_match_schema` pins it to `AdbcTransport.driver`. |
 | 4 | Value-expression scopes | **Reclassified as craft** (see table + Craft list). No change — not a schema enum. |

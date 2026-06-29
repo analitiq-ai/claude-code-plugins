@@ -50,8 +50,11 @@ was raised.
 
 The `connector-spec-api` skill is preloaded. Beyond that, read:
 
-- The matching auth-flow example under
-  `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/examples/` matching `auth_type`.
+- `spec-auth-flows.md` — the authoritative reference for **every** auth type.
+  Complete worked example connectors ship for the diverse archetypes only
+  (`api_key`, `oauth2_authorization_code`, `jwt`) under
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/examples/`; when your
+  `auth_type` has no example dir, author from the spec + the closest archetype.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/connection-contract.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`

@@ -52,8 +52,13 @@ was raised.
 
 The `connector-spec-db` skill is preloaded. Beyond that, read:
 
-- The matching driver example under
-  `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/examples/`.
+- The closest transport archetype under
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/examples/` — `postgresql`
+  (sqlalchemy + `tls` block, with the full kitchen-sink type maps) or
+  `postgresql-adbc` (adbc + `db_kwargs` TLS). The spec docs
+  (`spec-driver-selection.md`, `spec-tls.md`, `spec-dsn-bindings.md`,
+  `spec-type-maps.md`) are authoritative; the per-provider type map is
+  **derived from `provider_facts.native_types`**, not copied from an example.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/spec-driver-selection.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/spec-connector-package.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
