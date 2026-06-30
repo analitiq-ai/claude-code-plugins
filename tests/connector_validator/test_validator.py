@@ -1,4 +1,4 @@
-"""Tests for scripts/validate_connector.py.
+"""Tests for validator/src/analitiq_connector_validator.py.
 
 By default these tests run with `--semantic-only` so they don't depend on
 network access to the live schema host. There is one explicit Layer-1
@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "validate_connector.py"
+SCRIPT = REPO_ROOT / "validator" / "src" / "analitiq_connector_validator.py"
 FIXTURES = Path(__file__).parent / "fixtures"
 VALID_API_CONNECTOR = FIXTURES / "valid_api_connector" / "connector.json"
 EXAMPLES_GLOB = list(REPO_ROOT.glob("skills/connector-spec-*/examples/*/*.example.json"))
@@ -814,6 +814,80 @@ def test_api_endpoint_coverage_flags_uncovered_natives():
     assert "'date-time'" in messages, f"expected uncovered 'date-time' to be flagged; got {errs}"
 
 
+def test_semantic_only_runs_without_schema_url():
+    """Registry-CI shape: `--document … --semantic-only` with no `--schema-url`.
+
+    Layer 2 needs no schema fetch, so `--schema-url` is optional under
+    `--semantic-only`. This is the exact invocation the connector registry's
+    merge gate runs; it must surface `type-map-coverage` errors and exit
+    non-zero so CI can gate on the exit code — with no network and no
+    `${CLAUDE_PLUGIN_ROOT}`.
+    """
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--document",
+            str(FIXTURES / "api_endpoints_uncovered" / "connector.json"),
+            "--semantic-only",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 1, f"expected non-zero exit on coverage failure; stderr={proc.stderr}"
+    result = json.loads(proc.stdout)
+    assert result["passed"] is False
+    errs = errors_of(result, "type-map-coverage")
+    assert errs, f"expected a type-map-coverage error; got {result['findings']}"
+
+
+def test_schema_url_required_when_layer1_runs():
+    """Without `--semantic-only`, Layer 1 runs and `--schema-url` is mandatory.
+
+    Omitting it is an argparse usage error (exit 2), not a silent skip — the
+    validator must never green-light a document by quietly dropping Layer 1.
+    """
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--document",
+            str(VALID_API_CONNECTOR),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 2, f"expected argparse usage error; got rc={proc.returncode}"
+    assert "--schema-url is required" in proc.stderr
+
+
+def test_semantic_only_passes_clean_connector_without_schema_url():
+    """The merge gate's PASS path: a clean connector under `--semantic-only`
+    with no `--schema-url` exits 0 / `passed: True`.
+
+    The two checks above only assert non-zero exits, so a regression where
+    omitting `--schema-url` crashed or wrongly re-required the URL on a
+    *passing* document would slip past them. This pins the exact green
+    invocation the registry gate relies on.
+    """
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--document",
+            str(VALID_API_CONNECTOR),
+            "--semantic-only",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, f"expected clean pass; stderr={proc.stderr}"
+    assert json.loads(proc.stdout)["passed"] is True
+
+
 def test_db_connector_missing_sibling_type_map_caught(tmp_path):
     """The missing-sibling check must fire for kind=database too, not just api."""
     base = json.loads((FIXTURES / "valid_db_connector" / "connector.json").read_text())
@@ -1422,7 +1496,7 @@ def test_marker_message_keys_cover_every_emitted_kind():
     keep the mapping complete."""
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("validate_connector", SCRIPT)
+    spec = importlib.util.spec_from_file_location("analitiq_connector_validator", SCRIPT)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 

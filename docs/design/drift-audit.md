@@ -49,7 +49,7 @@ These cannot drift from the schema because the schema never defined them.
 
 ## Special cases — verify, don't blindly remove
 
-- **`scripts/validate_connector.py`** — already fetches + disk-caches the
+- **`validator/src/analitiq_connector_validator.py`** — already fetches + disk-caches the
   schemas for Layer 1 (zero drift). Its Layer-2 restatements of enums
   (encoding, scopes, auth shape) should read from the fetched schema rather
   than hardcode.

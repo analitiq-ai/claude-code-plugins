@@ -70,8 +70,8 @@ agent owns the authoring vocabulary for its kind via a dedicated spec skill
 
 ## Validation
 
-The plugin includes a Python validator script
-(`scripts/validate_connector.py`) that runs:
+The plugin includes a Python validator module
+(`validator/src/analitiq_connector_validator.py`) that runs:
 
 1. **JSON Schema validation** (Draft 2020-12) against the published schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
@@ -92,12 +92,19 @@ The plugin includes a Python validator script
 Run directly:
 
 ```bash
-python scripts/validate_connector.py \
+python validator/src/analitiq_connector_validator.py \
   --schema-url https://schemas.analitiq.ai/connector/latest.json \
   --document path/to/connector.json
 ```
 
 Output is a single `Diagnostics` JSON object. Exit 0 iff `passed: true`.
+
+The same module is packaged under [`validator/`](validator/) as the
+installable `analitiq-connector-validator` (console entry point
+`analitiq-validate-connector`) so the connector registry's CI can run Layer 2
+(`--semantic-only`, no network) as a required merge gate outside the plugin
+runtime. It is one canonical source — the plugin runs the module by path; CI
+`pip install`s the same module.
 
 Tests live under `tests/connector_validator/`. Run with `pytest`.
 

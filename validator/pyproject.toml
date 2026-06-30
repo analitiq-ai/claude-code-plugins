@@ -1,0 +1,34 @@
+[build-system]
+# >=77 for the PEP 639 SPDX `license` string below; pip provides it via build isolation.
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "analitiq-connector-validator"
+version = "0.1.0"
+description = "Layer 1 (JSON Schema) + Layer 2 (semantic) validator for Analitiq connector, endpoint, and type-map documents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+authors = [{ name = "Analitiq" }]
+keywords = ["analitiq", "connector", "json-schema", "validation", "type-map"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Quality Assurance",
+]
+# Only external dependency; everything else the validator needs is stdlib.
+dependencies = ["jsonschema>=4.18"]
+
+[project.scripts]
+analitiq-validate-connector = "analitiq_connector_validator:main"
+
+[project.urls]
+Homepage = "https://github.com/analitiq-ai/claude-plugin-connector"
+Issues = "https://github.com/analitiq-ai/claude-plugin-connector/issues"
+
+# Single-module package living under src/ (src layout). The module is the
+# same file the plugin runtime executes by path, so authoring, the plugin,
+# and registry CI all run one canonical source — no second copy to drift.
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["analitiq_connector_validator"]

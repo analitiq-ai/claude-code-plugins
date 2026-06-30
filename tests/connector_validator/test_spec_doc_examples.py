@@ -42,8 +42,8 @@ import pytest
 from jsonschema import Draft202012Validator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "scripts"))
-from validate_connector import fetch_schema  # noqa: E402  (script dir added above)
+sys.path.insert(0, str(REPO_ROOT / "validator" / "src"))
+from analitiq_connector_validator import fetch_schema  # noqa: E402  (module dir added above)
 
 API_ENDPOINT_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 SPEC_DIR = REPO_ROOT / "skills" / "connector-spec-api"

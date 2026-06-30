@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-import validate_connector as v  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "validator" / "src"))
+import analitiq_connector_validator as v  # noqa: E402
 
 CONNECTOR_URL = v.CONNECTOR_SCHEMA_URL
 API_ENDPOINT_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -189,7 +189,7 @@ def test_bare_marker_arrow_types_match_schema(canonical_types_schema: dict) -> N
         schema_set,
         EXPECTED_BARE_MARKER_ARROW_TYPES,
         "update _BARE_MARKER_ARROW_TYPES + _check_marker_siblings in "
-        "validate_connector.py, CLAUDE.md, and the connector-schema-validator "
+        "analitiq_connector_validator.py, CLAUDE.md, and the connector-schema-validator "
         "endpoint-annotations row.",
     )
     # The set the validator actually enforces must equal the contract's.
