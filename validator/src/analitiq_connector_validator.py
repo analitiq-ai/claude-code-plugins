@@ -3280,7 +3280,7 @@ def run_semantic_validators(doc: Any, doc_path: Path | None = None) -> list[dict
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate an Analitiq connector or endpoint document.")
-    parser.add_argument("--schema-url", required=True, help="Published schema URL to validate against.")
+    parser.add_argument("--schema-url", help="Published schema URL to validate against. Required unless --semantic-only (Layer 1 needs it to fetch; Layer 2 does not).")
     parser.add_argument("--document", required=True, help="Path to JSON document to validate.")
     parser.add_argument("--semantic-only", action="store_true", help="Skip Layer 1 JSON Schema validation.")
     parser.add_argument("--json-only", action="store_true", help="Skip Layer 2 semantic validators.")
@@ -3289,6 +3289,9 @@ def main() -> int:
 
     if args.semantic_only and args.json_only:
         parser.error("--semantic-only and --json-only are mutually exclusive (would skip all validation).")
+
+    if not args.semantic_only and not args.schema_url:
+        parser.error("--schema-url is required unless --semantic-only is given (Layer 1 fetches and validates against it).")
 
     document_path = Path(args.document)
     try:

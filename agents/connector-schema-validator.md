@@ -42,7 +42,7 @@ their own `$schema` field and the validator fetches from the same host.
 Invoke the validator script:
 
 ```
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/validate_connector.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/validator/src/analitiq_connector_validator.py \
   --schema-url <schema_url> \
   --document <document_path>
 ```
