@@ -749,6 +749,233 @@ def test_api_endpoint_arrow_mismatch_caught():
         f"narrowing Json → Object should not be flagged; got {errs}"
 
 
+# ---------------------------------------------------------------------------
+# Bare-marker arrow_type sibling-key rules (Object/List/Json)
+# ---------------------------------------------------------------------------
+#
+# The published `JsonSchemaPropertyNode` accepts `Object` / `List` / `Json`
+# as arrow_type values but is `additionalProperties: true`, so the JSON
+# Schema layer does NOT enforce the sibling-key contract. `endpoint-annotations`
+# is the only layer that catches an `Object` with no `properties`, a `List`
+# with no `items`, or a `Json` carrying an inner declaration.
+
+
+def _write_marker_endpoint(tmp_path: Path, schema: dict) -> Path:
+    """Write a minimal api-endpoint document whose read.response.schema is `schema`.
+
+    Validated directly (schema_url=api-endpoint) under --semantic-only so the
+    endpoint-annotations walker runs without a network fetch.
+    """
+    endpoint = {
+        "$schema": API_ENDPOINT_SCHEMA_URL,
+        "endpoint_id": "items",
+        "operations": {
+            "read": {
+                "request": {"method": "GET", "path": "/items"},
+                "response": {"records": {"ref": "response.body"}, "schema": schema},
+            }
+        },
+    }
+    path = tmp_path / "items.json"
+    path.write_text(json.dumps(endpoint))
+    return path
+
+
+def test_marker_object_requires_properties(tmp_path):
+    """`arrow_type: "Object"` with no `properties` is a contract violation."""
+    ep = _write_marker_endpoint(tmp_path, {
+        "type": "object",
+        "native_type": "json",
+        "arrow_type": "Object",
+    })
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert any('"Object"' in e["message"] and "properties" in e["message"] for e in errs), \
+        f"expected Object-without-properties error; got {errs}"
+
+
+def test_marker_object_empty_properties_rejected(tmp_path):
+    """An empty `properties` map does not satisfy the `Object` marker."""
+    ep = _write_marker_endpoint(tmp_path, {
+        "type": "object",
+        "native_type": "json",
+        "arrow_type": "Object",
+        "properties": {},
+    })
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert any('"Object"' in e["message"] and "properties" in e["message"] for e in errs), \
+        f"expected empty-properties Object error; got {errs}"
+
+
+def test_marker_object_forbids_items(tmp_path):
+    """`Object` must not carry an `items` sibling (that belongs to `List`)."""
+    ep = _write_marker_endpoint(tmp_path, {
+        "type": "object",
+        "native_type": "json",
+        "arrow_type": "Object",
+        "properties": {"id": {"native_type": "int", "arrow_type": "Int64"}},
+        "items": {"native_type": "text", "arrow_type": "Utf8"},
+    })
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert any('"Object"' in e["message"] and "items" in e["message"] for e in errs), \
+        f"expected Object-with-items error; got {errs}"
+
+
+def test_marker_list_requires_items(tmp_path):
+    """`arrow_type: "List"` with no `items` is a contract violation."""
+    ep = _write_marker_endpoint(tmp_path, {
+        "type": "array",
+        "native_type": "array",
+        "arrow_type": "List",
+    })
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert any('"List"' in e["message"] and "items" in e["message"] for e in errs), \
+        f"expected List-without-items error; got {errs}"
+
+
+def test_marker_list_forbids_properties(tmp_path):
+    """`List` must not carry a `properties` sibling (that belongs to `Object`)."""
+    ep = _write_marker_endpoint(tmp_path, {
+        "type": "array",
+        "native_type": "array",
+        "arrow_type": "List",
+        "items": {"native_type": "text", "arrow_type": "Utf8"},
+        "properties": {"id": {"native_type": "int", "arrow_type": "Int64"}},
+    })
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert any('"List"' in e["message"] and "properties" in e["message"] for e in errs), \
+        f"expected List-with-properties error; got {errs}"
+
+
+def test_marker_json_forbids_inner_declaration(tmp_path):
+    """`Json` is opaque: it must carry neither `properties` nor `items`."""
+    ep_props = _write_marker_endpoint(tmp_path, {
+        "type": "object",
+        "native_type": "jsonb",
+        "arrow_type": "Json",
+        "properties": {"id": {"native_type": "int", "arrow_type": "Int64"}},
+    })
+    errs = errors_of(
+        run_validator(ep_props, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL),
+        "endpoint-annotations",
+    )
+    assert any('"Json"' in e["message"] and "properties" in e["message"] for e in errs), \
+        f"expected Json-with-properties error; got {errs}"
+
+    ep_items = _write_marker_endpoint(tmp_path, {
+        "type": "array",
+        "native_type": "jsonb",
+        "arrow_type": "Json",
+        "items": {"native_type": "text", "arrow_type": "Utf8"},
+    })
+    errs = errors_of(
+        run_validator(ep_items, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL),
+        "endpoint-annotations",
+    )
+    assert any('"Json"' in e["message"] and "items" in e["message"] for e in errs), \
+        f"expected Json-with-items error; got {errs}"
+
+
+def test_marker_valid_shapes_pass(tmp_path):
+    """Valid Object+properties, List+items, and bare Json produce no marker errors."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "checkAccount": {
+                "type": "object",
+                "native_type": "json",
+                "arrow_type": "Object",
+                "properties": {
+                    "id": {"native_type": "int", "arrow_type": "Int64"},
+                    "objectName": {"native_type": "text", "arrow_type": "Utf8"},
+                },
+            },
+            "tags": {
+                "type": "array",
+                "native_type": "array",
+                "arrow_type": "List",
+                "items": {"native_type": "text", "arrow_type": "Utf8"},
+            },
+            "metadata": {
+                "native_type": "jsonb",
+                "arrow_type": "Json",
+            },
+        },
+    }
+    ep = _write_marker_endpoint(tmp_path, schema)
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert not errs, f"valid marker shapes should produce no endpoint-annotations errors; got {errs}"
+
+
+def test_marker_violation_recurses_into_nested_properties(tmp_path):
+    """The sibling-key rule is recursive: an Object nested inside `properties`
+    that itself lacks `properties` is flagged at its recursive pointer."""
+    ep = _write_marker_endpoint(tmp_path, {
+        "type": "object",
+        "native_type": "json",
+        "arrow_type": "Object",
+        "properties": {
+            "inner": {"native_type": "json", "arrow_type": "Object"},
+        },
+    })
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-annotations")
+    assert any(
+        "/operations/read/response/schema/properties/inner" in e["message"]
+        and '"Object"' in e["message"]
+        for e in errs
+    ), f"expected nested Object violation at recursive pointer; got {errs}"
+
+
+def test_connector_endpoint_marker_violation_surfaced_via_coverage(tmp_path):
+    """During connector-level validation the marker rule is enforced on each
+    sibling endpoint and surfaced under type-map-coverage (parity with the
+    asymmetric-pair walker)."""
+    connector = json.loads(VALID_API_CONNECTOR.read_text())
+    (tmp_path / "connector.json").write_text(json.dumps(connector))
+    # json → Json so the Object narrowing itself is accepted by coverage; the
+    # only finding must be the missing-properties marker error.
+    (tmp_path / "type-map-read.json").write_text(json.dumps([
+        {"match": "exact", "native": "json", "canonical": "Json"},
+    ]))
+    (tmp_path / "endpoints").mkdir()
+    (tmp_path / "endpoints" / "items.json").write_text(json.dumps({
+        "$schema": API_ENDPOINT_SCHEMA_URL,
+        "endpoint_id": "items",
+        "operations": {
+            "read": {
+                "request": {"method": "GET", "path": "/items"},
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "metadata": {
+                                "type": "object",
+                                "native_type": "json",
+                                "arrow_type": "Object",
+                            }
+                        },
+                    },
+                },
+            }
+        },
+    }))
+    result = run_validator(tmp_path / "connector.json", "--semantic-only")
+    errs = errors_of(result, "type-map-coverage")
+    assert any(
+        "items.json" in e["message"]
+        and '"Object"' in e["message"]
+        and "properties" in e["message"]
+        for e in errs
+    ), f"expected connector-level marker error from sibling endpoint; got {errs}"
+
+
 def test_api_endpoint_arrow_template_substitution_renders():
     """A regex rule with ${name} substitution renders before comparison."""
     import tempfile
