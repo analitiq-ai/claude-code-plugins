@@ -1611,6 +1611,82 @@ def test_api_endpoint_write_coverage_walks_all_modes():
 
 
 # ---------------------------------------------------------------------------
+# endpoint-filename — the file's basename must equal `{endpoint_id}.json`
+# ---------------------------------------------------------------------------
+
+
+def _write_named_endpoint(tmp_path: Path, *, filename: str, endpoint_id: str) -> Path:
+    """Write a minimal valid api-endpoint document under `filename`."""
+    endpoint = {
+        "$schema": API_ENDPOINT_SCHEMA_URL,
+        "endpoint_id": endpoint_id,
+        "operations": {
+            "read": {
+                "request": {"method": "GET", "path": "/items"},
+                "response": {"records": {"ref": "response.body"}, "schema": {"type": "object"}},
+            }
+        },
+    }
+    path = tmp_path / filename
+    path.write_text(json.dumps(endpoint))
+    return path
+
+
+def test_endpoint_filename_mismatch_caught(tmp_path):
+    """A standalone endpoint whose basename ≠ `{endpoint_id}.json` is an error."""
+    ep = _write_named_endpoint(tmp_path, filename="people.json", endpoint_id="users")
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    errs = errors_of(result, "endpoint-filename")
+    assert any(
+        "people.json" in e["message"] and "users.json" in e["message"] and e["path"] == "/endpoint_id"
+        for e in errs
+    ), f"expected filename↔endpoint_id mismatch error; got {errs}"
+    assert result["passed"] is False
+
+
+def test_endpoint_filename_match_passes(tmp_path):
+    """A standalone endpoint named `{endpoint_id}.json` produces no finding."""
+    ep = _write_named_endpoint(tmp_path, filename="users.json", endpoint_id="users")
+    result = run_validator(ep, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL)
+    assert not [f for f in result["findings"] if f["validator"] == "endpoint-filename"], \
+        f"matching filename should produce no endpoint-filename finding; got {result['findings']}"
+
+
+def test_endpoint_filename_surfaced_via_connector_coverage(tmp_path):
+    """During connector-level validation the basename rule is enforced on each
+    sibling endpoint (parity with the asymmetric-pair / marker walkers)."""
+    connector = json.loads(VALID_API_CONNECTOR.read_text())
+    (tmp_path / "connector.json").write_text(json.dumps(connector))
+    (tmp_path / "type-map-read.json").write_text(
+        (VALID_API_CONNECTOR.parent / "type-map-read.json").read_text()
+    )
+    (tmp_path / "endpoints").mkdir()
+    # endpoint_id is "ping" but the file is named misnamed.json.
+    _write_named_endpoint(tmp_path / "endpoints", filename="misnamed.json", endpoint_id="ping")
+    result = run_validator(tmp_path / "connector.json", "--semantic-only")
+    errs = errors_of(result, "endpoint-filename")
+    assert any(
+        "misnamed.json" in e["message"] and "ping.json" in e["message"] for e in errs
+    ), f"expected connector-level filename error from sibling endpoint; got {errs}"
+
+
+def test_endpoint_filename_no_path_warns():
+    """Invoked without a filesystem anchor, the check warns instead of a silent pass."""
+    sys.path.insert(0, str(REPO_ROOT / "validator" / "src"))
+    import analitiq_connector_validator as v
+
+    doc = {
+        "$schema": API_ENDPOINT_SCHEMA_URL,
+        "endpoint_id": "users",
+        "operations": {"read": {"request": {"method": "GET", "path": "/u"},
+                                "response": {"records": {"ref": "response.body"}, "schema": {"type": "object"}}}},
+    }
+    findings = v.check_endpoint_filename(doc, None)
+    assert findings and findings[0]["severity"] == "warning" and findings[0]["validator"] == "endpoint-filename", \
+        f"expected a no-path warning; got {findings}"
+
+
+# ---------------------------------------------------------------------------
 # type-map.json self-validation
 # ---------------------------------------------------------------------------
 
