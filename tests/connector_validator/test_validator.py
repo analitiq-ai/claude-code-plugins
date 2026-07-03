@@ -725,7 +725,8 @@ def test_type_map_empty_array_caught(tmp_path):
 
 
 def test_api_endpoint_coverage_passes_when_all_natives_covered():
-    """API connector with sibling type-map.json covering every (native_type, arrow_type) pair."""
+    """API connector with sibling type-map-read.json covering every
+    (native_type, arrow_type) pair; the (unannotated) read param is ignored."""
     result = run_validator(
         FIXTURES / "api_endpoints_covered" / "connector.json",
         "--semantic-only",
@@ -1049,8 +1050,9 @@ def test_api_connector_missing_endpoints_dir_caught():
 
 
 def test_api_connector_asymmetric_native_arrow_pair_caught():
-    """A field declaring only one of native_type / arrow_type is a contract
-    violation. Exercises ALL FOUR walker sites (read.response.schema,
+    """A schema-tree field declaring only one of native_type / arrow_type is a
+    contract violation; a param declaring either at all is one too (Param
+    forbids both). Exercises ALL FOUR walker sites (read.response.schema,
     read.params, write.<mode>.input.schema, write.<mode>.params) plus the
     'both keys present, non-string values' variant."""
     result = run_validator(
@@ -1058,16 +1060,33 @@ def test_api_connector_asymmetric_native_arrow_pair_caught():
         "--semantic-only",
     )
     errs = errors_of(result, "type-map-coverage")
-    msgs = " ".join(e["message"] for e in errs)
-    # Asymmetric (exactly-one-of-pair) — one per site.
-    assert "/operations/read/response/schema/properties/id" in msgs, \
-        f"expected asymmetric finding from read.response.schema; got {msgs}"
-    assert "/operations/read/params/q" in msgs, \
-        f"expected asymmetric finding from read.params; got {msgs}"
-    assert "/operations/write/insert/input/schema/properties/name" in msgs, \
-        f"expected asymmetric finding from write.insert.input.schema; got {msgs}"
-    assert "/operations/write/insert/params/tenant" in msgs, \
-        f"expected asymmetric finding from write.insert.params; got {msgs}"
+    # Asymmetric (exactly-one-of-pair) — schema-tree sites.
+    assert any("exactly one of" in e["message"]
+               and "/operations/read/response/schema/properties/id" in e["message"]
+               for e in errs), \
+        f"expected asymmetric finding from read.response.schema; got {errs}"
+    assert any("exactly one of" in e["message"]
+               and "/operations/write/insert/input/schema/properties/name" in e["message"]
+               for e in errs), \
+        f"expected asymmetric finding from write.insert.input.schema; got {errs}"
+    # Param sites — annotations are forbidden wholesale, even half-declared.
+    assert any("forbids both" in e["message"] and "/operations/read/params/q" in e["message"]
+               for e in errs), \
+        f"expected param-annotations finding from read.params; got {errs}"
+    assert any("forbids both" in e["message"] and "/operations/write/insert/params/tenant" in e["message"]
+               for e in errs), \
+        f"expected param-annotations finding from write.insert.params; got {errs}"
+    # Both-keys param: rejected wholesale, never fed to coverage. Its native
+    # ('weird') has no read-map rule, so a revert of the coverage-source
+    # removal would surface as a spurious coverage finding at a /params/
+    # pointer.
+    assert any("forbids both" in e["message"] and "/operations/read/params/legacy" in e["message"]
+               for e in errs), \
+        f"expected param-annotations finding for both-keys param; got {errs}"
+    assert not any("/params/" in e["message"]
+                   and ("no matching rule" in e["message"] or "resolves to" in e["message"])
+                   for e in errs), \
+        f"params must never feed type-map coverage; got {errs}"
     # Non-string-both variant.
     assert any("non-string value(s)" in e["message"]
                and "/operations/read/response/schema/properties/raw" in e["message"]
@@ -1415,11 +1434,11 @@ def test_marker_list_items_must_be_a_subschema(tmp_path):
             f"expected List+items={bad!r} to be flagged as no element spec; got {errs}"
 
 
-def test_marker_object_list_on_params_flagged(tmp_path):
-    """A `Param` is `additionalProperties: false` (no `properties`/`items`), so
-    Object/List markers on a param can never be satisfied and must be flagged —
-    on both read and write ops; a `Json` param (opaque) and a scalar param are
-    clean."""
+def test_annotations_on_params_flagged(tmp_path):
+    """The published `Param` def forbids native_type / arrow_type outright (a
+    param is a request input, typed only by its `type` field), so ANY annotated
+    param is flagged wholesale — marker, scalar, or half-declared alike — on
+    both read and write ops; an unannotated param is clean."""
     endpoint = {
         "$schema": API_ENDPOINT_SCHEMA_URL,
         "endpoint_id": "items",
@@ -1429,9 +1448,9 @@ def test_marker_object_list_on_params_flagged(tmp_path):
                 "response": {"records": {"ref": "response.body"}, "schema": {"type": "object"}},
                 "params": {
                     "shape": {"native_type": "obj", "arrow_type": "Object"},
-                    "tags": {"native_type": "arr", "arrow_type": "List"},
-                    "blob": {"native_type": "jsonb", "arrow_type": "Json"},
                     "q": {"native_type": "text", "arrow_type": "Utf8"},
+                    "half": {"arrow_type": "Utf8"},
+                    "clean": {"in": "query", "type": "string"},
                 },
             },
             "write": {
@@ -1449,15 +1468,21 @@ def test_marker_object_list_on_params_flagged(tmp_path):
         run_validator(path, "--semantic-only", schema_url=API_ENDPOINT_SCHEMA_URL),
         "endpoint-annotations",
     )
-    assert any("/operations/read/params/shape" in e["message"] and '"Object"' in e["message"]
-               for e in errs), f"expected Object-marker read param to be flagged; got {errs}"
-    assert any("/operations/read/params/tags" in e["message"] and '"List"' in e["message"]
-               for e in errs), f"expected List-marker read param to be flagged; got {errs}"
-    assert any("/operations/write/insert/params/wshape" in e["message"] and '"Object"' in e["message"]
-               for e in errs), f"expected Object-marker write param to be flagged; got {errs}"
-    # Json param (opaque) and scalar param must NOT be flagged.
-    assert not any("/params/blob" in e["message"] or "/params/q" in e["message"] for e in errs), \
-        f"Json/scalar params must not be flagged; got {errs}"
+    # Exactly one finding per annotated param — the wholesale rejection, and
+    # nothing else. A second finding at the same pointer means the marker
+    # param branch grew back (the coverage-branch revert is pinned by
+    # test_api_connector_asymmetric_native_arrow_pair_caught).
+    for pointer in (
+        "/operations/read/params/shape",
+        "/operations/read/params/q",
+        "/operations/read/params/half",
+        "/operations/write/insert/params/wshape",
+    ):
+        matches = [e for e in errs if pointer in e["message"]]
+        assert len(matches) == 1 and "forbids both" in matches[0]["message"], \
+            f"expected exactly one param-annotations finding at {pointer}; got {matches or errs}"
+    assert not any("/params/clean" in e["message"] for e in errs), \
+        f"unannotated param must not be flagged; got {errs}"
 
 
 def test_marker_violation_in_write_input_schema(tmp_path):
@@ -1635,8 +1660,9 @@ def test_api_endpoint_arrow_template_substitution_renders():
         assert not errs, f"expected templated canonical to render and match; got {errs}"
 
 
-def test_api_endpoint_write_coverage_passes_when_input_and_params_covered():
-    """API connector with write-side input.schema + params natives fully covered by the sibling type-map.json."""
+def test_api_endpoint_write_coverage_passes_when_input_covered():
+    """API connector with write-side input.schema natives fully covered by the
+    sibling type-map-read.json; the (unannotated) write param is ignored."""
     result = run_validator(
         FIXTURES / "api_endpoints_write_covered" / "connector.json",
         "--semantic-only",
@@ -1645,8 +1671,9 @@ def test_api_endpoint_write_coverage_passes_when_input_and_params_covered():
     assert not errs, f"expected no coverage errors when write fully covered; got {errs}"
 
 
-def test_api_endpoint_write_coverage_flags_uncovered_input_and_params():
-    """Write-side natives in operations.write.<mode>.input.schema and .params must be walked."""
+def test_api_endpoint_write_coverage_flags_uncovered_input():
+    """Write-side natives in operations.write.<mode>.input.schema must be
+    walked; params are never a coverage source (Param carries no annotations)."""
     result = run_validator(
         FIXTURES / "api_endpoints_write_uncovered" / "connector.json",
         "--semantic-only",
@@ -1655,14 +1682,13 @@ def test_api_endpoint_write_coverage_flags_uncovered_input_and_params():
     messages = " ".join(e["message"] for e in errs)
     assert "'uuid'" in messages, f"expected uncovered write input 'uuid' to be flagged; got {errs}"
     assert "'date-time'" in messages, f"expected uncovered write input 'date-time' to be flagged; got {errs}"
-    assert "'boolean'" in messages, f"expected uncovered write param 'boolean' to be flagged; got {errs}"
     # JSON pointers must locate the natives under the mode-keyed write path,
     # not at the bare operations/write level — guards against the walker
     # dropping the <mode> layer.
     assert "/operations/write/insert/input/schema" in messages, \
         f"expected /operations/write/insert/input/schema in pointers; got {messages}"
-    assert "/operations/write/insert/params/" in messages, \
-        f"expected /operations/write/insert/params/ in pointers; got {messages}"
+    assert "/params/" not in messages, \
+        f"params must produce no coverage findings; got {messages}"
 
 
 def test_api_endpoint_write_coverage_walks_all_modes():
