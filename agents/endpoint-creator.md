@@ -57,13 +57,13 @@ was raised.
 ## Process
 
 1. Set `$schema` to `https://schemas.analitiq.ai/api-endpoint/latest.json`.
-2. Set `endpoint_id` from `endpoint_facts.resource` — pattern
-   `^[a-z0-9][a-z0-9_-]*$`. This is the endpoint document's stable
-   identifier; the schema does not accept `alias` on endpoints. The
-   orchestrator derives the on-disk filename from it
-   (`endpoints/{endpoint_id}.json`), and the validator's
-   `endpoint-filename` check requires the file's basename to equal this
-   value — pick the `endpoint_id` that should also name the file.
+2. Set `endpoint_id` to `endpoint_facts.resource` **verbatim** — it is
+   already the derived full-locator key (see the `resources[].key` rule in
+   `io-contracts.md`); do not shorten, re-slugify, or alias it. Pattern
+   `^[a-z0-9][a-z0-9_-]*$`; the schema does not accept `alias` on endpoints.
+   The orchestrator writes the file as `endpoints/{endpoint_id}.json`, and
+   the `endpoint-filename` check requires the file's basename to equal this
+   value.
 3. Author `operations.read` when the resource is readable. Required keys
    are `request` and `response` (and inside `response`, both `records`
    and `schema` are required); `params`, `pagination`, `replication`

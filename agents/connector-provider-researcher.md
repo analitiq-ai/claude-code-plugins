@@ -27,7 +27,9 @@ You run at one of two scopes per invocation:
   `type-map-read` schemas; research the system-wide facts and return a
   `ProviderFacts` object (auth model, base URLs / origins, pagination, rate
   limits, post-auth selections, dynamic discovery probes, the **resource
-  list** to author endpoints for, and the connector-wide **native-type
+  list** to author endpoints for (derive each entry's `key` per the
+  `resources[].key` rule in io-contracts.md, never a free-picked slug), and
+  the connector-wide **native-type
   vocabulary**). For databases also cover driver-selection facts, DSN shape,
   TLS, and default port. Per-resource response field schemas are **not** part
   of this pass.
