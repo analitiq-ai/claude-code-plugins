@@ -104,11 +104,11 @@ The published schema is the single source of truth. **Never restate what it defi
 - **Fetch-once, pass-down** — the orchestrator hands the live contract schema URLs to the researcher (the mission spec) and the creators read the same schemas as vocabulary, so authoring and validation agree on one contract.
 - **Drift-check CI** for anything that must stay duplicated as decision logic (e.g. the `enum-mappers` that map provider facts onto schema enums): `tests/connector_validator/test_schema_drift.py` loads the live schemas and fails the build if the plugin's enum targets diverge.
 
-Enum lists that appear in this file and in skill prose are **illustrative**; the authoritative definition is always the live schema (or, for canonical Arrow types, `canonical-types.json` in `analitiq-infra`). Craft that the schema never defined (e.g. the `ssl_mode` vocabulary, the driver-selection decision order, datetime naive/tz judgment) is not drift-exposed and stays.
+Enum lists that appear in this file and in skill prose are **illustrative**; the authoritative definition is always the live schema (or, for canonical Arrow types, the vendored `contract-models/k2m/models/canonical_types.py` — the `analitiq-contract-models` package). Craft that the schema never defined (e.g. the `ssl_mode` vocabulary, the driver-selection decision order, datetime naive/tz judgment) is not drift-exposed and stays.
 
 ## Canonical Types
 
-Canonical types are Apache Arrow logical types in PascalCase (e.g. `Int32`, `Int64`, `Float64`, `Utf8`, `Boolean`, `Binary`, `Date32`, `Time64`, `Timestamp`, `Decimal128`, `List`, `Struct`, `Map`). The vocabulary is owned by `docs/schema-contracts/shared/canonical-types.json` in `analitiq-infra`. Authoring guidance: `skills/connector-spec-db/spec-type-maps.md`.
+Canonical types are Apache Arrow logical types in PascalCase (e.g. `Int32`, `Int64`, `Float64`, `Utf8`, `Boolean`, `Binary`, `Date32`, `Time64`, `Timestamp`, `Decimal128`, `List`, `Struct`, `Map`). The vocabulary is owned by the vendored `contract-models/k2m/models/canonical_types.py` (the `analitiq-contract-models` package). Authoring guidance: `skills/connector-spec-db/spec-type-maps.md`.
 
 ## Conventions
 

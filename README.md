@@ -163,8 +163,7 @@ claude plugin add ./claude-plugin-connector-creator
 ## Links
 
 - [Analitiq DIP Registry](https://github.com/analitiq-ai/analitiq-dip-registry) — community connector submissions.
-- [Schema contracts](https://github.com/analitiq-ai/analitiq-infra/tree/main/docs/schema-contracts) — authoritative shape specs.
-- [Published schemas](https://schemas.analitiq.ai) — the JSON Schemas the validator runs against.
+- [Published schemas](https://schemas.analitiq.ai) — the authoritative JSON Schemas the validator runs against.
 
 ## License
 
