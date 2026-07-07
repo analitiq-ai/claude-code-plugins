@@ -39,20 +39,25 @@ their own `$schema` field and the validator fetches from the same host.
 
 ## Layer 1 — JSON Schema validation
 
-Invoke the validator script:
+The validator is the prebuilt `analitiq-connector-validator` package (its
+`analitiq-validate-connector` console entry point) — the plugin no longer
+ships its source. Ensure the pinned release is installed, then invoke it:
 
 ```
-python3 ${CLAUDE_PLUGIN_ROOT}/validator/src/analitiq_connector_validator.py \
+command -v analitiq-validate-connector >/dev/null 2>&1 || pip install --quiet \
+  "analitiq-connector-validator @ git+https://github.com/analitiq-ai/claude-plugin-connector.git@validator-v0.1.0#subdirectory=validator"
+
+analitiq-validate-connector \
   --schema-url <schema_url> \
   --document <document_path>
 ```
 
-The script runs Draft 2020-12 validation against the fetched schema and
+The command runs Draft 2020-12 validation against the fetched schema and
 maps each error to a finding with `validator: "json-schema"`.
 
 ## Layer 2 — Semantic validators
 
-The same script runs each of the following. Skip those that don't apply to
+The same command runs each of the following. Skip those that don't apply to
 the document type:
 
 | Validator id | Rule |
@@ -72,7 +77,7 @@ the document type:
 
 ## Output
 
-Print the JSON output of the validator script verbatim — it is already a
+Print the JSON output of the validator verbatim — it is already a
 `Diagnostics` document. Do not summarize, do not add prose, do not
 reformat.
 
@@ -80,11 +85,11 @@ reformat.
 
 - Never modify the document under validation.
 - Never silence warnings. If `passed` is false, return the full finding list.
-- Always cite `rule_doc` for each finding. The script provides this; don't
+- Always cite `rule_doc` for each finding. The validator provides this; don't
   strip it.
-- If the script exits non-zero with no output (network failure, missing
-  Python deps), report a single `json-schema` error finding describing the
-  failure.
+- If the validator exits non-zero with no output (network failure, missing
+  Python deps, or the pinned package failed to install), report a single
+  `json-schema` error finding describing the failure.
 
 ## Output format
 

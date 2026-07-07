@@ -17,14 +17,13 @@ derivation offline.
 
 from __future__ import annotations
 
-import sys
 import urllib.error
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "validator" / "src"))
-import analitiq_connector_validator as v  # noqa: E402
+# Consumed as the prebuilt `analitiq-connector-validator` package (pinned in CI
+# / the connector-schema-validator agent), not from an in-tree source path.
+import analitiq_connector_validator as v
 
 CONNECTOR_URL = v.CONNECTOR_SCHEMA_URL
 API_ENDPOINT_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -206,8 +205,8 @@ def test_bare_marker_arrow_types_match_schema(canonical_types_schema: dict) -> N
         "authored_shape_type",
         schema_set,
         EXPECTED_BARE_MARKER_ARROW_TYPES,
-        "update _BARE_MARKER_ARROW_TYPES + _check_marker_siblings in "
-        "analitiq_connector_validator.py, CLAUDE.md, and the connector-schema-validator "
+        "update _BARE_MARKER_ARROW_TYPES + _check_marker_siblings in the "
+        "analitiq-connector-validator package, CLAUDE.md, and the connector-schema-validator "
         "endpoint-annotations row.",
     )
     # The set the validator actually enforces must equal the contract's.

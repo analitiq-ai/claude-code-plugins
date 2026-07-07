@@ -35,15 +35,17 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
 
+# The validator ships as the prebuilt `analitiq-connector-validator` package
+# (pinned in CI / the connector-schema-validator agent); we consume it here as
+# an installed dependency, not from an in-tree source path.
+from analitiq_connector_validator import fetch_schema
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(REPO_ROOT / "validator" / "src"))
-from analitiq_connector_validator import fetch_schema  # noqa: E402  (module dir added above)
 
 API_ENDPOINT_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 SPEC_DIR = REPO_ROOT / "skills" / "connector-spec-api"

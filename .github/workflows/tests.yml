@@ -33,7 +33,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install pytest 'jsonschema>=4.18'
+        # The validator is consumed as the prebuilt, pinned
+        # analitiq-connector-validator package — the plugin no longer ships its
+        # source. The two remaining suites (spec-doc examples, schema drift)
+        # import it as an installed dependency.
+        run: pip install pytest 'jsonschema>=4.18' "analitiq-connector-validator @ git+https://github.com/analitiq-ai/claude-plugin-connector.git@validator-v0.1.0#subdirectory=validator"
       - name: Run offline tests
         # The whole suite minus the live-fetch guards — fast and hermetic, so
         # it gates every PR.
@@ -56,6 +60,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install dependencies
-        run: pip install pytest 'jsonschema>=4.18'
+        # The validator is consumed as the prebuilt, pinned
+        # analitiq-connector-validator package — the plugin no longer ships its
+        # source. The two remaining suites (spec-doc examples, schema drift)
+        # import it as an installed dependency.
+        run: pip install pytest 'jsonschema>=4.18' "analitiq-connector-validator @ git+https://github.com/analitiq-ai/claude-plugin-connector.git@validator-v0.1.0#subdirectory=validator"
       - name: Run network drift guards
         run: pytest tests/connector_validator/ -m network -v -rs

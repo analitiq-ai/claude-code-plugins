@@ -70,8 +70,9 @@ agent owns the authoring vocabulary for its kind via a dedicated spec skill
 
 ## Validation
 
-The plugin includes a Python validator module
-(`validator/src/analitiq_connector_validator.py`) that runs:
+The plugin validates against the prebuilt, released
+[`analitiq-connector-validator`](https://github.com/analitiq-ai/claude-plugin-connector/releases/tag/validator-v0.1.0)
+package — its source is no longer bundled here. The validator runs:
 
 1. **JSON Schema validation** (Draft 2020-12) against the published schema:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
@@ -89,24 +90,24 @@ The plugin includes a Python validator module
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.
 
-Run directly:
+Install the pinned release, then run its console entry point:
 
 ```bash
-python validator/src/analitiq_connector_validator.py \
+pip install "analitiq-connector-validator @ git+https://github.com/analitiq-ai/claude-plugin-connector.git@validator-v0.1.0#subdirectory=validator"
+
+analitiq-validate-connector \
   --schema-url https://schemas.analitiq.ai/connector/latest.json \
   --document path/to/connector.json
 ```
 
-Output is a single `Diagnostics` JSON object. Exit 0 iff `passed: true`.
+Output is a single `Diagnostics` JSON object. Exit 0 iff `passed: true`. The
+`connector-schema-validator` agent installs this same pinned package on demand
+and invokes the same entry point; the connector registry's CI installs it to
+run Layer 2 (`--semantic-only`, no network) as a required merge gate. One
+released artifact, consumed everywhere — the plugin no longer carries a copy.
 
-The same module is packaged under [`validator/`](validator/) as the
-installable `analitiq-connector-validator` (console entry point
-`analitiq-validate-connector`) so the connector registry's CI can run Layer 2
-(`--semantic-only`, no network) as a required merge gate outside the plugin
-runtime. It is one canonical source — the plugin runs the module by path; CI
-`pip install`s the same module.
-
-Tests live under `tests/connector_validator/`. Run with `pytest`.
+Tests live under `tests/connector_validator/` (`test_spec_doc_examples.py`,
+`test_schema_drift.py`); they import the installed package. Run with `pytest`.
 
 ## Schema host
 
