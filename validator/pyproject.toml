@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "analitiq-connector-validator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Layer 1 (JSON Schema) + Layer 2 (semantic) validator for Analitiq connector, endpoint, and type-map documents."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -21,7 +21,7 @@ classifiers = [
 # synced there together on release); run-by-path uses the vendored sibling
 # instead (see the sys.path bootstrap in the module).
 dependencies = [
-    "analitiq-contract-models @ git+https://github.com/analitiq-ai/claude-plugin-connector.git@validator-v0.1.0#subdirectory=contract-models",
+    "analitiq-contract-models @ git+https://github.com/analitiq-ai/claude-plugin-connector.git@validator-v0.2.0#subdirectory=contract-models",
 ]
 
 [project.scripts]
