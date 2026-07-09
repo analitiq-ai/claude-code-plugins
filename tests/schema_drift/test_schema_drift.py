@@ -67,15 +67,44 @@ EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
 # api-endpoint `arrow_type` pattern); the published schema does NOT enforce the
 # siblings, so the validator must — keep this set in lockstep with the prose.
 EXPECTED_BARE_MARKER_ARROW_TYPES = {"Object", "List", "Json"}
+# The kind + transport discriminators — the outputs of KindMapper /
+# TransportTypeMapper in enum-mappers.md, restated in CLAUDE.md. Each lives as a
+# `properties.<field>.const` across the per-variant `$defs`.
+EXPECTED_KINDS = {"api", "database", "file", "s3", "stdout"}
+EXPECTED_TRANSPORT_TYPES = {"http", "sqlalchemy", "adbc", "s3", "file", "stdout"}
 
 
 # --- helpers (self-contained; no validator dependency) ---------------------
 
 
 def _fetch(url: str) -> dict:
-    """GET + parse a live schema. Raises on network/parse failure (callers skip)."""
+    """GET + JSON-parse a live schema.
+
+    Raises `HTTPError` on a 4xx/5xx status, `URLError`/`OSError` on a
+    connectivity failure, and `JSONDecodeError` on a non-JSON body — the caller
+    (`_fetch_or_skip`) decides skip-vs-fail per exception type.
+    """
     with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310 (fixed https host)
         return json.loads(resp.read().decode("utf-8"))
+
+
+def _fetch_or_skip(url: str) -> dict:
+    """Fetch a live schema for a drift check, mapping failures to skip vs fail.
+
+    A definitive negative from the host — an HTTP 4xx/5xx (the schema URL was
+    moved or removed, itself a form of contract drift) or a 200 with a non-JSON
+    body (proxy/captive-portal page) — **fails** the guard. Only a genuine
+    connectivity loss (DNS/refused/timeout) **skips**, so a real outage shows as
+    skipped rather than a false green.
+    """
+    try:
+        return _fetch(url)
+    except urllib.error.HTTPError as exc:  # host answered — 404/500 is drift, not an outage
+        pytest.fail(f"schema host returned HTTP {exc.code} for {url}: {exc}")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:  # connectivity loss
+        pytest.skip(f"live schema unreachable: {exc}")
+    except json.JSONDecodeError as exc:  # 200 with a non-JSON body
+        pytest.fail(f"schema host returned non-JSON for {url}: {exc}")
 
 
 def _enum_at(schema: dict, *path: str) -> set[str] | None:
@@ -98,19 +127,22 @@ def _enum_at(schema: dict, *path: str) -> set[str] | None:
     return set(enum)
 
 
-def _const_types(schema: dict, def_suffix: str) -> set[str]:
-    """Collect the `type` const across `$defs/*<suffix>` definitions.
+def _const_types(schema: dict, def_suffix: str, const_field: str = "type") -> set[str]:
+    """Collect the `<const_field>` const across `$defs/*<suffix>` definitions.
 
-    Auth families and pagination styles are modelled as one discriminated
-    `$def` per variant (e.g. `ApiKeyAuth`, `CursorPagination`), each pinning
-    `properties.type.const` — not a single flat enum.
+    Auth families, pagination styles, connector kinds, and transport types are
+    each modelled as one discriminated `$def` per variant (e.g. `ApiKeyAuth`,
+    `CursorPagination`, `DatabaseConnector`, `AdbcTransport`), pinning
+    `properties.<const_field>.const` — not a single flat enum. The discriminator
+    field name varies: `type` for auth/pagination, `kind` for connectors,
+    `transport_type` for transports.
     """
     out: set[str] = set()
     for name, node in schema.get("$defs", {}).items():
         if name.endswith(def_suffix) and isinstance(node, dict):
-            type_node = (node.get("properties") or {}).get("type") or {}
-            if "const" in type_node:
-                out.add(type_node["const"])
+            const_node = (node.get("properties") or {}).get(const_field) or {}
+            if "const" in const_node:
+                out.add(const_node["const"])
     return out
 
 
@@ -135,26 +167,17 @@ def _diff_msg(label: str, schema_set: set[str] | None, expected: set[str], fix: 
 
 @pytest.fixture(scope="module")
 def connector_schema() -> dict:
-    try:
-        return _fetch(CONNECTOR_URL)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        pytest.skip(f"live connector schema unreachable: {exc}")
+    return _fetch_or_skip(CONNECTOR_URL)
 
 
 @pytest.fixture(scope="module")
 def api_endpoint_schema() -> dict:
-    try:
-        return _fetch(API_ENDPOINT_URL)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        pytest.skip(f"live api-endpoint schema unreachable: {exc}")
+    return _fetch_or_skip(API_ENDPOINT_URL)
 
 
 @pytest.fixture(scope="module")
 def canonical_types_schema() -> dict:
-    try:
-        return _fetch(CANONICAL_TYPES_URL)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        pytest.skip(f"live canonical-types schema unreachable: {exc}")
+    return _fetch_or_skip(CANONICAL_TYPES_URL)
 
 
 @pytest.mark.network
@@ -229,4 +252,28 @@ def test_bare_marker_arrow_types_match_schema(canonical_types_schema: dict) -> N
         schema_set,
         EXPECTED_BARE_MARKER_ARROW_TYPES,
         "update CLAUDE.md and the connector-schema-validator endpoint-annotations row.",
+    )
+
+
+@pytest.mark.network
+def test_kinds_match_schema(connector_schema: dict) -> None:
+    schema_set = _const_types(connector_schema, "Connector", const_field="kind")
+    assert schema_set == EXPECTED_KINDS, _diff_msg(
+        "connector.kind",
+        schema_set,
+        EXPECTED_KINDS,
+        "update CLAUDE.md ('kind (one of ...)') and KindMapper in "
+        "skills/connector-builder/references/enum-mappers.md.",
+    )
+
+
+@pytest.mark.network
+def test_transport_types_match_schema(connector_schema: dict) -> None:
+    schema_set = _const_types(connector_schema, "Transport", const_field="transport_type")
+    assert schema_set == EXPECTED_TRANSPORT_TYPES, _diff_msg(
+        "transport.transport_type",
+        schema_set,
+        EXPECTED_TRANSPORT_TYPES,
+        "update TransportTypeMapper in "
+        "skills/connector-builder/references/enum-mappers.md.",
     )
