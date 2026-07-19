@@ -6,6 +6,10 @@ instead of restating it. A generated copy is only safe while it is pinned: this
 test regenerates it and fails when the checked-in file is stale, so a contract
 change lands as a red build instead of silently-wrong authoring guidance.
 
+It also guards the *citations*: prose cites rules by id (`ADV-ENDP-009`) instead
+of restating them, so a retired or renumbered id must not be allowed to leave
+dangling references behind a green build.
+
 Same environment contract as `test_schema_drift.py`: skipped when the pinned
 package is absent (offline dev), hard-failed in CI via
 `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
@@ -14,22 +18,12 @@ package is absent (offline dev), hard-failed in CI via
 from __future__ import annotations
 
 import importlib.util
-import os
+import re
 from pathlib import Path
 
-import pytest
+from _pins import require_contract_models
 
-try:
-    import analitiq.contracts  # noqa: F401
-except ImportError:  # pragma: no cover - environment guard
-    if os.environ.get("DRIFT_REQUIRE_CONTRACT_MODELS") == "1":
-        raise
-    pytest.skip(
-        "analitiq-contract-models not installed — run `pip install --pre "
-        '"analitiq-validator==1.0.0rc10" "analitiq-contract-models==1.0.0rc10"` '
-        "to run the drift guards",
-        allow_module_level=True,
-    )
+require_contract_models("analitiq.contracts")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "render_advisory.py"
@@ -81,3 +75,68 @@ def test_reference_covers_only_authored_resources() -> None:
 
     leaked = sorted(rule.id for rule in foreign if rule.id in rendered)
     assert not leaked, f"reference leaked out-of-scope rule ids: {leaked}"
+
+
+def test_scope_covers_every_authored_resource() -> None:
+    """A newly-added in-scope resource must not slip past the renderer.
+
+    `PLUGIN_RESOURCES` is an allowlist, so adding a resource to the contract
+    leaves the rendered output byte-identical and the sync test green while its
+    rules go missing. Pin the complement instead: everything excluded must be a
+    resource this plugin genuinely does not author.
+    """
+    from analitiq.contracts.shared.advisory import all_rules
+
+    renderer = _load_renderer()
+    # Documents owned by other tools: pipelines, streams, connection documents,
+    # run status, and database endpoints (generated at runtime by the
+    # connector's `resource_discovery`, never authored here).
+    known_foreign = {
+        "pipeline",
+        "stream",
+        "connection",
+        "data-sync-run-status",
+        "database-endpoint",
+    }
+    resources = {rule.resource for rule in all_rules()}
+    unclassified = resources - set(renderer.PLUGIN_RESOURCES) - known_foreign
+
+    assert not unclassified, (
+        f"contract added resource(s) {sorted(unclassified)} — decide whether this "
+        "plugin authors them. If yes, add to PLUGIN_RESOURCES in "
+        "scripts/render_advisory.py and regenerate; if no, add to known_foreign here."
+    )
+
+
+ADV_ID_RE = re.compile(r"ADV-[A-Z]+-\d+")
+
+
+def test_prose_rule_citations_resolve() -> None:
+    """Every `ADV-*` id cited in prose must name a rule that still exists.
+
+    Prose cites rules by id instead of restating them — which only works while
+    the ids resolve. A retired or renumbered rule would otherwise leave dangling
+    citations behind a green build.
+    """
+    from analitiq.contracts.shared.advisory import all_rules
+
+    known = {rule.id for rule in all_rules()}
+    generated = _load_renderer().OUTPUT_PATH
+
+    dangling: dict[str, set[str]] = {}
+    searched = 0
+    for path in [*REPO_ROOT.glob("*.md"), *(REPO_ROOT / "src").rglob("*.md")]:
+        if path == generated:
+            continue  # generated from the registry; covered by the sync test
+        searched += 1
+        cited = set(ADV_ID_RE.findall(path.read_text(encoding="utf-8")))
+        missing = cited - known
+        if missing:
+            dangling[str(path.relative_to(REPO_ROOT))] = missing
+
+    assert searched, "no prose files discovered — the search globs are wrong"
+    assert not dangling, (
+        f"prose cites rule ids that no longer exist: {dangling}. Update the "
+        "citation to the current rule, or restate the constraint if the rule "
+        "was retired."
+    )

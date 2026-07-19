@@ -40,12 +40,13 @@ connector or endpoint actually writes.
 | `state.*` | per run | Replication watermarks and other carried-over run state. |
 | `connector.*` | any | Connector-level declared values. |
 
-**Scope checking is endpoint-only, and shallow even there.** On an *endpoint*
-expression the **leading token** must be a known scope; the rest of the path is
-never checked, so `connection.discovered.nope` passes and resolves empty. On a
-*connector* document nothing is checked at all — a transport header reffing
-`bogus.thing` validates clean. Treat every ref as unverified: trace it to the
-declaration that produces it yourself.
+**Scope checking is narrow.** It runs only on an endpoint's **request slots**
+(`headers`, `query`, `body`, `path_params`) and `response.metadata`, and only
+on the **leading token** — the rest of the path is never checked, so
+`connection.discovered.nope` passes and resolves empty. Everywhere else there
+is no check at all: a bogus scope in a pagination `stop_when`, or in a
+connector transport's header, validates clean. Treat every ref as unverified
+and trace it to the declaration that produces it yourself.
 
 > **`stream.*`, `state.*`, and `runtime.*` are barred from endpoint request
 > slots.** They may not appear as direct refs in `request.headers` / `query` /

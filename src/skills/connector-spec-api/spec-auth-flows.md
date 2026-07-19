@@ -52,11 +52,16 @@ request that swaps the auth code for tokens. Both are
 `source: "platform"`; `client_secret` lives in `secrets` with
 `source: "platform"` and `secret: true`.
 
-**Don't invent form inputs for an OAuth connector.** The redirect flow collects
-everything it needs through the browser, so declare a pre-auth input only when
-the provider genuinely needs a value *before* the authorize URL can be built
-(a region, or a tenant slug that appears in the authorize host). An empty
-`inputs` map is the normal case for a platform-registered OAuth app.
+**Don't invent *user-facing* form inputs for an OAuth connector.** The redirect
+flow collects the user's authorization through the browser, so declare a
+`source: "user"` input only when the provider genuinely needs a value *before*
+the authorize URL can be built (a region, or a tenant slug in the authorize
+host). Asking the user for anything the redirect already yields is noise.
+
+This does not mean an empty `inputs` map: the app's own `client_id` /
+`client_secret` are still declared, as `source: "platform"` (above). Nothing
+validates that a ref resolves, so dropping them leaves a connector that passes
+validation and fails at connect with no credentials.
 
 **Platform-owned vs user-owned OAuth apps differ only in `source`.** Whether
 your platform registers one app for everyone (`source: "platform"`) or each

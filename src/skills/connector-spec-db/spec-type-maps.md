@@ -82,13 +82,20 @@ you must satisfy. Concretely:
   documented (`TIMESTAMP WITHOUT TIME ZONE`), or use a regex tolerant of the
   variation.
 
-> A standalone type-map file cannot catch a case mistake — there is no native
-> to probe. It surfaces when the map is validated **as a connector's sibling**,
-> where every endpoint's natives are resolved through it. Validate the
-> connector, not just the map.
+> **How much protection you get depends on the connector kind.** Coverage
+> probes natives only on an **API** connector, driven by the `native_type`
+> annotations in its endpoint files — there, a lowercase `exact` native is
+> reported as uncovered. A **database** connector has no endpoints to probe
+> from, so nothing validates its read map's matchers at all: a map with every
+> native lowercased validates completely clean. The runtime tolerates it
+> (it normalizes both sides), so this is a consistency convention there rather
+> than a correctness one — but author uppercase regardless, because it is the
+> one spelling that works under both.
 
 Write-map matchers run against PascalCase canonical strings **case-preserving**
-(the Arrow vocabulary is mixed-case), so case is significant there too.
+(the Arrow vocabulary is mixed-case), so case is significant there too — and
+unlike the read side it fails loudly: a lowercase canonical matcher is rejected
+outright as a pattern error.
 
 ## `${name}` substitution in regex rules
 

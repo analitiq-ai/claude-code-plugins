@@ -80,9 +80,9 @@ This is a **contract gap, not a design rule**: the runtime resolver already
 handles an expression here, and sibling fields on the same transport (`headers`,
 the rate limit's `time_window_seconds`) do accept expressions. Until the
 contract catches up, a multi-tenant provider cannot be authored — surface that
-as a blocker rather than working around it. Do not attempt an absolute URL in
-an operation's `request.path`; paths are concatenated onto `base_url`, so that
-produces a malformed URL rather than a different host.
+as a blocker rather than working around it. Nor can you smuggle the host into
+an operation's `request.path` as an absolute URL: `endpoint_id` is derived from
+that path, so `endpoint-id-locator` rejects it at authoring time.
 
 ## Header resolution order
 

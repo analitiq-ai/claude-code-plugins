@@ -18,24 +18,16 @@ packages are absent, hard-failed in CI via `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
 from __future__ import annotations
 
 import json
-import os
 import shutil
 from pathlib import Path
 
 import pytest
 
-try:
-    import analitiq.contracts  # noqa: F401
-    from analitiq.validator import validate_document  # noqa: F401
-except ImportError:  # pragma: no cover - environment guard
-    if os.environ.get("DRIFT_REQUIRE_CONTRACT_MODELS") == "1":
-        raise
-    pytest.skip(
-        "analitiq-validator / analitiq-contract-models not installed — run "
-        '`pip install --pre "analitiq-validator==1.0.0rc10" '
-        '"analitiq-contract-models==1.0.0rc10"` to run the drift guards',
-        allow_module_level=True,
-    )
+from _pins import require_contract_models
+
+require_contract_models("analitiq.contracts", "analitiq.validator")
+
+from analitiq.validator import validate_document  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "src" / "skills"
@@ -72,9 +64,23 @@ def _errors(findings: list[dict]) -> list[dict]:
     return [f for f in findings if f["severity"] == "error"]
 
 
-def test_examples_exist() -> None:
-    """Guard the glob itself — a renamed layout must not silently pass nothing."""
-    assert _example_dirs(), f"no examples discovered under {SKILLS_ROOT}"
+def test_every_example_dir_is_covered() -> None:
+    """Guard the glob itself — no example may silently drop out of coverage.
+
+    `_example_dirs()` selects on a `*.example.json` body, so a renamed body file
+    would quietly remove that example from the parametrized tests below while
+    still leaving examples discovered. Assert against the directory listing, not
+    against emptiness.
+    """
+    all_dirs = {d for d in SKILLS_ROOT.glob("connector-spec-*/examples/*") if d.is_dir()}
+    assert all_dirs, f"no example directories under {SKILLS_ROOT}"
+
+    uncovered = sorted(str(d.relative_to(SKILLS_ROOT)) for d in all_dirs - set(_example_dirs()))
+    assert not uncovered, (
+        f"example directories with no `*.example.json` body: {uncovered} — these "
+        "are skipped by every check below. Rename the body file to "
+        "`<name>.example.json` or remove the directory."
+    )
 
 
 @pytest.mark.parametrize("example_dir", _example_dirs(), ids=lambda d: d.name)

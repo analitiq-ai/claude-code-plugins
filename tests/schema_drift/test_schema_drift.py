@@ -18,37 +18,26 @@ to the exact contract the plugin enforces at authoring time, not a
 separately-hosted copy that can drift, 403, or 404.
 
 The package is pinned — by CI and by the `connector-schema-validator` agent — to
-`analitiq-validator==1.0.0rc10` / `analitiq-contract-models==1.0.0rc10`. When it
-isn't installed the whole module is skipped (offline-dev convenience) — except in
-CI, which sets `DRIFT_REQUIRE_CONTRACT_MODELS=1` so a missing or broken package
-is a hard failure there, never a green all-skipped gate. Run `-rs` to print skip
-reasons.
+the version in `tests/schema_drift/_pins.py`. When it isn't installed the whole
+module is skipped (offline-dev convenience) — except in CI, which sets
+`DRIFT_REQUIRE_CONTRACT_MODELS=1` so a missing or broken package is a hard
+failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.
 """
 
 from __future__ import annotations
 
-import os
 import re
 
 import pytest
 
-# Read the SAME contract models the validator validates against. When the package
-# is absent an offline dev run can't perform the check, so skip — BUT CI (this
-# suite is a merge gate) sets DRIFT_REQUIRE_CONTRACT_MODELS=1, making a missing or
-# broken package a HARD failure there, never a green all-skipped run. (A renamed
-# submodule already errors at the imports below, which this parent-package guard
-# does not cover — that asymmetry is intentional: both surface as red in CI.)
-try:
-    import analitiq.contracts  # noqa: F401
-except ImportError:  # pragma: no cover - environment guard
-    if os.environ.get("DRIFT_REQUIRE_CONTRACT_MODELS") == "1":
-        raise
-    pytest.skip(
-        "analitiq-contract-models not installed — run `pip install --pre "
-        '"analitiq-validator==1.0.0rc10" "analitiq-contract-models==1.0.0rc10"` '
-        "to run the drift guards",
-        allow_module_level=True,
-    )
+# Read the SAME contract models the validator validates against. The shared guard
+# skips an offline dev run but hard-fails in CI (DRIFT_REQUIRE_CONTRACT_MODELS=1),
+# so this merge gate can never pass by skipping. (A renamed submodule errors at
+# the imports below, which the parent-package guard does not cover — that
+# asymmetry is intentional: both surface as red in CI.)
+from _pins import assert_pinned_versions, require_contract_models  # noqa: E402
+
+require_contract_models("analitiq.contracts")
 
 from pydantic import TypeAdapter  # noqa: E402  (imports gated by the guard above)
 from analitiq.contracts.connector import Connector  # noqa: E402
@@ -245,6 +234,11 @@ def api_endpoint_schema() -> dict:
     return _schema(ApiEndpointDoc)
 
 
+def test_installed_versions_are_pinned() -> None:
+    """Guard the guards: every assertion below is only meaningful at the pin."""
+    assert_pinned_versions()
+
+
 def test_auth_types_match_schema(connector_schema: dict) -> None:
     schema_set = _const_types(connector_schema, "Auth")
     assert schema_set == EXPECTED_AUTH_TYPES, _diff_msg(
@@ -341,8 +335,9 @@ def test_validator_ids_match_package() -> None:
         package_set,
         EXPECTED_VALIDATOR_IDS,
         "update the Diagnostics enum in "
-        "src/skills/connector-builder/references/io-contracts.md and the id table "
-        "in src/agents/connector-schema-validator.md.",
+        "src/skills/connector-builder/references/io-contracts.md, the id table in "
+        "src/agents/connector-schema-validator.md, the Agents bullet in CLAUDE.md, "
+        "and the check list in README.md.",
     )
 
 

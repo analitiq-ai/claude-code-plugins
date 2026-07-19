@@ -136,18 +136,27 @@ the runtime sends it only from page two onward.
 > error. Confirm the target engine version handles `link`; if in doubt, prefer
 > `cursor`, which is equivalent for most providers that offer both.
 
-The next-page URL comes from the response (a `Link: <…>; rel="next"` header or
-a body field). `link.next_url` resolves to that URL and **replaces the entire
-request URL**, so the provider must return an **absolute** URL — a relative one
-cannot be followed. Only the first request is built from `path` + params.
+The next-page URL comes from the response. `link.next_url` resolves to that URL
+and **replaces the entire request URL**, so it must resolve to a bare,
+**absolute** URL — a relative one cannot be followed. Only the first request is
+built from `path` + params.
+
+Prefer a body field that already holds the bare URL:
 
 ```json
 {
   "type": "link",
-  "link": { "next_url": { "ref": "response.headers.link" } },
-  "stop_when": { "missing": { "ref": "response.headers.link" } }
+  "link": { "next_url": { "ref": "response.body.links.next" } },
+  "stop_when": { "missing": { "ref": "response.body.links.next" } }
 }
 ```
+
+A raw `Link:` header is **not** directly usable — its value is
+`<https://…>; rel="next"`, angle brackets and rel-parameters included, not a
+bare URL. Nothing validates this, so pointing `next_url` at
+`response.headers.link` produces a request to a malformed URL at runtime. When
+the provider only offers the header, confirm the response exposes a parsed form
+before choosing `link`.
 
 ## `keyset`
 
