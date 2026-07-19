@@ -62,11 +62,14 @@ normalizations:
 
 - **The validator** uppercases only the *incoming* native and compares your
   matcher **verbatim**, with no whitespace handling.
-- **The runtime** normalizes *both* sides — trim, collapse internal whitespace
-  runs, uppercase.
+- **The runtime** normalizes the incoming native the same way (plus trimming and
+  collapsing internal whitespace) and additionally normalizes an **`exact`**
+  rule's `native`. A **`regex`** pattern is used verbatim by both — deliberately,
+  since uppercasing a pattern would turn `\d` into `\D`.
 
-So the runtime is the more forgiving of the two, and the validator is the gate
-you must satisfy. Concretely:
+So the runtime is more forgiving for `exact` rules only; for `regex` rules the
+two behave identically. The validator is the gate you must satisfy either way.
+Concretely:
 
 - **`exact` natives must be authored uppercase.** `{"match": "exact", "native":
   "varchar"}` would resolve fine at runtime, but the validator's coverage check
@@ -93,9 +96,12 @@ you must satisfy. Concretely:
 > uppercase regardless, since that is the one spelling that works under both.
 
 Write-map matchers run against PascalCase canonical strings **case-preserving**
-(the Arrow vocabulary is mixed-case), so case is significant there too — and
-unlike the read side it fails loudly: a lowercase canonical matcher is rejected
-outright as a pattern error.
+(the Arrow vocabulary is mixed-case), so case is significant there too. How
+loudly a mistake fails depends on the rule kind, the same split as the read
+side: a lowercase **`exact`** canonical is rejected outright (it fails the Arrow
+type pattern), while a lowercase **`regex`** canonical is not checked at all —
+`{"match": "regex", "canonical": "^utf8$"}` validates with zero findings and
+simply never fires.
 
 ## `${name}` substitution in regex rules
 
@@ -123,9 +129,9 @@ fully-resolved literal.
 
 On the **write** side the contract *accepts* `${…}` in an `exact` rule's
 rendered `native` (the placeholder would be filled from a per-column hint
-rather than a regex capture) — but **do not author one**. DDL rendering
-currently passes no per-column hints, so an unresolved placeholder fails at
-`CREATE TABLE`. Render a concrete native (`TEXT`, or a fixed
+rather than a regex capture) — but **do not author one**. DDL rendering passes
+no per-column hints, and an unsubstituted placeholder raises during type
+mapping, before any DDL is emitted. Render a concrete native (`TEXT`, or a fixed
 `VARCHAR(255)`); use a `regex` rule when the width genuinely comes from the
 canonical.
 
@@ -274,10 +280,18 @@ ships no Decimal rule because NUMERIC/BIGNUMERIC selection needs
 precision-range arithmetic rules cannot express), never as a way to cut scope.
 
 **A clean warning is not proof of coverage.** The check probes a representative
-sample and does not exercise `FixedSizeBinary`, `Time32`, or any **tz-aware**
-`Timestamp` — a map missing all three still passes. Verify those by hand;
-`Timestamp(<unit>, UTC)` in particular is easy to miss because the bare
-`Timestamp` probe passes without it.
+sample, so whole families go unexercised — a map missing all of these still
+passes. Verify by hand at least:
+
+- `FixedSizeBinary`
+- `Time32` (only `Time64` is probed)
+- **tz-aware** `Timestamp` — easy to miss, because the bare `Timestamp` probe
+  passes without it
+- `Decimal256` (only `Decimal128` is probed, so a map whose Decimal rule is
+  narrowed to `Decimal128` shows nothing)
+
+Treat that as the floor rather than the whole set: containers (`List<…>`,
+`Struct<…>`, `Map<…>`) and rarer scalars are unprobed too.
 
 Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a

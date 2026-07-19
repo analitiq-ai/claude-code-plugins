@@ -42,8 +42,12 @@ connector or endpoint actually writes.
 
 **Scope checking is narrow.** It runs on an endpoint's `request.headers` /
 `query` / `body`, and on typed ref fields such as `response.records` and
-`response.metadata` — and only on the **leading token**. The rest of the path is
-never checked, so `connection.discovered.nope` passes and resolves empty.
+`response.metadata`. Except where noted below it checks only the **leading
+token**, so `connection.discovered.nope` passes and resolves empty.
+
+`response.records` is the one ref whose **full path** is validated: it is
+traversed against `response.schema` and must land on an array node
+(ADV-ENDP-012), so `response.body.nope` is an error rather than a silent empty.
 
 Everywhere else there is no check at all: a bogus scope in a pagination
 `stop_when`, or anywhere in a **connector** document (a transport header, an

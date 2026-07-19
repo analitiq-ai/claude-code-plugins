@@ -343,6 +343,7 @@ def test_write_coverage_probe_gaps_are_documented() -> None:
         "FixedSizeBinary": lambda p: p.startswith("FixedSizeBinary"),
         "Time32": lambda p: p.startswith("Time32"),
         "tz-aware Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" in p,
+        "Decimal256": lambda p: p.startswith("Decimal256"),
     }
     now_probed = sorted(
         name for name, matches in documented_gaps.items() if any(matches(p) for p in probes)
@@ -359,7 +360,7 @@ def test_write_coverage_probe_gaps_are_documented() -> None:
     expected_probed = {
         "Boolean": lambda p: p == "Boolean",
         "Json": lambda p: p == "Json",
-        "Decimal": lambda p: p.startswith("Decimal"),
+        "Decimal128": lambda p: p.startswith("Decimal128"),
         "bare Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" not in p,
         "Utf8": lambda p: p == "Utf8",
     }

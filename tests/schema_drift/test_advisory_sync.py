@@ -108,20 +108,29 @@ def test_scope_covers_every_authored_resource() -> None:
     )
 
 
-# Matches a full id and any `/NNN` shorthand suffixes: prose writes
-# `ADV-TMAP-001/002` for a pair, and the trailing halves must be checked too —
-# a guard that only saw the first id would miss exactly the dangling citation it
-# exists to catch.
-ADV_ID_RE = re.compile(r"ADV-([A-Z]+)-(\d+)((?:/\d+)*)")
+# Prose abbreviates groups of ids two ways: `ADV-TMAP-001/002` for a handful and
+# `ADV-TMAP-001…007` for a run. Both tails must be expanded — a guard that saw
+# only the leading id would miss exactly the dangling citation it exists to
+# catch. (Both forms are in use, and each was introduced *after* the guard, so
+# treat any new abbreviation as needing support here.)
+ADV_ID_RE = re.compile(
+    r"ADV-([A-Z]+)-(\d+)"          # the leading id
+    r"((?:/\d+)*)"                 # `/002/003` enumeration
+    r"(?:\s*(?:…|\.\.\.)\s*(\d+))?"  # `…007` range end
+)
 
 
 def _cited_ids(text: str) -> set[str]:
-    """Expand every `ADV-*` citation, including `ADV-X-001/002` shorthand."""
+    """Expand every `ADV-*` citation, including `/` lists and `…` ranges."""
     found: set[str] = set()
-    for prefix, first, rest in ADV_ID_RE.findall(text):
+    for prefix, first, enumerated, range_end in ADV_ID_RE.findall(text):
+        width = len(first)
         found.add(f"ADV-{prefix}-{first}")
-        for suffix in filter(None, rest.split("/")):
+        for suffix in filter(None, enumerated.split("/")):
             found.add(f"ADV-{prefix}-{suffix}")
+        if range_end:
+            for n in range(int(first), int(range_end) + 1):
+                found.add(f"ADV-{prefix}-{n:0{width}d}")
     return found
 
 
