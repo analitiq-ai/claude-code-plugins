@@ -50,8 +50,13 @@ must not appear in authored documents:
 - `updated_at`
 
 The published schema reflects this — the authoring shape does not list
-them in `properties` or `required`. The plugin's `reserved-field`
-validator flags them as errors if they appear.
+them in `properties` or `required`, so the contract models reject them
+(reported under `contract-model`).
+
+Reserving a field name at the **document** level does not reserve it inside a
+provider-owned namespace. A provider response legitimately containing a
+`created_at` field is fine: `response.schema` describes the provider's data, not
+the Analitiq document envelope. Only the document's own top level is reserved.
 
 ## Release version (`version`)
 

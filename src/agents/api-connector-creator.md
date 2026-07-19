@@ -60,6 +60,9 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+  (the `connector` + `type-map` sections — the cross-field rules your
+  artifacts must satisfy)
 
 ## Authoring order
 
@@ -119,9 +122,9 @@ restate validator rules.
 - [ ] **An incremental/replication cursor is set wherever the resource
   supports one.** (Provider behavior, not schema.)
 - [ ] **The auth flow matches the provider's documented auth**, including
-  token refresh where the provider issues short-lived tokens. (The
-  `auth-shape` validator checks the structural validity of the chosen
-  flow, not that it is the correct flow.)
+  token refresh where the provider issues short-lived tokens. (The contract
+  checks the structural validity of the chosen flow, not that it is the
+  correct flow.)
 - [ ] **No package files and no write map were produced**
   (`package_files: null`, `type_map_write: null`). Package-file absence
   is something the validator cannot see — it checks JSON documents only;

@@ -1,8 +1,13 @@
 # Lifecycle phases
 
-Excerpted from `docs/schema-contracts/shared/lifecycle-phases.md`. Used
-by `phase-resolvability` validation and by the creator agents when they
-declare which phase produces each value.
+Which values exist when, so a transport or operation only references values
+that can actually resolve at the point it runs.
+
+> **This is entirely author-side.** No validator checks phase resolvability: a
+> transport referencing `connection.discovered.api_domain` with no post-auth
+> output producing it validates clean and fails at connect. Only the *leading
+> scope token* of a ref is checked — never whether anything produces the path.
+> Walk the phases by hand.
 
 ## Phases
 
@@ -32,12 +37,17 @@ transport for the post-auth `discovery_request` that produces
 `api_domain`. Once discovery completes, normal API calls can use the
 `api` transport.
 
-## Validator findings
+## The failure this prevents
 
-`phase-resolvability` flags the common error of a transport using
-`connection.discovered.*` without a documented post-auth output that
-produces it. Other phase mismatches require declaring `phase` on each
-input correctly.
+The common error is a transport referencing `connection.discovered.*` with no
+post-auth output that produces it — the value is simply absent at connect. The
+mirror image is declaring an input's `phase` too late for the transport that
+needs it (a `base_url` component declared `phase: "auth"` cannot serve a
+pre-auth request).
+
+Neither is caught by validation. Before returning a connector, trace each
+transport's refs to the declaration that produces them and confirm the
+producing phase is no later than the consuming one.
 
 ## Runtime OAuth scope
 

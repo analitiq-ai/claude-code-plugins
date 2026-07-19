@@ -173,6 +173,12 @@ mechanical — the same judgment transfers across providers:
   `TIMESTAMP WITH TIME ZONE` → `Timestamp(<unit>, UTC)`.
 - **Bare vs zoned timestamp**: choose the tz-aware canonical only when the
   native (or, for APIs, the sample value) actually carries a zone.
+- **A boolean spelled as a narrow numeric** — some systems have no boolean
+  type and document a width-1 integer as their boolean (MySQL's `TINYINT(1)`).
+  Map the documented boolean spelling to `Boolean`, and keep the general
+  numeric native mapping to its integer canonical. Follow the provider's
+  documentation, not the type name: only map a numeric to `Boolean` where the
+  docs say that spelling *is* the boolean.
 
 ## API coverage (read map)
 

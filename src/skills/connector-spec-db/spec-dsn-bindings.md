@@ -43,10 +43,8 @@ Snowflake) may omit `dsn` entirely.
 - `template` is a connector-authored string with `{placeholder}` markers.
   No direct `${...}` context references — those go inside binding `value`
   expressions.
-- Every placeholder in the template must have a matching binding key.
-- Every binding key should appear in the template (the `dsn-binding`
-  validator emits a warning when unused; an extra binding is allowed if
-  the transport documents another use for it).
+- Every placeholder in the template must have a matching binding key, and
+  every binding key must be referenced by the template (ADV-CTOR-011).
 - Each binding declares:
   - `value` — a value expression (`ref` or `template` or `function`).
   - `encoding` — one of the closed enum values listed below.

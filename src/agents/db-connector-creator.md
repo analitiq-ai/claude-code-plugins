@@ -66,6 +66,9 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+  (the `connector` + `type-map` sections — the cross-field rules your
+  artifacts must satisfy)
 
 ## Authoring order
 
@@ -117,8 +120,8 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `port`, `database`, `username`, `password`, `ssl_mode`,
    `ssl_ca_certificate`. Each with the right `source` / `phase` /
    `storage` / `type` / `secret` / `enum` / `default`. The `ssl_mode`
-   input must declare its enum so `tls-consistency` and lookup-based
-   mappings can validate. The mode vocabulary is connector-defined
+   input must declare its enum so the dialect and any lookup-based
+   mappings have a closed vocabulary to interpret. The mode vocabulary is connector-defined
    (libpq-style for postgres-shaped systems; MySQL declares its native
    `DISABLED`/`PREFERRED`/`REQUIRED`/`VERIFY_CA`/`VERIFY_IDENTITY`) —
    the dialect's `build_tls_connect_arg` interprets it.
@@ -219,9 +222,10 @@ discipline, and dialect behavior. Do not restate validator rules.
   under-scoped walk just hides objects.)
 - [ ] **TLS is declared in the right place for the transport**:
   SQLAlchemy → the generic `tls` block; ADBC → driver-namespaced
-  `db_kwargs` entries with no `tls` block. (The `tls-consistency`
-  validator checks the ssl_ca / verify-mode pairing, not that the block
-  sits on the correct transport family.)
+  `db_kwargs` entries with no `tls` block. **And** any
+  certificate-verification mode in the `ssl_mode` enum has a matching
+  `ssl_ca_certificate` input. (Nothing validates either half — the TLS
+  block is vocabulary-agnostic by design.)
 
 ## Output
 
@@ -245,6 +249,9 @@ disk.
   `tls.ca_certificate`.
 - Never author endpoint files. DB endpoints are connection-scoped and
   produced at runtime by the connector's `resource_discovery`.
+- Never author OAuth flows or HTTP transports. If the provider needs one,
+  the classification was wrong — report and stop rather than authoring
+  outside your kind.
 - Never embed type-map rules inside `connector.json` — the connector
   schema rejects unknown fields. Emit them as the standalone
   `type_map_read` / `type_map_write` outputs instead.

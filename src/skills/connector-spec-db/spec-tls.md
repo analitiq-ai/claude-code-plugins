@@ -5,9 +5,14 @@ embedding driver-specific objects. The generic `tls` block is
 **SQLAlchemy-only**; for `adbc` transports, TLS lives inside
 `db_kwargs` (e.g. `adbc.postgresql.sslmode`, `adbc.postgresql.sslrootcert`)
 — see `spec-dsn-bindings.md` and `db-connector-creator.md` step 2.
-`tls-consistency` (the `ssl_mode` enum ↔ `ssl_ca_certificate` input
-check) applies regardless of transport type because both shapes
-resolve through the same `connection_contract.inputs` definitions.
+
+> **Nothing validates TLS coherence.** The contract's TLS block is
+> deliberately vocabulary-agnostic — it enforces no mode set and does not check
+> that a verification mode has a CA certificate to verify against. Every rule
+> below is author-side discipline; a connector that declares `verify-full` with
+> no `ssl_ca_certificate` input validates clean and fails at connect. Apply the
+> checklist by hand, for both SQLAlchemy and ADBC shapes (they resolve through
+> the same `connection_contract.inputs`).
 
 ## Shape
 
@@ -35,9 +40,8 @@ resolve through the same `connection_contract.inputs` definitions.
   `secrets.ssl_ca_certificate`.
 - If the `ssl_mode` enum allows any certificate-verification mode
   (`verify-ca` / `verify-full`, or MySQL-style `VERIFY_CA` /
-  `VERIFY_IDENTITY` — the validator normalizes case and `_`/`-`), the
-  connection contract must declare `ssl_ca_certificate` as an input.
-  The `tls-consistency` validator enforces this.
+  `VERIFY_IDENTITY`), the connection contract **must** declare
+  `ssl_ca_certificate` as an input. Nothing checks this — verify it yourself.
 - Connector authors must NOT embed driver-specific TLS objects, file
   paths, or executable code in connector JSON. The runtime materializer
   converts the generic declaration into driver-specific arguments.
@@ -77,6 +81,6 @@ resolves empty.
    the dialect's `build_tls_connect_arg` is the single place that
    derives driver connect arguments from `ssl_mode`.
 5. Declare the system's native mode vocabulary in the enum and make the
-   dialect's `build_tls_connect_arg` handle exactly that vocabulary —
-   the validator checks enum ↔ `ssl_ca_certificate` consistency, the
-   dialect owns interpretation.
+   dialect's `build_tls_connect_arg` handle exactly that vocabulary — the
+   dialect owns interpretation, and no validator will tell you the two
+   disagree.
