@@ -56,9 +56,9 @@ spelling — see the prohibitions below.
 ## What must NOT go directly in a request slot
 
 - **No direct `stream.*`, `state.*`, or `runtime.*` ref** in `headers`,
-  `query`, or `body`. The contract rejects it with *"route dynamic values
-  through declared params"*. These are the per-run values — filters, cursors,
-  batch sizing — and routing them through a param is what gives them a declared
+  `query`, or `body` — the contract rejects it and tells you to route the value
+  through a declared param. These are the per-run values (filters, cursors,
+  batch sizing), and routing them through a param is what gives them a declared
   type, requiredness, and operator set. Without that, nothing downstream knows
   whether a stream may filter on the value or what it may filter with.
 

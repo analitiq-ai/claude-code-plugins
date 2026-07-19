@@ -33,6 +33,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_ROOT = REPO_ROOT / "src" / "skills"
 CONNECTOR_SCHEMA = "https://schemas.analitiq.ai/connector/latest.json"
 ENDPOINT_SCHEMA = "https://schemas.analitiq.ai/api-endpoint/latest.json"
+TYPE_MAP_SCHEMAS = {
+    "type-map-read.json": "https://schemas.analitiq.ai/type-map-read/latest.json",
+    "type-map-write.json": "https://schemas.analitiq.ai/type-map-write/latest.json",
+}
 
 
 def _example_dirs() -> list[Path]:
@@ -95,6 +99,37 @@ def test_example_connector_validates(example_dir: Path, tmp_path: Path) -> None:
     assert not errors, "\n".join(
         f"{f['validator']} {f['path']}: {f['message']}" for f in errors
     )
+
+
+@pytest.mark.parametrize("example_dir", _example_dirs(), ids=lambda d: d.name)
+def test_example_type_maps_validate(example_dir: Path, tmp_path: Path) -> None:
+    """Validate each type map as a standalone document, under its own filename.
+
+    This is the invocation `connector-schema-validator` documents (each map
+    validated against its matching read/write schema URL, direction derived from
+    the filename), so it should be exercised directly rather than only through
+    the connector's sibling walk. It also localizes a failure to the map instead
+    of surfacing it on the connector.
+
+    It does NOT close the database read-map gap: rule-shape errors are already
+    caught by the sibling walk, and neither level probes natives on a DB
+    connector, so a wrong-case `exact` native still ships silently. That gap is
+    documented in `spec-type-maps.md`, not covered here.
+    """
+    definition = _stage(example_dir, tmp_path).parent
+    present = [(definition / name, url) for name, url in TYPE_MAP_SCHEMAS.items()
+               if (definition / name).exists()]
+    assert present, f"{example_dir.name} ships no type map"
+
+    for map_path, schema_url in present:
+        document = json.loads(map_path.read_text(encoding="utf-8"))
+        findings = validate_document(
+            document, doc_path=map_path.resolve(), schema_url=schema_url
+        )
+        errors = _errors(findings)
+        assert not errors, f"{map_path.name}\n" + "\n".join(
+            f"{f['validator']} {f['path']}: {f['message']}" for f in errors
+        )
 
 
 @pytest.mark.parametrize("example_dir", _example_dirs(), ids=lambda d: d.name)

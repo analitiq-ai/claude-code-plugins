@@ -148,9 +148,8 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `${name}` substitutions backed by those captures). Cover the **full
    canonical vocabulary**. Reconcile the validator's
    `type-map-write-coverage` warning, but do not treat a clean run as
-   coverage: it probes a sample and does **not** exercise
-   `FixedSizeBinary`, `Time32`, or any tz-aware `Timestamp`, so check
-   those by hand. Leave a family unmapped only when
+   coverage — it probes only a sample. `spec-type-maps.md` lists which
+   families go unprobed; check those by hand. Leave a family unmapped only when
    the dialect deliberately takes over its rendering via a
    `render_column_type` override (BigQuery's NUMERIC/BIGNUMERIC
    precision ranges). See `spec-type-maps.md`. Written to

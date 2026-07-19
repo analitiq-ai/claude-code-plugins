@@ -93,8 +93,8 @@ does not fetch it.
 
 The three document families differ, so don't generalize from one to another:
 
-| Document | `$schema` |
-|---|---|
-| Connector | Optional in the model, **required for a standalone file**. Matched by pattern, tolerating any environment host (`schemas.analitiq.<tld>`). |
-| API endpoint | **Required**, and locked to the `.ai` URL by a `const` — a different host is rejected. |
-| Type maps | **None.** Both maps are bare JSON arrays with no envelope and no `$schema`; the validator derives the read/write direction from the filename. |
+| Document | `$schema` | Enforced? |
+|---|---|---|
+| Connector | Author it; matched by pattern, tolerating any environment host (`schemas.analitiq.<tld>`). | Partly. The *pattern* is enforced when present, but the field is optional — a connector omitting `$schema` entirely validates clean. Always writing it is our convention, not a contract rule. |
+| API endpoint | Locked to the `.ai` URL by a `const`. | Yes — required, and a different host is rejected. |
+| Type maps | None — both maps are bare JSON arrays with no envelope. | N/A; direction comes from the filename. |

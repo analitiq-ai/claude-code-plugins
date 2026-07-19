@@ -320,6 +320,40 @@ def test_kinds_match_schema(connector_schema: dict) -> None:
     )
 
 
+def test_write_coverage_probe_gaps_are_documented() -> None:
+    """`spec-type-maps.md` names the families the write-coverage check misses.
+
+    That warning is the only signal an author gets about write-map gaps, so the
+    prose tells them which families it does NOT exercise. If a future validator
+    starts probing one of them, the prose becomes a false warning about a check
+    that now works — and if it stops probing another, the list is incomplete.
+    Assert the documented gaps against the real probe set.
+    """
+    from analitiq.validator import connectors
+
+    probes = set(getattr(connectors, "_WRITE_VOCABULARY_PROBES", ()))
+    assert probes, (
+        "_WRITE_VOCABULARY_PROBES not found — the validator was restructured; "
+        "recheck the write-coverage guidance in "
+        "src/skills/connector-spec-db/spec-type-maps.md."
+    )
+
+    # Families spec-type-maps.md tells authors to verify by hand.
+    documented_gaps = {
+        "FixedSizeBinary": lambda p: p.startswith("FixedSizeBinary"),
+        "Time32": lambda p: p.startswith("Time32"),
+        "tz-aware Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" in p,
+    }
+    now_probed = sorted(
+        name for name, matches in documented_gaps.items() if any(matches(p) for p in probes)
+    )
+    assert not now_probed, (
+        f"write-coverage now probes {now_probed}, which "
+        "src/skills/connector-spec-db/spec-type-maps.md still lists as unprobed. "
+        "Drop them from that list."
+    )
+
+
 def test_validator_ids_match_package() -> None:
     """The finding ids the plugin's prose enumerates must be the ones emitted.
 

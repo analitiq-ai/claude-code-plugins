@@ -5,9 +5,9 @@ that can actually resolve at the point it runs.
 
 > **This is entirely author-side.** No validator checks phase resolvability: a
 > transport referencing `connection.discovered.api_domain` with no post-auth
-> output producing it validates clean and fails at connect. Only the *leading
-> scope token* of a ref is checked — never whether anything produces the path.
-> Walk the phases by hand.
+> output producing it validates clean and fails at connect. On a connector
+> document refs are not checked *at all* — even a nonsense scope passes — so
+> there is no backstop here whatsoever. Walk the phases by hand.
 
 ## Phases
 
