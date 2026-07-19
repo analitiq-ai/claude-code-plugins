@@ -127,10 +127,10 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    the dialect's `build_tls_connect_arg` interprets it.
 5. **Resource discovery** — populate `resource_discovery` with the
    provider's discovery strategy for enumerating the system's objects.
-   This is central for DB connectors. Match the walk to the system's
-   object hierarchy: a three-level system (catalog → schema → table, e.g.
-   Snowflake / BigQuery) must enumerate catalogs too, not just schemas and
-   tables. See `spec-resource-discovery.md`.
+   This is central for DB connectors. Pick a strategy that matches the
+   system's object hierarchy — a three-level system (catalog → schema →
+   table, e.g. Snowflake / BigQuery) must not be flattened to two. See
+   `spec-resource-discovery.md`.
 6. **Read map** — author `type_map_read` (a top-level array of
    `{match, native, canonical}` rules where `native` is the matcher)
    covering the documented native vocabulary. For OLTP databases,
@@ -146,9 +146,11 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    direction: `canonical` is the matcher — regex with named captures
    for parameterized types — and `native` is the rendered DDL, with
    `${name}` substitutions backed by those captures). Cover the **full
-   canonical vocabulary**; the validator's `type-map-write-coverage`
-   warning names every family left unrendered, so reconcile that list
-   rather than working from memory. Leave a family unmapped only when
+   canonical vocabulary**. Reconcile the validator's
+   `type-map-write-coverage` warning, but do not treat a clean run as
+   coverage: it probes a sample and does **not** exercise
+   `FixedSizeBinary`, `Time32`, or any tz-aware `Timestamp`, so check
+   those by hand. Leave a family unmapped only when
    the dialect deliberately takes over its rendering via a
    `render_column_type` override (BigQuery's NUMERIC/BIGNUMERIC
    precision ranges). See `spec-type-maps.md`. Written to
@@ -216,10 +218,9 @@ discipline, and dialect behavior. Do not restate validator rules.
   unmapped canonical family is intentional and backed by a
   `render_column_type` override, not an accidental gap. (The validator
   only *warns* and cannot tell intentional from accidental.)
-- [ ] **`resource_discovery` walks every level of this system's object
-  hierarchy** — including catalogs on a three-level system — down to
-  columns. (Nothing validates that the walk matches the hierarchy; an
-  under-scoped walk just hides objects.)
+- [ ] **`resource_discovery` declares a strategy that matches this system's
+  object hierarchy** and reaches columns. (Nothing validates the match; a
+  strategy that flattens a level just hides objects.)
 - [ ] **TLS is declared in the right place for the transport**:
   SQLAlchemy → the generic `tls` block; ADBC → driver-namespaced
   `db_kwargs` entries with no `tls` block. **And** any

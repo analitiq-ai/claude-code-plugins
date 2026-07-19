@@ -87,8 +87,8 @@ EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # endpoint-creator.md, connector-provider-researcher.md, and
 # connector-spec-api/SKILL.md.
 EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
-# Bare-marker arrow_type vocabulary enforced by the endpoint-annotations
-# semantic check (Object→properties, List→items, Json→neither). Owned by the
+# Bare-marker arrow_type vocabulary enforced by the contract's authored-shape
+# rules (Object→properties, List→items, Json→neither). Owned by the
 # api-endpoint contract's `_ARROW_AUTHORED_SHAPE` (the same alternation the
 # `arrow_type` pattern embeds); the contract model leaves the sibling-key
 # contract open, so the validator enforces it — keep this set in lockstep with
@@ -200,7 +200,7 @@ def _bare_marker_arrow_types() -> set[str] | None:
     `analitiq.contracts.endpoints._ARROW_AUTHORED_SHAPE` is the single
     definition of the marker alternation (`"Object|List|Json"`) — the same
     constant the api-endpoint `arrow_type` pattern is built from and the
-    endpoint-annotations validator keys off. There is no public generated-schema
+    authored-shape rules key off. There is no public generated-schema
     pointer for this vocabulary (`arrow_type` doesn't surface in the endpoint
     model schema), so this one check reaches a private symbol. Returns None if
     the symbol is gone (renamed) or is no longer a plain `A|B|C` alternation of
@@ -310,7 +310,8 @@ def test_bare_marker_arrow_types_match_schema() -> None:
         "authored_shape_type",
         schema_set,
         EXPECTED_BARE_MARKER_ARROW_TYPES,
-        "update CLAUDE.md and the connector-schema-validator endpoint-annotations row.",
+        "update CLAUDE.md and the container-shape guidance in "
+        "src/skills/connector-spec-db/spec-type-maps.md.",
     )
 
 

@@ -95,11 +95,12 @@ Effective headers per request are built as:
 
 Header names match case-insensitively for override and removal.
 
-**Deleting an inherited header requires `headers_remove`.** There is no
-null-as-delete marker: `{"Authorization": null}` is not a deletion, and a block
-must not both set and remove the same header name (ADV-HTTP-001). Setting a
-header to an empty string is also not a deletion — it sends an empty header.
+**Declare a deletion with `headers_remove`, not with `null`.** A block must not
+both set and remove the same header name (ADV-HTTP-001). `headers_remove` is
+available on endpoint operation requests too, not just connector transports —
+that is how one endpoint drops an inherited default (e.g. an auth header a
+public sub-resource rejects).
 
-`headers_remove` is available on endpoint operation requests too, not just on
-connector transports — that is how one endpoint drops an inherited default
-(e.g. an auth header a public sub-resource rejects).
+Don't lean on a header resolving to nothing as an implicit delete; express the
+intent with `headers_remove` so it survives regardless of how empty values are
+treated.

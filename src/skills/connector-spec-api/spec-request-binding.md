@@ -61,6 +61,10 @@ spelling — see the prohibitions below.
   batch sizing — and routing them through a param is what gives them a declared
   type, requiredness, and operator set. Without that, nothing downstream knows
   whether a stream may filter on the value or what it may filter with.
+
+  The check catches `{"ref": …}` specifically; smuggling the same value in as
+  `{"template": "${runtime.…}"}` slips past it. Don't — the reason to route
+  through a param is the declared contract, not the validator.
 - **No unscoped ref or `${...}` placeholder.** The leading token of every ref
   and every template placeholder must be one of the contract's resolution
   scopes (see `connector-builder/references/value-expressions.md`).
@@ -126,7 +130,8 @@ inside `operations.write.<mode>.request.body` — never in `path_params`,
 - Referenced fields must exist in that mode's `input.schema`.
 
 Provider envelopes are authored literally around the binding; no wrapper key is
-special:
+special. This example is a **batched** write (`records`), so it is only legal
+alongside a `batching` block — an unbatched write wraps `record` instead:
 
 ```json
 "body": { "data": { "from_input": "records" } }

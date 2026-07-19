@@ -88,12 +88,11 @@ it "feels safer" makes it unreadable to the refs that need it and misreports the
 connector's secret surface. (The contract enforces the mode↔storage pairing,
 but it cannot tell whether a value is truly secret.)
 
-**Outputs resolve in dependency order.** When one output's request references
-another's value, the runtime orders them by those references — you do not
-declare an order, and the map's key order means nothing. Two consequences: a
-reference cycle between outputs is an error, and two outputs that don't
-reference each other have **no** guaranteed relative order, so never write one
-that quietly depends on the other having run.
+**Don't rely on output ordering.** `post_auth_outputs` is a map, and nothing in
+the contract declares or validates an execution order between entries. Author
+each output so it stands on its own: never write one that quietly depends on
+another having already run, and don't build a chain of outputs referencing each
+other's values.
 
 ## Cross-input validation (`validation`)
 

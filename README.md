@@ -89,10 +89,12 @@ Schemas are generated from — so there is no schema fetch. It runs:
    Cross-field rules are part of this pass and report under `contract-model`;
    they are catalogued by id in
    `src/skills/connector-builder/references/advisory-rules.md`.
-2. **Cross-file checks** a single document can't express:
-   - `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`,
-     `endpoint-filename`, `endpoint-id-unique`, `endpoint-id-locator`,
-     `embedded-json-schema`.
+2. **Checks the contract models can't express** — cross-file relationships
+   (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
+   `endpoint-id-locator`), embedded-schema validity
+   (`embedded-json-schema`), and quality warnings on a type map
+   (`type-map-rule`, `type-map-write-coverage`). A document matching no known
+   artifact kind reports under `document`.
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.

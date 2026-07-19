@@ -34,7 +34,8 @@ Pick what you need for the auth and pagination styles you're authoring:
 
 ## What this skill covers
 
-- HTTP transport idioms: single-origin, multi-origin, templated `base_url`.
+- HTTP transport idioms: single-origin and multi-origin (`base_url` must be a
+  literal string — see `spec-transport.md` for the multi-tenant limitation).
 - All API auth-type templates: `api_key`, `basic_auth`,
   `oauth2_authorization_code`, `oauth2_client_credentials`, `jwt`,
   `credentials`, `aws_iam`, `none`.

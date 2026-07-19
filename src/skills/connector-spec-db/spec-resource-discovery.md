@@ -3,10 +3,9 @@
 How database connectors declare the discovery strategy that the runtime
 uses to enumerate a system's objects.
 
-## The object hierarchy shapes discovery
+## The object hierarchy
 
-Systems differ in how many namespace levels sit above a table, and discovery
-has to walk the right number of them:
+Systems differ in how many namespace levels sit above a table:
 
 | Shape | Levels | Examples |
 |---|---|---|
@@ -14,15 +13,12 @@ has to walk the right number of them:
 | Two-level | schema → table | PostgreSQL, Redshift, Oracle |
 | Schema-less | database → table | MySQL / MariaDB, where the "schema" *is* the database |
 
-This shape is **not** a field you declare on the connector — the runtime derives
-it from the transport's driver. What it changes is your authoring: a three-level
-system must enumerate catalogs, and its endpoints carry a populated `catalog`;
-a schema-less system must not invent a second level to look uniform.
-
-Discovery therefore walks up to **four** actions, not three —
-`list_catalogs` (three-level systems only), `list_schemas`, `list_resources`,
-and `describe_resource`. A connector for Snowflake or BigQuery that enumerates
-only schemas and tables silently hides everything outside the default catalog.
+This shape is **not** something the connector declares — there is no catalog
+trigger to configure, and the discovery contract exposes exactly two actions
+(`list_resources`, `describe_resource`). What the shape affects is the
+`strategy` you pick and what the generated endpoints carry: on a three-level
+system the objects' `catalog` must come back populated, and on a schema-less
+system don't invent a second level to look uniform.
 
 ## Shape
 
@@ -106,5 +102,5 @@ declare determines whether they come out addressable:
 - Don't author a custom strategy in `implementation` unless one of the
   builtin IDs doesn't fit. Most connectors should use builtin
   strategies.
-- Don't enumerate only schemas and tables on a three-level system — see the
-  hierarchy table above.
+- Don't pick a strategy that flattens away a level the system actually has —
+  on a three-level system that hides everything outside the default catalog.

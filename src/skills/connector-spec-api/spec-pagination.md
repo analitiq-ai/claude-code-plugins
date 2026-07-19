@@ -94,8 +94,10 @@ range or an account id in a pagination block, it belongs elsewhere.
 ## `offset`
 
 Fixed-size pages addressed by an integer offset. `offset.increment_by` defaults
-to the effective limit, so declare it only when the provider counts in
-something other than records.
+to the effective limit. Prefer leaving it out: the contract accepts it, but a
+non-default step is not reliably honoured, so a provider that counts in
+something other than records may not paginate as declared — verify before
+depending on it.
 
 ```json
 {
@@ -127,6 +129,12 @@ the runtime sends it only from page two onward.
 ```
 
 ## `link`
+
+> **Check executability before choosing this.** `link` is a valid contract
+> strategy, but engine support for it has lagged the contract — a connector can
+> validate clean and then fail at read time with an unsupported-pagination-type
+> error. Confirm the target engine version handles `link`; if in doubt, prefer
+> `cursor`, which is equivalent for most providers that offer both.
 
 The next-page URL comes from the response (a `Link: <…>; rel="next"` header or
 a body field). `link.next_url` resolves to that URL and **replaces the entire

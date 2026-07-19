@@ -33,17 +33,19 @@ connector or endpoint actually writes.
 | `connection.selections.*` | `post_auth` and later | Durable user choices declared as `post_auth_outputs` with `storage: "connection.selections"`. |
 | `connection.discovered.*` | `post_auth` and later | Auto-discovered non-secret context (e.g. `api_domain`) declared as `post_auth_outputs` with `storage: "connection.discovered"`. |
 | `auth.*` | `auth` and later | Auth tokens (access_token, refresh_token, expiry). |
-| `runtime.*` | varies by ref | Per-run values — `run_id`, `current_time`, `batch_size`, the OAuth set (`state`, `redirect_uri`, `code`, `pkce_verifier`, `code_challenge`, `code_challenge_method`), and operation-local values like `runtime.pagination.offset`. Availability per `lifecycle-phases.md`. |
+| `runtime.*` | varies by ref | Per-run values. Only two families are actually supplied: `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set (`state`, `redirect_uri`, `code`, `pkce_verifier`, `code_challenge`, `code_challenge_method`) per `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`, `runtime.current_time`) validates clean and fails at resolution — don't guess names. |
 | `response.*` | endpoint response handling | The response being processed — `response.body.*`, `response.headers.*`. This is what pagination `stop_when` / `next_cursor` and `response.metadata` refs target. |
 | `request.*` | endpoint request handling | The request being built. |
 | `stream.*` | per stream | Stream-owned routing, tenant context, stream-specific auth context. |
 | `state.*` | per run | Replication watermarks and other carried-over run state. |
 | `connector.*` | any | Connector-level declared values. |
 
-Only the **leading token** is contract-checked. A ref with a valid scope but a
-path nothing produces (`connection.discovered.nope`) passes validation and
-resolves empty at runtime — the check is a spelling guard, not a resolvability
-proof.
+**Scope checking is endpoint-only, and shallow even there.** On an *endpoint*
+expression the **leading token** must be a known scope; the rest of the path is
+never checked, so `connection.discovered.nope` passes and resolves empty. On a
+*connector* document nothing is checked at all — a transport header reffing
+`bogus.thing` validates clean. Treat every ref as unverified: trace it to the
+declaration that produces it yourself.
 
 > **`stream.*`, `state.*`, and `runtime.*` are barred from endpoint request
 > slots.** They may not appear as direct refs in `request.headers` / `query` /
@@ -74,11 +76,12 @@ than loudly at authoring time.
 `encoding` already owns percent-encoding; wrapping the value encodes it twice.
 `url_encode` is for URL components you build yourself in a `template`.
 
-**Planned — NOT yet registered; do not reference (validation rejects unknown
-function names):** `jwt_sign` (sign a JWT from key/algorithm/claims) and
-`pkce_challenge_s256` (derive a PKCE S256 challenge from a runtime verifier).
-Until the engine registers a function, connectors must not call it — this
-includes the inline-signing path for `jwt` auth.
+**Planned — NOT yet registered; do not reference:** `jwt_sign` (sign a JWT from
+key/algorithm/claims) and `pkce_challenge_s256` (derive a PKCE S256 challenge
+from a runtime verifier). Nothing rejects them at authoring time (see below),
+so calling one ships a connector that fails at connect. Until the engine
+registers a function, connectors must not call it — this includes the
+inline-signing path for `jwt` auth.
 
 **Nothing validates the function name.** An unregistered name (including
 `jwt_sign`) passes every check and fails only when the engine tries to resolve

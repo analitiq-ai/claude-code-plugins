@@ -56,30 +56,39 @@ readability when the pattern would otherwise look ambiguous.
 
 ## Uppercase rule (read maps)
 
-Read-map matching **uppercases the incoming native and compares the rule's
-matcher verbatim**. Normalization applies to the probe, never to the rule. So
-**every read-map matcher must be authored uppercase** — both directions of that
-sentence matter:
+**Author every read-map matcher uppercase**, with whitespace exactly as the
+system reports it. That is the safe intersection of two slightly different
+normalizations:
 
-- **`exact` natives must be uppercase.** `{"match": "exact", "native":
-  "varchar"}` can never fire, because the probe arrives as `VARCHAR` and the
-  matcher is compared as authored. This is the most dangerous authoring
-  mistake in a type map: **nothing flags it.** The rule is structurally valid,
-  the map validates clean, and the miss only surfaces as a runtime type
-  resolution failure.
+- **The validator** uppercases only the *incoming* native and compares your
+  matcher **verbatim**, with no whitespace handling.
+- **The runtime** normalizes *both* sides — trim, collapse internal whitespace
+  runs, uppercase.
+
+So the runtime is the more forgiving of the two, and the validator is the gate
+you must satisfy. Concretely:
+
+- **`exact` natives must be authored uppercase.** `{"match": "exact", "native":
+  "varchar"}` would resolve fine at runtime, but the validator's coverage check
+  cannot match it against the `VARCHAR` probe and reports the native as
+  uncovered — an **error** on the owning connector. Author `VARCHAR`.
 - **Author `regex` patterns uppercase** (`^VARCHAR\(\d+\)$`, not
-  `^varchar\(\d+\)$`). A lowercase literal in the pattern can never match;
-  unlike the `exact` case, the validator does warn on this one.
+  `^varchar\(\d+\)$`). A lowercase literal can never match the uppercased
+  probe; the validator warns on this one.
 - **Named capture group names stay lowercase** (`(?<precision>…)`) — only the
   matched text is uppercased, not the group names.
+- **Don't rely on whitespace collapsing.** The runtime collapses internal runs,
+  the validator does not. Write the native with single spaces exactly as
+  documented (`TIMESTAMP WITHOUT TIME ZONE`), or use a regex tolerant of the
+  variation.
 
-Normalization is **uppercase only** — there is no whitespace collapsing. A
-native carrying internal spacing (`TIMESTAMP WITHOUT TIME ZONE`) must be
-matched with its spacing exactly as the engine reports it, or with a regex that
-tolerates the variation.
+> A standalone type-map file cannot catch a case mistake — there is no native
+> to probe. It surfaces when the map is validated **as a connector's sibling**,
+> where every endpoint's natives are resolved through it. Validate the
+> connector, not just the map.
 
-Write-map matchers run against PascalCase canonical strings verbatim — no
-normalization at all, so case is significant there too.
+Write-map matchers run against PascalCase canonical strings **case-preserving**
+(the Arrow vocabulary is mixed-case), so case is significant there too.
 
 ## `${name}` substitution in regex rules
 
@@ -105,18 +114,13 @@ On the **read** side a templated render is only legal on a `regex` rule — an
 `exact` native has no captures to substitute from, so its `canonical` must be a
 fully-resolved literal.
 
-On the **write** side an `exact` rule **may** carry `${…}` in its rendered
-`native`. Those placeholders are not regex captures but **per-column DDL
-hints** supplied by the column being rendered, which is how a fixed canonical
-renders a length-carrying native:
-
-```json
-{ "match": "exact", "canonical": "Utf8", "native": "VARCHAR(${length})" }
-```
-
-Prefer this to a bare `TEXT` when the target system's string type takes a
-length and the column declares one — it preserves the width across the round
-trip.
+On the **write** side the contract *accepts* `${…}` in an `exact` rule's
+rendered `native` (the placeholder would be filled from a per-column hint
+rather than a regex capture) — but **do not author one**. DDL rendering
+currently passes no per-column hints, so an unresolved placeholder fails at
+`CREATE TABLE`. Render a concrete native (`TEXT`, or a fixed
+`VARCHAR(255)`); use a `regex` rule when the width genuinely comes from the
+canonical.
 
 (Timestamp precision is **not** a `${}` case — Arrow's unit is a
 symbolic enum, not a digit; match on the native's digit count and ladder
@@ -131,9 +135,14 @@ A schemaless or structured-container native — `JSON`, `JSONB`, `VARIANT`,
 **never a scalar** like `Utf8`. The canonical is a *claim about the shape* of
 the data: `Utf8` asserts an opaque string and throws the structure away, so it
 is wrong for a JSON / array / struct column even when the driver happens to
-hand the value over as text on the wire. The `type-map-rule` validator
-**enforces** this — a schemaless / container native resolving to a scalar
-canonical is an error.
+hand the value over as text on the wire.
+
+> **Only the syntactic half is enforced** (ADV-TMAP-001/002). The contract
+> flags a native whose *shape* is visibly a container — angle brackets
+> (`array<object>`) or a `[]` suffix (`integer[]`). A bare vendor spelling is
+> deliberately not special-cased, so `{"native": "JSONB", "canonical": "Utf8"}`
+> validates **clean**. That is the common case and the one you have to get
+> right yourself.
 
 | Native (read) | Canonical |
 |---|---|
@@ -251,14 +260,17 @@ source could hand this system needs a rendering, including the parameterized
 families (Decimal via a regex with `${p}`/`${s}` captures) and both the bare
 and tz-aware `Timestamp` forms.
 
-Don't work from a memorized list: run the validator and read its
-`type-map-write-coverage` warning, which names every family your map leaves
-unrendered. Reconcile each one — a gap is legitimate **only** when the
-connector's dialect takes over that family's rendering via a
-`render_column_type` override (BigQuery ships no Decimal rule because
-NUMERIC/BIGNUMERIC selection needs precision-range arithmetic rules cannot
-express), never as a way to cut scope. Note the warning probes a representative
-sample, so a clean run is a floor, not proof of total coverage.
+Run the validator and reconcile every family its `type-map-write-coverage`
+warning names. A gap is legitimate **only** when the connector's dialect takes
+over that family's rendering via a `render_column_type` override (BigQuery
+ships no Decimal rule because NUMERIC/BIGNUMERIC selection needs
+precision-range arithmetic rules cannot express), never as a way to cut scope.
+
+**A clean warning is not proof of coverage.** The check probes a representative
+sample and does not exercise `FixedSizeBinary`, `Time32`, or any **tz-aware**
+`Timestamp` — a map missing all three still passes. Verify those by hand;
+`Timestamp(<unit>, UTC)` in particular is easy to miss because the bare
+`Timestamp` probe passes without it.
 
 Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a

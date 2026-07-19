@@ -87,7 +87,8 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    `client_secret` as `source: "platform"` inputs. For api_key, declare the
    `api_key` input with `secret: true`.
 5. **Resource discovery** — only if the provider has dynamic post-auth
-   discovery (e.g. Pipedrive's `api_domain`).
+   discovery (a value only readable after auth, e.g. an account id or
+   region read from a post-auth probe).
 6. **Type map (read)** — author a standalone `type_map_read` (a top-level array of
    `{match, native, canonical}` rules) covering every `(native_type,
    arrow_type)` pair the endpoint-creator emits on typed field schemas.

@@ -43,10 +43,12 @@ Same locator ⇒ same handle on every re-author / re-discovery (idempotent).
   `Sales."Order Items"` → `sales__order_items__0e62f7e9`. The slug keeps it
   legible; the hash guarantees uniqueness and determinism.
 
-  Both derivations ship in the contract package
-  (`analitiq.contracts.endpoint_identity.derive_db_endpoint_id`), so neither is
-  reimplemented here — this plugin authors no database endpoints, and the
-  runtime discovery that does produce them derives the id from that function.
+  The database derivation ships in the contract package as
+  `analitiq.contracts.endpoint_identity.derive_db_endpoint_id`, so it is never
+  reimplemented — this plugin authors no database endpoints, and the runtime
+  discovery that does produce them derives the id from that function. (The API
+  flatten lives in the validator, which recomputes it to enforce
+  `endpoint-id-locator`.)
 
 ## Why "encodes the locator" (API) and "opaque handle" (DB) are the same rule
 
