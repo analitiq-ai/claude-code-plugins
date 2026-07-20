@@ -7,7 +7,7 @@ and `connectors/connector-schema-parameterization.md`.
 
 | Field | Required | Notes |
 |---|---|---|
-| `$schema` | Yes (for standalone files) | Fixed const: `https://schemas.analitiq.ai/connector/latest.json`. The validator matches on this URL offline; it does not fetch it. |
+| `$schema` | Yes (for standalone files) | `https://schemas.analitiq.ai/connector/latest.json`. Always author this canonical URL. The connector contract accepts the published URL on any environment host (`schemas.analitiq.<tld>`), so a document authored against `.ai` still validates where the engine serves a per-environment schema. The validator matches on this URL offline; it does not fetch it. |
 | `kind` | Yes | The connector family — a schema-owned `kind` enum (validator-enforced); see CLAUDE.md for the current set. |
 | `connector_id` | Yes | Stable connector slug matching `^[a-z0-9][a-z0-9_-]*$` (lowercase). Names the on-disk `{connector_id}/` directory so the identifier and directory stay in sync. The connector contract **requires** `connector_id` in every authored definition — the "service-assigns-when-omitted" rule is `connection_id`'s on *connection* documents, not `connector_id`'s. |
 | `display_name` | No | User-facing label. |
@@ -50,8 +50,13 @@ must not appear in authored documents:
 - `updated_at`
 
 The published schema reflects this — the authoring shape does not list
-them in `properties` or `required`. The plugin's `reserved-field`
-validator flags them as errors if they appear.
+them in `properties` or `required`, so the contract models reject them
+(reported under `contract-model`).
+
+Reserving a field name at the **document** level does not reserve it inside a
+provider-owned namespace. A provider response legitimately containing a
+`created_at` field is fine: `response.schema` describes the provider's data, not
+the Analitiq document envelope. Only the document's own top level is reserved.
 
 ## Release version (`version`)
 
@@ -83,6 +88,13 @@ Authored connector files declare:
 { "$schema": "https://schemas.analitiq.ai/connector/latest.json" }
 ```
 
-This is locked by a `const` inside the published schema. Do not write a
-different URL — the validator will reject it. The validator matches on this
-URL offline; it does not fetch it.
+Always author the canonical `.ai` URL. The validator matches on it offline; it
+does not fetch it.
+
+The three document families differ, so don't generalize from one to another:
+
+| Document | `$schema` | Enforced? |
+|---|---|---|
+| Connector | Author it; matched by pattern, tolerating any environment host (`schemas.analitiq.<tld>`). | Partly. The *pattern* is enforced when present, but the field is optional — a connector omitting `$schema` entirely validates clean. Always writing it is our convention, not a contract rule. |
+| API endpoint | Locked to the `.ai` URL by a `const`. | Yes — required, and a different host is rejected. |
+| Type maps | None — both maps are bare JSON arrays with no envelope. | N/A; direction comes from the filename. |

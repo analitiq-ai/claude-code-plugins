@@ -60,6 +60,9 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+  (the `connector` + `type-map` sections — the cross-field rules your
+  artifacts must satisfy)
 
 ## Authoring order
 
@@ -84,7 +87,8 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    `client_secret` as `source: "platform"` inputs. For api_key, declare the
    `api_key` input with `secret: true`.
 5. **Resource discovery** — only if the provider has dynamic post-auth
-   discovery (e.g. Pipedrive's `api_domain`).
+   discovery (a value only readable after auth, e.g. an account id or
+   region read from a post-auth probe).
 6. **Type map (read)** — author a standalone `type_map_read` (a top-level array of
    `{match, native, canonical}` rules) covering every `(native_type,
    arrow_type)` pair the endpoint-creator emits on typed field schemas.
@@ -119,9 +123,9 @@ restate validator rules.
 - [ ] **An incremental/replication cursor is set wherever the resource
   supports one.** (Provider behavior, not schema.)
 - [ ] **The auth flow matches the provider's documented auth**, including
-  token refresh where the provider issues short-lived tokens. (The
-  `auth-shape` validator checks the structural validity of the chosen
-  flow, not that it is the correct flow.)
+  token refresh where the provider issues short-lived tokens. (The contract
+  checks the structural validity of the chosen flow, not that it is the
+  correct flow.)
 - [ ] **No package files and no write map were produced**
   (`package_files: null`, `type_map_write: null`). Package-file absence
   is something the validator cannot see — it checks JSON documents only;

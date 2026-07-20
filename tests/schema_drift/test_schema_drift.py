@@ -18,37 +18,26 @@ to the exact contract the plugin enforces at authoring time, not a
 separately-hosted copy that can drift, 403, or 404.
 
 The package is pinned — by CI and by the `connector-schema-validator` agent — to
-`analitiq-validator==1.0.0rc10` / `analitiq-contract-models==1.0.0rc10`. When it
-isn't installed the whole module is skipped (offline-dev convenience) — except in
-CI, which sets `DRIFT_REQUIRE_CONTRACT_MODELS=1` so a missing or broken package
-is a hard failure there, never a green all-skipped gate. Run `-rs` to print skip
-reasons.
+the version in `tests/schema_drift/_pins.py`. When it isn't installed the whole
+module is skipped (offline-dev convenience) — except in CI, which sets
+`DRIFT_REQUIRE_CONTRACT_MODELS=1` so a missing or broken package is a hard
+failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.
 """
 
 from __future__ import annotations
 
-import os
 import re
 
 import pytest
 
-# Read the SAME contract models the validator validates against. When the package
-# is absent an offline dev run can't perform the check, so skip — BUT CI (this
-# suite is a merge gate) sets DRIFT_REQUIRE_CONTRACT_MODELS=1, making a missing or
-# broken package a HARD failure there, never a green all-skipped run. (A renamed
-# submodule already errors at the imports below, which this parent-package guard
-# does not cover — that asymmetry is intentional: both surface as red in CI.)
-try:
-    import analitiq.contracts  # noqa: F401
-except ImportError:  # pragma: no cover - environment guard
-    if os.environ.get("DRIFT_REQUIRE_CONTRACT_MODELS") == "1":
-        raise
-    pytest.skip(
-        "analitiq-contract-models not installed — run `pip install --pre "
-        '"analitiq-validator==1.0.0rc10" "analitiq-contract-models==1.0.0rc10"` '
-        "to run the drift guards",
-        allow_module_level=True,
-    )
+# Read the SAME contract models the validator validates against. The shared guard
+# skips an offline dev run but hard-fails in CI (DRIFT_REQUIRE_CONTRACT_MODELS=1),
+# so this merge gate can never pass by skipping. (A renamed submodule errors at
+# the imports below, which the parent-package guard does not cover — that
+# asymmetry is intentional: both surface as red in CI.)
+from _pins import assert_pinned_versions, require_contract_models  # noqa: E402
+
+require_contract_models("analitiq.contracts")
 
 from pydantic import TypeAdapter  # noqa: E402  (imports gated by the guard above)
 from analitiq.contracts.connector import Connector  # noqa: E402
@@ -87,8 +76,8 @@ EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # endpoint-creator.md, connector-provider-researcher.md, and
 # connector-spec-api/SKILL.md.
 EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
-# Bare-marker arrow_type vocabulary enforced by the endpoint-annotations
-# semantic check (Object→properties, List→items, Json→neither). Owned by the
+# Bare-marker arrow_type vocabulary enforced by the contract's authored-shape
+# rules (Object→properties, List→items, Json→neither). Owned by the
 # api-endpoint contract's `_ARROW_AUTHORED_SHAPE` (the same alternation the
 # `arrow_type` pattern embeds); the contract model leaves the sibling-key
 # contract open, so the validator enforces it — keep this set in lockstep with
@@ -102,6 +91,34 @@ EXPECTED_BARE_MARKER_ARROW_TYPES = {"Object", "List", "Json"}
 # `database`), the same posture it holds for `file` / `s3` / `stdout`.
 EXPECTED_KINDS = {"api", "database", "nosql", "document", "file", "s3", "stdout"}
 EXPECTED_TRANSPORT_TYPES = {"http", "sqlalchemy", "adbc", "s3", "file", "stdout"}
+# Validator ids a connector/endpoint/type-map finding may carry — restated in
+# io-contracts.md's `Diagnostics` enum and the connector-schema-validator agent's
+# id table. Owned by `analitiq.validator.VALIDATOR_IDS`, minus the `bundle-*` ids,
+# which only apply to pipeline bundles this plugin never validates.
+EXPECTED_VALIDATOR_IDS = {
+    "contract-model",
+    "document",
+    "type-map-coverage",
+    "type-map-rule",
+    "type-map-write-coverage",
+    "endpoint-filename",
+    "endpoint-id-unique",
+    "endpoint-id-locator",
+    "embedded-json-schema",
+}
+# Resolution scopes a `ref` / `${...}` placeholder may lead with — restated as the
+# scope table in references/value-expressions.md.
+EXPECTED_RESOLUTION_SCOPES = {
+    "connector",
+    "connection",
+    "secrets",
+    "auth",
+    "stream",
+    "state",
+    "runtime",
+    "request",
+    "response",
+}
 
 
 # --- helpers ---------------------------------------------------------------
@@ -172,7 +189,7 @@ def _bare_marker_arrow_types() -> set[str] | None:
     `analitiq.contracts.endpoints._ARROW_AUTHORED_SHAPE` is the single
     definition of the marker alternation (`"Object|List|Json"`) — the same
     constant the api-endpoint `arrow_type` pattern is built from and the
-    endpoint-annotations validator keys off. There is no public generated-schema
+    authored-shape rules key off. There is no public generated-schema
     pointer for this vocabulary (`arrow_type` doesn't surface in the endpoint
     model schema), so this one check reaches a private symbol. Returns None if
     the symbol is gone (renamed) or is no longer a plain `A|B|C` alternation of
@@ -215,6 +232,11 @@ def connector_schema() -> dict:
 @pytest.fixture(scope="module")
 def api_endpoint_schema() -> dict:
     return _schema(ApiEndpointDoc)
+
+
+def test_installed_versions_are_pinned() -> None:
+    """Guard the guards: every assertion below is only meaningful at the pin."""
+    assert_pinned_versions()
 
 
 def test_auth_types_match_schema(connector_schema: dict) -> None:
@@ -282,7 +304,8 @@ def test_bare_marker_arrow_types_match_schema() -> None:
         "authored_shape_type",
         schema_set,
         EXPECTED_BARE_MARKER_ARROW_TYPES,
-        "update CLAUDE.md and the connector-schema-validator endpoint-annotations row.",
+        "update CLAUDE.md and the container-shape guidance in "
+        "src/skills/connector-spec-db/spec-type-maps.md.",
     )
 
 
@@ -294,6 +317,94 @@ def test_kinds_match_schema(connector_schema: dict) -> None:
         EXPECTED_KINDS,
         "update CLAUDE.md ('kind (one of ...)') and KindMapper in "
         "src/skills/connector-builder/references/enum-mappers.md.",
+    )
+
+
+def test_write_coverage_probe_gaps_are_documented() -> None:
+    """`spec-type-maps.md` names the families the write-coverage check misses.
+
+    That warning is the only signal an author gets about write-map gaps, so the
+    prose tells them which families it does NOT exercise. If a future validator
+    starts probing one of them, the prose becomes a false warning about a check
+    that now works — and if it stops probing another, the list is incomplete.
+    Assert the documented gaps against the real probe set.
+    """
+    from analitiq.validator import connectors
+
+    probes = set(getattr(connectors, "_WRITE_VOCABULARY_PROBES", ()))
+    assert probes, (
+        "_WRITE_VOCABULARY_PROBES not found — the validator was restructured; "
+        "recheck the write-coverage guidance in "
+        "src/skills/connector-spec-db/spec-type-maps.md."
+    )
+
+    # Families spec-type-maps.md tells authors to verify by hand.
+    documented_gaps = {
+        "FixedSizeBinary": lambda p: p.startswith("FixedSizeBinary"),
+        "Time32": lambda p: p.startswith("Time32"),
+        "tz-aware Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" in p,
+        "Decimal256": lambda p: p.startswith("Decimal256"),
+    }
+    now_probed = sorted(
+        name for name, matches in documented_gaps.items() if any(matches(p) for p in probes)
+    )
+    assert not now_probed, (
+        f"write-coverage now probes {now_probed}, which "
+        "src/skills/connector-spec-db/spec-type-maps.md still lists as unprobed. "
+        "Drop them from that list."
+    )
+
+    # The other direction: families the prose implies ARE probed. Without this,
+    # the check only catches gaps closing, never new gaps opening — and the
+    # prose would quietly become an incomplete list of what to verify by hand.
+    expected_probed = {
+        "Boolean": lambda p: p == "Boolean",
+        "Json": lambda p: p == "Json",
+        "Decimal128": lambda p: p.startswith("Decimal128"),
+        "bare Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" not in p,
+        "Utf8": lambda p: p == "Utf8",
+    }
+    stopped_probing = sorted(
+        name for name, matches in expected_probed.items() if not any(matches(p) for p in probes)
+    )
+    assert not stopped_probing, (
+        f"write-coverage no longer probes {stopped_probing}, so authors get no "
+        "warning for those families. Add them to the by-hand list in "
+        "src/skills/connector-spec-db/spec-type-maps.md."
+    )
+
+
+def test_validator_ids_match_package() -> None:
+    """The finding ids the plugin's prose enumerates must be the ones emitted.
+
+    `bundle-*` ids are excluded: they belong to pipeline-bundle validation, which
+    this plugin never invokes, so carrying them in an authoring reference would
+    imply findings an author can never see.
+    """
+    from analitiq.validator import VALIDATOR_IDS
+
+    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
+    assert package_set == EXPECTED_VALIDATOR_IDS, _diff_msg(
+        "validator ids",
+        package_set,
+        EXPECTED_VALIDATOR_IDS,
+        "update the Diagnostics enum in "
+        "src/skills/connector-builder/references/io-contracts.md, the id table in "
+        "src/agents/connector-schema-validator.md, the Agents bullet in CLAUDE.md, "
+        "and the check list in README.md.",
+    )
+
+
+def test_resolution_scopes_match_contract() -> None:
+    from analitiq.contracts.value_expression import RESOLUTION_SCOPES
+
+    package_set = set(RESOLUTION_SCOPES)
+    assert package_set == EXPECTED_RESOLUTION_SCOPES, _diff_msg(
+        "resolution scopes",
+        package_set,
+        EXPECTED_RESOLUTION_SCOPES,
+        "update the scope table in "
+        "src/skills/connector-builder/references/value-expressions.md.",
     )
 
 

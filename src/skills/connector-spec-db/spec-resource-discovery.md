@@ -1,7 +1,24 @@
 # Resource discovery (databases)
 
 How database connectors declare the discovery strategy that the runtime
-uses to enumerate schemas, tables, and columns.
+uses to enumerate a system's objects.
+
+## The object hierarchy
+
+Systems differ in how many namespace levels sit above a table:
+
+| Shape | Levels | Examples |
+|---|---|---|
+| Three-level | catalog → schema → table | Snowflake, BigQuery (project → dataset → table), Databricks |
+| Two-level | schema → table | PostgreSQL, Redshift, Oracle |
+| Schema-less | database → table | MySQL / MariaDB, where the "schema" *is* the database |
+
+This shape is **not** something the connector declares — there is no catalog
+trigger to configure, and the discovery contract exposes exactly two actions
+(`list_resources`, `describe_resource`). What the shape affects is the
+`strategy` you pick and what the generated endpoints carry: on a three-level
+system the objects' `catalog` must come back populated, and on a schema-less
+system don't invent a second level to look uniform.
 
 ## Shape
 
@@ -59,6 +76,24 @@ uses to enumerate schemas, tables, and columns.
   discovery. Connection-scoped type maps are out of scope for this
   plugin; see `shared/type-maps.md` for runtime resolution rules.
 
+## What discovery must record about each object
+
+The generated endpoints are produced at runtime, not here, but the strategy you
+declare determines whether they come out addressable:
+
+- **Every namespace level above the table goes into `catalog` / `schema`,
+  verbatim.** Exact case and special characters are preserved — the engine
+  dialect-quotes them into the qualified identifier. Never fold a parent
+  namespace into the object's `name`, and never try to recover it from the
+  `endpoint_id`, which is a derived handle (see
+  `connector-builder/references/endpoint-identity.md`).
+- **A column whose native type cannot be determined is recorded as the literal
+  `"unknown"`**, not omitted and not guessed. That surfaces as a visible
+  type-map miss rather than a silently mistyped column.
+- **`object_type` (table / view / …) is descriptive only.** Do not use it to
+  gate readability or writability — capability comes from the connector class's
+  protocol conformance, not from a discovered label.
+
 ## Common pitfalls
 
 - Don't try to ship database endpoints directly from the connector. They
@@ -67,3 +102,5 @@ uses to enumerate schemas, tables, and columns.
 - Don't author a custom strategy in `implementation` unless one of the
   builtin IDs doesn't fit. Most connectors should use builtin
   strategies.
+- Don't pick a strategy that flattens away a level the system actually has —
+  on a three-level system that hides everything outside the default catalog.

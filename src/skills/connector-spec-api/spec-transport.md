@@ -30,8 +30,7 @@ The simplest case: one `base_url`, one transport, one set of common headers.
 ## Multi-origin
 
 When a provider exposes auth, discovery, and data on different origins
-(e.g. Pipedrive: `oauth.pipedrive.com`, `api.pipedrive.com`, and
-`{api_domain}.pipedrive.com/api/v1`), define one transport per origin
+(e.g. separate `oauth.` / `api.` hosts), define one transport per origin
 and factor common headers into `transport_defaults`.
 
 ```json
@@ -46,7 +45,7 @@ and factor common headers into `transport_defaults`.
   },
   "transports": {
     "auth": {
-      "base_url": "https://oauth.pipedrive.com",
+      "base_url": "https://oauth.example.com",
       "headers": {
         "Authorization": {
           "function": "basic_auth",
@@ -57,30 +56,33 @@ and factor common headers into `transport_defaults`.
         }
       }
     },
-    "discovery": { "base_url": "https://api.pipedrive.com" },
-    "api": {
-      "base_url": { "template": "https://${connection.discovered.api_domain}.pipedrive.com/api/v1" }
-    }
+    "discovery": { "base_url": "https://api.example.com" },
+    "api": { "base_url": "https://api.example.com/v1" }
   }
 }
 ```
 
 The `auth` transport overrides the inherited Bearer `Authorization` with
-Basic auth. The `api` transport uses a templated `base_url` whose value
-comes from a post-auth output.
+Basic auth.
 
-## Templated `base_url`
+## `base_url` must be a literal string (current limitation)
 
-A connector may take a region or subdomain as user input and template
-it into `base_url`:
+`base_url` is typed as a plain string. A value expression — `{"template":
+"https://${connection.parameters.region}.example.com"}` or a `ref` — is
+**rejected**, so a host that varies per connection cannot be expressed today.
+That rules out:
 
-```json
-"base_url": { "template": "https://${connection.parameters.region}.example.com" }
-```
+- per-tenant hosts discovered after auth (`connection.discovered.api_domain`),
+- region / subdomain hosts taken as user input,
+- any provider whose data origin is not knowable at authoring time.
 
-The matching `region` input must be declared in
-`connection_contract.inputs` with `phase: "pre_auth"` so the template is
-resolvable before auth.
+This is a **contract gap, not a design rule**: the runtime resolver already
+handles an expression here, and sibling fields on the same transport (`headers`,
+the rate limit's `time_window_seconds`) do accept expressions. Until the
+contract catches up, a multi-tenant provider cannot be authored — surface that
+as a blocker rather than working around it. Nor can you smuggle the host into
+an operation's `request.path` as an absolute URL: `endpoint_id` is derived from
+that path, so `endpoint-id-locator` rejects it at authoring time.
 
 ## Header resolution order
 
@@ -92,3 +94,13 @@ Effective headers per request are built as:
 4. Merge resolved operation `headers`.
 
 Header names match case-insensitively for override and removal.
+
+**Declare a deletion with `headers_remove`, not with `null`.** A block must not
+both set and remove the same header name (ADV-HTTP-001). `headers_remove` is
+available on endpoint operation requests too, not just connector transports —
+that is how one endpoint drops an inherited default (e.g. an auth header a
+public sub-resource rejects).
+
+Don't lean on a header resolving to nothing as an implicit delete; express the
+intent with `headers_remove` so it survives regardless of how empty values are
+treated.
