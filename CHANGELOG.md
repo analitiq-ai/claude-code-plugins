@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.5](https://github.com/analitiq-ai/claude-plugin-connector/compare/v0.1.4...v0.1.5) (2026-07-20)
+
+
+### Features
+
+* capture decimal & temporal precision in authored read maps ([#35](https://github.com/analitiq-ai/claude-plugin-connector/issues/35)) ([b461b85](https://github.com/analitiq-ai/claude-plugin-connector/commit/b461b85970f9002ae6dde4af34baded4cc10dd06))
+* derive endpoint_id from full resource locator ([#31](https://github.com/analitiq-ai/claude-plugin-connector/issues/31)) ([999ac7f](https://github.com/analitiq-ai/claude-plugin-connector/commit/999ac7f1b2a6412e520e9674538b8787e0e04d6d))
+* **endpoint-creator:** require Content-Type on JSON request bodies ([796a3b1](https://github.com/analitiq-ai/claude-plugin-connector/commit/796a3b1abf70fbef17bd24999b607f73a71533cc))
+
+
+### Bug Fixes
+
+* adopt contract rc11 and drop the limitations it lifts ([#46](https://github.com/analitiq-ai/claude-plugin-connector/issues/46)) ([cbb0d53](https://github.com/analitiq-ai/claude-plugin-connector/commit/cbb0d53f898d36b089587b884798569c41a10c9e))
+* align plugin with published schema — function catalog, OAuth PKCE, connection-contract drift ([#36](https://github.com/analitiq-ai/claude-plugin-connector/issues/36)) ([80afe17](https://github.com/analitiq-ai/claude-plugin-connector/commit/80afe173279da70a2aadb9c5ed24e23a7c3c5156))
+* consolidate connector/endpoint prose against the rc10 contract ([#45](https://github.com/analitiq-ai/claude-plugin-connector/issues/45)) ([9264b85](https://github.com/analitiq-ai/claude-plugin-connector/commit/9264b85d99c9bd2041f0df6aa2f7fe1a5b4a260d))
+* pin validator to rc10 and repoint drift guard at the pinned package ([#44](https://github.com/analitiq-ai/claude-plugin-connector/issues/44)) ([6db68e5](https://github.com/analitiq-ai/claude-plugin-connector/commit/6db68e52149190e03a074d6863a11315a5395096))
+* stop treating param annotations as a type-map coverage source ([#29](https://github.com/analitiq-ai/claude-plugin-connector/issues/29)) ([a4ec725](https://github.com/analitiq-ai/claude-plugin-connector/commit/a4ec725a2f256d2c55595da40fd6352f82fd273e))
+
 ## [0.1.4](https://github.com/analitiq-ai/claude-plugin-connector/compare/v0.1.3...v0.1.4) (2026-07-02)
 
 
