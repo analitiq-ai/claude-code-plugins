@@ -2,16 +2,18 @@
 
 A self-check the creator agents run against their own output **before
 returning `CreatorOutput`**. It is a gate, not a substitute for the
-`connector-schema-validator`: the validator owns schema + semantic
-conformance (reserved-field, expression-resolver, dsn-binding,
-auth-shape, tls-consistency, type-map-rule, type-map coverage, …). This
-checklist deliberately covers **only what the validator structurally
-cannot enforce** — classification correctness, completeness against the
-provider's documentation, the both-directions principle, driver-choice
-discipline, and the non-JSON artifacts (package files, README) the
-in-plugin validator never sees. Do NOT restate validator rules here; if
-an item is mechanically checkable, it belongs in the validator, not on
-this list.
+`connector-schema-validator`: the validator owns structural and cross-field
+conformance (see `src/agents/connector-schema-validator.md` for what it does
+and does not check). This checklist deliberately covers **only what the
+validator cannot enforce** — classification correctness, completeness against
+the provider's documentation, the both-directions principle, driver-choice
+discipline, and the non-JSON artifacts (package files, README) the in-plugin
+validator never sees. Do NOT restate validator rules here; if an item is
+mechanically checkable, it belongs in the validator, not on this list.
+
+Three things authors often assume are validated but are not — a `function`
+name, a ref's resolvability, and TLS mode ↔ CA-certificate coherence. Those
+belong on this list, not in the validator's column.
 
 The kind-specific lists live at the end of each creator agent
 (`api-connector-creator` / `db-connector-creator`); both also apply this
@@ -36,8 +38,19 @@ shared core.
   reference.)
 - [ ] **No secret value is embedded as a literal** anywhere (passwords,
   tokens, keys) — every credential is a `ref` / `template` / `function`
-  into `secrets.*`. (The expression-resolver checks expression *shape*;
-  it cannot tell a literal default from a leaked secret.)
+  into `secrets.*`. (Nothing can tell a literal default from a leaked
+  secret.)
+- [ ] **No customer-specific value is baked into the connector** — no real
+  host, tenant id, account id, or database name. The connector declares the
+  input's shape; the connection supplies the value.
+- [ ] **Every `function` name is in the registered catalog.** Nothing
+  validates function names, so a typo or a planned-but-unregistered function
+  (e.g. `jwt_sign`) ships silently and fails at connect.
+- [ ] **Every ref resolves to something a declaration produces.** Scope
+  checking is narrow and never proves resolvability (see
+  `value-expressions.md`), so a `connection.discovered.*` ref with no post-auth
+  output behind it passes validation. Trace each one by hand
+  (`lifecycle-phases.md`).
 - [ ] **`default_transport` is the right default**, and any
   multi-transport split (auth / discovery / api origins) reflects the
   provider's real topology.

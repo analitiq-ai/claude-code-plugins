@@ -3,7 +3,7 @@
   "kind": "api",
   "connector_id": "oauth2-auth-code-example",
   "display_name": "OAuth2 Authorization Code Example",
-  "description": "Reference connector demonstrating OAuth2 authorization code with multi-origin transports and post-auth api_domain discovery.",
+  "description": "Reference connector demonstrating OAuth2 authorization code with multi-origin transports and a post-auth discovered per-tenant host.",
   "tags": [
     "example",
     "api",

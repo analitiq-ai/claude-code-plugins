@@ -56,20 +56,35 @@ readability when the pattern would otherwise look ambiguous.
 
 ## Uppercase rule (read maps)
 
-Read-map rules are matched against **UPPERCASED, whitespace-collapsed**
-native strings — the engine normalizes the native label before
-matching. Consequences:
+Read-side normalization — trim, collapse internal whitespace runs, uppercase —
+is applied differently to the two rule kinds, and that difference is the whole
+rule:
 
-- **Author `regex` patterns uppercase** (`^VARCHAR\(\d+\)$`, not
-  `^varchar\(\d+\)$`). A lowercase literal in the pattern can never
-  match; the validator warns on it.
-- `exact` natives are normalized automatically — authored case doesn't
-  matter, but uppercase is the convention.
-- **Named capture group names stay lowercase** (`(?<precision>…)`) —
-  only the matched text is normalized, not the group names.
+- **`exact` rules are normalized symmetrically.** The rule's `native` is
+  normalized at map-build time and the probed native at lookup, so
+  `{"native": "varchar"}` and `{"native": "CHARACTER  VARYING"}` both match.
+  Case and spacing genuinely don't matter here — SQL type names are
+  case-insensitive and drivers report inconsistent casing, so matching verbatim
+  would be a silent-miss footgun.
+- **`regex` rules normalize the probe only.** The pattern is used exactly as
+  authored, deliberately: uppercasing it would corrupt classes like `\d` into
+  `\D`. So **literals inside a pattern must be uppercase** —
+  `^VARCHAR\(\d+\)$`, never `^varchar\(\d+\)$`, which can never match. The
+  validator warns on this one.
+- **Named capture group names stay lowercase** (`(?<precision>…)`) — only the
+  matched text is uppercased, not the group names.
 
-Write-map matchers run against PascalCase canonical strings verbatim —
-no normalization, case is significant.
+Uppercase remains the house style for `exact` natives too — it reads
+consistently against the regex rules that sit beside them — but it is a
+convention there, not a correctness requirement.
+
+Write-map matchers run against PascalCase canonical strings **case-preserving**
+(the Arrow vocabulary is mixed-case), so case *is* significant there. How
+loudly a mistake fails depends on the rule kind: a lowercase **`exact`**
+canonical is rejected outright (it fails the Arrow type pattern), while a
+lowercase **`regex`** canonical is not checked at all —
+`{"match": "regex", "canonical": "^utf8$"}` validates with zero findings and
+simply never fires.
 
 ## `${name}` substitution in regex rules
 
@@ -89,8 +104,20 @@ hood at validation time. Authors write the ECMA-262 form.
 Placeholders are only legal in **parameter positions** of parameterized
 types (`Decimal128(${precision}, ${scale})`, `FixedSizeBinary(${n})` on
 the read side; `NUMERIC(${p}, ${s})`, `VARCHAR(${len})` and similar on
-the write side). Templated renders are only legal on `regex` rules;
-`exact` rules must emit a fully-resolved literal on the rendered side.
+the write side).
+
+On the **read** side a templated render is only legal on a `regex` rule — an
+`exact` native has no captures to substitute from, so its `canonical` must be a
+fully-resolved literal.
+
+On the **write** side the contract *accepts* `${…}` in an `exact` rule's
+rendered `native` (the placeholder would be filled from a per-column hint
+rather than a regex capture) — but **do not author one**. DDL rendering passes
+no per-column hints, and an unsubstituted placeholder raises during type
+mapping, before any DDL is emitted. Render a concrete native (`TEXT`, or a fixed
+`VARCHAR(255)`); use a `regex` rule when the width genuinely comes from the
+canonical.
+
 (Timestamp precision is **not** a `${}` case — Arrow's unit is a
 symbolic enum, not a digit; match on the native's digit count and ladder
 it to a unit instead. See "Database coverage → Read map".)
@@ -104,9 +131,14 @@ A schemaless or structured-container native — `JSON`, `JSONB`, `VARIANT`,
 **never a scalar** like `Utf8`. The canonical is a *claim about the shape* of
 the data: `Utf8` asserts an opaque string and throws the structure away, so it
 is wrong for a JSON / array / struct column even when the driver happens to
-hand the value over as text on the wire. The `type-map-rule` validator
-**enforces** this — a schemaless / container native resolving to a scalar
-canonical is an error.
+hand the value over as text on the wire.
+
+> **Only the syntactic half is enforced** (ADV-TMAP-001/002). The contract
+> flags a native whose *shape* is visibly a container — angle brackets
+> (`array<object>`) or a `[]` suffix (`integer[]`). A bare vendor spelling is
+> deliberately not special-cased, so `{"native": "JSONB", "canonical": "Utf8"}`
+> validates **clean**. That is the common case and the one you have to get
+> right yourself.
 
 | Native (read) | Canonical |
 |---|---|
@@ -146,6 +178,12 @@ mechanical — the same judgment transfers across providers:
   `TIMESTAMP WITH TIME ZONE` → `Timestamp(<unit>, UTC)`.
 - **Bare vs zoned timestamp**: choose the tz-aware canonical only when the
   native (or, for APIs, the sample value) actually carries a zone.
+- **A boolean spelled as a narrow numeric** — some systems have no boolean
+  type and document a width-1 integer as their boolean (MySQL's `TINYINT(1)`).
+  Map the documented boolean spelling to `Boolean`, and keep the general
+  numeric native mapping to its integer canonical. Follow the provider's
+  documentation, not the type name: only map a numeric to `Boolean` where the
+  docs say that spelling *is* the boolean.
 
 ## API coverage (read map)
 
@@ -213,15 +251,30 @@ database-package concept (DDL rendering).
     off the same unit: `Time32(SECOND|MILLISECOND)` for coarse,
     `Time64(MICROSECOND|NANOSECOND)` for fine.
 
-**Write map:** cover the **full canonical vocabulary** — Boolean,
-Int8–64, UInt8–64, Float16/32/64, Decimal (regex with `${p}`/`${s}`
-captures), Utf8/LargeUtf8, Json, Binary/LargeBinary/FixedSizeBinary,
-Date32/64, Time, Timestamp bare + tz variants. The validator probes
-every family and warns on gaps. A deliberate gap is legitimate only
-when the connector's dialect takes over that family's rendering via a
-`render_column_type` override (BigQuery ships no Decimal rule because
-NUMERIC/BIGNUMERIC selection needs precision-range arithmetic rules
-cannot express) — never as a way to cut scope.
+**Write map:** cover the **full canonical vocabulary** — every Arrow type a
+source could hand this system needs a rendering, including the parameterized
+families (Decimal via a regex with `${p}`/`${s}` captures) and both the bare
+and tz-aware `Timestamp` forms.
+
+Run the validator and reconcile every family its `type-map-write-coverage`
+warning names. A gap is legitimate **only** when the connector's dialect takes
+over that family's rendering via a `render_column_type` override (BigQuery
+ships no Decimal rule because NUMERIC/BIGNUMERIC selection needs
+precision-range arithmetic rules cannot express), never as a way to cut scope.
+
+**A clean warning is not proof of coverage.** The check probes a representative
+sample, so whole families go unexercised — a map missing all of these still
+passes. Verify by hand at least:
+
+- `FixedSizeBinary`
+- `Time32` (only `Time64` is probed)
+- **tz-aware** `Timestamp` — easy to miss, because the bare `Timestamp` probe
+  passes without it
+- `Decimal256` (only `Decimal128` is probed, so a map whose Decimal rule is
+  narrowed to `Decimal128` shows nothing)
+
+Treat that as the floor rather than the whole set: containers (`List<…>`,
+`Struct<…>`, `Map<…>`) and rarer scalars are unprobed too.
 
 Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a

@@ -1,8 +1,13 @@
 # Lifecycle phases
 
-Excerpted from `docs/schema-contracts/shared/lifecycle-phases.md`. Used
-by `phase-resolvability` validation and by the creator agents when they
-declare which phase produces each value.
+Which values exist when, so a transport or operation only references values
+that can actually resolve at the point it runs.
+
+> **This is entirely author-side.** No validator checks phase resolvability: a
+> transport referencing `connection.discovered.api_domain` with no post-auth
+> output producing it validates clean and fails at connect. On a connector
+> document refs are not checked *at all* — even a nonsense scope passes — so
+> there is no backstop here whatsoever. Walk the phases by hand.
 
 ## Phases
 
@@ -23,21 +28,35 @@ available. If a transport references `connection.discovered.api_domain`,
 it cannot be the `default_transport` for an operation that runs in
 `auth` or earlier.
 
-## Example: Pipedrive
+## Example: a value that arrives after auth
 
-Pipedrive's `default_transport` (`api`) uses
-`connection.discovered.api_domain`, which is populated only after
-post-auth discovery. So Pipedrive declares a separate `discovery`
-transport for the post-auth `discovery_request` that produces
-`api_domain`. Once discovery completes, normal API calls can use the
-`api` transport.
+A provider issues an access token, then exposes the account's own settings at a
+stable endpoint. Reading those settings needs `auth.access_token`, so that
+request cannot run in `pre_auth` — it is declared as a post-auth
+`discovery_request`, and the value it produces lands at
+`connection.discovered.<key>` for later phases to reference.
 
-## Validator findings
+The ordering rule is what matters: a transport that references
+`connection.discovered.*` is only invokable once post-auth discovery has run,
+so it can never be the transport for an `auth`-phase operation. Declare a
+separate transport for the discovery request itself, which needs only `auth`
+scopes.
 
-`phase-resolvability` flags the common error of a transport using
-`connection.discovered.*` without a documented post-auth output that
-produces it. Other phase mismatches require declaring `phase` on each
-input correctly.
+A discovered value can be templated straight into the data transport's
+`base_url` (see `connector-spec-api/spec-transport.md`), which is the usual
+shape for a per-tenant host.
+
+## The failure this prevents
+
+The common error is a transport referencing `connection.discovered.*` with no
+post-auth output that produces it — the value is simply absent at connect. The
+mirror image is declaring an input's `phase` too late for the transport that
+needs it (a `base_url` component declared `phase: "auth"` cannot serve a
+pre-auth request).
+
+Neither is caught by validation. Before returning a connector, trace each
+transport's refs to the declaration that produces them and confirm the
+producing phase is no later than the consuming one.
 
 ## Runtime OAuth scope
 

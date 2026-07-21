@@ -66,6 +66,9 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+  (the `connector` + `type-map` sections — the cross-field rules your
+  artifacts must satisfy)
 
 ## Authoring order
 
@@ -117,14 +120,17 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `port`, `database`, `username`, `password`, `ssl_mode`,
    `ssl_ca_certificate`. Each with the right `source` / `phase` /
    `storage` / `type` / `secret` / `enum` / `default`. The `ssl_mode`
-   input must declare its enum so `tls-consistency` and lookup-based
-   mappings can validate. The mode vocabulary is connector-defined
+   input must declare its enum so the dialect and any lookup-based
+   mappings have a closed vocabulary to interpret. The mode vocabulary is connector-defined
    (libpq-style for postgres-shaped systems; MySQL declares its native
    `DISABLED`/`PREFERRED`/`REQUIRED`/`VERIFY_CA`/`VERIFY_IDENTITY`) —
    the dialect's `build_tls_connect_arg` interprets it.
 5. **Resource discovery** — populate `resource_discovery` with the
-   provider's discovery strategy for enumerating schemas, tables, and
-   columns. This is central for DB connectors.
+   provider's discovery strategy for enumerating the system's objects.
+   This is central for DB connectors. Pick a strategy that matches the
+   system's object hierarchy — a three-level system (catalog → schema →
+   table, e.g. Snowflake / BigQuery) must not be flattened to two. See
+   `spec-resource-discovery.md`.
 6. **Read map** — author `type_map_read` (a top-level array of
    `{match, native, canonical}` rules where `native` is the matcher)
    covering the documented native vocabulary. For OLTP databases,
@@ -140,13 +146,14 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    direction: `canonical` is the matcher — regex with named captures
    for parameterized types — and `native` is the rendered DDL, with
    `${name}` substitutions backed by those captures). Cover the **full
-   canonical vocabulary**: Boolean, Int8–64, UInt8–64, Float16/32/64,
-   Decimal (regex with `${p}`/`${s}` captures), Utf8/LargeUtf8, Json,
-   Binary/LargeBinary/FixedSizeBinary, Date32/64, Time, Timestamp bare
-   + tz variants. Leave a family unmapped only when the dialect
-   deliberately takes over its rendering via a `render_column_type`
-   override (BigQuery's NUMERIC/BIGNUMERIC precision ranges). Written
-   to `{connector_id}/definition/type-map-write.json`.
+   canonical vocabulary**. Reconcile the validator's
+   `type-map-write-coverage` warning, but do not treat a clean run as
+   coverage — it probes only a sample. `spec-type-maps.md` lists which
+   families go unprobed; check those by hand. Leave a family unmapped only when
+   the dialect deliberately takes over its rendering via a
+   `render_column_type` override (BigQuery's NUMERIC/BIGNUMERIC
+   precision ranges). See `spec-type-maps.md`. Written to
+   `{connector_id}/definition/type-map-write.json`.
 8. **Package files** — author the four files per
    `spec-connector-package.md`:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
@@ -210,13 +217,15 @@ discipline, and dialect behavior. Do not restate validator rules.
   unmapped canonical family is intentional and backed by a
   `render_column_type` override, not an accidental gap. (The validator
   only *warns* and cannot tell intentional from accidental.)
-- [ ] **`resource_discovery` enumerates schemas, tables, and columns**
-  for this engine.
+- [ ] **`resource_discovery` declares a strategy that matches this system's
+  object hierarchy** and reaches columns. (Nothing validates the match; a
+  strategy that flattens a level just hides objects.)
 - [ ] **TLS is declared in the right place for the transport**:
   SQLAlchemy → the generic `tls` block; ADBC → driver-namespaced
-  `db_kwargs` entries with no `tls` block. (The `tls-consistency`
-  validator checks the ssl_ca / verify-mode pairing, not that the block
-  sits on the correct transport family.)
+  `db_kwargs` entries with no `tls` block. **And** any
+  certificate-verification mode in the `ssl_mode` enum has a matching
+  `ssl_ca_certificate` input. (Nothing validates either half — the TLS
+  block is vocabulary-agnostic by design.)
 
 ## Output
 
@@ -240,6 +249,9 @@ disk.
   `tls.ca_certificate`.
 - Never author endpoint files. DB endpoints are connection-scoped and
   produced at runtime by the connector's `resource_discovery`.
+- Never author OAuth flows or HTTP transports. If the provider needs one,
+  the classification was wrong — report and stop rather than authoring
+  outside your kind.
 - Never embed type-map rules inside `connector.json` — the connector
   schema rejects unknown fields. Emit them as the standalone
   `type_map_read` / `type_map_write` outputs instead.

@@ -86,12 +86,15 @@ Schemas are generated from — so there is no schema fetch. It runs:
      (direction derives from the filename)
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
-2. **Semantic validators** for cross-file / cross-field rules a single-document
-   model can't express:
-   - `reserved-field`, `expression-resolver`, `phase-resolvability`,
-     `transport-ref`, `dsn-binding`, `auth-shape`, `tls-consistency`,
-     `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`,
-     `endpoint-annotations`, `endpoint-filename`.
+   Cross-field rules are part of this pass and report under `contract-model`;
+   they are catalogued by id in
+   `skills/connector-builder/references/advisory-rules.md`.
+2. **Checks the contract models can't express** — cross-file relationships
+   (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
+   `endpoint-id-locator`), embedded-schema validity
+   (`embedded-json-schema`), and quality warnings on a type map
+   (`type-map-rule`, `type-map-write-coverage`). A document matching no known
+   artifact kind reports under `document`.
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.

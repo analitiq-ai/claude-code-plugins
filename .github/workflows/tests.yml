@@ -5,14 +5,16 @@ name: tests
 # package's own suite (packages/<pkg>/tests/).
 #
 # What the suites gate:
-#   connector_builder/ - the plugin restates a few schema-owned enum vocabularies
-#     as decision logic (enum-mappers.md, skill prose). These guards pin them to
-#     the contract and fail if they diverge. They read the enums straight from the
-#     pinned `analitiq-contract-models` package, so they run OFFLINE and
-#     DETERMINISTIC (no schema fetch) - which is what makes them usable as a merge
-#     gate. They pin prose to the contract the validator ENFORCES, not to whatever
-#     is live on the CDN; catching a newer upstream release is a dependency-bump
-#     concern, not this guard's job.
+#   connector_builder/ - three parts, all reading the in-repo contract source so
+#     they stay OFFLINE and DETERMINISTIC (no schema fetch), which is what makes
+#     them usable as a merge gate:
+#       - enum/vocabulary pins: values the plugin restates as decision logic
+#         (enum-mappers.md, skill prose, io-contracts.md) must match the
+#         contract, including validator ids and resolution scopes;
+#       - generated-reference sync: references/advisory-rules.md is rendered from
+#         the contract's advisory registry and must not be stale;
+#       - example validity: every connector/endpoint under skills/*/examples/
+#         must validate, since creator agents copy them as archetypes.
 #   pipeline_builder/  - the same problem solved the other way: contract-owned
 #     facts are GENERATED into the prose, and the suite fails when a generated
 #     block is stale relative to the pin.
@@ -79,7 +81,16 @@ jobs:
         env:
           ANALITIQ_VALIDATOR_FROM_SOURCE: '1'
           PYTHONPATH: packages/contract-models/src:packages/validator/src
+          # analitiq.contracts.shared.common reads os.environ["DOMAIN"] at
+          # import; the repo-root conftest sets it for pytest, but this step
+          # runs the script directly.
+          DOMAIN: analitiq.ai
         run: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check
+      - name: Check the generated advisory reference is current
+        # references/advisory-rules.md is rendered from the contract's advisory
+        # registry; stale prose here misleads every creator agent that reads it.
+        if: steps.install.conclusion == 'success'
+        run: python3 scripts/render_advisory.py check
       - name: Package build guards
         # These are what keep the private runtime out of the public wheels:
         # build.py AST-scans for imports outside (stdlib + pydantic/jsonschema),

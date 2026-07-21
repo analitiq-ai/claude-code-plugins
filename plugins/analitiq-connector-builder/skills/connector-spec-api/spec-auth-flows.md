@@ -52,6 +52,26 @@ request that swaps the auth code for tokens. Both are
 `source: "platform"`; `client_secret` lives in `secrets` with
 `source: "platform"` and `secret: true`.
 
+**Don't invent *user-facing* form inputs for an OAuth connector.** The redirect
+flow collects the user's authorization through the browser, so declare a
+`source: "user"` input only when the provider genuinely needs a value *before*
+the authorize URL can be built (a region, or a tenant slug in the authorize
+host). Asking the user for anything the redirect already yields is noise.
+
+This does not mean an empty `inputs` map: the app's own `client_id` /
+`client_secret` are still declared, as `source: "platform"` (above). Nothing
+validates that a ref resolves, so dropping them leaves a connector that passes
+validation and fails at connect with no credentials.
+
+**Platform-owned vs user-owned OAuth apps differ only in `source`.** Whether
+your platform registers one app for everyone (`source: "platform"`) or each
+user brings their own (`source: "user"`), the storage paths and every auth
+template stay identical — flip `source` and change nothing else.
+
+**Refresh timing is not yours to declare.** Author the `refresh` template and
+stop: when to refresh, how expiry is tracked, and retry behaviour are engine
+concerns. There is no place to encode a TTL or a refresh policy.
+
 Example: `examples/oauth2-authorization-code/oauth2-authorization-code.example.json`
 (multi-origin provider with post-auth discovery; sibling
 `examples/oauth2-authorization-code/type-map-read.json`).
