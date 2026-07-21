@@ -417,7 +417,7 @@ _JSON_SCHEMA_PROPERTY_NODE_DEF: dict[str, Any] = {
         "`dependentSchemas` (maps); `prefixItems`, `allOf`, `anyOf`, `oneOf` "
         "(lists); `items`, `contains`, `additionalProperties`, "
         "`propertyNames`, `unevaluatedItems`, `unevaluatedProperties`, `not`, "
-        "`if`, `then`, `else` (single). Canonical `arrow_type` "
+        "`if`, `then`, `else` (single). Issue #424 — canonical `arrow_type` "
         "must carry parameters when the type requires them; `native_type` and "
         "`arrow_type` are paired."
     ),
