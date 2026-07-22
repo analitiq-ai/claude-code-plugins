@@ -17,8 +17,10 @@ CDN-free, and self-consistent with the validator**: it pins the plugin's prose
 to the exact contract the plugin enforces at authoring time, not a
 separately-hosted copy that can drift, 403, or 404.
 
-The package is pinned — by CI and by the `connector-schema-validator` agent — to
-the version in `tests/connector_builder/_pins.py`. When it isn't installed the whole
+The suite exercises the in-repo source (whose version
+`tests/connector_builder/_pins.py` mirrors); the `connector-schema-validator`
+agent self-installs the published runtime pin (`VALIDATOR_PIN`), which trails
+that version during a release window. When the package isn't importable the whole
 module is skipped (offline-dev convenience) — except in CI, which sets
 `DRIFT_REQUIRE_CONTRACT_MODELS=1` so a missing or broken package is a hard
 failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.

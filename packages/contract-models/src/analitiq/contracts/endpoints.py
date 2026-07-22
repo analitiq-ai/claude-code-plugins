@@ -555,6 +555,18 @@ class LinkPagination(_EndpointModel):
 
     type: Literal["link"] = Field(...)
     link: Link = Field(...)
+    limit: PageSize | None = Field(
+        default=None,
+        description=(
+            "First-request-only page size. Follow-up requests use the "
+            "response-supplied `next_url` verbatim — no params traverse — so "
+            "`limit` binds into the initial request built from `path` + "
+            "params and never modifies a followed link. Wired like every "
+            "other strategy: if set, `limit.param` names a declared "
+            "`controlled_by: 'pagination'` param bound once in the request. "
+            "Spec: §Pagination Strategies."
+        ),
+    )
     stop_when: "Predicate" = Field(...)
 
 
@@ -2303,22 +2315,17 @@ def _validate_pagination_wiring(pagination: Any, params: dict[str, Param]) -> No
     referenced: list[str] = []
     if isinstance(pagination, OffsetPagination):
         referenced.append(pagination.offset.param)
-        if pagination.limit and pagination.limit.param:
-            referenced.append(pagination.limit.param)
     elif isinstance(pagination, PagePagination):
         referenced.append(pagination.page.param)
-        if pagination.limit and pagination.limit.param:
-            referenced.append(pagination.limit.param)
     elif isinstance(pagination, CursorPagination):
         referenced.append(pagination.cursor.param)
-        if pagination.limit and pagination.limit.param:
-            referenced.append(pagination.limit.param)
     elif isinstance(pagination, KeysetPagination):
         referenced.append(pagination.keyset.param)
-        if pagination.limit and pagination.limit.param:
-            referenced.append(pagination.limit.param)
-    # LinkPagination declares no request-binding params (spec: §Pagination
-    # Strategies — link replaces the entire URL, no params traverse).
+    # LinkPagination declares no cursor param (spec: §Pagination Strategies —
+    # link replaces the entire URL, no params traverse to follow-up requests).
+    # Every strategy carries an optional `limit`.
+    if pagination.limit and pagination.limit.param:
+        referenced.append(pagination.limit.param)
 
     for name in referenced:
         param = params.get(name)
