@@ -67,7 +67,7 @@ if os.environ["DOMAIN"] != _DEFAULT_DOMAIN:
         "in a clean shell) — otherwise every resource reports stale.")
 
 from pydantic import BaseModel, TypeAdapter  # noqa: E402
-from analitiq.contracts.shared.common import SCHEMA_BASE_URL  # noqa: E402
+from analitiq.contracts.shared.common import SCHEMA_BASE_URL, SLUG_PATTERN  # noqa: E402
 
 #: The `$id` host, owned by the contract package.
 CANONICAL_BASE = SCHEMA_BASE_URL
@@ -815,7 +815,7 @@ RESOURCES: tuple[Resource, ...] = (
             "Public JSON Schema contract for Analitiq connector documents — "
             "the authored shape used in source control, PR review, and "
             "author-time tooling. `connector_id` is the authored canonical "
-            "identifier (slug pattern `^[a-z0-9][a-z0-9_-]*$`). Only "
+            f"identifier (slug pattern `{SLUG_PATTERN}`). Only "
             "`created_at` and `updated_at` are server-managed and absent in "
             "the authored shape. "
             "Source of truth: analitiq.contracts.connector.Connector (Pydantic)."
