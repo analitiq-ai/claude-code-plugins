@@ -138,8 +138,8 @@ built from `path` + params.
 
 `limit` is therefore **first-request-only**: it binds the page size into that
 initial request; followed links are used verbatim, never modified. Wire it like
-every other strategy — declared param, `controlled_by: "pagination"`, bound in
-the request. Providers usually echo the page size back in each next link.
+every other strategy (see "Pagination is wired in three places" above).
+Providers usually echo the page size back in each next link.
 
 Prefer a body field that already holds the bare URL:
 

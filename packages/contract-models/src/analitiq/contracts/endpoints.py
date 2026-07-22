@@ -562,7 +562,7 @@ class LinkPagination(_EndpointModel):
             "response-supplied `next_url` verbatim — no params traverse — so "
             "`limit` binds into the initial request built from `path` + "
             "params and never modifies a followed link. Wired like every "
-            "other strategy: `limit.param` names a declared "
+            "other strategy: if set, `limit.param` names a declared "
             "`controlled_by: 'pagination'` param bound once in the request. "
             "Spec: §Pagination Strategies."
         ),
@@ -2323,8 +2323,7 @@ def _validate_pagination_wiring(pagination: Any, params: dict[str, Param]) -> No
         referenced.append(pagination.keyset.param)
     # LinkPagination declares no cursor param (spec: §Pagination Strategies —
     # link replaces the entire URL, no params traverse to follow-up requests).
-    # Every strategy carries an optional `limit`; for link it binds into the
-    # first request only.
+    # Every strategy carries an optional `limit`.
     if pagination.limit and pagination.limit.param:
         referenced.append(pagination.limit.param)
 

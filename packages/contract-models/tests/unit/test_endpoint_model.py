@@ -2316,18 +2316,101 @@ class TestLinkPaginationLimit:
         )
         parse_endpoint(payload)
 
-    def test_link_limit_unknown_param_rejected(self):
+    def test_link_limit_without_param_accepted(self):
+        # `PageSize.param` is optional across every strategy; a param-less
+        # `limit` declares nothing to wire, so the shared check must skip it.
+        payload = self._link_payload(params={}, limit={"max": 100})
+        parse_endpoint(payload)
+
+    def test_link_limit_param_unbound_rejected(self):
+        # A declared-but-unbound limit param fails binding uniqueness. For
+        # link this matters doubly: an unbound limit could never take effect —
+        # follow-up requests use the response-supplied URL verbatim.
         payload = self._link_payload(
-            params={},
+            params={"per_page": {"in": "query", "type": "integer", "required": False, "controlled_by": "pagination"}},
             limit={"param": "per_page"},
         )
+        with pytest.raises(ValidationError, match="not referenced"):
+            parse_endpoint(payload)
+
+
+class TestPaginationLimitWiring:
+    """The shared `limit` wiring check covers every strategy, not just link.
+
+    `_validate_pagination_wiring` hoists one `limit.param` check over all
+    five strategies (issue #52); parametrizing pins that a future re-inline
+    cannot silently drop a strategy from it.
+    """
+
+    STRATEGIES = ("offset", "page", "cursor", "keyset", "link")
+
+    # Minimal valid (params, request_query, strategy_block) wiring per strategy.
+    _BASES = {
+        "offset": (
+            {"o": {"in": "query", "type": "integer", "required": False, "controlled_by": "pagination"}},
+            {"o": {"from_param": "o"}},
+            {"offset": {"param": "o", "initial": 0, "increment_by": 1}},
+        ),
+        "page": (
+            {"p": {"in": "query", "type": "integer", "required": False, "controlled_by": "pagination"}},
+            {"p": {"from_param": "p"}},
+            {"page": {"param": "p", "initial": 1}},
+        ),
+        "cursor": (
+            {"c": {"in": "query", "type": "string", "required": False, "controlled_by": "pagination"}},
+            {"c": {"from_param": "c"}},
+            {"cursor": {"param": "c", "next_cursor": {"ref": "response.body.next"}}},
+        ),
+        "keyset": (
+            {"k": {"in": "query", "type": "string", "required": False, "controlled_by": "pagination"}},
+            {"k": {"from_param": "k"}},
+            {"keyset": {"param": "k", "order_by_field": "id"}},
+        ),
+        "link": (
+            {},
+            {},
+            {"link": {"next_url": {"ref": "response.body.links.next"}}},
+        ),
+    }
+
+    @classmethod
+    def _payload(cls, strategy, extra_params=None, extra_query=None, limit=None):
+        params, query, block = cls._BASES[strategy]
+        params = {**params, **(extra_params or {})}
+        query = {**query, **(extra_query or {})}
+        request = {"method": "GET", "path": "/v1/x"}
+        if query:
+            request["query"] = query
+        pagination = {"type": strategy, **block, "stop_when": {"empty": {"ref": "response.body.data"}}}
+        if limit is not None:
+            pagination["limit"] = limit
+        return _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": request,
+                "params": params,
+                "pagination": pagination,
+                "response": {
+                    "records": {"ref": "response.body.data"},
+                    "schema": {"type": "object", "properties": {
+                        "data": {"type": "array", "items": {"type": "object"}},
+                    }},
+                },
+            }},
+        )
+
+    @pytest.mark.parametrize("strategy", STRATEGIES)
+    def test_limit_unknown_param_rejected(self, strategy):
+        payload = self._payload(strategy, limit={"param": "per_page"})
         with pytest.raises(ValidationError, match="references unknown param"):
             parse_endpoint(payload)
 
-    def test_link_limit_param_without_controlled_by_rejected(self):
-        payload = self._link_payload(
-            params={"per_page": {"in": "query", "type": "integer", "required": False}},
-            request_query={"per_page": {"from_param": "per_page"}},
+    @pytest.mark.parametrize("strategy", STRATEGIES)
+    def test_limit_param_without_controlled_by_rejected(self, strategy):
+        payload = self._payload(
+            strategy,
+            extra_params={"per_page": {"in": "query", "type": "integer", "required": False}},
+            extra_query={"per_page": {"from_param": "per_page"}},
             limit={"param": "per_page"},
         )
         with pytest.raises(ValidationError, match="does not declare"):

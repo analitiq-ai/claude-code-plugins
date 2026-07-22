@@ -608,7 +608,7 @@
             }
           ],
           "default": null,
-          "description": "First-request-only page size. Follow-up requests use the response-supplied `next_url` verbatim \u2014 no params traverse \u2014 so `limit` binds into the initial request built from `path` + params and never modifies a followed link. Wired like every other strategy: `limit.param` names a declared `controlled_by: 'pagination'` param bound once in the request. Spec: \u00a7Pagination Strategies."
+          "description": "First-request-only page size. Follow-up requests use the response-supplied `next_url` verbatim \u2014 no params traverse \u2014 so `limit` binds into the initial request built from `path` + params and never modifies a followed link. Wired like every other strategy: if set, `limit.param` names a declared `controlled_by: 'pagination'` param bound once in the request. Spec: \u00a7Pagination Strategies."
         },
         "link": {
           "$ref": "#/$defs/Link"
