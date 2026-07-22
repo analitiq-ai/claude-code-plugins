@@ -279,6 +279,8 @@ def check_rule(rule: AdvisoryRule, model: Any) -> None:
 
 _RULES_BY_TARGET: dict[str, list[AdvisoryRule]] = {}
 _ALL_RULES: list[AdvisoryRule] = []
+
+
 def register(rules: list[AdvisoryRule]) -> None:
     """Index a batch of rules by every target class they bind to."""
     for rule in rules:
