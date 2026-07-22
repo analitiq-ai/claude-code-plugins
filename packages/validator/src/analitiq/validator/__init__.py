@@ -19,7 +19,10 @@ from . import connectors  # noqa: F401  — imported for its self-registration s
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
 from . import streams  # noqa: F401  — imported for its self-registration side effect
-from .connectors import (
+# The underscore names below are test-facing internals: packages/validator/tests
+# exercises them through the package root (see test_validation.py). Deliberately
+# NOT in __all__ — that would widen the published star-import surface.
+from .connectors import (  # skipcq: PY-W2000
     check_coverage,
     endpoint_filename_findings,
     is_api_endpoint_doc,
