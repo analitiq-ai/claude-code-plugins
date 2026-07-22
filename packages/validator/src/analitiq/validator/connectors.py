@@ -469,7 +469,7 @@ def _endpoint_locator_findings(ep_doc: Any) -> list[dict]:
             "endpoint-id-locator", "error", pointer,
             f"cannot derive a stable endpoint_id from request.path {path!r} — it "
             f"flattens to {handle!r}, which is empty or carries characters outside "
-            "the id charset (^[a-z0-9][a-z0-9_-]*$). The derivation assumes charset-"
+            f"the id charset ({SLUG_RE.pattern}). The derivation assumes charset-"
             "safe, non-empty paths; rename the path (e.g. drop a '.json' suffix) or "
             "extend the derivation rule with sanitization.")]
     if handle != endpoint_id:

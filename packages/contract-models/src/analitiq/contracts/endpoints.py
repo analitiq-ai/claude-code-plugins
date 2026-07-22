@@ -1787,7 +1787,7 @@ class _EndpointBase(_EndpointModel):
         pattern=SLUG_PATTERN,
         description=(
             "Stable endpoint identifier within the owner. "
-            "Matches `^[a-z0-9][a-z0-9_-]*$`."
+            f"Matches `{SLUG_PATTERN}`."
         ),
     )
     display_name: str | None = Field(
