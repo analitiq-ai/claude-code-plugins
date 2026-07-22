@@ -443,9 +443,10 @@ def test_bundle_rejects_dead_type_map_filename(tmp_path):
     _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
     diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
     assert not diag["passed"]
-    finding = next(f for f in diag["findings"] if f["validator"] == "connection-type-map")
-    assert finding["severity"] == "error"
-    assert "type-map-read.json" in finding["message"]  # the migration direction
+    migration = [f for f in diag["findings"] if f["validator"] == "connection-type-map"]
+    assert migration, diag["findings"]
+    assert migration[0]["severity"] == "error"
+    assert "type-map-read.json" in migration[0]["message"]  # the migration direction
 
 
 def test_bundle_flags_invalid_connection_type_map(tmp_path):

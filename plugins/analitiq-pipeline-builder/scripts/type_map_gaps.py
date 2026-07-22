@@ -140,7 +140,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = resolve(args.direction, probes, [Path(m) for m in args.maps])
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
+        # _load_rules wraps every per-file failure (read, parse, model) into a
+        # file-naming ValueError; OSError is the escape hatch for anything else.
         return _fail(str(exc))
 
     print(json.dumps(result, indent=2))
