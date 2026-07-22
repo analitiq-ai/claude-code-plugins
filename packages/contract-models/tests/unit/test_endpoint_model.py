@@ -2245,7 +2245,8 @@ class TestRecordsArrayItemsTupleForm:
 
 
 # ---------------------------------------------------------------------------
-# LinkPagination has no request-binding params (spec: §Pagination Strategies)
+# LinkPagination request-binding params (spec: §Pagination Strategies) — no
+# cursor param ever; `limit` is optional and first-request-only (issue #52)
 # ---------------------------------------------------------------------------
 
 
@@ -2274,6 +2275,63 @@ class TestLinkPaginationNoParams:
             }},
         )
         parse_endpoint(payload)
+
+
+class TestLinkPaginationLimit:
+    @staticmethod
+    def _link_payload(params, request_query=None, limit=None):
+        request = {"method": "GET", "path": "/v1/x"}
+        if request_query:
+            request["query"] = request_query
+        pagination = {
+            "type": "link",
+            "link": {"next_url": {"ref": "response.body.links.next"}},
+            "stop_when": {"missing": {"ref": "response.body.links.next"}},
+        }
+        if limit is not None:
+            pagination["limit"] = limit
+        return _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": request,
+                "params": params,
+                "pagination": pagination,
+                "response": {
+                    "records": {"ref": "response.body.data"},
+                    "schema": {"type": "object", "properties": {
+                        "data": {"type": "array", "items": {"type": "object"}},
+                    }},
+                },
+            }},
+        )
+
+    def test_link_with_first_request_limit_accepted(self):
+        # Issue #52: `limit` is wired like every other strategy — a declared
+        # `controlled_by='pagination'` param bound once in the request. The
+        # first-request-only semantics are runtime behaviour, not wiring.
+        payload = self._link_payload(
+            params={"per_page": {"in": "query", "type": "integer", "required": False, "controlled_by": "pagination"}},
+            request_query={"per_page": {"from_param": "per_page"}},
+            limit={"param": "per_page", "default": {"ref": "runtime.batch_size"}, "max": 100},
+        )
+        parse_endpoint(payload)
+
+    def test_link_limit_unknown_param_rejected(self):
+        payload = self._link_payload(
+            params={},
+            limit={"param": "per_page"},
+        )
+        with pytest.raises(ValidationError, match="references unknown param"):
+            parse_endpoint(payload)
+
+    def test_link_limit_param_without_controlled_by_rejected(self):
+        payload = self._link_payload(
+            params={"per_page": {"in": "query", "type": "integer", "required": False}},
+            request_query={"per_page": {"from_param": "per_page"}},
+            limit={"param": "per_page"},
+        )
+        with pytest.raises(ValidationError, match="does not declare"):
+            parse_endpoint(payload)
 
 
 # ---------------------------------------------------------------------------
