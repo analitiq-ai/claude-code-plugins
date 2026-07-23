@@ -58,7 +58,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/type-map-read/latest.json",
+  "$id": "https://schemas.analitiq.ai/type-map-read/3.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Public JSON Schema contract for a connector's `type-map-read.json` \u2014 the read direction (native \u2192 canonical) of its type-map pair, a top-level array of `{match, native, canonical}` rules, order significant (first match wins). The full per-rule contract (ECMA-262 regex, `${name}` capture correspondence, canonical vocabulary, schemaless-container handling) lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapReadDoc (Pydantic).",
   "items": {

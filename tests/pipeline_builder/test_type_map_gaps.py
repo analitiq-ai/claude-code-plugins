@@ -79,8 +79,8 @@ def test_write_matches_canonical_case_preserving(tmp_path):
 
 
 def test_write_gap_reported(tmp_path):
-    result = G.resolve("write", ["List<Float32>"], [_map(tmp_path, "w.json", CONNECTOR_WRITE)])
-    assert result["gaps"] == ["List<Float32>"]
+    result = G.resolve("write", ["Duration(SECOND)"], [_map(tmp_path, "w.json", CONNECTOR_WRITE)])
+    assert result["gaps"] == ["Duration(SECOND)"]
 
 
 def test_non_array_map_rejected(tmp_path):
