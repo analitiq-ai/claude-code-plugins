@@ -93,8 +93,8 @@ repo-root `conftest.py` puts both source trees on the path;
 Separately, the plugins **self-install a published release at runtime** — end
 users have no checkout, so this must be a real PyPI version:
 
-The pin is currently **`analitiq-validator==1.0.0rc13`** (which resolves
-`analitiq-contract-models==1.0.0rc13`). Three places state it, each pinned by a
+The pin is currently **`analitiq-validator==1.0.0rc14`** (which resolves
+`analitiq-contract-models==1.0.0rc14`). Three places state it, each pinned by a
 test so none can rot silently:
 
 - `VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_analitiq.py`
@@ -116,6 +116,14 @@ happens after that PR merges and publishes. Requiring equality would leave the
 Release PR permanently red. The test catches the dangerous direction instead: a
 pin *ahead* of what this repo ships points at something users cannot install.
 Bump the pin in a follow-up once the release is out.
+
+`scripts/check_validator_pin_contract.py` (CI job `pinned-validator-guard`)
+guards the pin from the other side: it installs the pinned release into an
+isolated venv and fails if that **published** wheel rejects the canonical
+`dialect+driver` values the plugin prose teaches — strict in steady state and
+on `release-please--*` branches (merging a Release PR is what would ship the
+contradiction), warn-only inside a release window (pin ≠ shipped). The script's
+docstring owns the full semantics.
 
 Running a plugin helper from a checkout would otherwise trigger the bootstrap
 (build a venv, install the published wheel, `os.execv` into it). The root
