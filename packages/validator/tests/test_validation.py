@@ -650,6 +650,55 @@ def test_write_vocabulary_gap_warns(validator, tmp_path):
     assert any(w["validator"] == "type-map-write-coverage" for w in _warnings(findings))
 
 
+def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
+    # The engine probes the write map with a destination column's `arrow_type`
+    # verbatim, and API-sourced documents carry the bare `Object`/`List` shape
+    # markers — a map without rules for them hard-errors the stream at
+    # configuration (issue #75). The coverage warning must name both.
+    p = tmp_path / "type-map-write.json"
+    findings = validator.validate_document([{"match": "exact", "canonical": "Utf8", "native": "TEXT"}],
+                                           doc_path=p)
+    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")
+    assert "'Object'" in gap["message"] and "'List'" in gap["message"]
+
+    covered = [{"match": "exact", "canonical": "Utf8", "native": "TEXT"},
+               {"match": "exact", "canonical": "Object", "native": "JSONB"},
+               {"match": "exact", "canonical": "List", "native": "JSONB"}]
+    findings = validator.validate_document(covered, doc_path=p)
+    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")
+    assert "'Object'" not in gap["message"] and "'List'" not in gap["message"]
+
+
+def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
+    # Every probe must be satisfiable by a realistic map, and a map covering
+    # them all must clear the warning entirely — otherwise an unsatisfiable
+    # probe (a typo, or a family no exact/regex rule can express) would warn
+    # on every author's map forever, teaching authors to ignore the signal.
+    # Mirrors the reference postgresql example: the Decimal/Time/Timestamp
+    # families are covered by regex on purpose, pinning that a regex rule
+    # fullmatching the bare probe satisfies it.
+    full_map = [
+        {"match": "exact", "canonical": c, "native": n}
+        for c, n in [
+            ("Boolean", "BOOLEAN"), ("Int8", "SMALLINT"), ("Int16", "SMALLINT"),
+            ("Int32", "INTEGER"), ("Int64", "BIGINT"), ("UInt8", "SMALLINT"),
+            ("UInt16", "INTEGER"), ("UInt32", "BIGINT"), ("UInt64", "BIGINT"),
+            ("Float16", "REAL"), ("Float32", "REAL"), ("Float64", "DOUBLE PRECISION"),
+            ("Utf8", "TEXT"), ("LargeUtf8", "TEXT"), ("Json", "JSONB"),
+            ("Object", "JSONB"), ("List", "JSONB"), ("Binary", "BYTEA"),
+            ("LargeBinary", "BYTEA"), ("Date32", "DATE"), ("Date64", "DATE"),
+        ]
+    ] + [
+        {"match": "regex", "canonical": r"^Decimal(128|256)\((?<p>\d+),\s*(?<s>\d+)\)$",
+         "native": "NUMERIC(${p}, ${s})"},
+        {"match": "regex", "canonical": r"^Time(32|64)\([A-Z]+\)$", "native": "TIME"},
+        {"match": "regex", "canonical": r"^Timestamp\([A-Z]+\)$", "native": "TIMESTAMP"},
+    ]
+    findings = validator.validate_document(full_map, doc_path=tmp_path / "type-map-write.json")
+    coverage = [f for f in findings if f["validator"] == "type-map-write-coverage"]
+    assert not coverage, coverage
+
+
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
 
 def _run_cli(tmp_path, doc, filename="doc.json"):
