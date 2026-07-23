@@ -100,6 +100,13 @@ When the resource is writable, also ground:
 
 ## Hard rules
 
+<!-- Maintainers: in the `- For databases:` bullets below, backticked
+     snake_case tokens (dotted or not, e.g. `sqlalchemy_driver`,
+     `tls.supported_modes`) are pinned to the ProviderFacts fragment in
+     references/io-contracts.md by
+     tests/connector_builder/test_provider_facts_guard.py — renaming a
+     field in one file without the other fails the build. -->
+
 - Do not invent values. If the docs do not say it, leave it unset and note it.
 - Do not return prose summaries. The orchestrator expects the JSON block only,
   optionally followed by a short list of doc URLs.

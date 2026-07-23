@@ -166,8 +166,10 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `spec-connector-package.md`:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
      `{Name}Connector(GenericSQLConnector)`. The dialect implements
-     every hook its transports require: SQLAlchemy + TLS →
-     `build_tls_connect_arg`; upsert → `build_sqlalchemy_upsert`
+     every hook its transports require: SQLAlchemy + TLS → the TLS hook
+     (`build_tls_connect_arg`, or `build_tls_connect_args` for drivers
+     that take TLS through several connect parameters —
+     `spec-connector-package.md` §Dialect hooks); upsert → `build_sqlalchemy_upsert`
      (+ `supports_upsert_sqlalchemy = True`); ADBC upsert →
      `adbc_stage_table_sql` (+ `supports_upsert_adbc = True`).
      Structural overrides only where the portable form is invalid
@@ -215,10 +217,12 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **`connector.py` imports the CDK only** — never another connector,
   never the engine/runtime.
 - [ ] **The dialect implements exactly the hooks its transports require**
-  (SQLAlchemy + TLS → `build_tls_connect_arg`; upsert →
-  `build_sqlalchemy_upsert` + `supports_upsert_sqlalchemy`; ADBC upsert →
-  `adbc_stage_table_sql` + `supports_upsert_adbc`) and ships **no Python
-  type-rendering table** — the write map owns the write direction.
+  (SQLAlchemy + TLS → the TLS hook, `build_tls_connect_arg` or
+  `build_tls_connect_args` per the driver's connect-parameter shape;
+  upsert → `build_sqlalchemy_upsert` + `supports_upsert_sqlalchemy`;
+  ADBC upsert → `adbc_stage_table_sql` + `supports_upsert_adbc`) and
+  ships **no Python type-rendering table** — the write map owns the
+  write direction.
 - [ ] **Structural overrides exist only where the portable form is
   genuinely invalid** (`batch_commits_key_type`,
   `current_timestamp_default`, and a `render_column_type` override only

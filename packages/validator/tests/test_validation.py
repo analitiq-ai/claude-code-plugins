@@ -76,7 +76,8 @@ def test_bare_sqlalchemy_driver_is_a_contract_model_finding(validator):
     doc = json.loads((CORPUS / "invalid_connector_bare_driver.json").read_text())
     errors = _errors(validator.validate_document(doc))
     assert any(
-        f["validator"] == "contract-model" and "driver" in f["path"] for f in errors
+        f["validator"] == "contract-model" and f["path"].endswith("/driver")
+        for f in errors
     ), errors
 
 
