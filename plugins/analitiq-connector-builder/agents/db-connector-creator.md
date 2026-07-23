@@ -111,7 +111,9 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      only when that is the system's viable path (e.g. Redshift).
      Author `tls.mode` (referencing
      `connection.parameters.ssl_mode`) and `tls.ca_certificate`
-     (referencing `secrets.ssl_ca_certificate`).
+     (referencing `secrets.ssl_ca_certificate`). Declaring `tls`
+     obligates the package dialect's TLS hook — the engine has no
+     built-in TLS interpretation for any driver (`spec-tls.md`).
 
    Both transport types use the same `dsn.kind: "url_template"` with a
    connector-specific `template` and one binding per logical field
@@ -126,10 +128,11 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `ssl_ca_certificate`. Each with the right `source` / `phase` /
    `storage` / `type` / `secret` / `enum` / `default`. The `ssl_mode`
    input must declare its enum so the dialect and any lookup-based
-   mappings have a closed vocabulary to interpret. The mode vocabulary is connector-defined
-   (libpq-style for postgres-shaped systems; MySQL declares its native
-   `DISABLED`/`PREFERRED`/`REQUIRED`/`VERIFY_CA`/`VERIFY_IDENTITY`) —
-   the dialect's `build_tls_connect_arg` interprets it.
+   mappings have a closed vocabulary to interpret. The mode vocabulary
+   is connector-defined, taken from the researcher's grounded TLS facts
+   (`provider_facts.tls.supported_modes` — the driver's own documented
+   mode names, never another connector's set; see `spec-tls.md`) — the
+   dialect's TLS hook interprets it.
 5. **Resource discovery** — populate `resource_discovery` with the
    provider's discovery strategy for enumerating the system's objects.
    This is central for DB connectors. Pick a strategy that matches the
