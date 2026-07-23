@@ -19,7 +19,7 @@ installable Python package.
 
 - This skill's `spec-driver-selection.md` — the transport/driver
   decision order (ADBC → Flight SQL → native bulk path → batched
-  INSERT) and the async-driver constraint.
+  INSERT) and the sync/async dispatch constraints.
 - This skill's `spec-dsn-bindings.md` — DSN URL templates and bindings.
 - This skill's `spec-tls.md` — TLS declaration mechanics.
 - This skill's `spec-resource-discovery.md` — schema/table enumeration at
@@ -58,9 +58,8 @@ installable Python package.
   — **the AdbcTransport contract requires at least one of the two**;
   TLS lives inside `db_kwargs`) and `sqlalchemy` (carries a
   `dialect+driver`, sync or async — e.g. `postgresql+asyncpg`,
-  `mysql+aiomysql`, `redshift+redshift_connector`; the engine dispatches
-  by the dialect's `is_async` capability; supports the generic `tls`
-  block). When present, `dsn` carries the same
+  `mysql+aiomysql`, `redshift+redshift_connector`; supports the
+  generic `tls` block). When present, `dsn` carries the same
   `dsn.kind: "url_template"` shape in both transport types; ADBC
   drivers that accept all connection state via `db_kwargs` (e.g.
   Snowflake) may omit `dsn` entirely.

@@ -80,9 +80,9 @@ order, stopping at the first match (full guide:
 Never select the JDBC bridge (`adbc-driver-jdbc`): it provides the ADBC
 API surface over row-by-row JDBC binding — the interface without the
 performance. SQLAlchemy transports accept a **sync or async** DBAPI
-(`postgresql+asyncpg`, `mysql+aiomysql`, `redshift+redshift_connector`);
-the engine dispatches by the dialect's `is_async` capability. Prefer
-async where the system has a working async driver.
+(`postgresql+asyncpg`, `mysql+aiomysql`, `redshift+redshift_connector`;
+dispatch is engine-side — see `spec-driver-selection.md` §Constraints).
+Prefer async where the system has a working async driver.
 
 ## Failing closed
 

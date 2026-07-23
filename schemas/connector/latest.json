@@ -3275,7 +3275,7 @@
         "driver": {
           "anyOf": [
             {
-              "pattern": "^[a-z][a-z0-9_]*\\+[a-z0-9_]+$",
+              "pattern": "^[a-z][a-z0-9_]*\\+[a-z][a-z0-9_]*$",
               "type": "string"
             },
             {
@@ -3283,7 +3283,7 @@
             }
           ],
           "default": null,
-          "description": "SQLAlchemy driver in `dialect+driver` form (e.g. `postgresql+asyncpg`, `mysql+aiomysql`, `redshift+redshift_connector`). May name a sync or an async DBAPI: the engine selects the sync vs async SQLAlchemy engine automatically from the dialect's own `is_async` capability, so no driver allow-list is imposed here. Optional \u2014 SQLAlchemy can derive the driver from the DSN scheme \u2014 but declare it so the sync/async choice is explicit to a reader.",
+          "description": "SQLAlchemy driver in `dialect+driver` form (e.g. `postgresql+asyncpg`, `mysql+aiomysql`, `redshift+redshift_connector`). May name a sync or an async DBAPI \u2014 no driver allow-list is imposed. The named driver must be a real SQLAlchemy dialect registration; that is checked at transport build, not here. Optional \u2014 SQLAlchemy can derive the driver from the DSN scheme \u2014 but declare it so the sync/async choice is explicit to a reader.",
           "title": "Driver"
         },
         "dsn": {

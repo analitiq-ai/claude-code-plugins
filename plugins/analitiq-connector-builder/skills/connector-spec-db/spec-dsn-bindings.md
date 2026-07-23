@@ -7,7 +7,7 @@ fields are:
 
 | `transport_type` | Identity field | Extras |
 |---|---|---|
-| `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`). The engine selects the sync vs async engine from the dialect's own `is_async` capability. Optional in the contract, since SQLAlchemy can derive it from the DSN's scheme — but **declare it anyway**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
+| `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). Optional in the contract, since SQLAlchemy can derive it from the DSN's scheme — but **declare it anyway**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
 | `adbc` | `driver` — closed enum: `postgresql`, `snowflake`, `bigquery` | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`.** TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
 
 Transport choice follows the decision order in

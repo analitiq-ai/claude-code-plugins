@@ -147,7 +147,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "sqlalchemy_driver": {
           "type": "string",
-          "description": "The SQLAlchemy 'dialect+driver' for the SQLAlchemy transport, sync or async (e.g. 'postgresql+asyncpg', 'mysql+aiomysql', 'redshift+redshift_connector'). The engine selects the sync vs async engine from the dialect's own is_async capability; no driver allow-list."
+          "description": "The SQLAlchemy 'dialect+driver' for the SQLAlchemy transport, sync or async (e.g. 'postgresql+asyncpg', 'mysql+aiomysql', 'redshift+redshift_connector'); no driver allow-list — see connector-spec-db/spec-driver-selection.md for the sync/async dispatch constraints."
         },
         "dsn": {
           "type": "object",

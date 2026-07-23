@@ -16,7 +16,7 @@ The connector root IS the Python package:
 ```
 {connector_id}/
   definition/
-    connector.json                   # declares connector_id; async/ADBC drivers only
+    connector.json                   # declares connector_id; SQLAlchemy/ADBC drivers
     type-map-read.json               # native → Arrow; regex patterns UPPERCASE
     type-map-write.json              # Arrow → native; REQUIRED for kind: database
   __init__.py                        # re-exports the connector class

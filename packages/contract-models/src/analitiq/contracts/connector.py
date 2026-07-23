@@ -983,15 +983,15 @@ class SqlAlchemyTransport(StrictModel):
     transport_type: Literal["sqlalchemy"] = Field(description="Transport type discriminator")
     driver: str | None = Field(
         default=None,
-        pattern=r"^[a-z][a-z0-9_]*\+[a-z0-9_]+$",
+        pattern=r"^[a-z][a-z0-9_]*\+[a-z][a-z0-9_]*$",
         description=(
             "SQLAlchemy driver in `dialect+driver` form "
             "(e.g. `postgresql+asyncpg`, `mysql+aiomysql`, "
             "`redshift+redshift_connector`). May name a sync or an async "
-            "DBAPI: the engine selects the sync vs async SQLAlchemy engine "
-            "automatically from the dialect's own `is_async` capability, so "
-            "no driver allow-list is imposed here. Optional — SQLAlchemy can "
-            "derive the driver from the DSN scheme — but declare it so the "
+            "DBAPI — no driver allow-list is imposed. The named driver must "
+            "be a real SQLAlchemy dialect registration; that is checked at "
+            "transport build, not here. Optional — SQLAlchemy can derive "
+            "the driver from the DSN scheme — but declare it so the "
             "sync/async choice is explicit to a reader."
         ),
     )

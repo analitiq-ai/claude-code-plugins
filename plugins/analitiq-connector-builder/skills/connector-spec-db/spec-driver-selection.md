@@ -51,12 +51,10 @@ enum entry exists, select the next tier in the decision order.
 
 **Redshift** takes the SQLAlchemy transport with the **sync**
 `redshift+redshift_connector` driver — the engine's canonical Redshift
-path, with Redshift-specific handling already built for it (a
-`redshift.redshift_connector` compile flavour for positional bind
-params, and a two-field TLS builder). `redshift_connector` is a sync
-DBAPI; the engine runs it on the sync SQLAlchemy engine automatically
-(it dispatches by the dialect's `is_async` capability — see
-"Constraints" below), so no ADBC entry is needed. DSN template
+path, with Redshift-specific bind-param and TLS handling already built
+for this driver. `redshift_connector` is a sync DBAPI; the engine runs
+it on the sync SQLAlchemy engine automatically (see "Constraints"
+below), so no ADBC entry is needed. DSN template
 `redshift+redshift_connector://{username}:{password}@{host}:{port}/{database}`.
 The libpq-compatible PostgreSQL ADBC driver (`transport_type: "adbc"`,
 driver `postgresql`) also reaches Redshift over the postgres wire, but
@@ -103,8 +101,8 @@ class.
   dialect's own `is_async` capability — there is no driver allow-list.
   Async drivers (`postgresql+asyncpg`, `mysql+aiomysql`) run on the
   async engine; sync drivers (`redshift+redshift_connector`,
-  `postgresql+psycopg2`) run on the sync engine, dispatched off the
-  event loop via `asyncio.to_thread`. Prefer async where the system has
+  `postgresql+psycopg2`) run on the sync engine, in a worker thread off
+  the event loop. Prefer async where the system has
   a working async driver; use a sync driver when that is the system's
   viable path (Redshift's `redshift_connector` is the canonical sync
   case). The declared `driver` must be a real SQLAlchemy
