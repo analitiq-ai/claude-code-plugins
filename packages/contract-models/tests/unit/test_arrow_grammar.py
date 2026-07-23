@@ -186,6 +186,29 @@ def test_sole_optional_param_is_supported(monkeypatch):
     assert not pattern.fullmatch("Solo(,3)")
 
 
+def test_multiple_trailing_optionals_nest(monkeypatch):
+    """Two trailing optionals must derive the NESTED form — supplying a later
+    optional while skipping an earlier one is malformed and must not match."""
+    monkeypatch.setattr(
+        arrow_grammar,
+        "FAMILIES",
+        {
+            **arrow_grammar.FAMILIES,
+            "TwoOpt": {"params": [
+                {"kind": "int", "min": 1, "max": None, "name": "a"},
+                {"kind": "unit", "allowed": ["SECOND"], "name": "b", "optional": True},
+                {"kind": "int", "min": 1, "max": None, "name": "c", "optional": True},
+            ]},
+        },
+    )
+    pattern = re.compile("^" + arrow_grammar.family_pattern("TwoOpt") + "$")
+    assert pattern.fullmatch("TwoOpt(1)")
+    assert pattern.fullmatch("TwoOpt(1, SECOND)")
+    assert pattern.fullmatch("TwoOpt(1, SECOND, 5)")
+    assert not pattern.fullmatch("TwoOpt(1, 5)")  # middle optional skipped
+    assert not pattern.fullmatch("TwoOpt(1, , 5)")
+
+
 def test_dangling_cross_ref_bound_fails_loudly():
     """A typo'd `"max": "presicion"` would otherwise disable the bound at BOTH
     layers — unbounded pattern here, silent skip in validate_cross_params."""

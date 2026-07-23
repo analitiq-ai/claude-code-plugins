@@ -221,15 +221,19 @@ def family_pattern(name: str, *, templated: bool = False) -> str:
             "generator only supports trailing optionals after a required first "
             "param"
         )
-    pieces: list[str] = []
-    for i, param in enumerate(params):
+    # Assembled back-to-front so each optional NESTS the ones after it —
+    # `A(?:,B(?:,C)?)?`, never the product form `A(?:,B)?(?:,C)?`, which would
+    # accept a string that skips a middle optional but supplies a later one.
+    # Byte-identical to the flat form for zero or one optional (all of today's
+    # manifest).
+    body = ""
+    for i in range(len(params) - 1, -1, -1):
+        param = params[i]
         literal = _param_literal_pattern(param, params)
         arg = f"(?:{literal}|{PLACEHOLDER_PATTERN})" if templated else literal
-        piece = arg if i == 0 else rf"\s*,\s*{arg}"
-        if param.get("optional"):
-            piece = f"(?:{piece})?"
-        pieces.append(piece)
-    return name + r"\(" + "".join(pieces) + r"\)"
+        piece = (arg if i == 0 else rf"\s*,\s*{arg}") + body
+        body = f"(?:{piece})?" if param.get("optional") else piece
+    return name + r"\(" + body + r"\)"
 
 
 # ---------------------------------------------------------------------------
