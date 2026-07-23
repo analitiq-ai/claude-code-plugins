@@ -39,7 +39,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -48,32 +50,55 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 
-from analitiq.contracts import arrow_grammar  # noqa: E402
-
-BASE_URL = "https://schemas.analitiq.ai"
-
 
 class GuardError(RuntimeError):
     """Infrastructure failure — the guard could not run to a verdict."""
+
+
+# The import itself is part of the guard: `arrow_grammar` loads and derives
+# from the vendored manifest at import time, so a missing/corrupt vendored
+# file or an underivable manifest shape surfaces HERE — it must classify as
+# "guard could not run" (exit 2), never as a divergence verdict or a raw
+# traceback. The broad except is deliberate at this boundary: any import
+# failure whatsoever means no verdict is possible.
+try:
+    from analitiq.contracts import arrow_grammar
+except Exception as exc:  # noqa: BLE001 — see comment above
+    arrow_grammar = None  # type: ignore[assignment]
+    _IMPORT_ERROR: Exception | None = exc
+else:
+    _IMPORT_ERROR = None
+
+BASE_URL = "https://schemas.analitiq.ai"
+
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _fetch(url: str) -> bytes:
     try:
         with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
             return resp.read()
-    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+    except (
+        urllib.error.URLError,
+        http.client.HTTPException,  # IncompleteRead/BadStatusLine are not OSError
+        OSError,
+        TimeoutError,
+    ) as exc:
         raise GuardError(f"fetch failed for {url}: {exc}") from exc
 
 
-def _fetch_json(url: str) -> dict:
-    raw = _fetch(url)
+def _parse_object(raw: bytes, *, context: str) -> dict:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise GuardError(f"{url} is not valid JSON: {exc}") from exc
+        raise GuardError(f"{context} is not valid JSON: {exc}") from exc
     if not isinstance(parsed, dict):
-        raise GuardError(f"{url} parsed to {type(parsed).__name__}, expected object")
+        raise GuardError(f"{context} parsed to {type(parsed).__name__}, expected object")
     return parsed
+
+
+def _fetch_json(url: str) -> dict:
+    return _parse_object(_fetch(url), context=url)
 
 
 def _sha256(data: bytes) -> str:
@@ -81,17 +106,18 @@ def _sha256(data: bytes) -> str:
 
 
 def _parse_version(value: str, *, context: str) -> tuple[int, ...]:
-    try:
-        return tuple(int(part) for part in value.split("."))
-    except ValueError as exc:
-        raise GuardError(f"{context}: unparseable version {value!r}") from exc
+    # Exactly three non-negative components: a malformed pointer must be a
+    # GuardError, not a crafted (and wrong) "pin AHEAD of latest" verdict from
+    # comparing tuples of different lengths.
+    if not _VERSION_RE.match(value):
+        raise GuardError(f"{context}: unparseable version {value!r}")
+    return tuple(int(part) for part in value.split("."))
 
 
 def check_offline() -> list[str]:
-    """Step 1 — the vendored bytes hash to the stated pin."""
+    """Step 1 — the vendored bytes hash to the stated pin. (Existence is
+    guaranteed here: a missing file already failed the module import above.)"""
     vendored = arrow_grammar._GRAMMAR_PATH
-    if not vendored.exists():
-        raise GuardError(f"vendored grammar missing: {vendored}")
     digest = _sha256(vendored.read_bytes())
     if digest != arrow_grammar.ENGINE_GRAMMAR_SHA256:
         return [
@@ -131,7 +157,12 @@ def check_published() -> tuple[list[str], list[str]]:
             f"{arrow_grammar.CONVERSION_MATRIX_SHA256}"
         )
     else:
-        matrix = json.loads(matrix_raw)
+        # Guarded parse + shape check even though the sha matched — a pin
+        # minted against corrupt bytes must be a GuardError, not a traceback
+        # or a confidently wrong family-diff verdict.
+        matrix = _parse_object(matrix_raw, context=matrix_url)
+        if not all(isinstance(cols, dict) for cols in matrix.values()):
+            raise GuardError(f"{matrix_url} is not a dict-of-dicts grid")
         grammar_families = set(arrow_grammar.FAMILY_NAMES)
         rows = set(matrix)
         if rows != grammar_families:
@@ -186,6 +217,15 @@ def main(argv: list[str] | None = None) -> int:
         help="run only the local hash check (no network); CI runs the full check",
     )
     args = parser.parse_args(argv)
+
+    if arrow_grammar is None:
+        print(
+            "::error::engine-grammar-pin guard could not run: importing the "
+            f"vendored grammar failed ({_IMPORT_ERROR}) — re-vendor the "
+            "published object (see analitiq/contracts/arrow_grammar.py)",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         failures = check_offline()

@@ -177,8 +177,9 @@ def _canonical_eq(a: str, b: str) -> bool:
     intra-parameter spacing of `Decimal128(38, 9)` vs `Decimal128(38,9)` is not
     significant, but whitespace INSIDE a token IS (`Time stamp(SECOND)` is not
     `Timestamp(SECOND)`) — so whitespace is collapsed only around the Arrow
-    separators (`,()`, the executable vocabulary's only punctuation), never
-    deleted wholesale."""
+    separators (`,()`, the vocabulary's only SEPARATOR punctuation; `:`/`/`/`+`
+    occur only inside timezone tokens, where whitespace stays significant),
+    never deleted wholesale."""
     norm = lambda s: _CANONICAL_SEP_WS.sub(r"\1", s).strip()  # noqa: E731
     return norm(a) == norm(b)
 

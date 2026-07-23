@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.analitiq.ai/canonical-types.json",
   "title": "Analitiq canonical types",
-  "description": "Analitiq's profile of the Apache Arrow logical type system. Canonical types are strings that identify an Arrow logical type in the form used by `type_map.canonical` entries on connector definitions and `arrow_type` fields throughout the schema contracts.\n\nOwnership: the ACCEPTED SET below is generated from the engine-published Arrow type grammar manifest (`https://schemas.analitiq.ai/arrow-type-grammar/latest.json`, pinned at v1.0.0) \u2014 the set of families the platform executes end-to-end. A family appears here only after the engine executes it; the contract adopts it by consuming the new manifest version, never by hand-editing this document.\n\nStandard (one screen):\n\nBase form: PascalCase Arrow type name from `arrow/format/Schema.fbs`.\n\nTwo parameter shapes:\n  - Bare name, no params \u2014 scalar types and the authored-shape JSON container markers: `Utf8`, `Int64`, `Boolean`, `Date32`, `Binary`, `Object`, `List`, `Json`.\n  - Parens `( )` for value params \u2014 parameterized scalars (units, precision/scale, byte widths): `Decimal128(38, 9)`, `Timestamp(MICROSECOND, UTC)`, `FixedSizeBinary(16)`.\n\nNested data is declared with the authored-shape markers only: `Object` / `List` carry their inner shape in sibling `properties` / `items` keys of the OWNING document (endpoint column, stream field spec), and `Json` is opaque. There are no fully-typed nested type strings in this vocabulary.\n\nUnit values inside parens are the literal Flatbuffers enum identifiers \u2014 uppercase:\n  - `TimeUnit`: `SECOND`, `MILLISECOND`, `MICROSECOND`, `NANOSECOND`.\n\nTimezone (Timestamp only): optional second arg. `null`, IANA name (including `Etc/GMT\u00b1N`), or fixed `\u00b1HH:MM` offset.\n\nFull canonical examples:\n  Utf8\n  Int64\n  Boolean\n  Date32\n  Decimal128(38, 9)\n  Decimal256(76, 0)\n  Timestamp(MICROSECOND)\n  Timestamp(MICROSECOND, UTC)\n  Timestamp(MILLISECOND, +05:30)\n  Time32(SECOND)\n  Time64(NANOSECOND)\n  Duration(MICROSECOND)\n  FixedSizeBinary(16)\n  Object\n  List\n  Json\n\nWhy uppercase unit names instead of PyArrow shorthand (`us`/`ms`/`ns`): the uppercase identifiers are the only spelling that's actually in the Arrow specification (the Flatbuffers `TimeUnit` enum). PyArrow's shortcodes are a Python-library convenience and read ambiguously in spec text (`us` parses as 'United States' to a casual reader or LLM). The engine tolerates the short forms on input; this authoring vocabulary does not. The translation to PyArrow constructor args is the runtime's job, not the spec's.\n\nWhy parens: parens hold values (integers, enums). The vocabulary has no type-parameter (angle-bracket) forms \u2014 nested shapes belong to the owning document's sibling keys, not to the type string.\n\nReference: https://arrow.apache.org/docs/format/Columnar.html#logical-types.\n\nScope note: `Decimal128/256` scale <= precision is a cross-parameter bound regex cannot express; the validator API and the contract models enforce it. Sibling-key rules for `Object`/`List`/`Json` are likewise the owning document's contract, not this string vocabulary's.\n\nVersion note: Arrow view types (`Utf8View`, `BinaryView`, `ListView`, `LargeListView`), the typed nested families (`List<T>`, `LargeList<T>`, `FixedSizeList<T>[n]`, `Struct<...>`, `Map<K, V>`), unions, encodings (`Dictionary`, `RunEndEncoded`), and `Interval` are not part of this canonical vocabulary: the platform does not execute them end-to-end. They return, if ever, by shipping in the engine first and re-consuming the grammar manifest (issue #81's re-add policy) \u2014 never by editing this document.",
+  "description": "Analitiq's profile of the Apache Arrow logical type system. Canonical types are strings that identify an Arrow logical type in the form used by `type_map.canonical` entries on connector definitions and `arrow_type` fields throughout the schema contracts.\n\nOwnership: the ACCEPTED SET below is generated from the engine-published Arrow type grammar manifest (`https://schemas.analitiq.ai/arrow-type-grammar/latest.json`, pinned at v1.0.0) \u2014 the set of families the platform executes end-to-end. A family appears here only after the engine executes it; the contract adopts it by consuming the new manifest version, never by hand-editing this document.\n\nStandard (one screen):\n\nBase form: PascalCase Arrow type name from `arrow/format/Schema.fbs`, or an Analitiq authored-shape container marker (`Object`, `List`, `Json`).\n\nTwo parameter shapes:\n  - Bare name, no params \u2014 scalar types and the authored-shape JSON container markers: `Utf8`, `Int64`, `Boolean`, `Date32`, `Binary`, `Object`, `List`, `Json`.\n  - Parens `( )` for value params \u2014 parameterized scalars (units, precision/scale, byte widths): `Decimal128(38, 9)`, `Timestamp(MICROSECOND, UTC)`, `FixedSizeBinary(16)`.\n\nNested data is declared with the authored-shape markers only: `Object` / `List` carry their inner shape in sibling `properties` / `items` keys of the OWNING document (endpoint column, stream field spec), and `Json` is opaque. There are no fully-typed nested type strings in this vocabulary.\n\nUnit values inside parens are the literal Flatbuffers enum identifiers \u2014 uppercase:\n  - `TimeUnit`: SECOND, MILLISECOND, MICROSECOND, NANOSECOND.\n\nTimezone (Timestamp only): optional second arg. `null`, IANA-shaped name (including `Etc/GMT\u00b1N`; the pattern gates the shape only \u2014 real zone membership is the engine's runtime check), or fixed `\u00b1HH:MM` offset.\n\nFull canonical examples:\n  Utf8\n  Int64\n  Boolean\n  Date32\n  Decimal128(38, 9)\n  Decimal256(76, 0)\n  Timestamp(MICROSECOND)\n  Timestamp(MICROSECOND, UTC)\n  Timestamp(MILLISECOND, +05:30)\n  Time32(SECOND)\n  Time64(NANOSECOND)\n  Duration(MICROSECOND)\n  FixedSizeBinary(16)\n  Object\n  List\n  Json\n\nWhy uppercase unit names instead of PyArrow shorthand (`us`/`ms`/`ns`): the uppercase identifiers are the only spelling that's actually in the Arrow specification (the Flatbuffers `TimeUnit` enum). PyArrow's shortcodes are a Python-library convenience and read ambiguously in spec text (`us` parses as 'United States' to a casual reader or LLM). The engine tolerates the short forms on input; this authoring vocabulary does not. The translation to PyArrow constructor args is the runtime's job, not the spec's.\n\nWhy parens: parens hold values (integers, enums). The vocabulary has no type-parameter (angle-bracket) forms \u2014 nested shapes belong to the owning document's sibling keys, not to the type string.\n\nReference: https://arrow.apache.org/docs/format/Columnar.html#logical-types.\n\nScope note: `Decimal128/256` scale <= precision is a cross-parameter bound regex cannot express; the validator API and the contract models enforce it (the patterns here cap a literal scale at the family's precision ceiling, the satisfiable envelope). Sibling-key rules for `Object`/`List`/`Json` are likewise the owning document's contract, not this string vocabulary's.\n\nVersion note: Arrow view types (`Utf8View`, `BinaryView`, `ListView`, `LargeListView`), the typed nested families (`List<T>`, `LargeList<T>`, `FixedSizeList<T>[n]`, `Struct<...>`, `Map<K, V>`), unions, encodings (`Dictionary`, `RunEndEncoded`), and `Interval` are not part of this canonical vocabulary: the platform does not execute them end-to-end. They return, if ever, by shipping in the engine first and re-consuming the grammar manifest (issue #81's re-add policy) \u2014 never by editing this document.",
   "$comment": "GENERATED by scripts/render_schemas.py from the vendored engine grammar manifest (analitiq.contracts.arrow_grammar) \u2014 do not hand-edit; run `render_schemas.py canonical-types` after a pin bump. Validating a value directly against this document's URL checks it against the strict canonical_type vocabulary. Type-map regex rules that permit ${name} templates reference the #/$defs/canonical_type_or_template fragment explicitly.",
   "$ref": "#/$defs/canonical_type",
   "$defs": {
@@ -116,7 +116,7 @@
     },
     "time_type": {
       "title": "Time",
-      "description": "Arrow time-of-day logical types. `Time32` supports SECOND and MILLISECOND units; `Time64` supports MICROSECOND and NANOSECOND units.",
+      "description": "Arrow time-of-day logical types. `Time32` supports SECOND, MILLISECOND units; `Time64` supports MICROSECOND, NANOSECOND units.",
       "oneOf": [
         {
           "type": "string",
@@ -130,27 +130,27 @@
     },
     "timestamp_type": {
       "title": "Timestamp",
-      "description": "Arrow Timestamp logical type. Unit is one of SECOND, MILLISECOND, MICROSECOND, NANOSECOND. Timezone is optional; when omitted, the type is zone-naive / local. When present, the timezone is either `null` (explicit zone-naive), an IANA zone (`UTC`, `America/New_York`, `Etc/GMT\u00b1N`), or a fixed `\u00b1HH:MM` offset. When mapping from a source that declares a zoned type (e.g., Postgres `TIMESTAMP WITH TIME ZONE`), use `UTC` unless there is a source-specific reason otherwise.",
+      "description": "Arrow Timestamp logical type. Unit is one of SECOND, MILLISECOND, MICROSECOND, NANOSECOND. Timezone is optional; when omitted, the type is zone-naive / local. When present, the timezone is either `null` (explicit zone-naive), an IANA-shaped zone name (`UTC`, `America/New_York`, `Etc/GMT\u00b1N` \u2014 the pattern gates the shape only; real zone membership is validated by the engine against the tzdb at runtime), or a fixed `\u00b1HH:MM` offset. When mapping from a source that declares a zoned type (e.g., Postgres `TIMESTAMP WITH TIME ZONE`), use `UTC` unless there is a source-specific reason otherwise.",
       "type": "string",
-      "pattern": "^Timestamp\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\\s*,\\s*(?:null|[A-Za-z_][A-Za-z0-9_/\\-]*|Etc/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\\)$"
+      "pattern": "^Timestamp\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\\s*,\\s*(?:null|[A-Za-z_][A-Za-z0-9_\\/\\-]*|Etc\\/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\\)$"
     },
     "duration_type": {
       "title": "Duration",
-      "description": "Arrow Duration logical type. Elapsed time with unit SECOND, MILLISECOND, MICROSECOND, or NANOSECOND.",
+      "description": "Arrow Duration logical type. Elapsed time with unit SECOND, MILLISECOND, MICROSECOND, NANOSECOND.",
       "type": "string",
       "pattern": "^Duration\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)\\)$"
     },
     "decimal_type": {
       "title": "Decimal",
-      "description": "Arrow Decimal128 or Decimal256 logical type. `Decimal128(precision, scale)` supports precision 1-38; `Decimal256(precision, scale)` supports precision 1-76. Scale is 0 <= scale <= precision; the scale-vs-precision bound is a cross-parameter rule enforced by the validator API and the contract models, not by these patterns. Use `Decimal128` unless the source precision exceeds 38.",
+      "description": "Arrow Decimal128 or Decimal256 logical type. `Decimal128(precision, scale)` supports precision 1-38; `Decimal256(precision, scale)` supports precision 1-76. Scale is 0 <= scale <= precision: the patterns cap a literal scale at the family's precision ceiling, and the scale-vs-precision relation itself is a cross-parameter rule enforced by the validator API and the contract models. Use `Decimal128` unless the source precision exceeds 38.",
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^Decimal128\\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\\s*,\\s*(?:0|[1-9][0-9]*)\\)$"
+          "pattern": "^Decimal128\\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-8])\\)$"
         },
         {
           "type": "string",
-          "pattern": "^Decimal256\\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\s*,\\s*(?:0|[1-9][0-9]*)\\)$"
+          "pattern": "^Decimal256\\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\)$"
         }
       ]
     },
@@ -173,11 +173,11 @@
         },
         {
           "description": "Templated Decimal128(precision, scale) \u2014 each parameter position accepts its literal grammar (at its valid range/enum, exactly as the strict vocabulary requires) or a `${name}` placeholder.",
-          "pattern": "^Decimal128\\((?:(?:[1-9]|1[0-9]|2[0-9]|3[0-8])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\s*,\\s*(?:(?:0|[1-9][0-9]*)|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\)$"
+          "pattern": "^Decimal128\\((?:(?:[1-9]|1[0-9]|2[0-9]|3[0-8])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\s*,\\s*(?:(?:[0-9]|1[0-9]|2[0-9]|3[0-8])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\)$"
         },
         {
           "description": "Templated Decimal256(precision, scale) \u2014 each parameter position accepts its literal grammar (at its valid range/enum, exactly as the strict vocabulary requires) or a `${name}` placeholder.",
-          "pattern": "^Decimal256\\((?:(?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\s*,\\s*(?:(?:0|[1-9][0-9]*)|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\)$"
+          "pattern": "^Decimal256\\((?:(?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\s*,\\s*(?:(?:[0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})\\)$"
         },
         {
           "description": "Templated Duration(unit) \u2014 each parameter position accepts its literal grammar (at its valid range/enum, exactly as the strict vocabulary requires) or a `${name}` placeholder.",
@@ -197,7 +197,7 @@
         },
         {
           "description": "Templated Timestamp(unit, tz) \u2014 each parameter position accepts its literal grammar (at its valid range/enum, exactly as the strict vocabulary requires) or a `${name}` placeholder.",
-          "pattern": "^Timestamp\\((?:(?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})(?:\\s*,\\s*(?:(?:null|[A-Za-z_][A-Za-z0-9_/\\-]*|Etc/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}))?\\)$"
+          "pattern": "^Timestamp\\((?:(?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\})(?:\\s*,\\s*(?:(?:null|[A-Za-z_][A-Za-z0-9_\\/\\-]*|Etc\\/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])|\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}))?\\)$"
         }
       ]
     }

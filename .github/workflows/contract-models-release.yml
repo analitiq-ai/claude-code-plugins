@@ -86,6 +86,23 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
 
+      - name: Smoke-test the built wheel (install + import)
+        # The package loads its vendored engine-grammar JSON at import time, so
+        # a wheel missing the package-data file cannot import AT ALL. build.py's
+        # import_guard exercises the staged source tree (copytree ships every
+        # file regardless of package-data), so only an install of the actual
+        # wheel proves the [tool.setuptools.package-data] declaration — and a
+        # broken rc published to PyPI is an immutable, burned version.
+        run: |
+          python -m venv "${{ runner.temp }}/cm-smoke"
+          "${{ runner.temp }}/cm-smoke/bin/pip" install --quiet "${{ runner.temp }}"/cm-dist/*.whl
+          "${{ runner.temp }}/cm-smoke/bin/python" -c "
+          import analitiq.contracts.endpoints as ep
+          import analitiq.contracts.arrow_grammar as ag
+          assert ag.FAMILY_NAMES and ep.ARROW_TYPE_RE.fullmatch('Utf8')
+          print('wheel imports; grammar loaded:', len(ag.FAMILY_NAMES), 'families')
+          "
+
       - name: Publish to PyPI (Trusted Publishing, OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

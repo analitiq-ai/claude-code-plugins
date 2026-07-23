@@ -1439,6 +1439,39 @@ class TestApiSchemaArrowType:
         with pytest.raises(ValidationError, match="canonical Arrow type"):
             parse_endpoint(payload)
 
+    def test_cross_param_decimal_in_response_schema_rejected(self):
+        """`Decimal128(5, 6)` passes the pattern (each position is in range)
+        but violates scale <= precision — the walker must catch it; it is NOT
+        on the `enforce_container_shape` chokepoint the Column tests cover."""
+        payload = _api_payload_with_response_schema({
+            "$schema": JSON_SCHEMA,
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "native_type": "numeric(5,6)",
+                    "arrow_type": "Decimal128(5, 6)",
+                },
+            },
+        })
+        with pytest.raises(ValidationError, match="scale .* must be <= precision"):
+            parse_endpoint(payload)
+
+    def test_cross_param_decimal_in_write_input_schema_rejected(self):
+        payload = _api_payload_with_write_input_schema({
+            "$schema": JSON_SCHEMA,
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number",
+                    "native_type": "numeric(5,6)",
+                    "arrow_type": "Decimal256(10, 11)",
+                },
+            },
+        })
+        with pytest.raises(ValidationError, match="scale .* must be <= precision"):
+            parse_endpoint(payload)
+
     def test_canonical_decimal_in_write_input_schema_accepted(self):
         parse_endpoint(_api_payload_with_write_input_schema({
             "$schema": JSON_SCHEMA,

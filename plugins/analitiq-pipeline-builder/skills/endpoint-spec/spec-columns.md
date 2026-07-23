@@ -52,13 +52,13 @@ PascalCase from `arrow/format/Schema.fbs`.
 
 **Parameterized** — the parameter is part of the type and is *not* optional; a bare name here is rejected:
 
-- `Decimal128\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\s*,\s*(?:0|[1-9][0-9]*)\)`
-- `Decimal256\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\s*,\s*(?:0|[1-9][0-9]*)\)`
+- `Decimal128\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\s*,\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-8])\)`
+- `Decimal256\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\s*,\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\)`
 - `Duration\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)\)`
 - `FixedSizeBinary\([1-9][0-9]*\)`
 - `Time32\((?:SECOND|MILLISECOND)\)`
 - `Time64\((?:MICROSECOND|NANOSECOND)\)`
-- `Timestamp\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\s*,\s*(?:null|[A-Za-z_][A-Za-z0-9_/\-]*|Etc/GMT[+\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\)`
+- `Timestamp\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\s*,\s*(?:null|[A-Za-z_][A-Za-z0-9_\/\-]*|Etc\/GMT[+\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\)`
 
 There are **no angle-bracket container forms**: nested data is declared with the bare authored-shape markers `Object` / `List` (with sibling `properties` / `items` on the owning column or field spec) or opaque `Json`. `Decimal128/256` additionally require scale <= precision — a cross-parameter bound the regex cannot express; the validator enforces it.
 <!-- END GENERATED: arrow-types -->

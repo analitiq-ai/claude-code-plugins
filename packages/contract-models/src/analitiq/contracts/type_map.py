@@ -77,29 +77,31 @@ def _validate_type_map_canonical(value: str) -> None:
     (`Decimal128(${p}, ${s})`, `Timestamp(${unit})`) has each `${...}`
     substituted with a dummy first, then `fullmatch`ed — so the whole SHAPE is
     validated (a scalar carrying parameters like `Utf8(${x})`, trailing garbage,
-    or a typo'd head all fail), not just the head. Two dummies are tried because
-    the grammar is parameter-specific (numeric precision vs a keyword unit); a
-    templated canonical is valid if either substitution yields a real Arrow type.
+    or a typo'd head all fail), not just the head. Several dummies are tried
+    (one per parameter grammar — a number for int positions plus one keyword
+    per unit family, derived from the vendored engine grammar); a templated
+    canonical is valid if ANY substitution yields a real Arrow type.
     Substitutions are parameter-positional, so one placeholder per parameter
     (`Decimal128(${p}, ${s})`, not `Decimal128(${p})`)."""
     if _PLACEHOLDER_RE.search(value):
-        # Dummies span the parameter grammars — a number for int positions plus
-        # one keyword per temporal unit family, derived from the vendored
-        # engine grammar. A templated canonical is valid if ANY dummy resolves
-        # it. Cross-parameter bounds are NOT checked on a templated canonical:
-        # a placeholder has no value to compare, and a dummy substitution would
-        # reject valid templates (`Decimal128(${p}, 9)` is not `scale > precision`).
         candidates = [_PLACEHOLDER_RE.sub(d, value)
                       for d in TEMPLATE_DUMMY_SUBSTITUTIONS]
     else:
         candidates = [value]
-        # Literal canonical: enforce the bounds the regex cannot express
-        # (Decimal scale <= precision), matching the endpoint model's check.
-        validate_cross_params(value)
     # `fullmatch`, not `match`, so a trailing newline (which Python `$` allows)
     # is rejected — matching the endpoint model's arrow_type check.
     if not any(_ARROW_TYPE_RE.fullmatch(c) for c in candidates):
         raise ValueError(f"canonical {value!r} is not a valid Arrow type")
+    # Pattern first, cross-parameter bound second — same order as the endpoint
+    # model sites, so one mistake gets one diagnosis (a shape error never
+    # surfaces as a scale complaint) and the check only ever sees
+    # pattern-valid ASCII digits. Literals only: a placeholder has no value to
+    # compare (`Decimal128(${p}, 9)` is not `scale > precision`), and the
+    # unsatisfiable-literal case (`Decimal128(${p}, 99)`) is already rejected
+    # by the pattern above, whose scale position is capped at the referenced
+    # param's own ceiling.
+    if not _PLACEHOLDER_RE.search(value):
+        validate_cross_params(value)
 # ECMA-262 named group `(?<name>…)` + named backreference `\k<name>` — the only
 # named forms the contract allows; translated to Python's `(?P<name>…)` / `(?P=name)`
 # spellings only to compile-check.

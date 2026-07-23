@@ -177,11 +177,13 @@ def test_schemaless_container_must_not_collapse_to_scalar():
     _accepts(READ, [{"match": "exact", "native": "JSONB", "canonical": "Utf8"}])  # bare name: not flagged
 
 
-def test_schemaless_native_must_map_to_json_only():
-    # `Json` is the ONLY container canonical a read rule can render (issue #81):
-    # the typed nested families are outside the executable vocabulary, and the
-    # authored-shape markers need sibling sub-schemas a string rule cannot carry
-    # (`Object`/`List` remain endpoint-narrowing vocabulary, not read-rule renders).
+def test_schemaless_native_maps_to_container_canonicals_only():
+    # The typed nested families are rejected outright (issue #81 — outside the
+    # vocabulary). `Object`/`List` still VALIDATE as renders (a string rule
+    # can't carry the sibling sub-schemas they need, but the model can't know
+    # that) — Json-only for read renders is craft guidance in
+    # spec-type-maps.md; the ENFORCED rule is "structured native must map to a
+    # container canonical, never a scalar".
     _accepts(READ, [{"match": "exact", "native": "union<int, str>", "canonical": "Json"}])
     for canonical in ("DenseUnion<a:Int64>", "SparseUnion<a:Int64>",
                       "Dictionary<Int32, Utf8>", "RunEndEncoded<Int32, Int64>"):

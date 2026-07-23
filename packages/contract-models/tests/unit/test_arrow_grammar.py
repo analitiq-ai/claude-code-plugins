@@ -38,20 +38,24 @@ def test_vendored_grammar_hashes_to_the_pin():
     )
 
 
-def test_every_family_appears_in_the_pattern():
-    """The pattern is a pure derivation: each family name is present, and no
-    alternative smuggles in a head the manifest doesn't know."""
+def test_pattern_is_a_pure_derivation_of_the_manifest():
+    """The published pattern is EXACTLY the composition of the per-family
+    fragments in sorted family order — nothing hand-appended can hide in it,
+    and each family behaves as its spec says (bare accepted iff no params)."""
+    assert arrow_grammar.ARROW_TYPE_PATTERN == (
+        "^(?:"
+        + "|".join(
+            arrow_grammar.family_pattern(name)
+            for name in sorted(arrow_grammar.FAMILIES)
+        )
+        + ")$"
+    )
     compiled = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
     for name, spec in arrow_grammar.FAMILIES.items():
         if spec.get("params"):
-            # A parameterized family's bare name must NOT match…
             assert not compiled.fullmatch(name), f"bare {name!r} must be rejected"
         else:
             assert compiled.fullmatch(name), f"bare {name!r} must be accepted"
-    # …and every head the pattern can accept is a manifest family.
-    heads = set(re.findall(r"[A-Za-z][A-Za-z0-9]*", arrow_grammar.ARROW_TYPE_PATTERN))
-    known_heads = {h for h in heads if h in arrow_grammar.FAMILIES}
-    assert known_heads == set(arrow_grammar.FAMILY_NAMES)
 
 
 def test_no_dead_families_in_the_manifest():
@@ -95,22 +99,42 @@ def test_template_dummies_cover_every_param_kind():
         ), f"no dummy resolves {template!r}"
 
 
-def test_int_range_pattern_bounds():
-    def matches(pattern: str, value: int) -> bool:
-        return re.fullmatch(pattern, str(value)) is not None
+@pytest.mark.parametrize("lo,hi", [(1, 38), (1, 76), (0, 38), (12, 45), (10, 10)])
+def test_int_range_pattern_is_exhaustively_correct(lo, hi):
+    """Property check over every value near the range (covers the decade
+    decomposition for lo >= 10, which the manifest doesn't exercise yet)."""
+    pattern = re.compile(arrow_grammar._int_range_pattern(lo, hi))
+    for v in range(0, 130):
+        assert (pattern.fullmatch(str(v)) is not None) == (lo <= v <= hi), (
+            f"[{lo},{hi}] wrong at {v}"
+        )
 
-    p138 = arrow_grammar._int_range_pattern(1, 38)
-    assert all(matches(p138, v) for v in (1, 9, 10, 29, 30, 38))
-    assert not any(matches(p138, v) for v in (0, 39, 40, 100))
-    p176 = arrow_grammar._int_range_pattern(1, 76)
-    assert all(matches(p176, v) for v in (1, 76))
-    assert not any(matches(p176, v) for v in (0, 77))
+
+def test_int_range_pattern_unbounded_and_leading_zeros():
     unbounded = arrow_grammar._int_range_pattern(1, None)
-    assert matches(unbounded, 1) and matches(unbounded, 12345)
+    assert re.fullmatch(unbounded, "1") and re.fullmatch(unbounded, "12345")
     assert not re.fullmatch(unbounded, "0") and not re.fullmatch(unbounded, "01")
     zero = arrow_grammar._int_range_pattern(0, None)
-    assert matches(zero, 0) and matches(zero, 10)
+    assert re.fullmatch(zero, "0") and re.fullmatch(zero, "10")
     assert not re.fullmatch(zero, "-1") and not re.fullmatch(zero, "007")
+    bounded_zero = arrow_grammar._int_range_pattern(0, 38)
+    assert not re.fullmatch(bounded_zero, "05")
+
+
+def test_cross_ref_int_bound_resolves_to_referenced_ceiling():
+    """`"max": "precision"` caps a literal scale at precision's own max — the
+    satisfiable envelope — so `Decimal128(38, 99)` fails the pattern outright
+    (and with it the unsatisfiable template `Decimal128(${p}, 99)`)."""
+    compiled = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
+    assert compiled.fullmatch("Decimal128(38, 38)")
+    assert not compiled.fullmatch("Decimal128(38, 39)")
+    assert compiled.fullmatch("Decimal256(76, 76)")
+    assert not compiled.fullmatch("Decimal256(76, 77)")
+    templated = re.compile(
+        "^" + arrow_grammar.family_pattern("Decimal128", templated=True) + "$"
+    )
+    assert templated.fullmatch("Decimal128(${p}, 20)")
+    assert not templated.fullmatch("Decimal128(${p}, 99)")
 
 
 def test_unsupported_manifest_shapes_fail_loudly():
@@ -119,7 +143,46 @@ def test_unsupported_manifest_shapes_fail_loudly():
     with pytest.raises(ValueError):
         arrow_grammar._int_range_pattern(2, None)  # unsupported unbounded min
     with pytest.raises(ValueError):
-        arrow_grammar._param_literal_pattern({"kind": "mystery", "name": "x"})
+        arrow_grammar._param_literal_pattern({"kind": "mystery", "name": "x"}, [])
+
+
+def test_non_trailing_optional_param_fails_loudly(monkeypatch):
+    """A leading/middle optional param would silently generate a wrong grammar
+    (the comma rides inside each piece); the generator must refuse instead."""
+    fake = {
+        "Bad": {
+            "params": [
+                {"kind": "int", "min": 1, "max": None, "name": "a", "optional": True},
+                {"kind": "int", "min": 1, "max": None, "name": "b"},
+            ]
+        }
+    }
+    monkeypatch.setattr(arrow_grammar, "FAMILIES", {**arrow_grammar.FAMILIES, **fake})
+    with pytest.raises(ValueError, match="non-trailing optional"):
+        arrow_grammar.family_pattern("Bad")
+
+
+def test_wheel_packaging_declares_the_vendored_manifest():
+    """`arrow_grammar.py` loads the JSON at import time, so the wheel MUST ship
+    it; the only thing putting it there is the pyproject package-data stanza.
+    Pin the declaration to the filename constant so neither can rot alone.
+    (The release workflow additionally installs the built wheel and imports
+    it — this is the offline half of that guard.)"""
+    import tomllib
+
+    pyproject = (
+        arrow_grammar._GRAMMAR_PATH.parents[3] / "pyproject.toml"
+    )
+    config = tomllib.loads(pyproject.read_text())
+    package_data = config["tool"]["setuptools"]["package-data"]
+    assert arrow_grammar.ENGINE_GRAMMAR_FILENAME in package_data.get(
+        "analitiq.contracts", []
+    ), (
+        "pyproject [tool.setuptools.package-data] must list "
+        f"{arrow_grammar.ENGINE_GRAMMAR_FILENAME} under 'analitiq.contracts' — "
+        "without it the published wheel cannot import"
+    )
+    assert arrow_grammar._GRAMMAR_PATH.name == arrow_grammar.ENGINE_GRAMMAR_FILENAME
 
 
 def test_cross_params_checks_literals_only():

@@ -44,7 +44,8 @@ requirements-dev.txt              # runtime deps of the packages + pytest
 re-renders and fails on any diff, and CI runs it. Never hand-edit a file under
 `schemas/`. `canonical-types.json` is versionless and outside the registry but
 still generated: `render_schemas.py canonical-types` builds it from the
-vendored engine grammar (see "the type vocabulary" below), and `check` covers
+vendored engine grammar (see "The canonical Arrow type vocabulary is
+engine-owned" below), and `check` covers
 it. Two files are exceptions, hand-authored and outside the registry:
 `data-sync-api/openapi.json`, which has no version triple, and
 `data-sync-run-response/1.0.0.json`, which is versioned but hand-maintained —

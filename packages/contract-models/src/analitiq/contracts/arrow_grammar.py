@@ -82,7 +82,18 @@ def load_grammar() -> dict[str, Any]:
     return json.loads(_GRAMMAR_PATH.read_text(encoding="utf-8"))
 
 
-GRAMMAR: dict[str, Any] = load_grammar()
+try:
+    GRAMMAR: dict[str, Any] = load_grammar()
+except (OSError, json.JSONDecodeError) as exc:
+    # Every `analitiq.contracts.*` import passes through here, so a missing or
+    # corrupt vendored file must name its remediation, not surface as a bare
+    # FileNotFoundError three imports deep.
+    raise RuntimeError(
+        f"vendored engine grammar {_GRAMMAR_PATH} is missing or corrupt "
+        f"({exc}); re-vendor the published "
+        f"{ENGINE_GRAMMAR_RESOURCE}/v{ENGINE_GRAMMAR_VERSION} object "
+        "(see this module's docstring for the pin-update procedure)"
+    ) from exc
 
 #: family name -> param spec, exactly as the engine publishes it.
 FAMILIES: dict[str, dict[str, Any]] = GRAMMAR["families"]
@@ -100,15 +111,18 @@ PLACEHOLDER_PATTERN = r"\$\{[A-Za-z_][A-Za-z0-9_]*\}"
 # lookup the engine performs at runtime; a regex can only gate the shape.
 # `Etc/GMT±N` zones carry a `+`/`-` the identifier class deliberately excludes
 # (it would swallow malformed offsets), so they get their own alternative.
-_IANA_ZONE = r"[A-Za-z_][A-Za-z0-9_/\-]*"
-_ETC_GMT_ZONE = r"Etc/GMT[+\-][0-9]{1,2}"
+# The `/` is escaped for compatibility with every ECMA-262 mode (the `v` flag
+# rejects a bare `/` in a character class); Python and the `u`/no-flag modes
+# treat `\/` identically to `/`.
+_IANA_ZONE = r"[A-Za-z_][A-Za-z0-9_\/\-]*"
+_ETC_GMT_ZONE = r"Etc\/GMT[+\-][0-9]{1,2}"
 
 
 def _int_range_pattern(lo: int, hi: int | None) -> str:
     """Regex for a decimal integer literal in [lo, hi] (no leading zeros).
 
     Covers exactly the shapes the manifest uses today — `lo` 0 or 1 with `hi`
-    None (unbounded), or 1 <= lo with lo <= hi <= 99. Anything else fails
+    None (unbounded), or 0 <= lo <= hi <= 99 bounded. Anything else fails
     loudly so a manifest widening is a visible decision, not a silent misparse.
     """
     if hi is None:
@@ -117,7 +131,7 @@ def _int_range_pattern(lo: int, hi: int | None) -> str:
         if lo == 1:
             return r"[1-9][0-9]*"
         raise ValueError(f"unsupported unbounded int range min={lo}")
-    if not (1 <= lo <= hi <= 99):
+    if not (0 <= lo <= hi <= 99):
         raise ValueError(f"unsupported int range [{lo}, {hi}]")
     parts: list[str] = []
     # Single-digit span.
@@ -140,17 +154,25 @@ def _int_range_pattern(lo: int, hi: int | None) -> str:
     return "(?:" + "|".join(parts) + ")"
 
 
-def _param_literal_pattern(param: dict[str, Any]) -> str:
-    """Regex for one parameter position's LITERAL values, from its spec."""
+def _param_literal_pattern(param: dict[str, Any], params: list[dict[str, Any]]) -> str:
+    """Regex for one parameter position's LITERAL values, from its spec.
+
+    `params` is the owning family's full param list, needed to resolve a
+    cross-parameter bound (`"max": "precision"`): the relation itself cannot
+    live in a per-position regex (`validate_cross_params` enforces it on
+    literals), but the referenced param's own numeric ceiling can — scale <=
+    precision <= 38 means a literal scale above 38 is unsatisfiable for ANY
+    precision, so the pattern rejects it outright. This also closes the
+    templated hole: `Decimal128(${p}, 99)` can never be satisfied and now
+    fails both the published template pattern and the runtime dummy check.
+    """
     kind = param["kind"]
     if kind == "int":
         lo = param["min"]
         hi = param["max"]
-        # A cross-parameter bound (`"max": "precision"`) cannot live in a
-        # per-position regex; the regex keeps the min, and
-        # `validate_cross_params` enforces the relation on literals.
         if isinstance(hi, str):
-            hi = None
+            ref = next((p for p in params if p["name"] == hi), None)
+            hi = ref["max"] if ref and isinstance(ref.get("max"), int) else None
         return _int_range_pattern(lo, hi)
     if kind == "unit":
         return "(?:" + "|".join(param["allowed"]) + ")"
@@ -174,9 +196,21 @@ def family_pattern(name: str, *, templated: bool = False) -> str:
         # authored-shape markers (`Object`/`List` — sibling `properties`/`items`
         # rules are model-layer, not string-vocabulary, concerns).
         return name
+    # The per-piece optional wrapper below is only correct for TRAILING
+    # optional params (the comma rides inside each non-first piece). A leading
+    # or middle optional would silently generate a wrong grammar — fail loudly
+    # instead, like every other unsupported manifest shape.
+    first_optional = next(
+        (i for i, p in enumerate(params) if p.get("optional")), len(params)
+    )
+    if any(not p.get("optional") for p in params[first_optional:]):
+        raise ValueError(
+            f"family {name!r} has a non-trailing optional param; the pattern "
+            "generator only supports trailing optionals"
+        )
     pieces: list[str] = []
     for i, param in enumerate(params):
-        literal = _param_literal_pattern(param)
+        literal = _param_literal_pattern(param, params)
         arg = f"(?:{literal}|{PLACEHOLDER_PATTERN})" if templated else literal
         piece = arg if i == 0 else rf"\s*,\s*{arg}"
         if param.get("optional"):
