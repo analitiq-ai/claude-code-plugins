@@ -1280,6 +1280,152 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
 # required so a declared block is never an empty no-op.
 #
 # Both blocks are OPTIONAL at the schema level; omission is legal.
+#
+# Capability block v2 (issue #89; engine analitiq-engine#401/#407) adds three
+# ADDITIVE declarations: `error_map` and `concurrency` (connector-level) and
+# `sql_capabilities.limits`. Additive means no refusal ever hinges on them
+# being present — absence (of a block, a family, or a single cap) is legal and
+# means "no declared mapping / no declared cap"; current engine behavior
+# applies. That contrasts with the shape facts above (a missing `merge_form`
+# blocks an upsert) and with `write_unit`'s at-least-one-bound rule: here an
+# EMPTY block (`{}`) is legal and equivalent to omission. Declared content is
+# still validated fail-loud: an off-vocabulary category, a malformed
+# identifier, or an unknown field is a config error. Connectors declare DRIVER
+# FACTS only; the engine alone derives verdicts (ack status, failure category,
+# error code) — these models must never grow verdict-shaped fields.
+
+
+# Closed, engine-owned failure-category vocabulary (capability block v2). The
+# engine's typed parser (`cdk/declarations.py` ERROR_CATEGORY_VALUES) is the
+# owner; this Literal mirrors it exactly.
+ErrorCategory = Literal[
+    "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected"
+]
+
+# Per-family identifier grammars, mirrored from the engine parser: a 2-char
+# SQLSTATE class or full 5-char state (uppercase alphanumeric only); a Python
+# exception class name; a signed integer vendor code; a 3-digit HTTP status
+# (100-599 — string-typed on the wire, like every JSON object key).
+_SQLSTATE_KEY_PATTERN = r"^[0-9A-Z]{2}([0-9A-Z]{3})?$"
+_EXCEPTION_KEY_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
+_VENDOR_CODE_KEY_PATTERN = r"^-?[0-9]+$"
+_HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
+
+# Pydantic renders a patterned-key dict as `patternProperties` alone, under
+# which a JSON-Schema-only consumer would ACCEPT the off-grammar keys the model
+# rejects (patternProperties constrains matching keys; non-matching keys fall
+# through to an unset additionalProperties). The injected sibling
+# `additionalProperties: false` closes that gap so schema and model agree —
+# the same schema-parity discipline as the `json_schema_extra` mirrors above.
+_SqlstateFamily = Annotated[
+    dict[Annotated[str, StringConstraints(pattern=_SQLSTATE_KEY_PATTERN)], ErrorCategory],
+    Field(json_schema_extra={"additionalProperties": False}),
+]
+_ExceptionFamily = Annotated[
+    dict[Annotated[str, StringConstraints(pattern=_EXCEPTION_KEY_PATTERN)], ErrorCategory],
+    Field(json_schema_extra={"additionalProperties": False}),
+]
+_VendorCodeFamily = Annotated[
+    dict[Annotated[str, StringConstraints(pattern=_VENDOR_CODE_KEY_PATTERN)], ErrorCategory],
+    Field(json_schema_extra={"additionalProperties": False}),
+]
+_HttpStatusFamily = Annotated[
+    dict[Annotated[str, StringConstraints(pattern=_HTTP_STATUS_KEY_PATTERN)], ErrorCategory],
+    Field(json_schema_extra={"additionalProperties": False}),
+]
+
+# A declared cap: positive integer, strictly typed. `strict=True` rejects the
+# bool/str/float coercions lax mode would accept, mirroring the engine parser's
+# explicit `isinstance(value, bool)` guard (bool is an int subclass in Python)
+# — the issue #89 grammar says "integer >= 1 (booleans rejected)" for every
+# cap field, unlike the contract's lax int fields (e.g. `write_unit.rows`).
+_DeclaredCap = Annotated[int, Field(strict=True, ge=1)]
+
+
+class ErrorMap(StrictModel):
+    """Driver-fact error classification map (capability block v2, issue #89).
+
+    Maps driver-reported identifiers onto the engine's closed failure-category
+    vocabulary, one map per identifier family. A subset of families (including
+    none — an empty block declares nothing) is legal, and so is an empty family
+    map. Additive: absence never blocks anything. Connectors declare driver
+    facts only; the engine alone derives verdicts (ack status, failure
+    category, error code) from them (analitiq-engine#401).
+    """
+
+    sqlstate: _SqlstateFamily | None = Field(
+        default=None,
+        description=(
+            "SQLSTATE → failure category. Keys are a 2-char SQLSTATE class "
+            "(e.g. `08`) or a full 5-char state (e.g. `28000`), uppercase "
+            "alphanumeric."
+        ),
+    )
+    exception: _ExceptionFamily | None = Field(
+        default=None,
+        description=(
+            "Python exception class name → failure category "
+            "(e.g. `OperationalError`)."
+        ),
+    )
+    vendor_code: _VendorCodeFamily | None = Field(
+        default=None,
+        description=(
+            "Vendor error code → failure category. Keys are signed integers "
+            "in string form (e.g. `1045`, `-803`)."
+        ),
+    )
+    http: _HttpStatusFamily | None = Field(
+        default=None,
+        description=(
+            "HTTP status → failure category. Keys are 3-digit statuses "
+            "100-599 in string form (e.g. `429`)."
+        ),
+    )
+
+
+class Concurrency(StrictModel):
+    """Connector-level concurrency declaration (capability block v2, issue #89).
+
+    Additive: absence of the block or of `max_connections` — including an
+    empty block — means "no declared cap" and current engine behavior applies.
+    A declared cap is validated strictly (positive integer, booleans rejected).
+    """
+
+    max_connections: _DeclaredCap | None = Field(
+        default=None,
+        description=(
+            "Maximum concurrent connections the engine may open to the target "
+            "system (integer ≥ 1). Absent means no declared cap."
+        ),
+    )
+
+
+class SqlLimits(StrictModel):
+    """Declared SQL driver caps (capability block v2, issue #89).
+
+    The one additive member of `sql_capabilities`: unlike the five required
+    shape facts, absence of the block or of any single cap — including an
+    empty block — is legal and means "no declared cap". It never blocks a
+    write; declared values are validated strictly (positive integers,
+    booleans rejected).
+    """
+
+    max_bind_params: _DeclaredCap | None = Field(
+        default=None,
+        description=(
+            "Maximum bind parameters per statement the driver accepts "
+            "(integer ≥ 1), e.g. 2100 for SQL Server. Absent means no "
+            "declared cap."
+        ),
+    )
+    max_identifier_len: _DeclaredCap | None = Field(
+        default=None,
+        description=(
+            "Maximum SQL identifier length in characters (integer ≥ 1), "
+            "e.g. 63 for Postgres. Absent means no declared cap."
+        ),
+    )
 
 
 class SqlStageCapabilities(StrictModel):
@@ -1380,8 +1526,9 @@ class SqlCapabilities(StrictModel):
     "Refuse, don't guess": the engine reads these facts instead of probing the
     live database, and refuses at handshake time when a needed fact was not
     declared (analitiq-engine#390, PR analitiq-engine#400). Optional as a block,
-    but when present all five facts are required — a partial declaration is a
-    config error.
+    but when present all five shape facts are required — a partial declaration
+    is a config error. `limits` (issue #89) is the one additive member: it and
+    each cap inside it may be omitted, meaning "no declared cap".
     """
 
     catalog: Literal["none", "read", "full"] = Field(
@@ -1426,6 +1573,15 @@ class SqlCapabilities(StrictModel):
         ...,
         description=(
             "Staging-relation capabilities for the merge/upsert write path."
+        ),
+    )
+    limits: SqlLimits | None = Field(
+        default=None,
+        description=(
+            "Declared SQL driver caps (capability block v2, issue #89). The "
+            "one additive member of this block: unlike the five required "
+            "shape facts, absence (of the block or any single cap) is legal "
+            "and means \"no declared cap\"."
         ),
     )
 
@@ -1596,6 +1752,24 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
             "any destination whose write cost is per-write-operation may "
             "declare the batch size the engine's coalescer should target. "
             "Absent means no coalescing preference."
+        ),
+    )
+    error_map: ErrorMap | None = Field(
+        default=None,
+        description=(
+            "Driver-fact error classification map (capability block v2, "
+            "issue #89): per-family identifier → failure-category facts "
+            "(sqlstate, exception, vendor_code, http). Connector-level "
+            "because families span kinds (http for API connectors, sqlstate/"
+            "vendor_code for databases). Additive — absence never blocks "
+            "anything; the engine alone derives verdicts from these facts."
+        ),
+    )
+    concurrency: Concurrency | None = Field(
+        default=None,
+        description=(
+            "Connector-level concurrency declaration (capability block v2, "
+            "issue #89). Additive — absence means no declared cap."
         ),
     )
 
@@ -1777,7 +1951,8 @@ class DatabaseConnector(ConnectorBase):
             "Declared SQL write-path capabilities (engine ADR §5). SQL-specific "
             "— not present on other connector kinds. Optional; when omitted the "
             "engine refuses any needed-but-undeclared fact at handshake time. "
-            "When present, all five facts are required."
+            "When present, all five shape facts are required; `limits` "
+            "(issue #89) is the one additive member and may be omitted."
         ),
     )
 
