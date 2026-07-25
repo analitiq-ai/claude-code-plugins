@@ -3778,7 +3778,7 @@
     },
     "SqlLimits": {
       "additionalProperties": false,
-      "description": "Declared SQL driver caps (capability block v2, issue #89).\n\nThe one additive member of `sql_capabilities`: unlike the five required\nshape facts, absence of the block or of any single cap \u2014 including an\nempty block \u2014 is legal and means \"no declared cap\". It never blocks a\nwrite; declared values are validated strictly (positive integers,\nbooleans rejected).",
+      "description": "Declared SQL driver caps (capability block v2, issue #89).\n\nThe one additive member of `sql_capabilities`: unlike the five required\nshape facts, absence of the block or of any single cap \u2014 including an\nempty block \u2014 is legal and means \"no declared cap\", and absence never\nblocks a write. Declared values are validated strictly (positive\nintegers, booleans rejected) and are enforced by the engine.",
       "properties": {
         "max_bind_params": {
           "anyOf": [
@@ -3805,7 +3805,7 @@
             }
           ],
           "default": null,
-          "description": "Maximum SQL identifier length in characters (integer \u2265 1), e.g. 63 for Postgres. Absent means no declared cap.",
+          "description": "Maximum SQL identifier length in bytes (integer \u2265 1), e.g. 63 for Postgres (NAMEDATALEN \u2212 1). Absent means no declared cap.",
           "title": "Max Identifier Len"
         }
       },

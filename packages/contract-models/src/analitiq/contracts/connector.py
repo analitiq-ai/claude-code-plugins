@@ -1263,16 +1263,18 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
         )
 
 
-# --- SQL write-path capabilities & write unit (engine ADR §5, issue #87) ---
+# --- Declared capabilities: SQL write path, write unit, capability block v2
+# (engine ADR §5; issues #87, #89) ---
 #
 # `sql_capabilities` — SQL-shape capabilities are DECLARED, not guessed. The
 # engine's SQL write path ("refuse, don't guess" — analitiq-engine#390, settled
 # in the engine ADR `docs/sql-write-path-v2.md` §5) reads these facts from the
 # connector definition and refuses any needed-but-undeclared fact at
 # config/handshake time, instead of probing the live database. A declared block
-# is COMPLETE — every top-level fact is required — because a partial declaration
-# is a config error, not a request for implicit defaults. (`stage.dedicated_schema`
-# is the one conditional field: required iff `stage.schema == "dedicated"`.)
+# is COMPLETE — every top-level shape fact is required — because a partial
+# declaration is a config error, not a request for implicit defaults.
+# (`stage.dedicated_schema` is the one conditional field: required iff
+# `stage.schema == "dedicated"`.)
 #
 # `write_unit` — a connector-level, non-SQL coalescing PREFERENCE (not a
 # refuse-don't-guess fact): a destination declares the batch size it wants, and
@@ -1295,9 +1297,10 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
 # error code) — these models must never grow verdict-shaped fields.
 
 
-# Closed, engine-owned failure-category vocabulary (capability block v2). The
-# engine's typed parser (`cdk/declarations.py` ERROR_CATEGORY_VALUES) is the
-# owner; this Literal mirrors it exactly.
+# Closed failure-category vocabulary (capability block v2), settled in issue
+# #89 and mirrored by the engine's typed parser (`cdk/declarations.py`). The
+# schema rendered from this Literal is the published contract; a vocabulary
+# change is a coordinated engine + contract revision, never a local edit.
 ErrorCategory = Literal[
     "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected"
 ]
@@ -1314,24 +1317,28 @@ _HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 # Pydantic renders a patterned-key dict as `patternProperties` alone, under
 # which a JSON-Schema-only consumer would ACCEPT the off-grammar keys the model
 # rejects (patternProperties constrains matching keys; non-matching keys fall
-# through to an unset additionalProperties). The injected sibling
-# `additionalProperties: false` closes that gap so schema and model agree —
-# the same schema-parity discipline as the `json_schema_extra` mirrors above.
+# through to an unset additionalProperties). Injecting `additionalProperties:
+# false` as a sibling closes that gap so schema and model agree — the same
+# schema-parity discipline as the `json_schema_extra` mirrors above. The four
+# aliases stay explicit (not factory-built) so static type checkers keep
+# covering the fields; the injected dict is shared so the invariant is stated
+# once.
+_CLOSED_KEY_GRAMMAR: dict[str, Any] = {"additionalProperties": False}
 _SqlstateFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_SQLSTATE_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra={"additionalProperties": False}),
+    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
 ]
 _ExceptionFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_EXCEPTION_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra={"additionalProperties": False}),
+    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
 ]
 _VendorCodeFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_VENDOR_CODE_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra={"additionalProperties": False}),
+    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
 ]
 _HttpStatusFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_HTTP_STATUS_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra={"additionalProperties": False}),
+    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
 ]
 
 # A declared cap: positive integer, strictly typed. `strict=True` rejects the
@@ -1339,6 +1346,9 @@ _HttpStatusFamily = Annotated[
 # explicit `isinstance(value, bool)` guard (bool is an int subclass in Python)
 # — the issue #89 grammar says "integer >= 1 (booleans rejected)" for every
 # cap field, unlike the contract's lax int fields (e.g. `write_unit.rows`).
+# Known one-way edge: JSON Schema's `type: integer` admits a zero-fraction
+# float (`8.0`) the strict model rejects — inexpressible to close in JSON
+# Schema, and the safe direction (the authoritative validator is stricter).
 _DeclaredCap = Annotated[int, Field(strict=True, ge=1)]
 
 
@@ -1406,9 +1416,9 @@ class SqlLimits(StrictModel):
 
     The one additive member of `sql_capabilities`: unlike the five required
     shape facts, absence of the block or of any single cap — including an
-    empty block — is legal and means "no declared cap". It never blocks a
-    write; declared values are validated strictly (positive integers,
-    booleans rejected).
+    empty block — is legal and means "no declared cap", and absence never
+    blocks a write. Declared values are validated strictly (positive
+    integers, booleans rejected) and are enforced by the engine.
     """
 
     max_bind_params: _DeclaredCap | None = Field(
@@ -1422,8 +1432,8 @@ class SqlLimits(StrictModel):
     max_identifier_len: _DeclaredCap | None = Field(
         default=None,
         description=(
-            "Maximum SQL identifier length in characters (integer ≥ 1), "
-            "e.g. 63 for Postgres. Absent means no declared cap."
+            "Maximum SQL identifier length in bytes (integer ≥ 1), e.g. 63 "
+            "for Postgres (NAMEDATALEN − 1). Absent means no declared cap."
         ),
     )
 

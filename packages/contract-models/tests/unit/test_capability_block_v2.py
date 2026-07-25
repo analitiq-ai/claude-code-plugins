@@ -20,12 +20,20 @@ Facts that have to hold and stay held, so they are pinned here:
    `patternProperties` alone — under which a JSON-Schema-only consumer would
    accept off-grammar keys the model rejects. The models inject a sibling
    `additionalProperties: false` per family so an external Draft 2020-12
-   validator rejects exactly what Pydantic rejects — proven on each sub-model's
-   own schema and end-to-end against the published `connector/latest.json`.
+   validator rejects what Pydantic rejects — proven on each sub-model's own
+   schema and end-to-end against the published `connector/latest.json`.
    Unlike the contract's lax int fields (`write_unit.rows`), the three cap
    fields are strict (`strict=True`): booleans are rejected by the model AND by
    the schema's `type: integer`, mirroring the engine parser's explicit
    `isinstance(value, bool)` guard — pinned here in both layers.
+
+   Parity is one-way lax on exactly two known edges, pinned as such below so
+   neither silently widens nor gets "fixed" in the wrong direction: JSON
+   Schema's `type: integer` admits a zero-fraction float (`8.0`) the strict
+   model rejects, and Python `jsonschema`'s `re.search`-based patterns let `$`
+   match before a trailing newline in a family key where pydantic-core's Rust
+   regex (end-of-string `$`) rejects it. Both go the safe direction — the
+   authoritative validator is the stricter layer.
 """
 from __future__ import annotations
 
@@ -110,6 +118,7 @@ def test_error_map_accepts(payload):
         ({"sqlstate": {"08": "flaky"}}, "off-vocabulary category"),
         ({"sqlstate": {"zz": "auth"}}, "sqlstate keys are uppercase-only"),
         ({"sqlstate": {"0": "auth"}}, "sqlstate class is exactly 2 chars"),
+        ({"sqlstate": {"080": "auth"}}, "sqlstate is 2 or 5 chars, never 3"),
         ({"sqlstate": {"0800": "auth"}}, "sqlstate is 2 or 5 chars, never 4"),
         ({"exception": {"1BadName": "auth"}}, "exception name can't start with a digit"),
         ({"exception": {"Op.Error": "auth"}}, "exception name is a bare class name"),
@@ -117,40 +126,28 @@ def test_error_map_accepts(payload):
         ({"vendor_code": {"": "auth"}}, "vendor code can't be empty"),
         ({"http": {"999": "auth"}}, "http status first digit is 1-5"),
         ({"http": {"42": "auth"}}, "http status is exactly 3 digits"),
-        ({"http": {"4290": "auth"}}, "http status is exactly 3 digits"),
+        ({"http": {"4290": "auth"}}, "http status is exactly 3 digits (anchors)"),
         ({"sqlstate": ["08"]}, "family must be an object, not an array"),
         ({"sqlstate": {"08": None}}, "category must be a string, never null"),
     ],
 )
 def test_error_map_rejects(payload, why):
+    # Both layers, one list: the model must reject, and — thanks to the
+    # `additionalProperties: false` mirror injected next to each family's
+    # `patternProperties` — the published schema must reject the same payload;
+    # patternProperties alone would let off-grammar keys through. `4290` is
+    # the load-bearing anchor case: it flips to accepted if either regex
+    # anchor is lost (prefix `429` / suffix `290` both match unanchored).
     with pytest.raises(ValidationError):
         ErrorMap.model_validate(payload)
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"grpc": {"UNAVAILABLE": "transient"}},
-        {"sqlstate": {"08": "flaky"}},
-        {"sqlstate": {"zz": "auth"}},
-        {"http": {"999": "auth"}},
-        {"exception": {"1BadName": "auth"}},
-        {"vendor_code": {"1.5": "auth"}},
-    ],
-)
-def test_error_map_json_schema_rejects(payload):
-    # The `additionalProperties: false` mirror injected next to each family's
-    # `patternProperties` must make the published schema reject off-grammar
-    # keys exactly as the model does — without it, patternProperties alone
-    # would let them through.
     assert not _external_validator(ErrorMap).is_valid(payload)
 
 
 # Hand-pinned expected member sets — a deliberate restatement so a future
 # NARROWING fails loudly (same rationale as EXPECTED_SQL_CAP_ENUMS in
-# test_sql_capabilities.py). The engine's `cdk/declarations.py`
-# (ERROR_CATEGORY_VALUES, per-family key regexes) is the owner; this is the
-# sanctioned "test's assertion target" copy (no-drift rule #3).
+# test_sql_capabilities.py). The vocabulary and key grammars are settled in
+# issue #89 and mirrored by the engine's typed parser (`cdk/declarations.py`);
+# this is the sanctioned "test's assertion target" copy (no-drift rule #3).
 EXPECTED_ERROR_CATEGORIES = {
     "transient",
     "config",
@@ -226,28 +223,18 @@ def test_concurrency_accepts(payload):
         ({"max_connections": -1}, "must be >= 1"),
         ({"max_connections": True}, "booleans are rejected (strict int)"),
         ({"max_connections": "8"}, "strings are rejected (strict int)"),
-        ({"max_connections": 2.5}, "floats are rejected (strict int)"),
+        ({"max_connections": 2.5}, "fractional floats are rejected"),
         ({"pool_size": 4}, "unknown fields are rejected"),
     ],
 )
 def test_concurrency_rejects(payload, why):
+    # Both layers: `type: integer` + `minimum: 1` + `additionalProperties:
+    # false` reject the same payloads strict Pydantic rejects — including
+    # booleans, which the contract's lax int fields (e.g. write_unit.rows)
+    # coerce but this block must not. (Zero-fraction floats are the one known
+    # divergence — see test_integral_float_is_a_known_one_way_divergence.)
     with pytest.raises(ValidationError):
         Concurrency.model_validate(payload)
-
-
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"max_connections": 0},
-        {"max_connections": True},
-        {"max_connections": "8"},
-        {"pool_size": 4},
-    ],
-)
-def test_concurrency_json_schema_rejects(payload):
-    # `type: integer` + `minimum: 1` reject the same payloads strict Pydantic
-    # rejects — including booleans, which the contract's lax int fields
-    # (e.g. write_unit.rows) coerce but this block must not.
     assert not _external_validator(Concurrency).is_valid(payload)
 
 
@@ -262,6 +249,7 @@ def test_concurrency_json_schema_rejects(payload):
         VALID_LIMITS,
         {"max_bind_params": 2100},  # partial declaration is legal (additive)
         {"max_identifier_len": 63},
+        {"max_bind_params": 1},  # the ge=1 accept boundary
         {},  # empty block ≡ absence — legal
     ],
 )
@@ -277,26 +265,50 @@ def test_limits_accepts(payload):
         ({"max_identifier_len": -5}, "must be >= 1"),
         ({"max_bind_params": True}, "booleans are rejected (strict int)"),
         ({"max_bind_params": "2100"}, "strings are rejected (strict int)"),
-        ({"max_bind_params": 2.5}, "floats are rejected (strict int)"),
+        ({"max_bind_params": 2.5}, "fractional floats are rejected"),
         ({"max_rows": 10}, "unknown fields are rejected"),
     ],
 )
 def test_limits_rejects(payload, why):
+    # Both layers — same discipline as test_concurrency_rejects.
     with pytest.raises(ValidationError):
         SqlLimits.model_validate(payload)
+    assert not _external_validator(SqlLimits).is_valid(payload)
+
+
+# The two known one-way parity edges (see module docstring). Pinned so a
+# future change that widens the divergence — or "fixes" it by relaxing the
+# model instead of the schema — fails loudly. Both go the safe direction:
+# the authoritative validator (the model) is the stricter layer.
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("model", "payload"),
     [
-        {"max_bind_params": 0},
-        {"max_bind_params": True},
-        {"max_bind_params": "2100"},
-        {"max_rows": 10},
+        (Concurrency, {"max_connections": 8.0}),
+        (SqlLimits, {"max_bind_params": 2100.0}),
     ],
 )
-def test_limits_json_schema_rejects(payload):
-    assert not _external_validator(SqlLimits).is_valid(payload)
+def test_integral_float_is_a_known_one_way_divergence(model, payload):
+    # Draft 2020-12 defines `type: integer` mathematically — a zero-fraction
+    # float qualifies — while the strict model (like the engine parser's
+    # `isinstance` check) rejects any float. Inexpressible to close in JSON
+    # Schema.
+    with pytest.raises(ValidationError):
+        model.model_validate(payload)
+    assert _external_validator(model).is_valid(payload)
+
+
+def test_trailing_newline_key_is_a_known_one_way_divergence():
+    # Python `jsonschema` matches patterns with `re.search`, where `$` also
+    # matches before a trailing newline; pydantic-core's Rust regex treats `$`
+    # as end-of-string. An ECMA validator (e.g. the FE's ajv) sides with the
+    # model. Applies to every anchored pattern in the contract; pinned here
+    # because the family key grammars are where it was first audited.
+    payload = {"http": {"429\n": "auth"}}
+    with pytest.raises(ValidationError):
+        ErrorMap.model_validate(payload)
+    assert _external_validator(ErrorMap).is_valid(payload)
 
 
 def test_sql_capabilities_accepts_limits_member():
@@ -320,6 +332,22 @@ def test_sql_capabilities_shape_facts_stay_required_alongside_limits():
     del payload["merge_form"]
     with pytest.raises(ValidationError):
         SqlCapabilities.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("model", "expected_members"),
+    [
+        (Concurrency, {"max_connections"}),
+        (SqlLimits, {"max_bind_params", "max_identifier_len"}),
+    ],
+)
+def test_cap_block_members_are_pinned(model, expected_members):
+    # Exact member-set pins, symmetric to test_error_map_families_are_pinned:
+    # a new cap field is a contract change (a new engine-consumed fact), never
+    # a silent addition.
+    schema = model.model_json_schema()
+    assert set(schema["properties"]) == expected_members
+    assert schema["additionalProperties"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -412,10 +440,22 @@ def test_published_connector_schema_exposes_new_defs():
     )
     defs = latest["$defs"]
     assert {"ErrorMap", "Concurrency", "SqlLimits"} <= set(defs)
-    # Connector-level: present on every kind.
-    for kind_def in ("ApiConnector", "DatabaseConnector", "StdoutConnector"):
-        assert "error_map" in defs[kind_def]["properties"]
-        assert "concurrency" in defs[kind_def]["properties"]
+    # Connector-level: present on EVERY kind. The kind set is pinned exactly
+    # so a new kind must consciously join this assertion (it will pass for
+    # free via ConnectorBase, but the author should see it happen).
+    kind_defs = {name for name in defs if name.endswith("Connector")}
+    assert kind_defs == {
+        "ApiConnector",
+        "DatabaseConnector",
+        "NosqlConnector",
+        "DocumentConnector",
+        "FileConnector",
+        "S3Connector",
+        "StdoutConnector",
+    }
+    for kind_def in sorted(kind_defs):
+        assert "error_map" in defs[kind_def]["properties"], kind_def
+        assert "concurrency" in defs[kind_def]["properties"], kind_def
     # SQL-only: `limits` lives inside SqlCapabilities, which stays
     # database-only.
     assert "limits" in defs["SqlCapabilities"]["properties"]
