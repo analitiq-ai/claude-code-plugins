@@ -120,12 +120,19 @@ a coroutine. The two are bridged, not reconciled:
 ```python
 from sqlalchemy.util import await_only
 
+
+class {Name}Dialect(SqlDialect):
     def bulk_land(self, conn, stage, batch, *, runtime) -> bool:
         columns = list(batch.schema.names)
         records = [tuple(row[c] for c in columns) for row in batch.to_pylist()]
         await_only(
             conn.connection.driver_connection.copy_records_to_table(
-                stage.table, records=records, columns=columns
+                stage.table,
+                # `stage.schema` is empty only for a temp-scope stage; a
+                # real-scope one is qualified and MUST be targeted as such.
+                schema_name=stage.schema or None,
+                records=records,
+                columns=columns,
             )
         )
         return True
@@ -134,6 +141,14 @@ from sqlalchemy.util import await_only
 The CDK exposes **no wrapper of its own** for this, so `sqlalchemy.util`
 is the one import outside the CDK-and-your-own-driver rule that a
 connector may legitimately reach for — and only here.
+
+**Target the stage's full address, not just its table name.** The engine
+leaves a `temp`-scope stage unqualified, but a `real`-scope one carries a
+schema — the target's, or the dedicated one. A bulk mechanism that passes
+only the bare table name resolves it against whatever the session's
+default happens to be, so it works on temp scope and silently lands in
+the wrong schema on real scope. Nothing catches this: the engine verifies
+the landed **row count**, not where the rows landed.
 
 ### The no-op degradation is a hard requirement
 

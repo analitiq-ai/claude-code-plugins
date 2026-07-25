@@ -819,6 +819,33 @@ def test_write_path_spec_example_matches_the_contract() -> None:
         SqlCapabilities.model_validate(example)
 
 
+def test_write_path_spec_code_examples_parse() -> None:
+    """The spec's Python examples must be syntactically valid.
+
+    Same reasoning as the JSON guard above: agents copy these blocks
+    verbatim, and a template that does not parse is worse than no template.
+    Each block is a class-level excerpt, so the placeholder dialect name and
+    the CDK imports are stubbed before parsing — this checks syntax, which is
+    the part a reader cannot eyeball reliably, not resolvability.
+    """
+    blocks = re.findall(
+        r"```python\n(.*?)```", WRITE_PATH_SPEC.read_text(encoding="utf-8"), re.S
+    )
+    assert blocks, (
+        f"no python fences in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — the "
+        "worked examples moved, so this guard is checking nothing."
+    )
+    preamble = (
+        "from collections.abc import Sequence\n"
+        "def await_only(x): pass\n"
+        "class SqlDialect: pass\n"
+        "class TableAddress: pass\n"
+    )
+    for block in blocks:
+        # `{Name}` is the spec's placeholder for the connector's class prefix.
+        compile(preamble + block.replace("{Name}", "Example"), "<spec>", "exec")
+
+
 def test_write_path_table_parser_reads_the_real_tables() -> None:
     """Pin the parser: its recall is what the seven checks above stand on.
 
