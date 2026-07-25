@@ -138,9 +138,10 @@ class {Name}Dialect(SqlDialect):
         return True
 ```
 
-The CDK exposes **no wrapper of its own** for this, so `sqlalchemy.util`
-is the one import outside the CDK-and-your-own-driver rule that a
-connector may legitimately reach for — and only here.
+The CDK exposes **no wrapper of its own** for this, so the import comes
+straight from SQLAlchemy — one of the narrow set
+`spec-connector-package.md` §Import rules sanctions, and legitimate only
+inside `bulk_land`.
 
 **Target the stage's full address, not just its table name.** The engine
 leaves a `temp`-scope stage unqualified, but a `real`-scope one carries a

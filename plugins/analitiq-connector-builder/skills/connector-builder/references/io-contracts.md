@@ -428,7 +428,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
           "additionalProperties": false,
           "description": "Python package files for kind=database connectors (the connector root IS the package). MUST be null for kind=api. Written by the orchestrator to {connector_id}/connector.py, __init__.py, requirements.txt, pyproject.toml. Contents follow the connector-package contract in connector-spec-db/spec-connector-package.md; enforcement (wheel build, entry points) is registry CI's job, not the schema validator's.",
           "properties": {
-            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector); CDK imports only." },
+            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector); imports per connector-spec-db/spec-connector-package.md section Import rules." },
             "init_py":          { "type": "string", "minLength": 1, "description": "Re-exports the connector + dialect classes." },
             "requirements_txt": { "type": "string", "minLength": 1, "description": "THIS connector's driver(s) only — the SQLAlchemy DBAPI (sync or async) and/or adbc-driver-{driver} wheel." },
             "pyproject_toml":   { "type": "string", "minLength": 1, "description": "name=analitiq-connector-{connector_id}; dynamic dependencies from requirements.txt; package-dir maps the repo root; entry points named {connector_id} under analitiq.source_connectors AND analitiq.destination_connectors." }

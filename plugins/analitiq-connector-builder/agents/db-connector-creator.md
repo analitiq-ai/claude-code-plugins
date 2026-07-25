@@ -251,10 +251,9 @@ discipline, and dialect behavior. Do not restate validator rules.
   the in-plugin validator never sees `pyproject.toml`. The two groups
   are where the both-directions principle becomes concrete for a DB
   connector.)
-- [ ] **`connector.py`'s imports are the sanctioned set** — the CDK, this
-  connector's own driver, and (only for an async `bulk_land`)
-  `sqlalchemy.util.await_only`; never another connector, never the
-  engine/runtime. `spec-connector-package.md` §Import rules is the list.
+- [ ] **`connector.py`'s imports are the sanctioned set** —
+  `spec-connector-package.md` §Import rules is the list, and it is short.
+  Never another connector, never the engine/runtime.
 - [ ] **The dialect implements exactly the hooks its transports require**
 <<<<<<< HEAD
   (the step-8 hook mapping) and ships **no Python type-rendering
