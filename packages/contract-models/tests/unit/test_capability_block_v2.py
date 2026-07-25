@@ -27,13 +27,16 @@ Facts that have to hold and stay held, so they are pinned here:
    the schema's `type: integer`, mirroring the engine parser's explicit
    `isinstance(value, bool)` guard — pinned here in both layers.
 
-   Parity is one-way lax on exactly two known edges, pinned as such below so
-   neither silently widens nor gets "fixed" in the wrong direction: JSON
+   Parity is one-way lax on exactly one known edge, pinned as such below so
+   it neither silently widens nor gets "fixed" in the wrong direction: JSON
    Schema's `type: integer` admits a zero-fraction float (`8.0`) the strict
-   model rejects, and Python `jsonschema`'s `re.search`-based patterns let `$`
-   match before a trailing newline in a family key where pydantic-core's Rust
-   regex (end-of-string `$`) rejects it. Both go the safe direction — the
-   authoritative validator is the stricter layer.
+   model rejects — the safe direction (the authoritative validator is the
+   stricter layer). A second candidate edge — Python `jsonschema`'s
+   `re.search`-based patterns letting `$` match before a trailing newline in
+   a family key — is closed at the source: the published patterns carry a
+   true-end `(?![\s\S])` assertion in place of the trailing `$`
+   (`_closed_true_end_keys`), which is end-of-string in BOTH regex dialects,
+   so every schema consumer rejects `"429\n"` exactly as the model does.
 """
 from __future__ import annotations
 
@@ -156,11 +159,24 @@ EXPECTED_ERROR_CATEGORIES = {
     "rate_limited",
     "write_rejected",
 }
+# The settled model-side grammar (issue #89; the engine's compiled patterns
+# and the StringConstraints on the family aliases are this, verbatim).
 EXPECTED_FAMILY_KEY_PATTERNS = {
     "sqlstate": r"^[0-9A-Z]{2}([0-9A-Z]{3})?$",
     "exception": r"^[A-Za-z_][A-Za-z0-9_]*$",
     "vendor_code": r"^-?[0-9]+$",
     "http": r"^[1-5][0-9]{2}$",
+}
+# What the PUBLISHED schema carries: the same grammar with the trailing `$`
+# replaced by the dialect-portable true-end assertion (`_closed_true_end_keys`
+# — Python `re`'s `$` would admit a trailing newline that pydantic-core's Rust
+# regex rejects). Pinned VERBATIM, not derived by re-running the transform, so
+# a transform bug fails here instead of replicating into the expectation.
+EXPECTED_PUBLISHED_KEY_PATTERNS = {
+    "sqlstate": r"^[0-9A-Z]{2}([0-9A-Z]{3})?(?![\s\S])",
+    "exception": r"^[A-Za-z_][A-Za-z0-9_]*(?![\s\S])",
+    "vendor_code": r"^-?[0-9]+(?![\s\S])",
+    "http": r"^[1-5][0-9]{2}(?![\s\S])",
 }
 
 
@@ -171,12 +187,13 @@ def _family_object_schema(schema: dict, family: str) -> dict:
     return obj
 
 
-@pytest.mark.parametrize("family", sorted(EXPECTED_FAMILY_KEY_PATTERNS))
+@pytest.mark.parametrize("family", sorted(EXPECTED_PUBLISHED_KEY_PATTERNS))
 def test_error_map_family_grammar_is_pinned(family):
     schema = ErrorMap.model_json_schema()
     obj = _family_object_schema(schema, family)
-    # Exactly the pinned key pattern, closed against off-grammar keys...
-    assert set(obj["patternProperties"]) == {EXPECTED_FAMILY_KEY_PATTERNS[family]}
+    # Exactly the pinned published key pattern, closed against off-grammar
+    # keys...
+    assert set(obj["patternProperties"]) == {EXPECTED_PUBLISHED_KEY_PATTERNS[family]}
     assert obj["additionalProperties"] is False
     # ...and exactly the pinned category vocabulary as values.
     (value_schema,) = obj["patternProperties"].values()
@@ -276,9 +293,9 @@ def test_limits_rejects(payload, why):
     assert not _external_validator(SqlLimits).is_valid(payload)
 
 
-# The two known one-way parity edges (see module docstring). Pinned so a
+# The one known one-way parity edge (see module docstring). Pinned so a
 # future change that widens the divergence — or "fixes" it by relaxing the
-# model instead of the schema — fails loudly. Both go the safe direction:
+# model instead of the schema — fails loudly. It goes the safe direction:
 # the authoritative validator (the model) is the stricter layer.
 
 
@@ -299,16 +316,25 @@ def test_integral_float_is_a_known_one_way_divergence(model, payload):
     assert _external_validator(model).is_valid(payload)
 
 
-def test_trailing_newline_key_is_a_known_one_way_divergence():
-    # Python `jsonschema` matches patterns with `re.search`, where `$` also
-    # matches before a trailing newline; pydantic-core's Rust regex treats `$`
-    # as end-of-string. An ECMA validator (e.g. the FE's ajv) sides with the
-    # model. Applies to every anchored pattern in the contract; pinned here
-    # because the family key grammars are where it was first audited.
-    payload = {"http": {"429\n": "auth"}}
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"http": {"429\n": "auth"}},
+        {"sqlstate": {"08\n": "unreachable"}},
+        {"vendor_code": {"1045\n": "auth"}},
+        {"exception": {"OperationalError\n": "transient"}},
+    ],
+)
+def test_trailing_newline_keys_rejected_by_both_layers(payload):
+    # Python `jsonschema` matches patterns with `re.search`, where a trailing
+    # `$` also matches before a final newline — which would let these keys
+    # through a schema-only consumer while pydantic-core's Rust regex
+    # (end-of-string `$`) rejects them. The published patterns therefore end
+    # in the dialect-portable `(?![\s\S])` (`_closed_true_end_keys`), so BOTH
+    # layers reject. Would fail if the transform were dropped.
     with pytest.raises(ValidationError):
         ErrorMap.model_validate(payload)
-    assert _external_validator(ErrorMap).is_valid(payload)
+    assert not _external_validator(ErrorMap).is_valid(payload)
 
 
 def test_sql_capabilities_accepts_limits_member():

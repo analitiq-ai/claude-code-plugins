@@ -1317,28 +1317,48 @@ _HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 # Pydantic renders a patterned-key dict as `patternProperties` alone, under
 # which a JSON-Schema-only consumer would ACCEPT the off-grammar keys the model
 # rejects (patternProperties constrains matching keys; non-matching keys fall
-# through to an unset additionalProperties). Injecting `additionalProperties:
-# false` as a sibling closes that gap so schema and model agree — the same
-# schema-parity discipline as the `json_schema_extra` mirrors above. The four
-# aliases stay explicit (not factory-built) so static type checkers keep
-# covering the fields; the injected dict is shared so the invariant is stated
-# once.
-_CLOSED_KEY_GRAMMAR: dict[str, Any] = {"additionalProperties": False}
+# through to an unset additionalProperties). This callable closes two gaps so
+# schema and model agree — the same schema-parity discipline as the
+# `json_schema_extra` mirrors above:
+#
+# 1. Inject `additionalProperties: false` as a sibling, so off-grammar keys
+#    are rejected rather than falling through.
+# 2. Publish the key patterns with a true-end assertion `(?![\s\S])` in place
+#    of the trailing `$`. Python-`re`-based schema validators (`jsonschema`)
+#    let `$` match before a trailing newline, admitting keys like `"429\n"`
+#    that pydantic-core's Rust regex (end-of-haystack `$`) and conformant
+#    ECMA validators reject; the lookahead is true-end in BOTH regex
+#    dialects. Lookahead cannot live in the StringConstraints pattern —
+#    pydantic-core's Rust regex rejects it — so, as with the DSN
+#    `url_template` pattern above, the ECMA-safe form goes in the published
+#    schema only and the Rust `$` (already true-end) is the runtime mirror.
+#
+# The four aliases stay explicit (not factory-built) so static type checkers
+# keep covering the fields; the callable is shared so both invariants are
+# stated once.
+def _closed_true_end_keys(schema: dict[str, Any]) -> None:
+    pattern_props = schema.pop("patternProperties", None)
+    if pattern_props:
+        schema["patternProperties"] = {
+            (key[:-1] + r"(?![\s\S])" if key.endswith("$") else key): value
+            for key, value in pattern_props.items()
+        }
+    schema["additionalProperties"] = False
 _SqlstateFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_SQLSTATE_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
+    Field(json_schema_extra=_closed_true_end_keys),
 ]
 _ExceptionFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_EXCEPTION_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
+    Field(json_schema_extra=_closed_true_end_keys),
 ]
 _VendorCodeFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_VENDOR_CODE_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
+    Field(json_schema_extra=_closed_true_end_keys),
 ]
 _HttpStatusFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_HTTP_STATUS_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_CLOSED_KEY_GRAMMAR),
+    Field(json_schema_extra=_closed_true_end_keys),
 ]
 
 # A declared cap: positive integer, strictly typed. `strict=True` rejects the
