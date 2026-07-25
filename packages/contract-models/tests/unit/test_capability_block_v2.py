@@ -1,4 +1,7 @@
-"""Pin capability block v2: `error_map`, `concurrency`, `sql_capabilities.limits`.
+r"""Pin capability block v2: `error_map`, `concurrency`, `sql_capabilities.limits`.
+
+(Raw docstring: it quotes the published `(?![\s\S])` true-end regex, which a
+normal string literal would mangle into an invalid escape sequence.)
 
 Issue #89 (engine analitiq-engine#401/#407): the engine reads three additional
 driver-fact declarations from the connector definition. The contract models are
