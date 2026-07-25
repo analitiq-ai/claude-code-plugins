@@ -129,11 +129,13 @@ SQLAlchemy construct helpers (`sqlalchemy.dialects.*.insert` and friends
 belonged to the removed record-executor surface). `bulk_land` is the
 exception: it performs the landing itself, so it reaches for the driver's
 own bulk API — and, on an **async** driver, for `sqlalchemy.util.await_only`
-to drive that coroutine from a hook the CDK calls synchronously. The CDK
-provides no wrapper for it, so that is the one sanctioned import outside
-the CDK and your own driver (`spec-sql-write-path.md`). Otherwise import a
-driver-side helper only where the connector genuinely uses one — that, or
-`ssl` for a TLS context.
+to drive that coroutine from a hook the CDK calls synchronously
+(`spec-sql-write-path.md`; the CDK provides no wrapper for it).
+
+Beyond the CDK and the connector's own driver, exactly two helpers are
+sanctioned, each only where the hook that needs it exists: `ssl`, for
+building a TLS context, and `sqlalchemy.util.await_only`, for an async
+`bulk_land`. Anything else is out of bounds.
 
 ### Dialect hooks
 
@@ -145,7 +147,7 @@ hooks fail loudly with `UnsupportedDialectOperationError`:
 | SQLAlchemy + TLS | `build_tls_connect_arg(mode, ca_pem)` — interprets the connector's declared `ssl_mode` vocabulary into the driver's single TLS connect argument (mode string, `False`, or an `SSLContext` built via `ca_ssl_context`); the CDK currently lands it under `connect_args["ssl"]`. When the driver takes TLS through **several** connect parameters instead, override `build_tls_connect_args(mode, ca_pem)` (plural) and return the full connect-args mapping. |
 | TLS downgrade check | `verify_tls_state(dbapi_connection, mode)` — the post-connect probe that refuses a TLS-promising mode which landed an unencrypted session. Its mode vocabulary is the one `spec-tls.md` teaches you to research. |
 | Writing | `stage_table_sql`, and — paired with what `sql_capabilities` declares — `merge_statement_sql` / `bulk_land`. The write path has its own spec: **`spec-sql-write-path.md`**. |
-| Discovery | `schemas_query()` and the `system_schemas` exclusion list. |
+| Discovery | `schemas_query(catalog="")` and the `system_schemas` exclusion list. |
 | Pre-DDL | `sqlalchemy_pre_ddl(schema_name)` when schemas must exist before `create_all` (postgres `CREATE SCHEMA IF NOT EXISTS`). |
 | Session setup | `session_init_sql()` for per-connection statements (MySQL's `SET time_zone`). |
 

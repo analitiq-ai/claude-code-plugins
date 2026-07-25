@@ -205,7 +205,10 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      (`spec-sql-write-path.md`). Structural overrides only where the
      portable form is invalid (`current_timestamp_default`,
      `empty_table_sql`); a `render_column_type` override only for logic
-     the write map cannot express. Imports come from the CDK only.
+     the write map cannot express. Imports follow
+     `spec-connector-package.md` §Import rules — the CDK, this
+     connector's own driver, and nothing else reaching for another
+     connector or the engine.
    - `init_py` — re-exports the connector + dialect classes.
    - `requirements_txt` — THIS connector's driver(s) only: the
      SQLAlchemy DBAPI (sync or async) and/or the matching
@@ -248,8 +251,10 @@ discipline, and dialect behavior. Do not restate validator rules.
   the in-plugin validator never sees `pyproject.toml`. The two groups
   are where the both-directions principle becomes concrete for a DB
   connector.)
-- [ ] **`connector.py` imports the CDK only** — never another connector,
-  never the engine/runtime.
+- [ ] **`connector.py`'s imports are the sanctioned set** — the CDK, this
+  connector's own driver, and (only for an async `bulk_land`)
+  `sqlalchemy.util.await_only`; never another connector, never the
+  engine/runtime. `spec-connector-package.md` §Import rules is the list.
 - [ ] **The dialect implements exactly the hooks its transports require**
 <<<<<<< HEAD
   (the step-8 hook mapping) and ships **no Python type-rendering
@@ -333,10 +338,13 @@ disk.
   type-rendering tables in `connector.py`. Dialect code exists only for
   the structural hooks and rule-inexpressible logic.
 - A connector never imports another connector and never imports the
-  engine — only the CDK (`cdk.sql.dialects.SqlDialect` /
+  engine. It imports the CDK (`cdk.sql.dialects.SqlDialect` /
   `cdk.sql.dialects.TableAddress`, `cdk.sql.generic.GenericSQLConnector`,
   `cdk.sql.exceptions`, `cdk.transport_factory.ca_ssl_context`,
-  `cdk.type_map`).
+  `cdk.type_map`), its own driver, and — where a hook genuinely needs one
+  — the narrow helpers `spec-connector-package.md` §Import rules
+  sanctions: `ssl` for a TLS context, and `sqlalchemy.util.await_only` to
+  drive an async driver's coroutine from inside `bulk_land`.
 - Drivers must be a real SQLAlchemy `dialect+driver` registration (sync
   or async) or ADBC. Never select the JDBC bridge.
 
