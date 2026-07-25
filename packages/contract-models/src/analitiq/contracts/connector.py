@@ -1550,6 +1550,85 @@ class SqlStageCapabilities(StrictModel):
         return self
 
 
+# Bulk-load vocabulary (analitiq-engine#391/#406), mirrored from the engine's
+# typed parser (`cdk/sql/capabilities.py`: `SQL_TRANSPORT_TYPES`,
+# `DIALECT_IMPLEMENTED_BULK_MECHANISMS`, `BULK_MECHANISMS_BY_TRANSPORT`). A
+# bulk mechanism is a fact about a SQL transport, not the connector as a whole
+# — `copy_from` needs the driver's wire connection, `adbc_ingest` an ADBC
+# cursor — so `bulk_load` maps each family to its mechanism instead of one
+# connector-wide value only one family could run. The dialect-implemented
+# mechanisms are valid on either family; `adbc_ingest` is the ADBC backend's
+# own native landing (no dialect code involved) and exists only under `adbc`,
+# so the unrunnable pairing is unrepresentable at parse time rather than
+# checked-for downstream.
+_DialectBulkMechanism = Literal["copy_from", "load_data_local_infile", "load_job"]
+_AdbcBulkMechanism = Literal[
+    "adbc_ingest", "copy_from", "load_data_local_infile", "load_job"
+]
+
+
+# `Literal[...] | None` publishes as `anyOf: [enum, null]` with `default:
+# null` — under which a JSON-Schema-only consumer would accept the explicit
+# `"sqlalchemy": null` the engine parser refuses (a declared mechanism is a
+# string; absence of the KEY is the only "none"). Collapse the published field
+# to the bare per-family enum so schema and model refuse null identically —
+# the same schema-parity discipline as `_closed_true_end_keys` above. The
+# model-side mirror is `SqlBulkLoad._null_is_not_a_mechanism`.
+def _enum_branch_only(schema: dict[str, Any]) -> None:
+    for branch in schema.pop("anyOf", ()):
+        if branch.get("type") != "null":
+            schema.update(branch)
+    schema.pop("default", None)
+
+
+class SqlBulkLoad(StrictModel):
+    """Per-transport bulk-load declaration (analitiq-engine#391/#406).
+
+    Maps a SQL transport family (`sqlalchemy` / `adbc`) to the bulk mechanism
+    its connections land with. An absent family lands via executemany — the
+    declared default; there is no `"none"` member because absence of the key
+    IS none — and an empty object is legal, declaring no bulk mechanism
+    anywhere. An explicit `null` mechanism is refused in both layers
+    (`_null_is_not_a_mechanism` / `_enum_branch_only`), and `adbc_ingest`
+    exists only under `adbc`: it is the ADBC backend's own native landing and
+    can never run on the SQLAlchemy transport.
+    """
+
+    sqlalchemy: _DialectBulkMechanism | None = Field(
+        default=None,
+        json_schema_extra=_enum_branch_only,
+        description=(
+            "Bulk mechanism for connections on the SQLAlchemy transport: "
+            "Postgres `copy_from` (`COPY FROM`), MySQL "
+            "`load_data_local_infile` (`LOAD DATA LOCAL INFILE`), or "
+            "BigQuery-style `load_job`. Omit the key to land via executemany."
+        ),
+    )
+    adbc: _AdbcBulkMechanism | None = Field(
+        default=None,
+        json_schema_extra=_enum_branch_only,
+        description=(
+            "Bulk mechanism for connections on the ADBC transport: the ADBC "
+            "backend's native `adbc_ingest`, or a dialect-implemented "
+            "`copy_from` / `load_data_local_infile` / `load_job`. Omit the "
+            "key to land via executemany."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _null_is_not_a_mechanism(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            for family in cls.model_fields:
+                if data.get(family, ...) is None:
+                    raise ValueError(
+                        f"bulk_load.{family} is null; declare a mechanism or "
+                        "omit the key — an absent family is the only 'none' "
+                        "(it lands via executemany)"
+                    )
+        return data
+
+
 class SqlCapabilities(StrictModel):
     """SQL write-path capabilities declared by a database connector (ADR §5).
 
@@ -1588,15 +1667,15 @@ class SqlCapabilities(StrictModel):
             "(`INSERT … ON DUPLICATE KEY`), or `none` (no native upsert)."
         ),
     )
-    bulk_load: Literal[
-        "none", "copy_from", "load_data_local_infile", "adbc_ingest", "load_job"
-    ] = Field(
+    bulk_load: SqlBulkLoad = Field(
         ...,
         description=(
-            "The bulk-ingest path the destination supports: `none`, Postgres "
-            "`copy_from` (`COPY FROM`), MySQL `load_data_local_infile` "
-            "(`LOAD DATA LOCAL INFILE`), ADBC bulk `adbc_ingest`, or "
-            "BigQuery-style `load_job`."
+            "Per-transport bulk-ingest declaration (analitiq-engine#406): "
+            "maps a SQL transport family (`sqlalchemy` / `adbc`) to the bulk "
+            "mechanism its connections land with. An absent family lands via "
+            "executemany; an empty object declares no bulk mechanism "
+            "anywhere. Required as an object — the block's all-facts-required "
+            "rule — but its members are each optional."
         ),
     )
     stage: SqlStageCapabilities = Field(

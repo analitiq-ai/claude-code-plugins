@@ -83,7 +83,7 @@ VALID_SQL_CAPS = {
     "catalog": "none",
     "session_targeting": "per_statement",
     "merge_form": "merge",
-    "bulk_load": "copy_from",
+    "bulk_load": {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"},
     "stage": {"scope": "temp", "schema": "target", "transactional_ddl": True},
 }
 VALID_LIMITS = {"max_bind_params": 2100, "max_identifier_len": 63}
