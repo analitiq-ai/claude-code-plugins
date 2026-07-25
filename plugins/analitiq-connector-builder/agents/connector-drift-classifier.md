@@ -41,7 +41,13 @@ object.
 
 - **major**: input-removed, input-renamed, input-type-changed,
   input-enum-narrowed, storage-changed, non-optional-input-added,
-  auth-shape-changed, discovery-shape-changed, type-map-rule-removed,
+  auth-shape-changed, discovery-shape-changed, sql-capabilities-changed
+  (a declared `sql_capabilities` shape fact **narrowed or removed** — the
+  engine reads these at handshake, so `merge_form` → `none`, `catalog` →
+  `none`, or dropping the block takes capability away from every existing
+  connection. Widening is not drift: adding a `bulk_load` mechanism or
+  gaining a `merge_form` is strictly enabling and classifies as `tuning`),
+  type-map-rule-removed,
   type-map-canonical-changed (an existing matcher now resolves to a
   different render — read map: an existing `native` resolves to a
   different canonical; write map: an existing `canonical` renders a

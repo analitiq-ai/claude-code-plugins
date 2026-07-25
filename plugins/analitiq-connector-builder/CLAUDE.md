@@ -128,7 +128,7 @@ is a drift surface (root `CLAUDE.md` → drift policy).
 |---|---|
 | Orchestration, endpoint identity, I/O contracts, lifecycle phases, value expressions, connection contract, metadata + versioning | `skills/connector-builder/` and its `references/` |
 | Auth flows, HTTP transports, pagination, replication | `skills/connector-spec-api/` |
-| Driver selection, DSN bindings, TLS, resource discovery, read/write type maps, connector package files | `skills/connector-spec-db/` |
+| Driver selection, DSN bindings, TLS, resource discovery, read/write type maps, the SQL write path (`sql_capabilities` + the dialect renderers), connector package files | `skills/connector-spec-db/` |
 | Storage-kind stub | `skills/connector-spec-storage/` |
 
 The published schema is the authority over all of it. Enum lists appearing in

@@ -16,7 +16,7 @@ The connector root IS the Python package:
 ```
 {connector_id}/
   definition/
-    connector.json                   # declares connector_id; SQLAlchemy/ADBC drivers
+    connector.json                   # connector_id; transports; sql_capabilities
     type-map-read.json               # native → Arrow; regex patterns UPPERCASE
     type-map-write.json              # Arrow → native; REQUIRED for kind: database
   __init__.py                        # re-exports the connector class
@@ -92,7 +92,7 @@ for SQLAlchemy transports and/or the `adbc-driver-{driver}` wheel (+
 One dialect class plus one connector class:
 
 ```python
-from cdk.sql.dialects import SqlDialect
+from cdk.sql.dialects import SqlDialect, TableAddress
 from cdk.transport_factory import ca_ssl_context
 from cdk.sql.generic import GenericSQLConnector
 
@@ -100,23 +100,37 @@ from cdk.sql.generic import GenericSQLConnector
 class {Name}Dialect(SqlDialect):
     name = "{dialect_name}"
     system_schemas = (...)           # catalog schemas to exclude from discovery
-    ...
+
+    def stage_table_sql(
+        self, stage: TableAddress, target: TableAddress, *, temp: bool
+    ) -> str:
+        ...                          # REQUIRED of every write-capable connector
+
+    ...                              # + whatever sql_capabilities obliges,
+                                     #   per spec-sql-write-path.md
 
 
 class {Name}Connector(GenericSQLConnector):
-    dialect_class = {Name}Dialect
+    dialect_class = {Name}Dialect    # and nothing else on this class
 ```
 
 ### Import rules
 
-A connector depends only on the CDK: `cdk.sql.dialects.SqlDialect`,
-`cdk.sql.generic.GenericSQLConnector`,
-`cdk.transport_factory.ca_ssl_context`, `cdk.type_map` — plus the
-connector's own driver and SQLAlchemy dialect helpers (e.g.
-`sqlalchemy.dialects.postgresql.insert`). It never imports another
-connector and never imports an engine/runtime. MariaDB ships its own
-copy of the mysql-shaped dialect rather than importing the mysql
+A connector depends only on the CDK: `cdk.sql.dialects.SqlDialect` and
+`cdk.sql.dialects.TableAddress`, `cdk.sql.generic.GenericSQLConnector`,
+`cdk.sql.exceptions`, `cdk.transport_factory.ca_ssl_context`,
+`cdk.type_map` — plus the connector's own driver. It never imports
+another connector and never imports an engine/runtime. MariaDB ships its
+own copy of the mysql-shaped dialect rather than importing the mysql
 connector.
+
+The two write-path **renderers** return statement text, so they need no
+SQLAlchemy construct helpers (`sqlalchemy.dialects.*.insert` and friends
+belonged to the removed record-executor surface). `bulk_land` is the
+exception: it performs the landing itself, so it does reach for the
+driver's own bulk API (`spec-sql-write-path.md`). Import a driver-side
+helper only where the connector genuinely uses one — that, or `ssl` for a
+TLS context.
 
 ### Dialect hooks
 
@@ -126,19 +140,20 @@ hooks fail loudly with `UnsupportedDialectOperationError`:
 | Transport feature | Required hook(s) |
 |---|---|
 | SQLAlchemy + TLS | `build_tls_connect_arg(mode, ca_pem)` — interprets the connector's declared `ssl_mode` vocabulary into the driver's single TLS connect argument (mode string, `False`, or an `SSLContext` built via `ca_ssl_context`); the CDK currently lands it under `connect_args["ssl"]`. When the driver takes TLS through **several** connect parameters instead, override `build_tls_connect_args(mode, ca_pem)` (plural) and return the full connect-args mapping. |
-| SQLAlchemy upsert | `build_sqlalchemy_upsert(table, records, conflict_keys)` + `supports_upsert_sqlalchemy = True` (e.g. postgres `ON CONFLICT DO UPDATE`, mysql `ON DUPLICATE KEY UPDATE`). |
-| ADBC upsert | `adbc_stage_table_sql(stage_qualified, target_qualified)` + `supports_upsert_adbc = True` (e.g. `CREATE TABLE … (LIKE … INCLUDING DEFAULTS)`, `CREATE TABLE … LIKE …`). |
+| TLS downgrade check | `verify_tls_state(dbapi_connection, mode)` — the post-connect probe that refuses a TLS-promising mode which landed an unencrypted session. Its mode vocabulary is the one `spec-tls.md` teaches you to research. |
+| Writing | `stage_table_sql`, and — paired with what `sql_capabilities` declares — `merge_statement_sql` / `bulk_land`. The write path has its own spec: **`spec-sql-write-path.md`**. |
 | Discovery | `schemas_query()` and the `system_schemas` exclusion list. |
 | Pre-DDL | `sqlalchemy_pre_ddl(schema_name)` when schemas must exist before `create_all` (postgres `CREATE SCHEMA IF NOT EXISTS`). |
+| Session setup | `session_init_sql()` for per-connection statements (MySQL's `SET time_zone`). |
 
 ### Structural overrides — only where the portable form is invalid
 
-- `batch_commits_key_type(type_mapper)` — where the write map's `Utf8`
-  cannot be a primary key (MySQL/MariaDB: bounded `VARCHAR(255)`; TEXT
-  cannot be a MySQL primary key).
 - `current_timestamp_default()` — where the DEFAULT expression must
   carry precision (MySQL/MariaDB: `CURRENT_TIMESTAMP(6)`; the bare form
   is error 1067 against a `DATETIME(6)` column).
+- `empty_table_sql(target)` — where the base's ANSI `DELETE FROM` is not
+  accepted as written (BigQuery requires a `WHERE` clause). Never
+  `TRUNCATE`: its implicit commit breaks the staged write cycle.
 
 ### Type vocabulary is declarative-only
 
@@ -150,14 +165,22 @@ cannot express (BigQuery's NUMERIC/BIGNUMERIC precision-range
 arithmetic) — and even then delegates everything else back to the map.
 **Connectors must NOT ship Python type-rendering tables.**
 
-### Thick-path overrides
+### Thick-path overrides go in the dialect, on sanctioned hooks
 
-When the system needs behavior the generic base cannot express,
-override just the quirky method (the thin → thick gradient). Example:
-BigQuery's connector class overrides `_record_batch_commit_via_adbc`
-(MERGE + rowcount collision detection, because BigQuery primary keys
-are NOT ENFORCED). Systems on decision-order step 3 implement their
-native bulk-load path here against the raw cursor.
+When the system needs behavior the generic base cannot express, override
+just the quirky hook (the thin → thick gradient) — **on the dialect**.
+The connector class carries `dialect_class` and nothing else; the
+sanctioned override surface is the public hooks `SqlDialect` itself
+declares, minus the framework-owned `capabilities` and `table_address`.
+Anything outside that — a private CDK internal, an invented public
+attribute, an extra member on the connector class — fails the CDK
+conformance kit's surface check. A helper of your own belongs under a
+leading underscore, with a name the base does not use.
+
+Systems on decision-order step 3 reach their native bulk-load path the
+same way: declare the mechanism in `sql_capabilities.bulk_load` and
+implement `bulk_land`, never a private override against the raw cursor
+(`spec-sql-write-path.md`).
 
 ## `__init__.py`
 
@@ -172,6 +195,9 @@ __all__ = ["{Name}Connector", "{Name}Dialect"]
 ## Enforcement
 
 The plugin's schema validator checks JSON documents only. Package files
-are enforced by registry CI: `pip wheel --no-deps .` must build, and
-the wheel must contain `analitiq_connector_{id}/connector.py` plus the
-two entry points.
+are enforced by registry CI: `pip wheel --no-deps .` must build, the
+wheel must contain `analitiq_connector_{id}/connector.py` plus the two
+entry points, and the CDK **conformance kit** must pass — it audits the
+dialect's override surface and checks the `sql_capabilities` declaration
+against the hooks the package actually implements
+(`spec-sql-write-path.md`).

@@ -145,5 +145,13 @@
       "list_resources": "on_activation",
       "describe_resource": "on_resource_selected"
     }
+  },
+  "sql_capabilities": {
+    "catalog": "none",
+    "session_targeting": "per_statement",
+    "merge_form": "insert_on_conflict",
+    "bulk_load": { "sqlalchemy": "copy_from" },
+    "stage": { "scope": "temp", "schema": "target", "transactional_ddl": true },
+    "limits": { "max_identifier_len": 63 }
   }
 }

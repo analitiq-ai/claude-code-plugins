@@ -61,6 +61,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
   **derived from `provider_facts.native_types`**, not copied from an example.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/spec-driver-selection.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/spec-connector-package.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/spec-sql-write-path.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/connection-contract.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
@@ -123,7 +124,47 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    system's object hierarchy — a three-level system (catalog → schema →
    table, e.g. Snowflake / BigQuery) must not be flattened to two. See
    `spec-resource-discovery.md`.
-6. **Read map** — author `type_map_read` (a top-level array of
+6. **SQL write-path capabilities** — author the top-level
+   `sql_capabilities` block per `spec-sql-write-path.md`. The contract
+   makes it optional; the engine refuses **every** write mode at
+   handshake without it, so a database connector always declares it. All
+   five shape facts are required — `catalog`, `session_targeting`,
+   `merge_form`, `bulk_load`, `stage` — and a partial block is a config
+   error, not a request for defaults. Never carry a value over from
+   another connector. Most of these are **researched facts**: where the
+   sub-bullet below names a `provider_facts` field and the researcher
+   left it unset, that is a research gap to report, not a value to
+   assume. Two are not researched facts and are called out as such.
+   - `catalog` — from `provider_facts.sql_write_path.catalog_model`, and
+     it must agree with the system's real object hierarchy, the same one
+     step 5's discovery strategy has to reach: a three-level system
+     cannot claim `none`.
+   - `session_targeting` — from
+     `provider_facts.sql_write_path.qualified_statement_targeting`.
+   - `merge_form` — from
+     `provider_facts.sql_write_path.upsert_grammar`: the grammar the
+     system genuinely has, `none` when it has none. Anything else obliges
+     `merge_statement_sql` in the dialect (step 9).
+   - `bulk_load` — **an authoring decision, not a researched value.** It
+     maps a transport family to its mechanism, so it follows from step
+     2's driver choice, informed by `provider_facts.bulk_load_protocol`
+     (a sibling of `sql_write_path`): `{"adbc": "adbc_ingest"}` for an
+     ADBC transport; a dialect-implemented mechanism — which obliges
+     `bulk_land` — for a system on decision-order step 3; and `{}`, a
+     complete and valid declaration, for executemany landing. Omit a
+     family; never write `null`.
+   - `stage.scope` — from
+     `provider_facts.sql_write_path.temp_table_support`;
+     `stage.transactional_ddl` — from
+     `provider_facts.sql_write_path.transactional_ddl`, a fact about the
+     system's DDL rather than a preference (`false` where DDL
+     auto-commits, as on MySQL).
+   - `stage.schema` — **an authoring decision, not a researched value.**
+     `target` unless the system's permission model keeps the engine from
+     creating relations in the target schema, in which case `dedicated`
+     plus a `dedicated_schema` name.
+   - `limits` is optional; declare a cap only where the driver has one.
+7. **Read map** — author `type_map_read` (a top-level array of
    `{match, native, canonical}` rules where `native` is the matcher)
    covering the documented native vocabulary. For OLTP databases,
    expand from your knowledge of the documented native vocabulary; for
@@ -134,7 +175,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    Parameterized natives use regex rules with named capture groups; see
    the spec for substitution rules. The orchestrator writes this array
    to `{connector_id}/definition/type-map-read.json`.
-7. **Write map** — author `type_map_write` (same rule shape, inverted
+8. **Write map** — author `type_map_write` (same rule shape, inverted
    direction: `canonical` is the matcher — regex with named captures
    for parameterized types — and `native` is the rendered DDL, with
    `${name}` substitutions backed by those captures). Cover the **full
@@ -146,20 +187,23 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `render_column_type` override (BigQuery's NUMERIC/BIGNUMERIC
    precision ranges). See `spec-type-maps.md`. Written to
    `{connector_id}/definition/type-map-write.json`.
-8. **Package files** — author the four files per
+9. **Package files** — author the four files per
    `spec-connector-package.md`:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
-     `{Name}Connector(GenericSQLConnector)`. The dialect implements
+     `{Name}Connector(GenericSQLConnector)`, the connector class
+     carrying `dialect_class` and nothing else. The dialect implements
      every hook its transports require: SQLAlchemy + TLS → the TLS hook
      (`build_tls_connect_arg`, or `build_tls_connect_args` for drivers
      that take TLS through several connect parameters —
-     `spec-connector-package.md` §Dialect hooks); upsert → `build_sqlalchemy_upsert`
-     (+ `supports_upsert_sqlalchemy = True`); ADBC upsert →
-     `adbc_stage_table_sql` (+ `supports_upsert_adbc = True`).
-     Structural overrides only where the portable form is invalid
-     (`batch_commits_key_type`, `current_timestamp_default`); a
-     `render_column_type` override only for logic the write map cannot
-     express. Imports come from the CDK only.
+     `spec-connector-package.md` §Dialect hooks); the write path →
+     `stage_table_sql` **always**, plus exactly what step 6's
+     declaration obliges: `merge_statement_sql` when
+     `merge_form != "none"` (rendering the all-keys no-op degradation),
+     `bulk_land` when `bulk_load` names a dialect-implemented mechanism
+     (`spec-sql-write-path.md`). Structural overrides only where the
+     portable form is invalid (`current_timestamp_default`,
+     `empty_table_sql`); a `render_column_type` override only for logic
+     the write map cannot express. Imports come from the CDK only.
    - `init_py` — re-exports the connector + dialect classes.
    - `requirements_txt` — THIS connector's driver(s) only: the
      SQLAlchemy DBAPI (sync or async) and/or the matching
@@ -179,9 +223,18 @@ package files it never sees (registry CI owns the wheel build), driver
 discipline, and dialect behavior. Do not restate validator rules.
 
 - [ ] **Driver chosen strictly per the decision order** in
+<<<<<<< HEAD
   `spec-driver-selection.md`, and a one-line rationale holds for why
   earlier tiers were skipped. (The validator accepts any well-formed
   `dialect+driver`; it cannot check the *order* was followed.)
+=======
+  `spec-driver-selection.md` (first-class ADBC → Arrow Flight SQL →
+  SQLAlchemy + a declared bulk mechanism → SQLAlchemy landing via
+  executemany), and a
+  one-line rationale holds for why earlier tiers were skipped. (The
+  validator accepts any well-formed `dialect+driver`; it cannot check
+  the *order* was followed.)
+>>>>>>> b1ea68f (feat(analitiq-connector-builder): author the rc17 SQL write path, not the removed rc13 hooks)
 - [ ] **Every SQLAlchemy `driver` is in `dialect+driver` form** and
   names a driver that actually exists; the sync/async choice follows
   `spec-driver-selection.md` §Constraints.
@@ -196,12 +249,43 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **`connector.py` imports the CDK only** — never another connector,
   never the engine/runtime.
 - [ ] **The dialect implements exactly the hooks its transports require**
+<<<<<<< HEAD
   (the step-8 hook mapping) and ships **no Python type-rendering
   table** — the write map owns the write direction.
+=======
+  (SQLAlchemy + TLS → the TLS hook, `build_tls_connect_arg` or
+  `build_tls_connect_args` per the driver's connect-parameter shape) and
+  ships **no Python type-rendering table** — the write map owns the
+  write direction.
+- [ ] **`sql_capabilities` is declared and complete.** All five shape
+  facts present, each traced to its source per step 6 — a researched
+  `provider_facts` field, or the two that are authoring decisions
+  (`bulk_load`, `stage.schema`) — never copied from another connector or
+  assumed, and `catalog` consistent with the system's real object
+  hierarchy. (The validator checks the block's shape;
+  nothing checks the values are *true of this system*, and the engine
+  refuses every write mode at handshake if the block is missing
+  entirely.)
+- [ ] **Declaration and dialect agree, both directions.**
+  `stage_table_sql` is implemented unconditionally;
+  `merge_statement_sql` exists iff `merge_form != "none"`; `bulk_land`
+  exists iff `bulk_load` names a dialect-implemented mechanism, and
+  every declared family is a transport this connector ships. (The
+  in-plugin validator never sees `connector.py`; the CDK conformance kit
+  fails a mismatch in either direction at registry CI.)
+- [ ] **`merge_statement_sql` renders the all-conflict-key no-op.** When
+  every landed column is a conflict key there is nothing to update — the
+  statement must degrade to the form's insert-only variant, never an
+  empty `SET` clause, which is invalid SQL. (A hard conformance test.)
+- [ ] **The override surface is sanctioned.** No private (`_`-prefixed)
+  CDK member is overridden, no invented public attribute sits on the
+  dialect, the connector class carries only `dialect_class`, and every
+  override keeps the base signature's shape.
+>>>>>>> b1ea68f (feat(analitiq-connector-builder): author the rc17 SQL write path, not the removed rc13 hooks)
 - [ ] **Structural overrides exist only where the portable form is
-  genuinely invalid** (`batch_commits_key_type`,
-  `current_timestamp_default`, and a `render_column_type` override only
-  for logic the write map cannot express).
+  genuinely invalid** (`current_timestamp_default`, `empty_table_sql`,
+  and a `render_column_type` override only for logic the write map
+  cannot express).
 - [ ] **Every `type-map-write-coverage` warning is reconciled** — each
   unmapped canonical family is intentional and backed by a
   `render_column_type` override, not an accidental gap. (The validator
@@ -247,9 +331,10 @@ disk.
   type-rendering tables in `connector.py`. Dialect code exists only for
   the structural hooks and rule-inexpressible logic.
 - A connector never imports another connector and never imports the
-  engine — only the CDK (`cdk.sql.dialects.SqlDialect`,
-  `cdk.sql.generic.GenericSQLConnector`,
-  `cdk.transport_factory.ca_ssl_context`, `cdk.type_map`).
+  engine — only the CDK (`cdk.sql.dialects.SqlDialect` /
+  `cdk.sql.dialects.TableAddress`, `cdk.sql.generic.GenericSQLConnector`,
+  `cdk.sql.exceptions`, `cdk.transport_factory.ca_ssl_context`,
+  `cdk.type_map`).
 - Drivers must be a real SQLAlchemy `dialect+driver` registration (sync
   or async) or ADBC. Never select the JDBC bridge.
 

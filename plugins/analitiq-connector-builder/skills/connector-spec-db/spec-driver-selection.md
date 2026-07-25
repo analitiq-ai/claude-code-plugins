@@ -17,11 +17,16 @@ Apply in order; stop at the first match.
 2. **The server exposes an Arrow Flight SQL endpoint** → ADBC via the
    generic Flight SQL driver. Currently unreachable — see §2.
 3. **Neither, but the system has a native bulk-load protocol** →
-   SQLAlchemy transport for connect/DDL, with the bulk path implemented
-   in the connector's own class (the thick path) against the raw
-   cursor.
-4. **None of the above** → SQLAlchemy transport with batched INSERT.
+   SQLAlchemy transport for connect/DDL, with the bulk path **declared**
+   in `sql_capabilities.bulk_load` and implemented in the dialect's
+   `bulk_land` hook (`spec-sql-write-path.md`).
+4. **None of the above** → SQLAlchemy transport, landing via executemany.
    This is the fallback, not the default — pick it last.
+
+Tiers 3 and 4 differ only in the `bulk_load` declaration: every SQL write
+rides the same stage-then-merge primitive, and the mechanism chosen here
+is how the batch **lands in the stage**. Declaring no mechanism (`{}`) is
+tier 4.
 
 ## 1. First-class ADBC drivers
 
@@ -35,6 +40,12 @@ exactly these:
 | BigQuery | `adbc-driver-bigquery` | Storage Write API (Arrow-native). |
 | DuckDB *(not in the enum — gap path below)* | shipped with `duckdb` itself | Zero-copy in-process. |
 | SQLite *(not in the enum — gap path below)* | `adbc-driver-sqlite` | Production-ready; mainly useful for testing, not volume. |
+
+An ADBC transport declares that landing as
+`sql_capabilities.bulk_load: {"adbc": "adbc_ingest"}`. It is the backend's
+own native path, so — unlike every other mechanism — it obliges **no**
+dialect code, which is what makes this tier cheap
+(`spec-sql-write-path.md`).
 
 The schema's `AdbcTransport.driver` enum is the **sole validator** for
 ADBC driver values (currently `postgresql`, `snowflake`, `bigquery`).
@@ -90,18 +101,31 @@ transport (or the native bulk path below) instead.
 
 ## 3. Native bulk-load protocols (no ADBC)
 
-Each of these is roughly 10x faster than parameterized INSERT, even
-batched. The connect/DDL layer stays on the SQLAlchemy transport; the
-bulk write runs against the raw driver cursor in the connector's own
-class.
+The connect/DDL layer stays on the SQLAlchemy transport; the bulk write
+goes through the **declared** mechanism — the connector names it under
+`sql_capabilities.bulk_load.sqlalchemy` and implements the dialect's
+`bulk_land` hook. Declaring a mechanism without the hook (or the hook
+without a declaration) fails the CDK conformance kit; the mechanism
+vocabulary is closed, so a protocol it does not name is a contract gap to
+raise, not a private override.
 
-| System | Driver | Bulk path |
-|---|---|---|
-| MySQL / MariaDB | aiomysql (SQLAlchemy async) | `LOAD DATA LOCAL INFILE` via raw cursor — stream Arrow → CSV/TSV → server reads it directly. |
-| PostgreSQL (when not on ADBC) | psycopg | `COPY FROM stdin BINARY`. |
-| Oracle | python-oracledb (SQLAlchemy) | `cursor.executemany(sql, rows)` with tuned `arraysize` — the standard fast path; SQL*Loader is not practical from Python. |
-| MSSQL / SQL Server | pyodbc (SQLAlchemy) | `fast_executemany=True` on the cursor — TDS batched parameter stream; single-line change. |
-| ClickHouse | clickhouse-connect (skip SQLAlchemy) | `client.insert_arrow(table_name, arrow_table)` — first-class Arrow ingest, just not branded ADBC. |
+Only the first two rows below are tier 3. The rest are systems an author
+might *expect* to find here: they reach tier 4, and the row says why —
+either because the fast path is the driver's own executemany tuning, or
+because the protocol is not in the closed vocabulary.
+
+| System | Driver | Tier | Bulk path |
+|---|---|---|---|
+| MySQL / MariaDB | aiomysql (SQLAlchemy async) | 3 | `load_data_local_infile` — `LOAD DATA LOCAL INFILE` into the stage table, streaming Arrow → CSV/TSV. Roughly 10x a parameterized INSERT. Needs `local_infile` enabled on **both** server and client (off by default on MySQL 8.0), so a connector that cannot rely on it drops to tier 4 with `bulk_load: {}` — as the shipped `mysql` connector does. |
+| PostgreSQL (when not on ADBC) | psycopg / asyncpg | 3 | `copy_from` — `COPY FROM stdin BINARY`. Roughly 10x a parameterized INSERT. |
+| Oracle | python-oracledb (SQLAlchemy) | 4 | No declared mechanism. `executemany` with a tuned `arraysize` **is** the standard fast path; SQL*Loader is not practical from Python. |
+| MSSQL / SQL Server | pyodbc (SQLAlchemy) | 4 | No declared mechanism. `fast_executemany=True` tunes the driver's own TDS batched parameter stream, so the executemany landing is already the fast path. |
+| ClickHouse | clickhouse-connect | 4 | First-class Arrow ingest (`client.insert_arrow`), just not branded ADBC — and **not in the closed mechanism vocabulary**, so it cannot be declared without a contract change. |
+
+BigQuery is not in this table: it is tier 1 (`adbc-driver-bigquery`). Its
+`load_job` mechanism exists in the vocabulary for a connector that
+reaches BigQuery over a SQLAlchemy transport instead, which is not the
+canonical path.
 
 ## Constraints from the engine contract
 

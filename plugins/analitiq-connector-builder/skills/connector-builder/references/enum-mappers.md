@@ -67,10 +67,11 @@ order, stopping at the first match (full guide:
    generic Flight SQL driver — currently unreachable (`flightsql` is
    not in the enum; `spec-driver-selection.md` §2).
 3. **Neither, but the system has a native bulk-load protocol** →
-   `sqlalchemy` for connect/DDL, bulk write in the connector's own
-   class (the thick path).
-4. **None of the above** → `sqlalchemy` with batched INSERT. The
-   fallback, not the default — pick it last.
+   `sqlalchemy` for connect/DDL, with the mechanism declared in
+   `sql_capabilities.bulk_load` and implemented in the dialect's
+   `bulk_land` hook (the thick path).
+4. **None of the above** → `sqlalchemy` landing via executemany. This is
+   the fallback, not the default — pick it last.
 
 Never select the JDBC bridge — the ADBC interface without the
 performance (`spec-driver-selection.md` §Do not use the JDBC bridge).

@@ -68,7 +68,7 @@ the connector release table:
 |---|---|---|
 | Patch | No connection drift. | Bug fixes, doc fixes, transport implementation tuning, type-map rule reordered (when the reorder does not change first-match resolution for any existing input). |
 | Minor | Additive, non-drifting. | Optional input added, optional discovery output added, optional endpoint added, type-map rule added. |
-| Major | Possible connection drift. | Input removed, renamed, type-changed, enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
+| Major | Possible connection drift. | Input removed, renamed, type-changed, enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, `sql_capabilities` shape fact narrowed or removed, type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
 
 Type-map drift categories apply per file: `type-map-read.json` and
 `type-map-write.json` are diffed independently, and a change in either

@@ -144,7 +144,41 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "bulk_load_protocol": {
           "type": "string",
-          "description": "The system's native bulk-load path when no ADBC driver exists (e.g. 'LOAD DATA LOCAL INFILE', 'COPY FROM stdin BINARY', 'fast_executemany'). Drives step 3 — SQLAlchemy transport with the bulk path implemented in the connector class."
+          "description": "The system's native bulk-load path when no ADBC driver exists (e.g. 'LOAD DATA LOCAL INFILE', 'COPY FROM stdin BINARY', 'fast_executemany'). Drives step 3 — SQLAlchemy transport with the mechanism declared in sql_capabilities.bulk_load and implemented in the dialect's bulk_land hook."
+        },
+        "sql_write_path": {
+          "type": ["object", "null"],
+          "description": "Documented facts the creator needs to declare sql_capabilities (connector-spec-db/spec-sql-write-path.md). The engine refuses, it does not guess, so an ungrounded fact must be left unset and reported as a gap rather than assumed. Two signals, deliberately distinct: OMIT a field the docs do not establish (the creator reports a research gap), and use NULL only where the field admits it to record a documented ABSENCE — `upsert_grammar: null` means the system documents no native upsert, which is a fact the creator maps to merge_form 'none'.",
+          "properties": {
+            "upsert_grammar": {
+              "type": ["string", "null"],
+              "description": "The system's documented native upsert statement, verbatim (e.g. 'INSERT ... ON CONFLICT DO UPDATE', 'INSERT ... ON DUPLICATE KEY UPDATE', 'MERGE'); null when the system documents none."
+            },
+            "catalog_model": {
+              "type": "string",
+              "description": "How the system addresses catalogs/databases: whether one connection can reference across them, and whether the docs permit creating/dropping them."
+            },
+            "qualified_statement_targeting": {
+              "type": "boolean",
+              "description": "True when statements may fully qualify the target (schema.table); false when the write target must be established as session state (e.g. USE / search_path)."
+            },
+            "temp_table_support": {
+              "type": "string",
+              "description": "The documented session/transaction-scoped temporary relation syntax, or a note that the system has none (which forces a real staging table)."
+            },
+            "transactional_ddl": {
+              "type": ["boolean", "null"],
+              "description": "Whether CREATE/DROP TABLE participate in a transaction. False for engines documenting an implicit commit on DDL (MySQL). Omit when the docs do not establish it — this is a correctness fact the creator must not assume."
+            },
+            "identifier_limits": {
+              "type": "object",
+              "description": "Documented driver/engine caps: max identifier length in bytes, max bind parameters per statement. Omit a cap the docs do not state.",
+              "properties": {
+                "max_identifier_len": { "type": "integer" },
+                "max_bind_params": { "type": "integer" }
+              }
+            }
+          }
         },
         "sqlalchemy_driver": {
           "type": "string",
@@ -313,7 +347,8 @@ access and may not guess field types).
               "input-removed", "input-renamed", "input-type-changed",
               "input-enum-narrowed", "storage-changed",
               "non-optional-input-added", "auth-shape-changed",
-              "discovery-shape-changed", "optional-input-added",
+              "discovery-shape-changed", "sql-capabilities-changed",
+              "optional-input-added",
               "optional-output-added", "optional-endpoint-added",
               "type-map-rule-added", "type-map-rule-removed",
               "type-map-rule-reordered", "type-map-canonical-changed",
