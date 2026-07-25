@@ -127,10 +127,13 @@ connector.
 The two write-path **renderers** return statement text, so they need no
 SQLAlchemy construct helpers (`sqlalchemy.dialects.*.insert` and friends
 belonged to the removed record-executor surface). `bulk_land` is the
-exception: it performs the landing itself, so it does reach for the
-driver's own bulk API (`spec-sql-write-path.md`). Import a driver-side
-helper only where the connector genuinely uses one — that, or `ssl` for a
-TLS context.
+exception: it performs the landing itself, so it reaches for the driver's
+own bulk API — and, on an **async** driver, for `sqlalchemy.util.await_only`
+to drive that coroutine from a hook the CDK calls synchronously. The CDK
+provides no wrapper for it, so that is the one sanctioned import outside
+the CDK and your own driver (`spec-sql-write-path.md`). Otherwise import a
+driver-side helper only where the connector genuinely uses one — that, or
+`ssl` for a TLS context.
 
 ### Dialect hooks
 

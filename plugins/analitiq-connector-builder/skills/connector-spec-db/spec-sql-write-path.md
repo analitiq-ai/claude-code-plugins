@@ -103,6 +103,38 @@ like `<target>` — the column-copy syntax is the vendor's
 decline; the engine falls back to executemany on `False` and verifies the
 landed row count either way.
 
+### `bulk_land` on an async driver
+
+Every dialect hook is called synchronously — the conformance kit rejects
+an `async def` override outright — but an async driver's bulk API returns
+a coroutine. The two are bridged, not reconciled:
+
+- `conn` is the **sync-facing** SQLAlchemy `Connection`. On the async
+  path the engine obtains it via `AsyncConnection.run_sync(...)`, so the
+  hook already runs inside SQLAlchemy's greenlet context.
+- Reach the raw driver object through `conn.connection.driver_connection`
+  (not `.dbapi_connection`, which is the DBAPI-shaped adapter).
+- Drive its coroutine with `sqlalchemy.util.await_only`, which is legal
+  precisely *because* of that greenlet context.
+
+```python
+from sqlalchemy.util import await_only
+
+    def bulk_land(self, conn, stage, batch, *, runtime) -> bool:
+        columns = list(batch.schema.names)
+        records = [tuple(row[c] for c in columns) for row in batch.to_pylist()]
+        await_only(
+            conn.connection.driver_connection.copy_records_to_table(
+                stage.table, records=records, columns=columns
+            )
+        )
+        return True
+```
+
+The CDK exposes **no wrapper of its own** for this, so `sqlalchemy.util`
+is the one import outside the CDK-and-your-own-driver rule that a
+connector may legitimately reach for — and only here.
+
 ### The no-op degradation is a hard requirement
 
 `merge_statement_sql` must render a valid statement **when every landed

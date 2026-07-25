@@ -163,7 +163,9 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      `target` unless the system's permission model keeps the engine from
      creating relations in the target schema, in which case `dedicated`
      plus a `dedicated_schema` name.
-   - `limits` is optional; declare a cap only where the driver has one.
+   - `limits` — from `provider_facts.sql_write_path.identifier_limits`.
+     Optional and additive: declare a cap only where the docs establish
+     one, and omit the block entirely when they establish neither.
 7. **Read map** — author `type_map_read` (a top-level array of
    `{match, native, canonical}` rules where `native` is the matcher)
    covering the documented native vocabulary. For OLTP databases,

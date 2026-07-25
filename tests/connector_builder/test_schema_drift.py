@@ -29,6 +29,7 @@ failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 
@@ -358,7 +359,7 @@ def _slug_literal_sites() -> list[tuple[str, int, str]]:
     return [
         (path.relative_to(PLUGIN_ROOT).as_posix(), lineno, match.group(0))
         for path in sorted(PLUGIN_ROOT.rglob("*.md"))
-        for lineno, line in enumerate(path.read_text().splitlines(), 1)
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         for match in _SLUG_LITERAL_RE.finditer(line)
     ]
 
@@ -469,9 +470,8 @@ _WRITE_PATH_FIX = (
     "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-driver-selection.md, "
     "the authoring order in "
     "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
-    "the decision order in "
-    "plugins/analitiq-connector-builder/skills/connector-builder/references/enum-mappers.md, "
-    "the summary in plugins/analitiq-connector-builder/skills/connector-spec-db/SKILL.md, "
+    "both archetypes under "
+    "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/, "
     "and the ProviderFacts carriers in "
     "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md."
 )
@@ -490,10 +490,19 @@ def _required_at(schema: dict, def_name: str) -> set[str] | None:
     return set(node["required"])
 
 
-def _required_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str:
+def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str:
+    """Diff message for a NAME set (required list or property keys).
+
+    Separate from `_diff_msg` because these are not enums: reporting "enum not
+    found at the expected pointer" for a renamed `$def` sends the reader
+    looking for the wrong thing. The missing-node wording is deliberately
+    generic ("not found at that $def") so the same helper can serve both a
+    `required` list and a `properties` key set without lying about which it
+    read.
+    """
     if found is None:
         return (
-            f"{label}: no `required` list at that $def — the contract was "
+            f"{label}: not found at that $def — the contract was "
             f"restructured. {_WRITE_PATH_FIX}"
         )
     return (
@@ -511,7 +520,7 @@ def test_sql_capability_facts_match_schema(connector_schema: dict) -> None:
     "a declared block is complete" would stop being true.
     """
     required = _required_at(connector_schema, "SqlCapabilities")
-    assert required == EXPECTED_SQL_CAPABILITY_FACTS, _required_diff_msg(
+    assert required == EXPECTED_SQL_CAPABILITY_FACTS, _set_diff_msg(
         "sql_capabilities required facts", required, EXPECTED_SQL_CAPABILITY_FACTS
     )
 
@@ -526,14 +535,14 @@ def test_sql_stage_facts_match_schema(connector_schema: dict) -> None:
     `dedicated_schema` is conditional, so it is never in `required`.
     """
     required = _required_at(connector_schema, "SqlStageCapabilities")
-    assert required == EXPECTED_SQL_STAGE_FACTS, _required_diff_msg(
+    assert required == EXPECTED_SQL_STAGE_FACTS, _set_diff_msg(
         "sql_capabilities.stage required facts", required, EXPECTED_SQL_STAGE_FACTS
     )
     # `dedicated_schema` is conditional, so `required` alone cannot catch it
     # being renamed out from under the prose's required-iff rule.
     node = (connector_schema.get("$defs") or {}).get("SqlStageCapabilities")
     props = set((node.get("properties") or {})) if isinstance(node, dict) else None
-    assert props == EXPECTED_SQL_STAGE_PROPERTIES, _required_diff_msg(
+    assert props == EXPECTED_SQL_STAGE_PROPERTIES, _set_diff_msg(
         "sql_capabilities.stage properties", props, EXPECTED_SQL_STAGE_PROPERTIES
     )
 
@@ -599,7 +608,7 @@ def test_sql_bulk_mechanisms_match_schema(connector_schema: dict) -> None:
     # Iterating EXPECTED alone is one-directional: a REMOVED family surfaces (as
     # a restructure), an ADDED one is invisible. The prose states the family set
     # as closed, so pin the set itself.
-    assert families == set(EXPECTED_SQL_BULK_MECHANISMS), _required_diff_msg(
+    assert families == set(EXPECTED_SQL_BULK_MECHANISMS), _set_diff_msg(
         "sql_capabilities.bulk_load families", families, set(EXPECTED_SQL_BULK_MECHANISMS)
     )
     for family, expected in EXPECTED_SQL_BULK_MECHANISMS.items():
@@ -622,7 +631,7 @@ def test_sql_limit_caps_match_schema(connector_schema: dict) -> None:
     """
     node = (connector_schema.get("$defs") or {}).get("SqlLimits")
     caps = set((node.get("properties") or {})) if isinstance(node, dict) else None
-    assert caps == EXPECTED_SQL_LIMIT_CAPS, _required_diff_msg(
+    assert caps == EXPECTED_SQL_LIMIT_CAPS, _set_diff_msg(
         "sql_capabilities.limits caps", caps, EXPECTED_SQL_LIMIT_CAPS
     )
 
@@ -646,19 +655,76 @@ _TABLE_ROW = re.compile(r"^\|([^|]*)\|([^|]*)\|")
 _BACKTICKED = re.compile(r"`([^`]+)`")
 
 
+def _table_blocks() -> list[list[str]]:
+    """Maximal runs of consecutive `|`-leading lines — one per markdown table."""
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
+        if line.startswith("|"):
+            current.append(line)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _labels_of_table_containing(label: str) -> set[str] | None:
+    """The full label-column set of the table whose rows include `label`.
+
+    Both directions, unlike a subset check: a contract fact with no prose row
+    fails, and a prose row for a fact the contract dropped fails too. Without
+    it the fact NAMES are pinned contract-side only — so making `limits`
+    required would fail one test, the fixer would add it to the expected set,
+    and the two prose files still claiming "all five shape facts" would stay
+    green. That is issue #95's two-step, in miniature.
+    """
+    tables = [
+        labels
+        for block in _table_blocks()
+        if label
+        in (
+            labels := {
+                found[0]
+                for row in block
+                if (m := _TABLE_ROW.match(row))
+                and len(found := _BACKTICKED.findall(m.group(1))) == 1
+            }
+        )
+    ]
+    return tables[0] if len(tables) == 1 else None
+
+
+def _vocabulary_rows() -> list[tuple[str, set[str]]]:
+    """Every (label, values) table row whose label cell is one backticked token."""
+    rows = []
+    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
+        row = _TABLE_ROW.match(line)
+        if not row:
+            continue
+        label = _BACKTICKED.findall(row.group(1))
+        values = set(_BACKTICKED.findall(row.group(2)))
+        if len(label) == 1 and values:
+            rows.append((label[0], values))
+    return rows
+
+
 def _documented_values(label: str) -> set[str] | None:
     """Backticked tokens in the Values cell of the row labelled `label`.
 
     None when no such row exists — the table was restructured or the row
     renamed, which the caller turns into an explicit failure rather than a
     vacuous pass against an empty set.
+
+    Collects ALL matching rows rather than returning the first: a summary
+    table added above the real one could otherwise shadow it with a stale
+    copy, and this guard exists precisely to never pass vacuously.
     """
-    for line in WRITE_PATH_SPEC.read_text().splitlines():
-        row = _TABLE_ROW.match(line)
-        if row and _BACKTICKED.findall(row.group(1)) == [label]:
-            values = set(_BACKTICKED.findall(row.group(2)))
-            return values or None
-    return None
+    matches = [values for row_label, values in _vocabulary_rows() if row_label == label]
+    if len(matches) != 1:
+        return None
+    return matches[0]
 
 
 @pytest.mark.parametrize(
@@ -696,21 +762,87 @@ def test_write_path_spec_tables_state_the_pinned_vocabularies(
     )
 
 
+@pytest.mark.parametrize(
+    "anchor, expected",
+    [
+        # The declaration table lists the five shape facts AND `limits`; the
+        # prose calls the latter optional, but it still needs a row.
+        ("catalog", EXPECTED_SQL_CAPABILITY_FACTS | {"limits"}),
+        ("scope", EXPECTED_SQL_STAGE_FACTS),
+        ("sqlalchemy", set(EXPECTED_SQL_BULK_MECHANISMS)),
+    ],
+)
+def test_write_path_spec_tables_state_the_pinned_fact_names(
+    anchor: str, expected: set[str]
+) -> None:
+    """The spec's tables must name exactly the facts the contract defines."""
+    documented = _labels_of_table_containing(anchor)
+    assert documented is not None, (
+        f"no single table in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} has a "
+        f"`{anchor}` row — the spec was restructured (or two tables now claim "
+        "the same fact), so this guard would have passed vacuously."
+    )
+    assert documented == expected, (
+        f"the `{anchor}` table in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} "
+        f"names different facts than the contract — "
+        f"prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}. {_WRITE_PATH_FIX}"
+    )
+
+
+def test_write_path_spec_example_matches_the_contract() -> None:
+    """The spec's worked example must be a document the contract accepts.
+
+    It is the ONLY artifact in the repo covering `insert_on_duplicate_key`, an
+    empty `bulk_load`, and `transactional_ddl: false` — both shipped archetypes
+    declare the Postgres-shaped combination — and an agent copies it verbatim.
+    Nothing else validates a fenced code block.
+    """
+    from analitiq.contracts.connector import SqlCapabilities
+
+    fences = re.findall(
+        r"```json\n(.*?)```", WRITE_PATH_SPEC.read_text(encoding="utf-8"), re.S
+    )
+    examples = [
+        block["sql_capabilities"]
+        for fence in fences
+        # The fence is an excerpt (`"sql_capabilities": {...}`), so wrap it back
+        # into an object before parsing.
+        if "sql_capabilities" in (block := json.loads("{" + fence.strip() + "}"))
+    ]
+    assert examples, (
+        f"no `sql_capabilities` json fence found in "
+        f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — the worked example moved "
+        "or changed shape, so this guard is checking nothing."
+    )
+    for example in examples:
+        SqlCapabilities.model_validate(example)
+
+
 def test_write_path_table_parser_reads_the_real_tables() -> None:
     """Pin the parser: its recall is what the seven checks above stand on.
 
-    A rewrite that tightened `_TABLE_ROW` past the real formatting would leave
-    every check above passing on `None`-guards alone... which the assertions
-    catch — but only if the parser still finds SOMETHING. Prove it reads a row
-    whose Values cell is prose, not vocabulary, and correctly declines it.
+    Recall first — a parser that matched nothing would leave every check above
+    resting on its `is None` guard, which is a real failure but for the wrong
+    reason, and a future "simplification" could pass the negative cases below
+    while reading no rows at all.
     """
-    # `bulk_load`'s Values cell reads "per-transport object" — no backticks, so
-    # it must come back None rather than an empty set masquerading as a match.
+    rows = _vocabulary_rows()
+    assert len(rows) >= 7, (
+        f"the parser found only {len(rows)} vocabulary rows in "
+        f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — it must read at least the "
+        "seven the tests above pin, or those tests are resting on None-guards."
+    )
+    assert _documented_values("catalog") == EXPECTED_SQL_CATALOG_MODES
+
+    # Precision: a Values cell that is prose, not vocabulary. `bulk_load` reads
+    # "per-transport object" — no backticks, so it must come back None rather
+    # than an empty set masquerading as a match.
     assert _documented_values("bulk_load") is None
-    # And a label that does not exist at all.
+    # A label that does not exist at all.
     assert _documented_values("no_such_field") is None
-    # The label cell must match EXACTLY one backticked token, so a row whose
-    # first cell carries prose cannot be mistaken for a vocabulary row.
+    # The label cell must match EXACTLY one backticked token, so a header row
+    # cannot be mistaken for a vocabulary row.
     assert _documented_values("Fact") is None
 
 

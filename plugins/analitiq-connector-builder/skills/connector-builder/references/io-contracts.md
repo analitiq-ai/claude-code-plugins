@@ -167,8 +167,8 @@ fan-out and returned as `EndpointFacts` (below).
               "description": "The documented session/transaction-scoped temporary relation syntax, or a note that the system has none (which forces a real staging table)."
             },
             "transactional_ddl": {
-              "type": ["boolean", "null"],
-              "description": "Whether CREATE/DROP TABLE participate in a transaction. False for engines documenting an implicit commit on DDL (MySQL). Omit when the docs do not establish it — this is a correctness fact the creator must not assume."
+              "type": "boolean",
+              "description": "Whether CREATE/DROP TABLE participate in a transaction. False for engines documenting an implicit commit on DDL (MySQL). Omit when the docs do not establish it — a boolean has no 'documented absence' state, so omission is the only unknown signal, and this is a correctness fact the creator must not assume."
             },
             "identifier_limits": {
               "type": "object",
