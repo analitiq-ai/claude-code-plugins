@@ -13,16 +13,21 @@ Two facts have to hold and stay held, so both are pinned here:
    five top-level facts required — and the two cross-field rules
    (`stage.dedicated_schema` present iff `stage.schema == "dedicated"`;
    `write_unit` carries at least one of `rows`/`bytes`) are enforced. Omission
-   of either block is legal (backwards compatible).
+   of either block is legal (backwards compatible). `bulk_load` (issue #92,
+   analitiq-engine#406) is a per-transport mapping — required as an object,
+   `{}` legal, per-family mechanism enums, explicit null refused — mirroring
+   the engine parser's acceptance/refusal exactly.
 
 2. **JSON-Schema parity.** The two cross-field rules are mirrored into the
    published JSON Schema via `json_schema_extra` (the same technique as
    `AdbcTransport`'s dsn/db_kwargs `anyOf` and `ConnectionConditionPredicate`'s
-   exactly-one-operator `oneOf`), so a JSON-Schema-only consumer (the FE, a
-   third-party validator) rejects exactly what the Pydantic model rejects for
-   these structural cross-field rules — proven here both on each sub-model's own
-   schema and, end-to-end, against the published `connector/latest.json` a real
-   consumer fetches. (Primitive-type coercion is deliberately out of scope: like
+   exactly-one-operator `oneOf`), and `bulk_load`'s per-family enums publish
+   bare — no null branch, no default (`_enum_branch_only`) — so a JSON-Schema-only
+   consumer (the FE, a third-party validator) rejects exactly what the Pydantic
+   model rejects for these structural rules (including an explicit null
+   mechanism) — proven here both on each sub-model's own schema and,
+   end-to-end, against the published `connector/latest.json` a real consumer
+   fetches. (Primitive-type coercion is deliberately out of scope: like
    every int field in the contract, `rows`/`bytes` inherit Pydantic's lax
    bool→int coercion that a `type: integer` schema does not share — a
    contract-wide characteristic, not a rule this file mirrors.) These tests
@@ -40,6 +45,7 @@ from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from analitiq.contracts.connector import (
+    SqlBulkLoad,
     SqlCapabilities,
     SqlStageCapabilities,
     WriteUnit,
@@ -59,13 +65,17 @@ POSTGRES_EXAMPLE = (
 )
 
 # A minimal, fully-declared stage/capabilities/write-unit trio reused as the
-# accepted baseline that the negative cases mutate.
+# accepted baseline that the negative cases mutate. `bulk_load` declares both
+# transport families — the dual-transport case (postgres: ADBC default +
+# SQLAlchemy) that motivated the per-transport mapping (issue #92,
+# analitiq-engine#406).
 VALID_STAGE = {"scope": "temp", "schema": "target", "transactional_ddl": True}
+VALID_BULK_LOAD = {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"}
 VALID_SQL_CAPS = {
     "catalog": "none",
     "session_targeting": "per_statement",
     "merge_form": "merge",
-    "bulk_load": "copy_from",
+    "bulk_load": VALID_BULK_LOAD,
     "stage": VALID_STAGE,
 }
 
@@ -286,7 +296,10 @@ def test_sql_capabilities_rejects_partial_block(missing):
         ("catalog", "readonly"),
         ("session_targeting", "per_session"),
         ("merge_form", "upsert"),
-        ("bulk_load", "copy"),
+        # The rc16 connector-wide scalar (a valid mechanism name, wrong shape):
+        # since analitiq-engine#406 a bulk mechanism is declared per transport
+        # family, so the scalar is refused, not grandfathered.
+        ("bulk_load", "copy_from"),
     ],
 )
 def test_sql_capabilities_rejects_off_vocabulary(field, value):
@@ -314,13 +327,16 @@ EXPECTED_SQL_CAP_ENUMS = {
     "catalog": {"none", "read", "full"},
     "session_targeting": {"per_statement", "session_default"},
     "merge_form": {"merge", "insert_on_conflict", "insert_on_duplicate_key", "none"},
-    "bulk_load": {
-        "none",
-        "copy_from",
-        "load_data_local_infile",
-        "adbc_ingest",
-        "load_job",
-    },
+}
+
+# Same pin for the per-transport bulk mechanisms (analitiq-engine#406:
+# `BULK_MECHANISMS_BY_TRANSPORT`): each family's accept set exactly — the
+# dialect-implemented mechanisms on either family, the ADBC backend's native
+# `adbc_ingest` only under `adbc`, and no `"none"` member anywhere (an absent
+# family is the only none; it lands via executemany).
+EXPECTED_BULK_LOAD_ENUMS = {
+    "sqlalchemy": {"copy_from", "load_data_local_infile", "load_job"},
+    "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
 
 
@@ -336,6 +352,128 @@ def test_sql_capabilities_enum_membership_is_pinned(field, expected):
         payload = copy.deepcopy(VALID_SQL_CAPS)
         payload[field] = member
         assert getattr(SqlCapabilities.model_validate(payload), field) == member
+
+
+@pytest.mark.parametrize(
+    ("family", "expected"), sorted(EXPECTED_BULK_LOAD_ENUMS.items())
+)
+def test_bulk_load_family_enum_membership_is_pinned(family, expected):
+    # The published per-family enum must equal the pinned set exactly — and
+    # carry no null branch: null is not a mechanism, so the field publishes as
+    # the bare enum (`_enum_branch_only`), not `anyOf: [enum, null]`.
+    rendered_field = SqlBulkLoad.model_json_schema()["properties"][family]
+    assert "anyOf" not in rendered_field
+    assert "default" not in rendered_field
+    assert set(rendered_field["enum"]) == expected, (
+        f"bulk_load.{family} enum drifted from the pinned set"
+    )
+    # ...and every pinned member must validate through the full block.
+    for member in expected:
+        payload = copy.deepcopy(VALID_SQL_CAPS)
+        payload["bulk_load"] = {family: member}
+        caps = SqlCapabilities.model_validate(payload)
+        assert getattr(caps.bulk_load, family) == member
+
+
+# ---------------------------------------------------------------------------
+# SqlBulkLoad (issue #92, analitiq-engine#391/#406)
+# ---------------------------------------------------------------------------
+# Acceptance/refusal mirrors the engine parser
+# (`cdk/sql/capabilities.py::SqlCapabilities._parse_bulk_load`) exactly, in
+# both layers: the Pydantic model and the published JSON Schema.
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"},  # both families
+        {"sqlalchemy": "load_data_local_infile"},  # one family alone
+        {"adbc": "adbc_ingest"},
+        {"adbc": "copy_from"},  # dialect mechanisms are valid on adbc too
+        {},  # empty object: no bulk mechanism anywhere — legal
+    ],
+)
+def test_bulk_load_accepts(payload):
+    SqlBulkLoad.model_validate(payload)
+    assert _external_validator(SqlBulkLoad).is_valid(payload)
+
+
+@pytest.mark.parametrize(
+    ("payload", "why"),
+    [
+        ({"flight_sql": "copy_from"}, "unknown transport family is rejected"),
+        (
+            {"sqlalchemy": "adbc_ingest"},
+            "adbc_ingest is the ADBC backend's own landing — unrunnable on "
+            "the sqlalchemy family, unrepresentable in the contract",
+        ),
+        ({"sqlalchemy": "none"}, "the scalar era's 'none' is not a mechanism"),
+        ({"adbc": "none"}, "absence of the family is the only none"),
+        ({"sqlalchemy": None}, "mechanism must be a string, never null"),
+        ({"adbc": None}, "mechanism must be a string, never null"),
+        ({"adbc": 1}, "non-string mechanism is rejected"),
+        ({"adbc": ["adbc_ingest"]}, "non-string mechanism is rejected"),
+        ("copy_from", "the rc16 connector-wide scalar shape is rejected"),
+    ],
+)
+def test_bulk_load_rejects(payload, why):
+    with pytest.raises(ValidationError):
+        SqlBulkLoad.model_validate(payload)
+    assert not _external_validator(SqlBulkLoad).is_valid(payload)
+
+
+def test_bulk_load_is_required_but_may_be_empty():
+    # `bulk_load` stays a required member of a declared block (the
+    # all-facts-required rule) — but as an object, where `{}` is the declared
+    # "no bulk mechanism anywhere". Both attributes read back as None.
+    payload = copy.deepcopy(VALID_SQL_CAPS)
+    payload["bulk_load"] = {}
+    caps = SqlCapabilities.model_validate(payload)
+    assert caps.bulk_load.sqlalchemy is None
+    assert caps.bulk_load.adbc is None
+
+
+def test_bulk_load_family_set_is_pinned():
+    # Exact member-set pin, symmetric to test_cap_block_members_are_pinned
+    # (capability v2): a transport family mirrors the engine's
+    # `SQL_TRANSPORT_TYPES` — a new family is a coordinated engine + contract
+    # change, never a silent field addition here.
+    schema = SqlBulkLoad.model_json_schema()
+    assert set(schema["properties"]) == set(EXPECTED_BULK_LOAD_ENUMS)
+    assert schema["additionalProperties"] is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"adbc": "adbc_ingest"},
+        {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"},
+    ],
+)
+def test_bulk_load_dump_round_trips(payload):
+    # "Absence is the only none" holds in the emit direction too
+    # (`_undeclared_families_stay_absent`): undeclared families are omitted
+    # from dumps, never emitted as the explicit null the model refuses — so
+    # every dump is valid input for the model AND the published schema, with
+    # no `exclude_none=True` needed at the call site.
+    model = SqlBulkLoad.model_validate(payload)
+    dumped = model.model_dump()
+    assert dumped == payload
+    SqlBulkLoad.model_validate(dumped)
+    json_dumped = json.loads(model.model_dump_json())
+    assert json_dumped == payload
+    assert _external_validator(SqlBulkLoad).is_valid(json_dumped)
+
+
+def test_sql_capabilities_dump_round_trips_through_nested_bulk_load():
+    # The serializer must survive composition: dumping the whole block (with
+    # the wire alias for `stage.schema`) re-validates, and the nested
+    # `bulk_load` comes back without null members.
+    caps = SqlCapabilities.model_validate(VALID_SQL_CAPS)
+    dumped = caps.model_dump(by_alias=True, exclude_none=True)
+    assert dumped == VALID_SQL_CAPS
+    SqlCapabilities.model_validate(dumped)
 
 
 # ---------------------------------------------------------------------------
@@ -398,7 +536,8 @@ def test_database_connector_carries_both_blocks(db_example):
     doc["sql_capabilities"] = copy.deepcopy(VALID_SQL_CAPS)
     doc["write_unit"] = {"rows": 200_000, "bytes": 33_554_432}
     connector = parse_connector(doc)
-    assert connector.sql_capabilities.bulk_load == "copy_from"
+    assert connector.sql_capabilities.bulk_load.sqlalchemy == "copy_from"
+    assert connector.sql_capabilities.bulk_load.adbc == "adbc_ingest"
     assert connector.sql_capabilities.stage.schema_ == "target"
     assert connector.write_unit.rows == 200_000
 
@@ -486,9 +625,19 @@ def test_published_connector_schema_exposes_new_defs():
         (REPO_ROOT / "schemas" / "connector" / "latest.json").read_text()
     )
     defs = latest["$defs"]
-    assert {"SqlCapabilities", "SqlStageCapabilities", "WriteUnit"} <= set(defs)
+    assert {
+        "SqlBulkLoad",
+        "SqlCapabilities",
+        "SqlStageCapabilities",
+        "WriteUnit",
+    } <= set(defs)
     assert "oneOf" in defs["SqlStageCapabilities"]
     assert "anyOf" in defs["WriteUnit"]
+    # The per-family enums publish bare (no null branch, no default) — the
+    # `_enum_branch_only` mirror survived rendering.
+    for family in ("sqlalchemy", "adbc"):
+        assert "enum" in defs["SqlBulkLoad"]["properties"][family]
+        assert "anyOf" not in defs["SqlBulkLoad"]["properties"][family]
     assert "sql_capabilities" in defs["DatabaseConnector"]["properties"]
     assert "write_unit" in defs["DatabaseConnector"]["properties"]
     # Connector-level: present on every kind that has properties.
@@ -526,6 +675,16 @@ def test_full_connector_validates_against_published_schema(db_example):
     )
     parse_connector(valid)  # the model agrees
 
+    # The other legal bulk_load shapes must also survive composition:
+    # single-family and the empty declares-nothing object.
+    for accepted_bulk in ({}, {"adbc": "adbc_ingest"}):
+        variant = copy.deepcopy(valid)
+        variant["sql_capabilities"]["bulk_load"] = accepted_bulk
+        assert validator.is_valid(variant), sorted(
+            e.message for e in validator.iter_errors(variant)
+        )
+        parse_connector(variant)
+
     # Each `mutate` is applied to a fresh deepcopy of the valid doc, so a
     # rejection isolates to that one change. Cover every cross-field / field rule
     # end-to-end — not just one failure mode — against the composed artifact.
@@ -538,7 +697,27 @@ def test_full_connector_validates_against_published_schema(db_example):
     def _empty_write_unit(doc):
         doc["write_unit"] = {}  # anyOf at-least-one-bound
 
-    for mutate in (_drop_stage_name, _blank_stage_name, _empty_write_unit):
+    def _scalar_bulk_load(doc):
+        doc["sql_capabilities"]["bulk_load"] = "copy_from"  # rc16 scalar shape
+
+    def _unknown_bulk_family(doc):
+        doc["sql_capabilities"]["bulk_load"] = {"flight_sql": "copy_from"}
+
+    def _unrunnable_bulk_pairing(doc):
+        doc["sql_capabilities"]["bulk_load"] = {"sqlalchemy": "adbc_ingest"}
+
+    def _null_bulk_mechanism(doc):
+        doc["sql_capabilities"]["bulk_load"] = {"adbc": None}
+
+    for mutate in (
+        _drop_stage_name,
+        _blank_stage_name,
+        _empty_write_unit,
+        _scalar_bulk_load,
+        _unknown_bulk_family,
+        _unrunnable_bulk_pairing,
+        _null_bulk_mechanism,
+    ):
         broken = copy.deepcopy(valid)
         mutate(broken)
         assert not validator.is_valid(broken), broken

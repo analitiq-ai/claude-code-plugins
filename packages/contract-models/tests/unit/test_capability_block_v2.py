@@ -71,8 +71,9 @@ POSTGRES_EXAMPLE = (
     / "postgresql.example.json"
 )
 
-# The issue #89 grammar example, reused as the accepted baseline that the
-# negative cases mutate.
+# The issue #89 grammar example (with `bulk_load` in its issue-#92
+# per-transport shape), reused as the accepted baseline that the negative
+# cases mutate.
 VALID_ERROR_MAP = {
     "sqlstate": {"08": "unreachable", "28000": "auth", "23": "write_rejected"},
     "exception": {"OperationalError": "transient"},
@@ -83,7 +84,7 @@ VALID_SQL_CAPS = {
     "catalog": "none",
     "session_targeting": "per_statement",
     "merge_form": "merge",
-    "bulk_load": "copy_from",
+    "bulk_load": {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"},
     "stage": {"scope": "temp", "schema": "target", "transactional_ddl": True},
 }
 VALID_LIMITS = {"max_bind_params": 2100, "max_identifier_len": 63}
