@@ -20,10 +20,12 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    SerializerFunctionWrapHandler,
     StringConstraints,
     Tag as UnionTag,
     TypeAdapter,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -1573,11 +1575,17 @@ _AdbcBulkMechanism = Literal[
 # string; absence of the KEY is the only "none"). Collapse the published field
 # to the bare per-family enum so schema and model refuse null identically —
 # the same schema-parity discipline as `_closed_true_end_keys` above. The
-# model-side mirror is `SqlBulkLoad._null_is_not_a_mechanism`.
+# model-side mirror is `SqlBulkLoad._null_is_not_a_mechanism`. Exactly one
+# non-null branch must exist: if the field annotation ever changes shape, the
+# render fails loudly here instead of publishing a silently merged schema.
 def _enum_branch_only(schema: dict[str, Any]) -> None:
-    for branch in schema.pop("anyOf", ()):
-        if branch.get("type") != "null":
-            schema.update(branch)
+    branches = [b for b in schema.pop("anyOf", ()) if b.get("type") != "null"]
+    if len(branches) != 1:
+        raise ValueError(
+            f"_enum_branch_only expects exactly one non-null anyOf branch, "
+            f"got {branches!r} — the field annotation changed shape"
+        )
+    schema.update(branches[0])
     schema.pop("default", None)
 
 
@@ -1586,12 +1594,15 @@ class SqlBulkLoad(StrictModel):
 
     Maps a SQL transport family (`sqlalchemy` / `adbc`) to the bulk mechanism
     its connections land with. An absent family lands via executemany — the
-    declared default; there is no `"none"` member because absence of the key
-    IS none — and an empty object is legal, declaring no bulk mechanism
-    anywhere. An explicit `null` mechanism is refused in both layers
-    (`_null_is_not_a_mechanism` / `_enum_branch_only`), and `adbc_ingest`
-    exists only under `adbc`: it is the ADBC backend's own native landing and
-    can never run on the SQLAlchemy transport.
+    default, needing no declaration; there is no `"none"` member because
+    absence of the key IS none — and an empty object is legal, declaring no
+    bulk mechanism anywhere. An explicit `null` mechanism is refused in both
+    layers (`_null_is_not_a_mechanism` / `_enum_branch_only`), and
+    `adbc_ingest` exists only under `adbc`: it is the ADBC backend's own
+    native landing and can never run on the SQLAlchemy transport.
+    Serialization holds the same rule in the emit direction: undeclared
+    families are omitted from dumps (`_undeclared_families_stay_absent`), so
+    the model never emits a document it would itself refuse.
     """
 
     sqlalchemy: _DialectBulkMechanism | None = Field(
@@ -1618,15 +1629,32 @@ class SqlBulkLoad(StrictModel):
     @model_validator(mode="before")
     @classmethod
     def _null_is_not_a_mechanism(cls, data: Any) -> Any:
+        # Scans the raw mapping's VALUES, not `cls.model_fields`, so a family
+        # that is ever aliased or added cannot let an explicit null slip
+        # through to the null-accepting `| None` annotation. A null under an
+        # unknown family reports here (naming the key) rather than as an
+        # unknown-key error — both are refusals.
         if isinstance(data, dict):
-            for family in cls.model_fields:
-                if data.get(family, ...) is None:
+            for family, mechanism in data.items():
+                if mechanism is None:
                     raise ValueError(
                         f"bulk_load.{family} is null; declare a mechanism or "
                         "omit the key — an absent family is the only 'none' "
                         "(it lands via executemany)"
                     )
         return data
+
+    @model_serializer(mode="wrap")
+    def _undeclared_families_stay_absent(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        # "Absence is the only none" must hold in the emit direction too: a
+        # plain `model_dump()` of `... | None` fields would emit the explicit
+        # `"family": null` this very model refuses, so a consumer re-emitting
+        # a parsed connector would produce a contract-invalid document unless
+        # it remembered `exclude_none=True`. Drop undeclared families so
+        # every dump is valid input for the model and the published schema.
+        return {k: v for k, v in handler(self).items() if v is not None}
 
 
 class SqlCapabilities(StrictModel):

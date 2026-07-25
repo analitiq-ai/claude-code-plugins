@@ -21,11 +21,13 @@ Two facts have to hold and stay held, so both are pinned here:
 2. **JSON-Schema parity.** The two cross-field rules are mirrored into the
    published JSON Schema via `json_schema_extra` (the same technique as
    `AdbcTransport`'s dsn/db_kwargs `anyOf` and `ConnectionConditionPredicate`'s
-   exactly-one-operator `oneOf`), so a JSON-Schema-only consumer (the FE, a
-   third-party validator) rejects exactly what the Pydantic model rejects for
-   these structural cross-field rules — proven here both on each sub-model's own
-   schema and, end-to-end, against the published `connector/latest.json` a real
-   consumer fetches. (Primitive-type coercion is deliberately out of scope: like
+   exactly-one-operator `oneOf`), and `bulk_load`'s per-family enums publish
+   bare — no null branch, no default (`_enum_branch_only`) — so a JSON-Schema-only
+   consumer (the FE, a third-party validator) rejects exactly what the Pydantic
+   model rejects for these structural rules (including an explicit null
+   mechanism) — proven here both on each sub-model's own schema and,
+   end-to-end, against the published `connector/latest.json` a real consumer
+   fetches. (Primitive-type coercion is deliberately out of scope: like
    every int field in the contract, `rows`/`bytes` inherit Pydantic's lax
    bool→int coercion that a `type: integer` schema does not share — a
    contract-wide characteristic, not a rule this file mirrors.) These tests
@@ -431,6 +433,49 @@ def test_bulk_load_is_required_but_may_be_empty():
     assert caps.bulk_load.adbc is None
 
 
+def test_bulk_load_family_set_is_pinned():
+    # Exact member-set pin, symmetric to test_cap_block_members_are_pinned
+    # (capability v2): a transport family mirrors the engine's
+    # `SQL_TRANSPORT_TYPES` — a new family is a coordinated engine + contract
+    # change, never a silent field addition here.
+    schema = SqlBulkLoad.model_json_schema()
+    assert set(schema["properties"]) == set(EXPECTED_BULK_LOAD_ENUMS)
+    assert schema["additionalProperties"] is False
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"adbc": "adbc_ingest"},
+        {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"},
+    ],
+)
+def test_bulk_load_dump_round_trips(payload):
+    # "Absence is the only none" holds in the emit direction too
+    # (`_undeclared_families_stay_absent`): undeclared families are omitted
+    # from dumps, never emitted as the explicit null the model refuses — so
+    # every dump is valid input for the model AND the published schema, with
+    # no `exclude_none=True` needed at the call site.
+    model = SqlBulkLoad.model_validate(payload)
+    dumped = model.model_dump()
+    assert dumped == payload
+    SqlBulkLoad.model_validate(dumped)
+    json_dumped = json.loads(model.model_dump_json())
+    assert json_dumped == payload
+    assert _external_validator(SqlBulkLoad).is_valid(json_dumped)
+
+
+def test_sql_capabilities_dump_round_trips_through_nested_bulk_load():
+    # The serializer must survive composition: dumping the whole block (with
+    # the wire alias for `stage.schema`) re-validates, and the nested
+    # `bulk_load` comes back without null members.
+    caps = SqlCapabilities.model_validate(VALID_SQL_CAPS)
+    dumped = caps.model_dump(by_alias=True, exclude_none=True)
+    assert dumped == VALID_SQL_CAPS
+    SqlCapabilities.model_validate(dumped)
+
+
 # ---------------------------------------------------------------------------
 # WriteUnit
 # ---------------------------------------------------------------------------
@@ -629,6 +674,16 @@ def test_full_connector_validates_against_published_schema(db_example):
         e.message for e in validator.iter_errors(valid)
     )
     parse_connector(valid)  # the model agrees
+
+    # The other legal bulk_load shapes must also survive composition:
+    # single-family and the empty declares-nothing object.
+    for accepted_bulk in ({}, {"adbc": "adbc_ingest"}):
+        variant = copy.deepcopy(valid)
+        variant["sql_capabilities"]["bulk_load"] = accepted_bulk
+        assert validator.is_valid(variant), sorted(
+            e.message for e in validator.iter_errors(variant)
+        )
+        parse_connector(variant)
 
     # Each `mutate` is applied to a fresh deepcopy of the valid doc, so a
     # rejection isolates to that one change. Cover every cross-field / field rule
