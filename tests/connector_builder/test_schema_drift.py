@@ -600,7 +600,7 @@ def test_sql_bulk_mechanisms_match_schema(connector_schema: dict) -> None:
     """Per-transport bulk mechanisms, pinned per family.
 
     Comparing a flattened union would let `adbc_ingest` migrate onto the
-    SQLAlchemy family unnoticed — and the prose's "obliges no dialect code"
+    SQLAlchemy family unnoticed — and the prose's "involves no dialect code"
     carve-out is stated for the ADBC family alone.
     """
     node = (connector_schema.get("$defs") or {}).get("SqlBulkLoad")
