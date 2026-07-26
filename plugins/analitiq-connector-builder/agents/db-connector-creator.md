@@ -135,10 +135,12 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    sub-bullet below names a `provider_facts` field and the researcher
    left it unset, that is a research gap to report, not a value to
    assume. Two are not researched facts and are called out as such.
-   - `catalog` — from `provider_facts.sql_write_path.catalog_model`, and
-     it must agree with the system's real object hierarchy, the same one
-     step 5's discovery strategy has to reach: a three-level system
-     cannot claim `none`.
+   - `catalog` — from `provider_facts.sql_write_path.catalog_model`. The
+     test is cross-catalog **addressability**, not depth: Postgres and
+     MySQL are `none` despite having a database above the schema, because
+     one connection cannot reach across it. Where statements can name
+     `catalog.schema.table`, step 5's discovery strategy must expose that
+     level too.
    - `session_targeting` — from
      `provider_facts.sql_write_path.qualified_statement_targeting`.
    - `merge_form` — from
@@ -194,10 +196,13 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
      `{Name}Connector(GenericSQLConnector)`, the connector class
      carrying `dialect_class` and nothing else. The dialect implements
-     every hook its transports require: SQLAlchemy + TLS → the TLS hook
-     (`build_tls_connect_arg`, or `build_tls_connect_args` for drivers
-     that take TLS through several connect parameters —
-     `spec-connector-package.md` §Dialect hooks); the write path →
+     every hook its transports require: SQLAlchemy + TLS → the
+     connect-arg hook (`build_tls_connect_arg`, or
+     `build_tls_connect_args` for drivers that take TLS through several
+     connect parameters) **and** `verify_tls_state`, the post-connect
+     probe that rejects a session which promised TLS and landed
+     unencrypted — declaring `tls` obliges both
+     (`spec-connector-package.md` §Dialect hooks); the write path →
      `stage_table_sql` **always**, plus exactly what step 6's
      declaration obliges: `merge_statement_sql` when
      `merge_form != "none"` (rendering the all-keys no-op degradation),
@@ -228,18 +233,9 @@ package files it never sees (registry CI owns the wheel build), driver
 discipline, and dialect behavior. Do not restate validator rules.
 
 - [ ] **Driver chosen strictly per the decision order** in
-<<<<<<< HEAD
   `spec-driver-selection.md`, and a one-line rationale holds for why
   earlier tiers were skipped. (The validator accepts any well-formed
   `dialect+driver`; it cannot check the *order* was followed.)
-=======
-  `spec-driver-selection.md` (first-class ADBC → Arrow Flight SQL →
-  SQLAlchemy + a declared bulk mechanism → SQLAlchemy landing via
-  executemany), and a
-  one-line rationale holds for why earlier tiers were skipped. (The
-  validator accepts any well-formed `dialect+driver`; it cannot check
-  the *order* was followed.)
->>>>>>> b1ea68f (feat(analitiq-connector-builder): author the rc17 SQL write path, not the removed rc13 hooks)
 - [ ] **Every SQLAlchemy `driver` is in `dialect+driver` form** and
   names a driver that actually exists; the sync/async choice follows
   `spec-driver-selection.md` §Constraints.
@@ -255,14 +251,8 @@ discipline, and dialect behavior. Do not restate validator rules.
   `spec-connector-package.md` §Import rules is the list, and it is short.
   Never another connector, never the engine/runtime.
 - [ ] **The dialect implements exactly the hooks its transports require**
-<<<<<<< HEAD
-  (the step-8 hook mapping) and ships **no Python type-rendering
-  table** — the write map owns the write direction.
-=======
-  (SQLAlchemy + TLS → the TLS hook, `build_tls_connect_arg` or
-  `build_tls_connect_args` per the driver's connect-parameter shape) and
-  ships **no Python type-rendering table** — the write map owns the
-  write direction.
+  (the step-9 hook mapping, TLS pair included) and ships **no Python
+  type-rendering table** — the write map owns the write direction.
 - [ ] **`sql_capabilities` is declared and complete.** All five shape
   facts present, each traced to its source per step 6 — a researched
   `provider_facts` field, or the two that are authoring decisions
@@ -340,10 +330,9 @@ disk.
   engine. It imports the CDK (`cdk.sql.dialects.SqlDialect` /
   `cdk.sql.dialects.TableAddress`, `cdk.sql.generic.GenericSQLConnector`,
   `cdk.sql.exceptions`, `cdk.transport_factory.ca_ssl_context`,
-  `cdk.type_map`), its own driver, and — where a hook genuinely needs one
-  — the narrow helpers `spec-connector-package.md` §Import rules
-  sanctions: `ssl` for a TLS context, and `sqlalchemy.util.await_only` to
-  drive an async driver's coroutine from inside `bulk_land`.
+  `cdk.type_map`), its own driver, the standard library, and exactly one
+  third-party helper — `sqlalchemy.util.await_only`, only inside an async
+  `bulk_land`. `spec-connector-package.md` §Import rules owns the list.
 - Drivers must be a real SQLAlchemy `dialect+driver` registration (sync
   or async) or ADBC. Never select the JDBC bridge.
 

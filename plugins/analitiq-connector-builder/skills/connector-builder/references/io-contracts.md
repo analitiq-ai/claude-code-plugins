@@ -144,7 +144,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "bulk_load_protocol": {
           "type": "string",
-          "description": "The system's native bulk-load path when no ADBC driver exists (e.g. 'LOAD DATA LOCAL INFILE', 'COPY FROM stdin BINARY', 'fast_executemany'). Drives step 3 — SQLAlchemy transport with the mechanism declared in sql_capabilities.bulk_load and implemented in the dialect's bulk_land hook."
+          "description": "The system's native bulk-load protocol when no ADBC driver exists, as the vendor documents it (e.g. 'LOAD DATA LOCAL INFILE', 'COPY FROM stdin BINARY'). A driver-side executemany tuning knob (SQL Server's fast_executemany, oracledb's arraysize) is NOT one — record it in notes instead, since it makes the ordinary executemany landing fast rather than adding a protocol. Informs step 3 of the driver-selection order, but only a protocol in the closed sql_capabilities.bulk_load vocabulary can actually be declared; anything else lands via executemany at tier 4."
         },
         "sql_write_path": {
           "type": ["object", "null"],
@@ -156,7 +156,7 @@ fan-out and returned as `EndpointFacts` (below).
             },
             "catalog_model": {
               "type": "string",
-              "description": "How the system addresses catalogs/databases: whether one connection can reference across them, and whether the docs permit creating/dropping them."
+              "description": "How the system addresses catalogs/databases: whether ONE CONNECTION can reference across them (the deciding fact — not merely whether a database level exists above the schema, which it does on Postgres and MySQL without being cross-addressable), and whether the docs permit creating/dropping them."
             },
             "qualified_statement_targeting": {
               "type": "boolean",

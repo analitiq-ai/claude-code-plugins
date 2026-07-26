@@ -132,10 +132,12 @@ own bulk API — and, on an **async** driver, for `sqlalchemy.util.await_only`
 to drive that coroutine from a hook the CDK calls synchronously
 (`spec-sql-write-path.md`; the CDK provides no wrapper for it).
 
-Beyond the CDK and the connector's own driver, exactly two helpers are
-sanctioned, each only where the hook that needs it exists: `ssl`, for
-building a TLS context, and `sqlalchemy.util.await_only`, for an async
-`bulk_land`. Anything else is out of bounds.
+The standard library is unrestricted — `__future__`, `collections.abc`
+for the `Sequence[str]` annotations the renderers take, `typing`, and
+`ssl` for building a TLS context. Beyond that and the connector's own
+driver, exactly **one** third-party helper is sanctioned, and only where
+the hook needing it exists: `sqlalchemy.util.await_only`, for an async
+`bulk_land`. Any other third-party import is out of bounds.
 
 ### Dialect hooks
 
