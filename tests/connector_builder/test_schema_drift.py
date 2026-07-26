@@ -73,8 +73,8 @@ EXPECTED_ADBC_DRIVERS = {"postgresql", "snowflake", "bigquery"}
 # SqlAlchemyTransport.driver is deliberately an OPEN `dialect+driver` pattern —
 # no driver allow-list (sync and async DBAPIs are both authorable; dispatch is
 # engine-side). The openness itself is what the prose restates as decision
-# logic (spec-driver-selection.md §Constraints, the Redshift routing, the
-# db-connector-creator checklist), so pin the pattern: a re-tightening — e.g.
+# logic (spec-driver-selection.md §Constraints and its sync/async guidance,
+# the db-connector-creator checklist), so pin the pattern: a re-tightening — e.g.
 # a revert to the old async-only alternation — must fail here and move the
 # prose in the same change.
 EXPECTED_SQLALCHEMY_DRIVER_PATTERN = r"^[a-z][a-z0-9_]*\+[a-z][a-z0-9_]*$"
@@ -466,7 +466,7 @@ def test_dsn_encodings_match_schema(connector_schema: dict) -> None:
 _WRITE_PATH_FIX = (
     "update the decision tables in "
     "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-sql-write-path.md, "
-    "the tier tables in "
+    "the mechanism table in "
     "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-driver-selection.md, "
     "the authoring order in "
     "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
@@ -475,6 +475,30 @@ _WRITE_PATH_FIX = (
     "and the ProviderFacts carriers in "
     "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md."
 )
+
+
+def test_driver_selection_mechanism_table_matches_the_contract() -> None:
+    """`spec-driver-selection.md` maps a researched protocol onto the closed set.
+
+    That mapping is the sanctioned decision-logic copy — the whole point of the
+    tier-3 section after the per-system table was removed — so the names in it
+    must be exactly the dialect-implemented mechanisms. `adbc_ingest` is
+    excluded: it belongs to tier 1 and obliges no dialect code, which is why the
+    SQLAlchemy family IS the dialect-implemented set.
+    """
+    rows = {
+        found[0]
+        for line in DRIVER_SELECTION_SPEC.read_text(encoding="utf-8").splitlines()
+        if (m := _TABLE_ROW.match(line))
+        and len(found := _BACKTICKED.findall(m.group(1))) == 1
+    }
+    expected = EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]
+    assert rows == expected, (
+        f"the mechanism table in {DRIVER_SELECTION_SPEC.relative_to(REPO_ROOT)} "
+        f"names different mechanisms than the contract — "
+        f"prose-only={sorted(rows - expected)} "
+        f"contract-only={sorted(expected - rows)}. {_WRITE_PATH_FIX}"
+    )
 
 
 def _required_at(schema: dict, def_name: str) -> set[str] | None:
@@ -646,6 +670,9 @@ def test_sql_limit_caps_match_schema(connector_schema: dict) -> None:
 
 WRITE_PATH_SPEC = (
     PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-sql-write-path.md"
+)
+DRIVER_SELECTION_SPEC = (
+    PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-driver-selection.md"
 )
 
 # `| `<label>` | `a` / `b` / `c` | …` — the label cell, then the values cell.

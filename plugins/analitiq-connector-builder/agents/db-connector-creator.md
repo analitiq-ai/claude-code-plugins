@@ -277,7 +277,6 @@ discipline, and dialect behavior. Do not restate validator rules.
   CDK member is overridden, no invented public attribute sits on the
   dialect, the connector class carries only `dialect_class`, and every
   override keeps the base signature's shape.
->>>>>>> b1ea68f (feat(analitiq-connector-builder): author the rc17 SQL write path, not the removed rc13 hooks)
 - [ ] **Structural overrides exist only where the portable form is
   genuinely invalid** (`current_timestamp_default`, `empty_table_sql`,
   and a `render_column_type` override only for logic the write map
