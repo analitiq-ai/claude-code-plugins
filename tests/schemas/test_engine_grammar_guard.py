@@ -42,12 +42,25 @@ def _grammar_bytes(guard):
     return guard.arrow_grammar._GRAMMAR_PATH.read_bytes()
 
 
-def _matrix_bytes(guard):
-    """A synthetic 29x29 grid over exactly the grammar families, with the
-    module's matrix pin pointed at it (monkeypatched per-test)."""
-    families = list(guard.arrow_grammar.FAMILY_NAMES)
-    grid = {row: {col: [] for col in families} for row in families}
-    return json.dumps(grid).encode()
+def _matrix_bytes(guard, *, families=None, version=None):
+    """A conversion-matrix object in the v2 envelope: its own `version` beside
+    a full grid. Healthy by default (grid over exactly the grammar families,
+    version equal to the pin); `families` and `version` override each half to
+    build the divergent cases. The module's matrix pin is pointed at whatever
+    bytes come out (monkeypatched per-test).
+    """
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES if families is None else families)
+    return json.dumps(
+        {
+            ag.ARTIFACT_VERSION_KEY: (
+                ag.CONVERSION_MATRIX_VERSION if version is None else version
+            ),
+            ag.MATRIX_CONVERSIONS_KEY: {
+                row: {col: [] for col in families} for row in families
+            },
+        }
+    ).encode()
 
 
 def _urls(guard):
@@ -61,10 +74,21 @@ def _urls(guard):
     }
 
 
-def _stub_fetch(guard, monkeypatch, *, matrix_bytes, grammar_latest, matrix_latest):
+def _stub_fetch(
+    guard,
+    monkeypatch,
+    *,
+    matrix_bytes,
+    grammar_latest,
+    matrix_latest,
+    grammar_bytes=None,
+):
     urls = _urls(guard)
     responses = {
-        urls["grammar"]: _grammar_bytes(guard),
+        # Defaults to the vendored bytes, i.e. a healthy publish. Override to
+        # express a divergent republish — step 2 is the check the whole guard
+        # exists for, so it must be expressible here.
+        urls["grammar"]: _grammar_bytes(guard) if grammar_bytes is None else grammar_bytes,
         urls["matrix"]: matrix_bytes,
         urls["grammar_latest"]: json.dumps({"version": grammar_latest}).encode(),
         urls["matrix_latest"]: json.dumps({"version": matrix_latest}).encode(),
@@ -115,16 +139,235 @@ def test_pin_ahead_of_published_latest_fails(guard, monkeypatch, capsys):
 
 def test_matrix_family_divergence_fails(guard, monkeypatch, capsys):
     families = list(guard.arrow_grammar.FAMILY_NAMES)[:-1] + ["Struct"]
-    grid = {row: {col: [] for col in families} for row in families}
     _stub_fetch(
         guard,
         monkeypatch,
-        matrix_bytes=json.dumps(grid).encode(),
+        matrix_bytes=_matrix_bytes(guard, families=families),
         grammar_latest=guard.arrow_grammar.ENGINE_GRAMMAR_VERSION,
         matrix_latest=guard.arrow_grammar.CONVERSION_MATRIX_VERSION,
     )
     assert guard.main([]) == 1
     assert "family keys != grammar families" in capsys.readouterr().err
+
+
+def test_matrix_column_divergence_fails(guard, monkeypatch, capsys):
+    """The row keys agree with the grammar but one row's COLUMNS do not.
+
+    Pins the real pre-fix bug: the row check was taught the `conversions` key
+    while the column check kept iterating the whole document, so this payload
+    produced `['version']` — a nonsense diff naming an envelope key as a
+    family — instead of the offending family. Hence the exact-list assertion
+    below rather than a substring match on the message.
+    """
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    grid = {row: {col: [] for col in families} for row in families}
+    grid[families[0]].pop(families[-1])
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: grid,
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    # The exact reported list: the offending family alone, no envelope key.
+    assert f"column keys != grammar families: ['{families[0]}']" in err
+    assert f"'{ag.ARTIFACT_VERSION_KEY}'" not in err
+
+
+def test_matrix_self_declared_version_mismatch_fails(guard, monkeypatch, capsys):
+    """The object at the pinned path declares a different version — a
+    mislabeled publish, invisible to a version derived from the URL.
+
+    Uses a PATCH-level difference, not a wildly different version: the realistic
+    mislabel is `2.0.1` served at the `2.0.0` path, and only a near-miss kills a
+    major-only or prefix comparison.
+    """
+    ag = guard.arrow_grammar
+    near_miss = ag.CONVERSION_MATRIX_VERSION[:-1] + str(
+        int(ag.CONVERSION_MATRIX_VERSION[-1]) + 1
+    )
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=_matrix_bytes(guard, version=near_miss),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    # Both operands, in the right order — a swapped message reads plausibly.
+    assert f"declares version {near_miss!r}" in err
+    assert f"pin says {ag.CONVERSION_MATRIX_VERSION!r}" in err
+
+
+def test_matrix_without_conversions_key_is_a_guard_error(guard, monkeypatch, capsys):
+    """A well-formed envelope that self-declares the PINNED version but holds
+    its grid somewhere other than `conversions`.
+
+    This is the branch the no-fallback contract actually rests on, and the only
+    payload that reaches it: every other malformed-matrix test trips the
+    `version` check first. Without this, replacing the read with
+    `matrix.get(KEY, matrix)` — the exact silent fallback the code refuses —
+    leaves the whole suite green. It is also the realistic future shape: a
+    later engine major renaming the grid key, which is precisely what the
+    matrix itself did in v2.0.0.
+    """
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                "grid": {row: {col: [] for col in families} for row in families},
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert f"has no `{ag.MATRIX_CONVERSIONS_KEY}` object" in err
+
+
+def test_empty_grid_is_a_divergence_not_a_guard_error(guard, monkeypatch, capsys):
+    """An empty published grid must not pass vacuously — and must be reported
+    as the DIVERGENCE it is (exit 1, naming the missing families), not as
+    "the guard could not run". Exit 2 here would tell a CI reader to retry an
+    infrastructure flake that will never clear."""
+    ag = guard.arrow_grammar
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: {},
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    assert "family keys != grammar families" in err
+    assert "Utf8" in err  # the diff names what is missing
+
+
+def test_unexpected_exception_is_a_guard_error_not_a_divergence(
+    guard, monkeypatch, capsys
+):
+    """Anything unclassified must be exit 2. Exit 1 is the definite verdict
+    "the contract diverged; re-vendor" — a confident, wrong instruction for a
+    fault that is not a divergence."""
+    def _boom(_failures):
+        raise RuntimeError("disk went away")
+
+    monkeypatch.setattr(guard, "check_published", _boom)
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err and "RuntimeError" in err
+
+
+def test_a_guard_error_still_reports_divergences_already_found(
+    guard, monkeypatch, capsys
+):
+    """The published grammar differs from the vendored copy (a definite
+    divergence, step 2) AND the matrix lacks `conversions` (a GuardError,
+    step 3). Exit 2 dominates, but the divergence must still be printed —
+    otherwise the one check this guard exists for reports as an infra flake
+    that a retry will never clear.
+    """
+    ag = guard.arrow_grammar
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        grammar_bytes=_grammar_bytes(guard) + b"\n",
+        matrix_bytes=json.dumps(
+            {ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION, "grid": {}}
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert "differs from the vendored copy" in err
+
+
+def test_published_grammar_differing_from_the_vendored_copy_fails(
+    guard, monkeypatch, capsys
+):
+    """Step 2 — the check the whole guard exists for. A divergent republish (or
+    a tampered vendored file) must fail; nothing else in the suite covers it."""
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        grammar_bytes=_grammar_bytes(guard) + b"\n",
+        matrix_bytes=_matrix_bytes(guard),
+        grammar_latest=guard.arrow_grammar.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=guard.arrow_grammar.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    assert "differs from the vendored copy" in capsys.readouterr().err
+
+
+def test_matrix_without_self_declared_version_is_a_guard_error(
+    guard, monkeypatch, capsys
+):
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.MATRIX_CONVERSIONS_KEY: {
+                    row: {col: [] for col in families} for row in families
+                }
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err and "self-declares its version" in err
+
+
+def test_pre_v2_bare_grid_is_a_guard_error_not_a_silent_fallback(
+    guard, monkeypatch, capsys
+):
+    """The v1.0.0 shape — a bare dict-of-dicts with no envelope. Accepting it
+    as a fallback would let the pin name v2 while the guard verified a v1
+    payload; it must refuse to run instead.
+
+    Asserts the observable verdict, not which check produces it (today the
+    missing `version` key trips first, before the grid is even read) — the
+    contract is that a pre-v2 payload can never reach a green verdict.
+    """
+    families = list(guard.arrow_grammar.FAMILY_NAMES)
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {row: {col: [] for col in families} for row in families}
+        ).encode(),
+        grammar_latest=guard.arrow_grammar.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=guard.arrow_grammar.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    assert "could not run" in capsys.readouterr().err
 
 
 def test_malformed_matrix_is_a_guard_error(guard, monkeypatch, capsys):
@@ -139,6 +382,24 @@ def test_malformed_matrix_is_a_guard_error(guard, monkeypatch, capsys):
     )
     assert guard.main([]) == 2
     assert "could not run" in capsys.readouterr().err
+
+
+def test_matrix_conversions_is_not_a_grid_is_a_guard_error(guard, monkeypatch, capsys):
+    ag = guard.arrow_grammar
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: {"Utf8": "not a column map"},
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    assert "not a dict-of-dicts grid" in capsys.readouterr().err
 
 
 def test_malformed_latest_version_is_a_guard_error(guard, monkeypatch, capsys):
@@ -162,7 +423,68 @@ def test_offline_hash_mismatch_fails(guard, monkeypatch, capsys):
     assert "must move together" in capsys.readouterr().err
 
 
+def test_offline_grammar_self_declared_version_mismatch_fails(
+    guard, monkeypatch, capsys
+):
+    """The vendored bytes hash correctly but the pin names a different version
+    than the manifest declares — which would publish `pinned at vX` prose that
+    misdescribes the vocabulary the contract actually derives from.
+
+    Near-miss version, and both operands asserted, for the reasons given in
+    test_matrix_self_declared_version_mismatch_fails.
+    """
+    ag = guard.arrow_grammar
+    real = ag.ENGINE_GRAMMAR_VERSION
+    near_miss = real[:-1] + str(int(real[-1]) + 1)
+    monkeypatch.setattr(ag, "ENGINE_GRAMMAR_VERSION", near_miss)
+    assert guard.main(["--offline"]) == 1
+    err = capsys.readouterr().err
+    assert f"declares version {real!r}" in err
+    assert f"pin says {near_miss!r}" in err
+    # Offline fetches nothing, so it must not blame the publish.
+    assert "published object is mislabeled" not in err
+
+
+def test_offline_vendored_grammar_without_version_is_a_guard_error(
+    guard, monkeypatch, capsys
+):
+    """A vendored manifest whose declared version cannot be read at all. Must
+    be exit 2, not a defaulted-and-green pass."""
+    monkeypatch.setattr(guard.arrow_grammar, "ARTIFACT_VERSION_KEY", "absent_key")
+    assert guard.main(["--offline"]) == 2
+    assert "self-declares its version" in capsys.readouterr().err
+
+
+def test_offline_healthy_passes_and_never_touches_the_network(
+    guard, monkeypatch, capsys
+):
+    """The offline success path: exit 0, and `--offline` genuinely suppresses
+    the fetch rather than merely being documented to."""
+    # Recorded rather than raised: `main` now catches every exception and turns
+    # it into exit 2, which would swallow a sentinel AssertionError and report
+    # this as an opaque `assert 2 == 0`.
+    attempted: list[str] = []
+    monkeypatch.setattr(guard, "_fetch", lambda url: attempted.append(url) or b"")
+    assert guard.main(["--offline"]) == 0
+    assert not attempted, f"--offline must not fetch, but tried {attempted}"
+    out = capsys.readouterr().out
+    # The banner must describe what actually ran — it is the only signal a CI
+    # reader gets about which half of the guard executed.
+    assert "offline hash + declared version" in out
+
+
 def test_ci_job_is_wired():
     workflow = _WORKFLOW.read_text()
     assert "engine-grammar-pin-guard:" in workflow
     assert "check_engine_grammar_pin.py" in workflow
+    # The one flag that makes the guard not run is the one the charter test has
+    # to forbid: `--offline` is the obvious "fix" when the CDN flakes, and it
+    # would leave the job permanently green having verified nothing about the
+    # engine's published truth. Checked over every non-comment line rather than
+    # the guard's own `run:` line, so a `run: |` block form cannot slip past.
+    invocations = [
+        line
+        for line in workflow.splitlines()
+        if "--offline" in line and not line.lstrip().startswith("#")
+    ]
+    assert not invocations, f"--offline must never run in CI: {invocations}"

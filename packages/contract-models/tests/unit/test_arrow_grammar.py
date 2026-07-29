@@ -1,16 +1,19 @@
 """Guards for `analitiq.contracts.arrow_grammar` — the vendored engine manifest.
 
-Three concerns, all offline:
+Four concerns, all offline:
 
 1. **The pin**: the vendored `arrow_type_grammar.json` must hash to the sha256
-   stated next to it. An edited/swapped vendored file fails here in any plain
-   pytest run; the network half (published object byte-compare, conversion-
-   matrix parity) lives in `scripts/check_engine_grammar_pin.py` (CI job
-   `engine-grammar-pin-guard`).
-2. **Derivation**: everything the contract derives from the manifest —
+   stated next to it, AND self-declare the pinned version. An edited/swapped
+   vendored file fails here in any plain pytest run; the network half
+   (published object byte-compare, conversion-matrix parity) lives in
+   `scripts/check_engine_grammar_pin.py` (CI job `engine-grammar-pin-guard`).
+2. **The envelope**: the vocabulary is read from the manifest's `families`
+   key, never from the document, and a manifest that cannot yield a usable
+   vocabulary must refuse to import rather than derive an empty one.
+3. **Derivation**: everything the contract derives from the manifest —
    `ARROW_TYPE_PATTERN`, container heads, template dummies — must be a pure
    function of the manifest's families, so a pin bump re-derives all of it.
-3. **The generators' failure modes**: unsupported manifest shapes (int ranges
+4. **The generators' failure modes**: unsupported manifest shapes (int ranges
    the builder can't render, unknown param kinds) must fail loudly, never
    silently misparse.
 
@@ -21,6 +24,7 @@ validator's test_type_map_model.py) — not restated here.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 
 import pytest
@@ -36,6 +40,78 @@ def test_vendored_grammar_hashes_to_the_pin():
         "file and the pin constants must move together (re-vendor the "
         "published object, then re-render schemas + regenerate docs)."
     )
+
+
+def test_vendored_grammar_self_declares_the_pinned_version():
+    """From v1.1.0 the manifest carries its own `version` (engine#413). The pin
+    must agree with it: `scripts/render_schemas.py` stamps `pinned at v{...}`
+    into published prose from the PIN, so a pin that disagrees with the file it
+    describes publishes a false provenance claim."""
+    declared = arrow_grammar.GRAMMAR.get(arrow_grammar.ARTIFACT_VERSION_KEY)
+    assert declared == arrow_grammar.ENGINE_GRAMMAR_VERSION, (
+        f"vendored {arrow_grammar._GRAMMAR_PATH.name} declares version "
+        f"{declared!r} but the pin says "
+        f"{arrow_grammar.ENGINE_GRAMMAR_VERSION!r} — re-vendor the published "
+        "object and move both pin constants together"
+    )
+
+
+def test_families_come_from_the_keyed_envelope_not_the_whole_document():
+    """The manifest is an envelope — `families` beside `version`. Deriving the
+    vocabulary from the document itself would admit envelope keys as families.
+
+    Asserted behaviourally (equality, and no envelope sibling reaching the
+    vocabulary) rather than by identity, so a defensive copy of the families
+    map stays a free refactor.
+    """
+    assert (
+        arrow_grammar.FAMILIES
+        == arrow_grammar.GRAMMAR[arrow_grammar.GRAMMAR_FAMILIES_KEY]
+    )
+    siblings = set(arrow_grammar.GRAMMAR) - {arrow_grammar.GRAMMAR_FAMILIES_KEY}
+    assert siblings, "manifest has no envelope siblings — this test is vacuous"
+    for key in siblings:
+        assert key not in arrow_grammar.FAMILY_NAMES
+        assert key not in arrow_grammar.ARROW_TYPE_PATTERN
+
+
+@pytest.mark.parametrize("payload,reason", [
+    ('{"families": {}}', "`families` is empty"),
+    ('{"version": "1.1.0"}', "no `families` key"),
+    ('{"families": []}', "`families` is list, expected object"),
+    ('[]', "top level is list, expected object"),
+    ('{"families": {"Utf8": "not a spec"}}', "family specs are not objects"),
+])
+def test_an_unusable_manifest_refuses_to_import(monkeypatch, payload, reason):
+    """Each shape parses as JSON, so nothing upstream rejects it, and each
+    would either crash three imports deep (`KeyError: 'families'`,
+    `AttributeError: 'str' object has no attribute 'get'`) or derive a
+    vocabulary accepting NO canonical type — while importing cleanly.
+
+    The published wheel reaches users who never run the CI guard or this suite,
+    so the floor belongs at import and must name its remediation. The
+    renamed-key case is not hypothetical: the sibling conversion-matrix
+    artifact did exactly this in its v2.0.0.
+    """
+    monkeypatch.setattr(arrow_grammar, "load_grammar", lambda: json.loads(payload))
+    with pytest.raises(RuntimeError) as exc:
+        arrow_grammar._load_families()
+    message = str(exc.value)
+    assert reason in message
+    # Remediation, not just diagnosis — this is what the reader acts on.
+    assert "re-vendor" in message
+    assert arrow_grammar.ENGINE_GRAMMAR_RESOURCE in message
+
+
+def test_unparseable_manifest_names_its_remediation(monkeypatch):
+    """The non-JSON path, chained so the underlying cause survives."""
+    def _bad():
+        raise json.JSONDecodeError("boom", "{", 0)
+
+    monkeypatch.setattr(arrow_grammar, "load_grammar", _bad)
+    with pytest.raises(RuntimeError, match="not valid JSON") as exc:
+        arrow_grammar._load_families()
+    assert isinstance(exc.value.__cause__, json.JSONDecodeError)
 
 
 def test_pattern_is_a_pure_derivation_of_the_manifest():
