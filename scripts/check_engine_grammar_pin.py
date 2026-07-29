@@ -10,13 +10,21 @@ vendored copy of the grammar (`analitiq.contracts.arrow_grammar`) to build
 contract accepts therefore derives from the vendored file; this guard is what
 ties the vendored file to the engine's published truth:
 
-  1. sha256(vendored) == the pin stated in `arrow_grammar.py` (offline).
+  1. sha256(vendored) == the pin stated in `arrow_grammar.py`, and the
+     manifest's own `version` key == the pinned version (offline).
   2. The published immutable object at the pinned version is byte-identical
      to the vendored copy (a divergent republish or a tampered vendored file
      both fail — the publish side is first-write-wins, so bytes must agree).
+     Byte-equality is what lets step 1 assert the published grammar's
+     self-declared version by asserting the vendored copy's.
   3. The published conversion-matrix at ITS pinned version hashes to its pin,
-     and its family keys equal the grammar's family set exactly, row and
-     column — the two engine artifacts must describe one capability set.
+     self-declares that same version, and its family keys equal the grammar's
+     family set exactly, row and column — the two engine artifacts must
+     describe one capability set. The matrix grid is read from the
+     `conversions` key of the v2 envelope; the pre-v2 bare-grid shape is not
+     accepted as a fallback. Note the shape/parity half runs only when the
+     sha256 matches: a hash mismatch is already a definite divergence, so the
+     checks that would describe those unaccounted-for bytes are skipped.
   4. The published `latest.json` pointers are consulted: a newer engine
      version than the pin is a NOTICE, not a failure — contract ⊆ engine
      still holds; adopting the new version is a deliberate pin bump
@@ -30,10 +38,12 @@ failure, malformed JSON — is a GuardError: a guard that cannot run must never
 read as green. `--offline` runs only step 1 (local dev convenience; CI always
 runs the full check).
 
-Wiring: the `engine-grammar-pin-guard` job in .github/workflows/tests.yml.
-The offline half is additionally pinned by
+Wiring: the `engine-grammar-pin-guard` job in .github/workflows/tests.yml —
+which must NOT pass `--offline` (that would make the job permanently green
+having verified nothing about the engine's published truth;
+`test_ci_job_is_wired` pins this). The offline half is additionally pinned by
 packages/contract-models/tests/unit/test_arrow_grammar.py so a plain pytest
-run catches a hash mismatch without network.
+run catches a hash or declared-version mismatch without network.
 """
 from __future__ import annotations
 
@@ -114,18 +124,80 @@ def _parse_version(value: str, *, context: str) -> tuple[int, ...]:
     return tuple(int(part) for part in value.split("."))
 
 
+def _declared_version(obj: dict, *, context: str) -> str:
+    """The version an artifact stamps on ITSELF (engine#413).
+
+    Reading this is strictly better than deriving the version from the URL
+    path: a mislabeled publish — right path, wrong contents — is invisible to
+    a path-derived version but fails here. An artifact that declares nothing
+    is a GuardError: from grammar v1.1.0 / matrix v2.0.0 on, every published
+    engine artifact carries the key, so its absence means the guard is looking
+    at something it cannot verify, not that the version is fine.
+    """
+    declared = obj.get(arrow_grammar.ARTIFACT_VERSION_KEY)
+    if not isinstance(declared, str):
+        # Absent, null, or a non-string (e.g. `"version": 2`) all land here:
+        # without a readable version there is no assertion to make.
+        raise GuardError(
+            f"{context} has no string `{arrow_grammar.ARTIFACT_VERSION_KEY}` "
+            f"(got {declared!r}) — every published engine artifact "
+            "self-declares its version. A pin naming a PRE-envelope version "
+            "(grammar < 1.1.0, matrix < 2.0.0) lands here too, and is a "
+            "deliberate one-way door: this guard cannot verify those."
+        )
+    return declared
+
+
+def _version_mismatch(declared: str, pinned: str, *, remediation: str, context: str) -> list[str]:
+    """Compare an artifact's self-declared version against its pin.
+
+    `remediation` differs by call site and must not be generalised: offline,
+    no published object has been fetched at all, so blaming the publish there
+    would send the reader to the wrong place.
+    """
+    if declared == pinned:
+        return []
+    return [
+        f"{context} declares version {declared!r} but the pin says "
+        f"{pinned!r} — {remediation}"
+    ]
+
+
 def check_offline() -> list[str]:
-    """Step 1 — the vendored bytes hash to the stated pin. (Existence is
-    guaranteed here: a missing file already failed the module import above.)"""
+    """Step 1 — the vendored bytes hash to the stated pin, and the manifest's
+    own `version` agrees with it. (Existence is guaranteed here: a missing file
+    already failed the module import above.)
+
+    The self-declared check lives offline rather than in `check_published`
+    because step 2 byte-compares the published grammar against this same file:
+    once those bytes are equal, a statement about the vendored copy's declared
+    version is a statement about the published object's. That inference needs
+    step 2 to have actually run, so under `--offline` (and on any run where
+    step 1 fails, since `main` then skips step 2) this asserts the vendored
+    copy only — which is still the file every derivation is built from.
+    """
     vendored = arrow_grammar._GRAMMAR_PATH
-    digest = _sha256(vendored.read_bytes())
+    raw = vendored.read_bytes()
+    digest = _sha256(raw)
     if digest != arrow_grammar.ENGINE_GRAMMAR_SHA256:
+        # Return early: with the bytes unaccounted for, anything parsed out of
+        # them describes a file we have already rejected.
         return [
             f"vendored {vendored.name} hashes to {digest}, but the pin in "
             f"arrow_grammar.py says {arrow_grammar.ENGINE_GRAMMAR_SHA256} — "
             "the vendored file and the pin must move together"
         ]
-    return []
+    context = f"vendored {vendored.name}"
+    declared = _declared_version(_parse_object(raw, context=context), context=context)
+    return _version_mismatch(
+        declared,
+        arrow_grammar.ENGINE_GRAMMAR_VERSION,
+        remediation=(
+            "the vendored file and the pin constants were not moved together; "
+            "re-vendor the published object and bump both"
+        ),
+        context=context,
+    )
 
 
 def check_published() -> tuple[list[str], list[str]]:
@@ -161,10 +233,48 @@ def check_published() -> tuple[list[str], list[str]]:
         # minted against corrupt bytes must be a GuardError, not a traceback
         # or a confidently wrong family-diff verdict.
         matrix = _parse_object(matrix_raw, context=matrix_url)
-        if not all(isinstance(cols, dict) for cols in matrix.values()):
-            raise GuardError(f"{matrix_url} is not a dict-of-dicts grid")
+        failures.extend(
+            _version_mismatch(
+                _declared_version(matrix, context=matrix_url),
+                arrow_grammar.CONVERSION_MATRIX_VERSION,
+                remediation=(
+                    "the published object is mislabeled, or the pin names a "
+                    "version whose object holds something else"
+                ),
+                context=matrix_url,
+            )
+        )
+        # From v2.0.0 the grid sits under `conversions`, beside the artifact's
+        # own `version`; v1.0.0 was the bare grid. Read the key, and treat its
+        # absence as "cannot run" — falling back to the flat shape would make
+        # the guard silently compare the ENVELOPE's keys against the family
+        # set and report a nonsense diff.
+        grid = matrix.get(arrow_grammar.MATRIX_CONVERSIONS_KEY)
+        if not isinstance(grid, dict):
+            raise GuardError(
+                f"{matrix_url} has no `{arrow_grammar.MATRIX_CONVERSIONS_KEY}` "
+                "object — the conversion matrix carries its grid there from "
+                "v2.0.0 on"
+            )
+        if not all(isinstance(cols, dict) for cols in grid.values()):
+            raise GuardError(
+                f"{matrix_url} `{arrow_grammar.MATRIX_CONVERSIONS_KEY}` is not "
+                "a dict-of-dicts grid"
+            )
+        # Existential floor. Every parity check below is an `all()` or a set
+        # equality, and both are vacuously TRUE on empty input: an empty grid
+        # against an empty family set would pass the whole block and print the
+        # guard's strongest green while the shipped contract accepts nothing.
+        # `arrow_grammar` refuses to import an empty `families`, so this can
+        # only fire on the published matrix — but a guard whose every check is
+        # a universal quantifier needs one existential.
         grammar_families = set(arrow_grammar.FAMILY_NAMES)
-        rows = set(matrix)
+        if not grid or not grammar_families:
+            raise GuardError(
+                f"{matrix_url} has an empty grid or the grammar an empty "
+                "family set — parity would pass vacuously and certify nothing"
+            )
+        rows = set(grid)
         if rows != grammar_families:
             failures.append(
                 "conversion-matrix family keys != grammar families: "
@@ -173,7 +283,7 @@ def check_published() -> tuple[list[str], list[str]]:
             )
         else:
             bad_cols = {
-                row for row, cols in matrix.items() if set(cols) != grammar_families
+                row for row, cols in grid.items() if set(cols) != grammar_families
             }
             if bad_cols:
                 failures.append(
@@ -214,7 +324,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--offline",
         action="store_true",
-        help="run only the local hash check (no network); CI runs the full check",
+        help=(
+            "run only the local checks — vendored hash + self-declared version "
+            "(no network); CI always runs the full check"
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -236,6 +349,20 @@ def main(argv: list[str] | None = None) -> int:
     except GuardError as exc:
         print(f"::error::engine-grammar-pin guard could not run: {exc}", file=sys.stderr)
         return 2
+    except Exception as exc:  # noqa: BLE001 — see comment below
+        # Anything not already classified is still "the guard could not run",
+        # never a divergence. Without this the fallthrough is exit 1, which the
+        # design defines as a DEFINITE verdict ("the contract diverged from
+        # engine truth") whose remediation is re-vendoring — a confident and
+        # wrong instruction. Reachable: the vendored file disappearing between
+        # import and read, or `urlopen` raising ValueError/UnicodeError, which
+        # `_fetch` does not catch.
+        print(
+            "::error::engine-grammar-pin guard could not run: unexpected "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
 
     for notice in notices:
         print(f"::notice::{notice}")
@@ -243,7 +370,11 @@ def main(argv: list[str] | None = None) -> int:
         for failure in failures:
             print(f"::error::{failure}", file=sys.stderr)
         return 1
-    scope = "offline hash" if args.offline else "published objects + hashes + family parity"
+    scope = (
+        "offline hash + declared version"
+        if args.offline
+        else "published objects + hashes + declared versions + family parity"
+    )
     print(
         f"engine-grammar pin OK ({scope}): "
         f"{arrow_grammar.ENGINE_GRAMMAR_RESOURCE} v{arrow_grammar.ENGINE_GRAMMAR_VERSION}, "

@@ -19,20 +19,39 @@ from it everything the contract used to restate by hand:
 - the container-head set type-map validation reasons over,
 - the dummy substitutions templated type-map canonicals are checked with.
 
+Both artifacts self-declare their version in a top-level `version` key
+(engine#413; grammar v1.1.0 and matrix v2.0.0 on). The pin below still states
+the version — it is what builds the URL to fetch, so it cannot be derived from
+the thing it fetches — but the guards now assert the object's OWN version
+against it rather than trusting the path it asked for.
+
 The pin (version + sha256, both manifests) is stated here once. Guards:
 
 - `tests/unit/test_arrow_grammar.py` re-hashes the vendored file against the
-  pin — offline, so an edited or swapped vendored copy fails everywhere;
+  pin and checks its self-declared version — offline, so an edited or swapped
+  vendored copy fails everywhere;
 - `scripts/check_engine_grammar_pin.py` (CI) fetches the pinned published
-  object, byte-compares it against the vendored copy, cross-checks the
-  conversion-matrix family keys, and reports when the engine has published a
-  newer version than the pin.
+  object, byte-compares it against the vendored copy, asserts the MATRIX's
+  self-declared version directly and the GRAMMAR's via the vendored copy those
+  bytes are identical to, cross-checks the conversion-matrix family keys, and
+  reports when the engine has published a newer version than the pin.
 
-Updating the pin = replace the vendored file with the newly published object,
-bump the constants here, re-render the schemas, and re-run the plugin doc
-generator. Per the re-add policy a family appears here only after the engine
-executes it: the engine work ships first, and the contract picks it up by
-consuming the new manifest version — never by hand-editing the vocabulary.
+Updating the pin:
+
+- **Grammar** — replace the vendored file with the newly published object and
+  bump `ENGINE_GRAMMAR_VERSION` / `ENGINE_GRAMMAR_SHA256` together (the sha is
+  `sha256` of the published bytes; `latest.json` also states it).
+- **Matrix** — nothing is vendored, so bump `CONVERSION_MATRIX_VERSION` /
+  `CONVERSION_MATRIX_SHA256` from the published `latest.json`. A MAJOR bump
+  here can be an envelope/shape change rather than a vocabulary change (v2.0.0
+  moved the grid under `conversions`), which means the guard's reader may need
+  teaching before the pin can move.
+- Then re-render the schemas (`render_schemas.py canonical-types`, plus any
+  affected resource) and re-run the plugin doc generator.
+
+Per the re-add policy a family appears here only after the engine executes it:
+the engine work ships first, and the contract picks it up by consuming the new
+manifest version — never by hand-editing the vocabulary.
 
 What stays contract-owned (authoring-profile policy, not engine facts):
 
@@ -57,21 +76,32 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 ENGINE_GRAMMAR_RESOURCE = "arrow-type-grammar"
-ENGINE_GRAMMAR_VERSION = "1.0.0"
+ENGINE_GRAMMAR_VERSION = "1.1.0"
 ENGINE_GRAMMAR_SHA256 = (
-    "e1a55efdba6c5c07ff48c91cd915a0d3d9aa40abea213a6d15229aaad8f96204"
+    "43f434025ae9fcaf8609b0cd494c3a04cac6bb4abf0f1fe50caa590ffbbbc679"
 )
 ENGINE_GRAMMAR_FILENAME = "arrow_type_grammar.json"
 
 # The conversion matrix is NOT vendored — the vocabulary needs only the grammar.
-# The pin is recorded so the CI guard can verify the two published artifacts
-# agree (grammar families == matrix keys) at the pinned versions.
+# The pin is recorded so the CI guard can (a) fetch the right object, (b) assert
+# that object's own declared version, and (c) verify the two published artifacts
+# agree — grammar families == the keys of the matrix's `conversions` grid — at
+# the pinned versions.
 CONVERSION_MATRIX_RESOURCE = "conversion-matrix"
-CONVERSION_MATRIX_VERSION = "1.0.0"
+CONVERSION_MATRIX_VERSION = "2.0.0"
 CONVERSION_MATRIX_SHA256 = (
-    "29e8dc8a665390684cb2207a222655b09836dd3510605675a0ac255028d5ffc3"
+    "6a40da57330c435908973cb70aaa33d5af5e220dcb1bcaf55e29e365713bd072"
 )
 CONVERSION_MATRIX_FILENAME = "conversion_matrix.json"
+
+#: Key holding the family->spec map inside the grammar manifest.
+GRAMMAR_FAMILIES_KEY = "families"
+#: Key holding the family x family grid inside the conversion matrix.
+MATRIX_CONVERSIONS_KEY = "conversions"
+#: Key each artifact stamps its own version under (engine#413). Both artifacts
+#: self-declare from grammar v1.1.0 / matrix v2.0.0 on, which is what lets a
+#: consumer assert the version it got rather than trusting the URL it asked for.
+ARTIFACT_VERSION_KEY = "version"
 
 _GRAMMAR_PATH = Path(__file__).with_name(ENGINE_GRAMMAR_FILENAME)
 
@@ -82,21 +112,48 @@ def load_grammar() -> dict[str, Any]:
     return json.loads(_GRAMMAR_PATH.read_text(encoding="utf-8"))
 
 
-try:
-    GRAMMAR: dict[str, Any] = load_grammar()
-except (OSError, json.JSONDecodeError) as exc:
-    # Every `analitiq.contracts.*` import passes through here, so a missing or
-    # corrupt vendored file must name its remediation, not surface as a bare
-    # FileNotFoundError three imports deep.
-    raise RuntimeError(
-        f"vendored engine grammar {_GRAMMAR_PATH} is missing or corrupt "
-        f"({exc}); re-vendor the published "
-        f"{ENGINE_GRAMMAR_RESOURCE}/v{ENGINE_GRAMMAR_VERSION} object "
-        "(see this module's docstring for the pin-update procedure)"
-    ) from exc
+def _load_families() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Parse the vendored manifest and pull the vocabulary out of its envelope.
 
-#: family name -> param spec, exactly as the engine publishes it.
-FAMILIES: dict[str, dict[str, Any]] = GRAMMAR["families"]
+    Every `analitiq.contracts.*` import passes through here, so ANY unusable
+    vendored file must name its remediation rather than surface as a bare
+    exception three imports deep. "Unusable" includes shapes that parse fine:
+
+    - a missing/renamed `families` key would otherwise raise a bare `KeyError`.
+      This is not hypothetical — the sibling conversion-matrix artifact did
+      exactly this rename in its v2.0.0 (bare grid -> `conversions`), so a
+      future grammar major could relocate `families` the same way;
+    - an EMPTY `families` map parses, imports, and derives
+      `ARROW_TYPE_PATTERN == "^(?:)$"` — a contract that accepts no canonical
+      type at all. Every downstream derivation here is a comprehension over
+      `FAMILIES`, so emptiness propagates silently instead of failing; it needs
+      an explicit floor.
+    """
+    try:
+        grammar: dict[str, Any] = load_grammar()
+        families = grammar[GRAMMAR_FAMILIES_KEY]
+        if not isinstance(families, dict) or not families:
+            raise ValueError(
+                f"`{GRAMMAR_FAMILIES_KEY}` is "
+                f"{'empty' if isinstance(families, dict) else 'not an object'}"
+            )
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"vendored engine grammar {_GRAMMAR_PATH} is missing or corrupt "
+            f"({exc!r}); re-vendor the published "
+            f"{ENGINE_GRAMMAR_RESOURCE}/v{ENGINE_GRAMMAR_VERSION} object "
+            "(see this module's docstring for the pin-update procedure)"
+        ) from exc
+    return grammar, families
+
+
+#: The whole manifest — an envelope. v1.0.0 already carried the vocabulary
+#: under `families`; v1.1.0 added a sibling `version` alongside it.
+#: family name -> param spec, exactly as the engine publishes it. Read by key,
+#: so envelope siblings never reach the derivations below.
+GRAMMAR: dict[str, Any]
+FAMILIES: dict[str, dict[str, Any]]
+GRAMMAR, FAMILIES = _load_families()
 
 # ---------------------------------------------------------------------------
 # Contract-owned profile fragments (see module docstring for why these are

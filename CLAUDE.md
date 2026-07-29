@@ -61,13 +61,20 @@ at `schemas.analitiq.ai`), and this repo vendors one pinned grammar version at
 `packages/contract-models/src/analitiq/contracts/arrow_type_grammar.json`.
 `ARROW_TYPE_PATTERN`, the canonical-types `$defs`, and the container-head set
 are all derived from it (`analitiq.contracts.arrow_grammar` states the pin —
-version + sha256 — once). Guards: `test_arrow_grammar.py` re-hashes the
-vendored file offline; the `engine-grammar-pin-guard` CI job byte-compares it
-against the published immutable object and cross-checks the conversion-matrix
-family keys. A family is added by shipping it in the engine first, then
-bumping the pin here (re-vendor, `render_schemas.py canonical-types`, re-render
-the affected resources, re-run the plugin doc generator) — never by hand-editing
-the vocabulary.
+version + sha256 — once). Both artifacts also self-declare their version in a
+top-level `version` key, and each keeps its payload under a key of its own —
+the grammar's families under `families`, the matrix's grid under `conversions`
+(v2.0.0 moved it there). Always read those keys, never the document itself.
+Guards: `test_arrow_grammar.py` re-hashes the vendored file offline, checks its
+self-declared version against the pin, and pins the refusal to import a
+manifest whose `families` is absent or empty; the `engine-grammar-pin-guard`
+CI job byte-compares the vendored file against the published immutable object,
+asserts the matrix's self-declared version directly and the grammar's via the
+vendored copy those bytes are identical to, and cross-checks the
+conversion-matrix family keys. A family is added by shipping it in the engine
+first, then bumping the pin here (re-vendor, `render_schemas.py
+canonical-types`, re-render the affected resources, re-run the plugin doc
+generator) — never by hand-editing the vocabulary.
 
 `.github/workflows/schemas-publish.yml` uploads the tree to the serving bucket
 (defined in the infra repo's Terraform) on pushes to main touching `schemas/`.

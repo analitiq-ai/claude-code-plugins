@@ -115,11 +115,15 @@ jobs:
     # engine-published arrow-type-grammar manifest (issue #81). pytest pins
     # the vendored bytes to the sha256 stated in arrow_grammar.py offline;
     # this job is the network half: the published immutable object at the
-    # pinned version must be byte-identical to the vendored copy, the
-    # published conversion-matrix must carry exactly the same family set, and
-    # a newer engine publication surfaces as a notice (adopting it is a
-    # deliberate pin bump, never automatic). The script owns the full
-    # semantics; stdlib-only, so no dependency install step.
+    # pinned version must be byte-identical to the vendored copy, each artifact
+    # must self-declare the version its pin names, the published
+    # conversion-matrix must carry exactly the same family set (read from its
+    # `conversions` grid), and a newer engine publication surfaces as a notice
+    # (adopting it is a deliberate pin bump, never automatic). The script owns
+    # the full semantics; stdlib-only, so no dependency install step.
+    #
+    # Never add --offline here: it would make this job green having verified
+    # nothing about the engine's published truth. test_ci_job_is_wired pins that.
     name: vendored engine grammar matches published manifests
     runs-on: ubuntu-latest
     steps:
