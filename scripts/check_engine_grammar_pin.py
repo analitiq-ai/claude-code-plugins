@@ -34,9 +34,13 @@ ties the vendored file to the engine's published truth:
 
 Exit codes: 0 ok (including the newer-version notice), 1 divergence, 2
 GuardError. Every infrastructure failure — missing vendored file, fetch
-failure, malformed JSON — is a GuardError: a guard that cannot run must never
-read as green. `--offline` runs only step 1 (local dev convenience; CI always
-runs the full check).
+failure, malformed JSON, anything unclassified — is a GuardError: a guard that
+cannot run must never read as green, and must never mint the exit-1 verdict
+("the contract diverged; re-vendor") for a fault that is not a divergence.
+Exit 2 still PRINTS any divergence already found: dropping them would report a
+real divergent republish as an infrastructure flake, which a CI reader retries
+forever. `--offline` runs only step 1 (local dev convenience; CI always runs
+the full check).
 
 Wiring: the `engine-grammar-pin-guard` job in .github/workflows/tests.yml —
 which must NOT pass `--offline` (that would make the job permanently green
@@ -200,9 +204,16 @@ def check_offline() -> list[str]:
     )
 
 
-def check_published() -> tuple[list[str], list[str]]:
-    """Steps 2-4 — published objects vs the pins. Returns (failures, notices)."""
-    failures: list[str] = []
+def check_published(failures: list[str]) -> list[str]:
+    """Steps 2-4 — published objects vs the pins. Returns notices.
+
+    Divergences are APPENDED to the caller's `failures` rather than returned,
+    so a `GuardError` raised by a later check cannot discard the definite
+    verdicts already reached. Losing them would be actively misleading: a
+    published grammar that differs from the vendored copy is the divergence
+    this whole guard exists to catch, and reporting only "could not run"
+    invites a CI reader to retry it as a flake forever.
+    """
     notices: list[str] = []
 
     grammar_url = (
@@ -262,17 +273,24 @@ def check_published() -> tuple[list[str], list[str]]:
                 "a dict-of-dicts grid"
             )
         # Existential floor. Every parity check below is an `all()` or a set
-        # equality, and both are vacuously TRUE on empty input: an empty grid
-        # against an empty family set would pass the whole block and print the
-        # guard's strongest green while the shipped contract accepts nothing.
-        # `arrow_grammar` refuses to import an empty `families`, so this can
-        # only fire on the published matrix — but a guard whose every check is
-        # a universal quantifier needs one existential.
+        # equality, both vacuously TRUE on empty input — an empty grid against
+        # an empty family set would pass the whole block and print the guard's
+        # strongest green while the shipped contract accepts nothing.
+        #
+        # Only the GRAMMAR side is guarded here. An empty published grid is a
+        # definite divergence, not an un-runnable guard, so it belongs to the
+        # `rows != grammar_families` comparison below, which reports it as
+        # exit 1 and names every missing family. Guarding it here instead would
+        # downgrade a real divergence to "could not run".
+        #
+        # `arrow_grammar` already refuses to import an empty `families`, so this
+        # is unreachable today; it stays as the local statement of an invariant
+        # the whole block silently depends on.
         grammar_families = set(arrow_grammar.FAMILY_NAMES)
-        if not grid or not grammar_families:
+        if not grammar_families:
             raise GuardError(
-                f"{matrix_url} has an empty grid or the grammar an empty "
-                "family set — parity would pass vacuously and certify nothing"
+                "the vendored grammar has an empty family set — every parity "
+                "check below would pass vacuously and certify nothing"
             )
         rows = set(grid)
         if rows != grammar_families:
@@ -316,11 +334,24 @@ def check_published() -> tuple[list[str], list[str]]:
                 f"v{latest} — the contract promises a manifest the engine has "
                 "not published"
             )
-    return failures, notices
+    return notices
+
+
+def _report(failures: list[str]) -> None:
+    """Print divergences found so far. Called on every exit path, including the
+    GuardError ones — a definite verdict already reached must never be dropped
+    because a later check could not run."""
+    for failure in failures:
+        print(f"::error::{failure}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    # `__doc__` is None under `python -OO`; falling over here would exit 1 —
+    # the "contract diverged, go re-vendor" verdict — for a flag that has
+    # nothing to do with the contract.
+    parser = argparse.ArgumentParser(
+        description=(__doc__ or "engine-grammar pin guard").splitlines()[0]
+    )
     parser.add_argument(
         "--offline",
         action="store_true",
@@ -340,13 +371,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    # Owned here, not inside the checks, so every exit path below can report
+    # what was already found (see `_report`).
+    failures: list[str] = []
+    notices: list[str] = []
     try:
-        failures = check_offline()
-        notices: list[str] = []
+        failures.extend(check_offline())
         if not args.offline and not failures:
-            net_failures, notices = check_published()
-            failures.extend(net_failures)
+            notices.extend(check_published(failures))
     except GuardError as exc:
+        _report(failures)
         print(f"::error::engine-grammar-pin guard could not run: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:  # noqa: BLE001 — see comment below
@@ -357,6 +391,7 @@ def main(argv: list[str] | None = None) -> int:
         # wrong instruction. Reachable: the vendored file disappearing between
         # import and read, or `urlopen` raising ValueError/UnicodeError, which
         # `_fetch` does not catch.
+        _report(failures)
         print(
             "::error::engine-grammar-pin guard could not run: unexpected "
             f"{type(exc).__name__}: {exc}",
@@ -367,8 +402,7 @@ def main(argv: list[str] | None = None) -> int:
     for notice in notices:
         print(f"::notice::{notice}")
     if failures:
-        for failure in failures:
-            print(f"::error::{failure}", file=sys.stderr)
+        _report(failures)
         return 1
     scope = (
         "offline hash + declared version"

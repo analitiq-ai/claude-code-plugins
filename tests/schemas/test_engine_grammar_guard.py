@@ -240,9 +240,11 @@ def test_matrix_without_conversions_key_is_a_guard_error(guard, monkeypatch, cap
     assert f"has no `{ag.MATRIX_CONVERSIONS_KEY}` object" in err
 
 
-def test_empty_grid_does_not_pass_vacuously(guard, monkeypatch, capsys):
-    """Every parity check is an `all()` or a set equality, both vacuously true
-    on empty input. An empty grid must not print the guard's strongest green."""
+def test_empty_grid_is_a_divergence_not_a_guard_error(guard, monkeypatch, capsys):
+    """An empty published grid must not pass vacuously — and must be reported
+    as the DIVERGENCE it is (exit 1, naming the missing families), not as
+    "the guard could not run". Exit 2 here would tell a CI reader to retry an
+    infrastructure flake that will never clear."""
     ag = guard.arrow_grammar
     _stub_fetch(
         guard,
@@ -256,8 +258,51 @@ def test_empty_grid_does_not_pass_vacuously(guard, monkeypatch, capsys):
         grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
         matrix_latest=ag.CONVERSION_MATRIX_VERSION,
     )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    assert "family keys != grammar families" in err
+    assert "Utf8" in err  # the diff names what is missing
+
+
+def test_unexpected_exception_is_a_guard_error_not_a_divergence(
+    guard, monkeypatch, capsys
+):
+    """Anything unclassified must be exit 2. Exit 1 is the definite verdict
+    "the contract diverged; re-vendor" — a confident, wrong instruction for a
+    fault that is not a divergence."""
+    def _boom(_failures):
+        raise RuntimeError("disk went away")
+
+    monkeypatch.setattr(guard, "check_published", _boom)
     assert guard.main([]) == 2
-    assert "vacuously" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "could not run" in err and "RuntimeError" in err
+
+
+def test_a_guard_error_still_reports_divergences_already_found(
+    guard, monkeypatch, capsys
+):
+    """The published grammar differs from the vendored copy (a definite
+    divergence, step 2) AND the matrix lacks `conversions` (a GuardError,
+    step 3). Exit 2 dominates, but the divergence must still be printed —
+    otherwise the one check this guard exists for reports as an infra flake
+    that a retry will never clear.
+    """
+    ag = guard.arrow_grammar
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        grammar_bytes=_grammar_bytes(guard) + b"\n",
+        matrix_bytes=json.dumps(
+            {ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION, "grid": {}}
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert "differs from the vendored copy" in err
 
 
 def test_published_grammar_differing_from_the_vendored_copy_fails(
@@ -415,11 +460,13 @@ def test_offline_healthy_passes_and_never_touches_the_network(
 ):
     """The offline success path: exit 0, and `--offline` genuinely suppresses
     the fetch rather than merely being documented to."""
-    def _explode(url):
-        raise AssertionError(f"--offline must not fetch, but tried {url}")
-
-    monkeypatch.setattr(guard, "_fetch", _explode)
+    # Recorded rather than raised: `main` now catches every exception and turns
+    # it into exit 2, which would swallow a sentinel AssertionError and report
+    # this as an opaque `assert 2 == 0`.
+    attempted: list[str] = []
+    monkeypatch.setattr(guard, "_fetch", lambda url: attempted.append(url) or b"")
     assert guard.main(["--offline"]) == 0
+    assert not attempted, f"--offline must not fetch, but tried {attempted}"
     out = capsys.readouterr().out
     # The banner must describe what actually ran — it is the only signal a CI
     # reader gets about which half of the guard executed.
@@ -433,6 +480,11 @@ def test_ci_job_is_wired():
     # The one flag that makes the guard not run is the one the charter test has
     # to forbid: `--offline` is the obvious "fix" when the CDN flakes, and it
     # would leave the job permanently green having verified nothing about the
-    # engine's published truth.
-    guard_step = workflow.split("check_engine_grammar_pin.py", 1)[1].split("\n")[0]
-    assert "--offline" not in guard_step
+    # engine's published truth. Checked over every non-comment line rather than
+    # the guard's own `run:` line, so a `run: |` block form cannot slip past.
+    invocations = [
+        line
+        for line in workflow.splitlines()
+        if "--offline" in line and not line.lstrip().startswith("#")
+    ]
+    assert not invocations, f"--offline must never run in CI: {invocations}"

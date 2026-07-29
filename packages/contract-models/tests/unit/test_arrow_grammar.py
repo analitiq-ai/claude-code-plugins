@@ -75,25 +75,43 @@ def test_families_come_from_the_keyed_envelope_not_the_whole_document():
         assert key not in arrow_grammar.ARROW_TYPE_PATTERN
 
 
-@pytest.mark.parametrize("payload,why", [
-    ('{"families": {}}', "empty map derives ARROW_TYPE_PATTERN == '^(?:)$'"),
-    ('{"version": "1.1.0"}', "renamed/absent key would be a bare KeyError"),
-    ('{"families": []}', "wrong type would fail later, far from the cause"),
+@pytest.mark.parametrize("payload,reason", [
+    ('{"families": {}}', "`families` is empty"),
+    ('{"version": "1.1.0"}', "no `families` key"),
+    ('{"families": []}', "`families` is list, expected object"),
+    ('[]', "top level is list, expected object"),
+    ('{"families": {"Utf8": "not a spec"}}', "family specs are not objects"),
 ])
-def test_an_unusable_families_map_refuses_to_import(monkeypatch, payload, why):
+def test_an_unusable_manifest_refuses_to_import(monkeypatch, payload, reason):
     """Each shape parses as JSON, so nothing upstream rejects it, and each
-    would either crash three imports deep or derive a vocabulary accepting NO
-    canonical type — while importing cleanly. The published wheel reaches users
-    who never run the CI guard, so the floor belongs at import, naming its
-    remediation.
+    would either crash three imports deep (`KeyError: 'families'`,
+    `AttributeError: 'str' object has no attribute 'get'`) or derive a
+    vocabulary accepting NO canonical type — while importing cleanly.
 
-    The renamed-key case is not hypothetical: the sibling conversion-matrix
+    The published wheel reaches users who never run the CI guard or this suite,
+    so the floor belongs at import and must name its remediation. The
+    renamed-key case is not hypothetical: the sibling conversion-matrix
     artifact did exactly this in its v2.0.0.
     """
     monkeypatch.setattr(arrow_grammar, "load_grammar", lambda: json.loads(payload))
-    with pytest.raises(RuntimeError, match="missing or corrupt") as exc:
+    with pytest.raises(RuntimeError) as exc:
         arrow_grammar._load_families()
-    assert "re-vendor" in str(exc.value), why
+    message = str(exc.value)
+    assert reason in message
+    # Remediation, not just diagnosis — this is what the reader acts on.
+    assert "re-vendor" in message
+    assert arrow_grammar.ENGINE_GRAMMAR_RESOURCE in message
+
+
+def test_unparseable_manifest_names_its_remediation(monkeypatch):
+    """The non-JSON path, chained so the underlying cause survives."""
+    def _bad():
+        raise json.JSONDecodeError("boom", "{", 0)
+
+    monkeypatch.setattr(arrow_grammar, "load_grammar", _bad)
+    with pytest.raises(RuntimeError, match="not valid JSON") as exc:
+        arrow_grammar._load_families()
+    assert isinstance(exc.value.__cause__, json.JSONDecodeError)
 
 
 def test_pattern_is_a_pure_derivation_of_the_manifest():

@@ -112,46 +112,76 @@ def load_grammar() -> dict[str, Any]:
     return json.loads(_GRAMMAR_PATH.read_text(encoding="utf-8"))
 
 
+def _unusable(reason: str) -> RuntimeError:
+    """The one remediation message for a vendored file we cannot derive from.
+
+    Returns the error for the caller to `raise` (optionally `from` a cause),
+    so every rejection below reads as a one-liner and the remediation text
+    exists once.
+    """
+    return RuntimeError(
+        f"vendored engine grammar {_GRAMMAR_PATH} is unusable ({reason}); "
+        f"re-vendor the published {ENGINE_GRAMMAR_RESOURCE}/"
+        f"v{ENGINE_GRAMMAR_VERSION} object (see this module's docstring for "
+        "the pin-update procedure)"
+    )
+
+
 def _load_families() -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
     """Parse the vendored manifest and pull the vocabulary out of its envelope.
 
-    Every `analitiq.contracts.*` import passes through here, so ANY unusable
-    vendored file must name its remediation rather than surface as a bare
-    exception three imports deep. "Unusable" includes shapes that parse fine:
+    Every `analitiq.contracts.*` import passes through here, so a vendored file
+    this module cannot derive from must name its remediation rather than
+    surface as a bare exception three imports deep. Checked here:
 
-    - a missing/renamed `families` key would otherwise raise a bare `KeyError`.
-      This is not hypothetical — the sibling conversion-matrix artifact did
+    - unreadable / not JSON / not an object;
+    - a missing or renamed `families` key, which would otherwise be a bare
+      `KeyError`. Not hypothetical — the sibling conversion-matrix artifact did
       exactly this rename in its v2.0.0 (bare grid -> `conversions`), so a
       future grammar major could relocate `families` the same way;
-    - an EMPTY `families` map parses, imports, and derives
-      `ARROW_TYPE_PATTERN == "^(?:)$"` — a contract that accepts no canonical
-      type at all. Every downstream derivation here is a comprehension over
-      `FAMILIES`, so emptiness propagates silently instead of failing; it needs
-      an explicit floor.
+    - an EMPTY `families` map, which parses, imports, and derives
+      `ARROW_TYPE_PATTERN == "^(?:)$"` — a contract accepting no canonical type
+      at all. Every derivation below is a comprehension over `FAMILIES`, so
+      emptiness propagates silently instead of failing;
+    - a family whose spec is not an object, which would otherwise surface as
+      `AttributeError: 'str' object has no attribute 'get'` from whichever
+      derivation happened to run first.
+
+    NOT checked here: the internals of a well-formed spec (param `kind`, `min`,
+    `allowed`, …). Those are the pattern generators' domain — `family_pattern`
+    and `_param_literal_pattern` already fail loudly and self-describingly on
+    them, and duplicating that validation would be a second place to update
+    when the manifest grammar grows.
     """
     try:
         grammar: dict[str, Any] = load_grammar()
-        families = grammar[GRAMMAR_FAMILIES_KEY]
-        if not isinstance(families, dict) or not families:
-            raise ValueError(
-                f"`{GRAMMAR_FAMILIES_KEY}` is "
-                f"{'empty' if isinstance(families, dict) else 'not an object'}"
-            )
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError(
-            f"vendored engine grammar {_GRAMMAR_PATH} is missing or corrupt "
-            f"({exc!r}); re-vendor the published "
-            f"{ENGINE_GRAMMAR_RESOURCE}/v{ENGINE_GRAMMAR_VERSION} object "
-            "(see this module's docstring for the pin-update procedure)"
-        ) from exc
+    except OSError as exc:
+        raise _unusable(f"cannot read the file: {exc}") from exc
+    except ValueError as exc:  # JSONDecodeError/UnicodeDecodeError are both this
+        raise _unusable(f"not valid JSON: {exc}") from exc
+
+    if not isinstance(grammar, dict):
+        raise _unusable(f"top level is {type(grammar).__name__}, expected object")
+    if GRAMMAR_FAMILIES_KEY not in grammar:
+        raise _unusable(f"no `{GRAMMAR_FAMILIES_KEY}` key")
+    families = grammar[GRAMMAR_FAMILIES_KEY]
+    if not isinstance(families, dict):
+        raise _unusable(
+            f"`{GRAMMAR_FAMILIES_KEY}` is {type(families).__name__}, expected object"
+        )
+    if not families:
+        raise _unusable(f"`{GRAMMAR_FAMILIES_KEY}` is empty")
+    bad = sorted(n for n, spec in families.items() if not isinstance(spec, dict))
+    if bad:
+        raise _unusable(f"family specs are not objects: {bad}")
     return grammar, families
 
 
 #: The whole manifest — an envelope. v1.0.0 already carried the vocabulary
 #: under `families`; v1.1.0 added a sibling `version` alongside it.
+GRAMMAR: dict[str, Any]
 #: family name -> param spec, exactly as the engine publishes it. Read by key,
 #: so envelope siblings never reach the derivations below.
-GRAMMAR: dict[str, Any]
 FAMILIES: dict[str, dict[str, Any]]
 GRAMMAR, FAMILIES = _load_families()
 
