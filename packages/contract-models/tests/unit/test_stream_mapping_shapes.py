@@ -6,8 +6,7 @@ but "the shape it replaced no longer validates". Every class below pairs the
 accept with the reject it was introduced for.
 
 Covered here: the token-array `get` path, the single-segment assignment target,
-the `kind`-discriminated assignment value, the database write-mode set (both its
-membership and its subset relationship to `endpoints.WriteMode`), and the
+the `kind`-discriminated assignment value, the database write-mode set, and the
 retirement of `Execution.max_concurrent_batches`. `WriteMode` itself and
 `PageSize.default` are pinned in test_endpoint_model.py, next to the models that
 own them; `Batching.max_concurrent_batches` in test_pipeline_runtime.py.
@@ -23,7 +22,6 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter, ValidationError
 
-from analitiq.contracts.endpoints import WRITE_MODES
 from analitiq.contracts.stream import (
     AssignmentTarget,
     AssignmentValue,

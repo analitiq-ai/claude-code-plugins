@@ -154,9 +154,9 @@ was raised.
      mode.**
      An array of one or more strings, each a top-level field name
      declared in this mode's `input.schema`; together they are the
-     provider-defined natural key the upsert matches on. For `insert`
-     omit it (the schema pins it to `null`); an `upsert` without it
-     fails validation. Use `endpoint_facts.conflict_keys` — the provider's
+     provider-defined natural key the upsert matches on. On any other
+     mode omit it — the schema pins it to `null` there; an `upsert`
+     without it fails validation. Use `endpoint_facts.conflict_keys` — the provider's
      documented idempotency / match key (e.g. an external id or a unique
      business key) — never invent one.
    - `batching` (optional) — `{"max_records": <int ≥ 2>}` when the

@@ -857,6 +857,20 @@
                     }
                   ]
                 },
+                "truncate_insert": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/WriteOperation"
+                    },
+                    {
+                      "properties": {
+                        "conflict_keys": {
+                          "type": "null"
+                        }
+                      }
+                    }
+                  ]
+                },
                 "upsert": {
                   "allOf": [
                     {

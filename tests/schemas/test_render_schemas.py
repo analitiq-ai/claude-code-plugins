@@ -135,3 +135,49 @@ def test_walker_reaches_computed_field_return_types():
 
     Public.__module__ = PUBLIC
     assert private in _model_tree(Public)
+
+
+# ---------------------------------------------------------------------------
+# Rendered mirrors of model rules
+# ---------------------------------------------------------------------------
+
+
+def test_write_mode_conflict_keys_mirror_covers_every_mode():
+    """The `operations.write` conflict-keys mirror must be derived, not listed.
+
+    `Operations._conflict_keys_by_mode` requires `conflict_keys` on `upsert` and
+    forbids it on every other mode. `render_schemas` mirrors that into the
+    published schema so external validators enforce the same rule — and that
+    mirror used to hardcode `insert`/`upsert`. Widening `WriteMode` updated the
+    derived `propertyNames.enum` but not the mirror, so the published schema
+    ACCEPTED `truncate_insert.conflict_keys` while the model rejected it.
+
+    Iterate the vocabulary, so a new mode fails here instead of shipping a hole
+    into an immutable `X.Y.Z.json`.
+    """
+    from analitiq.contracts.endpoints import WRITE_MODES
+
+    schema = render_schemas.render_latest(
+        render_schemas.get_resource("api-endpoint"), "0.0.0"
+    )
+    write = schema["$defs"]["Operations"]["properties"]["write"]
+    # `write` renders as anyOf[object-branch, null]; the mirror lives on the
+    # object branch, alongside the derived `propertyNames.enum`.
+    obj_branch = next(b for b in write["anyOf"] if b.get("type") == "object")
+    branches = obj_branch["properties"]
+
+    assert set(obj_branch["propertyNames"]["enum"]) == set(WRITE_MODES)
+    assert set(branches) == set(WRITE_MODES), (
+        "the rendered conflict-keys mirror does not cover every write mode; "
+        f"missing: {sorted(set(WRITE_MODES) - set(branches))}"
+    )
+    for mode in WRITE_MODES:
+        pinned = branches[mode]["allOf"][1]
+        if mode == "upsert":
+            assert pinned["required"] == ["conflict_keys"]
+            assert pinned["properties"]["conflict_keys"]["minItems"] == 1
+        else:
+            assert pinned["properties"]["conflict_keys"] == {"type": "null"}, (
+                f"write mode {mode!r} does not pin conflict_keys to null, so the "
+                "published schema is laxer than the model"
+            )

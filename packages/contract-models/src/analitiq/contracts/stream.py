@@ -636,7 +636,7 @@ class StreamDestination(StrictModel):
                 )
         elif self.write.conflict_keys is not None:
             # conflict_keys are an upsert concept; a non-upsert database mode
-            # (insert) must not carry them.
+            # must not carry them.
             raise ValueError(
                 "destinations[].write.conflict_keys is only valid for a database upsert "
                 f"(endpoint_ref.scope='connection', write.mode='upsert'); write.mode="

@@ -2463,8 +2463,12 @@ class TestWriteModeVocabulary:
     Pinned as an exact set, not a membership check: adding a mode is a
     coordinated change across the wire protocol, the CDK and this contract, so
     it should fail here and be re-stated deliberately rather than land as a
-    silent widening. `stream._DB_WRITE_MODES` derives from this tuple; that
-    derivation is pinned in test_stream_mapping_shapes.py.
+    silent widening.
+
+    `stream._DB_WRITE_MODES` is declared independently rather than derived from
+    this tuple — the two are different facts, and stream.py states why — but it
+    is BOUNDED by it: an import-time guard there refuses a database mode outside
+    this vocabulary.
     """
 
     def test_exact_members(self):
