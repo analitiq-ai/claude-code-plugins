@@ -44,7 +44,7 @@ require_contract_models("analitiq.contracts")
 
 from pydantic import TypeAdapter  # noqa: E402  (imports gated by the guard above)
 from analitiq.contracts.connector import Connector  # noqa: E402
-from analitiq.contracts.endpoints import ApiEndpointDoc  # noqa: E402
+from analitiq.contracts.endpoints import WRITE_MODES, ApiEndpointDoc  # noqa: E402
 from analitiq.contracts.shared.common import SLUG_PATTERN  # noqa: E402
 
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder"
@@ -93,9 +93,13 @@ EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
 # `Operations.write` keys — the destination write-mode vocabulary, shared with
 # database destinations. `endpoint-creator.md` restates the whole set as decision
 # logic: it tells the author to key only `insert` / `upsert`, and names
-# `truncate_insert` as the member the schema permits but an API destination
-# cannot perform. A fourth mode landing in the contract must reach that guidance,
-# or the agent silently omits a writable operation the provider supports.
+# `truncate_insert` as the member the schema permits but an API destination has
+# no meaning for. A fourth mode landing in the contract must reach that
+# guidance, or the agent silently omits a writable operation the provider
+# supports. Like every expected set in this file, this one is compared against
+# the CONTRACT, not against the prose — the prose is reachable only through the
+# failure message. `test_endpoint_creator_prose_names_every_write_mode` below is
+# what actually reads the document.
 EXPECTED_WRITE_MODES = {"insert", "upsert", "truncate_insert"}
 # Bare-marker arrow_type vocabulary enforced by the contract's authored-shape
 # rules (Object→properties, List→items, Json→neither). Owned by the
@@ -431,6 +435,40 @@ def test_write_modes_match_schema(api_endpoint_schema: dict) -> None:
         "update the write-mode guidance in endpoint-creator.md (which mode(s) to "
         "key, and which the schema permits but an API destination cannot "
         "perform) together with the pipeline plugin's WriteModeMapper.",
+    )
+
+
+def test_endpoint_creator_prose_names_every_write_mode() -> None:
+    """The authoring step must account for every mode the contract admits.
+
+    `test_write_modes_match_schema` pins the vocabulary but never opens the
+    document, so on its own a mode could be added to the contract,
+    `EXPECTED_WRITE_MODES` updated to match, and `endpoint-creator.md` left
+    describing a smaller world — the agent would then omit a writable operation
+    the provider supports and nothing would say so.
+
+    Naming a mode is not endorsing it: `truncate_insert` is named precisely to
+    tell the author not to key it. What this forbids is silence.
+
+    Scoped to the numbered step that authors `operations.write`, so an
+    occurrence in an unrelated section cannot stand in for the guidance.
+    """
+    doc = PLUGIN_ROOT / "agents" / "endpoint-creator.md"
+    steps = [
+        block
+        for block in re.split(r"(?m)^(?=\d+\. )", doc.read_text())
+        if "`operations.write`" in block or "operations.write" in block.split("\n")[0]
+    ]
+    assert steps, (
+        f"{doc.name}: no numbered step authors `operations.write` any more — "
+        "the agent was restructured; re-scope this gate."
+    )
+    step = "\n".join(steps)
+    missing = [mode for mode in WRITE_MODES if f"`{mode}`" not in step]
+    assert not missing, (
+        f"endpoint-creator.md's write step does not mention {missing} — a mode "
+        "the contract admits is invisible to the authoring agent. Say whether "
+        "to key it or why not; do not leave it unmentioned."
     )
 
 

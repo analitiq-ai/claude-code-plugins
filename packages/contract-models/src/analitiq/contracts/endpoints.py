@@ -422,8 +422,15 @@ class PageSize(_EndpointModel):
     # `Strict()` on the int branch is not decoration. Without it pydantic's lax
     # mode coerces `true` -> 1 and `"50"` -> 50, while the rendered schema says
     # `type: integer` and rejects both — so this package would accept documents
-    # that every external consumer of the published schema rejects. The whole
-    # premise is that the two agree.
+    # that every external consumer of the published schema rejects. The premise
+    # is that the two agree.
+    #
+    # `Strict()` costs one deliberate asymmetry in the other direction: JSON
+    # Schema's `type: integer` accepts a zero-fraction float, so `50.0` passes
+    # the published schema and fails here. Kept, because a document this
+    # package accepts must always be one the schema accepts, and that direction
+    # still holds. Pinned by
+    # `test_float_spelled_integer_is_a_one_directional_gap`.
     #
     # Note the bound reaches the BARE-SCALAR spelling only. `Expression`
     # contains `LiteralExpression`, so `{"literal": 0}` is still a

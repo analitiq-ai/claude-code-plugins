@@ -2560,14 +2560,18 @@ class TestPageSizeDefault:
         # `Strict()` earns its place here. Pydantic's lax mode would read `true`
         # as 1 and `"50"` as 50, while the rendered schema says `type: integer`
         # and rejects both — so this package would accept documents that every
-        # external consumer of the published schema refuses. The whole premise
-        # is that the model and the schema are one contract.
+        # external consumer of the published schema refuses. The premise is that
+        # the model and the schema are one contract; see
+        # `test_float_spelled_integer_is_a_one_directional_gap` for the single
+        # value where `Strict()` makes the model the tighter of the two.
         with pytest.raises(ValidationError):
             PageSize.model_validate({"param": "limit", "default": value})
 
     @pytest.mark.parametrize("field", ["default", "max"])
     def test_model_and_published_schema_agree(self, field):
         # Direct statement of that premise, rather than trusting the above.
+        # Agreement holds on every spelling below; the one exception is a
+        # float-spelled integer, pinned separately.
         # Parametrized over BOTH numeric fields: `max` carried the identical
         # coercion defect, and a version of this test that looped only over
         # `default` is what let it survive the first fix.
@@ -2585,6 +2589,34 @@ class TestPageSizeDefault:
             )
             with pytest.raises(ValidationError):
                 PageSize.model_validate({"param": "limit", field: value})
+
+    @pytest.mark.parametrize("field", ["default", "max"])
+    def test_float_spelled_integer_is_a_one_directional_gap(self, field):
+        # The one place the two halves of the contract disagree, recorded so it
+        # cannot silently invert. JSON Schema's `type: integer` matches any
+        # number with a zero fractional part, so `50.0` is a valid integer to
+        # every external consumer; `Strict()` makes pydantic refuse it.
+        #
+        # Left as-is rather than reconciled. The model being the STRICTER side
+        # is the safe direction — a document this package accepts is always one
+        # the published schema accepts, which is the property the plugins rely
+        # on. Reconciling downward (dropping `Strict()`) would reopen the
+        # `"50"`/`true` coercion above; reconciling upward (teaching the schema
+        # to reject `50.0`) would make the published contract refuse a document
+        # JSON Schema calls valid, and would need a new version triple.
+        #
+        # If this ever fails, the asymmetry flipped: the schema became stricter
+        # than the model, which is the direction that actually hurts.
+        schema = TypeAdapter(ApiEndpointDoc).json_schema(ref_template="#/$defs/{model}")
+        validator = Draft202012Validator(
+            {"$ref": "#/$defs/PageSize", "$defs": schema["$defs"]}
+        )
+        assert validator.is_valid({"param": "limit", field: 50.0}), (
+            f"published schema now rejects {field}=50.0 — it used to accept it, "
+            "and the model still does not; the safe direction inverted"
+        )
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", field: 50.0})
 
     def test_expression_branch_is_default_only(self):
         # `default` takes an expression; `max` is a provider fact, so it does

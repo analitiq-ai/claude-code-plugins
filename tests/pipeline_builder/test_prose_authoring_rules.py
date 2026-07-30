@@ -56,19 +56,39 @@ def _section(doc: Path, heading: str) -> str:
     return match.group(1)
 
 
+def _paragraphs(text: str) -> list[str]:
+    """Split into blank-line-separated blocks.
+
+    Every assertion here scopes to the block that carries the rule rather than
+    to the whole document. Document-wide matching is how a prose gate goes
+    quietly dead: unrelated prose supplies the token and the assertion can no
+    longer fail for the reason it names.
+    """
+    return [block for block in re.split(r"\n\s*\n", text) if block.strip()]
+
+
+def _bullets(text: str) -> list[str]:
+    """Split a markdown list into one entry per top-level `- ` bullet."""
+    return re.split(r"(?m)^(?=- )", text)
+
+
 # ---------------------------------------------------------------------------
 # WriteModeMapper — the only route from a user's phrasing to `write.mode`
 # ---------------------------------------------------------------------------
 
 
 def test_write_mode_mapper_routes_to_every_database_write_mode():
-    """Every SQL write mode is reachable from something a user might say.
+    """Every SQL write mode is the target of some `| database |` mapper row.
 
     A mode the contract implements but the mapper never names cannot be
     authored: the user says "re-sync", the orchestrator has no row to match, and
     the feature is dead while every contract test stays green. Derived from
     `_DB_WRITE_MODES`, so adding a mode to the contract fails here until the
     mapper learns a phrasing for it.
+
+    What this measures is the target column, not the quality of the phrasings
+    that reach it — rerouting a row's user-input cell to nonsense keeps this
+    green. Reachability in the stronger sense is not testable from prose.
     """
     section = _section(ENUM_MAPPERS, "WriteModeMapper")
     routed = {
@@ -96,12 +116,25 @@ def test_write_mode_mapper_requires_asking_before_a_destructive_route():
 
     Hand-anchored on the mode name rather than derived: "is destructive" is not a
     property the contract models express, so there is nothing to read it from.
+
+    Scoped to the paragraph that names the mode. Section-wide matching was not
+    enough: `## WriteModeMapper` already contains an unrelated bolded "ask the
+    user" about `upsert` conflict keys, so the guardrail could be deleted and
+    the assertion satisfied by that sentence instead.
     """
     section = _section(ENUM_MAPPERS, "WriteModeMapper")
     assert "truncate_insert" in section, "the destructive mode left this section"
-    assert re.search(r"\*\*ask\b[^*]*\*\*", section, re.I), (
-        "enum-mappers.md: the WriteModeMapper section no longer instructs the "
-        "agent to ask the user before routing to a mode that empties a table."
+    guarded = [
+        block
+        for block in _paragraphs(section)
+        if "truncate_insert" in block or "empties" in block
+        if re.search(r"\*\*[^*]*\bask\b[^*]*\*\*", block, re.I)
+    ]
+    assert guarded, (
+        "enum-mappers.md: no paragraph that names `truncate_insert` (or an "
+        "emptied table) still instructs the agent, in bold, to ask the user "
+        "before routing there. An agent may now silently choose a mode that "
+        "wipes an append-only destination."
     )
 
 
@@ -111,12 +144,16 @@ def test_write_mode_mapper_requires_asking_before_a_destructive_route():
 
 
 def test_stream_creator_teaches_the_assignment_value_discriminator():
-    """`kind` and both variant tags must survive in the authoring agent's rules.
+    """`kind` and both variant tags must survive somewhere in the agent's prose.
 
     This is a breaking contract change: an agent that loses the rule authors the
     old two-optional-fields shape, which every rc19 validator rejects. The tags
     are read off the discriminated union, so renaming a variant in the contract
     fails here rather than silently invalidating the prose.
+
+    The property is "the file still teaches this", not "this particular
+    sentence survives" — the rule is stated twice (Process step 6 and Hard
+    rules) and deleting either copy alone leaves the agent correctly taught.
     """
     text = STREAM_CREATOR.read_text()
     tags = {
@@ -142,17 +179,32 @@ def test_stream_creator_teaches_token_array_get_paths():
     reverting to `"address.city"` produces documents the contract rejects.
     Guarded by the contract's own annotation: if `path` ever goes back to a
     scalar, this test fails and the prose rule is what should be deleted.
+
+    Same "taught somewhere" property as the discriminator test above: the rule
+    appears in Process step 6 and again under Hard rules, and either copy alone
+    satisfies it.
     """
     assert typing.get_origin(GetExpression.model_fields["path"].annotation) is list, (
         "GetExpression.path is no longer a list — the token-array rule in "
         "stream-creator.md is now wrong and should be removed with this test."
     )
     text = STREAM_CREATOR.read_text()
-    assert re.search(r"`\[\s*\"[^\"]+\"\s*,\s*\"[^\"]+\"\s*\]`", text), (
-        "stream-creator.md carries no multi-segment token-array `path` example "
-        '(e.g. `["address", "city"]`) — the rule reads as a bare assertion.'
-    )
     assert "dotted string" in text, (
         "stream-creator.md no longer rules out the dotted-string `path` an agent "
         "would otherwise default to."
+    )
+    # The worked example must sit in a bullet that is ABOUT `get`/`path`. A
+    # document-wide search silently passes forever: `write.conflict_keys` is
+    # illustrated as `["org_id", "external_id"]` under Hard rules, which
+    # satisfies the array regex while saying nothing about source paths.
+    multi_segment = re.compile(r"`\[\s*\"[^\"]+\"\s*,\s*\"[^\"]+\"\s*\]`")
+    assert any(
+        multi_segment.search(bullet)
+        for bullet in _bullets(text)
+        if "`path`" in bullet or "path:" in bullet
+        if "get" in bullet
+    ), (
+        "no `get`/`path` rule in stream-creator.md carries a multi-segment "
+        'token-array example (e.g. `["address", "city"]`) — the rule reads as '
+        "a bare assertion an agent has to take on faith."
     )
