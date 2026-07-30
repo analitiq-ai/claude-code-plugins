@@ -79,9 +79,11 @@ class TestGetExpressionPath:
     def test_a_dot_inside_a_token_is_one_segment(self):
         # There is no escape rule to get wrong: a field literally named `a.b` is
         # one token, and it is a different path from the nested `["a", "b"]`.
-        literal = GetExpression.model_validate({"op": "get", "path": ["a.b"]})
-        nested = GetExpression.model_validate({"op": "get", "path": ["a", "b"]})
-        assert literal.path != nested.path
+        # Assert the value, not `literal != nested` — that comparison is true by
+        # construction and would hold against any model at all.
+        assert GetExpression.model_validate(
+            {"op": "get", "path": ["a.b"]}
+        ).path == ["a.b"]
 
     def test_nested_get_inside_a_pipe_carries_tokens(self):
         # The failure that motivated the change lived here — a `get` nested in a
@@ -139,6 +141,35 @@ class TestAssignmentTargetPath:
     def test_empty_path_rejected(self):
         with pytest.raises(ValidationError):
             AssignmentTarget.model_validate({"path": "", "arrow_type": "Utf8"})
+
+    @pytest.mark.parametrize("path", ["  ", "\t", "\n", " "])
+    def test_whitespace_only_path_rejected(self, path):
+        # A destination field name must not be laxer than the source name that
+        # feeds it: `GetExpression.path` segments are `NonEmptyStr`, which
+        # requires a non-space character. Without these cases the pattern can be
+        # loosened back to `^[^.]+$` and only a doc-echo assertion notices.
+        with pytest.raises(ValidationError):
+            AssignmentTarget.model_validate({"path": path, "arrow_type": "Utf8"})
+
+    @pytest.mark.parametrize("path", ["a b", " a ", "id_2"])
+    def test_inner_and_edge_whitespace_still_accepted(self, path):
+        # The constraint is "contains a non-space", NOT "is stripped" or "has no
+        # spaces" — provider field names legitimately contain them. Pinned so
+        # the next tightening does not quietly overreach.
+        assert AssignmentTarget.model_validate(
+            {"path": path, "arrow_type": "Utf8"}
+        ).path == path
+
+    def test_published_schema_carries_the_single_segment_pattern(self):
+        # The constraint is a commitment to external validators, so assert it
+        # survived rendering rather than trusting the model alone.
+        schema = StreamMapping.model_json_schema()
+        pattern = schema["$defs"]["AssignmentTarget"]["properties"]["path"]["pattern"]
+        validator = Draft202012Validator({"type": "string", "pattern": pattern})
+        assert validator.is_valid("id")
+        assert validator.is_valid("a b")
+        assert not validator.is_valid("a.b")
+        assert not validator.is_valid("   ")
 
 
 class TestAssignmentValueKind:
@@ -224,8 +255,12 @@ class TestAssignmentValueKind:
         }
 
     def test_published_schema_rejects_what_the_model_rejects(self):
-        # The claim the discriminator exists to support: one contract, two
-        # validators. Probe the malformed shapes through the rendered schema.
+        # One contract, two validators. Note this does NOT pin the
+        # discriminator — a bare `anyOf` with `extra="forbid"` on both variants
+        # rejects these same payloads, so this passes with `discriminator=`
+        # removed. `test_published_schema_carries_the_kind_discriminator` above
+        # carries that alone. What this pins is model/schema agreement on the
+        # malformed shapes, which is a separate and equally losable property.
         schema = StreamMapping.model_json_schema()
         validator = Draft202012Validator(schema)
         for payload in (
@@ -249,21 +284,22 @@ class TestAssignmentValueKind:
 
 
 class TestDatabaseWriteModes:
-    """The SQL destination's mode set, and its relationship to the universe."""
+    """The SQL destination's mode set.
+
+    Its subset relationship to `endpoints.WriteMode` is NOT tested here. That
+    guard is the `raise AssertionError` at import in `stream.py`, and an
+    import-time check cannot be exercised by a test in a module that imports it:
+    a violation is a collection error, so any such test would be skipped rather
+    than failed. Asserting the same condition here would be a comment wearing a
+    test's clothes. Verified by mutation instead — removing `truncate_insert`
+    from `WriteMode` fails collection with the guard's own message.
+    """
 
     def test_exact_members(self):
         # Pinned as an exact set: which modes the SQL write path implements is a
         # coordinated engine + contract fact, so adding one should fail here and
         # be restated deliberately.
         assert _DB_WRITE_MODES == {"insert", "upsert", "truncate_insert"}
-
-    def test_is_a_subset_of_the_universe(self):
-        # The invariant that must hold forever, as opposed to the equality that
-        # merely holds today: a database mode outside `WriteMode` is always
-        # wrong. The reverse is NOT asserted — an API-only mode may join
-        # `WriteMode` without becoming a legal SQL destination mode, which is
-        # exactly why `_DB_WRITE_MODES` is declared rather than derived.
-        assert _DB_WRITE_MODES <= set(WRITE_MODES)
 
     def test_database_destination_accepts_truncate_insert(self):
         dest = StreamDestination.model_validate(
@@ -278,9 +314,15 @@ class TestDatabaseWriteModes:
         # Match on the mode in the message, not just the leading sentence:
         # `_validate_write_conflict_keys` runs BEFORE `_validate_db_write_mode`
         # and short-circuits, so "only valid for a database upsert" is what any
-        # non-upsert mode produces — including an invalid one. Matching the
-        # generic prefix would keep this test green even with `truncate_insert`
-        # removed from the vocabulary entirely.
+        # non-upsert mode produces — including a mode that is not in the
+        # vocabulary at all. The generic prefix passed for `mode: "banana"`.
+        #
+        # The mode-specific match still does not prove membership: the message
+        # interpolates the mode from the INPUT document, so it matches whenever
+        # the document says `truncate_insert`, valid or not. Hence the explicit
+        # membership assertion — without it this test stays green with
+        # `truncate_insert` removed from `_DB_WRITE_MODES`.
+        assert "truncate_insert" in _DB_WRITE_MODES
         with pytest.raises(
             ValidationError, match=r"write\.mode='truncate_insert' must not declare it"
         ):

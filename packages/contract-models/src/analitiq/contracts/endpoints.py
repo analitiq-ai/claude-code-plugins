@@ -444,7 +444,10 @@ class PageSize(_EndpointModel):
             "The `{literal: N}` expression form carries no such bound."
         ),
     )
-    max: int | None = Field(default=None, ge=1)
+    # `Strict()` for the same reason as `default` above: lax coercion would read
+    # `"50"` and `true` as integers here while the rendered schema rejects them,
+    # so the two halves of the contract would disagree.
+    max: Annotated[int, Field(ge=1), Strict()] | None = Field(default=None)
 
 
 class OffsetCursor(_EndpointModel):

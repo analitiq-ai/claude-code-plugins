@@ -2551,7 +2551,7 @@ class TestPageSizeDefault:
         with pytest.raises(ValidationError):
             PageSize.model_validate({"param": "limit", "default": "fifty"})
 
-    @pytest.mark.parametrize("value", [True, "50", "0"])
+    @pytest.mark.parametrize("value", [True, "50"])
     def test_no_coercion_into_the_int_branch(self, value):
         # `Strict()` earns its place here. Pydantic's lax mode would read `true`
         # as 1 and `"50"` as 50, while the rendered schema says `type: integer`
@@ -2561,22 +2561,33 @@ class TestPageSizeDefault:
         with pytest.raises(ValidationError):
             PageSize.model_validate({"param": "limit", "default": value})
 
-    def test_model_and_published_schema_agree(self):
+    @pytest.mark.parametrize("field", ["default", "max"])
+    def test_model_and_published_schema_agree(self, field):
         # Direct statement of that premise, rather than trusting the above.
+        # Parametrized over BOTH numeric fields: `max` carried the identical
+        # coercion defect, and a version of this test that looped only over
+        # `default` is what let it survive the first fix.
         schema = TypeAdapter(ApiEndpointDoc).json_schema(ref_template="#/$defs/{model}")
         # Point at the PageSize def but keep the whole `$defs` map alongside it,
         # or the Expression branch's internal `$ref`s cannot resolve.
         validator = Draft202012Validator(
             {"$ref": "#/$defs/PageSize", "$defs": schema["$defs"]}
         )
-        for value in (50, {"ref": "runtime.batch_size"}, None):
-            assert validator.is_valid({"param": "limit", "default": value})
+        for value in (50, None):
+            assert validator.is_valid({"param": "limit", field: value})
         for value in (0, -10, "fifty", True, "50"):
-            assert not validator.is_valid({"param": "limit", "default": value}), (
-                f"published schema accepts default={value!r}"
+            assert not validator.is_valid({"param": "limit", field: value}), (
+                f"published schema accepts {field}={value!r}"
             )
             with pytest.raises(ValidationError):
-                PageSize.model_validate({"param": "limit", "default": value})
+                PageSize.model_validate({"param": "limit", field: value})
+
+    def test_expression_branch_is_default_only(self):
+        # `default` takes an expression; `max` is a provider fact, so it does
+        # not. Pinned because the parametrized test above treats them alike.
+        assert PageSize.model_validate({"default": {"ref": "runtime.batch_size"}})
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"max": {"ref": "runtime.batch_size"}})
 
     def test_literal_expression_bypasses_the_bound(self):
         # Known hole, recorded rather than left for someone to discover: the
