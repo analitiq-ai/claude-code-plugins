@@ -107,8 +107,8 @@ within those caps. When a user asks for a specific write size on one
 destination, change the stream, not the pipeline.
 
 Batch **concurrency** is not authorable at all. `max_concurrent_batches` used
-to sit on both `runtime.batching` and `destinations[].execution`; no consumer
-ever read either, so both were retired from the contract rather than left as a
-knob that looked load-bearing and did nothing. Do not author it, and do not
-offer it when a user asks how to tune throughput — `batch_size` is the lever
-that exists.
+to sit on both `runtime.batching` and `destinations[].execution`, and nothing
+acted on either — the value bounded no concurrency anywhere — so both were
+retired from the contract rather than left as a knob that looked load-bearing
+and did nothing. Do not author it, and do not offer it when a user asks how to
+tune throughput — `batch_size` is the lever that exists.

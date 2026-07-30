@@ -94,3 +94,40 @@ def test_example_declares_matching_schema_url(entity, path):
         "database_endpoint": DATABASE_ENDPOINT_SCHEMA_URL,
     }[entity]
     assert json.loads(path.read_text()).get("$schema") == expected
+
+
+def test_full_refresh_example_demonstrates_the_shapes_it_is_named_for():
+    """The #108 example must keep demonstrating #108's shapes.
+
+    `test_example_validates` proves this file is a valid stream; nothing proved
+    it still *shows* anything. Each assertion below can be broken with the whole
+    suite green — swap `truncate_insert` for `insert`, flatten the nested token
+    path, turn the constant into an expression — and this is the repo's only
+    worked example of all three, which is what creator agents copy from.
+    """
+    import json
+
+    path = ROOT / "skills/stream-spec/examples/db-full-refresh-truncate-insert.example.json"
+    doc = json.loads(path.read_text())
+
+    modes = {d["write"]["mode"] for d in doc["destinations"]}
+    assert "truncate_insert" in modes, "the full-refresh example lost its write mode"
+
+    values = [a["value"] for a in doc["mapping"]["assignments"]]
+    kinds = {v["kind"] for v in values}
+    assert kinds == {"expression", "constant"}, (
+        f"the example must show both assignment-value variants; got {sorted(kinds)}"
+    )
+
+    get_paths = [
+        v["expression"]["path"]
+        for v in values
+        if v["kind"] == "expression" and v["expression"]["op"] == "get"
+    ]
+    assert any(len(p) > 1 for p in get_paths), (
+        "the example must keep one multi-segment token path — it is the only "
+        "worked demonstration that `get.path` descends into a nested record"
+    )
+    assert any(
+        v["expression"]["op"] == "pipe" for v in values if v["kind"] == "expression"
+    ), "the example must keep its pipe/fn conversion chain"

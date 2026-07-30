@@ -18,6 +18,12 @@ survived rendering.
 """
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
 import pytest
 from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter, ValidationError
@@ -218,6 +224,19 @@ class TestAssignmentValueKind:
                 }
             )
 
+    @pytest.mark.parametrize("kind", ["expression", "constant"])
+    def test_variant_payload_is_required(self, kind):
+        # The OTHER half of retired ADV-STRM-008. "Exactly one of expression or
+        # constant" is two claims: at most one (covered above — the illegal
+        # combination left the type) and AT LEAST one, which is carried solely
+        # by the `...` on each variant's payload field. Make either field
+        # `| None = Field(default=None)` and every other test here still passes
+        # while `{"kind": "expression"}` validates with a null payload.
+        # Retiring an advisory rule without pinning both halves of its
+        # replacement is the specific risk of this refactor.
+        with pytest.raises(ValidationError):
+            _ASSIGNMENT_VALUE.validate_python({"kind": kind})
+
     def test_unknown_kind_rejected(self):
         with pytest.raises(ValidationError):
             _ASSIGNMENT_VALUE.validate_python(
@@ -271,6 +290,10 @@ class TestAssignmentValueKind:
                 "expression": {"op": "get", "path": ["id"]},
                 "constant": {"arrow_type": "Utf8", "value": "acme"},
             },
+            # Payload-less variants: the rendered `required` is a separate
+            # losable fact from the model's `...`.
+            {"kind": "expression"},
+            {"kind": "constant"},
         ):
             doc = {"assignments": [{"target": {"path": "id", "arrow_type": "Utf8"},
                                     "value": payload}]}
@@ -284,13 +307,13 @@ class TestAssignmentValueKind:
 class TestDatabaseWriteModes:
     """The SQL destination's mode set.
 
-    Its subset relationship to `endpoints.WriteMode` is NOT tested here. That
-    guard is the `raise AssertionError` at import in `stream.py`, and an
-    import-time check cannot be exercised by a test in a module that imports it:
-    a violation is a collection error, so any such test would be skipped rather
-    than failed. Asserting the same condition here would be a comment wearing a
-    test's clothes. Verified by mutation instead — removing `truncate_insert`
-    from `WriteMode` fails collection with the guard's own message.
+    Its subset relationship to `endpoints.WriteMode` is enforced by a `raise
+    AssertionError` at import in `stream.py`. Asserting the same condition
+    *inline* here would prove nothing — this module imports `stream`, so a
+    violation is a collection error and the test never runs. It is pinned in a
+    subprocess instead (`test_import_guard_rejects_a_mode_outside_the_universe`
+    below), because an unpinned guard is deletable, and the module comment
+    calls this one load-bearing.
     """
 
     def test_exact_members(self):
@@ -298,6 +321,47 @@ class TestDatabaseWriteModes:
         # coordinated engine + contract fact, so adding one should fail here and
         # be restated deliberately.
         assert _DB_WRITE_MODES == {"insert", "upsert", "truncate_insert"}
+
+    def test_import_guard_rejects_a_mode_outside_the_universe(self):
+        # Import `stream` fresh in a subprocess with `WriteMode` narrowed, so
+        # the guard runs against a violating vocabulary. Without this the whole
+        # `if not _DB_WRITE_MODES <= set(WRITE_MODES): raise` block can be
+        # deleted with the suite green — an unpinned guard, which is what
+        # `.claude/rules/no-drift-surfaces.md` exists to prevent.
+        source = textwrap.dedent(
+            """
+            import analitiq.contracts.endpoints as endpoints
+            endpoints.WRITE_MODES = ("insert",)
+            try:
+                import analitiq.contracts.stream  # noqa: F401
+            except AssertionError as exc:
+                assert "subset" in str(exc), exc
+                print("GUARD_FIRED")
+            """
+        )
+        # The source tree is on `sys.path` via the repo-root conftest, not on
+        # PYTHONPATH, so hand it to the child explicitly — derived from the
+        # loaded package rather than hardcoded, so it follows a layout change.
+        import analitiq.contracts as contracts
+
+        src_root = str(Path(contracts.__path__[0]).parents[1])
+        result = subprocess.run(
+            [sys.executable, "-c", source],
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "DOMAIN": "analitiq.ai",
+                "PYTHONPATH": os.pathsep.join(
+                    [src_root, *filter(None, [os.environ.get("PYTHONPATH")])]
+                ),
+            },
+        )
+        assert "GUARD_FIRED" in result.stdout, (
+            "the import-time subset guard in stream.py did not fire for a "
+            f"database mode outside WriteMode.\nstdout={result.stdout!r}\n"
+            f"stderr={result.stderr!r}"
+        )
 
     def test_database_destination_accepts_truncate_insert(self):
         dest = StreamDestination.model_validate(
@@ -356,3 +420,71 @@ class TestExecutionHasNoConcurrencyKnob:
         # stored stream that spells it out — hence stream 16.0.0 -> 17.0.0.
         with pytest.raises(ValidationError):
             Execution.model_validate({"batch_size": 1000, "max_concurrent_batches": 3})
+
+
+class TestStreamDestinationSchemaMirror:
+    """`_STREAM_DESTINATION_SCHEMA_RULES` must reject what the validators reject.
+
+    The four `allOf` branches in `stream.py` are a hand-written mirror of
+    `_validate_write_conflict_keys` and `_validate_db_write_mode`, and nothing
+    validated a destination document against the published schema — so each
+    branch could be deleted with the whole suite green, leaving the schema
+    laxer than the model.
+
+    That is exactly the bug this release shipped and then fixed on the
+    `operations.write` side (see
+    tests/schemas/test_render_schemas.py::test_write_mode_conflict_keys_mirror_covers_every_mode),
+    and #108 CHANGED branch 4's meaning: "non-upsert" used to mean `insert` and
+    now also covers `truncate_insert`. Live surface, not legacy.
+
+    One case per branch, each asserted against BOTH validators.
+    """
+
+    # (branch, document) — every one must be rejected by model and schema alike.
+    REJECTED = [
+        # 1: scope=connection ⇒ mode ∈ _DB_WRITE_MODES
+        ("db mode vocabulary",
+         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "overwrite"}}),
+        # 2: scope=connector ⇒ conflict_keys forbidden (endpoint-owned)
+        ("api conflict_keys forbidden",
+         {"endpoint_ref": _API_ENDPOINT_REF,
+          "write": {"mode": "create", "conflict_keys": ["id"]}}),
+        # 3: scope=connection + upsert ⇒ conflict_keys required, non-empty
+        ("db upsert requires conflict_keys",
+         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "upsert"}}),
+        # 4: scope=connection + non-upsert ⇒ conflict_keys forbidden.
+        #    `truncate_insert` is the member #108 added to this branch.
+        ("truncate_insert forbids conflict_keys",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "truncate_insert", "conflict_keys": ["id"]}}),
+    ]
+
+    @pytest.mark.parametrize("label, doc", REJECTED, ids=[r[0] for r in REJECTED])
+    def test_model_and_published_schema_both_reject(self, label, doc):
+        validator = Draft202012Validator(StreamDestination.model_json_schema())
+        assert not validator.is_valid(doc), (
+            f"published schema accepts a destination the model rejects ({label}); "
+            "the corresponding allOf branch in _STREAM_DESTINATION_SCHEMA_RULES "
+            "is missing or neutered"
+        )
+        with pytest.raises(ValidationError):
+            StreamDestination.model_validate(doc)
+
+    @pytest.mark.parametrize("label, doc", [
+        ("db insert", {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "insert"}}),
+        ("db upsert with keys",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "upsert", "conflict_keys": ["id"]}}),
+        ("db truncate_insert",
+         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "truncate_insert"}}),
+        ("api endpoint-owned mode",
+         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}),
+    ], ids=lambda v: v if isinstance(v, str) else "")
+    def test_model_and_published_schema_both_accept(self, label, doc):
+        # The other direction: a mirror that rejects too much is equally broken,
+        # and an over-tightened branch would otherwise look like a passing test.
+        validator = Draft202012Validator(StreamDestination.model_json_schema())
+        assert validator.is_valid(doc), (
+            f"published schema rejects a valid destination ({label})"
+        )
+        StreamDestination.model_validate(doc)

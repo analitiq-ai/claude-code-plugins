@@ -576,11 +576,11 @@ def _encode_write_mode_conflict_keys_rule(defs: dict[str, Any]) -> None:
     # field's nullable `default: null`:
     #   - upsert: pin the value to a non-empty array (so `null` is rejected, not
     #     just satisfied by key presence).
-    #   - insert: forbid only a *non-null* value (so `null`/absent pass, matching
-    #     the model, while a real key is rejected).
-    # The insert pin to `type: null` is satisfiable only because the base
+    #   - every other mode: forbid only a *non-null* value (so `null`/absent
+    #     pass, matching the model, while a real key is rejected).
+    # The non-upsert pin to `type: null` is satisfiable only because the base
     # `WriteOperation.conflict_keys` $ref renders as `anyOf[array, null]`; if that
-    # field is ever narrowed to array-only, this branch becomes unsatisfiable.
+    # field is ever narrowed to array-only, those branches become unsatisfiable.
     # Built by iterating WRITE_MODES, never by listing the modes here. The
     # hand-written version enumerated `insert`/`upsert`, so widening the
     # vocabulary updated the derived `propertyNames.enum` while this mirror

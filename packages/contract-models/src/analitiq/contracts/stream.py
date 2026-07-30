@@ -671,7 +671,8 @@ class StreamDestination(StrictModel):
 # dotted string needs something to split it, and per #108 the engine splits at
 # the root expression node only — so a `get` nested inside another node
 # (`pipe`, `if`, `concat`, `coalesce`) reaches the evaluator still holding the
-# raw string and silently produces a wrong column rather than an error. That
+# raw string and silently produces an all-nulls column rather than an error —
+# the string's first character is looked up as a field name and misses. That
 # remains true of the engine until analitiq-ai/analitiq-engine#434 lands, which
 # is blocked on this release. Tokens make "parsed at the root only"
 # unrepresentable, and they retire the escaping question the dotted form never
@@ -946,19 +947,25 @@ class ConstantAssignmentValue(StrictModel):
 
 
 # `kind`-discriminated union, replacing a single model with two nullable fields
-# and a `_validate_one_of` (retired ADV-STRM-008). Both shapes rejected the same
-# documents; what changes is where the rule lives.
+# and a `_validate_one_of` (retired ADV-STRM-008).
+#
+# This is the BREAKING half of the release: `kind` is required, so every
+# pre-#108 document — which had no such key — is now rejected. What the two
+# shapes agree on is the illegal *combination*; the new one additionally
+# demands the discriminator.
 #
 # The old model DECLARED both fields, so an instance could hold both and a
 # validator had to say no. Here each variant declares only its own payload key,
 # so `ExpressionAssignmentValue` has no `constant` attribute to hold — the
-# illegal combination is gone from the type rather than caught on the way in
-# (`extra="forbid"` is what rejects it in the input, as before). A third value
+# illegal combination is gone from the type rather than caught on the way in.
+# (`extra="forbid"` on each variant is what rejects it in the input now; before,
+# both fields being declared meant only `_validate_one_of` could.) A third value
 # kind is then additive: append a variant, touch neither of these two.
 #
-# On errors, precisely: a missing or unknown `kind` fails at the discriminator
-# (`union_tag_not_found`), which names no variant. A payload that carries a
-# valid `kind` but the wrong body is reported against that variant — which is
+# On errors, precisely: a MISSING `kind` fails at the discriminator with
+# `union_tag_not_found`, naming no variant; an UNKNOWN one fails with
+# `union_tag_invalid`, which does name the expected tags. A payload that carries
+# a valid `kind` but the wrong body is reported against that variant — which is
 # the improvement over "exactly one of 'expression' or 'constant'", where every
 # malformed value produced the same sentence.
 #
@@ -977,10 +984,13 @@ AssignmentValue = Annotated[
 # the engine splits such a path and rejects any result longer than one segment,
 # so pinning it here turns a runtime rejection into an unparseable document.
 #
-# Two constraints, matching what a SOURCE segment already guarantees
-# (`GetExpression.path` items are `NonEmptyStr`): no `.` anywhere, and at least
-# one non-whitespace character — a destination field name must not be laxer
-# than the source name it is fed from. Written without lookaround on purpose:
+# Two constraints. "At least one non-whitespace character" is the parity one —
+# it is what `NonEmptyStr` already guarantees for a SOURCE segment
+# (`GetExpression.path` items), and a destination field name must not be laxer
+# than the source name it is fed from. "No `.` anywhere" is target-only and
+# deliberately TIGHTER than the source: `["a.b"]` is a legal source token,
+# because there the dot is inside one segment rather than separating two.
+# Written without lookaround on purpose:
 # pydantic's default rust-regex engine has none, and this pattern is published
 # into the JSON Schema.
 SINGLE_SEGMENT_PATH_PATTERN = r"^[^.]*[^.\s][^.]*$"

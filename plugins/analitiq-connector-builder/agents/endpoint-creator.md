@@ -131,13 +131,15 @@ was raised.
 4. Author `operations.write` when the resource is writable
    (`endpoint_facts.writable`). `write` is a **mode-keyed map** whose keys come
    from the shared destination write-mode vocabulary, and at least one mode is
-   required when `write` is present. Key only the modes **this provider
-   documents an operation for** — in practice `insert` and `upsert`. The
-   vocabulary is shared with database destinations, so it also carries
-   `truncate_insert` (empty the destination, reload it); key it only if the
-   provider genuinely exposes a replace-the-collection operation, which is rare.
-   Every mode block shares the same shape and they differ only in
-   `conflict_keys`. Each mode block holds:
+   required when `write` is present. Key **only `insert` and `upsert`** here,
+   and only those the provider documents an operation for. The vocabulary is
+   shared with database destinations, so the schema also permits
+   `truncate_insert` (empty the destination, reload it) — that mode belongs to
+   the SQL write path and an API destination cannot perform it, so keying it
+   produces a connector that validates and then fails at run time. If a provider
+   genuinely exposes a replace-the-collection operation, raise it as a contract
+   gap rather than authoring around it. The modes you do key share the same
+   block shape and differ only in `conflict_keys`. Each mode block holds:
    - `request` (required) — `method` (`POST` / `PUT` / `PATCH`), `path`,
      and the same optional `query` / `headers` / `path_params` / `body`
      / `transport_ref` keys as the read request. The **body must reference

@@ -150,8 +150,10 @@ def _has_known_scope(token: str) -> bool:
 # `truncate_insert` is the full-refresh mode: empty the destination, then insert
 # the run's records. Per #108 it is already first-class on the wire and in the
 # CDK, and this contract is the one declaration missing it — so a destination
-# declaring the mode is rejected at startup until this ships. Delivery is
-# at-least-once by design; a run that retries reloads what it already wrote.
+# declaring the mode is rejected at startup until this ships. #108 also records
+# the verdict on its delivery semantics — at-least-once by design. Stated as a
+# verdict deliberately: the mechanics belong to the SQL write path, not to this
+# contract, and restating them here would be a copy that rots.
 WriteMode = Literal["insert", "upsert", "truncate_insert"]
 WRITE_MODES: tuple[str, ...] = get_args(WriteMode)
 READ_METHODS: tuple[str, ...] = ("GET", "POST")
