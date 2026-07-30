@@ -450,12 +450,13 @@ def test_endpoint_creator_prose_names_every_write_mode() -> None:
     Naming a mode is not endorsing it: `truncate_insert` is named precisely to
     tell the author not to key it. What this forbids is silence.
 
-    Scoped to the numbered steps INSIDE `## Process`, so a mode named anywhere
-    else cannot stand in for the guidance. The section bound is load-bearing:
-    splitting the whole document on `^\\d+\\. ` leaves the last step running to
-    end of file, which swallows `## Hard rules` — measured, and it let the
-    write step be gutted while a mode name in an unrelated bullet kept this
-    green.
+    Scoped to the ONE numbered step that authors `operations.write`, so a mode
+    named anywhere else cannot stand in for the guidance. Two coarser spellings
+    were each measurably bypassable: splitting the whole document left the last
+    step running to end of file and swallowing `## Hard rules`, and matching
+    every step that merely mentions `operations.write` also caught step 5
+    ("at least one of read or write must be present"), so the guidance could be
+    gutted and the vocabulary parked in that step instead.
     """
     doc = PLUGIN_ROOT / "agents" / "endpoint-creator.md"
     process = re.search(
@@ -468,7 +469,7 @@ def test_endpoint_creator_prose_names_every_write_mode() -> None:
     steps = [
         block
         for block in re.split(r"(?m)^(?=\d+\. )", process.group(1))
-        if "operations.write" in block
+        if re.match(r"\d+\. Author\b.*\boperations\.write\b", block)
     ]
     assert steps, (
         f"{doc.name}: no numbered step authors `operations.write` any more — "
