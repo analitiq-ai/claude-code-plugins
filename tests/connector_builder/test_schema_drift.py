@@ -450,14 +450,25 @@ def test_endpoint_creator_prose_names_every_write_mode() -> None:
     Naming a mode is not endorsing it: `truncate_insert` is named precisely to
     tell the author not to key it. What this forbids is silence.
 
-    Scoped to the numbered step that authors `operations.write`, so an
-    occurrence in an unrelated section cannot stand in for the guidance.
+    Scoped to the numbered steps INSIDE `## Process`, so a mode named anywhere
+    else cannot stand in for the guidance. The section bound is load-bearing:
+    splitting the whole document on `^\\d+\\. ` leaves the last step running to
+    end of file, which swallows `## Hard rules` — measured, and it let the
+    write step be gutted while a mode name in an unrelated bullet kept this
+    green.
     """
     doc = PLUGIN_ROOT / "agents" / "endpoint-creator.md"
+    process = re.search(
+        r"^##\s+Process\s*$(.*?)(?=^#|\Z)", doc.read_text(), re.M | re.S
+    )
+    assert process, (
+        f"{doc.name}: no `## Process` section — the agent was restructured; "
+        "re-scope this gate."
+    )
     steps = [
         block
-        for block in re.split(r"(?m)^(?=\d+\. )", doc.read_text())
-        if "`operations.write`" in block or "operations.write" in block.split("\n")[0]
+        for block in re.split(r"(?m)^(?=\d+\. )", process.group(1))
+        if "operations.write" in block
     ]
     assert steps, (
         f"{doc.name}: no numbered step authors `operations.write` any more — "

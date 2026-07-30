@@ -56,15 +56,28 @@ def _section(doc: Path, heading: str) -> str:
     return match.group(1)
 
 
-def _paragraphs(text: str) -> list[str]:
-    """Split into blank-line-separated blocks.
+def _prose_paragraphs(text: str) -> list[str]:
+    """Blank-line-separated blocks, with markdown table rows removed.
 
     Every assertion here scopes to the block that carries the rule rather than
     to the whole document. Document-wide matching is how a prose gate goes
     quietly dead: unrelated prose supplies the token and the assertion can no
     longer fail for the reason it names.
+
+    Table rows are dropped because a mapper table is one blank-line-delimited
+    block that names every mode, so it would qualify as "the paragraph about
+    `truncate_insert`" for any guidance assertion — and a bolded aside in an
+    unrelated row of it would stand in for the guardrail. A table states the
+    routing; the guidance about that routing is always prose beside it.
     """
-    return [block for block in re.split(r"\n\s*\n", text) if block.strip()]
+    blocks = []
+    for block in re.split(r"\n\s*\n", text):
+        prose = "\n".join(
+            line for line in block.splitlines() if not line.lstrip().startswith("|")
+        )
+        if prose.strip():
+            blocks.append(prose)
+    return blocks
 
 
 def _bullets(text: str) -> list[str]:
@@ -117,16 +130,18 @@ def test_write_mode_mapper_requires_asking_before_a_destructive_route():
     Hand-anchored on the mode name rather than derived: "is destructive" is not a
     property the contract models express, so there is nothing to read it from.
 
-    Scoped to the paragraph that names the mode. Section-wide matching was not
-    enough: `## WriteModeMapper` already contains an unrelated bolded "ask the
-    user" about `upsert` conflict keys, so the guardrail could be deleted and
-    the assertion satisfied by that sentence instead.
+    Scoped to a PROSE paragraph that names the mode. Two narrower spellings of
+    this assertion were measurably satisfiable without the guardrail: a
+    section-wide search matched the unrelated bolded "ask the user" about
+    `upsert` conflict keys, and a paragraph-scoped one matched a bolded aside
+    added to any row of the mapper table, which names every mode in a single
+    block. `_prose_paragraphs` drops table rows for that reason.
     """
     section = _section(ENUM_MAPPERS, "WriteModeMapper")
     assert "truncate_insert" in section, "the destructive mode left this section"
     guarded = [
         block
-        for block in _paragraphs(section)
+        for block in _prose_paragraphs(section)
         if "truncate_insert" in block or "empties" in block
         if re.search(r"\*\*[^*]*\bask\b[^*]*\*\*", block, re.I)
     ]
@@ -180,9 +195,13 @@ def test_stream_creator_teaches_token_array_get_paths():
     Guarded by the contract's own annotation: if `path` ever goes back to a
     scalar, this test fails and the prose rule is what should be deleted.
 
-    Same "taught somewhere" property as the discriminator test above: the rule
-    appears in Process step 6 and again under Hard rules, and either copy alone
-    satisfies it.
+    The two assertions below have different reach, which is worth stating
+    because the weaker one reads like the stronger. "Not a dotted string" is
+    document-wide, so either of the rule's two statements (Process step 6, Hard
+    rules) satisfies it. The worked example is bullet-scoped and in practice
+    only the Hard-rules copy satisfies it — step 6 writes `path` unticked and
+    is not split into its own bullet. That is the harmless direction: stricter
+    than described, not laxer.
     """
     assert typing.get_origin(GetExpression.model_fields["path"].annotation) is list, (
         "GetExpression.path is no longer a list — the token-array rule in "
