@@ -17,10 +17,12 @@ from pydantic import TypeAdapter, ValidationError
 from analitiq.contracts.endpoints import (
     _RESERVED_ENDPOINT_FIELDS,
     RESOLUTION_SCOPES,
+    WRITE_MODES,
     ApiEndpointDoc,
     Column,
     ColumnFieldSpec,
     DatabaseEndpointDoc,
+    PageSize,
     Param,
     PredicateAnd,
     PredicateEq,
@@ -2453,6 +2455,99 @@ class TestPaginationLimitWiring:
         )
         with pytest.raises(ValidationError, match="does not declare"):
             parse_endpoint(payload)
+
+
+class TestWriteModeVocabulary:
+    """`WriteMode` is the one destination write-mode vocabulary.
+
+    Pinned as an exact set, not a membership check: adding a mode is a
+    coordinated change across the wire protocol, the CDK and this contract, so
+    it should fail here and be re-stated deliberately rather than land as a
+    silent widening. `stream._DB_WRITE_MODES` derives from this tuple; that
+    derivation is pinned in test_stream_mapping_shapes.py.
+    """
+
+    def test_exact_members(self):
+        assert set(WRITE_MODES) == {"insert", "upsert", "truncate_insert"}
+
+    def test_api_endpoint_may_declare_a_truncate_insert_operation(self):
+        # The vocabulary is shared, so `operations.write` accepts every member.
+        # Whether a given transport can actually perform a mode is a runtime
+        # capability question, not a document-shape one.
+        payload = _minimal_api_payload(
+            endpoint_id="items",
+            operations={"write": {"truncate_insert": {
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/items",
+                    "body": {"from_input": "records"},
+                },
+                "input": {"schema": {"type": "object", "properties": {
+                    "id": {"type": "string"},
+                }}},
+                "batching": {"max_records": 100},
+            }}},
+        )
+        parse_endpoint(payload)
+
+    def test_conflict_keys_still_upsert_only(self):
+        # The new mode inherits the existing rule rather than an exemption:
+        # conflict_keys applies to `upsert` and to nothing else.
+        payload = _minimal_api_payload(
+            endpoint_id="items",
+            operations={"write": {"truncate_insert": {
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/items",
+                    "body": {"from_input": "records"},
+                },
+                "input": {"schema": {"type": "object", "properties": {
+                    "id": {"type": "string"},
+                }}},
+                "batching": {"max_records": 100},
+                "conflict_keys": ["id"],
+            }}},
+        )
+        with pytest.raises(ValidationError, match="conflict_keys is not allowed"):
+            parse_endpoint(payload)
+
+
+class TestPageSizeDefault:
+    """`default`'s literal branch is bounded; its expression branch is not.
+
+    `max` already carried `ge=1` and the sibling `OffsetCursor.increment_by`
+    already carried `gt=0`, while `default` was a bare `Any` — the same intent
+    enforced at three different strengths. A non-positive page size is a
+    meaningless request, so it fails validation rather than the first call.
+    """
+
+    def test_positive_literal_accepted(self):
+        assert PageSize.model_validate({"param": "limit", "default": 50}).default == 50
+
+    def test_zero_rejected(self):
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": 0})
+
+    def test_negative_rejected(self):
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": -10})
+
+    def test_expression_branch_still_accepted(self):
+        # The dominant authored form: the engine resolves the page size per
+        # request, so the bound cannot be checked here and must not be applied.
+        page_size = PageSize.model_validate(
+            {"param": "limit", "default": {"ref": "runtime.batch_size"}}
+        )
+        assert isinstance(page_size.default, RefExpression)
+
+    def test_omitted_still_accepted(self):
+        assert PageSize.model_validate({"max": 100}).default is None
+
+    def test_non_numeric_literal_rejected(self):
+        # Previously `Any` let any JSON scalar through; a page size that is not
+        # a number and not an expression can only fail later.
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": "fifty"})
 
 
 # ---------------------------------------------------------------------------

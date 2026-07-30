@@ -6,9 +6,12 @@
         "arrow_type": "Utf8"
       },
       "value": {
+        "kind": "expression",
         "expression": {
           "op": "get",
-          "path": "x"
+          "path": [
+            "x"
+          ]
         }
       }
     }

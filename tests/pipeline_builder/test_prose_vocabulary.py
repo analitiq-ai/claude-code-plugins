@@ -118,7 +118,8 @@ REQUIRED_BLOCKS = {
         "endpoint-id-derivation", "fields-connection-endpoint-ref", "fields-connector-endpoint-ref"},
     "skills/stream-spec/spec-filter-operators.md": {"filter-operators"},
     "skills/stream-spec/spec-mapping.md": {
-        "fields-assignment-target", "fields-assignment-value", "fields-stream-mapping"},
+        "fields-assignment-target", "fields-assignment-value-constant",
+        "fields-assignment-value-expression", "fields-stream-mapping"},
     "skills/stream-spec/spec-source.md": {"fields-stream-source"},
     "skills/stream-spec/spec-validation-rules.md": {"fields-validation-rule"},
 }
@@ -134,7 +135,8 @@ ALLOWED_RESTATEMENTS = {
     ("skills/pipeline-builder/references/enum-mappers.md", "replication.method"):
         (1, {"full_refresh", "incremental"}, "same: mapper table target column"),
     ("skills/pipeline-builder/references/enum-mappers.md", "write.mode"):
-        (1, {"insert", "upsert"}, "same: mapper table target column"),
+        (1, {"insert", "upsert", "truncate_insert"},
+         "same: mapper table target column"),
     ("skills/pipeline-spec/spec-schedule.md", "schedule.type"):
         (1, {"manual", "interval", "cron"},
          "the §`timezone` section names all three types while explaining that "
@@ -148,9 +150,11 @@ ALLOWED_RESTATEMENTS = {
         (1, {"required", "not_null", "min_length", "max_length", "pattern", "range", "in_list"},
          "per-member semantics (which types take a `value`)"),
     ("agents/stream-creator.md", "write.mode"):
-        (2, {"insert", "upsert"},
+        (2, {"insert", "upsert", "truncate_insert"},
          "§`Process` and §`Hard rules` both state the conflict_keys rule "
-         "(ADV-STRM-011), which distinguishes the two modes and so names both"),
+         "(ADV-STRM-011), which is what distinguishes the modes — `upsert` "
+         "requires the key, every other database mode forbids it — so each "
+         "statement has to name them all"),
 }
 
 # Restatements inside fenced code blocks using bare, unticked members. The
@@ -162,9 +166,12 @@ FENCED_RESTATEMENTS = {
         "the PipelineFacts jsonc example annotates the field with its vocabulary",
     ("skills/pipeline-builder/references/io-contracts.md", "schedule.type"):
         "same example, schedule field",
-    ("skills/pipeline-builder/references/io-contracts.md", "write.mode"):
-        "the DriftVerdict example shows a write_mode_changed entry, which needs a "
-        "concrete from/to pair to illustrate the shape",
+    # `write.mode` used to be listed here: the DriftVerdict example's
+    # write_mode_changed entry needs a concrete from/to pair, and with a
+    # two-member vocabulary that pair happened to name the whole set. It gained
+    # `truncate_insert`, so an insert->upsert pair is now what it always meant to
+    # be — one illustrative transition, not an enumeration — and there is no
+    # restatement left to record.
 }
 
 # Vocabularies whose members are ordinary domain nouns, so a full-set match

@@ -8,7 +8,7 @@ block (`analitiq.contracts.stream.Validation`, whose members are
 ```jsonc
 {
   "target": {"path": "email", "arrow_type": "Utf8", "nullable": false},
-  "value": {"expression": {"op": "get", "path": "email"}},
+  "value": {"kind": "expression", "expression": {"op": "get", "path": ["email"]}},
   "validate": {
     "rules": [
       {"type": "required", "field": "email"},

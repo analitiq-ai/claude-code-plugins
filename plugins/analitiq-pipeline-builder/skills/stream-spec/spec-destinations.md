@@ -26,8 +26,7 @@ The sketch below illustrates a filled-in destination.
         "conflict_keys": ["id"]
       },
       "execution": {
-        "batch_size": 1000,
-        "max_concurrent_batches": 3
+        "batch_size": 1000
       }
     }
   ]
@@ -92,7 +91,6 @@ server-side at save time, not by the local validator.
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
 | `batch_size` | no | integer \| null | `None` | `min=1`, `max=100000` |
-| `max_concurrent_batches` | no | integer \| null | `None` | `min=1`, `max=100` |
 <!-- END GENERATED: fields-stream-execution -->
 
 `execution` is one of **three** places batching is decided, and each has a
@@ -113,7 +111,12 @@ Use `execution` sparingly — pipeline defaults exist for a reason. Typical use:
 low-throughput destination next to a high-throughput one in the same
 `destinations[]`.
 
-What the two knobs mean per destination kind:
+`batch_size` is the only override there is. `execution` also carried a
+`max_concurrent_batches`, which nothing ever consumed; it was retired from the
+contract instead of being left as a knob that read as load-bearing and did
+nothing.
+
+What batch size means per destination kind:
 
 - **API destination** — the endpoint's write `batching.max_records` caps how many
   records may ride in one provider request.

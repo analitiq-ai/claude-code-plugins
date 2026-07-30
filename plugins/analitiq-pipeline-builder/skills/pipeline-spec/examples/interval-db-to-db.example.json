@@ -20,8 +20,7 @@
   },
   "runtime": {
     "batching": {
-      "batch_size": 3000,
-      "max_concurrent_batches": 3
+      "batch_size": 3000
     }
   }
 }

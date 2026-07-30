@@ -141,9 +141,18 @@ def _has_known_scope(token: str) -> bool:
 
 # Single source of truth for the destination write-mode vocabulary. The
 # `Literal` is the type used wherever a mode is keyed/validated (`operations.write`
-# below, the endpoint-schema `write_modes` list); the tuple is derived from it so
-# the two can never drift.
-WriteMode = Literal["insert", "upsert"]
+# below, the endpoint-schema `write_modes` list, and `stream._DB_WRITE_MODES`);
+# the tuple is derived from it so they can never drift.
+#
+# `truncate_insert` is the full-refresh mode: empty the destination, then insert
+# the run's records. It is the only mode that works for a source with no
+# reliable cursor and no stable key, which is why every comparable contract
+# carries it (Airbyte `overwrite`, Singer `FULL_TABLE`, Fivetran re-sync). It is
+# already first-class on the wire and in the CDK; this contract was the one
+# declaration missing it, so a destination that declared the mode was rejected
+# at startup. Its at-least-once delivery under retry is by design, stated in the
+# SQL write-path spec.
+WriteMode = Literal["insert", "upsert", "truncate_insert"]
 WRITE_MODES: tuple[str, ...] = get_args(WriteMode)
 READ_METHODS: tuple[str, ...] = ("GET", "POST")
 WRITE_METHODS: tuple[str, ...] = ("POST", "PUT", "PATCH")
@@ -411,7 +420,17 @@ class PageSize(_EndpointModel):
     """Optional ``limit`` block shared by paginated strategies that accept page size."""
 
     param: str | None = Field(default=None)
-    default: Any | None = Field(default=None, description="Default page size value or expression.")
+    default: Annotated[int, Field(gt=0)] | Expression | None = Field(  # type: ignore[valid-type]
+        default=None,
+        description=(
+            "Default page size — a positive-integer literal, or a value "
+            "expression the engine resolves per request (typically "
+            "`{ref: runtime.batch_size}`). A non-positive page size is a "
+            "meaningless request, so the literal branch is bounded here rather "
+            "than at the first HTTP call; the same bound `max` carries as "
+            "`ge=1` and `OffsetCursor.increment_by` as `gt=0`."
+        ),
+    )
     max: int | None = Field(default=None, ge=1)
 
 

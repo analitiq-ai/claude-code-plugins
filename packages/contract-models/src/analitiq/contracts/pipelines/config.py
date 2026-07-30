@@ -200,15 +200,6 @@ class Batching(StrictModel):
     """Pipeline-wide record batching defaults."""
 
     batch_size: int = Field(default=100, ge=1, le=100_000, description="Records per batch")
-    max_concurrent_batches: int = Field(
-        default=3,
-        ge=1,
-        le=100,
-        description=(
-            "Per-binding cap for each (stream, destination) execution binding "
-            "(not a pipeline-wide aggregate ceiling)"
-        ),
-    )
 
 
 class ErrorHandling(RetryErrorHandlingBase):

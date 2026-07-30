@@ -280,11 +280,6 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         targets=("ConstantValue",), enforcer="_validate_container_shape",
     ),
     AdvisoryRule(
-        id="ADV-STRM-008", kind="custom", resource="stream",
-        prose="An assignment value must declare exactly one of expression or constant.",
-        targets=("AssignmentValue",), enforcer="_validate_one_of",
-    ),
-    AdvisoryRule(
         id="ADV-STRM-009", kind="custom", resource="stream",
         prose="A validation rule requires value for value-taking types and omits it for required/not_null.",
         targets=("ValidationRule",), enforcer="_validate_value_for_rule",
@@ -306,7 +301,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     ),
     AdvisoryRule(
         id="ADV-STRM-013", kind="custom", resource="stream",
-        prose="A database (connection-scope) destination's write.mode must be one of {insert, upsert}; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
+        prose="A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
         targets=("StreamDestination",), enforcer="_validate_db_write_mode",
     ),
     # --- connector (ConnectionContractInput + connector document) -----------

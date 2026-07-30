@@ -59,8 +59,7 @@
         ]
       },
       "execution": {
-        "batch_size": 1000,
-        "max_concurrent_batches": 3
+        "batch_size": 1000
       }
     }
   ],
@@ -73,9 +72,12 @@
           "nullable": false
         },
         "value": {
+          "kind": "expression",
           "expression": {
             "op": "get",
-            "path": "id"
+            "path": [
+              "id"
+            ]
           }
         }
       },
@@ -87,9 +89,12 @@
           "nullable": false
         },
         "value": {
+          "kind": "expression",
           "expression": {
             "op": "get",
-            "path": "amount"
+            "path": [
+              "amount"
+            ]
           }
         }
       },
@@ -100,9 +105,12 @@
           "nullable": true
         },
         "value": {
+          "kind": "expression",
           "expression": {
             "op": "get",
-            "path": "updated_at"
+            "path": [
+              "updated_at"
+            ]
           }
         }
       }

@@ -18,7 +18,7 @@ onto them is not, and is what this file adds.
 | `stream.source.replication.method` | `full_refresh`, `incremental` | discriminated union `analitiq.contracts.stream.Replication` |
 | `stream.source.database_pagination.type` | `offset`, `keyset` | discriminated union `analitiq.contracts.stream.DatabasePagination` |
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
-| `stream.destinations[].write.mode` (database) | `insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
+| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
 <!-- END GENERATED: enum-vocabulary -->
 
 ## ScheduleTypeMapper
@@ -57,11 +57,21 @@ both methods are always supported.
 | api | one of the endpoint's `operations.write` keys | → | that key (verbatim) |
 | database | "insert", "append", "load" | → | `insert` |
 | database | "upsert", "merge", "on-conflict update" | → | `upsert` (requires `conflict_keys`) |
+| database | "overwrite", "replace", "full refresh", "truncate and load", "re-sync" | → | `truncate_insert` (forbids `conflict_keys`) |
 
 For database `upsert`, ask the user (or infer from the destination
 endpoint's `primary_keys`) which fields form the conflict resolution
 key set. `conflict_keys` is a flat, non-empty list of field names
 (`[<field>, …]`).
+
+`truncate_insert` empties the destination and reloads it — the full-refresh
+mode every comparable tool carries (Airbyte `overwrite`, Singer `FULL_TABLE`,
+Fivetran re-sync). Route to it when the user describes replacing the
+destination's contents rather than adding to them, and it is the **only**
+correct choice when the source has neither a reliable cursor nor a stable key:
+`insert` would accumulate duplicates on every run and `upsert` has nothing to
+match on. Its cost is that a retried run re-reads the source, so delivery is
+at-least-once by design — say so if the user is choosing between modes.
 
 ## AuthTypeMapper (informational)
 

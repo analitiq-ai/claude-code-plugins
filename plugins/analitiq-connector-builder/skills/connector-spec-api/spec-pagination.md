@@ -64,7 +64,9 @@ be marked `controlled_by`). A `controlled_by` param must **not** declare
   `{"ref": "runtime.batch_size"}` so the run's configured batch size flows
   through, rather than hardcoding a number and overriding the operator's
   choice. Hardcode only when the provider's usable page size is genuinely
-  fixed.
+  fixed — and then it must be a **positive integer**: a hardcoded literal is
+  bounded by the contract, because a zero or negative page size is a
+  meaningless request rather than a request the provider gets to reject.
 
 ## `stop_when` is a predicate, not a keyword
 

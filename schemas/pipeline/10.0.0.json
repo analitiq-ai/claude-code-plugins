@@ -325,7 +325,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/pipeline/latest.json",
+  "$id": "https://schemas.analitiq.ai/pipeline/10.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "allOf": [
