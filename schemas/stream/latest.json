@@ -310,7 +310,7 @@
             "address"
           ],
           "minLength": 1,
-          "pattern": "^[^.]+$",
+          "pattern": "^[^.]*[^.\\s][^.]*$",
           "title": "Path",
           "type": "string"
         },
@@ -906,7 +906,7 @@
     },
     "GetExpression": {
       "additionalProperties": false,
-      "description": "`{\"op\": \"get\", \"path\": [\"<segment>\", ...]}` \u2014 read a source field.\n\nThe path is a token array, not a dotted string. A dotted string only\nsurvives as long as *something* splits it, and the engine splits at the\nroot expression node \u2014 so a `get` nested inside a `pipe` (or any later\nnode kind) reached the evaluator still holding the raw string and indexed\nit character-wise, yielding an all-nulls column with no error. Carrying\nthe tokens makes \"parsed at the root only\" unrepresentable, and it removes\nthe escaping question entirely: a source field literally named `a.b` is\n`[\"a.b\"]`, distinct from the nested `[\"a\", \"b\"]`.",
+      "description": "`{\"op\": \"get\", \"path\": [\"<segment>\", ...]}` \u2014 read a source field.\n\nThe path is an ordered token array: `[\"a\", \"b\"]` reads field `b` nested\nunder `a`, and `[\"a.b\"]` reads a top-level field whose name contains a dot.",
       "properties": {
         "op": {
           "const": "get",

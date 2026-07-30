@@ -1036,7 +1036,7 @@
             }
           ],
           "default": null,
-          "description": "Default page size \u2014 a positive-integer literal, or a value expression the engine resolves per request (typically `{ref: runtime.batch_size}`). A non-positive page size is a meaningless request, so the literal branch is bounded here rather than at the first HTTP call; the same bound `max` carries as `ge=1` and `OffsetCursor.increment_by` as `gt=0`.",
+          "description": "Default page size. Either a positive integer (e.g. `50`) or a value expression the engine resolves per request \u2014 typically `{ref: runtime.batch_size}`, so the run's configured batch size flows through. A bare non-positive integer is rejected: it is a meaningless request rather than one the provider gets to refuse. The `{literal: N}` expression form carries no such bound.",
           "title": "Default"
         },
         "max": {
@@ -2431,7 +2431,7 @@
             }
           ],
           "default": null,
-          "description": "Upsert conflict-target fields \u2014 the provider-defined natural key the upsert matches on (e.g. Salesforce `ExternalIdField`, HubSpot `idProperty`, Airtable `fieldsToMergeOn`, Elasticsearch `_id`, Algolia `objectID`). Each entry is a top-level field name in `input.schema`. A single composite key set \u2014 every listed field participates. Required on the `upsert` write mode; forbidden on `insert` (enforced by `operations`, which knows the mode key).",
+          "description": "Upsert conflict-target fields \u2014 the provider-defined natural key the upsert matches on (e.g. Salesforce `ExternalIdField`, HubSpot `idProperty`, Airtable `fieldsToMergeOn`, Elasticsearch `_id`, Algolia `objectID`). Each entry is a top-level field name in `input.schema`. A single composite key set \u2014 every listed field participates. Required on the `upsert` write mode; forbidden on every other write mode (enforced by `operations`, which knows the mode key).",
           "title": "Conflict Keys"
         },
         "idempotency": {
@@ -2444,7 +2444,7 @@
             }
           ],
           "default": null,
-          "description": "Provider idempotency-key placement (e.g. Stripe `Idempotency-Key` header, Square `idempotency_key` body field). Allowed on both `insert` and `upsert`, required on neither \u2014 some providers require the key even on upsert (Square `UpsertCatalogObject`). Forbidden together with `batching`: the key value is per-record, and a resumed cursor re-batches different row compositions, so a multi-record request cannot carry a key that survives an engine restart."
+          "description": "Provider idempotency-key placement (e.g. Stripe `Idempotency-Key` header, Square `idempotency_key` body field). Allowed on any write mode, required on none \u2014 some providers require the key even on upsert (Square `UpsertCatalogObject`). Forbidden together with `batching`: the key value is per-record, and a resumed cursor re-batches different row compositions, so a multi-record request cannot carry a key that survives an engine restart."
         },
         "input": {
           "$ref": "#/$defs/WriteInput"

@@ -66,9 +66,11 @@ diff the user did not ask for.
 
 `value` is a **discriminated union**: `kind` names the variant, and the variant
 admits exactly one payload key. Always author `kind` — it is required, and the
-key alone no longer identifies the variant. There is no "neither" state to
-default and no "both" state to disambiguate, so a malformed value reports the
-variant it failed to satisfy rather than a generic *exactly one of…*.
+payload key alone no longer identifies the variant.
+
+If you get it wrong, the error tells you where to look: a missing or unknown
+`kind` fails at the discriminator before any variant is tried, while a valid
+`kind` with the wrong body is reported against that variant by name.
 
 ### `kind: "expression"` — read from the source
 
@@ -139,7 +141,7 @@ never author them.
 
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
-| `path` | **yes** | string | — | `pattern=^[^.]+$`, `minLength=1` |
+| `path` | **yes** | string | — | `pattern=^[^.]*[^.\s][^.]*$`, `minLength=1` |
 | `arrow_type` | **yes** | string | — | `pattern=(long; see `endpoint-spec/spec-columns.md`)` |
 | `native_type` | no | string \| null | `None` | — |
 | `nullable` | no | boolean | `True` | — |

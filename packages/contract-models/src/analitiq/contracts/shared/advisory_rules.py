@@ -279,6 +279,12 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="constant.value's JSON kind must match arrow_type, and the Object/List/scalar container shape rule applies.",
         targets=("ConstantValue",), enforcer="_validate_container_shape",
     ),
+    # ADV-STRM-008 retired in 1.0.0rc19 (#108): `AssignmentValue` became a
+    # `kind`-discriminated union, so "exactly one of expression or constant" is
+    # no longer a rule anything enforces — the union states it. Advisory ids are
+    # stable identifiers that appear in user-facing findings, so the gap stays a
+    # gap: do NOT reuse 008 for an unrelated rule, or archived findings decode
+    # to the wrong meaning.
     AdvisoryRule(
         id="ADV-STRM-009", kind="custom", resource="stream",
         prose="A validation rule requires value for value-taking types and omits it for required/not_null.",

@@ -44,7 +44,7 @@ EXAMPLES = list(_examples())
 # one examples/ directory and add examples elsewhere, and the total still clears the
 # bar while a whole entity silently goes unvalidated.
 EXPECTED_EXAMPLE_COUNTS = {
-    "pipeline-spec": 3, "stream-spec": 3, "connection-spec": 9, "endpoint-spec": 4,
+    "pipeline-spec": 3, "stream-spec": 4, "connection-spec": 9, "endpoint-spec": 4,
 }
 
 

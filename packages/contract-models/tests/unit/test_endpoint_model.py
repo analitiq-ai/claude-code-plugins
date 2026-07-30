@@ -2513,12 +2513,14 @@ class TestWriteModeVocabulary:
 
 
 class TestPageSizeDefault:
-    """`default`'s literal branch is bounded; its expression branch is not.
+    """`default`'s BARE-SCALAR spelling is bounded. Nothing else is.
 
-    `max` already carried `ge=1` and the sibling `OffsetCursor.increment_by`
-    already carried `gt=0`, while `default` was a bare `Any` — the same intent
-    enforced at three different strengths. A non-positive page size is a
-    meaningless request, so it fails validation rather than the first call.
+    `default` was a bare `Any` while `max` carried `ge=1` — the same intent at
+    two strengths, and a non-positive page size is a meaningless request rather
+    than one the provider gets to refuse. The reach of the new bound is narrower
+    than "the literal branch", though, and the tests below pin where it stops:
+    `{literal: 0}` still validates. Do not restate this class's scope as
+    "literals are positive" — see `test_literal_expression_bypasses_the_bound`.
     """
 
     def test_positive_literal_accepted(self):
@@ -2548,6 +2550,45 @@ class TestPageSizeDefault:
         # a number and not an expression can only fail later.
         with pytest.raises(ValidationError):
             PageSize.model_validate({"param": "limit", "default": "fifty"})
+
+    @pytest.mark.parametrize("value", [True, "50", "0"])
+    def test_no_coercion_into_the_int_branch(self, value):
+        # `Strict()` earns its place here. Pydantic's lax mode would read `true`
+        # as 1 and `"50"` as 50, while the rendered schema says `type: integer`
+        # and rejects both — so this package would accept documents that every
+        # external consumer of the published schema refuses. The whole premise
+        # is that the model and the schema are one contract.
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": value})
+
+    def test_model_and_published_schema_agree(self):
+        # Direct statement of that premise, rather than trusting the above.
+        schema = TypeAdapter(ApiEndpointDoc).json_schema(ref_template="#/$defs/{model}")
+        # Point at the PageSize def but keep the whole `$defs` map alongside it,
+        # or the Expression branch's internal `$ref`s cannot resolve.
+        validator = Draft202012Validator(
+            {"$ref": "#/$defs/PageSize", "$defs": schema["$defs"]}
+        )
+        for value in (50, {"ref": "runtime.batch_size"}, None):
+            assert validator.is_valid({"param": "limit", "default": value})
+        for value in (0, -10, "fifty", True, "50"):
+            assert not validator.is_valid({"param": "limit", "default": value}), (
+                f"published schema accepts default={value!r}"
+            )
+            with pytest.raises(ValidationError):
+                PageSize.model_validate({"param": "limit", "default": value})
+
+    def test_literal_expression_bypasses_the_bound(self):
+        # Known hole, recorded rather than left for someone to discover: the
+        # `Expression` branch contains `LiteralExpression`, whose payload is
+        # `Any`, so a statically-known non-positive page size is one spelling
+        # away. Closing it means bounding the literal expression everywhere a
+        # positive number is required (`max`, `OffsetCursor.increment_by`,
+        # `PageCursor.increment_by`) — wider than #108, tracked separately.
+        # This test exists so that fix flips it, rather than silently passing.
+        assert PageSize.model_validate(
+            {"param": "limit", "default": {"literal": 0}}
+        ).default.literal == 0
 
 
 # ---------------------------------------------------------------------------

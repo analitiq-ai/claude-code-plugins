@@ -2,7 +2,7 @@
 
 Narrow by design: the runtime block is mostly bounded scalars that the rendered
 JSON Schema already states. What is worth a test is the shape the contract
-deliberately *stopped* offering — see below.
+deliberately *stopped* offering — `TestBatchingHasNoConcurrencyKnob`.
 """
 from __future__ import annotations
 
@@ -18,6 +18,11 @@ class TestBatchingHasNoConcurrencyKnob:
     an absent one — it invites tuning advice that cannot have an effect — so it
     was retired from both models rather than documented as a no-op. The stream
     half is pinned in test_stream_mapping_shapes.py.
+
+    This is a BREAKING removal, not a deprecation: the field had a non-null
+    default, so any stored pipeline document that spells it out now fails
+    validation and needs migrating. That is why pipeline schema 9.0.0 -> 10.0.0
+    is a major bump.
     """
 
     def test_batch_size_still_accepted(self):

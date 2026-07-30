@@ -64,14 +64,20 @@ endpoint's `primary_keys`) which fields form the conflict resolution
 key set. `conflict_keys` is a flat, non-empty list of field names
 (`[<field>, …]`).
 
-`truncate_insert` empties the destination and reloads it — the full-refresh
+`truncate_insert` **empties the destination** and reloads it — the full-refresh
 mode every comparable tool carries (Airbyte `overwrite`, Singer `FULL_TABLE`,
-Fivetran re-sync). Route to it when the user describes replacing the
-destination's contents rather than adding to them, and it is the **only**
-correct choice when the source has neither a reliable cursor nor a stable key:
-`insert` would accumulate duplicates on every run and `upsert` has nothing to
-match on. Its cost is that a retried run re-reads the source, so delivery is
-at-least-once by design — say so if the user is choosing between modes.
+Fivetran re-sync). Route to it only when the user describes *replacing* the
+destination's contents rather than adding to them.
+
+It is destructive, so never infer it from the source's shape alone. A source
+with no cursor and no stable key is a signal, not a verdict: an append-only
+event or log stream fits that description exactly, and `insert` is correct there
+— `truncate_insert` would wipe the accumulated history on every run. Decide by
+what the destination is *for*: a mirror of current state (route here) or an
+accumulating record (do not). When the user's intent is not explicit, **ask
+before routing to a mode that empties a table.**
+
+Delivery is at-least-once by design; say so if the user is weighing modes.
 
 ## AuthTypeMapper (informational)
 

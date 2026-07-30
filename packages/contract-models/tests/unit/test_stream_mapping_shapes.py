@@ -1,19 +1,26 @@
 """Guards for the mapping/destination shapes reshaped in the #108 release.
 
-Four of that release's six changes land on the stream surface, and each one
-exists to make a specific wrong document *unrepresentable* rather than merely
-wrong. That is the thing worth pinning: not "the field has a new type", but
-"the shape it replaced no longer validates". So every class below pairs the
+Each change exists to make a specific wrong document *unrepresentable* rather
+than merely wrong, so that is what gets pinned: not "the field has a new type",
+but "the shape it replaced no longer validates". Every class below pairs the
 accept with the reject it was introduced for.
 
-The endpoint-side changes (`WriteMode` gaining `truncate_insert`,
-`PageSize.default` bounding its literal branch) are pinned in
-test_endpoint_model.py, next to the models that own them; the stream side of
-`truncate_insert` — a database destination selecting it — is pinned here.
+Covered here: the token-array `get` path, the single-segment assignment target,
+the `kind`-discriminated assignment value, the database write-mode set (both its
+membership and its subset relationship to `endpoints.WriteMode`), and the
+retirement of `Execution.max_concurrent_batches`. `WriteMode` itself and
+`PageSize.default` are pinned in test_endpoint_model.py, next to the models that
+own them; `Batching.max_concurrent_batches` in test_pipeline_runtime.py.
+
+Several tests assert against the RENDERED JSON Schema, not just the model. That
+is deliberate — the discriminator and the shared constraints are contract
+commitments to external validators, and the model alone cannot show they
+survived rendering.
 """
 from __future__ import annotations
 
 import pytest
+from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.endpoints import WRITE_MODES
@@ -26,6 +33,7 @@ from analitiq.contracts.stream import (
     GetExpression,
     PipeExpression,
     StreamDestination,
+    StreamMapping,
     _DB_WRITE_MODES,
 )
 
@@ -187,17 +195,75 @@ class TestAssignmentValueKind:
                 {"kind": "template", "expression": {"op": "get", "path": ["id"]}}
             )
 
+    def test_published_schema_carries_the_kind_discriminator(self):
+        # Without this the discriminator is INVISIBLE to the suite. Every other
+        # test in this class passes against a plain smart union, because
+        # `extra="forbid"` on each variant does the rejecting — so deleting
+        # `Field(discriminator="kind")` stays green, and the only signal is a
+        # separate render job reporting the schema as "stale", which a
+        # re-render silences.
+        #
+        # The discriminator is a contract commitment, not an implementation
+        # detail: it is what lets an external validator report which variant
+        # failed, and the model comment promises it. Assert the rendered node.
+        value = StreamMapping.model_json_schema()["$defs"]["Assignment"]["properties"]["value"]
+        assert "discriminator" in value, (
+            "the published assignment value is a bare union — `Field(discriminator=...)` "
+            f"was dropped from AssignmentValue; got {sorted(value)}"
+        )
+        assert value["discriminator"] == {
+            "propertyName": "kind",
+            "mapping": {
+                "expression": "#/$defs/ExpressionAssignmentValue",
+                "constant": "#/$defs/ConstantAssignmentValue",
+            },
+        }
+        assert {branch["$ref"] for branch in value["oneOf"]} == {
+            "#/$defs/ExpressionAssignmentValue",
+            "#/$defs/ConstantAssignmentValue",
+        }
+
+    def test_published_schema_rejects_what_the_model_rejects(self):
+        # The claim the discriminator exists to support: one contract, two
+        # validators. Probe the malformed shapes through the rendered schema.
+        schema = StreamMapping.model_json_schema()
+        validator = Draft202012Validator(schema)
+        for payload in (
+            {},
+            {"expression": {"op": "get", "path": ["id"]}},  # the pre-#108 shape
+            {"kind": "constant", "expression": {"op": "get", "path": ["id"]}},
+            {"kind": "template", "expression": {"op": "get", "path": ["id"]}},
+            {
+                "kind": "expression",
+                "expression": {"op": "get", "path": ["id"]},
+                "constant": {"arrow_type": "Utf8", "value": "acme"},
+            },
+        ):
+            doc = {"assignments": [{"target": {"path": "id", "arrow_type": "Utf8"},
+                                    "value": payload}]}
+            assert not validator.is_valid(doc), (
+                f"published schema accepts {payload!r}, which the model rejects"
+            )
+            with pytest.raises(ValidationError):
+                StreamMapping.model_validate(doc)
+
 
 class TestDatabaseWriteModes:
-    """The database vocabulary is derived from `endpoints.WriteMode`, not copied."""
+    """The SQL destination's mode set, and its relationship to the universe."""
 
-    def test_derived_from_the_endpoint_vocabulary(self):
-        # If these ever diverge it is because someone restated one of them; the
-        # point of deriving is that adding a mode is a single edit.
-        assert _DB_WRITE_MODES == frozenset(WRITE_MODES)
+    def test_exact_members(self):
+        # Pinned as an exact set: which modes the SQL write path implements is a
+        # coordinated engine + contract fact, so adding one should fail here and
+        # be restated deliberately.
+        assert _DB_WRITE_MODES == {"insert", "upsert", "truncate_insert"}
 
-    def test_truncate_insert_is_in_the_vocabulary(self):
-        assert "truncate_insert" in WRITE_MODES
+    def test_is_a_subset_of_the_universe(self):
+        # The invariant that must hold forever, as opposed to the equality that
+        # merely holds today: a database mode outside `WriteMode` is always
+        # wrong. The reverse is NOT asserted — an API-only mode may join
+        # `WriteMode` without becoming a legal SQL destination mode, which is
+        # exactly why `_DB_WRITE_MODES` is declared rather than derived.
+        assert _DB_WRITE_MODES <= set(WRITE_MODES)
 
     def test_database_destination_accepts_truncate_insert(self):
         dest = StreamDestination.model_validate(
@@ -208,7 +274,16 @@ class TestDatabaseWriteModes:
     def test_truncate_insert_forbids_conflict_keys(self):
         # `conflict_keys` is an upsert concept; a full-refresh load has nothing
         # to match on, so declaring one is a defect rather than a no-op.
-        with pytest.raises(ValidationError, match="only valid for a database upsert"):
+        #
+        # Match on the mode in the message, not just the leading sentence:
+        # `_validate_write_conflict_keys` runs BEFORE `_validate_db_write_mode`
+        # and short-circuits, so "only valid for a database upsert" is what any
+        # non-upsert mode produces — including an invalid one. Matching the
+        # generic prefix would keep this test green even with `truncate_insert`
+        # removed from the vocabulary entirely.
+        with pytest.raises(
+            ValidationError, match=r"write\.mode='truncate_insert' must not declare it"
+        ):
             StreamDestination.model_validate(
                 {
                     "endpoint_ref": _DB_ENDPOINT_REF,
@@ -237,6 +312,7 @@ class TestExecutionHasNoConcurrencyKnob:
 
     def test_max_concurrent_batches_rejected(self):
         # Retired, not deprecated: the model is closed, so a document still
-        # carrying it fails rather than being quietly ignored.
+        # carrying it fails rather than being quietly ignored. Breaking for any
+        # stored stream that spells it out — hence stream 16.0.0 -> 17.0.0.
         with pytest.raises(ValidationError):
             Execution.model_validate({"batch_size": 1000, "max_concurrent_batches": 3})
