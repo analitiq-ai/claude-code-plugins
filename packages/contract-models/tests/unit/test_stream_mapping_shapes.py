@@ -28,6 +28,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import TypeAdapter, ValidationError
 
+from analitiq.contracts.shared.common import NonEmptyStr
 from analitiq.contracts.stream import (
     AssignmentTarget,
     AssignmentValue,
@@ -150,8 +151,7 @@ class TestAssignmentTargetPath:
     def test_whitespace_only_path_rejected(self, path):
         # A destination field name must not be laxer than the source name that
         # feeds it: `GetExpression.path` segments are `NonEmptyStr`, which
-        # requires a non-space character. Without these cases the pattern can be
-        # loosened back to `^[^.]+$` and only a doc-echo assertion notices.
+        # requires a non-space character.
         with pytest.raises(ValidationError):
             AssignmentTarget.model_validate({"path": path, "arrow_type": "Utf8"})
 
@@ -163,6 +163,34 @@ class TestAssignmentTargetPath:
         assert AssignmentTarget.model_validate(
             {"path": path, "arrow_type": "Utf8"}
         ).path == path
+
+    @pytest.mark.parametrize(
+        "name", ["id", "id_2", "a b", " a ", "Ünïcode", "", "   ", "\t", "\n"]
+    )
+    def test_dot_free_names_track_the_source_segment_constraint(self, name):
+        # `SINGLE_SEGMENT_PATH_PATTERN` justifies its whitespace half as parity
+        # with `NonEmptyStr` — the constraint on a SOURCE segment
+        # (`GetExpression.path` items) — on the grounds that a destination field
+        # name must not be laxer than the source name feeding it. Assert the
+        # parity rather than the pattern: the two are written independently
+        # (pydantic cannot compose two `pattern` constraints on one field), so
+        # tightening or loosening `NonEmptyStr` must fail here.
+        source = TypeAdapter(NonEmptyStr)
+        try:
+            source.validate_python(name)
+            source_accepts = True
+        except ValidationError:
+            source_accepts = False
+        try:
+            AssignmentTarget.model_validate({"path": name, "arrow_type": "Utf8"})
+            target_accepts = True
+        except ValidationError:
+            target_accepts = False
+        assert source_accepts == target_accepts, (
+            f"{name!r}: source segment accepts={source_accepts} but assignment "
+            f"target accepts={target_accepts} — the two segment constraints have "
+            "diverged on a dot-free name"
+        )
 
     def test_published_schema_carries_the_single_segment_pattern(self):
         # The constraint is a commitment to external validators, so assert it
@@ -226,14 +254,11 @@ class TestAssignmentValueKind:
 
     @pytest.mark.parametrize("kind", ["expression", "constant"])
     def test_variant_payload_is_required(self, kind):
-        # The OTHER half of retired ADV-STRM-008. "Exactly one of expression or
-        # constant" is two claims: at most one (covered above — the illegal
-        # combination left the type) and AT LEAST one, which is carried solely
-        # by the `...` on each variant's payload field. Make either field
-        # `| None = Field(default=None)` and every other test here still passes
-        # while `{"kind": "expression"}` validates with a null payload.
-        # Retiring an advisory rule without pinning both halves of its
-        # replacement is the specific risk of this refactor.
+        # The AT-LEAST-ONE half of retired ADV-STRM-008. "Exactly one of
+        # expression or constant" was two claims: at most one, which the union
+        # now makes unrepresentable, and at least one, which is carried by the
+        # `...` on each variant's payload field. Retiring an advisory rule
+        # means pinning both halves of whatever replaces it.
         with pytest.raises(ValidationError):
             _ASSIGNMENT_VALUE.validate_python({"kind": kind})
 
@@ -244,16 +269,12 @@ class TestAssignmentValueKind:
             )
 
     def test_published_schema_carries_the_kind_discriminator(self):
-        # Without this the discriminator is INVISIBLE to the suite. Every other
-        # test in this class passes against a plain smart union, because
-        # `extra="forbid"` on each variant does the rejecting — so deleting
-        # `Field(discriminator="kind")` stays green, and the only signal is a
-        # separate render job reporting the schema as "stale", which a
-        # re-render silences.
-        #
         # The discriminator is a contract commitment, not an implementation
-        # detail: it is what lets an external validator report which variant
-        # failed, and the model comment promises it. Assert the rendered node.
+        # detail: it is what lets an external validator report WHICH variant
+        # failed, and the model comment promises it. A plain smart union
+        # rejects the same documents (`extra="forbid"` on each variant does
+        # that work), so the commitment can only be asserted on the rendered
+        # node itself.
         value = StreamMapping.model_json_schema()["$defs"]["Assignment"]["properties"]["value"]
         assert "discriminator" in value, (
             "the published assignment value is a bare union — `Field(discriminator=...)` "
@@ -272,12 +293,11 @@ class TestAssignmentValueKind:
         }
 
     def test_published_schema_rejects_what_the_model_rejects(self):
-        # One contract, two validators. Note this does NOT pin the
-        # discriminator — a bare `anyOf` with `extra="forbid"` on both variants
-        # rejects these same payloads, so this passes with `discriminator=`
-        # removed. `test_published_schema_carries_the_kind_discriminator` above
-        # carries that alone. What this pins is model/schema agreement on the
-        # malformed shapes, which is a separate and equally losable property.
+        # One contract, two validators. What this pins is model/schema
+        # AGREEMENT on the malformed shapes — not the discriminator, which a
+        # bare `anyOf` over two `extra="forbid"` variants would satisfy just as
+        # well (`test_published_schema_carries_the_kind_discriminator` covers
+        # that).
         schema = StreamMapping.model_json_schema()
         validator = Draft202012Validator(schema)
         for payload in (
@@ -290,8 +310,8 @@ class TestAssignmentValueKind:
                 "expression": {"op": "get", "path": ["id"]},
                 "constant": {"arrow_type": "Utf8", "value": "acme"},
             },
-            # Payload-less variants: the rendered `required` is a separate
-            # losable fact from the model's `...`.
+            # Payload-less variants — the schema side of each variant's
+            # required payload.
             {"kind": "expression"},
             {"kind": "constant"},
         ):
@@ -311,9 +331,8 @@ class TestDatabaseWriteModes:
     AssertionError` at import in `stream.py`. Asserting the same condition
     *inline* here would prove nothing — this module imports `stream`, so a
     violation is a collection error and the test never runs. It is pinned in a
-    subprocess instead (`test_import_guard_rejects_a_mode_outside_the_universe`
-    below), because an unpinned guard is deletable, and the module comment
-    calls this one load-bearing.
+    subprocess instead
+    (`test_import_guard_rejects_a_mode_outside_the_universe` below).
     """
 
     def test_exact_members(self):
@@ -324,10 +343,9 @@ class TestDatabaseWriteModes:
 
     def test_import_guard_rejects_a_mode_outside_the_universe(self):
         # Import `stream` fresh in a subprocess with `WriteMode` narrowed, so
-        # the guard runs against a violating vocabulary. Without this the whole
-        # `if not _DB_WRITE_MODES <= set(WRITE_MODES): raise` block can be
-        # deleted with the suite green — an unpinned guard, which is what
-        # `.claude/rules/no-drift-surfaces.md` exists to prevent.
+        # the guard runs against a violating vocabulary. In-process there is no
+        # way to reach it: `stream` is already imported by the time any test
+        # body runs.
         source = textwrap.dedent(
             """
             import analitiq.contracts.endpoints as endpoints
@@ -381,9 +399,8 @@ class TestDatabaseWriteModes:
         #
         # The mode-specific match still does not prove membership: the message
         # interpolates the mode from the INPUT document, so it matches whenever
-        # the document says `truncate_insert`, valid or not. Hence the explicit
-        # membership assertion — without it this test stays green with
-        # `truncate_insert` removed from `_DB_WRITE_MODES`.
+        # the document says `truncate_insert`, valid or not — hence the
+        # explicit membership assertion below.
         assert "truncate_insert" in _DB_WRITE_MODES
         with pytest.raises(
             ValidationError, match=r"write\.mode='truncate_insert' must not declare it"
@@ -426,18 +443,18 @@ class TestStreamDestinationSchemaMirror:
     """`_STREAM_DESTINATION_SCHEMA_RULES` must reject what the validators reject.
 
     The four `allOf` branches in `stream.py` are a hand-written mirror of
-    `_validate_write_conflict_keys` and `_validate_db_write_mode`, and nothing
-    validated a destination document against the published schema — so each
-    branch could be deleted with the whole suite green, leaving the schema
-    laxer than the model.
+    `_validate_write_conflict_keys` and `_validate_db_write_mode`. A mirror's
+    characteristic failure is going laxer than what it mirrors, which no
+    model-only test can see — the same failure this release hit and fixed on
+    the `operations.write` side (see
+    tests/schemas/test_render_schemas.py::test_write_mode_conflict_keys_mirror_covers_every_mode).
 
-    That is exactly the bug this release shipped and then fixed on the
-    `operations.write` side (see
-    tests/schemas/test_render_schemas.py::test_write_mode_conflict_keys_mirror_covers_every_mode),
-    and #108 CHANGED branch 4's meaning: "non-upsert" used to mean `insert` and
-    now also covers `truncate_insert`. Live surface, not legacy.
+    #108 also CHANGED branch 4's meaning: "non-upsert" used to mean `insert`
+    and now also covers `truncate_insert`. Live surface, not legacy.
 
-    One case per branch, each asserted against BOTH validators.
+    One case per branch, each asserted against BOTH validators, plus a
+    symmetric accept set so an over-tightened branch cannot pass as a
+    correct one.
     """
 
     # (branch, document) — every one must be rejected by model and schema alike.

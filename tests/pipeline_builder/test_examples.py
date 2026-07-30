@@ -99,11 +99,11 @@ def test_example_declares_matching_schema_url(entity, path):
 def test_full_refresh_example_demonstrates_the_shapes_it_is_named_for():
     """The #108 example must keep demonstrating #108's shapes.
 
-    `test_example_validates` proves this file is a valid stream; nothing proved
-    it still *shows* anything. Each assertion below can be broken with the whole
-    suite green — swap `truncate_insert` for `insert`, flatten the nested token
-    path, turn the constant into an expression — and this is the repo's only
-    worked example of all three, which is what creator agents copy from.
+    Validity and illustrativeness are different properties: this file stays a
+    perfectly valid stream after swapping `truncate_insert` for `insert`,
+    flattening the nested token path, or turning the constant into an
+    expression. It is the repo's only worked example of all three, and worked
+    examples are what creator agents copy from, so each shape is asserted.
     """
     import json
 

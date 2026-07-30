@@ -148,12 +148,9 @@ def _has_known_scope(token: str) -> bool:
 # The tuple is derived from the Literal so those two cannot drift.
 #
 # `truncate_insert` is the full-refresh mode: empty the destination, then insert
-# the run's records. Per #108 it is already first-class on the wire and in the
-# CDK, and this contract is the one declaration missing it — so a destination
-# declaring the mode is rejected at startup until this ships. #108 also records
-# the verdict on its delivery semantics — at-least-once by design. Stated as a
-# verdict deliberately: the mechanics belong to the SQL write path, not to this
-# contract, and restating them here would be a copy that rots.
+# the run's records. Adding it here is what #108 asks of this contract; its
+# delivery semantics (at-least-once by design) and its execution belong to the
+# SQL write path, and restating either here would be a copy that rots.
 WriteMode = Literal["insert", "upsert", "truncate_insert"]
 WRITE_MODES: tuple[str, ...] = get_args(WriteMode)
 READ_METHODS: tuple[str, ...] = ("GET", "POST")
@@ -1542,7 +1539,7 @@ def is_valid_conflict_keys(value: Any) -> bool:
 
 
 class WriteOperation(_EndpointModel):
-    """One write-mode block (insert or upsert)."""
+    """One write-mode block, keyed in `operations.write` by the mode it serves."""
 
     model_config = ConfigDict(
         json_schema_extra={

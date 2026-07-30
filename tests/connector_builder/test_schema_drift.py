@@ -90,6 +90,13 @@ EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # endpoint-creator.md, connector-provider-researcher.md, and
 # connector-spec-api/SKILL.md.
 EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
+# `Operations.write` keys — the destination write-mode vocabulary, shared with
+# database destinations. `endpoint-creator.md` restates the whole set as decision
+# logic: it tells the author to key only `insert` / `upsert`, and names
+# `truncate_insert` as the member the schema permits but an API destination
+# cannot perform. A fourth mode landing in the contract must reach that guidance,
+# or the agent silently omits a writable operation the provider supports.
+EXPECTED_WRITE_MODES = {"insert", "upsert", "truncate_insert"}
 # Bare-marker arrow_type vocabulary enforced by the contract's authored-shape
 # rules (Object→properties, List→items, Json→neither). Owned by the
 # contract's `CONTAINER_CANONICAL_HEADS` (the grammar-derived set the
@@ -212,6 +219,32 @@ def _pattern_at(schema: dict, *path: str) -> str | None:
         pattern = cand.get("pattern")
         if isinstance(pattern, str):
             return pattern
+    return None
+
+
+def _property_names_enum(schema: dict, *path: str) -> set[str] | None:
+    """Return the `propertyNames.enum` at `$defs/.../<path>`, looking through `anyOf`.
+
+    A mode-keyed map (`dict[WriteMode, …]`) renders its closed key set as
+    `propertyNames.enum` rather than as an `enum` on the property itself, and an
+    optional map buries that under an `anyOf` branch beside the null one. Same
+    restructure tolerance as `_pattern_at`.
+    """
+    node: object = schema
+    for key in path:
+        if not isinstance(node, dict) or key not in node:
+            return None
+        node = node[key]
+    if not isinstance(node, dict):
+        return None
+    branches = node.get("anyOf")
+    candidates: list[dict] = [node]
+    if isinstance(branches, list):
+        candidates += [b for b in branches if isinstance(b, dict)]
+    for cand in candidates:
+        names = cand.get("propertyNames")
+        if isinstance(names, dict) and isinstance(names.get("enum"), list):
+            return set(names["enum"])
     return None
 
 
@@ -384,6 +417,20 @@ def test_idempotency_targets_match_schema(api_endpoint_schema: dict) -> None:
         EXPECTED_IDEMPOTENCY_TARGETS,
         "update io-contracts.md EndpointFacts.idempotency, endpoint-creator.md, "
         "connector-provider-researcher.md, and connector-spec-api/SKILL.md.",
+    )
+
+
+def test_write_modes_match_schema(api_endpoint_schema: dict) -> None:
+    schema_set = _property_names_enum(
+        api_endpoint_schema, "$defs", "Operations", "properties", "write"
+    )
+    assert schema_set == EXPECTED_WRITE_MODES, _diff_msg(
+        "operations.write keys",
+        schema_set,
+        EXPECTED_WRITE_MODES,
+        "update the write-mode guidance in endpoint-creator.md (which mode(s) to "
+        "key, and which the schema permits but an API destination cannot "
+        "perform) together with the pipeline plugin's WriteModeMapper.",
     )
 
 

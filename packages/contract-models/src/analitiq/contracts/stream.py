@@ -496,19 +496,18 @@ class Execution(StrictModel):
 
 
 # The write modes a database (connection-scope) destination may be asked to
-# perform — the subset of `endpoints.WriteMode` the engine's SQL write path
-# implements. An API (connector-scope) destination's mode is the selected
-# endpoint's `operations.write` key, resolved at runtime, so it is not
-# constrained here. Enforced in pydantic by `_validate_db_write_mode` and
-# mirrored into the published schema by the first `allOf` branch below.
+# perform — the subset of `endpoints.WriteMode` the SQL write path implements.
+# An API (connector-scope) destination's mode is the selected endpoint's
+# `operations.write` key, resolved at runtime, so it is not constrained here.
+# Enforced in pydantic by `_validate_db_write_mode` and mirrored into the
+# published schema by the first `allOf` branch below.
 #
 # Deliberately NOT `frozenset(WRITE_MODES)`, though the two are equal today.
 # They are separate facts: `WriteMode` is the universe of modes a destination
 # may be asked for, and it also keys an API endpoint's `operations.write`, so a
 # mode that only an HTTP provider can perform (a provider-specific verb, say)
-# belongs there and must NOT thereby become a legal SQL destination mode. Alias
-# them and adding one silently widens the other — the same defect #108 fixes,
-# pointed the other way, and nothing would fail.
+# belongs there and must NOT thereby become a legal SQL destination mode.
+# Aliasing them would make adding one to either side widen both.
 #
 # The subset assertion below catches the one direction that IS always wrong: a
 # database mode outside the universe. Same idiom as the `FilterOperator` guard
@@ -667,20 +666,19 @@ class StreamDestination(StrictModel):
 # ---------------------------------------------------------------------------
 
 
-# Why a token array rather than the dotted string this replaced (#108). A
-# dotted string needs something to split it, and per #108 the engine splits at
-# the root expression node only — so a `get` nested inside another node
-# (`pipe`, `if`, `concat`, `coalesce`) reaches the evaluator still holding the
-# raw string and silently produces an all-nulls column rather than an error —
-# the string's first character is looked up as a field name and misses. That
-# remains true of the engine until analitiq-ai/analitiq-engine#434 lands, which
-# is blocked on this release. Tokens make "parsed at the root only"
-# unrepresentable, and they retire the escaping question the dotted form never
-# answered: `["a.b"]` is a field named `a.b`, `["a", "b"]` is nested.
+# Why a token array rather than the dotted string this replaced (#108).
+#
+# A dotted string is not a path — it is a path plus an unstated splitting
+# convention, and the contract never stated one. Two questions it left open:
+# where the split happens (every consumer had to decide, and #108 records what
+# went wrong when they decided differently), and how a field name containing a
+# literal dot is spelled (unanswerable). Tokens answer both by construction:
+# there is nothing left to split, and `["a.b"]` is a field named `a.b` while
+# `["a", "b"]` is nested.
 #
 # Kept as a comment, not in the docstring: the docstring renders verbatim into
-# the published `$defs.GetExpression.description`, where an engine post-mortem
-# is noise for the external authors reading it.
+# the published `$defs.GetExpression.description`, where the rationale is noise
+# for the external authors reading it.
 class GetExpression(StrictModel):
     """`{"op": "get", "path": ["<segment>", ...]}` — read a source field.
 
@@ -979,10 +977,10 @@ AssignmentValue = Annotated[
 
 # An assignment target addresses exactly one field on the destination record
 # root, so its `path` is a single segment. Nesting beneath that root is declared
-# by `arrow_type: "Object"` plus `properties` (or `List` plus `items`);
-# expressing it a second way, as a dotted target path, is the defect — per #108
-# the engine splits such a path and rejects any result longer than one segment,
-# so pinning it here turns a runtime rejection into an unparseable document.
+# by `arrow_type: "Object"` plus `properties` (or `List` plus `items`), and a
+# dotted target path would be a second, contradictory spelling of the same
+# thing (#108). Constraining it here makes that document unparseable rather
+# than leaving each consumer to reject it later.
 #
 # Two constraints. "At least one non-whitespace character" is the parity one —
 # it is what `NonEmptyStr` already guarantees for a SOURCE segment

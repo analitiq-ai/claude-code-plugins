@@ -135,10 +135,11 @@ was raised.
    and only those the provider documents an operation for. The vocabulary is
    shared with database destinations, so the schema also permits
    `truncate_insert` (empty the destination, reload it) — that mode belongs to
-   the SQL write path and an API destination cannot perform it, so keying it
-   produces a connector that validates and then fails at run time. If a provider
-   genuinely exposes a replace-the-collection operation, raise it as a contract
-   gap rather than authoring around it. The modes you do key share the same
+   the SQL write path and has no defined meaning for an API destination, so a
+   connector keying it passes validation while declaring something no HTTP
+   provider was asked to do. If a provider genuinely exposes a
+   replace-the-collection operation, raise it as a contract gap rather than
+   authoring around it. The modes you do key share the same
    block shape and differ only in `conflict_keys`. Each mode block holds:
    - `request` (required) — `method` (`POST` / `PUT` / `PATCH`), `path`,
      and the same optional `query` / `headers` / `path_params` / `body`

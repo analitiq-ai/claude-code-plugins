@@ -2417,7 +2417,7 @@
           }
         }
       ],
-      "description": "One write-mode block (insert or upsert).",
+      "description": "One write-mode block, keyed in `operations.write` by the mode it serves.",
       "properties": {
         "batching": {
           "anyOf": [
