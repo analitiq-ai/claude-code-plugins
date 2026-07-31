@@ -154,6 +154,46 @@ def test_unrecognized_strict_value_is_a_guard_error(guard, monkeypatch):
     assert guard.main() == 2
 
 
+def test_unpublished_pin_exits_3_not_2(guard, monkeypatch):
+    # A package-release PR pins the version it is about to publish, so this red
+    # is a routine step (root CLAUDE.md "Releases"). It must be distinguishable
+    # from "the runner is broken", or people learn to wave exit 2 through.
+    monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "")
+
+    def unpublished(pin, drivers):
+        raise guard.PinNotPublished(f"{pin} is not on PyPI yet")
+
+    monkeypatch.setattr(guard, "probe_pinned_wheel", unpublished)
+    assert guard.main() == 3
+
+
+def test_unpublished_is_told_apart_from_an_unreachable_index(guard):
+    # Both cases print "No matching distribution found"; only the version list
+    # discriminates. Getting this backwards would either mask a dead index as a
+    # routine release step, or make every release PR look like broken CI.
+    pin = "analitiq-validator==1.0.0rc20"
+
+    with pytest.raises(guard.PinNotPublished):
+        guard._raise_if_unpublished(
+            pin,
+            "ERROR: Could not find a version that satisfies the requirement "
+            f"{pin} (from versions: 1.0.0rc14, 1.0.0rc19)\n"
+            f"ERROR: No matching distribution found for {pin}",
+        )
+
+    # Index unreachable -> `none`. Must fall through to the GuardError path.
+    guard._raise_if_unpublished(
+        pin,
+        "WARNING: Retrying after connection broken by ProxyError\n"
+        "ERROR: Could not find a version that satisfies the requirement "
+        f"{pin} (from versions: none)\n"
+        f"ERROR: No matching distribution found for {pin}",
+    )
+
+    # An unrelated pip failure (e.g. a build error) is not a resolution failure.
+    guard._raise_if_unpublished(pin, "ERROR: Failed building wheel for foo")
+
+
 def test_guard_error_exits_2_never_a_verdict(guard, monkeypatch):
     # "A guard that cannot run must never read as green" — nor as a
     # contradiction. Both an infrastructure failure in the probe and an

@@ -115,42 +115,33 @@ repo-root `conftest.py` puts both source trees on the path;
 `test_suite_exercises_in_repo_source_not_an_installed_wheel` guards this.
 
 Separately, the plugins **self-install a published release at runtime** — end
-users have no checkout, so this must be a real PyPI version:
+users have no checkout, so the pin must name a version already on PyPI.
+**`VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_analitiq.py` is
+the only place that version is stated.** Never restate it — not here, not in a
+README. The one unavoidable second copy is the self-install line in
+`plugins/analitiq-connector-builder/agents/connector-schema-validator.md`
+(prose an agent runs, so it cannot import the constant); it is pinned to
+`VALIDATOR_PIN` by `test_connector_validator_agent_states_the_same_pin`.
 
-The pin is currently **`analitiq-validator==1.0.0rc19`** (which resolves
-`analitiq-contract-models==1.0.0rc19`). Three places state it, each pinned by a
-test so none can rot silently:
+The pin must be **at or behind** `packages/validator/pyproject.toml`
+(`test_validator_pin_matches_the_package_this_repo_ships`). Equal is allowed and
+is the steady state; behind is tolerated because the pin names a version that
+must already be **on PyPI**, and the publish is a hand-pushed tag that fires
+*after* the version bump merges. The dangerous direction is a pin **ahead** of
+what this repo ships: marketplace installs track main HEAD, so a pin naming an
+unpublished version means every user's `pip install` fails outright and the
+plugin cannot run at all.
 
-- `VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_analitiq.py`
-- the self-install line in
-  `plugins/analitiq-connector-builder/agents/connector-schema-validator.md`
-  (three occurrences: the comment, the version probe, and the install command)
-- this section
-
-`PINNED_VERSION` in `tests/connector_builder/_pins.py` is a different value: it
-tracks what this repo *ships* (`packages/contract-models/pyproject.toml`), so it
-moves with the pyproject bump, ahead of the pin, and only coincides with the pin
-outside a release window. The drift suite states no version — it imports `_pins`.
-
-`test_validator_pin_matches_the_package_this_repo_ships` requires the pin to be
-**at or behind** `packages/validator/pyproject.toml`. Not equal: release-please
-bumps that file inside the Release PR, and the pin cannot follow in the same
-commit because it names a version that must already be on PyPI — which only
-happens after that PR merges and publishes. Requiring equality would leave the
-Release PR permanently red. The test catches the dangerous direction instead: a
-pin *ahead* of what this repo ships points at something users cannot install.
-Bump the pin in a follow-up once the release is out.
+`PINNED_VERSION` in `tests/connector_builder/_pins.py` is a *different* value —
+what this repo **ships** (`packages/contract-models/pyproject.toml`), not what
+the plugins install — so it runs ahead of the pin during a release window.
 
 `scripts/check_validator_pin_contract.py` (CI job `pinned-validator-guard`)
 guards the pin from the other side: it installs the pinned release into an
 isolated venv and fails if that **published** wheel rejects the canonical
-`dialect+driver` values the plugin prose teaches. Marketplace installs track
-main HEAD (the plugin sources are unpinned relative paths), so the guard is
-strict on pushes to main — a release window (pin ≠ shipped) shows as a red
-main until the pin catch-up lands — and on `release-please--*` branches;
-ordinary PRs inside a window only warn so a contract-widening PR can still
-land. The script's docstring owns the full semantics, including the
-live-settings caveat that no branch protection currently requires the check.
+`dialect+driver` values the plugin prose teaches. Its docstring owns the full
+semantics — the strictness windows, the exit codes, and the live-settings caveat
+that no branch protection currently requires the check.
 
 Running a plugin helper from a checkout would otherwise trigger the bootstrap
 (build a venv, install the published wheel, `os.execv` into it). The root
@@ -248,9 +239,32 @@ the rc suffix and jumping the train to a final release.
 
 Manual tagging also matches their discipline: `packages/validator` pins
 contract-models with an exact `==`, `test_contract_models_pin.py` fails on any
-skew, so three values must move together (both `[project].version`s and the pin);
-and a minor bump is a coordinated engine rollout, not something a commit type
-should infer.
+skew, so several values must move together; and a minor bump is a coordinated
+engine rollout, not something a commit type should infer.
+
+**A package release is ONE PR.** All five values move in a single commit — both
+`[project].version`s, validator's `==` dep on contract-models, `VALIDATOR_PIN`,
+and the connector agent's self-install line. The publish happens *from the PR
+branch, before the merge*, so main is only ever updated to a pin that is already
+on PyPI:
+
+1. Open the PR with all five bumped. `pinned-validator-guard` goes **red** —
+   expected, the new version isn't published yet.
+2. Push the release tag at the PR head: `git tag validator-v1.0.0rc20 <sha> &&
+   git push origin validator-v1.0.0rc20`. The publish workflow is tag-triggered
+   and checks out the tagged commit; it does not care whether that commit is on
+   main yet, and asserts tag == pyproject version before building.
+3. Approve the publish in the `pypi` environment (Analitiq-Bot).
+4. Re-run the `pinned-validator-guard` job. It now installs the published wheel
+   and goes green — that red→green flip **is** the release gate.
+5. **Merge with a merge commit, not a squash.** A squash rewrites the commit the
+   tag points at, orphaning the released artifact's provenance: the tag would
+   reference a commit that is in no branch. This is the one place the repo's
+   squash convention does not apply. (Live-settings caveat: nothing enforces
+   this — it is discipline, like the environment reviewer rules.)
+
+Both packages release together when their versions move together; push both tags
+at the same commit.
 
 Config: `release-please-config.json` + `.release-please-manifest.json`.
 Workflow: `.github/workflows/release-please.yml`.

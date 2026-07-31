@@ -11,12 +11,18 @@ name: Publish analitiq-validator
 # analitiq-validator` and run the `analitiq-validate` console
 # script.
 #
-# Runbook:
-#   1. Bump `version` in packages/validator/pyproject.toml (rc while iterating; final
-#      X.Y.Z once). Merge to main.
-#   2. Push a tag matching that version: `validator-v1.0.0rc2`.
+# Runbook — the tag is pushed at the PR head, BEFORE the merge, so main is only
+# ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
+# full sequence; the short form:
+#   1. One PR bumps every coupled value (this pyproject's `version`, the
+#      contract-models `==` dep, VALIDATOR_PIN, the connector agent's
+#      self-install line). `pinned-validator-guard` is red until step 3.
+#   2. Push a tag matching that version at the PR head: `validator-v1.0.0rc2`.
+#      Checkout below resolves the tag, so the commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the validator's own
 #      test suite, builds sdist+wheel from the rendered package, and publishes.
+#   4. Re-run `pinned-validator-guard` (now green), then merge with a MERGE
+#      COMMIT — squashing would orphan the commit this tag points at.
 #
 # PyPI versions are immutable (single-use): iterate with pre-release suffixes
 # (rc1, rc2, ...) and cut the final X.Y.Z once.

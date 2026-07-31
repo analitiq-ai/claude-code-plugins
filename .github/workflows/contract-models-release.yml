@@ -8,12 +8,19 @@ name: Publish analitiq-contract-models
 # rendering of a private one. build.py stages it verbatim and guards the result:
 # no `alq` codename leak, no private path leak, boto3-free, minimal surface.
 #
-# Runbook:
-#   1. Bump `version` in packages/contract-models/pyproject.toml (e.g. 1.0.0rc1 -> rc2;
-#      1.0.0 for the first immutable release). Merge to main.
-#   2. Push a tag matching that version: `contract-models-v1.0.0rc2`.
+# Runbook — the tag is pushed at the PR head, BEFORE the merge, so main is only
+# ever updated to a version already on PyPI. Root CLAUDE.md "Releases" owns the
+# full sequence; the short form:
+#   1. One PR bumps every coupled value (this pyproject's `version`, the
+#      validator pyproject's `version` and its `==` dep on this package,
+#      VALIDATOR_PIN, the connector agent's self-install line).
+#   2. Push a tag matching that version at the PR head:
+#      `contract-models-v1.0.0rc2`. Checkout below resolves the tag, so the
+#      commit need not be on main yet.
 #   3. This workflow asserts tag == pyproject version, runs the build guards,
 #      builds sdist+wheel from the rendered package, and publishes to PyPI.
+#   4. Merge with a MERGE COMMIT — squashing would orphan the commit this tag
+#      points at.
 #
 # PyPI versions are immutable: a version is single-use, so use pre-release
 # suffixes (rc1, rc2, .dev1, ...) while iterating and cut the final X.Y.Z once.
