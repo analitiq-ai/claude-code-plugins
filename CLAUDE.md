@@ -117,8 +117,8 @@ repo-root `conftest.py` puts both source trees on the path;
 Separately, the plugins **self-install a published release at runtime** — end
 users have no checkout, so this must be a real PyPI version:
 
-The pin is currently **`analitiq-validator==1.0.0rc14`** (which resolves
-`analitiq-contract-models==1.0.0rc14`). Three places state it, each pinned by a
+The pin is currently **`analitiq-validator==1.0.0rc19`** (which resolves
+`analitiq-contract-models==1.0.0rc19`). Three places state it, each pinned by a
 test so none can rot silently:
 
 - `VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_analitiq.py`
