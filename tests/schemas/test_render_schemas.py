@@ -162,8 +162,16 @@ def test_write_mode_conflict_keys_mirror_covers_every_mode():
     )
     write = schema["$defs"]["Operations"]["properties"]["write"]
     # `write` renders as anyOf[object-branch, null]; the mirror lives on the
-    # object branch, alongside the derived `propertyNames.enum`.
-    obj_branch = next(b for b in write["anyOf"] if b.get("type") == "object")
+    # object branch, alongside the derived `propertyNames.enum`. Absent means
+    # the field stopped rendering as a nullable map — report that rather than
+    # letting a bare `next()` raise StopIteration with no context.
+    obj_branch = next(
+        (b for b in write["anyOf"] if b.get("type") == "object"), None
+    )
+    assert obj_branch is not None, (
+        "Operations.write no longer renders an object branch under `anyOf` — "
+        f"the mode-keyed map was restructured; got {write.get('anyOf')!r}"
+    )
     branches = obj_branch["properties"]
 
     assert set(obj_branch["propertyNames"]["enum"]) == set(WRITE_MODES)

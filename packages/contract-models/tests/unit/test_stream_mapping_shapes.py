@@ -367,6 +367,11 @@ class TestDatabaseWriteModes:
             [sys.executable, "-c", source],
             capture_output=True,
             text=True,
+            # The child's exit status is not the signal — it prints GUARD_FIRED
+            # on success and would exit non-zero if the guard did NOT fire and
+            # something else raised. Assert on stdout below, which distinguishes
+            # those; `check=True` would conflate them into the same CalledProcessError.
+            check=False,
             env={
                 **os.environ,
                 "DOMAIN": "analitiq.ai",

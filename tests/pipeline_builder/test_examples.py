@@ -105,8 +105,6 @@ def test_full_refresh_example_demonstrates_the_shapes_it_is_named_for():
     expression. It is the repo's only worked example of all three, and worked
     examples are what creator agents copy from, so each shape is asserted.
     """
-    import json
-
     path = ROOT / "skills/stream-spec/examples/db-full-refresh-truncate-insert.example.json"
     doc = json.loads(path.read_text())
 
