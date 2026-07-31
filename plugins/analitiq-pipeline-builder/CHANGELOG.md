@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.1.3...analitiq-pipeline-builder-v0.2.0) (2026-07-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **contract-models:** token-array get paths, single-segment targets, explicit value kind, truncate_insert, drop max_concurrent_batches, bound page size (rc19) ([#109](https://github.com/analitiq-ai/claude-code-plugins/issues/109))
+
+### Features
+
+* **contract-models:** token-array get paths, single-segment targets, explicit value kind, truncate_insert, drop max_concurrent_batches, bound page size (rc19) ([#109](https://github.com/analitiq-ai/claude-code-plugins/issues/109)) ([c0069a8](https://github.com/analitiq-ai/claude-code-plugins/commit/c0069a80a5b54e204b14f37ebdda5710f08c1e64))
+
 ## [0.1.3](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.1.2...analitiq-pipeline-builder-v0.1.3) (2026-07-23)
 
 
