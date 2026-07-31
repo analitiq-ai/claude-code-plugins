@@ -15,7 +15,7 @@ the canonical `dialect+driver` values against the wheel's own
 `SqlAlchemyTransport`.
 
 Single sources, referenced not copied:
-  - the pin:     `VALIDATOR_PIN` in plugins/analitiq-pipeline-builder/scripts/_analitiq.py
+  - the pin:     `VALIDATOR_PIN` in plugins/analitiq-pipeline-builder/scripts/_bootstrap.py
   - the canon:   the "## Driver examples" table in
                  plugins/analitiq-connector-builder/skills/connector-spec-db/spec-dsn-bindings.md
   - shipped:     `[project].version` in packages/validator/pyproject.toml
@@ -37,7 +37,8 @@ merely a precursor to it.
     GuardError — a typo must not silently downgrade to non-strict.
 
 Exit codes: 0 verdict-ok (or window warning), 1 strict contradiction, 2
-GuardError. EVERY infrastructure failure — unreadable sources, venv/pip
+GuardError, 3 the pin is not on PyPI yet (expected mid-release — push the tag).
+EVERY infrastructure failure — unreadable sources, venv/pip
 failure, probe crash, unparseable probe output — is a GuardError: a guard
 that cannot run must never read as green, and must not be mistaken for a
 verdict either. Inside the probe, only pydantic's ValidationError counts as
@@ -65,7 +66,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PIN_SOURCE = (
-    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_analitiq.py"
+    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_bootstrap.py"
 )
 CANON_SOURCE = (
     REPO_ROOT
@@ -103,8 +104,19 @@ class GuardError(RuntimeError):
     """The guard could not run — infrastructure, not a verdict. Exits 2."""
 
 
+class PinNotPublished(RuntimeError):
+    """The pinned version is not on PyPI yet. Exits 3.
+
+    Deliberately NOT a GuardError. A package release bumps the pin and publishes
+    from the PR head before merging (root CLAUDE.md "Releases"), so this state is
+    a routine step of every release — red, but expected, and cleared by pushing
+    the tag rather than by fixing anything. Collapsing it into exit 2 would train
+    people to wave through the code that also means "the runner is broken".
+    """
+
+
 def read_pin() -> str:
-    """The full `analitiq-validator==X` requirement from `_analitiq.py`."""
+    """The full `analitiq-validator==X` requirement from `_bootstrap.py`."""
     match = re.search(
         r'^VALIDATOR_PIN = "(analitiq-validator==[^"]+)"$',
         PIN_SOURCE.read_text(encoding="utf-8"),
@@ -190,6 +202,27 @@ def read_strict_env() -> bool:
     return value == "1"
 
 
+def _raise_if_unpublished(pin: str, output: str) -> None:
+    """Re-raise a pip resolution failure as `PinNotPublished` — but only when the
+    index was reachable and simply has no such version.
+
+    pip reports "index is unreachable" and "version does not exist" with the same
+    `No matching distribution found`. The discriminator is the version list it
+    offers: a real list proves it read the index and the pin is genuinely absent
+    (the expected state of an open package-release PR, whose pin names the
+    version that PR is about to publish). `none` means it never saw the index —
+    a network or index failure, which stays a GuardError.
+    """
+    if "No matching distribution found" not in output:
+        return
+    match = re.search(r"\(from versions: ([^)]*)\)", output)
+    if not match or match.group(1).strip() == "none":
+        return
+    raise PinNotPublished(
+        f"{pin} is not on PyPI yet — the index offers: {match.group(1).strip()}"
+    )
+
+
 def probe_pinned_wheel(pin: str, drivers: list[str]) -> list[str]:
     """Install `pin` into a throwaway venv; return the drivers its models reject."""
     with tempfile.TemporaryDirectory(prefix="validator-pin-guard-") as tmp:
@@ -208,6 +241,7 @@ def probe_pinned_wheel(pin: str, drivers: list[str]) -> list[str]:
             # can be wrapped as a GuardError (exit 2, never a verdict).
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
             if result.returncode != 0:
+                _raise_if_unpublished(pin, f"{result.stdout}\n{result.stderr}")
                 raise GuardError(
                     f"{' '.join(cmd)} failed:\n"
                     f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
@@ -255,6 +289,16 @@ def main() -> int:
         print(f"canonical drivers ({CANON_SOURCE.name}): {', '.join(drivers)}")
 
         rejected = probe_pinned_wheel(pin, drivers)
+    except PinNotPublished as exc:
+        print(f"NOT PUBLISHED YET: {exc}", file=sys.stderr)
+        print(
+            "Expected while a package-release PR is open — the pin names the "
+            "version this PR releases, and the publish runs from the PR head "
+            "before the merge. Push the release tag at this commit, approve the "
+            "publish, then re-run this job. See root CLAUDE.md 'Releases'.",
+            file=sys.stderr,
+        )
+        return 3
     except (GuardError, OSError) as exc:
         # OSError covers unreadable source files and unlaunchable
         # subprocesses — infrastructure, exactly like a GuardError.

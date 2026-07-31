@@ -195,18 +195,13 @@ def test_active_pipeline_requires_a_stream(tmp_path):
 # --- the pin itself --------------------------------------------------------
 
 def test_validator_pin_matches_the_package_this_repo_ships():
-    """`VALIDATOR_PIN` and packages/validator's version are one fact, twice.
+    """The pin must be a version this repo has actually published.
 
-    The plugin self-installs the PUBLISHED validator at runtime (end users have
-    no checkout), so the pin must be a real released version — it cannot simply
-    read the source tree. But it must be the version *this repo publishes*, or
-    agents would run against a contract the repo no longer considers current.
-
-    Previously this compared against requirements-dev.txt. That file no longer
-    carries the pin: the packages are source here, and installing the published
-    wheel alongside would silently shadow that source.
+    The plugins self-install the PUBLISHED validator at runtime (end users have
+    no checkout), so the pin cannot simply read the source tree — but it must not
+    run ahead of it either.
     """
-    from _analitiq import VALIDATOR_PIN
+    from _bootstrap import VALIDATOR_PIN
 
     pyproject = (REPO_ROOT / "packages" / "validator" / "pyproject.toml").read_text()
     # Anchor to [project]; a bare `^version =` would take whichever table came
@@ -215,45 +210,28 @@ def test_validator_pin_matches_the_package_this_repo_ships():
     shipped = re.search(r'^version\s*=\s*"([^"]+)"', project, re.M)
     assert shipped, "packages/validator/pyproject.toml has no [project] version"
 
-    pin_version = VALIDATOR_PIN.split("==", 1)[1]
     assert VALIDATOR_PIN.startswith("analitiq-validator=="), VALIDATOR_PIN
+    pin_version = VALIDATOR_PIN.split("==", 1)[1]
 
-    # NOT equality. release-please bumps pyproject.toml inside the Release PR,
-    # and the pin cannot follow in the same commit: it names a version that must
-    # already be ON PyPI, which only happens after that PR merges and publishes.
-    # Requiring equality would make the Release PR permanently red and
-    # unmergeable. The dangerous direction is the other one - a pin AHEAD of
-    # what this repo has shipped points at something users cannot install.
+    # `<=`, not `==`: equal is the steady state, behind is tolerated while a
+    # release is in flight (the pin can only name a version already on PyPI, and
+    # the publish tag fires after the bump merges). Ahead is the failure — main
+    # HEAD is what users install, so an unpublished pin breaks `pip install`
+    # outright. Root CLAUDE.md explains the window.
     assert Version(pin_version) <= Version(shipped.group(1)), (
-        f"_analitiq.VALIDATOR_PIN is {VALIDATOR_PIN!r}, ahead of the "
+        f"_bootstrap.VALIDATOR_PIN is {VALIDATOR_PIN!r}, ahead of the "
         f"{shipped.group(1)} this repo ships. Agents would try to install a "
         "version that is not published.")
 
-    # CLAUDE.md names the pin too, and sits outside the generator's plugin-root
-    # scope, so nothing else would notice it going stale. Assert its presence
-    # FIRST: a conditional check would silently disable itself the moment someone
-    # reworded the line, which is exactly the drift it exists to catch.
-    # Repo-root CLAUDE.md: both plugins consume the same validator, so the pin is
-    # stated once for the monorepo rather than per plugin.
-    claude_md = (REPO_ROOT / "CLAUDE.md").read_text()
-    assert "analitiq-validator==" in claude_md, (
-        "CLAUDE.md no longer states the validator pin in the `analitiq-validator==X` "
-        "form this test recognises; restore it or update this assertion.")
-    assert VALIDATOR_PIN in claude_md, (
-        f"CLAUDE.md documents a different validator pin than {VALIDATOR_PIN!r}")
-
 
 def test_connector_validator_agent_states_the_same_pin():
-    """The connector plugin's validator agent self-installs the same pin.
+    """The connector agent's self-install line is the pin's one unavoidable copy.
 
-    CLAUDE.md lists the agent's self-install block among the places stating
-    the runtime pin, "each pinned by a test" — this is that test. The block
-    states the version in three forms (the lockstep comment, the version
-    probe, the install command); every version token in the file must equal
-    the pin, so a partial bump cannot leave a probe that never matches what
-    the install command actually installs.
+    It is prose an agent runs, so it cannot import `VALIDATOR_PIN`. Every version
+    token in the file must equal the pin — a partial bump would leave the probe
+    checking for something the install command never installs.
     """
-    from _analitiq import VALIDATOR_PIN
+    from _bootstrap import VALIDATOR_PIN
 
     pin_version = VALIDATOR_PIN.split("==", 1)[1]
     agent_md = (REPO_ROOT / "plugins" / "analitiq-connector-builder"
@@ -266,16 +244,7 @@ def test_connector_validator_agent_states_the_same_pin():
         "pre-release?); restore the self-install pin or update this assertion.")
     assert set(versions) == {pin_version}, (
         f"connector-schema-validator.md states versions {sorted(set(versions))!r} "
-        f"but the runtime pin is {pin_version!r} — bump every occurrence "
-        "(comment, probe, install command) together.")
-
-    # The lockstep comment's bare `rcN` shorthand must match the pin too.
-    rc = re.search(r"rc\d+$", pin_version)
-    assert rc, f"pin {pin_version!r} is not an rcN pre-release; update this test"
-    shorthands = re.findall(r"(?<![0-9.])\brc\d+\b", agent_md)
-    assert set(shorthands) <= {rc.group(0)}, (
-        f"connector-schema-validator.md uses bare shorthand(s) "
-        f"{sorted(set(shorthands))!r} that do not match the pin's {rc.group(0)!r}")
+        f"but the runtime pin is {pin_version!r}")
 
 
 def test_suite_exercises_in_repo_source_not_an_installed_wheel():

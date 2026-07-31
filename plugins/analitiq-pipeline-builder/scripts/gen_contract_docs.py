@@ -35,7 +35,7 @@ import re
 import sys
 from pathlib import Path
 
-from _analitiq import ensure_deps_or_reexec
+from _bootstrap import ensure_deps_or_reexec
 
 # Docs the generator is allowed to rewrite: everything under the plugin root. A block id
 # may appear in more than one file; every occurrence is rendered identically.

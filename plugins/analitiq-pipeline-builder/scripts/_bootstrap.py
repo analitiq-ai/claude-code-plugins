@@ -14,11 +14,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Single source of the validator pin — the PUBLISHED release the plugin
-# self-installs at runtime. requirements-dev.txt deliberately does NOT carry it
-# (installing the wheel would shadow the in-repo source); the invariant is
-# instead `pin == packages/validator/pyproject.toml version`, enforced by
-# tests/pipeline_builder/test_contract_enforcement.py.
+# Single source of the validator pin — the PUBLISHED release both plugins
+# self-install at runtime. Nothing else may restate this version; the connector
+# plugin's validator agent carries the one unavoidable copy (prose, not code)
+# and is pinned to it by tests/pipeline_builder/test_contract_enforcement.py,
+# which also holds the pin at or behind packages/validator/pyproject.toml.
+# requirements-dev.txt deliberately does NOT carry it — installing the wheel
+# would shadow the in-repo source.
 VALIDATOR_PIN = "analitiq-validator==1.0.0rc19"
 
 _REEXEC_SENTINEL = "ANALITIQ_PIPELINE_VALIDATOR_BOOTSTRAPPED"
