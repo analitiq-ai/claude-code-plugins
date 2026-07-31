@@ -18,7 +18,7 @@ onto them is not, and is what this file adds.
 | `stream.source.replication.method` | `full_refresh`, `incremental` | discriminated union `analitiq.contracts.stream.Replication` |
 | `stream.source.database_pagination.type` | `offset`, `keyset` | discriminated union `analitiq.contracts.stream.DatabasePagination` |
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
-| `stream.destinations[].write.mode` (database) | `insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
+| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
 <!-- END GENERATED: enum-vocabulary -->
 
 ## ScheduleTypeMapper
@@ -57,11 +57,27 @@ both methods are always supported.
 | api | one of the endpoint's `operations.write` keys | → | that key (verbatim) |
 | database | "insert", "append", "load" | → | `insert` |
 | database | "upsert", "merge", "on-conflict update" | → | `upsert` (requires `conflict_keys`) |
+| database | "overwrite", "replace", "full refresh", "truncate and load", "re-sync" | → | `truncate_insert` (forbids `conflict_keys`) |
 
 For database `upsert`, ask the user (or infer from the destination
 endpoint's `primary_keys`) which fields form the conflict resolution
 key set. `conflict_keys` is a flat, non-empty list of field names
 (`[<field>, …]`).
+
+`truncate_insert` **empties the destination** and reloads it — the full-refresh
+mode every comparable tool carries (Airbyte `overwrite`, Singer `FULL_TABLE`,
+Fivetran re-sync). Route to it only when the user describes *replacing* the
+destination's contents rather than adding to them.
+
+It is destructive, so never infer it from the source's shape alone. A source
+with no cursor and no stable key is a signal, not a verdict: an append-only
+event or log stream fits that description exactly, and `insert` is correct there
+— `truncate_insert` would wipe the accumulated history on every run. Decide by
+what the destination is *for*: a mirror of current state (route here) or an
+accumulating record (do not). When the user's intent is not explicit, **ask
+before routing to a mode that empties a table.**
+
+Delivery is at-least-once by design; say so if the user is weighing modes.
 
 ## AuthTypeMapper (informational)
 

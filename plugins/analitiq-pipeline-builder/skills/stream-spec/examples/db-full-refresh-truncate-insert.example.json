@@ -1,0 +1,129 @@
+{
+  "$schema": "https://schemas.analitiq.ai/stream/latest.json",
+  "stream_id": "44444444-4444-4444-8444-444444444444",
+  "display_name": "Product catalog mirror",
+  "description": "Full refresh of a catalog with no reliable cursor and no stable key: the destination mirrors current state, so each run replaces it.",
+  "pipeline_id": "20202020-2020-4020-8020-202020202020",
+  "source": {
+    "endpoint_ref": {
+      "scope": "connection",
+      "connection_id": "21212121-2121-4121-8121-212121212121",
+      "endpoint_id": "public__catalog__dcd4e8b3",
+      "database_object": {
+        "name": "catalog",
+        "object_type": "table",
+        "schema": "public"
+      }
+    },
+    "selected_columns": [
+      "sku",
+      "price_cents",
+      "shipping"
+    ],
+    "replication": {
+      "method": "full_refresh"
+    }
+  },
+  "destinations": [
+    {
+      "endpoint_ref": {
+        "scope": "connection",
+        "connection_id": "23232323-2323-4323-8323-232323232323",
+        "endpoint_id": "analytics__catalog__1fd34a63",
+        "database_object": {
+          "name": "catalog",
+          "object_type": "table",
+          "schema": "analytics"
+        }
+      },
+      "write": {
+        "mode": "truncate_insert"
+      },
+      "execution": {
+        "batch_size": 5000
+      }
+    }
+  ],
+  "mapping": {
+    "assignments": [
+      {
+        "target": {
+          "path": "sku",
+          "arrow_type": "Utf8",
+          "nullable": false
+        },
+        "value": {
+          "kind": "expression",
+          "expression": {
+            "op": "get",
+            "path": [
+              "sku"
+            ]
+          }
+        }
+      },
+      {
+        "target": {
+          "path": "price",
+          "arrow_type": "Utf8",
+          "nullable": false
+        },
+        "value": {
+          "kind": "expression",
+          "expression": {
+            "op": "pipe",
+            "args": [
+              {
+                "op": "get",
+                "path": [
+                  "price_cents"
+                ]
+              },
+              {
+                "op": "fn",
+                "name": "to_string"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "target": {
+          "path": "ship_city",
+          "arrow_type": "Utf8",
+          "nullable": true
+        },
+        "value": {
+          "kind": "expression",
+          "expression": {
+            "op": "get",
+            "path": [
+              "shipping",
+              "address",
+              "city"
+            ]
+          }
+        }
+      },
+      {
+        "target": {
+          "path": "source_system",
+          "arrow_type": "Utf8",
+          "nullable": false
+        },
+        "value": {
+          "kind": "constant",
+          "constant": {
+            "arrow_type": "Utf8",
+            "value": "erp"
+          }
+        }
+      }
+    ]
+  },
+  "status": "draft",
+  "tags": [
+    "catalog",
+    "full-refresh"
+  ]
+}

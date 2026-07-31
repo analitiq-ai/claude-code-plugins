@@ -396,7 +396,16 @@ FIELD_TABLE_MODELS = {
     "fields-connection-endpoint-ref": ("analitiq.contracts.stream", "ConnectionEndpointRef"),
     "fields-stream-mapping": ("analitiq.contracts.stream", "StreamMapping"),
     "fields-assignment-target": ("analitiq.contracts.stream", "AssignmentTarget"),
-    "fields-assignment-value": ("analitiq.contracts.stream", "AssignmentValue"),
+    # `AssignmentValue` is a `kind`-discriminated union, not a model class, so it
+    # has no single field table. Each variant gets its own block: the reader sees
+    # the discriminator value alongside the one payload key that variant admits,
+    # which is exactly the shape the union enforces.
+    "fields-assignment-value-expression": (
+        "analitiq.contracts.stream", "ExpressionAssignmentValue",
+    ),
+    "fields-assignment-value-constant": (
+        "analitiq.contracts.stream", "ConstantAssignmentValue",
+    ),
     "fields-validation-rule": ("analitiq.contracts.stream", "ValidationRule"),
 }
 

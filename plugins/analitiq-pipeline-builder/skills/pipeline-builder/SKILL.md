@@ -66,7 +66,7 @@ carries the phrasing tables — and halt rather than inventing a member:
 | `stream.source.replication.method` | `full_refresh`, `incremental` | discriminated union `analitiq.contracts.stream.Replication` |
 | `stream.source.database_pagination.type` | `offset`, `keyset` | discriminated union `analitiq.contracts.stream.DatabasePagination` |
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
-| `stream.destinations[].write.mode` (database) | `insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
+| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
 <!-- END GENERATED: enum-vocabulary -->
 
 ## Required reading

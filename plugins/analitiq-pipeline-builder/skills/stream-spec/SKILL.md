@@ -79,7 +79,7 @@ validation error, not a pass-through value.
 | `stream.source.replication.method` | `full_refresh`, `incremental` | discriminated union `analitiq.contracts.stream.Replication` |
 | `stream.source.database_pagination.type` | `offset`, `keyset` | discriminated union `analitiq.contracts.stream.DatabasePagination` |
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
-| `stream.destinations[].write.mode` (database) | `insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
+| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
 <!-- END GENERATED: enum-vocabulary -->
 
 `status` is the only execution gate on a stream — there is no parallel boolean
@@ -110,12 +110,11 @@ emits each one's stable id in the finding message, so a failure like
 | `ADV-STRM-005` | A pipe expression must start with a get step and be followed only by fn steps. |
 | `ADV-STRM-006` | An arrow field's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
 | `ADV-STRM-007` | constant.value's JSON kind must match arrow_type, and the Object/List/scalar container shape rule applies. |
-| `ADV-STRM-008` | An assignment value must declare exactly one of expression or constant. |
 | `ADV-STRM-009` | A validation rule requires value for value-taking types and omits it for required/not_null. |
 | `ADV-STRM-010` | An assignment target's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
 | `ADV-STRM-011` | conflict_keys is required for a connection-scope upsert destination and forbidden for a connector-scope or non-upsert destination. |
 | `ADV-STRM-012` | A filter operator must belong to the source scope's vocabulary: the database operator set for a connection source, the API operator set for a connector source. |
-| `ADV-STRM-013` | A database (connection-scope) destination's write.mode must be one of {insert, upsert}; an API (connector-scope) destination's mode is an endpoint-declared operations.write key. |
+| `ADV-STRM-013` | A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key. |
 <!-- END GENERATED: advisory-stream -->
 
 ## Output rules

@@ -69,6 +69,27 @@ def test_rule_ids_are_unique():
     assert len(ids) == len(set(ids)), "duplicate advisory rule ids"
 
 
+#: Ids that have been retired and must never be reissued. Advisory ids appear in
+#: user-facing findings and in archived diagnostics, so reusing one silently
+#: re-points every stored occurrence at a different rule. Uniqueness alone does
+#: not catch this — a retired id is free by definition.
+RETIRED_RULE_IDS = {
+    # ADV-STRM-008 ("exactly one of expression or constant"), retired in
+    # 1.0.0rc19 (#108): `AssignmentValue` became a `kind`-discriminated union,
+    # so the union states the rule and no validator enforces it.
+    "ADV-STRM-008",
+}
+
+
+def test_retired_rule_ids_are_not_reissued():
+    live = {r.id for r in all_rules()}
+    reissued = sorted(RETIRED_RULE_IDS & live)
+    assert not reissued, (
+        f"retired advisory ids reissued: {reissued}. These appear in archived "
+        "findings; give the new rule the next free number instead."
+    )
+
+
 def test_every_target_resolves_to_a_model():
     for rule in all_rules():
         for target in rule.targets:

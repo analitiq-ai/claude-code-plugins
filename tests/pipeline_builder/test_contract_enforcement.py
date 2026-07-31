@@ -103,7 +103,12 @@ def test_database_operators_rejected_on_an_api_source(tmp_path, operator):
 
 @pytest.mark.parametrize("mode", ["merge", "append", "overwrite", "replace"])
 def test_database_write_mode_is_closed(tmp_path, mode):
-    """A database destination takes insert/upsert only; rc6 accepted anything."""
+    """A database destination's write mode is a closed set; rc6 accepted anything.
+
+    The probes are the near-miss synonyms other tools use for the modes this
+    contract does have — `merge` for `upsert`, `append` for `insert`,
+    `overwrite`/`replace` for `truncate_insert`. None of them is a member.
+    """
     doc = _stream(destination={"endpoint_ref": _connection_ref(DST),
                                "write": {"mode": mode}})
     assert not _diagnose(tmp_path, doc)["passed"], f"{mode!r} must not validate"

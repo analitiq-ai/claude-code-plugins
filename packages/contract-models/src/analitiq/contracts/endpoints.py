@@ -29,6 +29,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    Strict,
     Tag as UnionTag,
     field_validator,
     model_validator,
@@ -139,11 +140,18 @@ def _has_known_scope(token: str) -> bool:
     scope. Stripped like the resolver, which strips before resolving."""
     return token.strip().split(".", 1)[0] in RESOLUTION_SCOPES
 
-# Single source of truth for the destination write-mode vocabulary. The
-# `Literal` is the type used wherever a mode is keyed/validated (`operations.write`
-# below, the endpoint-schema `write_modes` list); the tuple is derived from it so
-# the two can never drift.
-WriteMode = Literal["insert", "upsert"]
+# The UNIVERSE of destination write modes — every mode a destination may be
+# asked to perform. It keys an API endpoint's `operations.write` map below, and
+# it bounds `stream._DB_WRITE_MODES`, which is the (currently equal) subset the
+# SQL write path implements. Read that as a bound, not an alias: the two are
+# separate facts and `stream.py` says why it does not derive one from the other.
+# The tuple is derived from the Literal so those two cannot drift.
+#
+# `truncate_insert` is the full-refresh mode: empty the destination, then insert
+# the run's records. Adding it here is what #108 asks of this contract; its
+# delivery semantics (at-least-once by design) and its execution belong to the
+# SQL write path, and restating either here would be a copy that rots.
+WriteMode = Literal["insert", "upsert", "truncate_insert"]
 WRITE_MODES: tuple[str, ...] = get_args(WriteMode)
 READ_METHODS: tuple[str, ...] = ("GET", "POST")
 WRITE_METHODS: tuple[str, ...] = ("POST", "PUT", "PATCH")
@@ -411,8 +419,41 @@ class PageSize(_EndpointModel):
     """Optional ``limit`` block shared by paginated strategies that accept page size."""
 
     param: str | None = Field(default=None)
-    default: Any | None = Field(default=None, description="Default page size value or expression.")
-    max: int | None = Field(default=None, ge=1)
+    # `Strict()` on the int branch is not decoration. Without it pydantic's lax
+    # mode coerces `true` -> 1 and `"50"` -> 50, while the rendered schema says
+    # `type: integer` and rejects both — so this package would accept documents
+    # that every external consumer of the published schema rejects. The premise
+    # is that the two agree.
+    #
+    # `Strict()` costs one deliberate asymmetry in the other direction: JSON
+    # Schema's `type: integer` accepts a zero-fraction float, so `50.0` passes
+    # the published schema and fails here. Kept, because a document this
+    # package accepts must always be one the schema accepts, and that direction
+    # still holds. Pinned by
+    # `test_float_spelled_integer_is_a_one_directional_gap`.
+    #
+    # Note the bound reaches the BARE-SCALAR spelling only. `Expression`
+    # contains `LiteralExpression`, so `{"literal": 0}` is still a
+    # statically-known non-positive page size that validates here. Closing that
+    # means bounding the literal expression wherever a positive number is
+    # required (`max`, `OffsetCursor.increment_by`, `PageCursor.increment_by`),
+    # which is a wider change than #108 — tracked separately. Do not describe
+    # this field as "the literal branch is bounded"; it is not.
+    default: Annotated[int, Field(gt=0), Strict()] | Expression | None = Field(  # type: ignore[valid-type]
+        default=None,
+        description=(
+            "Default page size. Either a positive integer (e.g. `50`) or a "
+            "value expression the engine resolves per request — typically "
+            "`{ref: runtime.batch_size}`, so the run's configured batch size "
+            "flows through. A bare non-positive integer is rejected: it is a "
+            "meaningless request rather than one the provider gets to refuse. "
+            "The `{literal: N}` expression form carries no such bound."
+        ),
+    )
+    # `Strict()` for the same reason as `default` above: lax coercion would read
+    # `"50"` and `true` as integers here while the rendered schema rejects them,
+    # so the two halves of the contract would disagree.
+    max: Annotated[int, Field(ge=1), Strict()] | None = Field(default=None)
 
 
 class OffsetCursor(_EndpointModel):
@@ -1505,7 +1546,7 @@ def is_valid_conflict_keys(value: Any) -> bool:
 
 
 class WriteOperation(_EndpointModel):
-    """One write-mode block (insert or upsert)."""
+    """One write-mode block, keyed in `operations.write` by the mode it serves."""
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -1559,7 +1600,8 @@ class WriteOperation(_EndpointModel):
             "Algolia `objectID`). Each entry is a top-level field name in "
             "`input.schema`. A single composite key set — every listed field "
             "participates. Required on the `upsert` write mode; forbidden on "
-            "`insert` (enforced by `operations`, which knows the mode key)."
+            "every other write mode (enforced by `operations`, which knows the "
+            "mode key)."
         ),
     )
     batching: Batching | None = Field(default=None)
@@ -1567,9 +1609,9 @@ class WriteOperation(_EndpointModel):
         default=None,
         description=(
             "Provider idempotency-key placement (e.g. Stripe `Idempotency-Key` "
-            "header, Square `idempotency_key` body field). Allowed on both "
-            "`insert` and `upsert`, required on neither — some providers require "
-            "the key even on upsert (Square `UpsertCatalogObject`). Forbidden "
+            "header, Square `idempotency_key` body field). Allowed on any write "
+            "mode, required on none — some providers require the key even on "
+            "upsert (Square `UpsertCatalogObject`). Forbidden "
             "together with `batching`: the "
             "key value is per-record, and a resumed cursor re-batches different "
             "row compositions, so a multi-record request cannot carry a key "

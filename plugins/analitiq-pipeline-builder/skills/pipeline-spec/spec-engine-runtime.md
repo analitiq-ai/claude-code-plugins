@@ -48,7 +48,6 @@ terms — how the runtime divides them is not a contract fact.
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
 | `batch_size` | no | integer | `100` | `min=1`, `max=100000` |
-| `max_concurrent_batches` | no | integer | `3` | `min=1`, `max=100` |
 <!-- END GENERATED: fields-batching -->
 
 ### `logging`
@@ -107,7 +106,9 @@ So the pipeline-level values are defaults, and stream-level overrides win
 within those caps. When a user asks for a specific write size on one
 destination, change the stream, not the pipeline.
 
-`max_concurrent_batches` is per `(stream, destination)` binding. There is **no
-public pipeline-wide aggregate cap** on concurrent batches: aggregate
-concurrency scales with the number of active bindings, so size the value with
-that multiplication in mind rather than reading it as a pipeline ceiling.
+Batch **concurrency** is not authorable at all. `max_concurrent_batches` used
+to sit on both `runtime.batching` and `destinations[].execution`, and nothing
+acted on either — the value bounded no concurrency anywhere — so both were
+retired from the contract rather than left as a knob that looked load-bearing
+and did nothing. Do not author it, and do not offer it when a user asks how to
+tune throughput — `batch_size` is the lever that exists.

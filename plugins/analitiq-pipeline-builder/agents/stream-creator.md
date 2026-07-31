@@ -54,11 +54,13 @@ The orchestrator passes:
 5. Author `destinations[]` per `spec-destinations.md` — one entry per input
    destination, each `endpoint_ref` shaped by scope. In `write`, author
    `conflict_keys` as a single flat list of field names **only** for a database
-   `upsert`; omit it for `insert` and for every API destination. Include
-   `execution` only when overriding pipeline batching.
+   `upsert`; omit it for `insert`, for `truncate_insert`, and for every API
+   destination. Include `execution` only when overriding pipeline batching.
 6. Author `mapping` only when the user wanted explicit assignments; otherwise
-   omit (the registry applies pass-through). Each assignment's `value` is exactly
-   one of `expression` (`get`, or a `pipe`/`fn` chain) or `constant`.
+   omit (the registry applies pass-through). Each assignment's `value` declares
+   `kind` — `"expression"` (a `get`, or a `pipe`/`fn` chain) or `"constant"` —
+   alongside that variant's single payload key. A `get` path is a token array
+   (`["address", "city"]`), never a dotted string.
 7. Return a `CreatorOutput` (`entity: stream`).
 
 ## Output format
@@ -101,10 +103,18 @@ return a structured refusal:
   lands). Return a structured refusal if the orchestrator asks for that.
 - `write.conflict_keys` is a **flat list of field names** (`["id"]` or
   `["org_id", "external_id"]`), required for a database `upsert`, forbidden for
-  `insert` and for API destinations.
-- Each `mapping.assignments[].value` has **exactly one** of `expression` or
-  `constant`. `expression` is `{op:"get", path}` (default) or a
-  `{op:"pipe", args:[…]}` chain; an `fn` node is valid only inside `pipe.args`.
+  `insert`, for `truncate_insert`, and for API destinations.
+- Each `mapping.assignments[].value` declares a `kind` discriminator —
+  `"expression"` or `"constant"` — plus that variant's one payload key. Never
+  author both keys and never omit `kind`. `expression` is
+  `{op:"get", path:[…]}` (default) or a `{op:"pipe", args:[…]}` chain; an `fn`
+  node is valid only inside `pipe.args`.
+- A `get` `path` is an **array of segment tokens**, outermost first —
+  `["id"]`, `["address", "city"]`. Never a dotted string. A source field whose
+  name contains a literal dot is a single token, `["a.b"]`.
+- `mapping.assignments[].target.path` is the opposite: a **single segment**, no
+  dots. Nesting on the destination is declared with `arrow_type: "Object"` plus
+  `properties` (or `"List"` plus `items`), never with a dotted path.
 - Database-only source options (`selected_columns`, `tie_breaker_fields`,
   `database_pagination`) are forbidden when the source is a `connector` (API) ref.
 - Do **not** author `version`, `org_id`, `created_at`, `updated_at`,

@@ -39,12 +39,14 @@ Each `assignments[]` entry (`analitiq.contracts.stream.Assignment`) pairs a
           "nullable": false
         },
         "value": {
-          "expression": {"op": "get", "path": "id"}
+          "kind": "expression",
+          "expression": {"op": "get", "path": ["id"]}
         }
       },
       {
         "target": {"path": "tenant_id", "arrow_type": "Utf8", "nullable": false},
         "value": {
+          "kind": "constant",
           "constant": {"arrow_type": "Utf8", "value": "acme-corp"}
         }
       }
@@ -62,27 +64,62 @@ diff the user did not ask for.
 
 ## `assignments[].value`
 
-<!-- BEGIN GENERATED: fields-assignment-value -->
-`analitiq.contracts.stream.AssignmentValue` — closed (`additionalProperties: false`); required: none
+`value` is a **discriminated union**: `kind` names the variant, and the variant
+admits exactly one payload key. Always author `kind` — it is required, and the
+payload key alone no longer identifies the variant.
+
+If you get it wrong, the error tells you where to look: a missing or unknown
+`kind` fails at the discriminator before any variant is tried, while a valid
+`kind` with the wrong body is reported against that variant by name.
+
+### `kind: "expression"` — read from the source
+
+<!-- BEGIN GENERATED: fields-assignment-value-expression -->
+`analitiq.contracts.stream.ExpressionAssignmentValue` — closed (`additionalProperties: false`); required: `expression`, `kind`
 
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
-| `expression` | no | GetExpression \| PipeExpression \| null | `None` | — |
-| `constant` | no | ConstantValue \| null | `None` | — |
-<!-- END GENERATED: fields-assignment-value -->
+| `kind` | **yes** | const 'expression' | — | — |
+| `expression` | **yes** | GetExpression \| PipeExpression | — | — |
+<!-- END GENERATED: fields-assignment-value-expression -->
 
-Both members are individually optional, but exactly one must be present
-(`ADV-STRM-008`):
+`expression` is one of:
 
-- `expression` — one of:
-  - `{"op": "get", "path": "<source field>"}` — read a source field. The default;
-    it covers almost every mapping.
-  - `{"op": "pipe", "args": [{"op": "get", "path": "<source field>"}, {"op": "fn", "name": "<conversion>"}, …]}` —
-    a `get` seed passed through one or more `fn` conversion stages
-    (`ADV-STRM-005`). An `fn` node is valid **only** inside `pipe.args`, never
-    standalone. Author `pipe` only when a conversion is genuinely required;
-    otherwise prefer `get`.
-- `constant` — `{"arrow_type": "<fully-qualified Arrow type>", "value": <JSON value>}`.
+- `{"op": "get", "path": ["<segment>", …]}` — read a source field. The default;
+  it covers almost every mapping.
+- `{"op": "pipe", "args": [{"op": "get", "path": [...]}, {"op": "fn", "name": "<conversion>"}, …]}` —
+  a `get` seed passed through one or more `fn` conversion stages
+  (`ADV-STRM-005`). An `fn` node is valid **only** inside `pipe.args`, never
+  standalone. Author `pipe` only when a conversion is genuinely required;
+  otherwise prefer `get`.
+
+#### `get.path` is a token array, never a dotted string
+
+One entry per path segment, outermost first: `["address", "city"]` reads
+`city` nested under `address`. A single top-level field is a one-element array,
+`["id"]` — not `"id"`.
+
+There is no escaping to learn, because there is nothing to escape: a source
+field whose name literally contains a dot is `["a.b"]`, which is a different
+path from the nested `["a", "b"]`. The dotted string this replaced could not
+tell those apart, and — worse — was only ever split at the outermost expression
+node, so a `get` nested inside a `pipe` reached the evaluator still holding the
+raw string and produced an all-nulls column with no error at all. The token
+array makes that failure unrepresentable.
+
+### `kind: "constant"` — assign a typed literal
+
+<!-- BEGIN GENERATED: fields-assignment-value-constant -->
+`analitiq.contracts.stream.ConstantAssignmentValue` — closed (`additionalProperties: false`); required: `constant`, `kind`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `kind` | **yes** | const 'constant' | — | — |
+| `constant` | **yes** | ConstantValue | — | — |
+<!-- END GENERATED: fields-assignment-value-constant -->
+
+`constant` is
+`{"arrow_type": "<fully-qualified Arrow type>", "value": <JSON value>}`.
 
 ### When a bare `get` is not enough
 
@@ -92,7 +129,7 @@ writable only when the assignment names the matrix's conversion `fn` in a `pipe`
 A bare `get` across such a pair is **rejected**, not silently coerced. So when
 source and target Arrow types differ, check the pair before reaching for `get`:
 if it is an explicit conversion, the assignment must be
-`{"op": "pipe", "args": [{"op": "get", …}, {"op": "fn", "name": …}]}`. The
+`{"op": "pipe", "args": [{"op": "get", "path": [...]}, {"op": "fn", "name": …}]}`. The
 conversion function names are closed (`analitiq.contracts.stream.FnExpression`);
 the engine's `version`/`args` node fields are deliberately not published, so
 never author them.
@@ -104,7 +141,7 @@ never author them.
 
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
-| `path` | **yes** | string | — | `minLength=1` |
+| `path` | **yes** | string | — | `pattern=^[^.]*[^.\s][^.]*$`, `minLength=1` |
 | `arrow_type` | **yes** | string | — | `pattern=(long; see `endpoint-spec/spec-columns.md`)` |
 | `native_type` | no | string \| null | `None` | — |
 | `nullable` | no | boolean | `True` | — |
@@ -119,11 +156,20 @@ Carries 3 declarative cross-field `if`/`then` rule(s) — see the advisory rules
 Must be unique within `assignments` (`ADV-STRM-002`).
 
 `target.path` addresses the **assignment root only** — the destination field this
-assignment writes. Inner structure is declared recursively by `properties` (for
-an `Object` target) and `items` (for a `List` target), governed by `ADV-STRM-010`.
-Child field specs are **not** separately addressable from `assignments`: you
-cannot write a second assignment at `address.city` to reach inside an `address`
-Object target. One assignment owns one root and declares everything beneath it.
+assignment writes — so it is a **single segment** and the contract rejects any
+value containing a `.`. Inner structure is declared recursively by `properties`
+(for an `Object` target) and `items` (for a `List` target), governed by
+`ADV-STRM-010`. Child field specs are **not** separately addressable from
+`assignments`: you cannot write a second assignment at `address.city` to reach
+inside an `address` Object target. One assignment owns one root and declares
+everything beneath it.
+
+Note the asymmetry with the source side, and that it is deliberate: `get.path`
+is a token array because a source read may descend into a nested record;
+`target.path` is one segment because nesting on the destination is already
+expressed by `arrow_type` + `properties`/`items`. Saying it a second way, as a
+dotted target, was the defect — two spellings of one thing, one of which the
+engine rejected after splitting it.
 
 Cross-document: each `target.path` must exist in the resolved destination
 endpoint schema. Endpoint resolution is server-side at save time; the local

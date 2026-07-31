@@ -77,6 +77,7 @@ from analitiq.contracts.credentials_file import CredentialsFile  # noqa: E402
 from analitiq.contracts.connector import Connector  # noqa: E402
 from analitiq.contracts.endpoints import (  # noqa: E402
     ARROW_TYPE_PATTERN,
+    WRITE_MODES,
     ApiEndpointDoc,
     DatabaseEndpointDoc,
 )
@@ -575,17 +576,28 @@ def _encode_write_mode_conflict_keys_rule(defs: dict[str, Any]) -> None:
     # field's nullable `default: null`:
     #   - upsert: pin the value to a non-empty array (so `null` is rejected, not
     #     just satisfied by key presence).
-    #   - insert: forbid only a *non-null* value (so `null`/absent pass, matching
-    #     the model, while a real key is rejected).
-    # The insert pin to `type: null` is satisfiable only because the base
+    #   - every other mode: forbid only a *non-null* value (so `null`/absent
+    #     pass, matching the model, while a real key is rejected).
+    # The non-upsert pin to `type: null` is satisfiable only because the base
     # `WriteOperation.conflict_keys` $ref renders as `anyOf[array, null]`; if that
-    # field is ever narrowed to array-only, this branch becomes unsatisfiable.
+    # field is ever narrowed to array-only, those branches become unsatisfiable.
+    # Built by iterating WRITE_MODES, never by listing the modes here. The
+    # hand-written version enumerated `insert`/`upsert`, so widening the
+    # vocabulary updated the derived `propertyNames.enum` while this mirror
+    # silently kept its two branches — and the published schema then ACCEPTED
+    # `truncate_insert.conflict_keys`, which the model rejects. A rendered
+    # mirror of a model rule has to be derived from the same vocabulary the
+    # model reads, or it is exactly the drift surface the repo forbids.
     obj_branch["properties"] = {
-        "insert": {"allOf": [write_op_ref, {"properties": {"conflict_keys": {"type": "null"}}}]},
-        "upsert": {"allOf": [write_op_ref, {
-            "required": ["conflict_keys"],
-            "properties": {"conflict_keys": {"type": "array", "minItems": 1}},
-        }]},
+        mode: {"allOf": [write_op_ref, (
+            {
+                "required": ["conflict_keys"],
+                "properties": {"conflict_keys": {"type": "array", "minItems": 1}},
+            }
+            if mode == "upsert"
+            else {"properties": {"conflict_keys": {"type": "null"}}}
+        )]}
+        for mode in WRITE_MODES
     }
 
 

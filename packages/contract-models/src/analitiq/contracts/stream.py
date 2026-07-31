@@ -11,7 +11,11 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN, DatabaseObject
+from analitiq.contracts.endpoints import (
+    ARROW_TYPE_PATTERN,
+    WRITE_MODES,
+    DatabaseObject,
+)
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
 from analitiq.contracts.shared.advisory import AdvisoryValidated, find_duplicates
 from analitiq.contracts.shared.arrow_shape import (
@@ -457,8 +461,11 @@ class Write(StrictModel):
         ...,
         min_length=1,
         description=(
-            "Write mode. API: selected endpoint operations.write key. "
-            "Database: 'insert' or 'upsert'."
+            "Write mode. API destination (endpoint_ref.scope='connector'): the "
+            "selected endpoint's operations.write key. Database destination "
+            "(scope='connection'): a member of the closed database write-mode "
+            "vocabulary, enumerated by the StreamDestination conditional rule "
+            "that selects on that scope."
         ),
     )
     conflict_keys: list[Annotated[str, Field(min_length=1)]] | None = Field(
@@ -486,26 +493,38 @@ class Execution(StrictModel):
         le=100_000,
         description="Override pipeline.runtime.batching.batch_size for this binding.",
     )
-    max_concurrent_batches: int | None = Field(
-        default=None,
-        ge=1,
-        le=100,
-        description="Override pipeline.runtime.batching.max_concurrent_batches for this binding.",
+
+
+# The write modes a database (connection-scope) destination may be asked to
+# perform — the subset of `endpoints.WriteMode` the SQL write path implements.
+# An API (connector-scope) destination's mode is the selected endpoint's
+# `operations.write` key, resolved at runtime, so it is not constrained here.
+# Enforced in pydantic by `_validate_db_write_mode` and mirrored into the
+# published schema by the first `allOf` branch below.
+#
+# Deliberately NOT `frozenset(WRITE_MODES)`, though the two are equal today.
+# They are separate facts: `WriteMode` is the universe of modes a destination
+# may be asked for, and it also keys an API endpoint's `operations.write`, so a
+# mode that only an HTTP provider can perform (a provider-specific verb, say)
+# belongs there and must NOT thereby become a legal SQL destination mode.
+# Aliasing them would make adding one to either side widen both.
+#
+# The subset assertion below catches the one direction that IS always wrong: a
+# database mode outside the universe. Same idiom as the `FilterOperator` guard
+# above — a divergence fails at import, not silently at runtime.
+_DB_WRITE_MODES: frozenset[str] = frozenset({"insert", "upsert", "truncate_insert"})
+
+if not _DB_WRITE_MODES <= set(WRITE_MODES):
+    raise AssertionError(
+        "_DB_WRITE_MODES must be a subset of endpoints.WriteMode; unknown: "
+        f"{sorted(_DB_WRITE_MODES - set(WRITE_MODES))}"
     )
-
-
-# The database (connection-scope) write-mode vocabulary is closed to
-# {insert, upsert}. An API (connector-scope) destination's mode is the selected
-# endpoint's `operations.write` key, resolved at runtime, so it is not
-# constrained here. Enforced in pydantic by `_validate_db_write_mode` and
-# mirrored into the published schema by the first `allOf` branch below.
-_DB_WRITE_MODES: frozenset[str] = frozenset({"insert", "upsert"})
 
 # Declarative mirror of `_validate_write_conflict_keys` and
 # `_validate_db_write_mode`. The selecting field is a nested discriminator
 # (`endpoint_ref.scope`) and `write.mode` is an open string on a connector
 # destination, so this is stock if/then rather than a discriminated union:
-#   scope=connection           ⇒ write.mode ∈ {insert, upsert}
+#   scope=connection           ⇒ write.mode ∈ _DB_WRITE_MODES
 #   scope=connector            ⇒ write.conflict_keys forbidden (null/absent)
 #   scope=connection, upsert   ⇒ write.conflict_keys required, non-empty array
 #   scope=connection, ¬upsert  ⇒ write.conflict_keys forbidden (null/absent)
@@ -616,7 +635,7 @@ class StreamDestination(StrictModel):
                 )
         elif self.write.conflict_keys is not None:
             # conflict_keys are an upsert concept; a non-upsert database mode
-            # (insert) must not carry them.
+            # must not carry them.
             raise ValueError(
                 "destinations[].write.conflict_keys is only valid for a database upsert "
                 f"(endpoint_ref.scope='connection', write.mode='upsert'); write.mode="
@@ -627,9 +646,9 @@ class StreamDestination(StrictModel):
     @model_validator(mode="after")
     def _validate_db_write_mode(self) -> "StreamDestination":
         # A database destination's write-mode vocabulary is closed to
-        # {insert, upsert}. An API destination's mode is the selected endpoint's
-        # `operations.write` key (endpoint-owned, resolved at runtime), so it is
-        # not constrained here. Spec: §Write Selection.
+        # `_DB_WRITE_MODES`. An API destination's mode is the selected
+        # endpoint's `operations.write` key (endpoint-owned, resolved at
+        # runtime), so it is not constrained here. Spec: §Write Selection.
         if (
             self.endpoint_ref.scope == SCOPE_CONNECTION
             and self.write.mode not in _DB_WRITE_MODES
@@ -647,13 +666,37 @@ class StreamDestination(StrictModel):
 # ---------------------------------------------------------------------------
 
 
+# Why a token array rather than the dotted string this replaced (#108).
+#
+# A dotted string is not a path — it is a path plus an unstated splitting
+# convention, and the contract never stated one. Two questions it left open:
+# where the split happens (every consumer had to decide, and #108 records what
+# went wrong when they decided differently), and how a field name containing a
+# literal dot is spelled (unanswerable). Tokens answer both by construction:
+# there is nothing left to split, and `["a.b"]` is a field named `a.b` while
+# `["a", "b"]` is nested.
+#
+# Kept as a comment, not in the docstring: the docstring renders verbatim into
+# the published `$defs.GetExpression.description`, where the rationale is noise
+# for the external authors reading it.
 class GetExpression(StrictModel):
-    """`{"op": "get", "path": "<source field reference>"}` — read a source
-    field."""
+    """`{"op": "get", "path": ["<segment>", ...]}` — read a source field.
+
+    The path is an ordered token array: `["a", "b"]` reads field `b` nested
+    under `a`, and `["a.b"]` reads a top-level field whose name contains a dot.
+    """
 
     op: Literal["get"] = Field(...)
-    path: str = Field(
-        ..., min_length=1, description="Source field reference."
+    path: list[NonEmptyStr] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Source field reference as an ordered token array — one entry per "
+            "path segment, outermost first. `['a', 'b']` reads field `b` "
+            "nested under `a`; `['a.b']` reads a top-level field whose name "
+            "literally contains a dot."
+        ),
+        examples=[["id"], ["address", "city"]],
     )
 
 
@@ -881,44 +924,74 @@ class ConstantValue(StrictModel):
         return self
 
 
-class AssignmentValue(StrictModel):
-    """Exactly one of `expression` or `constant` per spec §Assignment."""
+class ExpressionAssignmentValue(StrictModel):
+    """`{"kind": "expression", "expression": {...}}` — assign from a source read."""
 
-    # Declarative mirror of `_validate_one_of`. No discriminator field exists, so
-    # the two branches pin the *other* field to null (rather than relying on
-    # `required`, since both default to null).
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "oneOf": [
-                {
-                    "required": ["expression"],
-                    "properties": {
-                        "expression": {"not": {"type": "null"}},
-                        "constant": {"type": "null"},
-                    },
-                },
-                {
-                    "required": ["constant"],
-                    "properties": {
-                        "constant": {"not": {"type": "null"}},
-                        "expression": {"type": "null"},
-                    },
-                },
-            ]
-        },
+    kind: Literal["expression"] = Field(
+        ..., description="Assignment value kind; always 'expression' here."
+    )
+    expression: GetExpression | PipeExpression = Field(
+        ..., description="Source read, optionally piped through conversion stages."
     )
 
-    expression: GetExpression | PipeExpression | None = Field(default=None)
-    constant: ConstantValue | None = Field(default=None)
 
-    @model_validator(mode="after")
-    def _validate_one_of(self) -> "AssignmentValue":
-        if (self.expression is None) == (self.constant is None):
-            raise ValueError(
-                "value must contain exactly one of 'expression' or 'constant'"
-            )
-        return self
+class ConstantAssignmentValue(StrictModel):
+    """`{"kind": "constant", "constant": {...}}` — assign a typed literal."""
+
+    kind: Literal["constant"] = Field(
+        ..., description="Assignment value kind; always 'constant' here."
+    )
+    constant: ConstantValue = Field(..., description="Typed constant to assign.")
+
+
+# `kind`-discriminated union, replacing a single model with two nullable fields
+# and a `_validate_one_of` (retired ADV-STRM-008).
+#
+# This is the BREAKING half of the release: `kind` is required, so every
+# pre-#108 document — which had no such key — is now rejected. What the two
+# shapes agree on is the illegal *combination*; the new one additionally
+# demands the discriminator.
+#
+# The old model DECLARED both fields, so an instance could hold both and a
+# validator had to say no. Here each variant declares only its own payload key,
+# so `ExpressionAssignmentValue` has no `constant` attribute to hold — the
+# illegal combination is gone from the type rather than caught on the way in.
+# (`extra="forbid"` on each variant is what rejects it in the input now; before,
+# both fields being declared meant only `_validate_one_of` could.) A third value
+# kind is then additive: append a variant, touch neither of these two.
+#
+# On errors, precisely: a MISSING `kind` fails at the discriminator with
+# `union_tag_not_found`, naming no variant; an UNKNOWN one fails with
+# `union_tag_invalid`, which does name the expected tags. A payload that carries
+# a valid `kind` but the wrong body is reported against that variant — which is
+# the improvement over "exactly one of 'expression' or 'constant'", where every
+# malformed value produced the same sentence.
+#
+# The published JSON Schema renders `oneOf` + a `kind` discriminator (pinned by
+# test_stream_mapping_shapes.py), so external validators reject what this does.
+AssignmentValue = Annotated[
+    ExpressionAssignmentValue | ConstantAssignmentValue,
+    Field(discriminator="kind"),
+]
+
+
+# An assignment target addresses exactly one field on the destination record
+# root, so its `path` is a single segment. Nesting beneath that root is declared
+# by `arrow_type: "Object"` plus `properties` (or `List` plus `items`), and a
+# dotted target path would be a second, contradictory spelling of the same
+# thing (#108). Constraining it here makes that document unparseable rather
+# than leaving each consumer to reject it later.
+#
+# Two constraints. "At least one non-whitespace character" is the parity one —
+# it is what `NonEmptyStr` already guarantees for a SOURCE segment
+# (`GetExpression.path` items), and a destination field name must not be laxer
+# than the source name it is fed from. "No `.` anywhere" is target-only and
+# deliberately TIGHTER than the source: `["a.b"]` is a legal source token,
+# because there the dot is inside one segment rather than separating two.
+# Written without lookaround on purpose:
+# pydantic's default rust-regex engine has none, and this pattern is published
+# into the JSON Schema.
+SINGLE_SEGMENT_PATH_PATTERN = r"^[^.]*[^.\s][^.]*$"
 
 
 class AssignmentTarget(StrictModel):
@@ -931,7 +1004,16 @@ class AssignmentTarget(StrictModel):
     )
 
     path: str = Field(
-        ..., min_length=1, description="Destination field reference."
+        ...,
+        min_length=1,
+        pattern=SINGLE_SEGMENT_PATH_PATTERN,
+        description=(
+            "Destination field reference — a single segment naming one field "
+            "on the destination record root. Nesting is declared with "
+            "`arrow_type: 'Object'` + `properties` (or `'List'` + `items`), "
+            "never with a dotted path."
+        ),
+        examples=["id", "address"],
     )
     arrow_type: str = Field(
         ...,

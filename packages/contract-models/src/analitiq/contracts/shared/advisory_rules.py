@@ -279,11 +279,12 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="constant.value's JSON kind must match arrow_type, and the Object/List/scalar container shape rule applies.",
         targets=("ConstantValue",), enforcer="_validate_container_shape",
     ),
-    AdvisoryRule(
-        id="ADV-STRM-008", kind="custom", resource="stream",
-        prose="An assignment value must declare exactly one of expression or constant.",
-        targets=("AssignmentValue",), enforcer="_validate_one_of",
-    ),
+    # ADV-STRM-008 retired in 1.0.0rc19 (#108): `AssignmentValue` became a
+    # `kind`-discriminated union, so "exactly one of expression or constant" is
+    # no longer a rule anything enforces — the union states it. Advisory ids are
+    # stable identifiers that appear in user-facing findings, so the gap stays a
+    # gap: do NOT reuse 008 for an unrelated rule, or archived findings decode
+    # to the wrong meaning.
     AdvisoryRule(
         id="ADV-STRM-009", kind="custom", resource="stream",
         prose="A validation rule requires value for value-taking types and omits it for required/not_null.",
@@ -306,7 +307,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     ),
     AdvisoryRule(
         id="ADV-STRM-013", kind="custom", resource="stream",
-        prose="A database (connection-scope) destination's write.mode must be one of {insert, upsert}; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
+        prose="A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
         targets=("StreamDestination",), enforcer="_validate_db_write_mode",
     ),
     # --- connector (ConnectionContractInput + connector document) -----------

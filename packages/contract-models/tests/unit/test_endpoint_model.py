@@ -17,10 +17,12 @@ from pydantic import TypeAdapter, ValidationError
 from analitiq.contracts.endpoints import (
     _RESERVED_ENDPOINT_FIELDS,
     RESOLUTION_SCOPES,
+    WRITE_MODES,
     ApiEndpointDoc,
     Column,
     ColumnFieldSpec,
     DatabaseEndpointDoc,
+    PageSize,
     Param,
     PredicateAnd,
     PredicateEq,
@@ -2453,6 +2455,187 @@ class TestPaginationLimitWiring:
         )
         with pytest.raises(ValidationError, match="does not declare"):
             parse_endpoint(payload)
+
+
+class TestWriteModeVocabulary:
+    """`WriteMode` is the one destination write-mode vocabulary.
+
+    Pinned as an exact set, not a membership check: adding a mode is a
+    coordinated change across the wire protocol, the CDK and this contract, so
+    it should fail here and be re-stated deliberately rather than land as a
+    silent widening.
+
+    `stream._DB_WRITE_MODES` is declared independently rather than derived from
+    this tuple — the two are different facts, and stream.py states why — but it
+    is BOUNDED by it: an import-time guard there refuses a database mode outside
+    this vocabulary.
+    """
+
+    def test_exact_members(self):
+        assert set(WRITE_MODES) == {"insert", "upsert", "truncate_insert"}
+
+    def test_api_endpoint_may_declare_a_truncate_insert_operation(self):
+        # The vocabulary is shared, so `operations.write` accepts every member.
+        # Whether a given transport can actually perform a mode is a runtime
+        # capability question, not a document-shape one.
+        payload = _minimal_api_payload(
+            endpoint_id="items",
+            operations={"write": {"truncate_insert": {
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/items",
+                    "body": {"from_input": "records"},
+                },
+                "input": {"schema": {"type": "object", "properties": {
+                    "id": {"type": "string"},
+                }}},
+                "batching": {"max_records": 100},
+            }}},
+        )
+        parse_endpoint(payload)
+
+    def test_conflict_keys_still_upsert_only(self):
+        # The new mode inherits the existing rule rather than an exemption:
+        # conflict_keys applies to `upsert` and to nothing else.
+        payload = _minimal_api_payload(
+            endpoint_id="items",
+            operations={"write": {"truncate_insert": {
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/items",
+                    "body": {"from_input": "records"},
+                },
+                "input": {"schema": {"type": "object", "properties": {
+                    "id": {"type": "string"},
+                }}},
+                "batching": {"max_records": 100},
+                "conflict_keys": ["id"],
+            }}},
+        )
+        with pytest.raises(ValidationError, match="conflict_keys is not allowed"):
+            parse_endpoint(payload)
+
+
+class TestPageSizeDefault:
+    """`default`'s BARE-SCALAR spelling is bounded. Nothing else is.
+
+    `default` was a bare `Any` while `max` carried `ge=1` — the same intent at
+    two strengths, and a non-positive page size is a meaningless request rather
+    than one the provider gets to refuse. The reach of the new bound is narrower
+    than "the literal branch", though, and the tests below pin where it stops:
+    `{literal: 0}` still validates. Do not restate this class's scope as
+    "literals are positive" — see `test_literal_expression_bypasses_the_bound`.
+    """
+
+    def test_positive_literal_accepted(self):
+        assert PageSize.model_validate({"param": "limit", "default": 50}).default == 50
+
+    def test_zero_rejected(self):
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": 0})
+
+    def test_negative_rejected(self):
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": -10})
+
+    def test_expression_branch_still_accepted(self):
+        # The dominant authored form: the engine resolves the page size per
+        # request, so the bound cannot be checked here and must not be applied.
+        page_size = PageSize.model_validate(
+            {"param": "limit", "default": {"ref": "runtime.batch_size"}}
+        )
+        assert isinstance(page_size.default, RefExpression)
+
+    def test_omitted_still_accepted(self):
+        assert PageSize.model_validate({"max": 100}).default is None
+
+    def test_non_numeric_literal_rejected(self):
+        # Previously `Any` let any JSON scalar through; a page size that is not
+        # a number and not an expression can only fail later.
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": "fifty"})
+
+    @pytest.mark.parametrize("value", [True, "50"])
+    def test_no_coercion_into_the_int_branch(self, value):
+        # `Strict()` earns its place here. Pydantic's lax mode would read `true`
+        # as 1 and `"50"` as 50, while the rendered schema says `type: integer`
+        # and rejects both — so this package would accept documents that every
+        # external consumer of the published schema refuses. The premise is that
+        # the model and the schema are one contract; see
+        # `test_float_spelled_integer_is_a_one_directional_gap` for the single
+        # value where `Strict()` makes the model the tighter of the two.
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": value})
+
+    @pytest.mark.parametrize("field", ["default", "max"])
+    def test_model_and_published_schema_agree(self, field):
+        # Direct statement of that premise, rather than trusting the above.
+        # Agreement holds on every spelling below; the one exception is a
+        # float-spelled integer, pinned separately.
+        # Parametrized over BOTH numeric fields: `max` carried the identical
+        # coercion defect, and a version of this test that looped only over
+        # `default` is what let it survive the first fix.
+        schema = TypeAdapter(ApiEndpointDoc).json_schema(ref_template="#/$defs/{model}")
+        # Point at the PageSize def but keep the whole `$defs` map alongside it,
+        # or the Expression branch's internal `$ref`s cannot resolve.
+        validator = Draft202012Validator(
+            {"$ref": "#/$defs/PageSize", "$defs": schema["$defs"]}
+        )
+        for value in (50, None):
+            assert validator.is_valid({"param": "limit", field: value})
+        for value in (0, -10, "fifty", True, "50"):
+            assert not validator.is_valid({"param": "limit", field: value}), (
+                f"published schema accepts {field}={value!r}"
+            )
+            with pytest.raises(ValidationError):
+                PageSize.model_validate({"param": "limit", field: value})
+
+    @pytest.mark.parametrize("field", ["default", "max"])
+    def test_float_spelled_integer_is_a_one_directional_gap(self, field):
+        # The one place the two halves of the contract disagree, recorded so it
+        # cannot silently invert. JSON Schema's `type: integer` matches any
+        # number with a zero fractional part, so `50.0` is a valid integer to
+        # every external consumer; `Strict()` makes pydantic refuse it.
+        #
+        # Left as-is rather than reconciled. The model being the STRICTER side
+        # is the safe direction — a document this package accepts is always one
+        # the published schema accepts, which is the property the plugins rely
+        # on. Reconciling downward (dropping `Strict()`) would reopen the
+        # `"50"`/`true` coercion above; reconciling upward (teaching the schema
+        # to reject `50.0`) would make the published contract refuse a document
+        # JSON Schema calls valid, and would need a new version triple.
+        #
+        # If this ever fails, the asymmetry flipped: the schema became stricter
+        # than the model, which is the direction that actually hurts.
+        schema = TypeAdapter(ApiEndpointDoc).json_schema(ref_template="#/$defs/{model}")
+        validator = Draft202012Validator(
+            {"$ref": "#/$defs/PageSize", "$defs": schema["$defs"]}
+        )
+        assert validator.is_valid({"param": "limit", field: 50.0}), (
+            f"published schema now rejects {field}=50.0 — it used to accept it, "
+            "and the model still does not; the safe direction inverted"
+        )
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", field: 50.0})
+
+    def test_expression_branch_is_default_only(self):
+        # `default` takes an expression; `max` is a provider fact, so it does
+        # not. Pinned because the parametrized test above treats them alike.
+        assert PageSize.model_validate({"default": {"ref": "runtime.batch_size"}})
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"max": {"ref": "runtime.batch_size"}})
+
+    def test_literal_expression_bypasses_the_bound(self):
+        # Known hole, recorded rather than left for someone to discover: the
+        # `Expression` branch contains `LiteralExpression`, whose payload is
+        # `Any`, so a statically-known non-positive page size is one spelling
+        # away. Closing it means bounding the literal expression everywhere a
+        # positive number is required (`max`, `OffsetCursor.increment_by`,
+        # `PageCursor.increment_by`) — wider than #108, tracked separately.
+        # This test exists so that fix flips it, rather than silently passing.
+        assert PageSize.model_validate(
+            {"param": "limit", "default": {"literal": 0}}
+        ).default.literal == 0
 
 
 # ---------------------------------------------------------------------------
