@@ -23,7 +23,7 @@ import argparse
 import json
 import sys
 
-from _analitiq import ensure_deps_or_reexec
+from _bootstrap import ensure_deps_or_reexec
 
 
 def main(argv: list[str] | None = None) -> int:

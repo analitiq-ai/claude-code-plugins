@@ -49,5 +49,5 @@ for _src in (REPO_ROOT / "packages" / "contract-models" / "src",
 # venv and `os.execv` into it when `importlib.metadata` can't find the pin. Source
 # on sys.path has no metadata, so without this the bootstrap would replace the
 # pytest process mid-run. See `_FROM_SOURCE` in
-# plugins/analitiq-pipeline-builder/scripts/_analitiq.py.
+# plugins/analitiq-pipeline-builder/scripts/_bootstrap.py.
 os.environ["ANALITIQ_VALIDATOR_FROM_SOURCE"] = "1"

@@ -44,7 +44,7 @@ import json
 import sys
 from pathlib import Path
 
-from _analitiq import ensure_deps_or_reexec
+from _bootstrap import ensure_deps_or_reexec
 
 
 def _fail(message: str) -> "int":

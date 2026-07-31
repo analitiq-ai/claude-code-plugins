@@ -15,7 +15,7 @@ the canonical `dialect+driver` values against the wheel's own
 `SqlAlchemyTransport`.
 
 Single sources, referenced not copied:
-  - the pin:     `VALIDATOR_PIN` in plugins/analitiq-pipeline-builder/scripts/_analitiq.py
+  - the pin:     `VALIDATOR_PIN` in plugins/analitiq-pipeline-builder/scripts/_bootstrap.py
   - the canon:   the "## Driver examples" table in
                  plugins/analitiq-connector-builder/skills/connector-spec-db/spec-dsn-bindings.md
   - shipped:     `[project].version` in packages/validator/pyproject.toml
@@ -66,7 +66,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PIN_SOURCE = (
-    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_analitiq.py"
+    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_bootstrap.py"
 )
 CANON_SOURCE = (
     REPO_ROOT
@@ -116,7 +116,7 @@ class PinNotPublished(RuntimeError):
 
 
 def read_pin() -> str:
-    """The full `analitiq-validator==X` requirement from `_analitiq.py`."""
+    """The full `analitiq-validator==X` requirement from `_bootstrap.py`."""
     match = re.search(
         r'^VALIDATOR_PIN = "(analitiq-validator==[^"]+)"$',
         PIN_SOURCE.read_text(encoding="utf-8"),

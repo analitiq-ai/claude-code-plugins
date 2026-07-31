@@ -116,7 +116,7 @@ repo-root `conftest.py` puts both source trees on the path;
 
 Separately, the plugins **self-install a published release at runtime** — end
 users have no checkout, so the pin must name a version already on PyPI.
-**`VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_analitiq.py` is
+**`VALIDATOR_PIN` in `plugins/analitiq-pipeline-builder/scripts/_bootstrap.py` is
 the only place that version is stated.** Never restate it — not here, not in a
 README. The one unavoidable second copy is the self-install line in
 `plugins/analitiq-connector-builder/agents/connector-schema-validator.md`

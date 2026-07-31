@@ -201,7 +201,7 @@ def test_validator_pin_matches_the_package_this_repo_ships():
     no checkout), so the pin cannot simply read the source tree — but it must not
     run ahead of it either.
     """
-    from _analitiq import VALIDATOR_PIN
+    from _bootstrap import VALIDATOR_PIN
 
     pyproject = (REPO_ROOT / "packages" / "validator" / "pyproject.toml").read_text()
     # Anchor to [project]; a bare `^version =` would take whichever table came
@@ -219,7 +219,7 @@ def test_validator_pin_matches_the_package_this_repo_ships():
     # HEAD is what users install, so an unpublished pin breaks `pip install`
     # outright. Root CLAUDE.md explains the window.
     assert Version(pin_version) <= Version(shipped.group(1)), (
-        f"_analitiq.VALIDATOR_PIN is {VALIDATOR_PIN!r}, ahead of the "
+        f"_bootstrap.VALIDATOR_PIN is {VALIDATOR_PIN!r}, ahead of the "
         f"{shipped.group(1)} this repo ships. Agents would try to install a "
         "version that is not published.")
 
@@ -231,7 +231,7 @@ def test_connector_validator_agent_states_the_same_pin():
     token in the file must equal the pin — a partial bump would leave the probe
     checking for something the install command never installs.
     """
-    from _analitiq import VALIDATOR_PIN
+    from _bootstrap import VALIDATOR_PIN
 
     pin_version = VALIDATOR_PIN.split("==", 1)[1]
     agent_md = (REPO_ROOT / "plugins" / "analitiq-connector-builder"

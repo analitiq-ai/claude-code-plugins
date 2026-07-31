@@ -35,7 +35,7 @@ def guard():
 
 
 def test_reads_the_pin_from_its_single_source(guard):
-    # `_analitiq.py` owns the pin; the guard references it by regex. If that
+    # `_bootstrap.py` owns the pin; the guard references it by regex. If that
     # file is refactored so the regex misses, this fails here instead of the
     # guard erroring in CI.
     assert guard.read_pin().startswith("analitiq-validator==")
