@@ -37,11 +37,13 @@ spelling — see the prohibitions below.
 
 ## Binding rules
 
-- **`path_params` values must be exactly `{"from_param": <name>}`.** No other
-  expression kind is accepted there, and the bound param must declare
-  `in: "path"`. The `path_params` keys must equal the `{placeholder}` names in
-  `request.path`, and the block is present exactly when the path declares
-  placeholders (ADV-ENDP-001).
+- **`path_params` values are bindings, never free expressions.** On a read,
+  exactly `{"from_param": <name>}`, and the bound param must declare
+  `in: "path"`. On a write, `{"from_input": "record.<dotted>"}` is also legal —
+  the record itself supplies the segment; see "Write path segments" below. The
+  `path_params` keys must equal the `{placeholder}` names in `request.path`,
+  and the block is present exactly when the path declares placeholders
+  (ADV-ENDP-001).
 - **A binding's location must match the site it appears in** (ADV-ENDP-008):
   `request.headers` binds only `in: "header"` params, `request.query` only
   `in: "query"`, `request.body` only `in: "body"`.
@@ -110,12 +112,12 @@ If a provider wants the same value in both a header and a query string, declare
 two params with distinct names and bind each at its own site. One param cannot
 satisfy two bindings (ADV-ENDP-009 counts bindings per param).
 
-## Write bodies: `from_input`
+## Writes: `from_input`
 
 `{"from_input": ...}` addresses the record being written. Author it inside
-`operations.write.<mode>.request.body`. It is never legal in `headers`,
-`query`, a read body, or a param `default`. Bind `path_params` with
-`{"from_param": ...}`.
+`operations.write.<mode>.request.body`, or as a write `path_params` binding
+(below). It is never legal in `headers`, `query`, anywhere on a read, or a
+param `default` — those sites exist before any record is in scope.
 
 | Value | Means |
 |---|---|
@@ -137,3 +139,38 @@ alongside a `batching` block — an unbatched write wraps `record` instead:
 ```json
 "body": { "data": { "from_input": "records" } }
 ```
+
+## Write path segments: `path_params` + `from_input`
+
+A per-record write whose URL names the record — `PUT /Contact/{id}`,
+`DELETE /items/{sku}` — takes the segment from the record itself. Bind the
+placeholder with `from_input` and declare **no param at all**:
+
+```json
+"request": {
+  "method": "PUT",
+  "path": "/Contact/{id}",
+  "path_params": { "id": { "from_input": "record.id" } },
+  "body": { "from_input": "record" }
+}
+```
+
+Choosing between the two binding kinds: `from_input` when the segment
+identifies the record being written (the update/delete-by-id shape);
+`{from_param}` when it comes from configuration (an account id, a workspace
+slug) — a write param must then carry a `default`, since a write has no other
+source to fill it.
+
+The rules that bite:
+
+- **`record.<dotted>` only.** A path segment carries exactly one value, so the
+  whole `record` and any `records[...]` form are refused, and the field it
+  names must exist in the mode's `input.schema` (membership is checked through
+  `$ref` / `allOf`, so a shared `$defs` shape works).
+- **Mutually exclusive with `batching`.** A multi-record request has no single
+  record to take the segment from. An update-by-id endpoint is per-record by
+  nature; if the provider also offers a bulk route, that is a separate mode.
+- **Never wrap the binding in `url_encode` / `base64_encode`.** Encoding is
+  engine-owned: the engine percent-encodes each substituted value as one path
+  segment, so wrapping double-encodes (`a b` arrives as `a%2520b`) and the
+  provider 404s or matches the wrong resource.

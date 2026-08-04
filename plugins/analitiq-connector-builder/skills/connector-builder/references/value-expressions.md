@@ -40,22 +40,28 @@ connector or endpoint actually writes.
 | `state.*` | per run | Replication watermarks and other carried-over run state. |
 | `connector.*` | any | Connector-level declared values. |
 
-**Scope checking is narrow.** It runs on an endpoint's `request.headers` /
-`query` / `body`, and on typed ref fields such as `response.records` and
-`response.metadata`. Except where noted below it checks only the **leading
-token**, so `connection.discovered.nope` passes and resolves empty.
+**Scope checking is two-tier on an endpoint.** Every expression slot on an
+operation is swept — `pagination` (every `stop_when` operand included),
+`response.metadata`, the `request` `path_params` / `headers` / `query` / `body`
+slots, and each `params.<name>.default`. For most scopes only the **leading
+token** is checked, so `connection.discovered.nope` passes and resolves empty.
 
-`response.records` is the one ref whose **full path** is validated: it is
-traversed against `response.schema` and must land on an array node
-(ADV-ENDP-012), so `response.body.nope` is an error rather than a silent empty.
+`response.*` refs get the full treatment (ADV-ENDP-023). A
+`response.body.<path>` must resolve against `response.schema` by declared-path
+resolution to a node that declares a type — `response.body.nope` is an error,
+not a silent one-page sync — and `response.metadata.<key>` must name a key the
+document declares. A `response.*` ref in any request slot or param `default` is
+refused outright, whatever it names: the request is built before the response
+exists, so it could only interpolate to nothing. `response.records`
+additionally must land on an array node (ADV-ENDP-012).
 
-Everywhere else there is no check at all: a bogus scope in a pagination
-`stop_when`, or anywhere in a **connector** document (a transport header, an
-auth template), validates clean. Treat every ref as unverified and trace it to
-the declaration that produces it yourself.
+In a **connector** document (a transport header, an auth template) there is no
+check at all — treat every ref there as unverified and trace it to the
+declaration that produces it yourself.
 
-(`request.path_params` is not scope-checked either — it is separately restricted
-to `{from_param: …}`, so a raw ref there is rejected on different grounds.)
+(`request.path_params` takes bindings, not raw refs: `{from_param: …}` on a
+read, and on a write also `{from_input: "record.<dotted>"}` — see
+`connector-spec-api/spec-request-binding.md`.)
 
 > **`stream.*`, `state.*`, and `runtime.*` are barred from endpoint request
 > slots.** They may not appear as direct refs in `request.headers` / `query` /
