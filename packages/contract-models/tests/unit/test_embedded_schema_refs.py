@@ -29,6 +29,9 @@ from analitiq.contracts.endpoints import (
     ApiEndpointDoc,
     DeclarationConflictError,
     DeclaredPathError,
+    JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+    JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+    JSON_SCHEMA_SUBSCHEMA_KEYS,
     ResponseExtraction,
     WriteInput,
     effective_properties,
@@ -38,6 +41,7 @@ from analitiq.contracts.endpoints import (
     resolve_declared_path,
     resolve_local_pointer,
     resolve_read_record_schema,
+    resolve_schema_ref,
 )
 from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
 
@@ -1089,6 +1093,87 @@ class TestRecordShapeThroughRefs:
     def test_a_typo_in_a_cursor_field_is_still_caught_through_a_ref(self):
         with pytest.raises(ValidationError, match="not declared in response.schema record-shape"):
             parse_endpoint(_replicating_doc(self.SCHEMA, "updated_ta"))
+
+
+class TestThePublishedLandingSetMatchesTheResolver:
+    """The published algorithm names the positions a `$ref` may land on, and
+    `schemas/api-endpoint/16.1.0.json` is immutable once merged — a wrong list
+    there can only be superseded, never corrected.
+
+    It used to enumerate all twenty keywords `JsonSchemaPropertyNode`
+    constrains, then say separately that a path must not CROSS a conditional
+    one. A reader takes "cross" as "pass through", so `#/properties/x/not` read
+    as legal. `resolve_schema_ref` tests every token INCLUDING the last, so only
+    eight of the twenty are landable.
+    """
+
+    LANDABLE = {
+        "properties", "$defs", "definitions",     # maps
+        "allOf", "prefixItems",                   # lists
+        "items", "propertyNames", "contentSchema",  # single
+    }
+
+    def _root(self):
+        leaf = {"type": "string"}
+        return {
+            "$defs": {"A": leaf},
+            "definitions": {"B": leaf},
+            "properties": {"x": {
+                "type": "object",
+                "allOf": [leaf],
+                "prefixItems": [leaf],
+                "items": leaf,
+                "propertyNames": leaf,
+                "contentSchema": leaf,
+                "contains": leaf,
+                "not": leaf,
+                "if": leaf, "then": leaf, "else": leaf,
+                "anyOf": [leaf], "oneOf": [leaf],
+                "additionalProperties": leaf,
+                "unevaluatedProperties": leaf,
+                "unevaluatedItems": leaf,
+                "patternProperties": {"^a": leaf},
+                "dependentSchemas": {"k": leaf},
+            }},
+        }
+
+    def _pointer(self, keyword):
+        if keyword == "$defs":
+            return "#/$defs/A"
+        if keyword == "definitions":
+            return "#/definitions/B"
+        if keyword == "properties":
+            return "#/properties/x"
+        if keyword in ("allOf", "prefixItems", "anyOf", "oneOf"):
+            return f"#/properties/x/{keyword}/0"
+        if keyword == "patternProperties":
+            return "#/properties/x/patternProperties/^a"
+        if keyword == "dependentSchemas":
+            return "#/properties/x/dependentSchemas/k"
+        return f"#/properties/x/{keyword}"
+
+    @pytest.mark.parametrize(
+        "keyword",
+        sorted(
+            JSON_SCHEMA_SUBSCHEMA_KEYS
+            | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        ),
+    )
+    def test_each_keyword_lands_exactly_as_the_published_prose_says(self, keyword):
+        resolved = resolve_schema_ref(self._root(), self._pointer(keyword))
+        assert (resolved is not _MISSING) == (keyword in self.LANDABLE), (
+            f"{keyword!r} disagrees with the published landing set: the schema "
+            "says one thing and the resolver does another"
+        )
+
+    def test_the_published_sentence_names_exactly_those_eight(self):
+        """Cheap textual pin: the description renders verbatim into the
+        published schema, so the count and the names must track the set above."""
+        description = ResponseExtraction.model_fields["schema_"].description
+        assert "Exactly eight keywords qualify" in description
+        for keyword in self.LANDABLE:
+            assert f"`{keyword}`" in description, f"{keyword} missing from prose"
 
 
 class TestKeywordVocabularyHasOneOwner:

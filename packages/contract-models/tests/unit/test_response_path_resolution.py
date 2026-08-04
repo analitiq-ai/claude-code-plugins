@@ -1176,6 +1176,104 @@ class TestRequestSlotsAreSweptToo:
         assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
 
 
+class TestMetadataSubKeysAreCheckedToo:
+    """`metadata` is the one reserved response sub-scope whose key set is closed
+    and declared in this same document, so it is exactly as checkable as
+    `response.body` — but it was waved through as "engine-owned" alongside
+    `headers`/`status`/`record_count`/`records`, which genuinely are.
+
+    `response.metadata.nope` resolves to nothing on every page, so paging stops
+    after page one and the run reports success: #123 verbatim, one segment to
+    the right of where it was fixed.
+    """
+
+    def _payload(self, next_cursor_ref, metadata=None):
+        payload = _read_payload("cursor")
+        read = payload["operations"]["read"]
+        read["response"]["metadata"] = metadata or {
+            "cur": {"ref": "response.body.next_cursor"}
+        }
+        read["pagination"]["cursor"]["next_cursor"] = {"ref": next_cursor_ref}
+        return payload
+
+    def test_a_declared_metadata_key_resolves(self):
+        parse_endpoint(self._payload("response.metadata.cur"))
+
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            "response.metadata.nope",
+            "response.metadata.Cur",  # case matters
+            "response.metadata.cur_",
+        ],
+    )
+    def test_an_undeclared_metadata_key_is_rejected(self, ref):
+        with pytest.raises(ValidationError, match="not a declared `response.metadata` key"):
+            parse_endpoint(self._payload(ref))
+
+    def test_the_harm_named_is_the_read_harm(self):
+        """The message must say what actually breaks — paging stopping — not the
+        generic write text. `_unresolved_harm` is exhaustive, so a mis-typed
+        operation raises rather than silently picking the wrong sentence."""
+        with pytest.raises(ValidationError, match="paging stops after the first page"):
+            parse_endpoint(self._payload("response.metadata.nope"))
+
+    def test_the_other_reserved_scopes_are_still_unchecked(self):
+        """`headers`/`status`/`record_count` really are engine-owned — the
+        document declares nothing about them, so there is no key set to check a
+        sub-key against and inventing one would reject valid documents."""
+        parse_endpoint(self._payload("response.record_count"))
+
+
+class TestARecordShapeMustDeclareSomething:
+    """The gate materialized the record shape only to catch an exception and
+    discarded the result, so a shape composing down to `{}` passed — and
+    `find_record_field_properties` then returned None. The plugin prose reads
+    that None as "the ref did not resolve, go fix the endpoint", but the ref
+    resolved perfectly: a fix loop with no exit.
+
+    The self-`$ref` spelling is newly reachable because this PR made `$ref`
+    following legal in the record locator.
+    """
+
+    def _payload(self, items, defs=None):
+        payload = _read_payload("cursor")
+        schema = payload["operations"]["read"]["response"]["schema"]
+        if defs:
+            schema.setdefault("$defs", {}).update(defs)
+        schema["properties"]["data"] = {"type": "array", "items": items}
+        payload["operations"]["read"]["response"]["records"] = {
+            "ref": "response.body.data"
+        }
+        return payload
+
+    @pytest.mark.parametrize(
+        ("items", "defs"),
+        [
+            ({}, None),  # the empty schema accepts anything and says nothing
+            ({"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}),
+        ],
+    )
+    def test_a_shape_that_composes_to_nothing_is_rejected(self, items, defs):
+        with pytest.raises(ValidationError, match="declares nothing at all"):
+            parse_endpoint(self._payload(items, defs))
+
+    @pytest.mark.parametrize(
+        "items",
+        [
+            # NOT rejected: "an object, fields undeclared" is the documented
+            # unknowable case the corpus uses. Emptiness separates "I am not
+            # telling you the fields" from "I am not telling you anything";
+            # only the latter is unauthorable, and a gate that confused the two
+            # rejected 46 valid documents.
+            {"type": "object"},
+            {"type": "object", "properties": {"id": {"type": "string"}}},
+        ],
+    )
+    def test_a_shape_that_declares_only_its_type_is_accepted(self, items):
+        parse_endpoint(self._payload(items))
+
+
 class TestParamDefaultIsAnExpressionSlot:
     """`params.<name>.default` is an expression tree the resolver evaluates, and
     it was reached by no check at all — not the shape check, not the scope

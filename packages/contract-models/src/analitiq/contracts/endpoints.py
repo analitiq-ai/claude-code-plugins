@@ -1572,23 +1572,20 @@ class ResponseExtraction(_EndpointModel):
             "there to invent its type, which is what decides whether an "
             "ordering comparison in `stop_when` raises.\n"
             "5. *References.* Every `$ref` in this document must be an "
-            "in-document JSON Pointer (`#`, or `#/…`) landing on a schema "
-            "position — the positions being exactly the keywords this document's "
-            "`JsonSchemaPropertyNode` constrains (`properties`, "
-            "`patternProperties`, `$defs`, `definitions`, `dependentSchemas` as "
-            "maps; `prefixItems`, `allOf`, `anyOf`, `oneOf` as lists; `items`, "
-            "`contains`, `contentSchema`, `additionalProperties`, "
-            "`propertyNames`, `unevaluatedItems`, `unevaluatedProperties`, "
-            "`not`, `if`, `then`, `else` singly) — and its path must not CROSS "
-            "a conditionally-applied "
-            "keyword — `anyOf`, `oneOf`, `if`/`then`/`else`, `not`, "
-            "`dependentSchemas`, `patternProperties`, `contains`, "
-            "`additionalProperties`, `unevaluatedProperties`, "
-            "`unevaluatedItems`. `#/anyOf/0` names a real schema position, but "
-            "one that applies only to instances taking that branch, so "
-            "following it would commit the resolver to a branch — the guess "
-            "clause 3 refuses when it meets the same keyword on a node. "
-            "`allOf` is not in that set: its branches all apply, so "
+            "in-document JSON Pointer (`#`, or `#/…`) whose EVERY token — the "
+            "last one included — is an unconditionally-applied schema position. "
+            "Exactly eight keywords qualify: `properties`, `$defs`, "
+            "`definitions` as maps; `allOf`, `prefixItems` as lists; `items`, "
+            "`propertyNames`, `contentSchema` singly. Every OTHER keyword this "
+            "document's `JsonSchemaPropertyNode` constrains — `anyOf`, `oneOf`, "
+            "`if`/`then`/`else`, `not`, `dependentSchemas`, `patternProperties`, "
+            "`contains`, `additionalProperties`, `unevaluatedProperties`, "
+            "`unevaluatedItems` — applies conditionally, and a pointer may "
+            "neither cross one NOR END ON one. `#/anyOf/0` names a real schema "
+            "position, but one that applies only to instances taking that "
+            "branch, so following it would commit the resolver to a branch — "
+            "the guess clause 3 refuses when it meets the same keyword on a "
+            "node. `allOf` is not in that set: its branches all apply, so "
             "`#/allOf/0` resolves. Pointer tokens are percent-decoded then "
             "RFC 6901 "
             "unescaped, and array indices follow RFC 6901 exactly (`0` or "
@@ -3059,10 +3056,16 @@ def _validate_response_body_paths(
     * Every `response.metadata` value, likewise.
     * Tokens are collected with the shared resolver grammar, so a ref buried in
       a `${...}` template counts and a `{literal}` payload does not.
-    * Only `response.body[.<path>]` is checked. The other response scopes
-      (`headers`, `status`, `record_count`, `records`, `metadata`) are reserved
-      and engine-owned — `response.schema` describes the BODY, so it has no
-      opinion about them (see :func:`_response_body_segments`).
+    * Only `response.body[.<path>]` is resolved against `response.schema`.
+      `headers`, `status`, `record_count` and `records` are reserved and
+      engine-owned — the schema describes the BODY, so it has no opinion about
+      them (see :func:`_response_body_segments`).
+    * `metadata` is the exception, and is checked by KEY rather than by path:
+      its key set is closed and declared in this same document, so
+      `response.metadata.<key>` is exactly as checkable as `response.body`.
+      Lumping it in with the genuinely engine-owned scopes let
+      `response.metadata.nope` through — paging stops after page one, run
+      reports success.
     * The addressed node must declare a `type` (or the `native_type`/
       `arrow_type` pair). Resolving a path to `{}` would satisfy the letter of
       the rule and none of its purpose: a conformance kit planting a value at
@@ -3113,7 +3116,9 @@ def _validate_response_body_paths(
                 can_read_response=False,
             ))
 
-    _sweep_expression_sites(sites, response.schema_)
+    _sweep_expression_sites(
+        sites, response.schema_, frozenset(response.metadata or {})
+    )
 
 
 def _validate_replication_wiring(replication: Replication, params: dict[str, Param]) -> None:
@@ -4072,6 +4077,7 @@ class _ExpressionSite:
 def _sweep_expression_sites(
     sites: "list[_ExpressionSite]",
     response_schema: Any = None,
+    metadata_keys: "frozenset[str] | None" = None,
 ) -> None:
     """Run EVERY expression check over every site, from one table.
 
@@ -4114,6 +4120,24 @@ def _sweep_expression_sites(
                     "`params` entry or a literal "
                     "(spec: §Value Expressions — scopes)"
                 )
+            if metadata_keys is not None and token.startswith("response.metadata."):
+                # `metadata` is the ONE reserved response sub-scope whose key set
+                # is closed and author-declared, in this same document. The other
+                # reserved scopes (`headers`, `status`, `record_count`,
+                # `records`) really are engine-owned and unknowable here, but
+                # lumping `metadata` in with them let `response.metadata.nope`
+                # through — which resolves to nothing on every page, so paging
+                # stops after page one and the run reports success. That is #123
+                # verbatim, one segment to the right of where it was fixed.
+                key = token.split(".", 2)[2].split(".")[0]
+                if key not in metadata_keys:
+                    raise ValueError(
+                        f"{where} references {token!r}, but "
+                        f"{key!r} is not a declared `response.metadata` key "
+                        f"(declared: {sorted(metadata_keys)!r}). "
+                        f"{_unresolved_harm(site.operation)} "
+                        "(spec: §API Response Extraction)"
+                    )
             segments = _response_body_segments(token)
             if segments is None or response_schema is None:
                 continue
@@ -4418,13 +4442,33 @@ def _validate_records_in_response_schema(
     items = node.get("items")
     if isinstance(items, dict):
         try:
-            materialize_node(items, response.schema_)
+            materialized_items = materialize_node(items, response.schema_)
         except SchemaResolutionError as exc:
             raise ValueError(
                 f"response.records ref {ref!r} resolves to an array whose record "
                 f"shape is self-contradictory: {exc.reason} "
                 "(spec: §API Response Extraction — declared-path resolution)"
             ) from None
+        # And the shape must declare SOMETHING. Materializing purely to catch an
+        # exception inferred validity from the absence of one, so a record shape
+        # that composes down to nothing at all passed: `items: {}`, and a `$defs`
+        # entry that only `$ref`s itself, which the cycle rule collapses to `{}`
+        # without raising. The second is newly reachable because this PR made
+        # `$ref` following legal in the record locator.
+        #
+        # Deliberately NOT "must declare fields": `{"type": "object"}` with no
+        # `properties` is the documented unknowable-shape case the corpus uses,
+        # and `_json_schema_top_level_fields` returns None for it too. Emptiness
+        # is what separates "I am not telling you the fields" from "I am not
+        # telling you anything", and only the latter is unauthorable.
+        if not materialized_items:
+            raise ValueError(
+                f"response.records ref {ref!r} resolves to an array whose record "
+                "shape declares nothing at all, so nothing downstream can tell "
+                "what a record is. Declare at least the record's `type` (a "
+                "`$defs` entry that only references itself composes to nothing) "
+                "(spec: §Cross-Field Validation)"
+            )
     return node
 
 
