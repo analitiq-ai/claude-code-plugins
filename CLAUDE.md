@@ -357,8 +357,11 @@ of a review, and before closing one.
 3. Determine if the raised issues are legitimate or not.
    a. if the issue is legitimate and relevant to the PR, fix it.
    b. if the issue is outside the scope of the PR, check if there is a related
-      issue in the GitHub issue tracker. If not, create a new issue in GitHub
-      (subject to the consolidation rule in `CONTRIBUTING.md`) and move on.
+      issue in the GitHub issue tracker. If not, ask whether to file one — and
+      when filing, apply the consolidation rule in `CONTRIBUTING.md` first: if
+      this is the third leak from a mechanism already filed, file the
+      consolidation issue and close the instances into it rather than adding
+      another instance. Then move on.
    c. If the issue is not a legitimate problem, summarize your thoughts on the
       point and move on.
 4. Once you fixed all issues that need fixing, commit fixes, push to the branch.
