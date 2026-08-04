@@ -26,6 +26,8 @@ from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
     _MISSING,
+    _compose_declarations,
+    _property_contributors,
     ApiEndpointDoc,
     DeclarationConflictError,
     DeclaredPathError,
@@ -1280,10 +1282,77 @@ class TestMaterializeMatchesTheNaiveFold:
         merged = {}
         for source in sources:
             for name, value in source.items():
+                if name == "properties":
+                    continue  # composed per-name below, as the real fold does
                 merged[name] = (
                     _combine_schema_values(merged[name], value) if name in merged else value
                 )
+        # `properties` is NOT an ordinary dict key. Merging it as one is exactly
+        # the bug `materialize_node` was carrying — it is how the two views came
+        # to disagree — so a reference that does it cannot report the defect it
+        # exists to catch. Compose per name, and prove satisfiability from the
+        # RAW contributors, which is what `_compose_declarations` proves.
+        own_properties = [
+            s["properties"] for s in sources
+            if isinstance(s, dict) and isinstance(s.get("properties"), dict)
+        ]
+        if own_properties:
+            raw = TestMaterializeMatchesTheNaiveFold._naive_contributors(node, root)
+            by_name = {}
+            for source_map in own_properties:
+                for name, declaration in source_map.items():
+                    by_name.setdefault(name, []).append(declaration)
+            properties = {}
+            for name, declarations in by_name.items():
+                contributors = raw.get(name) or declarations
+                if len(contributors) > 1:
+                    _refuse_disjoint_types(name, contributors)
+                folded = declarations[0]
+                for declaration in declarations[1:]:
+                    folded = _combine_schema_values(folded, declaration, kind="schema")
+                properties[name] = folded
+            merged["properties"] = properties
         return merged
+
+    @staticmethod
+    def _naive_contributors(node, root):
+        """Reference for `_property_contributors` — no memo, no shared state.
+
+        Same source order (`$ref` target, `allOf` branches in document order,
+        the node itself last) and the same dedup rule (a declaration
+        re-contributed by a later source MOVES to the end). Exponential, which
+        is why the graphs are small.
+        """
+        from analitiq.contracts.endpoints import resolve_schema_ref
+
+        if not isinstance(node, dict):
+            return {}
+        recurse = TestMaterializeMatchesTheNaiveFold._naive_contributors
+        sources = []
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            target = resolve_schema_ref(root, ref)
+            if isinstance(target, dict):
+                sources.append(recurse(target, root))
+        for branch in node.get("allOf") or []:
+            if isinstance(branch, dict):
+                sources.append(recurse(branch, root))
+        own = node.get("properties")
+        sources.append(
+            {k: [v] for k, v in own.items()} if isinstance(own, dict) else {}
+        )
+
+        contributors = {}
+        for source in sources:
+            for name, declarations in source.items():
+                bucket = contributors.setdefault(name, [])
+                for declaration in declarations:
+                    for index, seen in enumerate(bucket):
+                        if declaration == seen:
+                            bucket.pop(index)
+                            break
+                    bucket.append(declaration)
+        return contributors
 
     def test_agrees_with_the_fold_on_random_shared_defs_graphs(self):
         import random
@@ -1329,6 +1398,125 @@ class TestMaterializeMatchesTheNaiveFold:
             f"reference fold; first: {divergences[0]!r}"
         )
 
+    def test_the_contributor_walk_agrees_with_its_own_naive_reference(self):
+        """The second differential, and the one that was missing.
+
+        `materialize_node` was pinned; `_contributors` — the walk that
+        `resolve_declared_path`, `effective_properties`, ADV-ENDP-023, record
+        field enumeration and cursor-field resolution ALL run — was pinned by
+        nothing differential. Every historically-shipped bug class was
+        reinstallable there with a fully green suite: own-source-first,
+        `reversed(branches)`, `$ref` after `allOf`, and dedup keeping the first
+        occurrence.
+
+        This compares the composed VALUES, not merely whether both sides raise,
+        because the failure mode is a different `arrow_type` on a derived
+        column rather than an error.
+        """
+        import random
+
+        random.seed(20260805)
+        names = [f"D{i}" for i in range(9)]
+        types = ["string", "integer", "boolean", "number"]
+        divergences = []
+        for trial in range(1200):
+            allow_cycle = trial % 3 == 0
+            defs = {}
+            for i, name in enumerate(names):
+                entry = {}
+                if random.random() < 0.75:
+                    entry["properties"] = {
+                        # A varying `type` so the disjoint-type proof is
+                        # differentially exercised; the old generator gave `f`
+                        # no `type` at all, so `_refuse_disjoint_types` never
+                        # fired on either side.
+                        "f": {
+                            "native_type": f"NT{i}",
+                            "arrow_type": f"AT{i}",
+                            "type": random.sample(types, random.randint(1, 3)),
+                        },
+                        f"own{i}": {"type": "string"},
+                    }
+                reachable = names[i + 1:] + ([names[0]] if allow_cycle and i else [])
+                picks = random.sample(
+                    reachable, min(len(reachable), random.randint(0, 2))
+                )
+                if picks:
+                    entry["allOf"] = [{"$ref": f"#/$defs/{p}"} for p in picks]
+                if names[i + 1:] and random.random() < 0.35:
+                    entry["$ref"] = f"#/$defs/{random.choice(names[i + 1:])}"
+                defs[name] = entry
+            root = {"$defs": defs, "allOf": [{"$ref": "#/$defs/D0"}]}
+
+            try:
+                reference = self._naive_contributors(root, root)
+            except RecursionError:
+                # Cyclic: the reference cannot answer, but the real walk must
+                # still terminate.
+                try:
+                    effective_properties(root, root)
+                except DeclarationConflictError:
+                    pass
+                continue
+            except DeclarationConflictError:
+                # The reference itself proved the graph unsatisfiable (an
+                # `allOf` branch it walked into). The real walk must agree.
+                with pytest.raises(DeclarationConflictError):
+                    _property_contributors(root, root)
+                continue
+            def attempt(thunk):
+                """Refusal is an ANSWER here, not an escape: both sides prove
+                satisfiability from the same contributor list, so 'both refused'
+                is agreement and 'one refused' is the divergence worth naming."""
+                try:
+                    return ("ok", thunk())
+                except DeclarationConflictError as exc:
+                    return ("refused", exc.reason)
+
+            actual = attempt(lambda: _property_contributors(root, root))
+            if actual != ("ok", reference):
+                divergences.append(root)
+                continue
+            composed = attempt(lambda: {
+                name: _compose_declarations(name, declarations)
+                for name, declarations in reference.items()
+            })
+            if attempt(lambda: effective_properties(root, root)) != composed:
+                divergences.append(root)
+        assert not divergences, (
+            f"{len(divergences)} graphs contribute differently from the "
+            f"reference walk; first: {divergences[0]!r}"
+        )
+
+    @pytest.mark.parametrize(
+        "view",
+        [
+            pytest.param(lambda n, r: _property_contributors(n, r), id="contributors"),
+            pytest.param(lambda n, r: effective_properties(n, r), id="effective"),
+            pytest.param(lambda n, r: materialize_node(n, r), id="materialize"),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "node",
+        [
+            {"allOf": [False], "properties": {"a": {"type": "string"}}},
+            {"allOf": [{"type": "object"}, False]},
+            {"$ref": "#/$defs/B", "properties": {"a": {"type": "string"}}},
+        ],
+    )
+    def test_an_unsatisfiable_branch_is_refused_by_every_view(self, view, node):
+        """`_reject_unsatisfiable_branch` is called from BOTH walkers, and
+        deleting either copy left the suite green — the generative differentials
+        cannot reach it because neither generator emits a boolean branch.
+
+        A rule enforced by one view and not the other is how
+        `effective_properties` came to answer `{}` where `materialize_node`
+        raised, which crashed a public helper.
+        """
+        root = {"$defs": {"B": {"allOf": [False]}}, **node}
+        with pytest.raises(DeclarationConflictError):
+            view(node, root)
+
     def test_materialize_terminates_and_unions_on_mutual_recursion(self):
         # `materialize_node` carries its own cycle guard, separate from
         # `_contributors`'. Nothing timed or tested it: removing it left the
@@ -1348,6 +1536,11 @@ class TestMaterializeMatchesTheNaiveFold:
         # `materialize_node` is a SECOND walk with its own memo, and the only
         # perf test drove `resolve_declared_path`. Deleting this memo left the
         # suite green while a depth-22 diamond went from 0s to 72s.
+        #
+        # Run on a bounded thread, not just timed: without the memo a depth-40
+        # diamond is 2**40 expansions, so the wall-clock assertion below is
+        # never REACHED — the suite wedges and CI reports an unattributed job
+        # timeout instead of this test's name.
         import time
 
         depth = 40
@@ -1361,7 +1554,8 @@ class TestMaterializeMatchesTheNaiveFold:
         root = {"type": "object", "$defs": defs, "allOf": [{"$ref": "#/$defs/L0"}]}
 
         started = time.monotonic()
-        assert "leaf" in materialize_node(root, root)["properties"]
+        result = _run_with_timeout(lambda: materialize_node(root, root))
+        assert "leaf" in result["properties"]
         assert time.monotonic() - started < 5.0
 
     def test_the_two_views_agree_when_the_contributors_are_NESTED(self):
@@ -1500,3 +1694,15 @@ class TestMaterializeMatchesTheNaiveFold:
         }
         resolved = materialize_node(root["items"], root)["properties"]["updated_at"]
         assert resolved["arrow_type"] == "Timestamp(MICROSECOND)"
+
+        # BOTH views, because the dedup that makes this work lives only in
+        # `_contributors` — `materialize_node` has none. Asserting the
+        # permissive view alone let the fix be reverted with a green suite: a
+        # keep-FIRST dedup puts `Overrides` at its distant (lowest) position, so
+        # `effective_properties` and `resolve_declared_path` answer `Utf8` while
+        # `materialize_node` still answers `Timestamp(MICROSECOND)`. Two views,
+        # two column types for one field, no error anywhere.
+        composed = effective_properties(root["items"], root)["updated_at"]
+        assert materialize_node(composed, root)["arrow_type"] == "Timestamp(MICROSECOND)"
+        walked = resolve_declared_path(root["items"], ["updated_at"], root=root)
+        assert materialize_node(walked, root)["arrow_type"] == "Timestamp(MICROSECOND)"

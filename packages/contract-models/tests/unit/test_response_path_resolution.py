@@ -19,6 +19,7 @@ through `properties`. Every path the old properties-only walk resolved must
 still resolve — that is what guarantees no document that validates today starts
 failing. One test per conditional construct pins it.
 """
+import threading
 import time
 
 import pytest
@@ -37,6 +38,31 @@ from analitiq.contracts.endpoints import (
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
+
+
+def _run_with_timeout(fn, seconds=5.0):
+    """Run `fn` on a daemon thread; fail rather than hang the suite.
+
+    A missing memo turns these graphs into 2**depth expansions, so a plain
+    wall-clock assertion is never reached — the run wedges and CI reports a job
+    timeout with no test name attached.
+    """
+    box = {}
+
+    def target():
+        try:
+            box["value"] = fn()
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the main thread
+            box["error"] = exc
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    if thread.is_alive():
+        pytest.fail(f"resolution did not terminate within {seconds}s")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 # ---------------------------------------------------------------------------
@@ -1052,7 +1078,11 @@ class TestCompositionIsLinearNotExponential:
         root = {"type": "object", "$defs": defs, "allOf": [{"$ref": "#/$defs/L0"}]}
 
         started = time.monotonic()
-        assert resolve_declared_path(root, ["leaf"]) == {"type": "string"}
+        # On a bounded thread: without the memo this is 2**40 expansions, so the
+        # wall-clock assertion below is never reached and the suite WEDGES —
+        # CI then reports an unattributed job timeout rather than this test.
+        result = _run_with_timeout(lambda: resolve_declared_path(root, ["leaf"]))
+        assert result == {"type": "string"}
         # Generous on purpose: the assertion is linear-vs-exponential, not a
         # benchmark. Before the memo, depth 24 alone ran for minutes.
         assert time.monotonic() - started < 5.0
