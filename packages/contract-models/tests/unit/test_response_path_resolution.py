@@ -25,6 +25,7 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
+    DeclarationConflictError,
     DeclaredPathError,
     effective_properties,
     parse_endpoint,
@@ -370,6 +371,57 @@ class TestNonObjectIntermediate:
     def test_non_dict_root_with_no_segments_is_returned_verbatim(self):
         """No segment means no lookup, so there is nothing to reject."""
         assert resolve_declared_path(True, []) is True
+
+
+class TestEveryConflictArrivesPositioned:
+    """`resolve_declared_path` promises `DeclaredPathError` — the positioned
+    class — for every failure, and three call sites catch only that class to
+    build their "failed at segment X" framing.
+
+    Collecting contributors can raise the UNpositioned
+    `DeclarationConflictError` (an `allOf` branch that is boolean `false`), and
+    that collection used to sit outside the try that converts it. The document
+    was still refused — `SchemaResolutionError` is a `ValueError`, so Pydantic
+    wrapped it — but the author was told only "the intersection is empty",
+    losing the field name and the walked prefix. These pin the narrow class on
+    both exits of the loop body: segment present, and segment absent.
+    """
+
+    UNSATISFIABLE = {
+        "type": "object",
+        "allOf": [False],
+        "properties": {"a": {"type": "object", "properties": {"b": {"type": "string"}}}},
+    }
+
+    @pytest.mark.parametrize(
+        ("segments", "segment", "index"),
+        [
+            (["a"], "a", 0),  # declared: conflict surfaces while composing
+            (["zzz"], "zzz", 0),  # undeclared: conflict surfaces while collecting
+            (["a", "b"], "a", 0),  # refused at the first hop, not the last
+        ],
+    )
+    def test_conflict_is_reported_at_the_segment_being_walked(
+        self, segments, segment, index
+    ):
+        with pytest.raises(DeclaredPathError) as excinfo:
+            resolve_declared_path(self.UNSATISFIABLE, segments)
+        assert excinfo.value.segment == segment
+        assert excinfo.value.index == index
+        assert "no instance satisfies" in excinfo.value.reason
+
+    def test_the_bare_conflict_class_never_escapes(self):
+        """Catching the narrow class must be sufficient. Asserted as its own
+        case because `DeclarationConflictError` is a SIBLING of
+        `DeclaredPathError`, so `pytest.raises(DeclaredPathError)` above would
+        not catch a leak — it would error out instead, which reads the same in a
+        report but for the wrong reason."""
+        try:
+            resolve_declared_path(self.UNSATISFIABLE, ["zzz"])
+        except DeclaredPathError:
+            pass
+        except DeclarationConflictError as exc:  # pragma: no cover - the defect
+            pytest.fail(f"unpositioned conflict escaped: {exc}")
 
 
 class TestResolveLocalPointer:

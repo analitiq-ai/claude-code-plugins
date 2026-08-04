@@ -1509,8 +1509,9 @@ class ResponseExtraction(_EndpointModel):
             "`cursor_field` and `pagination.keyset.order_by_field` (both "
             "resolved relative to the record shape but against this document as "
             "root), and every `{ref}` and `${...}` placeholder inside "
-            "`pagination`, `response.metadata` and the `request` "
-            "`headers`/`query`/`body` slots — must "
+            "`pagination`, `response.metadata`, the `request` "
+            "`path_params`/`headers`/`query`/`body` slots and every "
+            "`params.<name>.default` — must "
             "resolve against this document by the following algorithm. It is "
             "stated in full because the validator, the engine and the "
             "conformance kit must all reproduce it identically.\n"
@@ -1524,9 +1525,13 @@ class ResponseExtraction(_EndpointModel):
             "2. *Composition.* Contributors declaring the same name compose "
             "into one declaration: identical declarations collapse, differing "
             "ones fold into an `allOf` (an `allOf` branch narrowing a base "
-            "declaration is the idiom `allOf` exists for). It is an error only "
-            "when the contributors' `type` sets are provably disjoint, so no "
-            "instance could satisfy all of them. That test runs for the name "
+            "declaration is the idiom `allOf` exists for). Composition fails on "
+            "a contradiction that can be PROVED, and only then: when the "
+            "contributors' `type` sets are provably disjoint, so no instance "
+            "could satisfy all of them, and when an `allOf` branch is the "
+            "boolean schema `false`, which no instance satisfies and which "
+            "therefore empties the whole intersection. The disjoint-type test "
+            "runs for the name "
             "being resolved, and again on the node a path finally lands on "
             "(and on a records array's record shape), because a terminal node "
             "assembled from contradictory `allOf`/`$ref` sources is unsatisfiable "
@@ -3728,7 +3733,7 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    return _materialize(node, node if root is None else root, {}, set())
+    return _materialize(node, node if root is None else root, {}, set(), {})
 
 
 def _materialize(
@@ -3736,6 +3741,7 @@ def _materialize(
     root: Any,
     memo: dict[int, tuple[Any, Any]],
     on_path: set[int],
+    contrib_memo: dict[int, tuple[Any, dict[str, list[Any]]]],
 ) -> Any:
     """Memoized fold. Each node is materialized ONCE and its RESULT reused.
 
@@ -3773,13 +3779,15 @@ def _materialize(
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
         if isinstance(target, dict):
-            sources.append(_materialize(target, root, memo, on_path))
+            sources.append(_materialize(target, root, memo, on_path, contrib_memo))
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
             _reject_unsatisfiable_branch(branch)
             if isinstance(branch, dict):
-                sources.append(_materialize(branch, root, memo, on_path))
+                sources.append(
+                    _materialize(branch, root, memo, on_path, contrib_memo)
+                )
     sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
 
     # The same refusal `_compose_declarations` applies to a property name's
@@ -3825,26 +3833,33 @@ def _materialize(
         if isinstance(source, dict) and isinstance(source.get("properties"), dict)
     ]
     if own_properties:
-        # Collect each name's contributors ACROSS sources first, then prove the
-        # whole set at once. Merging pairwise and checking each pair only ever
-        # compares the accumulator's LAST `type` against the next one, so three
-        # contributors that are pairwise compatible but jointly empty slipped
-        # through — while `_compose_declarations`, which does intersect n-way,
-        # refused the same document. The two views must agree, and the
-        # permissive one is what derives the destination column.
+        # The proof reads the RAW contributors — the same list
+        # `_compose_declarations` proves — and NOT the maps hanging off
+        # `sources`. Those sources have each already been materialized, and
+        # `type` is a data position that merges last-wins, so a nested level
+        # collapses its own contributors before this one can see them:
+        # `{string,integer}` then `{integer,boolean}` folds to
+        # `{integer,boolean}`, and the three-way emptiness against
+        # `{string,boolean}` becomes a two-way overlap on `boolean`. Proving
+        # from the folded maps therefore refused single-level contradictions
+        # and accepted nested ones, which is `effective_properties` refusing a
+        # record shape `materialize_node` was happy to derive columns from.
         #
-        # Proving here rather than by calling `effective_properties` for its
-        # exception: a call whose result is discarded reads as dead, costs a
-        # second full walk (measured 1.6x), and would eventually be deleted —
-        # taking the proof with it.
+        # `_contributors` shares `contrib_memo` across the whole walk, so this
+        # stays one linear pass rather than a fresh closure walk per node.
+        raw = _contributors(node, root, contrib_memo, set())
         by_name: dict[str, list[Any]] = {}
         for source_map in own_properties:
             for name, declaration in source_map.items():
                 by_name.setdefault(name, []).append(declaration)
         properties: dict[str, Any] = {}
         for name, declarations in by_name.items():
-            if len(declarations) > 1:
-                _refuse_disjoint_types(name, declarations)
+            # Fall back to the folded declarations only for a name the raw walk
+            # cannot see (a cycle truncated it); never prove on the weaker set
+            # when the stronger one exists.
+            contributors = raw.get(name) or declarations
+            if len(contributors) > 1:
+                _refuse_disjoint_types(name, contributors)
             folded = declarations[0]
             for declaration in declarations[1:]:
                 folded = _combine_schema_values(
@@ -3929,17 +3944,25 @@ def resolve_declared_path(
                 segment=segment,
                 index=index,
             )
-        contributors = _property_contributors(node, document)
-        if segment in contributors:
-            try:
+        # `_property_contributors` raises `DeclarationConflictError` too (an
+        # `allOf` branch that is boolean `false`), so it sits INSIDE the same
+        # try as the compose: a conflict raised while collecting contributors is
+        # every bit as positioned as one raised while folding them, and leaving
+        # it outside sent the bare conflict past the three narrow
+        # `except DeclaredPathError` handlers — the document was still refused,
+        # but the author lost the field name and the walked prefix.
+        try:
+            contributors = _property_contributors(node, document)
+            if segment in contributors:
                 node = _compose_declarations(segment, contributors[segment])
-            except DeclarationConflictError as exc:
-                # `_compose_declarations` has no path context of its own (it is
-                # per-name); re-raise with the segment/index this walk is at so
-                # the caller can say where in the path the contradiction sits.
-                raise DeclaredPathError(
-                    exc.reason, segment=segment, index=index
-                ) from None
+        except DeclarationConflictError as exc:
+            # Neither callee has path context of its own (one inspects a node,
+            # the other a name); re-raise with the segment/index this walk is at
+            # so the caller can say where in the path the contradiction sits.
+            raise DeclaredPathError(
+                exc.reason, segment=segment, index=index
+            ) from None
+        if segment in contributors:
             continue
 
         # Not declared. Only NOW does ambiguity matter — checking it earlier

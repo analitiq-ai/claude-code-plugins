@@ -306,8 +306,6 @@ class TestStandaloneEndpointValidation:
         }
 
     def _run(self, tmp_path, connector_body):
-        import json
-
         from analitiq.validator.connectors import _validate_api_endpoint
 
         pkg = tmp_path / "pkg"

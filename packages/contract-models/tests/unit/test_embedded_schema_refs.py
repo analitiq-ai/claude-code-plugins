@@ -17,7 +17,9 @@ Plus `resolve_local_pointer`, the RFC 6901 walker both halves stand on. Its
 "not found" answer is a sentinel rather than `None` — a pointer can legitimately
 land on a JSON null — and that distinction is pinned here.
 """
+import random
 import threading
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -388,7 +390,12 @@ class TestGuardEndToEndOnADocument:
 
 class TestAdvisoryRegistration:
     def test_adv_endp_026_is_registered_against_both_embedded_schema_classes(self):
-        rule = next(r for r in ADVISORY_RULES if r.id == "ADV-ENDP-026")
+        # Look the rule up by id rather than `next(...)`: an unregistered rule
+        # is the failure this test exists to catch, and a KeyError on a dict
+        # names it, where a bare StopIteration does not.
+        rules = {rule.id: rule for rule in ADVISORY_RULES}
+        assert "ADV-ENDP-026" in rules, "ADV-ENDP-026 is not registered"
+        rule = rules["ADV-ENDP-026"]
         assert set(rule.targets) == {"ResponseExtraction", "WriteInput"}
         # One enforcer name must exist on every target.
         assert hasattr(ResponseExtraction, rule.enforcer)
@@ -1271,6 +1278,98 @@ class TestMaterializeMatchesTheNaiveFold:
         started = time.monotonic()
         assert "leaf" in materialize_node(root, root)["properties"]
         assert time.monotonic() - started < 5.0
+
+    def test_the_two_views_agree_when_the_contributors_are_NESTED(self):
+        # The single-level case below was the only agreement pin, and it passes
+        # whether the proof reads raw contributors or already-materialized ones.
+        # Nesting is what tells them apart: `_materialize` collects a name's
+        # declarations from sources that have THEMSELVES been materialized, and
+        # `type` is a data position that merges last-wins, so an inner level
+        # collapses its own contributors before the outer proof can see them.
+        #
+        # {string,integer} & {integer,boolean} & {string,boolean} is empty, but
+        # no two of the three are disjoint — so the emptiness is only visible
+        # while all three declarations still exist side by side.
+        record = {
+            "type": "object",
+            "allOf": [{"$ref": "#/$defs/Base"}],
+            "properties": {"id": {"type": ["string", "boolean"]}},
+        }
+        root = {
+            "type": "object",
+            "$defs": {"Base": {"allOf": [
+                {"properties": {"id": {"type": ["string", "integer"]}}},
+                {"properties": {"id": {"type": ["integer", "boolean"]}}},
+            ]}},
+            "properties": {"data": {"type": "array", "items": record}},
+        }
+        with pytest.raises(DeclarationConflictError):
+            effective_properties(record, root)
+        with pytest.raises(DeclarationConflictError):
+            materialize_node(record, root)
+
+    @pytest.mark.parametrize("seed", range(60))
+    def test_the_two_views_never_disagree_about_satisfiability(self, seed):
+        """Generative pin on the invariant the whole gate rests on.
+
+        `materialize_node` is the PERMISSIVE view and the one that derives the
+        destination column; `effective_properties` is the one the path walk
+        consults. Whenever they disagree, a record shape no instance can satisfy
+        is accepted and some arbitrary contributor names the column type. Six
+        separate rewrites of this composition have each shipped a version where
+        they disagreed on some shape, so the property — not any one shape — is
+        what has to be tested.
+
+        Chains are 2-4 levels deep so a level's own contributors are folded
+        before the level above reads them, which is exactly the case a
+        single-level fixture cannot reach. A third of the shapes close a
+        back-edge: the proof walk shares one memo across the whole
+        materialization, so a node's contributor set can be computed while some
+        ancestor is mid-walk, and the two views must still land together.
+        """
+        rng = random.Random(seed)
+        universe = ["string", "integer", "boolean", "number"]
+
+        def type_set():
+            return rng.sample(universe, rng.randint(1, 3))
+
+        depth = rng.randint(2, 4)
+        cyclic = rng.random() < 0.34
+        defs: dict[str, Any] = {}
+        for level in range(depth):
+            if level + 1 < depth:
+                nxt = [{"$ref": f"#/$defs/L{level + 1}"}]
+            elif cyclic:
+                nxt = [{"$ref": f"#/$defs/L{rng.randint(0, level)}"}]
+            else:
+                nxt = []
+            defs[f"L{level}"] = {
+                "allOf": nxt + [
+                    {"properties": {"id": {"type": type_set()}}}
+                    for _ in range(rng.randint(1, 3))
+                ]
+            }
+        record = {
+            "type": "object",
+            "allOf": [{"$ref": "#/$defs/L0"}],
+            "properties": {"id": {"type": type_set()}},
+        }
+        root = {"type": "object", "$defs": defs,
+                "properties": {"data": {"type": "array", "items": record}}}
+
+        def refuses(view):
+            try:
+                view(record, root)
+            except DeclarationConflictError:
+                return True
+            return False
+
+        assert refuses(effective_properties) == refuses(materialize_node), (
+            "the two views disagree about whether this record shape is "
+            f"satisfiable (seed {seed}): effective_properties="
+            f"{refuses(effective_properties)}, "
+            f"materialize_node={refuses(materialize_node)}"
+        )
 
     def test_a_contradictory_field_across_branches_is_refused_by_both_views(self):
         # The refusal `materialize_node` applies at a schema position, and the
