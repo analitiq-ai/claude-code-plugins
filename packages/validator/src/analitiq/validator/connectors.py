@@ -853,9 +853,19 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
             # could never be cleared — an alarm that cannot be acted on trains
             # authors to ignore the id. Only warn when the connector genuinely
             # is not reachable.
-            sibling = doc_path.parent.parent / "connector.json" if doc_path else None
+            # `.resolve()` first: `Path("things.json").parent.parent` is `.`, so
+            # validating with a relative `--document` from inside `endpoints/`
+            # missed the sibling and downgraded a genuinely broken ref to a
+            # warning — a silent pass on the one check this adds. `..` in the
+            # path failed the same way.
+            sibling = (
+                doc_path.resolve().parent.parent / "connector.json"
+                if doc_path
+                else None
+            )
             connector_doc = None
-            if sibling is not None and sibling.is_file():
+            sibling_exists = sibling is not None and sibling.is_file()
+            if sibling_exists:
                 connector_doc, load_findings = _load_json_sibling(
                     sibling, "endpoint-transport-ref"
                 )
@@ -878,6 +888,17 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                     "connector.json was read but declares no usable `transports` "
                     "object, so there was nothing to resolve the name against. "
                     "Validate the connector to see why."))
+            elif sibling_exists:
+                # The file IS there and WAS read — it just did not parse.
+                # Branching on `connector_doc is None` alone said "not
+                # reachable", contradicting the parse error emitted beside it
+                # under the same id.
+                findings.append(finding(
+                    "endpoint-transport-ref", "warning", "/",
+                    f"transport_ref {declared_refs!r} not checked: the sibling "
+                    f"connector.json at {sibling} could not be parsed, so its "
+                    "`transports` could not be read. Fix the error reported "
+                    "above and re-run."))
             else:
                 findings.append(finding(
                     "endpoint-transport-ref", "warning", "/",

@@ -351,3 +351,44 @@ class TestStandaloneEndpointValidation:
             "a connector-read failure surfaced under the type-map id; a fix loop "
             "filtering on endpoint-transport-ref would never see it"
         )
+
+    def test_unparseable_connector_is_not_described_as_unreachable(self, tmp_path):
+        """The file was found and read; only the parse failed. Reporting it as
+        "no sibling connector.json was reachable" contradicts the parse error
+        emitted beside it under the same id, and points the author at the wrong
+        problem."""
+        findings = self._run(tmp_path, "{not json")
+        warnings = [
+            f for f in findings
+            if f["validator"] == "endpoint-transport-ref" and f["severity"] == "warning"
+        ]
+        assert warnings, "expected a not-checked warning"
+        assert not any("was reachable" in f["message"] for f in warnings)
+        assert any("could not be parsed" in f["message"] for f in warnings)
+
+    @pytest.mark.parametrize("shape", ["relative", "dotdot"])
+    def test_a_non_absolute_document_path_still_finds_the_sibling(
+        self, tmp_path, monkeypatch, shape
+    ):
+        """`Path("thing.json").parent.parent` is `.`, so a relative `--document`
+        run from inside `endpoints/` missed the connector entirely and downgraded
+        a genuinely broken `transport_ref` to a warning — a silent pass on the
+        one check this adds."""
+        from analitiq.validator.connectors import _validate_api_endpoint
+
+        pkg = tmp_path / "pkg"
+        (pkg / "endpoints").mkdir(parents=True)
+        (pkg / "connector.json").write_text('{"kind":"api","transports":{"other":{}}}')
+        doc = self._endpoint()
+        (pkg / "endpoints" / "thing.json").write_text(json.dumps(doc))
+
+        monkeypatch.chdir(pkg / "endpoints")
+        doc_path = (
+            Path("thing.json") if shape == "relative"
+            else Path("..") / "endpoints" / "thing.json"
+        )
+        findings = _validate_api_endpoint(doc, doc_path, None)
+        assert ("endpoint-transport-ref", "error") in self._ids(findings), (
+            "the undeclared transport_ref was downgraded to a warning because "
+            "the sibling lookup missed"
+        )

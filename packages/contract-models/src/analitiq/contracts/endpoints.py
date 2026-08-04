@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from dataclasses import dataclass
 from enum import Enum
 from collections.abc import Iterator, Sequence
 from typing import Annotated, Any, Literal, Union, get_args
@@ -905,6 +906,20 @@ _REQUEST_SCHEMA_RULES: dict[str, Any] = {
         },
     ],
 }
+
+
+#: Request fields that carry author-written value expressions, and so must be
+#: swept. Stated once because both operations build their site tables from it:
+#: dropping a slot from one table and not the other is how `request.path_params`
+#: came to be checked on reads and not on writes. `_EXPRESSION_SLOTS_ARE_COMPLETE`
+#: pins it against the models, so a new expression-carrying request field cannot
+#: be added without either landing here or failing the suite.
+_REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
+    "path_params",
+    "headers",
+    "query",
+    "body",
+)
 
 
 class _RequestBase(AdvisoryValidated, _EndpointModel):
@@ -2057,22 +2072,33 @@ class WriteOperation(_EndpointModel):
         # the provider listed in `body.errors`. Partial data loss, green run —
         # strictly worse than the paging truncation #123 was filed for. The
         # request slots are swept for the same reason the read side is.
-        write_sites: list[tuple[str, Any]] = [
-            (f"operations.write.request.{slot}", getattr(self.request, slot, None))
-            for slot in ("path_params", "headers", "query", "body")
+        write_sites: list[_ExpressionSite] = [
+            _ExpressionSite(
+                where=f"operations.write.request.{slot}",
+                payload=getattr(self.request, slot, None),
+                operation=_OperationKind.WRITE,
+                can_read_response=False,
+            )
+            for slot in _REQUEST_EXPRESSION_SLOTS
         ]
-        write_sites.append((
-            "operations.write.response",
-            self.response.model_dump() if self.response is not None else None,
+        write_sites.append(_ExpressionSite(
+            where="operations.write.response",
+            payload=self.response.model_dump() if self.response is not None else None,
+            operation=_OperationKind.WRITE_RESPONSE,
+            can_read_response=True,
         ))
         write_sites += [
-            (f"operations.write.params[{name!r}].default", param.default)
+            _ExpressionSite(
+                where=f"operations.write.params[{name!r}].default",
+                payload=param.default,
+                operation=_OperationKind.WRITE,
+                # A param default feeds the REQUEST, so it is built before the
+                # response too.
+                can_read_response=False,
+            )
             for name, param in self.params.items()
         ]
-        _sweep_expression_sites(
-            [(w, p) for w, p in write_sites if p is not None],
-            operation=_OperationKind.WRITE,
-        )
+        _sweep_expression_sites([s for s in write_sites if s.payload is not None])
 
         path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
         if path_from_inputs and self.batching is not None:
@@ -2581,14 +2607,6 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
     pointer to the bad fragment instead of a downstream "param not
     referenced" error from the param-binding walk that runs after.
     """
-    if isinstance(value, dict) and "literal" in value:
-        # A `literal` payload is opaque data — `resolve_value_expression` returns
-        # it verbatim. `_collect_singleton_values`, `_collect_function_names` and
-        # `_expression_tokens` all say so and all skip it; this walker did not,
-        # and it is the one that REJECTS. A provider-shaped default carrying a
-        # field named `template`/`function`/`ref` was unauthorable with no
-        # working escape, which is what the escape hatch is for.
-        return
     if isinstance(value, dict):
         present_expr_keys = [k for k in value if k in _ALL_EXPRESSION_KEYS]
         if present_expr_keys:
@@ -2614,9 +2632,21 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
                     f"{non_x_others!r}; expressions must be the documented shape "
                     "(spec: §Value Expressions)"
                 )
+            if primary == "literal":
+                # A `literal` payload is opaque data — `resolve_value_expression`
+                # returns it verbatim, and `_collect_singleton_values`,
+                # `_collect_function_names` and `_expression_tokens` all skip it.
+                # So this walker must not RECURSE into it (a provider-shaped
+                # default carrying a field named `template`/`function`/`ref` was
+                # otherwise unauthorable with no working escape) — but it must
+                # still CHECK the dict that carries it. Skipping the dict too
+                # accepted `{"ref": "totally.bogus", "literal": 5}`: the resolver
+                # dispatches `literal` before `ref`, so the value went out as 5
+                # and the author's ref was silently inert.
+                return
             # Recurse into the expression's argument(s). For `function`, this
             # walks `input` (which may itself be an expression) and `map`'s
-            # values; for `template`/`ref`/`literal` the inner is leaf data.
+            # values; for `template`/`ref` the inner is leaf data.
             for v_inner in value.values():
                 _validate_expression_shapes(v_inner, f"{where}.<{primary}>")
             return
@@ -3040,26 +3070,48 @@ def _validate_response_body_paths(
       decides whether an ordering comparison in `stop_when` raises. A
       declaration that says nothing is not a declaration.
     """
-    sites: list[tuple[str, Any]] = []
+    sites: list[_ExpressionSite] = []
     if pagination is not None:
         # `model_dump()` rather than the model: predicates nest arbitrarily deep
         # inside `stop_when`, and a plain dict is what the shared token walker
         # knows how to traverse.
-        sites.append(("pagination", pagination.model_dump()))
+        sites.append(_ExpressionSite(
+            where="pagination",
+            payload=pagination.model_dump(),
+            operation=_OperationKind.READ,
+            # Pagination is the one request-shaping block that legitimately
+            # reads the PREVIOUS page's response.
+            can_read_response=True,
+        ))
     for key, expression in (response.metadata or {}).items():
-        sites.append((f"response.metadata[{key!r}]", expression.model_dump()))
+        sites.append(_ExpressionSite(
+            where=f"response.metadata[{key!r}]",
+            payload=expression.model_dump(),
+            operation=_OperationKind.READ,
+            can_read_response=True,
+        ))
     # The REQUEST slots too. A request is built before the response exists, so a
-    # `response.*` ref there is doubly wrong — and it was accepted:
+    # `response.*` ref there is refused outright — and it was accepted:
     # `request.query = {"c": {"ref": "response.body.nope"}}` interpolated
     # nothing, the provider answered 200, and the run went green. #123's failure
     # at the site where the value actually goes onto the wire.
-    for slot in ("path_params", "headers", "query", "body"):
+    for slot in _REQUEST_EXPRESSION_SLOTS:
         value = getattr(request, slot, None)
         if value is not None:
-            sites.append((f"request.{slot}", value))
+            sites.append(_ExpressionSite(
+                where=f"request.{slot}",
+                payload=value,
+                operation=_OperationKind.READ,
+                can_read_response=False,
+            ))
     for name, param in (params or {}).items():
         if param.default is not None:
-            sites.append((f"params[{name!r}].default", param.default))
+            sites.append(_ExpressionSite(
+                where=f"params[{name!r}].default",
+                payload=param.default,
+                operation=_OperationKind.READ,
+                can_read_response=False,
+            ))
 
     _sweep_expression_sites(sites, response.schema_)
 
@@ -3996,10 +4048,30 @@ class _OperationKind(str, Enum):
     WRITE_RESPONSE = "write_response"
 
 
+@dataclass(frozen=True, slots=True)
+class _ExpressionSite:
+    """One swept slot, with everything the checks need STATED by its producer.
+
+    `operation` used to be a per-call default and `WRITE_RESPONSE` was then
+    re-derived by prefix-matching `where` — the very inference this enum's
+    docstring says it replaced, one field rename away from firing again. A
+    producer knows which operation it is and whether its slot is built before
+    the response exists; neither is recoverable from a display label, so
+    neither is inferred from one.
+    """
+
+    where: str
+    payload: Any
+    operation: _OperationKind
+    #: False for a slot built BEFORE the response exists — every `request.*`
+    #: slot. A `response.*` ref there resolves to nothing at request-build time
+    #: whatever it names, so it is refused on scope alone.
+    can_read_response: bool
+
+
 def _sweep_expression_sites(
-    sites: "list[tuple[str, Any]]",
+    sites: "list[_ExpressionSite]",
     response_schema: Any = None,
-    operation: _OperationKind = _OperationKind.READ,
 ) -> None:
     """Run EVERY expression check over every site, from one table.
 
@@ -4018,17 +4090,30 @@ def _sweep_expression_sites(
     So: one function, all four checks, and each operation states its slots once.
     A slot added to the table gets every check by construction.
     """
-    for where, payload in sites:
+    for site in sites:
+        where, payload = site.where, site.payload
         _validate_expression_shapes(payload, where)
         for token in _expression_tokens(payload):
-            site_operation = (
-                _OperationKind.WRITE_RESPONSE
-                if operation is _OperationKind.WRITE
-                and where.startswith("operations.write.response")
-                else operation
-            )
-            _reject_unknown_scope(where, token, site_operation)
-            _reject_unknown_response_scope(where, token, site_operation)
+            _reject_unknown_scope(where, token, site.operation)
+            _reject_unknown_response_scope(where, token, site.operation)
+            if not site.can_read_response and token.split(".")[0] == "response":
+                # Scope-level, not path-level. Checking only whether the path
+                # RESOLVES let `request.query = {"ref":
+                # "response.body.next_cursor"}` through whenever the response
+                # schema happened to declare that path — and every `response.*`
+                # ref in a write request slot through unconditionally, since a
+                # write has no `response.schema` to resolve against. The request
+                # is built before the response exists, so the ref interpolates
+                # nothing regardless of what it names: the provider is called
+                # with the value missing and answers 200.
+                raise ValueError(
+                    f"{where} references {token!r}, but a request is built "
+                    "before the response exists, so no `response.*` value is "
+                    "available here — it would interpolate to nothing and the "
+                    "request would go out with the value missing. Use a "
+                    "`params` entry or a literal "
+                    "(spec: §Value Expressions — scopes)"
+                )
             segments = _response_body_segments(token)
             if segments is None or response_schema is None:
                 continue
@@ -4079,10 +4164,16 @@ def _unresolved_harm(operation: _OperationKind) -> str:
             "It resolves to nothing at run time, so the request goes out with "
             "that value missing and the provider answers whatever it answers."
         )
-    return (
-        "It resolves to nothing at run time, so paging stops after the first "
-        "page and the run still reports success."
-    )
+    if operation is _OperationKind.READ:
+        return (
+            "It resolves to nothing at run time, so paging stops after the "
+            "first page and the run still reports success."
+        )
+    # Exhaustive on purpose. With the read text as the fall-through, a raw
+    # `"write"` string — `==`-equal to the member but not `is`-identical — got
+    # paging advice, which is the wrong-message bug this enum replaced; and a
+    # member added later would inherit it silently.
+    raise AssertionError(f"unhandled operation kind {operation!r}")
 
 
 def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> None:

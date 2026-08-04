@@ -34,7 +34,11 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from analitiq.contracts.endpoints import ApiEndpointDoc, parse_endpoint
+from analitiq.contracts.endpoints import (
+    _REQUEST_EXPRESSION_SLOTS,
+    ApiEndpointDoc,
+    parse_endpoint,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -756,6 +760,56 @@ class TestWriteBlocksAreSweptForScopeTypos:
             request_extras={"query": {"c": {"ref": "response.bodyy.x"}}},
         )
         with pytest.raises(ValidationError):
+            parse_endpoint(_api_payload({"insert": op}))
+
+    #: Write slots that accept a free expression. `path_params` is excluded by
+    #: CONTRACT — it must be `{from_param}`/`{from_input}`, a strictly stronger
+    #: rule, pinned by its own case below.
+    FREE_SLOTS = ("headers", "query", "body")
+
+    @pytest.mark.parametrize("slot", FREE_SLOTS)
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            # A write has NO `response.schema`, so path-level checking could
+            # never reject any of these — every `response.*` ref in a write
+            # request slot was accepted unconditionally. The rule is
+            # scope-level: the request is built before the response exists.
+            "response.body.anything",
+            "response.body.errors",
+            "response.record_count",
+        ],
+    )
+    def test_a_response_ref_in_any_write_request_slot_is_rejected(self, slot, ref):
+        """`body` had no negative case on the write side at all, so dropping it
+        from the write site table left the suite green."""
+        binding = {"ref": ref}
+        extras = {slot: binding} if slot == "body" else {slot: {"c": binding}}
+        op = _write_op(request_extras=extras)
+        with pytest.raises(ValidationError, match="before the response exists"):
+            parse_endpoint(_api_payload({"insert": op}))
+
+    def test_write_path_params_is_guarded_by_the_stronger_binding_rule(self):
+        op = _write_op(path_params={"id": {"ref": "response.body.anything"}})
+        with pytest.raises(ValidationError, match="must be a `.from_param"):
+            parse_endpoint(_api_payload({"insert": op}))
+
+    def test_the_write_slot_tuple_still_covers_every_expression_field(self):
+        assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
+
+    def test_a_response_ref_in_a_write_param_default_is_rejected(self):
+        """The write side's `params[<n>].default` had a positive case and no
+        negative one — the read side's equivalent is what #123 was filed for."""
+        op = _write_op(
+            params={"tok": {
+                "in": "query",
+                "type": "string",
+                "required": False,
+                "default": {"ref": "response.body.next"},
+            }},
+            request_extras={"query": {"tok": {"from_param": "tok"}}},
+        )
+        with pytest.raises(ValidationError, match="before the response exists"):
             parse_endpoint(_api_payload({"insert": op}))
 
     def test_a_good_write_response_still_validates(self):

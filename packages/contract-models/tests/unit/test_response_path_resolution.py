@@ -25,6 +25,7 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
+    _REQUEST_EXPRESSION_SLOTS,
     DeclarationConflictError,
     DeclaredPathError,
     effective_properties,
@@ -1109,24 +1110,70 @@ class TestScopeTyposOnEitherSideOfTheDot:
 
 class TestRequestSlotsAreSweptToo:
     """A request is built before the response exists, so a `response.*` ref in
-    `request.query`/`headers`/`body` is doubly wrong — and it was accepted. It
-    is also the site where the value goes onto the wire."""
+    ANY request slot is refused on scope alone — it is also the site where the
+    value goes onto the wire.
 
-    def test_undeclared_response_body_path_in_query_is_rejected(self):
+    Parametrized over the whole slot tuple rather than one slot per hand-written
+    case: dropping `path_params` or `body` from a site table used to leave the
+    suite fully green, which is how the same slot went missing from two tables
+    in a row.
+    """
+
+    #: Read slots that accept a free expression. `path_params` is absent by
+    #: CONTRACT, not by oversight — on a read it must be `{from_param: <name>}`,
+    #: which is a strictly stronger rule; the case below pins that, so this list
+    #: shrinking silently is still a test failure.
+    FREE_SLOTS = ("headers", "query", "body")
+
+    def _with_slot(self, slot, value):
         payload = _read_payload("cursor")
-        payload["operations"]["read"]["request"]["query"]["extra"] = {
-            "ref": "response.body.nope"
-        }
-        with pytest.raises(ValidationError, match="does not resolve in response.schema"):
+        request = payload["operations"]["read"]["request"]
+        if slot == "body":
+            request["method"] = "POST"  # a GET read carries no body
+        request.setdefault(slot, {})["extra"] = value
+        return payload
+
+    @pytest.mark.parametrize("slot", FREE_SLOTS)
+    @pytest.mark.parametrize(
+        ("ref", "expected"),
+        [
+            # Resolves perfectly well — and is STILL wrong here, because the
+            # response does not exist yet. Path-level checking accepted it.
+            ("response.body.next_cursor", "before the response exists"),
+            ("response.body.nope", "before the response exists"),
+            ("response.record_count", "before the response exists"),
+            ("response.bodyy.x", "is not one of"),
+            ("Response.body.x", "not a known resolution scope"),
+        ],
+    )
+    def test_a_response_ref_in_a_request_slot_is_rejected(self, slot, ref, expected):
+        payload = self._with_slot(slot, {"ref": ref})
+        with pytest.raises(ValidationError, match=expected):
             parse_endpoint(payload)
 
-    def test_misspelled_sub_scope_in_headers_is_rejected(self):
-        payload = _read_payload("cursor")
-        payload["operations"]["read"]["request"]["headers"] = {
-            "X-A": {"ref": "response.bodyy.x"}
-        }
-        with pytest.raises(ValidationError, match="is not one of"):
+    @pytest.mark.parametrize("slot", FREE_SLOTS)
+    def test_the_same_ref_inside_a_template_is_rejected(self, slot):
+        payload = self._with_slot(slot, {"template": "${response.body.next_cursor}"})
+        with pytest.raises(ValidationError, match="before the response exists"):
             parse_endpoint(payload)
+
+    def test_read_path_params_is_guarded_by_the_stronger_from_param_rule(self):
+        """Why `path_params` is not in `FREE_SLOTS`: a read path binding may only
+        be `{from_param: <name>}`, so no `response.*` ref can be written there at
+        all. The write side has no such restriction, which is why its own suite
+        carries the parametrized case."""
+        payload = _read_payload("cursor")
+        request = payload["operations"]["read"]["request"]
+        request["path"] = request["path"] + "/{thing}"
+        request["path_params"] = {"thing": {"ref": "response.body.next_cursor"}}
+        with pytest.raises(ValidationError, match="must be a `.from_param"):
+            parse_endpoint(payload)
+
+    def test_the_slot_tuple_still_covers_every_expression_carrying_field(self):
+        """`_REQUEST_EXPRESSION_SLOTS` drives both site tables. Adding an
+        expression-carrying request field without adding it here would silently
+        leave it unswept — the defect class this PR closed four times."""
+        assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
 
 
 class TestParamDefaultIsAnExpressionSlot:
