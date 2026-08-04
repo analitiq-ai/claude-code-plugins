@@ -346,13 +346,22 @@ After creating a PR, follow these steps. Continue invoking the PR review process
 until no more errors are raised. If raised errors are not relevant to the PR, ask
 if you should create a GitHub issue for the raised error.
 
+`CONTRIBUTING.md` owns the two rules this loop does not: the **consolidation
+rule** (three findings sharing one mechanism become one abstraction issue —
+governs step 3b below) and **close against the class, not the instances** (what
+a PR must satisfy before it closes an issue). Read it before filing an issue out
+of a review, and before closing one.
+
 1. Use `/pr-review-toolkit` to review the PR after you have implemented all changes.
 2. Wait for feedback from the review executor.
 3. Determine if the raised issues are legitimate or not.
    a. if the issue is legitimate and relevant to the PR, fix it.
    b. if the issue is outside the scope of the PR, check if there is a related
-      issue in the GitHub issue tracker. If not, create a new issue in GitHub and
-      move on.
+      issue in the GitHub issue tracker. If not, ask whether to file one — and
+      when filing, apply the consolidation rule in `CONTRIBUTING.md` first: if
+      this is the third leak from a mechanism already filed, file the
+      consolidation issue and close the instances into it rather than adding
+      another instance. Then move on.
    c. If the issue is not a legitimate problem, summarize your thoughts on the
       point and move on.
 4. Once you fixed all issues that need fixing, commit fixes, push to the branch.
