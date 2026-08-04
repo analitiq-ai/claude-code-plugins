@@ -12,8 +12,9 @@ validator never sees. Do NOT restate validator rules here; if an item is
 mechanically checkable, it belongs in the validator, not on this list.
 
 Three things authors often assume are validated but are not — a `function`
-name, a non-`response` ref's resolvability, and TLS mode ↔ CA-certificate
-coherence. Those belong on this list, not in the validator's column.
+name, a ref's resolvability outside `response.body` / `response.metadata`,
+and TLS mode ↔ CA-certificate coherence. Those belong on this list, not in
+the validator's column.
 
 The kind-specific lists live at the end of each creator agent
 (`api-connector-creator` / `db-connector-creator`); both also apply this
@@ -46,13 +47,16 @@ shared core.
 - [ ] **Every `function` name is in the registered catalog.** Nothing
   validates function names, so a typo or a planned-but-unregistered function
   (e.g. `jwt_sign`) ships silently and fails at connect.
-- [ ] **Every NON-`response` ref resolves to something a declaration
-  produces.** `response.*` refs on an endpoint are proved by the validator
-  (paths against `response.schema`, metadata keys against the declared set —
-  see `value-expressions.md`); every other scope is checked on its leading
-  token only, and a connector document is not ref-checked at all. So a
-  `connection.discovered.*` ref with no post-auth output behind it passes
-  validation. Trace those by hand (`lifecycle-phases.md`).
+- [ ] **Every ref resolves to something a declaration produces, except the
+  two the validator proves.** Only `response.body.<path>` (against
+  `response.schema`) and `response.metadata.<key>` (against the declared
+  set) are proved — see `value-expressions.md`. Everything else is on you:
+  `response.headers.<name>` is not proved and *cannot* be (headers are
+  provider-supplied at runtime, so a made-up name validates clean and pages
+  once), every other scope is checked on its leading token only, and a
+  connector document is not ref-checked at all — so a
+  `connection.discovered.*` ref with no post-auth output behind it passes.
+  Trace those by hand (`lifecycle-phases.md`).
 - [ ] **`default_transport` is the right default**, and any
   multi-transport split (auth / discovery / api origins) reflects the
   provider's real topology.

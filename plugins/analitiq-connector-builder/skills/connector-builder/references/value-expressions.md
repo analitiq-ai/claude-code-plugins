@@ -46,14 +46,22 @@ operation is swept — `pagination` (every `stop_when` operand included),
 slots, and each `params.<name>.default`. For most scopes only the **leading
 token** is checked, so `connection.discovered.nope` passes and resolves empty.
 
-`response.*` refs get the full treatment (ADV-ENDP-023). A
+Two `response` sub-scopes are resolved in full (ADV-ENDP-023). A
 `response.body.<path>` must resolve against `response.schema` by declared-path
 resolution to a node that declares a type — `response.body.nope` is an error,
 not a silent one-page sync — and `response.metadata.<key>` must name a key the
-document declares. A `response.*` ref in any request slot or param `default` is
-refused outright, whatever it names: the request is built before the response
-exists, so it could only interpolate to nothing. `response.records`
-additionally must land on an array node (ADV-ENDP-012).
+document declares. `response.records` additionally must land on an array node
+(ADV-ENDP-012).
+
+The other `response` sub-scopes are checked for spelling only, and cannot be
+more: `response.headers.<name>`, `response.status`, `response.record_count`
+are runtime values the document declares nothing about, so
+`response.headers.X-Made-Up` validates clean and pages once. Trace those
+against the provider's actual response yourself.
+
+Wherever it appears, a `response.*` ref in a request slot or a param `default`
+is refused outright, whatever it names: the request is built before the
+response exists, so it could only interpolate to nothing.
 
 In a **connector** document (a transport header, an auth template) there is no
 check at all — treat every ref there as unverified and trace it to the
