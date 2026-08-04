@@ -26,8 +26,10 @@ from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
     _MISSING,
+    _OperationKind,
     _compose_declarations,
     _property_contributors,
+    _unresolved_harm,
     ApiEndpointDoc,
     DeclarationConflictError,
     DeclaredPathError,
@@ -1193,6 +1195,23 @@ class TestThePublishedLandingSetMatchesTheResolver:
         assert "Exactly eight keywords qualify" in description
         for keyword in self.LANDABLE:
             assert f"`{keyword}`" in description, f"{keyword} missing from prose"
+
+
+class TestEachOperationKindGetsItsOwnHarmText:
+    """Unreachable through the enum — all three members are handled — so no
+    document-level test can catch a regression here. Pinned directly instead."""
+
+    def test_every_member_has_a_distinct_harm_text(self):
+        texts = {kind: _unresolved_harm(kind) for kind in _OperationKind}
+        assert len(set(texts.values())) == len(_OperationKind)
+
+    def test_a_raw_equal_string_is_refused_rather_than_given_the_read_text(self):
+        """`"write" == _OperationKind.WRITE` is True but `is` is False, and the
+        dispatch uses `is`. With the read text as a fall-through, a raw string
+        silently got paging advice about an operation that does not page — the
+        wrong-message bug the enum was introduced to remove."""
+        with pytest.raises(AssertionError, match="unhandled operation kind"):
+            _unresolved_harm("write")
 
 
 class TestKeywordVocabularyHasOneOwner:

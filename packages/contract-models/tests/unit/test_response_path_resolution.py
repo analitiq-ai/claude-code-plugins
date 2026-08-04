@@ -1333,6 +1333,57 @@ class TestParamDefaultIsAnExpressionSlot:
     @pytest.mark.parametrize(
         "default",
         [
+            {"ref": "response.body.next_cursor"},
+            {"template": "${response.body.next_cursor}"},
+        ],
+    )
+    def test_a_VALID_response_ref_in_a_param_default_is_still_rejected(self, default):
+        """Every case above names a path that does not exist, so all of them are
+        caught by the scope checks — none exercises `can_read_response=False` on
+        this site. Flipping that flag to True left the whole suite green.
+
+        The path here DOES resolve, so only the scope flag can refuse it, and
+        `match=` pins that: a param default feeds the REQUEST, which is built
+        before the response exists. On a `controlled_by: "pagination"` param
+        this default is the paging SEED, so accepting it is #123 verbatim — and
+        the write side's counterpart already exists, with a docstring calling
+        this one "the read side's equivalent, which is what #123 was filed for".
+        """
+        with pytest.raises(ValidationError, match="before the response exists"):
+            parse_endpoint(self._payload(default))
+
+    @pytest.mark.parametrize(
+        "default",
+        [
+            {"ref": "totally.bogus", "literal": 5},
+            {"literal": 5, "ref": "totally.bogus"},
+            {"literal": 5, "from_param": "nope"},
+            {"literal": 5, "zzz": 1},
+        ],
+    )
+    def test_a_literal_carrier_dict_is_checked_even_though_its_payload_is_not(
+        self, default
+    ):
+        """`literal` must stop the walker RECURSING into the opaque payload, not
+        stop it CHECKING the dict that carries it. Skipping both accepted
+        `{"ref": ..., "literal": 5}` — the resolver dispatches `literal` before
+        `ref`, so the value goes out as 5 and the author's ref is silently inert.
+
+        Deliberately on `params[<n>].default` and not `request.query`: on the
+        query slot the fixture's param-binding rule rejects these for an
+        unrelated reason, so a test written there passes without touching this
+        branch at all. The accept side is pinned separately by
+        `test_literal_wrapped_unknown_ref_in_header_accepted`; this is the half
+        that was missing.
+        """
+        with pytest.raises(
+            ValidationError, match="multiple expression keys|unexpected siblings"
+        ):
+            parse_endpoint(self._payload(default))
+
+    @pytest.mark.parametrize(
+        "default",
+        [
             {"ref": "connection.parameters.page_size"},
             {"literal": "abc"},
             {"template": "${connection.parameters.base}/x"},
