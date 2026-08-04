@@ -383,8 +383,13 @@ class TestPaginationExpressions:
                 },
                 "response": {
                     "records": {"ref": "response.body.data"},
+                    # `next` and `next_cursor` are declared because the pagination
+                    # block reads them: every `response.body.*` path pagination
+                    # references must resolve here (ADV-ENDP-023).
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
+                        "next": {"type": "string"},
+                        "next_cursor": {"type": "string"},
                     }},
                 },
             }},
@@ -437,8 +442,12 @@ class TestPredicate:
                 },
                 "response": {
                     "records": {"ref": "response.body.data"},
+                    # `has_more` / `next` are the fields this class's stop_when
+                    # predicates read; ADV-ENDP-023 requires them declared.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
+                        "has_more": {"type": "boolean"},
+                        "next": {"type": "string"},
                     }},
                 },
             }},
@@ -1904,8 +1913,14 @@ class TestPaginationStrategies:
                 },
                 "response": {
                     "records": {"ref": "response.body.data"},
+                    # `links.next` is the path this pagination reads, so
+                    # ADV-ENDP-023 requires it declared here — nested objects
+                    # resolve segment by segment through `properties`.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
+                        "links": {"type": "object", "properties": {
+                            "next": {"type": "string"},
+                        }},
                     }},
                 },
             }},
@@ -2308,8 +2323,13 @@ class TestLinkPaginationNoParams:
                 },
                 "response": {
                     "records": {"ref": "response.body.data"},
+                    # ADV-ENDP-023: `links.next` is read by both `link.next_url`
+                    # and `stop_when`, so it must be declared.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
+                        "links": {"type": "object", "properties": {
+                            "next": {"type": "string"},
+                        }},
                     }},
                 },
             }},
@@ -2338,8 +2358,13 @@ class TestLinkPaginationLimit:
                 "pagination": pagination,
                 "response": {
                     "records": {"ref": "response.body.data"},
+                    # ADV-ENDP-023: every payload this helper builds paginates on
+                    # `response.body.links.next`, so the path is declared here.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
+                        "links": {"type": "object", "properties": {
+                            "next": {"type": "string"},
+                        }},
                     }},
                 },
             }},

@@ -22,6 +22,12 @@ module adds only what a single-document model cannot express:
   a database id from its verbatim
   `database_object` (`slug(schema)__slug(table)[__slug(catalog)]__hash8`, via the
   shared `analitiq.contracts.endpoint_identity`);
+- **endpoint → transport** (`endpoint-transport-ref`): an endpoint's
+  `request.transport_ref` must name a transport the sibling connector.json
+  declares. `ConnectorBase._transport_refs_resolvable` enforces the same rule for
+  every connector-internal ref site, but an endpoint document is a separate file
+  and structurally invisible to that model validator — so the cross-file half of
+  the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
   rules, dead uppercase-only read patterns, and write-map vocabulary gaps.
 
@@ -85,6 +91,7 @@ register_validator_ids({
     "endpoint-filename",
     "endpoint-id-unique",
     "endpoint-id-locator",
+    "endpoint-transport-ref",
     "embedded-json-schema",
 })
 
@@ -445,6 +452,69 @@ def _api_operation_paths(ep_doc: dict) -> list[tuple[str, str]]:
     return out
 
 
+def _api_operation_transport_refs(ep_doc: dict) -> list[tuple[str, Any]]:
+    """`(pointer, request.transport_ref)` for every operation of an api-endpoint
+    doc that DECLARES one — the read request and each write mode's request.
+
+    An absent or `null` `transport_ref` is omitted: it means "use the connector's
+    `default_transport`", which is always resolvable, so there is nothing to
+    check. Malformed shapes (a non-dict `operations`/`write` mode, a request that
+    is not an object) are skipped rather than probed — they are already recorded
+    as model errors, and this walk must not crash on them."""
+    out: list[tuple[str, Any]] = []
+    ops = ep_doc.get("operations")
+    if not isinstance(ops, dict):
+        return out
+
+    def _collect(block: Any, pointer: str) -> None:
+        if not isinstance(block, dict):
+            return
+        request = block.get("request")
+        if not isinstance(request, dict) or request.get("transport_ref") is None:
+            return
+        out.append((f"{pointer}/request/transport_ref", request["transport_ref"]))
+
+    _collect(ops.get("read"), "/operations/read")
+    write = ops.get("write")
+    if isinstance(write, dict):
+        for mode, block in write.items():
+            _collect(block, f"/operations/write/{mode}")
+    return out
+
+
+def _endpoint_transport_ref_findings(ep_doc: Any, transports: Any,
+                                     label: str = "") -> list[dict]:
+    """Cross-file gate: every `request.transport_ref` an endpoint declares must
+    name a transport the sibling connector.json declares in `transports`.
+
+    This is the cross-file half of the contract's §Transport Selection rule.
+    `ConnectorBase._transport_refs_resolvable` already enforces it for every
+    connector-INTERNAL ref site (auth ops, post-auth requests, resource
+    discovery), but an endpoint lives in its own document, so no single-document
+    model validator can see both sides — only a connector-anchored walk can.
+    The wording mirrors that model validator's so one rule reads the same
+    wherever it fires.
+
+    A non-string ref is left alone (the model already reports the type error),
+    and a `transports` value that is not a dict means the connector itself is
+    malformed — its own model error stands, and fabricating "declared: []"
+    findings on top of it would only bury it."""
+    if not isinstance(ep_doc, dict) or not isinstance(transports, dict):
+        return []
+    findings: list[dict] = []
+    for pointer, ref in _api_operation_transport_refs(ep_doc):
+        if not isinstance(ref, str) or ref in transports:
+            continue
+        where = f"{label}{pointer}" if label else pointer
+        findings.append(finding(
+            "endpoint-transport-ref", "error", pointer,
+            f"{where} transport_ref={ref!r} is not declared in the sibling "
+            f"connector.json `transports` (declared: {sorted(transports)!r}; "
+            "spec: §Transport Selection). A request dispatches only through a "
+            "transport the connector declares."))
+    return findings
+
+
 def _endpoint_locator_findings(ep_doc: Any) -> list[dict]:
     """Gate: an API `endpoint_id` must equal the handle derived from its resource
     locator — the read `request.path` when present, else the first write path
@@ -698,6 +768,11 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+        # Cross-file: the endpoint's transport_ref sites resolve against THIS
+        # connector's `transports` — checkable only here, where both documents
+        # are in hand.
+        findings.extend(_endpoint_transport_ref_findings(
+            ep_doc, doc.get("transports"), label=ep_path.name))
         for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
             rendered = _render_canonical(native, read_doc)
             site = f"{ep_path.name}{pointer}"

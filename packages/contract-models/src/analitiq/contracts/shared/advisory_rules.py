@@ -171,7 +171,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     AdvisoryRule(
         id="ADV-ENDP-006", kind="custom", resource="api-endpoint",
         prose="Every node in input.schema must pair native_type/arrow_type and match its container shape.",
-        targets=("WriteInput",), enforcer="_validate_arrow_types",
+        targets=("WriteInput",), enforcer="_validate",
     ),
     AdvisoryRule(
         id="ADV-ENDP-007", kind="custom", resource="api-endpoint",
@@ -252,6 +252,42 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-ENDP-022", kind="custom", resource="api-endpoint",
         prose="Every expression dict in a request slot must declare exactly one primary key (ref/template/literal/function/from_param/from_input) alongside only x-* siblings.",
         targets=("ReadOperation", "WriteOperation"), enforcer="_wiring",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-023", kind="custom", resource="api-endpoint",
+        prose="Every response.body path referenced by pagination or response.metadata must resolve by declared-path resolution against response.schema.",
+        targets=("ReadOperation",), enforcer="_wiring",
+    ),
+    # Stated as the CONSTRAINT, not as a grant. This registry renders verbatim
+    # into `references/advisory-rules.md`, which ships in the plugin cache
+    # alongside hand-authored authoring prose; a row reading "a write path_param
+    # MAY bind from_input" reads as an instruction to use it, and the shipped
+    # runtime validator pin does not accept it yet. The rule is the same either
+    # way — what changes is whether the reference table teaches.
+    AdvisoryRule(
+        id="ADV-ENDP-024", kind="custom", resource="api-endpoint",
+        prose="A path_param from_input binding is invalid on a read operation, and on a write must address exactly one record field (record.<dotted>, never record or records) that input.schema declares.",
+        targets=("ReadOperation", "WriteOperation"), enforcer="_wiring",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-025", kind="custom", resource="api-endpoint",
+        prose="from_input in request.path_params and batching are mutually exclusive on a write operation.",
+        targets=("WriteOperation",), enforcer="_wiring",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-026", kind="custom", resource="api-endpoint",
+        prose="Every $ref in an embedded response/input schema must be an in-document reference that resolves to a schema in the same document.",
+        targets=("ResponseExtraction", "WriteInput"), enforcer="_validate",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-027", kind="custom", resource="api-endpoint",
+        prose="A request.path_params binding must not apply a wire-encoding function (url_encode/base64_encode): the engine percent-encodes each substituted path segment.",
+        targets=("ReadOperation", "WriteOperation"), enforcer="_wiring",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-028", kind="custom", resource="api-endpoint",
+        prose="A write request.path_params from_param binding must name a param declaring a default; a write param has no other source, so a sourceless one can never resolve.",
+        targets=("WriteOperation",), enforcer="_wiring",
     ),
     # --- stream -------------------------------------------------------------
     AdvisoryRule(
