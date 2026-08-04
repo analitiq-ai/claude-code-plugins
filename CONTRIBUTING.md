@@ -53,15 +53,15 @@ analitiq-ai/analitiq-engine#346 was titled for four divergences: pagination,
 **request binding**, replication, error classification. Its body narrated
 pagination only; a survey comment on it enumerated the request-binding sites by
 name — `transport_ref`, `path_params`, `headers`, `headers_remove`, `query` —
-and proposed splitting them out. Nobody split them. The issue fixed pagination
-and closed 2026-07-22.
+and set them out as ordered work *inside* the issue. The issue did item one,
+fixed pagination, and closed 2026-07-22 with the rest of its own order untouched.
 
-Eleven days later engine PR #451 was working the same list from scratch, and the
-sites that survey had already named were filed a second time, two weeks after
-the issue that named them closed: #124 here (`request.transport_ref` is
-contract-valid and read by nothing), engine #452 (`request.headers` /
-`headers_remove` / `in: header`) and engine #453 (`request.query`'s key map
-dropped on the wire).
+Eleven days later engine PR #451 was working that list again from scratch, and
+three of the five sites the survey had already named were filed a second time,
+within a fortnight of the issue that named them closing: #124 here
+(`request.transport_ref` is contract-valid and read by nothing), engine #452
+(`request.headers` / `headers_remove` / `in: header`) and engine #453
+(`request.query`'s key map dropped on the wire).
 
 If a PR fixes part of an issue, it closes nothing. Either narrow the issue's
 scope explicitly — edit the body, say what moved out and where it went, file the
@@ -86,7 +86,9 @@ Which check depends on where the divergence lives:
       --live-connection ci/live-connection.json
   ```
 
-  The kit is tier-scoped, not per-finding: a run executes every check that
+  The kit's own documentation, shipped with the CDK, is the authority on its
+  flags; the lines above are the shape, not a pin. The kit is tier-scoped, not
+  per-finding: a run executes every check that
   applies to the target connector's `kind`, so green means the class passed, not
   the instance. It also refuses to report a false green — a run that collects no
   applicable check for the target's `kind` fails outright and says so, which is
