@@ -95,7 +95,8 @@ was raised.
      a direct `stream.*` / `state.*` / `runtime.*` ref anywhere in a request slot is
      rejected. Fixed protocol values stay direct (`{"literal": …}`, or a
      `connection.parameters.*` / `secrets.*` ref). Every declared param must
-     be bound by exactly one binding. Full rules: `spec-request-binding.md`.
+     be bound by exactly one binding (ADV-ENDP-009). Full rules:
+     `spec-request-binding.md`.
    - `pagination` — when `endpoint_facts.paginated` is true, populate per
      `endpoint_facts.pagination` (the connector-wide `style` + `params`,
      echoed into the branch — the API connector body carries no
@@ -142,8 +143,7 @@ was raised.
    connector keying it passes validation while declaring something no HTTP
    provider was asked to do. If a provider genuinely exposes a
    replace-the-collection operation, raise it as a contract gap rather than
-   authoring around it. The modes you do key share the same
-   block shape and differ only in `conflict_keys`. Each mode block holds:
+   authoring around it. Each mode block holds:
    - `request` (required) — `method` (`POST` / `PUT` / `PATCH`), `path`,
      and the same optional `query` / `headers` / `path_params` / `body`
      / `transport_ref` keys as the read request — except that `path_params`
@@ -168,17 +168,13 @@ was raised.
      describing one provider-facing destination record. Every field a
      `from_input` path addresses must be declared here.
    - `conflict_keys` — **required for `upsert`, forbidden for every other
-     mode.**
-     An array of one or more strings, each a top-level field name
-     declared in this mode's `input.schema`; together they are the
-     provider-defined natural key the upsert matches on. On any other
-     mode omit it — the schema pins it to `null` there; an `upsert`
-     without it fails validation. Use `endpoint_facts.conflict_keys` — the provider's
-     documented idempotency / match key (e.g. an external id or a unique
-     business key) — never invent one.
+     mode** (ADV-ENDP-019): an array of top-level field names declared in
+     this mode's `input.schema` — together the provider-defined natural
+     key the upsert matches on. Use `endpoint_facts.conflict_keys`;
+     never invent one.
    - `batching` (optional) — `{"max_records": <int ≥ 2>}` when the
      provider documents a per-request cap. Mutually exclusive with
-     `idempotency`.
+     `idempotency` (ADV-ENDP-015).
    - `idempotency` (optional) — `{"in": "header" | "body", "name":
      "<non-empty>"}`: where the provider's idempotency key goes on each
      write request (`header`: Stripe `Idempotency-Key`; `body`: Square's
@@ -200,12 +196,12 @@ was raised.
      - `error` — `{code, message, details}`, each a value expression,
        for failure parsing.
      - `metadata` — named value expressions for response metadata.
-     - `success_when` — predicate determining operation success.
-       Schema-closed set: `eq`, `neq`, `lt`, `lte`, `gt`, `gte`,
-       `exists`, `missing`, `empty`, `not_empty`, `and`, `or`, `not`.
+     - `success_when` — predicate determining operation success. The
+       operator vocabulary is the schema's predicate grammar — the same
+       `$defs` the pagination `stop_when` uses (`spec-pagination.md`).
 5. At least one of `operations.read` or `operations.write` must be
-   present. Omit the other when the resource is read-only or
-   write-only.
+   present (ADV-ENDP-018) — omit the other when the resource is
+   read-only or write-only.
 
 ## Hard rules
 

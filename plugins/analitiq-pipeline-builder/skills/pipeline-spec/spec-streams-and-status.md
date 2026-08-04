@@ -8,6 +8,7 @@ for their types, defaults and constraints.
 An array of **stream UUIDs**. Each entry is the `stream_id` of a stream
 defined in a sibling `streams/<stream-slug>.json` file.
 
+<!-- validate: pipeline#/streams -->
 ```jsonc
 {
   "streams": [

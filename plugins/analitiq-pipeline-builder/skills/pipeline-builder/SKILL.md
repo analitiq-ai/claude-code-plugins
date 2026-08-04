@@ -318,10 +318,11 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
     Attempt at most **5 fix passes per artifact** — re-dispatch the
     matching creator with the validator's findings, re-validate, repeat.
     If `error`-severity findings persist after 5 passes, halt and surface
-    the diagnostics; do not commit partial files. A draft pipeline produces
-    no not-runnable finding (runnability is enforced only once it is
-    `active`). The validator is single-shot — iteration discipline lives
-    here in the orchestrator's prose.
+    the diagnostics; do not commit partial files.
+    <!-- PROBE: pipeline-draft-runnability-unchecked -->
+    A draft pipeline produces no not-runnable finding (runnability is
+    enforced only once it is `active`). The validator is single-shot —
+    iteration discipline lives here in the orchestrator's prose.
 
     **`connector-endpoint-ref` warnings.** The bundle validation (run with
     `bundle_root: .`) may return `connector-endpoint-ref` **warnings** — a

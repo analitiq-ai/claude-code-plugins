@@ -38,29 +38,11 @@ identified by `connector_path`, so `provider` is optional.
 
 ## Modes
 
-The orchestrator runs in one of three modes (input `mode`, default
-`build`). `build` and `update` share phases 1–5 and differ only at
-phases 0, 6, and 7; `validate` runs phase 0 then validates the on-disk
-documents (report-only, no fix loop), skipping research, authoring,
-drift, and write.
-
-- **`build`** (default) — author a fresh connector. Phase 0 halts if a
-  `{connector_id}/` directory already exists.
-- **`update`** — the connector already exists and its upstream system
-  has changed. Re-author from *current* docs (phases 1–5 run normally),
-  then diff the fresh draft against the existing connector to set the
-  new version (phase 6 is required), and regenerate the tree (phase 7).
-  The existing connector is read **only** as the drift baseline — it is
-  never edited in place, and the version is bumped from the prior
-  release, never reset to `1.0.0`. Run inside a VCS checkout so the
-  regeneration is reviewable via `git diff`. Connector content is
-  treated as fully reproducible from `ProviderFacts` + creator logic;
-  non-reproducible hand edits to a connector are not preserved across an
-  update (known limitation).
-- **`validate`** — read-only. Skip phases 1–3 and 5–7; run phase 4
-  (validation) over the on-disk documents (connector, type maps, and all
-  endpoint files) and report the diagnostics. Do not research, author,
-  fix, or write. To fix reported findings, re-run in `update` mode.
+`build` (default) authors a fresh connector; `update` re-authors from
+*current* docs and re-versions against the existing tree (read only as
+the drift baseline, never edited in place); `validate` is a read-only
+diagnostics pass. Mode semantics, phase branching, and failure modes:
+`references/pipeline.md` §Modes.
 
 ## Required reading
 
@@ -73,170 +55,32 @@ Always load:
 Do NOT load `connector-spec-api` or `connector-spec-db` here — the creator
 sub-agents own those skills.
 
-## Pipeline (full contract: `references/pipeline.md`)
+## Pipeline
 
-0. **Pre-flight** — branch on `mode` before any research or authoring:
-   - **`build`** — check whether a directory named `{connector_id}/`
-     already exists in the current working directory. If it does,
-     **halt** and ask the user to remove or rename it before re-running.
-     Do not read the existing directory's contents and do not attempt to
-     migrate or merge — this is a stopgap to prevent accidental
-     overwrites and to keep the build path simple. Migration of
-     pre-existing connectors authored under the legacy shape is
-     intentionally out of scope. The user-facing message must include
-     the full path of the existing directory, the exact `rm -rf {path}`
-     command they can run to remove it (do NOT run it for them), and a
-     note that re-running after removal will produce a fresh connector
-     authored from scratch.
-   - **`update`** — `connector_path` points at the existing connector.
-     Read its directory name and `connector.json` `connector_id` up front
-     (the target artifact, not spec material) and record it as the
-     read-only drift baseline (the default `previous_release_path`).
-     Proceed to phase 1; do not edit it in place — phase 7 regenerates
-     the tree. If research/authoring later yields a `connector_id` that
-     differs from `connector_path`'s, **halt** and surface the mismatch
-     rather than writing a divergent tree (a changed slug is a new
-     connector, not an update). If `connector_path` does not exist, fall
-     back to `build` semantics and tell the user.
-   - **`validate`** — read the on-disk documents under `connector_path`
-     (`definition/connector.json`, `definition/type-map-read.json`,
-     `definition/type-map-write.json` when present, and
-     `definition/endpoints/*.json`) and skip directly to phase 4. No
-     research, authoring, or writing. If `connector_path` does not exist,
-     halt and tell the user there is nothing to validate.
+The phase-by-phase contract — halt conditions, fix-loop discipline, the
+worklist protocol, and the on-disk layout — is `references/pipeline.md`
+(always loaded). The index:
 
-1. **Research (domain)** — invoke `connector-provider-researcher` at
-   `scope: domain`, handing it the **live contract schema URLs** as its
-   mission spec (`connector` + `type-map-read`, plus `type-map-write` for
-   databases). The schema is *what to research*; the researcher walks it
-   and grounds every fact in the provider's docs. Receive `ProviderFacts`
-   (discriminated by kind), which carries the connector skeleton, the
-   **resource list** (`resources`), and the connector-wide
-   `native_type_vocabulary`. Pass `docs_url` when the user supplied one;
-   otherwise the researcher locates the official docs itself and reports
-   the URL it used.
-2. **Classify** — run the closed-enum mappers inline (see
-   `references/enum-mappers.md`):
-   - `KindMapper` → `kind`.
-   - `AuthTypeMapper` → `auth.type`.
-   - `TransportTypeMapper` → `transport_type` per transport.
-3. **Dispatch creator (domain body + type maps)** — based on `kind`:
-   - `kind = api` → `api-connector-creator`.
-   - `kind = database` → `db-connector-creator`.
-   - `kind ∈ {file, s3, stdout}` → `storage-connector-creator` (stub).
-
-   The creator authors the connector body and the type map(s) — **not**
-   endpoints. Always pass `provider_facts`; without it the creator
-   refuses (its hard gate, which makes skipping research structurally
-   impossible).
-4. **Validate the domain (barrier)** — invoke
-   `connector-schema-validator` over the connector body and type map(s):
-   - Connector → `https://schemas.analitiq.ai/connector/latest.json`.
-   - Read map (`type-map-read.json`) →
-     `https://schemas.analitiq.ai/type-map-read/latest.json`.
-   - Write map (`type-map-write.json`, database only) →
-     `https://schemas.analitiq.ai/type-map-write/latest.json`. Both maps
-     run the full contract-model + semantic pass; the validator derives the
-     direction from the filename.
-
-   The validator validates JSON documents only. The database package
-   files (`connector.py`, `__init__.py`, `requirements.txt`,
-   `pyproject.toml`) are NOT validated here — registry CI owns their
-   enforcement (wheel build + entry-point checks).
-
-   This is a **barrier**: in `build` / `update` mode the connector body
-   and type maps MUST validate clean before any endpoint fan-out, because
-   each endpoint references the connector's transports/auth and resolves
-   its field types through `type-map-read`. For `kind = database` this
-   completes validation — database connectors author no endpoint files,
-   so phase 5 is skipped.
-
-   In `validate` mode, run the validator once over **every** on-disk
-   document (connector, both type maps when present, and all
-   `endpoints/*.json`), report the resulting `Diagnostics`, and stop —
-   there is no fix loop and no creator re-dispatch (phases 1–3 and 5 were
-   skipped, so there is no `CreatorOutput` to revise). The fix loop below
-   applies to `build` and `update` only.
-
-   In `build` / `update` mode the orchestrator should attempt at most 5
-   fix passes per artifact — re-dispatch the matching creator with the
-   validator's findings and the artifacts it produced on the prior pass
-   (`CreatorOutput`), re-validate, repeat. The creator — not the
-   orchestrator — decides whether each finding is a real defect or a
-   validator false positive; it owns the spec. Pass `Diagnostics.findings`
-   verbatim and do not pre-filter, pre-diagnose, or read spec material to
-   interpret them yourself. If `error`-severity findings persist after 5
-   passes, halt and surface the diagnostics; do not write partial files.
-   The validator script itself is single-shot — iteration discipline
-   lives in the orchestrator's prose, not in the script. The cap is
-   best-effort and not runtime-enforced; runtime enforcement is tracked at
-   https://github.com/analitiq-ai/claude-code-plugins/issues/3.
-5. **Endpoint fan-out (api only)** — the domain is authored and clean, so
-   now author one endpoint per resource, **concurrently and bounded**.
-   Enumerate `ProviderFacts.resources` (or the user-specified resource
-   list) into a **worklist** with per-item state (`pending → running →
-   done · failed`) so no resource is dropped. Run each resource as its
-   own branch, at most **N concurrent** (default **10**); as one finishes,
-   pull the next `pending`. Each branch is:
-   - `connector-provider-researcher` at `scope: endpoint` → `EndpointFacts`
-     (that resource's response field schema — datetime zone-awareness from
-     a real sample value, enum domains, nullability, formats),
-   - `endpoint-creator` authors the endpoint document from those facts
-     (its hard gate: no `EndpointFacts`, no authoring),
-   - `connector-schema-validator` against
-     `https://schemas.analitiq.ai/api-endpoint/latest.json`, with the same
-     per-artifact 5-pass fix loop as phase 4.
-
-   A branch that still fails after the fix cap is marked `failed` in the
-   worklist and surfaced — it does **not** block its siblings, and the
-   orchestrator reports partial results rather than silently dropping the
-   endpoint. If a resource exposes a native not in
-   `type_map_read`, that is a **domain-level** type-map addition: re-author
-   and re-validate the domain (phases 3–4), never patch the map per
-   endpoint — canonical types stay consistent across endpoints.
-6. **Drift** — the classifier reads `previous_version` from
-   `previous_release_path` and returns the computed `next_version`; set
-   the connector's top-level `version` to that `next_version` directly
-   (do not recompute the semver yourself). This `version` is the
-   connector's own release semver, owned by `connector-drift-classifier`
-   — unrelated to the plugin package version, which this repo bumps via
-   PR labels. The classifier needs a `current_path` to diff, so stage the
-   freshly-authored draft to a temporary path first.
-   - **`update`** — required: invoke `connector-drift-classifier` with
-     `previous_release_path` = the existing connector and `current_path`
-     = the staged draft, and apply the returned `next_version` (never
-     reset to `1.0.0`).
-   - **`build`** — if `previous_release_path` was supplied, invoke
-     `connector-drift-classifier` the same way (staged draft as
-     `current_path`) and apply `next_version`; otherwise this is a first
-     release — set `version: "1.0.0"`.
-7. **Write** — write files to disk. In `update` mode the regenerated
-   files replace the existing connector tree (its prior files were read
-   as the drift baseline in phase 6, never edited in place); report that
-   the tree was regenerated and recommend reviewing `git diff` before
-   committing. Each API endpoint file **must** be named
-   `{endpoint_id}.json` — the basename has to equal the document's
-   `endpoint_id` exactly (the engine locates an endpoint as
-   `endpoints/{endpoint_id}.json`, so a divergent filename is unreachable
-   at runtime). The validator's `endpoint-filename` check enforces this.
-   API connectors carry only the definition; database
-   connectors are installable Python packages, so the creator's package
-   files land at the connector root:
-
-   ```
-   {connector_id}/
-   ├── definition/
-   │   ├── connector.json
-   │   ├── type-map-read.json          # required for both api and db; native → Arrow
-   │   ├── type-map-write.json         # database only; Arrow → native DDL render rules
-   │   └── endpoints/
-   │       └── {endpoint_id}.json      # api connectors only — one file per endpoint; filename = document.endpoint_id
-   ├── __init__.py                     # database only — re-exports the connector class
-   ├── connector.py                    # database only — {Name}Dialect + {Name}Connector
-   ├── requirements.txt                # database only — THIS connector's driver(s) only
-   ├── pyproject.toml                  # database only — analitiq-connector-{connector_id} + entry points
-   └── README.md
-   ```
+0. **Pre-flight** — branch on `mode`; `build` halts if `{connector_id}/`
+   already exists (manual removal only — never delete it yourself).
+1. **Research (domain)** — `connector-provider-researcher` at
+   `scope: domain`, mission spec = the live contract schema URLs →
+   `ProviderFacts`.
+2. **Classify** — run the closed-enum mappers inline
+   (`references/enum-mappers.md`): `KindMapper`, `AuthTypeMapper`,
+   `TransportTypeMapper`.
+3. **Dispatch creator** — `api-` / `db-` / `storage-connector-creator`
+   by kind; always pass `provider_facts` (the creator's hard gate).
+4. **Validate the domain (barrier)** — `connector-schema-validator` over
+   the connector body and type map(s); the domain must be clean before
+   any fan-out. At most 5 fix passes per artifact, findings passed
+   verbatim to the owning creator, which triages them — never you.
+5. **Endpoint fan-out (api only)** — a bounded worklist (default 10
+   concurrent); one researcher → endpoint-creator → validator branch per
+   resource; failed branches are surfaced, never dropped.
+6. **Drift** — `connector-drift-classifier` computes `next_version` from
+   the staged draft; apply it directly (never recompute the semver).
+7. **Write** — layout and filename rules: `references/pipeline.md` §7.
 
 ## Output
 

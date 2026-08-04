@@ -16,7 +16,7 @@ A value expression is one of:
 | `function` | `{"function": "<name>", "input": {...}}` | Call a registered function with named inputs. |
 
 Anywhere the schema accepts a value expression, exactly one of the four
-shapes is allowed.
+shapes is allowed — in endpoint request slots this is ADV-ENDP-022.
 
 ## Logical scopes
 
@@ -34,7 +34,7 @@ connector or endpoint actually writes.
 | `connection.selections.*` | `post_auth` and later | Durable user choices declared as `post_auth_outputs` with `storage: "connection.selections"`. |
 | `connection.discovered.*` | `post_auth` and later | Auto-discovered non-secret context (e.g. `api_domain`) declared as `post_auth_outputs` with `storage: "connection.discovered"`. |
 | `auth.*` | `auth` and later | Auth tokens (access_token, refresh_token, expiry). |
-| `runtime.*` | varies by ref | Per-run values. Only two families are actually supplied: `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set (`state`, `redirect_uri`, `code`, `pkce_verifier`, `code_challenge`, `code_challenge_method`) per `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`, `runtime.current_time`) validates clean and fails at resolution — don't guess names. |
+| `runtime.*` | varies by ref | Per-run values. Only two families are actually supplied: `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set in `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`) validates clean and fails at resolution — don't guess names. |
 | `response.*` | endpoint response handling | The response being processed — `response.body.*`, `response.headers.*`. This is what pagination `stop_when` / `next_cursor` and `response.metadata` refs target. |
 | `request.*` | endpoint request handling | The request being built. |
 | `stream.*` | per stream | Stream-owned routing, tenant context, stream-specific auth context. |
@@ -147,8 +147,5 @@ first.
 
 Inside `dsn.template`, `{placeholder}` markers are NOT `${...}` value
 expressions. They resolve through `dsn.bindings`, where each binding
-declares a `value` (a value expression) and an `encoding` (closed enum).
-
-This is intentional: the runtime owns percent-encoding mechanics for DSN
-construction and applies declared encodings before substitution.
-Connector authors must not pre-encode binding values.
+declares a `value` (a value expression) and an `encoding` (closed enum) —
+see `connector-spec-db/spec-dsn-bindings.md`.

@@ -1096,18 +1096,6 @@ WAIVERS: tuple[Waiver, ...] = (
         "object hierarchy at run time; no authored document exists to probe.",
     ),
     Waiver(
-        "plugins/analitiq-connector-builder/skills/connector-builder/SKILL.md",
-        "are NOT validated here",
-        "the validator's input surface is JSON documents; package files never "
-        "reach it, so there is no document whose acceptance a probe could pin.",
-    ),
-    Waiver(
-        "plugins/analitiq-connector-builder/skills/connector-builder/SKILL.md",
-        "type maps MUST validate clean before any endpoint fan-out",
-        "imperative workflow instruction to the orchestrator, not a claim about "
-        "what the validator checks.",
-    ),
-    Waiver(
         "plugins/analitiq-connector-builder/skills/connector-builder/references/pipeline.md",
         "type maps MUST validate clean before the phase-5 endpoint fan-out",
         "imperative workflow instruction to the orchestrator, not a claim about "

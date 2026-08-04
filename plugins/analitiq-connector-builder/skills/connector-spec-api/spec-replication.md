@@ -34,6 +34,7 @@ Pick the variant by how the provider's filter works.
 The provider takes one open-ended "changed since X" filter. Use a
 `SingleCursorMapping`:
 
+<!-- validate: api-endpoint#/operations/read/replication -->
 ```json
 {
   "replication": {
@@ -63,6 +64,7 @@ The provider won't take an open "since" filter — it requires a closed
 window with separate start and end params (e.g. `from`/`to`). Use a
 `WindowCursorMapping`:
 
+<!-- validate: api-endpoint#/operations/read/replication -->
 ```json
 {
   "replication": {

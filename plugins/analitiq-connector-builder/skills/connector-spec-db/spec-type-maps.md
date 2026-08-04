@@ -91,9 +91,9 @@ simply never fires.
 
 When a `regex` rule's rendered side carries `${name}` placeholders,
 every placeholder must be backed by a matching **named capture group**
-in the matcher side. The contract uses ECMA-262 syntax for capture
-groups — `(?<name>…)` — translated to Python's `(?P<name>…)` under the
-hood at validation time. Authors write the ECMA-262 form.
+in the matcher side (ADV-TMAP-003). Authors write the ECMA-262 capture
+form `(?<name>…)` — Python-only `(?P<name>…)` syntax is rejected
+(ADV-TMAP-005).
 
 - Read map: placeholders in `canonical`, captures in `native` —
   `native: "^NUMERIC\\((?<precision>[0-9]+),\\s*(?<scale>[0-9]+)\\)$"`,
@@ -107,9 +107,9 @@ types (`Decimal128(${precision}, ${scale})`, `FixedSizeBinary(${n})` on
 the read side; `NUMERIC(${p}, ${s})`, `VARCHAR(${len})` and similar on
 the write side).
 
-On the **read** side a templated render is only legal on a `regex` rule — an
-`exact` native has no captures to substitute from, so its `canonical` must be a
-fully-resolved literal.
+On the **read** side a templated render is only legal on a `regex` rule
+(ADV-TMAP-003) — an `exact` native has no captures to substitute from, so its
+`canonical` must be a fully-resolved literal.
 
 On the **write** side the contract *accepts* `${…}` in an `exact` rule's
 rendered `native` (the placeholder would be filled from a per-column hint
@@ -177,6 +177,7 @@ The shape markers `Object` and `List` split by direction:
   `List`. A write map without rules for them hard-errors the stream at
   configuration time. Render both exactly like `Json`:
 
+  <!-- validate: type-map-write#/ -->
   ```json
   { "match": "exact", "canonical": "Object", "native": "JSONB" },
   { "match": "exact", "canonical": "List",   "native": "JSONB" }
@@ -315,9 +316,7 @@ passes. Verify by hand at least:
   narrowed to `Decimal128` shows nothing)
 
 Treat that as the floor rather than the whole set: rarer scalars are
-unprobed too. Older validator releases do not probe the `Object` /
-`List` markers at all, so a clean warning proves nothing about them —
-verify their rules by hand as well.
+unprobed too.
 
 Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a
@@ -360,58 +359,23 @@ is wrong — `Timestamp` requires a unit).
 
 ## Worked example: Postgres (read)
 
-Excerpt from the reference read map — uppercase patterns, the
-width-tiered `NUMERIC`/`DECIMAL` capture (`Decimal128` ≤ 38, `Decimal256`
-above, over a bare fallback; the on-disk file adds precision-only
-`(p)`→scale-0 tiers, trimmed here), the timestamp precision ladder (digit
-count → Arrow unit, here instantiated to Postgres's 0–6 range), and a
-`JSONB` column mapped to the `Json` container canonical (not a scalar):
-
-```json
-[
-  { "match": "exact", "native": "SMALLINT",                                    "canonical": "Int16" },
-  { "match": "exact", "native": "INTEGER",                                     "canonical": "Int32" },
-  { "match": "exact", "native": "BIGINT",                                      "canonical": "Int64" },
-  { "match": "exact", "native": "TEXT",                                        "canonical": "Utf8" },
-  { "match": "exact", "native": "JSONB",                                       "canonical": "Json" },
-  { "match": "exact", "native": "DATE",                                        "canonical": "Date32" },
-
-  { "match": "regex", "native": "^(?:NUMERIC|DECIMAL)\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d+)\\)$", "canonical": "Decimal128(${precision}, ${scale})" },
-  { "match": "regex", "native": "^(?:NUMERIC|DECIMAL)\\((?<precision>39|[4-6]\\d|7[0-6]),\\s*(?<scale>\\d+)\\)$",   "canonical": "Decimal256(${precision}, ${scale})" },
-  { "match": "regex", "native": "^(?:NUMERIC|DECIMAL)$",                                                           "canonical": "Decimal128(38, 9)" },
-
-  { "match": "regex", "native": "^TIMESTAMP\\(0\\)( WITHOUT TIME ZONE)?$",        "canonical": "Timestamp(SECOND)" },
-  { "match": "regex", "native": "^TIMESTAMP\\([1-3]\\)( WITHOUT TIME ZONE)?$",    "canonical": "Timestamp(MILLISECOND)" },
-  { "match": "regex", "native": "^TIMESTAMP(\\([4-6]\\))?( WITHOUT TIME ZONE)?$", "canonical": "Timestamp(MICROSECOND)" }
-]
-```
+See the reference read map, `examples/postgresql/type-map-read.json` —
+uppercase patterns, the width-tiered `NUMERIC`/`DECIMAL` captures
+(`Decimal128` ≤ 38, `Decimal256` above, plus precision-only `(p)`→scale-0
+tiers, over a bare fallback), the timestamp precision ladder (digit
+count → Arrow unit, there instantiated to Postgres's 0–6 range), and a
+`JSONB` column mapped to the `Json` container canonical (not a scalar).
 
 ## Worked example: Postgres (write)
 
-Excerpt from the reference write map — `canonical` is the matcher (note
-the regex over the canonical string with lowercase capture names), and
-`native` is the rendered DDL:
-
-```json
-[
-  { "match": "exact", "canonical": "Boolean",   "native": "BOOLEAN" },
-  { "match": "exact", "canonical": "Int64",     "native": "BIGINT" },
-  { "match": "regex", "canonical": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$", "native": "NUMERIC(${p}, ${s})" },
-  { "match": "exact", "canonical": "Utf8",      "native": "TEXT" },
-  { "match": "exact", "canonical": "Json",      "native": "JSONB" },
-  { "match": "exact", "canonical": "Object",    "native": "JSONB" },
-  { "match": "exact", "canonical": "List",      "native": "JSONB" },
-  { "match": "regex", "canonical": "^FixedSizeBinary\\(\\d+\\)$",          "native": "BYTEA" },
-  { "match": "regex", "canonical": "^Time(32|64)\\([A-Z]+\\)$",            "native": "TIME" },
-  { "match": "regex", "canonical": "^Timestamp\\([A-Z]+\\)$",              "native": "TIMESTAMP" },
-  { "match": "regex", "canonical": "^Timestamp\\([A-Z]+,\\s*UTC\\)$",      "native": "TIMESTAMPTZ" }
-]
-```
+See the reference write map, `examples/postgresql/type-map-write.json` —
+`canonical` is the matcher (note the regexes over the canonical string
+with lowercase capture names), and `native` is the rendered DDL.
 
 First-match-wins applies per file: more specific rules come **before**
-broader fallbacks (the tz Timestamp rule never fires above because the
-bare `^Timestamp\([A-Z]+\)$` doesn't match a two-argument canonical —
-but a genuinely overlapping family rule must be ordered carefully).
+broader fallbacks. In that file the bare `^Timestamp\([A-Z]+\)$` rule
+sits before the tz rule yet cannot swallow a two-argument canonical —
+but a genuinely overlapping family rule must be ordered carefully.
 
 ## Out of scope
 

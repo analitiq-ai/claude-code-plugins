@@ -65,6 +65,7 @@ The orchestrator passes:
 
 ## Output format
 
+<!-- illustrative -->
 ```jsonc
 {
   "entity": "stream",
@@ -78,6 +79,7 @@ The orchestrator passes:
 If the destination kind is one the engine doesn't yet run (file / s3 / stdout),
 return a structured refusal:
 
+<!-- illustrative -->
 ```jsonc
 {
   "entity": "stream",

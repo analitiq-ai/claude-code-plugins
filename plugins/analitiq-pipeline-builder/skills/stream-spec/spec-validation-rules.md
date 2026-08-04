@@ -5,6 +5,7 @@ block (`analitiq.contracts.stream.Validation`, whose members are
 `analitiq.contracts.stream.ValidationRule` and
 `analitiq.contracts.stream.StreamValidationErrorHandling`):
 
+<!-- validate: stream#/mapping/assignments/0 -->
 ```jsonc
 {
   "target": {"path": "email", "arrow_type": "Utf8", "nullable": false},

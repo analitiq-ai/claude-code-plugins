@@ -18,18 +18,9 @@ embedding driver-specific objects. The generic `tls` block is
 
 ## Shape
 
-```json
-{
-  "transports": {
-    "database": {
-      "tls": {
-        "mode": { "ref": "connection.parameters.ssl_mode" },
-        "ca_certificate": { "ref": "secrets.ssl_ca_certificate" }
-      }
-    }
-  }
-}
-```
+See the `transports.database.tls` block in
+`examples/postgresql/postgresql.example.json` — the only reference example
+carrying a `tls` block (`mode` + `ca_certificate` as `ref` expressions).
 
 ## Rules
 
@@ -90,15 +81,8 @@ resolves empty.
 
 ## Authoring checklist
 
-1. Always declare `ssl_mode` as a connection input with an explicit
-   `enum`.
-2. Always declare `ssl_ca_certificate` as a secret input when any
-   certificate-verification mode is in the enum.
-3. Reference both via `ref` inside the transport's `tls` block.
-4. Do not duplicate driver-specific SSL options elsewhere in the JSON —
-   the dialect's TLS hook is the single place that derives driver
-   connect arguments from `ssl_mode`.
-5. <!-- PROBE: tls-coherence-unchecked -->
-   Declare the researched mode vocabulary in the enum and make the
-   dialect's TLS hook handle exactly that vocabulary — the dialect owns
-   interpretation, and no validator will tell you the two disagree.
+<!-- PROBE: tls-coherence-unchecked -->
+Re-verify each rule above before returning — especially that the
+`ssl_mode` enum and the dialect's TLS hook handle exactly the same
+vocabulary: the dialect owns interpretation, and no validator will tell
+you the two disagree.

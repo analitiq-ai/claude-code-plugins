@@ -21,6 +21,7 @@ other type's field out entirely rather than setting it to `null`.
 
 ## `type: manual`
 
+<!-- validate: pipeline#/schedule -->
 ```jsonc
 {"type": "manual"}
 ```
@@ -29,6 +30,7 @@ Runs only on an explicit user trigger. Nothing schedules it.
 
 ## `type: interval`
 
+<!-- validate: pipeline#/schedule -->
 ```jsonc
 {"type": "interval", "interval_minutes": 60}
 ```
@@ -42,6 +44,7 @@ contract accepts.
 
 ## `type: cron`
 
+<!-- validate: pipeline#/schedule -->
 ```jsonc
 {"type": "cron", "timezone": "Europe/Berlin", "cron_expression": "cron(0 2 * * ? *)"}
 ```

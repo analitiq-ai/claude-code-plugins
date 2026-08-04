@@ -2,8 +2,9 @@
 
 A handful of enums can't simply be deleted from the plugin: they ARE the
 mapping logic (`enum-mappers.md` maps researched provider facts onto schema
-enum values; `ProviderFacts` classifies into them; `CLAUDE.md` documents the
-closed sets). Per the drift policy, anything that must stay duplicated is pinned
+enum values; `ProviderFacts` classifies into them; `README.md`'s Supported
+kinds table documents the closed sets). Per the drift policy, anything that
+must stay duplicated is pinned
 to the contract here. If the contract's enum changes, the matching test fails
 and names the divergence, so the prose + mappers are updated in the same change
 instead of silently drifting.
@@ -50,7 +51,7 @@ from analitiq.contracts.shared.common import SLUG_PATTERN  # noqa: E402
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder"
 
 # --- plugin-side expected sets ---------------------------------------------
-# These mirror the schema-owned enums restated across CLAUDE.md and
+# These mirror the schema-owned enums restated across README.md and
 # enum-mappers.md. (io-contracts.md restates the pagination set verbatim and an
 # auth `family` set that is intentionally a SUBSET — its API `auth_model.family`
 # omits `db`, which never applies to an API.) When a test below fails, update
@@ -109,7 +110,8 @@ EXPECTED_WRITE_MODES = {"insert", "upsert", "truncate_insert"}
 # the prose.
 EXPECTED_BARE_MARKER_ARROW_TYPES = {"Object", "List", "Json"}
 # The kind + transport discriminators — the outputs of KindMapper /
-# TransportTypeMapper in enum-mappers.md, restated in CLAUDE.md. Each lives as a
+# TransportTypeMapper in enum-mappers.md; the kinds are also restated in
+# README.md's Supported kinds table. Each lives as a
 # `properties.<field>.const` across the per-variant `$defs`. The contract admits
 # `nosql` / `document` alongside the storage stubs; the plugin recognizes them
 # in its vocabulary but authors none (KindMapper still routes document DBs →
@@ -360,7 +362,8 @@ def test_auth_types_match_schema(connector_schema: dict) -> None:
         "auth.type",
         schema_set,
         EXPECTED_AUTH_TYPES,
-        "update CLAUDE.md '## Supported Auth Types' and AuthTypeMapper in "
+        "update the Supported kinds table in "
+        "plugins/analitiq-connector-builder/README.md and AuthTypeMapper in "
         "plugins/analitiq-connector-builder/skills/connector-builder/references/enum-mappers.md.",
     )
 
@@ -408,7 +411,8 @@ def test_dsn_encodings_match_schema(connector_schema: dict) -> None:
         "DsnBinding.encoding",
         schema_set,
         EXPECTED_DSN_ENCODINGS,
-        "update spec-dsn-bindings.md + CLAUDE.md.",
+        "update the Encoding values table in "
+        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-dsn-bindings.md.",
     )
 
 
@@ -501,7 +505,7 @@ def test_bare_marker_arrow_types_match_schema() -> None:
         "authored_shape_type",
         schema_set,
         EXPECTED_BARE_MARKER_ARROW_TYPES,
-        "update CLAUDE.md and the container-shape guidance in "
+        "update the container-shape guidance in "
         "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-type-maps.md.",
     )
 
@@ -512,7 +516,8 @@ def test_kinds_match_schema(connector_schema: dict) -> None:
         "connector.kind",
         schema_set,
         EXPECTED_KINDS,
-        "update CLAUDE.md ('kind (one of ...)') and KindMapper in "
+        "update the Supported kinds table in "
+        "plugins/analitiq-connector-builder/README.md and KindMapper in "
         "plugins/analitiq-connector-builder/skills/connector-builder/references/enum-mappers.md.",
     )
 
@@ -593,8 +598,8 @@ def test_validator_ids_match_package() -> None:
         EXPECTED_VALIDATOR_IDS,
         "update the Diagnostics enum in "
         "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md, the id table in "
-        "plugins/analitiq-connector-builder/agents/connector-schema-validator.md, the Agents bullet in CLAUDE.md, "
-        "and the check list in README.md.",
+        "plugins/analitiq-connector-builder/agents/connector-schema-validator.md, "
+        "and the check list in plugins/analitiq-connector-builder/README.md § Validation.",
     )
 
 

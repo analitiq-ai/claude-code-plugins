@@ -20,6 +20,7 @@ schemas** (the field-level facts that decide things like datetime
 zone-awareness) are not carried here; they are researched per endpoint in the
 fan-out and returned as `EndpointFacts` (below).
 
+<!-- illustrative -->
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -187,6 +188,7 @@ grounded on the resource's own documentation / a real sample; an
 `endpoint-creator` dispatched without `EndpointFacts` refuses (it has no web
 access and may not guess field types).
 
+<!-- illustrative -->
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -245,6 +247,7 @@ access and may not guess field types).
 
 ## Diagnostics
 
+<!-- illustrative -->
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -287,6 +290,7 @@ access and may not guess field types).
 
 ## DriftVerdict
 
+<!-- illustrative -->
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -328,6 +332,7 @@ access and may not guess field types).
 
 Returned by `api-connector-creator` and `db-connector-creator`.
 
+<!-- illustrative -->
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -408,6 +413,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
 
 ## EndpointCreatorOutput
 
+<!-- illustrative -->
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",

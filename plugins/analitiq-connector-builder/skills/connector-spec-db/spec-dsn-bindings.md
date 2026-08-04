@@ -8,35 +8,18 @@ fields are:
 | `transport_type` | Identity field | Extras |
 |---|---|---|
 | `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). Optional in the contract, since SQLAlchemy can derive it from the DSN's scheme — but **declare it anyway**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
-| `adbc` | `driver` — closed enum: `postgresql`, `snowflake`, `bigquery` | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`.** TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
+| `adbc` | `driver` — a closed enum owned by the contract's `AdbcTransport` (see `spec-driver-selection.md` §Constraints) | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`** (ADV-CTOR-004). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
 
-Transport choice follows the decision order in
-`spec-driver-selection.md` (first-class ADBC → Flight SQL →
-SQLAlchemy + native bulk path → SQLAlchemy batched INSERT; never the
-JDBC bridge). For databases in the ADBC driver enum, prefer `adbc`
-— it exchanges Arrow columns natively and avoids the SQLAlchemy
-row-to-Arrow conversion. The chosen driver ships ONLY in the
-connector's `requirements.txt` (the engine pins no database drivers).
-ADBC drivers that accept all connection state via `db_kwargs` (e.g.
-Snowflake) may omit `dsn` entirely.
+Transport choice follows the decision order in `spec-driver-selection.md`.
+The chosen driver ships ONLY in the connector's `requirements.txt` (the
+engine pins no database drivers). ADBC drivers that accept all connection
+state via `db_kwargs` (e.g. Snowflake) may omit `dsn` entirely.
 
 ## Shape
 
-```json
-{
-  "dsn": {
-    "kind": "url_template",
-    "template": "postgresql+asyncpg://{username}:{password}@{host}:{port}/{database}",
-    "bindings": {
-      "username": { "value": { "ref": "connection.parameters.username" }, "encoding": "url_userinfo" },
-      "password": { "value": { "ref": "secrets.password" }, "encoding": "url_userinfo" },
-      "host":     { "value": { "ref": "connection.parameters.host" }, "encoding": "host" },
-      "port":     { "value": { "ref": "connection.parameters.port" }, "encoding": "raw" },
-      "database": { "value": { "ref": "connection.parameters.database" }, "encoding": "url_path_segment" }
-    }
-  }
-}
-```
+See the `transports.database.dsn` block in
+`examples/postgresql/postgresql.example.json` — the reference `url_template` +
+`bindings` shape, with the canonical per-field encodings.
 
 ## Rules
 

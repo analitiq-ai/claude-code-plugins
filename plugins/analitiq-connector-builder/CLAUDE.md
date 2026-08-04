@@ -91,8 +91,29 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   quote a claim as prose inside one to dodge the gate.)
 - A probe that stops matching the contract means the contract moved: update
   the prose AND the probe together, then re-run `write`.
+- Do NOT restate validator rules in `references/definition-of-done.md`: if an
+  item is mechanically checkable, it belongs in the validator, not on that
+  list.
 - `tests/connector_builder/test_validator_claims.py` runs the same predicate
   in pytest.
+
+## Fenced JSON examples — the annotation convention
+
+Prefer pointing prose at a validated file under a skill's `examples/` tree
+(gated by `tests/*/test_examples*.py`) over an inline fence. An inline
+`json` / `jsonc` fence that stays carries an HTML comment directly above it
+declaring how it is verified (applies to BOTH plugins; review-enforced until
+an extraction gate lands):
+
+- `<!-- validate: <resource> -->` — a full document; must validate against
+  that resource's contract.
+- `<!-- validate: <resource>#/<pointer> -->` — a fragment; must validate
+  against the sub-model at that pointer.
+- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail with exactly
+  that diagnostic.
+- `<!-- illustrative -->` — outside the published contract's validation
+  surface (plugin-internal I/O envelopes, shape sketches); an explicit,
+  reviewable exemption.
 
 ## Where the authoring rules live
 

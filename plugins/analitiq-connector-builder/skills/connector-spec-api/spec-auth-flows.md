@@ -27,6 +27,7 @@ host, see the multi-origin transport pattern in `spec-transport.md`.
 `connection_contract.inputs`. The `Authorization` header in the transport
 should use the `basic_auth` function expression — never pre-compute base64.
 
+<!-- validate: connector#/transports/api/headers/Authorization -->
 ```json
 "Authorization": {
   "function": "basic_auth",
@@ -87,6 +88,7 @@ Example: `examples/oauth2-authorization-code/oauth2-authorization-code.example.j
 Used for machine-to-machine auth. The `token_exchange` request POSTs
 client credentials and gets an access token (no browser redirect):
 
+<!-- validate: connector#/auth -->
 ```json
 "auth": {
   "type": "oauth2_client_credentials",
@@ -108,24 +110,17 @@ client credentials and gets an access token (no browser redirect):
 **Optional:** `test`.
 
 Declare the signing key, algorithm, and claim inputs in
-`connection_contract.inputs` (see `examples/jwt/jwt.example.json`), and set
-the `Authorization` header from the minted token:
-
-```json
-"Authorization": {
-  "template": "Bearer ${auth.access_token}"
-}
-```
+`connection_contract.inputs`, and set the transport's `Authorization` header
+from the minted token with the `Bearer ${auth.access_token}` template —
+`examples/jwt/jwt.example.json` shows both.
 
 <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
-> **Inline signing is not yet available.** The `jwt_sign` function that
-> would mint `auth.access_token` from the declared key/claims is **planned,
-> not registered** in the engine — and nothing rejects the call at authoring
-> time: a `jwt_sign` reference validates clean and fails only at connect,
-> when the engine cannot resolve the function. Until it lands, a `jwt`-auth
-> connector can declare its inputs but cannot mint the token inline; do not
-> author a `jwt_sign` call. Flag this capability gap before shipping a `jwt`
-> connector that depends on local signing.
+> **Inline signing is not yet available.** `jwt_sign` is planned, not
+> registered (`connector-builder/references/value-expressions.md` §Function
+> catalog) — and nothing rejects the call at authoring time: it validates
+> clean and fails at connect. Declare the inputs, author no `jwt_sign` call,
+> and flag this capability gap before shipping a `jwt` connector that depends
+> on local signing.
 
 ## `credentials`
 

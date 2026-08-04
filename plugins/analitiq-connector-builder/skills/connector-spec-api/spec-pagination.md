@@ -33,28 +33,10 @@ be marked `controlled_by`). A `controlled_by` param must **not** declare
 `operators`: pagination owns it, so a stream may not also filter on it
 (ADV-ENDP-002).
 
-```json
-{
-  "params": {
-    "page":     { "in": "query", "type": "integer", "required": false, "controlled_by": "pagination" },
-    "per_page": { "in": "query", "type": "integer", "required": false, "controlled_by": "pagination" }
-  },
-  "request": {
-    "method": "GET",
-    "path": "/v1/items",
-    "query": {
-      "page":     { "from_param": "page" },
-      "per_page": { "from_param": "per_page" }
-    }
-  },
-  "pagination": {
-    "type": "page",
-    "page":  { "param": "page", "initial": 1, "increment_by": 1 },
-    "limit": { "param": "per_page", "default": { "ref": "runtime.batch_size" }, "max": 100 },
-    "stop_when": { "empty": { "ref": "response.body.data" } }
-  }
-}
-```
+See `examples/api-key/endpoints/v1__items.json` for the full three-place
+wiring — every endpoint example (api-key, jwt, oauth2-authorization-code)
+declares `type: "page"` pagination with its `controlled_by` params declared
+and bound this way.
 
 ## `limit`: `max` is the provider's cap, `default` is ours
 
@@ -113,6 +95,7 @@ provider's `offset` counts:
 - a positive-integer literal is a fixed step (`1` for page-index-style
   offsets)
 
+<!-- validate: api-endpoint#/operations/read/pagination -->
 ```json
 {
   "type": "offset",
@@ -133,6 +116,7 @@ Server returns an opaque token in each response; the next request passes it
 back. **Omit the cursor param on the first request** — there is no token yet;
 the runtime sends it only from page two onward.
 
+<!-- validate: api-endpoint#/operations/read/pagination -->
 ```json
 {
   "type": "cursor",
@@ -156,6 +140,7 @@ Providers usually echo the page size back in each next link.
 
 Prefer a body field that already holds the bare URL:
 
+<!-- validate: api-endpoint#/operations/read/pagination -->
 ```json
 {
   "type": "link",
@@ -188,6 +173,7 @@ response's casing, and a literal dot in a field name cannot be addressed.
 
 Omit `initial` entirely for the first page — never write `null`.
 
+<!-- validate: api-endpoint#/operations/read/pagination -->
 ```json
 {
   "type": "keyset",

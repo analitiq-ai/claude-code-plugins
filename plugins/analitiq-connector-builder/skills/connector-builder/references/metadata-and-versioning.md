@@ -9,7 +9,7 @@ release table is the plugin's own policy.
 | Field | Required | Notes |
 |---|---|---|
 | `$schema` | Yes (for standalone files) | `https://schemas.analitiq.ai/connector/latest.json`. Always author this canonical URL. The connector contract accepts the published URL on any environment host (`schemas.analitiq.<tld>`), so a document authored against `.ai` still validates where the engine serves a per-environment schema. The validator matches on this URL offline; it does not fetch it. |
-| `kind` | Yes | The connector family — a schema-owned `kind` enum (validator-enforced); see CLAUDE.md for the current set. |
+| `kind` | Yes | The connector family — a schema-owned `kind` enum (validator-enforced); routing per value: `enum-mappers.md` §KindMapper. |
 | `connector_id` | Yes | Stable connector slug matching `^[a-z0-9][a-z0-9_-]*$` (lowercase). Names the on-disk `{connector_id}/` directory so the identifier and directory stay in sync. The connector contract **requires** `connector_id` in every authored definition — the "service-assigns-when-omitted" rule is `connection_id`'s on *connection* documents, not `connector_id`'s. |
 | `display_name` | No | User-facing label. |
 | `description` | No | Human-readable summary. |
@@ -83,13 +83,8 @@ If no `previous_release_path` is supplied, set `version: "1.0.0"`.
 
 ## Schema URL declaration
 
-Authored connector files declare:
-
-```json
-{ "$schema": "https://schemas.analitiq.ai/connector/latest.json" }
-```
-
-Always author the canonical `.ai` URL. The validator matches on it offline; it
+Authored connector files declare `$schema` with the canonical `.ai` URL stated
+in the field table above — always. The validator matches on it offline; it
 does not fetch it.
 
 The three document families differ, so don't generalize from one to another:

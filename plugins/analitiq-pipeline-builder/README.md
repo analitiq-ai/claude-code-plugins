@@ -47,8 +47,10 @@ what you ask and re-validates; it never regenerates or overwrites your secrets.
 
 Output lands under `connections/`, `pipelines/`, and (read-only) `connectors/`.
 Fill in the `.secrets/` templates, then submit the connections and pipeline to
-the registry. The full file layout, identity model, and secrets workflow are
-documented in [CLAUDE.md](CLAUDE.md).
+the registry. The full file layout and identity model are documented in
+[identity-and-versioning.md](skills/pipeline-builder/references/identity-and-versioning.md);
+the secrets workflow in
+[spec-envelope.md](skills/connection-spec/spec-envelope.md).
 
 ## Validate manually
 
@@ -64,7 +66,8 @@ python3 plugins/analitiq-pipeline-builder/scripts/validate.py \
 
 Output is a single `Diagnostics` JSON object; exit `0` iff `passed: true`. Tests
 live under `tests/` — run with `pip install -r requirements-dev.txt && pytest`.
-How validation dispatches per entity is documented in [CLAUDE.md](CLAUDE.md).
+How validation dispatches per entity is documented in
+[pipeline-schema-validator.md](agents/pipeline-schema-validator.md).
 
 ## How it fits together
 

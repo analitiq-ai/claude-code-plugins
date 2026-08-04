@@ -15,6 +15,7 @@ A dynamic request value is declared **once** as a param (the typed contract —
 name, location, type, requiredness, filterability) and **referenced** from the
 request slot with a binding expression:
 
+<!-- validate: api-endpoint#/operations/read -->
 ```json
 {
   "params": {
@@ -77,12 +78,10 @@ spelling — see the prohibitions below.
 ## What legitimately stays direct
 
 Values that are **fixed for the endpoint** need no param, because there is no
-input to type or filter on:
-
-```json
-"headers": { "Accept": "application/json" },
-"query":   { "api_version": { "literal": "2024-01" } }
-```
+input to type or filter on: a fixed header is authored directly
+(`"headers": { "Accept": "application/json" }` — every endpoint example under
+`examples/*/endpoints/` carries it), and a fixed query value binds a literal
+expression (`"query": { "api_version": { "literal": "2024-01" } }`).
 
 Connection-scoped values resolved from the connector's connection contract
 (`connection.parameters.*`, `secrets.*`, `auth.*`) are also direct refs — they
@@ -133,12 +132,12 @@ param `default` — those sites exist before any record is in scope.
   `record` / `record.<field>` (ADV-ENDP-017).
 - **`records.<dotted>` is not supported** — dotted paths through the batch
   array are rejected.
-- Referenced fields must exist in that mode's `input.schema`.
 
 Provider envelopes are authored literally around the binding; no wrapper key is
 special. This example is a **batched** write (`records`), so it is only legal
 alongside a `batching` block — an unbatched write wraps `record` instead:
 
+<!-- validate: api-endpoint#/operations/write/insert/request/body -->
 ```json
 "body": { "data": { "from_input": "records" } }
 ```
@@ -149,6 +148,7 @@ A per-record write whose URL names the record — `PUT /Contact/{id}`,
 `DELETE /items/{sku}` — takes the segment from the record itself. Bind the
 placeholder with `from_input` and declare **no param at all**:
 
+<!-- validate: api-endpoint#/operations/write/upsert/request -->
 ```json
 "request": {
   "method": "PUT",

@@ -38,6 +38,7 @@ Analitiq services enforce) and normalizes every result into one envelope.
 
 2. Capture stdout. It is a single JSON object:
 
+   <!-- illustrative -->
    ```jsonc
    {
      "passed": true | false,
@@ -73,6 +74,7 @@ Analitiq services enforce) and normalizes every result into one envelope.
   network or `pip` unavailable — or the adapter crashed), return the stderr
   excerpt as a single error finding; never forward partial or non-JSON stdout:
 
+  <!-- illustrative -->
   ```jsonc
   {"passed": false, "findings": [{"validator": "contract-model", "severity": "error", "path": "", "message": "<stderr excerpt>"}]}
   ```

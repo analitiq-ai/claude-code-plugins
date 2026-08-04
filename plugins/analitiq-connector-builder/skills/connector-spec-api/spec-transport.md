@@ -5,27 +5,9 @@ Authoring patterns for `transports` in API connectors.
 ## Single-origin
 
 The simplest case: one `base_url`, one transport, one set of common headers.
-
-```json
-{
-  "default_transport": "api",
-  "transports": {
-    "api": {
-      "transport_type": "http",
-      "base_url": "https://api.example.com",
-      "headers": {
-        "Accept": "application/json",
-        "Authorization": { "template": "Bearer ${secrets.api_key}" }
-      },
-      "timeout_seconds": 30,
-      "rate_limit": {
-        "max_requests": 1000,
-        "time_window_seconds": 60
-      }
-    }
-  }
-}
-```
+See `examples/api-key/api-key.example.json` — a single `api` transport with a
+literal `base_url`, common headers (including the templated `Authorization`),
+`timeout_seconds`, and a `rate_limit`.
 
 ## Multi-origin
 
@@ -33,36 +15,10 @@ When a provider exposes auth, discovery, and data on different origins
 (e.g. separate `oauth.` / `api.` hosts), define one transport per origin
 and factor common headers into `transport_defaults`.
 
-```json
-{
-  "default_transport": "api",
-  "transport_defaults": {
-    "transport_type": "http",
-    "headers": {
-      "Accept": "application/json",
-      "Authorization": { "template": "Bearer ${auth.access_token}" }
-    }
-  },
-  "transports": {
-    "auth": {
-      "base_url": "https://oauth.example.com",
-      "headers": {
-        "Authorization": {
-          "function": "basic_auth",
-          "input": {
-            "username": { "ref": "connection.parameters.client_id" },
-            "password": { "ref": "secrets.client_secret" }
-          }
-        }
-      }
-    },
-    "discovery": { "base_url": "https://api.example.com" },
-    "api": { "base_url": "https://api.example.com/v1" }
-  }
-}
-```
-
-The `auth` transport overrides the inherited Bearer `Authorization` with
+See `examples/oauth2-authorization-code/oauth2-authorization-code.example.json`
+— `transport_defaults` carries the shared headers (including the Bearer
+`Authorization`), with `auth` / `discovery` / `api` transports, one per origin.
+Its `auth` transport overrides the inherited Bearer `Authorization` with
 Basic auth.
 
 ## Templated `base_url`
@@ -73,6 +29,7 @@ host that varies per connection is expressed directly on the transport.
 
 A region or subdomain the user supplies before auth:
 
+<!-- validate: connector#/transports/api/base_url -->
 ```json
 "base_url": { "template": "https://${connection.parameters.region}.example.com" }
 ```
@@ -80,11 +37,9 @@ A region or subdomain the user supplies before auth:
 The matching `region` input must be declared in `connection_contract.inputs`
 with `phase: "pre_auth"` so the template resolves before auth.
 
-A per-tenant host discovered *after* auth:
-
-```json
-"base_url": { "template": "https://${connection.discovered.api_domain}.example.com/api/v1" }
-```
+A per-tenant host discovered *after* auth: see the `api` transport in
+`examples/oauth2-authorization-code/oauth2-authorization-code.example.json`,
+whose `base_url` templates `${connection.discovered.api_domain}` into the host.
 
 That value comes from a `post_auth_outputs` entry, so the transport is only
 usable once post-auth discovery has run — it cannot serve an `auth`-phase

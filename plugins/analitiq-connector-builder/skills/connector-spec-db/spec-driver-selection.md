@@ -10,11 +10,12 @@ connector for a new system.
 
 Apply in order; stop at the first match.
 
-1. **A first-class ADBC driver exists** → `transport_type: "adbc"`. The
-   driver hands Arrow buffers directly to the system's native bulk
-   protocol; no row-by-row path at all.
+1. **A first-class ADBC driver exists and is in the `AdbcTransport.driver`
+   enum** → `transport_type: "adbc"`. The driver hands Arrow buffers
+   directly to the system's native bulk protocol; no row-by-row path at
+   all.
 2. **The server exposes an Arrow Flight SQL endpoint** → ADBC via the
-   generic Flight SQL driver.
+   generic Flight SQL driver. Currently unreachable — see §2.
 3. **Neither, but the system has a native bulk-load protocol** →
    SQLAlchemy transport for connect/DDL, with the bulk path implemented
    in the connector's own class (the thick path) against the raw
@@ -32,8 +33,8 @@ exactly these:
 | PostgreSQL | `adbc-driver-postgresql` | libpq `COPY BINARY`. Production-ready. |
 | Snowflake | `adbc-driver-snowflake` | Native Arrow ingestion via the internal Go-Snowflake driver. |
 | BigQuery | `adbc-driver-bigquery` | Storage Write API (Arrow-native). |
-| DuckDB | shipped with `duckdb` itself | Zero-copy in-process. |
-| SQLite | `adbc-driver-sqlite` | Production-ready; mainly useful for testing, not volume. |
+| DuckDB *(not in the enum — gap path below)* | shipped with `duckdb` itself | Zero-copy in-process. |
+| SQLite *(not in the enum — gap path below)* | `adbc-driver-sqlite` | Production-ready; mainly useful for testing, not volume. |
 
 The schema's `AdbcTransport.driver` enum is the **sole validator** for
 ADBC driver values (currently `postgresql`, `snowflake`, `bigquery`).
@@ -73,15 +74,19 @@ wire compatibility does not extend to the driver's option surface
 Caveat: this only helps if the target server actually exposes a Flight
 SQL endpoint. Ordinary MySQL/Postgres deployments do not.
 
+Today this tier is **unreachable**: `flightsql` is not in the
+`AdbcTransport.driver` enum, so selecting it is the same contract-gap
+path as §1. Record the server's Flight SQL support in research; do not
+author the transport.
+
 ## Do not use the JDBC bridge
 
 | Driver | Package | What it does |
 |---|---|---|
 | JDBC bridge | `adbc-driver-jdbc` | Wraps any JDBC driver — gives an ADBC API surface over Oracle/MSSQL/MariaDB/MySQL/Redshift, but underneath it still binds row-by-row through JDBC. |
 
-It buys the ADBC interface, not ADBC performance. A connector that
-needs one of these systems takes the SQLAlchemy transport (or the
-native bulk path below) instead.
+A connector that needs one of these systems takes the SQLAlchemy
+transport (or the native bulk path below) instead.
 
 ## 3. Native bulk-load protocols (no ADBC)
 
