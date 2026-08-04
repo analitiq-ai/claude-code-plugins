@@ -84,6 +84,23 @@ def _read_doc(schema, records="response.body", pagination=None, metadata=None):
     }
 
 
+def _endpoint_with_record_shape(items, defs):
+    """A read endpoint whose records array has `items` as its record shape.
+
+    The end-to-end frame for the composition tests: the helpers disagreeing is
+    only the mechanism, and what actually ships is whether `parse_endpoint`
+    accepts the document.
+    """
+    return _read_doc(
+        {
+            "type": "object",
+            "$defs": defs,
+            "properties": {"data": {"type": "array", "items": items}},
+        },
+        records="response.body.data",
+    )
+
+
 def _replicating_doc(schema, cursor_field, records="response.body.data"):
     """A read endpoint replicating on `cursor_field`, over `schema`.
 
@@ -1587,7 +1604,56 @@ class TestMaterializeMatchesTheNaiveFold:
         with pytest.raises(DeclarationConflictError):
             materialize_node(record, root)
 
-    @pytest.mark.parametrize("seed", range(60))
+    def test_a_shared_contributor_cache_cannot_answer_another_walks_question(self):
+        """The deterministic pin for the mechanism the generator finds only ~0.4%
+        of the time — 60 seeds had a ~1-in-4 chance of catching it, which is not
+        a test, it is a coin.
+
+        `_contributors` caches `{}` for a node it meets on the CURRENT path. A
+        contributor memo shared across a whole materialization therefore stores
+        entries carrying some ancestor's truncation, and a later node reads a
+        WEAKER contributor set than `effective_properties` computes for it from a
+        standing start — reintroducing the two-view disagreement the proof
+        exists to prevent, via the cache added to make it cheap.
+
+        `x` is `{string,boolean}` ∩ `{integer,boolean}` ∩ `{string,integer}` =
+        empty, with no two disjoint, spread over a `$ref` cycle so it is only
+        visible to a walk that starts at B.
+        """
+        root = {"$defs": {
+            "A": {"$ref": "#/$defs/C",
+                  "properties": {"x": {"type": ["string", "boolean"]}}},
+            "B": {"$ref": "#/$defs/A",
+                  "properties": {"x": {"type": ["integer", "boolean"]}}},
+            "C": {"$ref": "#/$defs/A",
+                  "properties": {"x": {"type": ["string", "integer"]}}},
+        }}
+        record = root["$defs"]["B"]
+        with pytest.raises(DeclarationConflictError):
+            effective_properties(record, root)
+        with pytest.raises(DeclarationConflictError):
+            materialize_node(record, root)
+
+    def test_that_shape_is_refused_end_to_end_not_just_by_the_helpers(self):
+        """Because the helper disagreement is only the mechanism — the harm is
+        `parse_endpoint` accepting the document and `find_record_field_properties`
+        then naming the destination column's type from the permissive view, while
+        `resolve_declared_path` raises on the same field."""
+        payload = _endpoint_with_record_shape(
+            items={"$ref": "#/$defs/B"},
+            defs={
+                "A": {"$ref": "#/$defs/C",
+                      "properties": {"x": {"type": ["string", "boolean"]}}},
+                "B": {"$ref": "#/$defs/A",
+                      "properties": {"x": {"type": ["integer", "boolean"]}}},
+                "C": {"$ref": "#/$defs/A",
+                      "properties": {"x": {"type": ["string", "integer"]}}},
+            },
+        )
+        with pytest.raises(ValidationError, match="self-contradictory"):
+            parse_endpoint(payload)
+
+    @pytest.mark.parametrize("seed", range(240))
     def test_the_two_views_never_disagree_about_satisfiability(self, seed):
         """Generative pin on the invariant the whole gate rests on.
 

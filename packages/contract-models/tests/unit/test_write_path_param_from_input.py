@@ -812,6 +812,35 @@ class TestWriteBlocksAreSweptForScopeTypos:
         with pytest.raises(ValidationError, match="before the response exists"):
             parse_endpoint(_api_payload({"insert": op}))
 
+    def _with_metadata(self, success_ref):
+        op = _write_op(path_params={"id": {"from_input": "record.id"}})
+        op["response"] = {
+            "metadata": {"total": {"ref": "response.body.n"}},
+            "success_when": {"eq": [{"ref": success_ref}, 1]},
+        }
+        return _api_payload({"insert": op})
+
+    def test_an_undeclared_write_metadata_key_is_rejected(self):
+        """`WriteResponse.metadata` has the same closed, author-declared key set
+        as the read side, and the harm here is the worst in the contract: a
+        `success_when` over a ref that resolves to nothing holds unconditionally,
+        so every write reports success including the ones whose rejected rows the
+        provider listed.
+
+        The check was wired to the read sweep only — the write sweep passed no
+        `metadata_keys`, so the guard was dead on this side. Same "a site that
+        was not on somebody's list" shape, one call site right.
+        """
+        with pytest.raises(ValidationError, match="not a declared `response.metadata` key"):
+            parse_endpoint(self._with_metadata("response.metadata.nope"))
+
+    def test_the_write_harm_named_is_the_success_when_harm(self):
+        with pytest.raises(ValidationError, match="every write reports success"):
+            parse_endpoint(self._with_metadata("response.metadata.nope"))
+
+    def test_a_declared_write_metadata_key_resolves(self):
+        parse_endpoint(self._with_metadata("response.metadata.total"))
+
     def test_a_good_write_response_still_validates(self):
         parse_endpoint(
             self._op(

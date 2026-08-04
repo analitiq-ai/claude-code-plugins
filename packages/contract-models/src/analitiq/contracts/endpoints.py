@@ -2100,7 +2100,20 @@ class WriteOperation(_EndpointModel):
             )
             for name, param in self.params.items()
         ]
-        _sweep_expression_sites([s for s in write_sites if s.payload is not None])
+        # `metadata_keys` too: `WriteResponse.metadata` has the identical closed,
+        # author-declared key set, and the harm string for an undeclared key here
+        # is the worst one in the contract — a `success_when` predicate over a ref
+        # that resolves to nothing holds unconditionally, so every write reports
+        # success including the ones whose rejected rows the provider listed.
+        # That message was already written and already selected by
+        # WRITE_RESPONSE; only the check that emits it was wired to the read
+        # sweep alone.
+        _sweep_expression_sites(
+            [s for s in write_sites if s.payload is not None],
+            metadata_keys=frozenset(
+                (self.response.metadata or {}) if self.response is not None else {}
+            ),
+        )
 
         path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
         if path_from_inputs and self.batching is not None:
@@ -3916,9 +3929,29 @@ def _materialize(
         # and accepted nested ones, which is `effective_properties` refusing a
         # record shape `materialize_node` was happy to derive columns from.
         #
-        # `_contributors` shares `contrib_memo` across the whole walk, so this
-        # stays one linear pass rather than a fresh closure walk per node.
-        raw = _contributors(node, root, contrib_memo, set())
+        # The walk starts FRESH — its own memo, `contrib_memo` used only to skip
+        # nodes already proved. Sharing one contributor memo across the
+        # materialization was faster and wrong: `_contributors` caches `{}` for a
+        # node it meets on the CURRENT path, so an entry computed while some
+        # ancestor was mid-walk carries that truncation, and a later node reads a
+        # weaker contributor set than `effective_properties` would compute for it
+        # from a standing start. That is the same two-view disagreement this
+        # proof exists to prevent, reintroduced by the cache meant to make it
+        # cheap:
+        #
+        #   A: {$ref: C, properties: {x: {type: [string, boolean]}}}
+        #   B: {$ref: A, properties: {x: {type: [integer, boolean]}}}
+        #   C: {$ref: A, properties: {x: {type: [string, integer]}}}
+        #
+        # gave `materialize_node(B)` an accepted `[integer, boolean]` while
+        # `effective_properties(B)` refused. Truncation-tainting the cache
+        # instead was tried earlier in this PR and is exponential — the taint
+        # propagates to every ancestor, so one back-edge uncaches the whole walk.
+        if id(node) not in contrib_memo:
+            raw = _property_contributors(node, root)
+            contrib_memo[id(node)] = (node, raw)
+        else:
+            raw = contrib_memo[id(node)][1]
         by_name: dict[str, list[Any]] = {}
         for source_map in own_properties:
             for name, declaration in source_map.items():
