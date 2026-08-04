@@ -1081,3 +1081,61 @@ class TestRecordShapeThroughRefs:
     def test_a_typo_in_a_cursor_field_is_still_caught_through_a_ref(self):
         with pytest.raises(ValidationError, match="not declared in response.schema record-shape"):
             parse_endpoint(_replicating_doc(self.SCHEMA, "updated_ta"))
+
+
+class TestKeywordVocabularyHasOneOwner:
+    """The JSON-Schema keyword vocabulary every walker keys off exists in three
+    hand-maintained copies — the contract's `_JSON_SCHEMA_*_KEYS`, the
+    validator's `_SUBSCHEMA_*_KEYS`, and the renderer's
+    `JsonSchemaPropertyNode`. Adding `contentSchema` required editing all three,
+    and the fourth expression of it — that node's own published *description* —
+    was missed, so the shipped contract constrained a keyword while its prose
+    said it did not recurse there.
+
+    Per `.claude/rules/no-drift-surfaces.md` an unavoidable restatement must be
+    pinned by a test. These are the four comparisons that catch it: per bucket
+    (the bucket decides HOW the walker recurses), the rendered constraint map,
+    and the rendered sentence.
+    """
+
+    def _rendered_node(self):
+        import json
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[4]
+        doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
+        return doc["$defs"]["JsonSchemaPropertyNode"]
+
+    def test_validator_buckets_match_the_contract_bucket_for_bucket(self):
+        from analitiq.contracts import endpoints as ep
+        from analitiq.validator import connectors as vc
+
+        assert vc._SUBSCHEMA_MAP_KEYS == ep._JSON_SCHEMA_SUBSCHEMA_KEYS
+        assert vc._SUBSCHEMA_LIST_KEYS == ep._JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+        assert vc._SUBSCHEMA_SINGLE_KEYS == ep._JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+
+    def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
+        from analitiq.contracts import endpoints as ep
+
+        vocabulary = (
+            ep._JSON_SCHEMA_SUBSCHEMA_KEYS
+            | ep._JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | ep._JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        )
+        rendered = set(self._rendered_node()["properties"]) - {"arrow_type", "native_type"}
+        assert rendered == vocabulary
+
+    def test_rendered_description_names_every_keyword_it_constrains(self):
+        from analitiq.contracts import endpoints as ep
+
+        vocabulary = (
+            ep._JSON_SCHEMA_SUBSCHEMA_KEYS
+            | ep._JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | ep._JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        )
+        description = self._rendered_node()["description"]
+        missing = sorted(k for k in vocabulary if f"`{k}`" not in description)
+        assert not missing, (
+            f"the published node constrains {missing!r} but its description does "
+            "not name them — the contract contradicts its own prose"
+        )

@@ -1520,8 +1520,14 @@ class ResponseExtraction(_EndpointModel):
             "ones fold into an `allOf` (an `allOf` branch narrowing a base "
             "declaration is the idiom `allOf` exists for). It is an error only "
             "when the contributors' `type` sets are provably disjoint, so no "
-            "instance could satisfy all of them — and only for the name "
-            "actually being resolved.\n"
+            "instance could satisfy all of them. That test runs for the name "
+            "being resolved, and again on the node a path finally lands on "
+            "(and on a records array's record shape), because a terminal node "
+            "assembled from contradictory `allOf`/`$ref` sources is unsatisfiable "
+            "whether or not any further segment is read from it. Folding a node "
+            "together with the sources that unconditionally apply — its `$ref` "
+            "target and `allOf` branches, that order, itself last — is how any "
+            "consumer reads `type`/`items`/`properties` off it.\n"
             "3. *Refusal to guess.* Nothing else declares a segment. If a "
             "segment is absent and the node carries `anyOf`, `oneOf`, "
             "`if`/`then`/`else`, `patternProperties`, `dependentSchemas`, a "
@@ -1532,14 +1538,23 @@ class ResponseExtraction(_EndpointModel):
             "simply undeclared (the typo case). A node declaring BOTH the "
             "segment and one of those keywords resolves through `properties`; "
             "the ambiguity check runs only on a miss.\n"
-            "4. *Typedness.* A node a pagination or `metadata` path resolves "
-            "to must declare a `type` (or a `native_type`/`arrow_type` pair). "
+            "4. *Typedness.* A node any checked `response.body` path resolves "
+            "to — in `pagination`, in `response.metadata`, or in a `request` "
+            "`headers`/`query`/`body` slot — must declare a `type` (or a "
+            "`native_type`/`arrow_type` pair). "
             "A declaration that says nothing leaves whatever plants a value "
             "there to invent its type, which is what decides whether an "
             "ordering comparison in `stop_when` raises.\n"
             "5. *References.* Every `$ref` in this document must be an "
-            "in-document JSON Pointer (`#/$defs/<name>`) landing on a schema "
-            "position, and its path must not CROSS a conditionally-applied "
+            "in-document JSON Pointer (`#`, or `#/…`) landing on a schema "
+            "position — the positions being exactly the keywords this document's "
+            "`JsonSchemaPropertyNode` constrains (`properties`, "
+            "`patternProperties`, `$defs`, `definitions`, `dependentSchemas` as "
+            "maps; `prefixItems`, `allOf`, `anyOf`, `oneOf` as lists; `items`, "
+            "`contains`, `contentSchema`, `additionalProperties`, "
+            "`propertyNames`, `unevaluatedItems`, `unevaluatedProperties`, "
+            "`not`, `if`, `then`, `else` singly) — and its path must not CROSS "
+            "a conditionally-applied "
             "keyword — `anyOf`, `oneOf`, `if`/`then`/`else`, `not`, "
             "`dependentSchemas`, `patternProperties`, `contains`, "
             "`additionalProperties`, `unevaluatedProperties`, "
@@ -1553,7 +1568,10 @@ class ResponseExtraction(_EndpointModel):
             "unescaped, and array indices follow RFC 6901 exactly (`0` or "
             "`[1-9][0-9]*`). Non-local refs, dangling refs, refs into "
             "non-schema positions such as `default`/`examples`/`const`/`enum`, "
-            "and the `$id`, `$anchor`, `$dynamicRef`/`$dynamicAnchor`, "
+            "refs whose target is a boolean schema (`true`/`false` declare "
+            "nothing about a value's shape, so no path through them can reach a "
+            "typed declaration), and the `$id`, `$anchor`, "
+            "`$dynamicRef`/`$dynamicAnchor`, "
             "`$recursiveRef`/`$recursiveAnchor` keywords are all refused: "
             "nothing on the offline validate/author/execute path can fetch a "
             "second document or retarget a base URI, and a subtree reached "
@@ -2017,6 +2035,26 @@ class WriteOperation(_EndpointModel):
         # ADV-ENDP-025. Held here rather than in `_validate_param_wiring`
         # because `batching` is a property of the write MODE, not of the request,
         # so this is the innermost scope that can see both.
+        # A write has no `response.schema`, so declared-path resolution has
+        # nothing to resolve against — but both SCOPE checks apply, and they are
+        # what catches this class. `success_when` is the predicate that decides
+        # whether a write SUCCEEDED: `{"empty": {"ref": "response.bodyy.errors"}}`
+        # resolves to nothing on every response, so `empty` holds unconditionally
+        # and every write reports success, including the ones whose rejected rows
+        # the provider listed in `body.errors`. Partial data loss, green run —
+        # strictly worse than the paging truncation #123 was filed for. The
+        # request slots are swept for the same reason the read side is.
+        _reject_unknown_scopes_in(
+            {
+                "operations.write.request.headers": self.request.headers,
+                "operations.write.request.query": self.request.query,
+                "operations.write.request.body": self.request.body,
+                "operations.write.response": (
+                    self.response.model_dump() if self.response is not None else None
+                ),
+            }
+        )
+
         path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
         if path_from_inputs and self.batching is not None:
             raise ValueError(
@@ -3369,17 +3407,37 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 # The fix is to stop treating this as a recursive fold at all. What both walkers
 # actually need is the SET of nodes whose declarations unconditionally apply,
 # and that set is just reachability over `allOf` and in-document `$ref` edges.
-# One iterative walk with a visited set computes it in O(V+E); a cycle is
-# nothing special — it is a node already visited, which is exactly the "a cycle
-# contributes nothing the second time" rule stated in the contract. No cache, no
-# truncation flag, no difference between the cyclic and acyclic cases.
+# One walk with a visited set computes it in O(V+E); a cycle is nothing special
+# — it is a node already visited, which is exactly the "a cycle contributes
+# nothing the second time" rule stated in the contract. No cache, no truncation
+# flag, no difference between the cyclic and acyclic cases. (The walk recurses
+# per node, so it is bounded by schema nesting depth like every other walker in
+# this module; it is not an explicit-stack loop.)
+#
+# ORDER IS PART OF THE ANSWER, not an implementation detail. Flattening the fold
+# into a single pre-order and reversing it looked equivalent and was not: it
+# inverted precedence between a DIRECT later branch and a transitively-reached
+# contributor of an earlier one, so a nearby `allOf` override silently lost to a
+# distant base and a destination column changed type with no error anywhere.
+# The two callers therefore ask for the two different orders the fold produced:
+#
+#   PRE  (self, then `allOf` branches, then `$ref`) — `_property_contributors`,
+#        which absorbed the node's own `properties` first.
+#   POST (`$ref`, then `allOf` branches, then self) — `materialize_node`, whose
+#        sources were `[ref, *branches, own]` with the LAST merged winning, so
+#        every node must appear after everything it composes with.
 
 
-def _composition_chain(node: dict[str, Any], root: Any) -> list[dict[str, Any]]:
+def _composition_chain(
+    node: dict[str, Any], root: Any, order: str = "pre"
+) -> list[dict[str, Any]]:
     """Every node whose declarations unconditionally apply to ``node``.
 
-    Document order, ``node`` itself first: its own statements are the most
-    specific, and both callers depend on that position. Follows `allOf`
+    ``order="pre"`` emits ``node`` first, then its `allOf` branches, then its
+    `$ref` target. ``order="post"`` emits the `$ref` target first, then the
+    branches, then ``node`` — the source order the recursive fold merged in, so
+    a caller that folds "last wins" gets the precedence the fold gave it. The
+    distinction is load-bearing; see the note above. Follows `allOf`
     branches and in-document `$ref` targets — the two composition keywords whose
     contributions always apply. `anyOf`/`oneOf`/`if`-`then`-`else` are
     conditional and are not followed; a `$ref` INTO one is refused by
@@ -3396,14 +3454,24 @@ def _composition_chain(node: dict[str, Any], root: Any) -> list[dict[str, Any]]:
         if not isinstance(current, dict) or id(current) in seen:
             return
         seen.add(id(current))
-        ordered.append(current)
+        if order == "pre":
+            ordered.append(current)
+        else:
+            # `$ref` before `allOf` before self — the source order the recursive
+            # fold merged in, so "later wins" keeps meaning what it meant.
+            ref_first = current.get("$ref")
+            if isinstance(ref_first, str):
+                visit(resolve_schema_ref(root, ref_first))
         branches = current.get("allOf")
         if isinstance(branches, list):
             for branch in branches:
                 visit(branch)
-        ref = current.get("$ref")
-        if isinstance(ref, str):
-            visit(resolve_schema_ref(root, ref))
+        if order == "pre":
+            ref = current.get("$ref")
+            if isinstance(ref, str):
+                visit(resolve_schema_ref(root, ref))
+        else:
+            ordered.append(current)
 
     visit(node)
     return ordered
@@ -3580,14 +3648,14 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    if not isinstance(node, dict):
-        return node
     document = node if root is None else root
-    # Reversed, so the node's OWN statements land last and win: it is the most
-    # specific declaration. Everything it composes with is folded in underneath.
+    # Post-order: every node appears after everything it composes with, so the
+    # node's OWN statements land last and win. Reversing a pre-order is NOT the
+    # same thing — it also reverses sibling order and lifts a distant
+    # contributor above a direct one.
     sources = [
         {k: v for k, v in source.items() if k not in ("$ref", "allOf")}
-        for source in reversed(_composition_chain(node, document))
+        for source in _composition_chain(node, document, order="post")
     ]
 
     # The same refusal `_compose_declarations` applies to a property name's
@@ -3707,6 +3775,22 @@ def resolve_declared_path(
     return node
 
 
+def _reject_unknown_scopes_in(sites: dict[str, Any]) -> None:
+    """Run both scope checks over every expression token in ``sites``.
+
+    The scope half of the response-path sweep, for blocks that have no
+    `response.schema` to resolve against — the write request and the write
+    response. Path resolution needs a declared body shape; catching a
+    misspelled scope does not.
+    """
+    for where, payload in sites.items():
+        if payload is None:
+            continue
+        for token in _expression_tokens(payload):
+            _reject_unknown_scope(where, token)
+            _reject_unknown_response_scope(where, token)
+
+
 def _reject_unknown_scope(where: str, token: str) -> None:
     """The LEADING token must name a real resolution scope.
 
@@ -3813,11 +3897,15 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     try:
         node: Any = resolve_declared_path(response_schema, segments)
     except SchemaResolutionError:
-        # This is the EXTRACTION path, not a gate: an unresolvable ref is
-        # reported as an error by `_validate_records_in_response_schema`, and
-        # duplicating the rejection here would only turn one message into two.
-        # Fall back so a caller that never ran the gate still gets a schema.
-        return response_schema
+        # Do NOT fall back to `response_schema` here. That returned the response
+        # ENVELOPE, so a one-character typo in `records.ref` silently enumerated
+        # `data`/`has_more`/`next_cursor` as the destination table's columns —
+        # a confident wrong answer handed to the one caller the fallback existed
+        # to serve (the pipeline plugin's prose calls this without running the
+        # gate first). `None` says "I could not resolve this", which is the only
+        # honest answer; the gate still reports the ref properly for anyone who
+        # does run it.
+        return None
     # Materialize before reading `type`/`items`, and again on the record shape:
     # the collection may be reached through a `$ref` (`{"$ref": "#/$defs/Coll"}`)
     # and the record shape is very often `items: {"$ref": "#/$defs/Record"}` —
@@ -3907,13 +3995,37 @@ def _validate_records_in_response_schema(
     # raw one would report `type=None` for a perfectly good `{"$ref": …}`
     # collection. The materialized node is what the caller drills into, so the
     # record shape it sees is composed the same way.
-    node = materialize_node(node, response.schema_)
+    try:
+        node = materialize_node(node, response.schema_)
+    except SchemaResolutionError as exc:
+        raise ValueError(
+            f"response.records ref {ref!r} resolves to a self-contradictory node "
+            f"in response.schema: {exc.reason} "
+            "(spec: §API Response Extraction — declared-path resolution)"
+        ) from None
     if node.get("type") != "array":
         raise ValueError(
             f"response.records ref {ref!r} resolves to a non-array node in "
             f"response.schema (got type={node.get('type')!r}); spec requires "
             "the schema location to be an array (spec: §Cross-Field Validation)"
         )
+    # Gate the RECORD SHAPE too, not just the array node. Without this a
+    # contradictory `items` (or a `$defs` entry it references) validated here and
+    # then raised out of `resolve_read_record_schema` /
+    # `find_record_field_properties` — public helpers the pipeline plugin's
+    # prose calls directly — as a bare traceback with no endpoint, no ref and no
+    # `$defs` name. A gate that lets the bad document through and lets a
+    # downstream script crash on it is not a gate.
+    items = node.get("items")
+    if isinstance(items, dict):
+        try:
+            materialize_node(items, response.schema_)
+        except SchemaResolutionError as exc:
+            raise ValueError(
+                f"response.records ref {ref!r} resolves to an array whose record "
+                f"shape is self-contradictory: {exc.reason} "
+                "(spec: §API Response Extraction — declared-path resolution)"
+            ) from None
     return node
 
 

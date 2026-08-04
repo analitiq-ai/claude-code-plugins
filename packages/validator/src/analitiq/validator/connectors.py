@@ -840,11 +840,32 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
             connector_doc = None
             if sibling is not None and sibling.is_file():
                 connector_doc, load_findings = _load_type_map(sibling)
-                findings.extend(load_findings)
-            if isinstance(connector_doc, dict):
+                # `_load_type_map` is reused here as a generic JSON reader, but
+                # its error path is labelled `type-map-coverage`. Relabel: an
+                # endpoint validation reporting a type-map finding about
+                # connector.json is invisible to a fix loop filtering on this
+                # check's own id, and wrong about which check failed.
+                findings.extend(
+                    {**f, "validator": "endpoint-transport-ref"} for f in load_findings
+                )
+            transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
+            if isinstance(transports, dict):
                 findings.extend(_endpoint_transport_ref_findings(
-                    doc, connector_doc.get("transports"),
-                    label=doc_path.name if doc_path else ""))
+                    doc, transports, label=doc_path.name if doc_path else ""))
+            elif isinstance(connector_doc, dict):
+                # Connector found, but its `transports` is missing or not an
+                # object. `_endpoint_transport_ref_findings` returns [] there —
+                # correct at the CONNECTOR-anchored call site, where the
+                # connector's own model error already stands. Here the connector
+                # model never runs, so returning [] would report a clean pass on
+                # an endpoint whose `transport_ref` resolves to nothing. Say what
+                # could not be checked and why.
+                findings.append(finding(
+                    "endpoint-transport-ref", "warning", "/",
+                    f"transport_ref {declared_refs!r} not checked: the sibling "
+                    "connector.json declares no usable `transports` object, so "
+                    "there was nothing to resolve the name against. Validate the "
+                    "connector to see why."))
             else:
                 findings.append(finding(
                     "endpoint-transport-ref", "warning", "/",

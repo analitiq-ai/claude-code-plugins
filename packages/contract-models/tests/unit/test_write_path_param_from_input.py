@@ -723,3 +723,45 @@ class TestLiteralWrappedBindingIsNotABinding:
         op = _write_op(path_params={"id": {"literal": {"from_input": "record.id"}}})
         with pytest.raises(ValidationError, match="from_param"):
             parse_endpoint(_api_payload({"insert": op}))
+
+
+class TestWriteBlocksAreSweptForScopeTypos:
+    """A write has no `response.schema`, so declared-path resolution has nothing
+    to resolve against — but both SCOPE checks apply, and they are what catches
+    this class. `success_when` is the worst cell: it decides whether a write
+    SUCCEEDED, and a ref that resolves to nothing makes `empty` hold on every
+    response, so every write reports success including the ones whose rejected
+    rows the provider listed. Partial data loss, green run."""
+
+    def _op(self, **response):
+        op = _write_op(path_params={"id": {"from_input": "record.id"}})
+        op["response"] = response
+        return _api_payload({"insert": op})
+
+    @pytest.mark.parametrize(
+        "ref", ["response.bodyy.errors", "responses.body.errors", "Response.body.ok"]
+    )
+    def test_success_when_scope_typo_is_rejected(self, ref):
+        with pytest.raises(ValidationError):
+            parse_endpoint(self._op(success_when={"empty": {"ref": ref}}))
+
+    @pytest.mark.parametrize("slot", ["affected_records", "generated_keys"])
+    def test_extraction_slot_scope_typo_is_rejected(self, slot):
+        with pytest.raises(ValidationError):
+            parse_endpoint(self._op(**{slot: {"ref": "response.bodyy.n"}}))
+
+    def test_write_request_slot_scope_typo_is_rejected(self):
+        op = _write_op(
+            path_params={"id": {"from_input": "record.id"}},
+            request_extras={"query": {"c": {"ref": "response.bodyy.x"}}},
+        )
+        with pytest.raises(ValidationError):
+            parse_endpoint(_api_payload({"insert": op}))
+
+    def test_a_good_write_response_still_validates(self):
+        parse_endpoint(
+            self._op(
+                success_when={"empty": {"ref": "response.body.errors"}},
+                affected_records={"ref": "response.body.count"},
+            )
+        )

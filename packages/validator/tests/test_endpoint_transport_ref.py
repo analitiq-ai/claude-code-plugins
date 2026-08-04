@@ -192,3 +192,79 @@ def test_malformed_connector_transports_yields_no_fabricated_finding(
                     {"widgets.json": _read_endpoint("nope")}, validator)
     assert not _ref_errors(findings), findings
     assert _errors(findings), "the malformed connector must still be reported"
+
+
+class TestOriginContainmentGapIsRecorded:
+    """`CONTRIBUTING.md` clause 3: a PR that deliberately leaves a surface wide
+    records it, in the same PR, as a test or a follow-up issue.
+
+    `transport_ref`'s containment rule has two halves. The NAME half is enforced
+    here. The ORIGIN half — every URL a request produces landing on a declared
+    transport's origin — is enforced by nothing: not this contract, not this
+    validator, and not the engine, which opens one session from
+    `default_transport`, pins the read path to that single origin and has no
+    write-path origin guard at all.
+
+    This is that record. It pins the disclaimer so it cannot be quietly softened
+    back into an implied guarantee, and it pins the behaviour so the day origin
+    containment lands, this test goes red and points at the prose that must
+    change with it.
+    """
+
+    @pytest.mark.parametrize(
+        "model_name", ["GetReadRequest", "PostReadRequest", "WriteRequest"]
+    )
+    def test_the_unenforced_half_is_declared_unenforced(self, model_name):
+        from analitiq.contracts import endpoints
+
+        description = getattr(endpoints, model_name).model_fields[
+            "transport_ref"
+        ].description
+        assert "enforced by nothing today" in description, (
+            f"{model_name}.transport_ref no longer states that origin containment "
+            "is unenforced. Either it became enforced — in which case this test "
+            "and the description must both change — or the contract has started "
+            "promising a guarantee it does not provide."
+        )
+        assert "454" in description, (
+            f"{model_name}.transport_ref no longer names the issue tracking the "
+            "unenforced half; the gap would become undiscoverable."
+        )
+
+    def test_a_second_origin_is_accepted_because_nothing_checks_origins(self):
+        # Records the CURRENT behaviour, not the desired one: a next-page link on
+        # a second declared transport's origin validates clean. When origin
+        # containment is implemented this assertion is what fails first.
+        from analitiq.contracts.endpoints import parse_endpoint
+
+        doc = {
+            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+            "endpoint_id": "files",
+            "operations": {
+                "read": {
+                    "request": {"method": "GET", "path": "/v1/files",
+                                "transport_ref": "api"},
+                    "params": {},
+                    "pagination": {
+                        "type": "link",
+                        "link": {"next_url": {"ref": "response.body.next"}},
+                        "stop_when": {"missing": {"ref": "response.body.next"}},
+                    },
+                    "response": {
+                        "records": {"ref": "response.body.data"},
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "next": {"type": "string"},
+                                "data": {
+                                    "type": "array",
+                                    "items": {"type": "object",
+                                              "properties": {"id": {"type": "string"}}},
+                                },
+                            },
+                        },
+                    },
+                }
+            },
+        }
+        parse_endpoint(doc)  # must not raise: no origin rule exists to violate
