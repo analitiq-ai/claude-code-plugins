@@ -57,6 +57,7 @@ Usage::
 from __future__ import annotations
 
 import difflib
+import functools
 import json
 import os
 import re
@@ -154,6 +155,16 @@ def _endpoint_with_write(response: dict | None = None, request_extra: dict | Non
     return doc
 
 
+def _example_body(example_dir: Path) -> dict:
+    """The example connector document in `example_dir`, loud when absent."""
+    body = next(example_dir.glob("*.example.json"), None)
+    if body is None:
+        raise FileNotFoundError(
+            f"no *.example.json under {example_dir} — the example tree the "
+            "probes stage moved; repoint the *_EXAMPLE constants")
+    return json.loads(body.read_text())
+
+
 def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
                       read_map: list | None = None, write_map: list | None = None) -> list[dict]:
     """Validate a mutated example connector with its siblings staged on disk.
@@ -162,7 +173,7 @@ def _staged_connector(mutate: Callable[[dict], dict], example_dir: Path,
     cross-file coverage checks walk a `definition/` directory, so the type maps
     (and endpoints, for the API example) must sit beside the document.
     """
-    doc = mutate(json.loads(next(example_dir.glob("*.example.json")).read_text()))
+    doc = mutate(_example_body(example_dir))
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         definition.mkdir()
@@ -434,7 +445,7 @@ def _p_endpoint_pair_unresolved() -> list[dict]:
     record["properties"]["mystery"] = {
         "type": "string", "native_type": "MYSTERY_TYPE", "arrow_type": "Utf8",
     }
-    doc = json.loads(next(API_EXAMPLE.glob("*.example.json")).read_text())
+    doc = _example_body(API_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
         (definition / "endpoints").mkdir(parents=True)
@@ -623,6 +634,34 @@ class ProbeFailure:
     findings: list[dict] = field(default_factory=list)
 
 
+def _expectation_failure(probe: Probe, findings: list[dict]) -> ProbeFailure | None:
+    errors = [f for f in findings if f.get("severity") == "error"]
+    if probe.expect == "silent" and findings:
+        return ProbeFailure(probe.id, "expected zero findings", findings)
+    if probe.expect == "clean" and errors:
+        return ProbeFailure(probe.id, "expected no error findings", errors)
+    if probe.expect == "error":
+        if not errors:
+            return ProbeFailure(probe.id, "expected an error finding, got none", findings)
+        if not any(re.search(probe.message_re, f.get("message", "")) for f in errors):
+            return ProbeFailure(
+                probe.id, f"no error message matched {probe.message_re!r}", errors)
+    return None
+
+
+def _pattern_failure(probe: Probe, findings: list[dict]) -> ProbeFailure | None:
+    if probe.forbid_re and any(
+        re.search(probe.forbid_re, f.get("message", "")) for f in findings
+    ):
+        return ProbeFailure(probe.id, f"a finding matched forbidden {probe.forbid_re!r}", findings)
+    if probe.require_re and not any(
+        re.search(probe.require_re, f.get("message", "")) for f in findings
+    ):
+        return ProbeFailure(
+            probe.id, f"no finding matched required {probe.require_re!r}", findings)
+    return None
+
+
 def run_probe(probe: Probe) -> ProbeFailure | None:
     if probe.expect not in ("clean", "error", "silent"):
         raise ValueError(f"probe {probe.id!r}: unknown expectation {probe.expect!r}")
@@ -637,27 +676,7 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
                if re.search(r"crashed unexpectedly", f.get("message", ""))]
     if crashed:
         return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
-    errors = [f for f in findings if f.get("severity") == "error"]
-    if probe.expect == "silent" and findings:
-        return ProbeFailure(probe.id, "expected zero findings", findings)
-    if probe.expect == "clean" and errors:
-        return ProbeFailure(probe.id, "expected no error findings", errors)
-    if probe.expect == "error":
-        if not errors:
-            return ProbeFailure(probe.id, "expected an error finding, got none", findings)
-        if not any(re.search(probe.message_re, f.get("message", "")) for f in errors):
-            return ProbeFailure(
-                probe.id, f"no error message matched {probe.message_re!r}", errors)
-    if probe.forbid_re and any(
-        re.search(probe.forbid_re, f.get("message", "")) for f in findings
-    ):
-        return ProbeFailure(probe.id, f"a finding matched forbidden {probe.forbid_re!r}", findings)
-    if probe.require_re and not any(
-        re.search(probe.require_re, f.get("message", "")) for f in findings
-    ):
-        return ProbeFailure(
-            probe.id, f"no finding matched required {probe.require_re!r}", findings)
-    return None
+    return _expectation_failure(probe, findings) or _pattern_failure(probe, findings)
 
 
 def verify_probes() -> list[ProbeFailure]:
@@ -912,9 +931,7 @@ def rendered_block_probe_ids() -> set[str]:
     return ids
 
 
-_PIPELINE_GEN = None
-
-
+@functools.lru_cache(maxsize=None)
 def _pipeline_gen():
     """The pipeline plugin's generator module, imported by path (cached).
 
@@ -923,22 +940,19 @@ def _pipeline_gen():
     surface. Import is side-effect-free — the dependency bootstrap only runs
     when its `main()` calls it.
     """
-    global _PIPELINE_GEN
-    if _PIPELINE_GEN is None:
-        import importlib.util
+    import importlib.util
 
-        scripts_dir = str(PIPELINE_PLUGIN / "scripts")
-        spec = importlib.util.spec_from_file_location(
-            "_pipeline_gen_contract_docs", PIPELINE_PLUGIN / "scripts" / "gen_contract_docs.py")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        sys.path.insert(0, scripts_dir)  # gen_contract_docs imports _bootstrap
-        try:
-            spec.loader.exec_module(module)
-        finally:
-            sys.path.remove(scripts_dir)
-        _PIPELINE_GEN = module
-    return _PIPELINE_GEN
+    scripts_dir = str(PIPELINE_PLUGIN / "scripts")
+    spec = importlib.util.spec_from_file_location(
+        "_pipeline_gen_contract_docs", PIPELINE_PLUGIN / "scripts" / "gen_contract_docs.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    sys.path.insert(0, scripts_dir)  # gen_contract_docs imports _bootstrap
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(scripts_dir)
+    return module
 
 
 def _known_block_ids_for(path: Path) -> set[str]:
@@ -1218,6 +1232,71 @@ FENCE_REACH = 10
 ADV_REACH = 2
 
 
+def _hit_is_pinned(line_index: int, block: tuple[int, int],
+                   pinned_spans: list[tuple[int, int]],
+                   fence_lines: list[int], adv_lines: list[int]) -> bool:
+    start, end = block
+    if any(s <= line_index <= e for s, e in pinned_spans):
+        return True
+    if any(start <= f <= end and f <= line_index <= f + FENCE_REACH
+           for f in fence_lines):
+        return True
+    return any(start <= a <= end and abs(a - line_index) <= ADV_REACH
+               for a in adv_lines)
+
+
+def _matching_waiver(rel: str, window: str, trigger_text: str) -> Waiver | None:
+    """The waiver covering this hit, if any.
+
+    Both conditions are load-bearing: `contains in window` binds the waiver to
+    the hit's location, and `trigger in contains` binds it to this specific
+    trigger phrase — without the second, a new claim appended beside a waived
+    sentence would ride its neighbour's waiver.
+    """
+    return next(
+        (w for w in WAIVERS
+         if w.path == rel
+         and (w.contains in window or w.contains in _normalize(window))
+         and trigger_text in _normalize(w.contains)),
+        None)
+
+
+def _dangling_fence_ids(rel: str, text: str) -> list[str]:
+    return [
+        f"{rel}: fence names unknown probe {fence_id!r}"
+        for fence in _FENCE_RE.finditer(text)
+        for fence_id in re.split(r"\s*,\s*", fence.group("ids"))
+        if fence_id not in PROBES_BY_ID
+    ]
+
+
+def _scan_doc(path: Path) -> tuple[list[Violation], list[str], set[Waiver]]:
+    text = path.read_text(encoding="utf-8")
+    rel = path.relative_to(REPO_ROOT).as_posix()
+    lines = text.splitlines()
+    pinned_spans = _line_spans(text, _known_block_ids_for(path))
+    fence_lines = [i for i, line in enumerate(lines) if _FENCE_RE.search(line)]
+    adv_lines = [i for i, line in enumerate(lines) if _ADV_RE.search(line)]
+
+    violations: list[Violation] = []
+    used: set[Waiver] = set()
+    for block in _blocks(lines):
+        start, end = block
+        normalized = _normalize("\n".join(lines[start:end + 1]))
+        for match in _TRIGGER_RE.finditer(normalized):
+            line_index = start + normalized[:match.start()].count("\n")
+            if _hit_is_pinned(line_index, block, pinned_spans, fence_lines, adv_lines):
+                continue
+            window = "\n".join(
+                lines[max(start, line_index - 1):min(end, line_index + 1) + 1])
+            waiver = _matching_waiver(rel, window, match.group(0))
+            if waiver is not None:
+                used.add(waiver)
+                continue
+            violations.append(Violation(rel, line_index + 1, match.group(0)))
+    return violations, _dangling_fence_ids(rel, text), used
+
+
 def scan() -> tuple[list[Violation], list[str], list[Waiver]]:
     """Returns (violations, dangling fence ids, stale waivers).
 
@@ -1232,53 +1311,11 @@ def scan() -> tuple[list[Violation], list[str], list[Waiver]]:
     violations: list[Violation] = []
     dangling: list[str] = []
     used_waivers: set[Waiver] = set()
-
     for path in _scannable_docs():
-        text = path.read_text(encoding="utf-8")
-        rel = path.relative_to(REPO_ROOT).as_posix()
-        lines = text.splitlines()
-        pinned_spans = _line_spans(text, _known_block_ids_for(path))
-        fence_lines = [i for i, line in enumerate(lines) if _FENCE_RE.search(line)]
-        adv_lines = [i for i, line in enumerate(lines) if _ADV_RE.search(line)]
-
-        for fence in _FENCE_RE.finditer(text):
-            for fence_id in re.split(r"\s*,\s*", fence.group("ids")):
-                if fence_id not in PROBES_BY_ID:
-                    dangling.append(f"{rel}: fence names unknown probe {fence_id!r}")
-
-        def _pinned(i: int, block: tuple[int, int]) -> bool:
-            start, end = block
-            if any(s <= i <= e for s, e in pinned_spans):
-                return True
-            if any(start <= f <= end and f <= i <= f + FENCE_REACH for f in fence_lines):
-                return True
-            return any(start <= a <= end and abs(a - i) <= ADV_REACH for a in adv_lines)
-
-        for block in _blocks(lines):
-            start, end = block
-            normalized = _normalize("\n".join(lines[start:end + 1]))
-            for match in _TRIGGER_RE.finditer(normalized):
-                line_index = start + normalized[:match.start()].count("\n")
-                if _pinned(line_index, block):
-                    continue
-                window = "\n".join(
-                    lines[max(start, line_index - 1):min(end, line_index + 1) + 1])
-                # Both conditions are load-bearing: `contains in window` binds
-                # the waiver to the hit's location, and `match in contains`
-                # binds it to this specific trigger phrase — without the
-                # second, a new claim appended beside a waived sentence would
-                # ride its neighbour's waiver.
-                waiver = next(
-                    (w for w in WAIVERS
-                     if w.path == rel
-                     and (w.contains in window or w.contains in _normalize(window))
-                     and match.group(0) in _normalize(w.contains)),
-                    None)
-                if waiver is not None:
-                    used_waivers.add(waiver)
-                    continue
-                violations.append(Violation(rel, line_index + 1, match.group(0)))
-
+        doc_violations, doc_dangling, doc_used = _scan_doc(path)
+        violations.extend(doc_violations)
+        dangling.extend(doc_dangling)
+        used_waivers |= doc_used
     stale = [w for w in WAIVERS if w not in used_waivers]
     return violations, dangling, stale
 
@@ -1310,6 +1347,71 @@ def _report_probe_failures(failures: list[ProbeFailure]) -> None:
     )
 
 
+def _render_docs(docs: list[Path], write: bool) -> list[str]:
+    """Render every doc's blocks; return the stale ones (check) or write them."""
+    stale_docs: list[str] = []
+    for path in docs:
+        current = path.read_text(encoding="utf-8")
+        rendered = render_text(current, str(path))
+        if current == rendered:
+            continue
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if write:
+            path.write_text(rendered, encoding="utf-8")
+            print(f"regenerated {rel}")
+        else:
+            stale_docs.append(rel)
+            sys.stdout.writelines(difflib.unified_diff(
+                current.splitlines(keepends=True), rendered.splitlines(keepends=True),
+                fromfile=f"a/{rel}", tofile=f"b/{rel}"))
+    return stale_docs
+
+
+def _check_problems(stale_docs: list[str]) -> list[str]:
+    """Every gate failure as a printable message; empty means the gate holds."""
+    violations, dangling, stale_waivers = scan()
+    referenced = rendered_block_probe_ids() | fence_probe_ids()
+    unreferenced = sorted(set(PROBES_BY_ID) - referenced)
+    unembedded = sorted(set(RENDERERS) - embedded_block_ids())
+    broken_markers = malformed_marker_docs()
+
+    problems: list[str] = []
+    if unembedded:
+        problems.append(
+            f"renderer(s) with no embedded block: {', '.join(unembedded)} — "
+            "a renderer no document embeds is dead code and its probes pin "
+            "nothing; embed the block or delete the renderer.")
+    if broken_markers:
+        problems.append(
+            f"malformed generated-block markers in: {', '.join(broken_markers)} "
+            "— a BEGIN marker with no matching END (or an id no renderer owns) "
+            "leaves the region looking generated while nothing regenerates or "
+            "checks it.")
+    if stale_docs:
+        problems.append(
+            f"{len(stale_docs)} document(s) stale: {', '.join(stale_docs)}\n"
+            "Run: python3 scripts/render_validator_claims.py write")
+    if violations:
+        listing = "\n".join(f"  {v.path}:{v.line}: {v.text[:120]}" for v in violations)
+        problems.append(
+            f"{len(violations)} unpinned validator-behavior claim(s):\n{listing}\n"
+            "Each flagged sentence states what the validator does or does not "
+            "check. Pin it: move it into a generated block, add a "
+            "`<!-- PROBE: <id> -->` fence backed by a probe in "
+            "scripts/render_validator_claims.py, cite the ADV-* rule that enforces "
+            "it, or register a Waiver with the reason it cannot be pinned.")
+    if dangling:
+        problems.append("dangling probe fences:\n  " + "\n  ".join(dangling))
+    for waiver in stale_waivers:
+        problems.append(
+            f"stale waiver (matches nothing): {waiver.path}: {waiver.contains!r}")
+    if unreferenced:
+        problems.append(
+            f"unreferenced probe(s): {', '.join(unreferenced)} — a probe must "
+            "back a rendered block or a prose fence; delete it or wire it up.")
+    return problems
+
+
 def main(argv: list[str]) -> int:
     mode = argv[1] if len(argv) > 1 else "check"
     if mode not in ("write", "check"):
@@ -1322,84 +1424,16 @@ def main(argv: list[str]) -> int:
         return 1
 
     docs = generated_docs()
-    stale_docs: list[str] = []
-    for path in docs:
-        current = path.read_text(encoding="utf-8")
-        rendered = render_text(current, str(path))
-        if current == rendered:
-            continue
-        rel = path.relative_to(REPO_ROOT).as_posix()
-        if mode == "write":
-            path.write_text(rendered, encoding="utf-8")
-            print(f"regenerated {rel}")
-        else:
-            stale_docs.append(rel)
-            sys.stdout.writelines(difflib.unified_diff(
-                current.splitlines(keepends=True), rendered.splitlines(keepends=True),
-                fromfile=f"a/{rel}", tofile=f"b/{rel}"))
-
+    stale_docs = _render_docs(docs, write=(mode == "write"))
     if mode == "write":
         return 0
 
-    violations, dangling, stale_waivers = scan()
-    referenced = rendered_block_probe_ids() | fence_probe_ids()
-    unreferenced = sorted(set(PROBES_BY_ID) - referenced)
-    unembedded = sorted(set(RENDERERS) - embedded_block_ids())
-    broken_markers = malformed_marker_docs()
-
-    ok = True
-    if unembedded:
-        ok = False
-        print(
-            f"\nrenderer(s) with no embedded block: {', '.join(unembedded)} — "
-            "a renderer no document embeds is dead code and its probes pin "
-            "nothing; embed the block or delete the renderer.",
-            file=sys.stderr,
-        )
-    if broken_markers:
-        ok = False
-        print(
-            f"\nmalformed generated-block markers in: {', '.join(broken_markers)} "
-            "— a BEGIN marker with no matching END (or a typo'd id) leaves the "
-            "region looking generated while nothing regenerates or checks it.",
-            file=sys.stderr,
-        )
-    if stale_docs:
-        ok = False
-        print(f"\n{len(stale_docs)} document(s) stale: {', '.join(stale_docs)}\n"
-              "Run: python3 scripts/render_validator_claims.py write", file=sys.stderr)
-    if violations:
-        ok = False
-        print(f"\n{len(violations)} unpinned validator-behavior claim(s):", file=sys.stderr)
-        for v in violations:
-            print(f"  {v.path}:{v.line}: {v.text[:120]}", file=sys.stderr)
-        print(
-            "\nEach flagged sentence states what the validator does or does not "
-            "check. Pin it: move it into a generated block, add a "
-            "`<!-- PROBE: <id> -->` fence backed by a probe in "
-            "scripts/render_validator_claims.py, cite the ADV-* rule that enforces "
-            "it, or register a Waiver with the reason it cannot be pinned.",
-            file=sys.stderr,
-        )
-    if dangling:
-        ok = False
-        print("\ndangling probe fences:\n  " + "\n  ".join(dangling), file=sys.stderr)
-    if stale_waivers:
-        ok = False
-        for waiver in stale_waivers:
-            print(f"\nstale waiver (matches nothing): {waiver.path}: {waiver.contains!r}",
-                  file=sys.stderr)
-    if unreferenced:
-        ok = False
-        print(
-            f"\nunreferenced probe(s): {', '.join(unreferenced)} — a probe must "
-            "back a rendered block or a prose fence; delete it or wire it up.",
-            file=sys.stderr,
-        )
-
-    if ok:
+    problems = _check_problems(stale_docs)
+    for problem in problems:
+        print(f"\n{problem}", file=sys.stderr)
+    if not problems:
         print(f"{len(PROBES)} probes hold; {len(docs)} document(s) in sync; scan clean")
-    return 0 if ok else 1
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":
