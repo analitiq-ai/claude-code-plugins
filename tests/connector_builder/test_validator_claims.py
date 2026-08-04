@@ -256,6 +256,145 @@ def test_scanner_positive_control(monkeypatch, tmp_path: Path) -> None:
         )
 
 
+def test_scan_exemption_boundaries(monkeypatch, tmp_path: Path) -> None:
+    """Every exemption path in `scan()` holds at its exact boundary.
+
+    Round-2 mutation testing showed the gate's aggregate verdict on a green
+    tree exercises none of its branches: `ADV_REACH = 1000`, a deleted
+    dangling-fence report, or column-anchored code fences all survived CI.
+    One synthetic doc per rule, each asserting both sides of the boundary, so
+    a reach constant or an exemption arm cannot drift silently.
+    """
+    # Pin the constants themselves: this fixture derives its geometry from
+    # them, so without these asserts a widened reach would widen the fixture
+    # with it and the boundary test would prove nothing (mutation-verified).
+    assert _REGISTRY.FENCE_REACH == 10, (
+        "FENCE_REACH changed — re-measure the live fence distances (max was 8) "
+        "and rework this fixture's geometry deliberately"
+    )
+    reach = _REGISTRY.FENCE_REACH
+    filler = [f"filler line {i} with no trigger." for i in range(reach)]
+    doc = tmp_path / "plugins" / "boundaries.md"
+    doc.parent.mkdir(parents=True)
+    lines = [
+        "# Boundaries",                                        # 1
+        "",
+        "enforced by ADV-ENDP-023, and the tail is not checked here.",  # 3: ADV same line -> pinned
+        "an ADV citation two lines up cannot pin this: not checked.",   # 4
+        f"see ADV-CTOR-001 above, {_REGISTRY.ADV_REACH + 1} lines away", # 5
+        "",
+        "<!-- PROBE: read-body-path-typo -->",                 # 7: fence
+        *filler,                                               # 8 .. 7+reach: within reach
+        "past the fence's reach, this one is not checked.",    # 8+reach: distance reach+1 -> flagged
+        "",
+        "  ```",                                               # indented code fence
+        "  a fenced example: validates clean.",                # pinned as code
+        "  ```",
+        "",
+        "<!-- PROBE: no-such-probe -->",                       # dangling fence id
+    ]
+    # Make line 4's distance from line 3's ADV exceed ADV_REACH by padding:
+    # instead of relying on layout above, compute the two ADV cases directly.
+    assert _REGISTRY.ADV_REACH == 2, (
+        "ADV_REACH changed — rework this fixture's line geometry with it"
+    )
+    doc.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _REGISTRY._pipeline_gen()
+    monkeypatch.setattr(_REGISTRY, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(_REGISTRY, "PLUGINS_ROOT", tmp_path / "plugins")
+    monkeypatch.setattr(_REGISTRY, "WAIVERS", ())
+
+    violations, dangling, _stale = _REGISTRY.scan()
+    flagged_lines = sorted(v.line for v in violations)
+    # Line 3 (ADV same line) and lines 4-5 (within ADV_REACH=2 of line 3's
+    # citation) are pinned; the one past the fence's reach is flagged.
+    assert flagged_lines == [8 + reach], (
+        f"expected only the past-reach line {8 + reach}, got "
+        f"{[(v.line, v.text) for v in violations]}"
+    )
+    assert dangling == ["plugins/boundaries.md: fence names unknown probe 'no-such-probe'"]
+
+    # The ADV boundary from the other side: the same claim 3 lines below the
+    # citation (ADV_REACH + 1) must be flagged.
+    far = tmp_path / "plugins" / "adv-far.md"
+    far.write_text(
+        "enforced by ADV-ENDP-023.\n"
+        "filler with no trigger.\n"
+        "filler with no trigger.\n"
+        "three lines from the citation: not checked.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_REGISTRY, "_scannable_docs", lambda: [far])
+    violations, _, _ = _REGISTRY.scan()
+    assert [(v.line, v.text) for v in violations] == [(4, "not checked")]
+
+    # Waiver-at-the-hit: both conditions must fail independently. The first
+    # waiver's text is real but sits outside the hit's one-line window; the
+    # second sits ON the hit line but does not contain the trigger phrase.
+    # Neither may apply, both come back stale, and the violation stays.
+    monkeypatch.setattr(
+        _REGISTRY, "WAIVERS",
+        (_REGISTRY.Waiver("plugins/adv-far.md", "enforced by ADV-ENDP-023", "wrong place"),
+         _REGISTRY.Waiver("plugins/adv-far.md", "three lines from the citation", "wrong phrase")),
+    )
+    violations, _, stale = _REGISTRY.scan()
+    assert [(v.line, v.text) for v in violations] == [(4, "not checked")]
+    assert sorted(w.reason for w in stale) == ["wrong phrase", "wrong place"]
+
+
+def test_scope_table_refuses_probeless_cells() -> None:
+    """`_cell` must refuse an empty probe tuple.
+
+    An unmeasured cell rendered into the scope table is the exact claim class
+    this registry exists to pin — round 2 found three live ones. No live cell
+    is empty anymore, so the guard needs a direct negative or its deletion is
+    invisible.
+    """
+    with pytest.raises(RuntimeError, match="no backing probe"):
+        _REGISTRY._cell("spelling-only", ())
+
+
+def test_run_probe_branches() -> None:
+    """Every verdict branch in `run_probe` fires on a synthetic probe.
+
+    The 44 live probes all pass, so on a green tree none of these branches
+    executes — round-2 mutation testing removed the crash guard and the
+    forbid/require checks with everything staying green.
+    """
+    Probe = _REGISTRY.Probe
+
+    def probe(expect, findings, **kw):
+        return Probe("synthetic", expect, lambda: findings, **kw)
+
+    error = {"severity": "error", "message": "the tail does not resolve"}
+    warning = {"severity": "warning", "message": "coverage gap in the write map"}
+    crash = {"severity": "error",
+             "message": "check 'contract-model' crashed unexpectedly (KeyError: 'x')"}
+
+    assert _REGISTRY.run_probe(probe("clean", [warning])) is None
+    assert _REGISTRY.run_probe(probe("silent", [])) is None
+    assert _REGISTRY.run_probe(
+        probe("error", [error], message_re="does not resolve")) is None
+
+    assert _REGISTRY.run_probe(probe("clean", [error])).reason.startswith("expected no error")
+    assert _REGISTRY.run_probe(probe("silent", [warning])).reason.startswith("expected zero")
+    assert _REGISTRY.run_probe(
+        probe("error", [warning], message_re="x")).reason.startswith("expected an error")
+    assert "no error message matched" in _REGISTRY.run_probe(
+        probe("error", [error], message_re="something else")).reason
+    # The crash guard beats every expectation — a crash embedding the very
+    # vocabulary a message_re looks for must still fail.
+    assert "crashed" in _REGISTRY.run_probe(
+        probe("error", [crash], message_re="crashed unexpectedly")).reason
+    assert "crashed" in _REGISTRY.run_probe(probe("clean", [crash])).reason
+    assert "forbidden" in _REGISTRY.run_probe(
+        probe("clean", [warning], forbid_re="coverage")).reason
+    assert "required" in _REGISTRY.run_probe(
+        probe("clean", [warning], require_re="no such text")).reason
+    with pytest.raises(ValueError, match="unknown expectation"):
+        _REGISTRY.run_probe(probe("eror", []))
+
+
 def test_unknown_block_id_pins_nothing_and_is_reported(monkeypatch, tmp_path: Path) -> None:
     """A GENERATED pair whose id no renderer owns must not exempt its contents.
 

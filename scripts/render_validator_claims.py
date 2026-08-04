@@ -56,7 +56,6 @@ Usage::
 
 from __future__ import annotations
 
-import copy
 import difflib
 import json
 import os
@@ -340,6 +339,24 @@ def _p_write_request_slot_response_ref() -> list[dict]:
     return _validate(_endpoint_with_write(request_extra={"query": {"c": {"ref": "response.body.id"}}}))
 
 
+def _p_write_records_tail() -> list[dict]:
+    return _validate(_endpoint_with_write(
+        response={"success_when": {"empty": {"ref": "response.records.errors"}}},
+    ))
+
+
+def _p_write_headers_tail() -> list[dict]:
+    return _validate(_endpoint_with_write(
+        response={"success_when": {"eq": [{"ref": "response.headers.X-Made-Up"}, {"literal": "x"}]}},
+    ))
+
+
+def _p_write_status_ref() -> list[dict]:
+    return _validate(_endpoint_with_write(
+        response={"success_when": {"eq": [{"ref": "response.status"}, {"literal": 200}]}},
+    ))
+
+
 def _p_write_truncate_insert() -> list[dict]:
     return _validate(_endpoint_with_write(mode="truncate_insert", batching={"max_records": 100}))
 
@@ -546,6 +563,9 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"not a declared"),
     Probe("write-request-slot-response-ref", "error", _p_write_request_slot_response_ref,
           message_re=r"built before the response exists"),
+    Probe("write-records-tail-unchecked", "clean", _p_write_records_tail),
+    Probe("write-headers-tail-unchecked", "clean", _p_write_headers_tail),
+    Probe("write-status-ref-unchecked", "clean", _p_write_status_ref),
     Probe("write-truncate-insert-accepted", "clean", _p_write_truncate_insert),
     # connector documents. The forbid_re on the "nothing checks X" probes is
     # what expect="clean" alone cannot give: a warning-tier check for X would
@@ -718,13 +738,13 @@ _SCOPE_TABLE_ROWS: tuple[tuple[str, tuple[str, tuple[str, ...]], tuple[str, tupl
      ("declared-key", ("write-metadata-undeclared-key",))),
     ("`response.records.<path>`",
      ("spelling-only", ("read-records-tail-unchecked",)),
-     ("spelling-only", ())),
+     ("spelling-only", ("write-records-tail-unchecked",))),
     ("`response.headers.<name>`",
      ("spelling-only", ("read-headers-tail-unchecked",)),
-     ("spelling-only", ())),
+     ("spelling-only", ("write-headers-tail-unchecked",))),
     ("`response.status`",
      ("spelling-only", ("read-status-ref-unchecked",)),
-     ("spelling-only", ())),
+     ("spelling-only", ("write-status-ref-unchecked",))),
     ("`response.record_count`",
      ("spelling-only", ("read-record-count-unchecked",)),
      ("barred", ("write-record-count-barred",))),
@@ -732,6 +752,11 @@ _SCOPE_TABLE_ROWS: tuple[tuple[str, tuple[str, tuple[str, ...]], tuple[str, tupl
 
 
 def _cell(kind: str, probe_ids: tuple[str, ...]) -> str:
+    if not probe_ids:
+        raise RuntimeError(
+            f"scope-table cell {kind!r} has no backing probe — an unmeasured "
+            "cell is the exact claim class this registry exists to pin"
+        )
     expected, text = _CELL_KINDS[kind]
     for probe_id in probe_ids:
         probe = PROBES_BY_ID[probe_id]
