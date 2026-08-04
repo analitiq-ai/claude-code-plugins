@@ -1500,9 +1500,11 @@ class ResponseExtraction(_EndpointModel):
             "\n"
             "**Declared-path resolution.** Every `response.body[.<path>]` this "
             "endpoint reads — `records` above, each replication "
-            "`cursor_field` (resolved relative to the record shape but against "
-            "this document as root), and every `{ref}` and `${...}` "
-            "placeholder inside `pagination` and `response.metadata` — must "
+            "`cursor_field` and `pagination.keyset.order_by_field` (both "
+            "resolved relative to the record shape but against this document as "
+            "root), and every `{ref}` and `${...}` placeholder inside "
+            "`pagination`, `response.metadata` and the `request` "
+            "`headers`/`query`/`body` slots — must "
             "resolve against this document by the following algorithm. It is "
             "stated in full because the validator, the engine and the "
             "conformance kit must all reproduce it identically.\n"
@@ -1537,7 +1539,17 @@ class ResponseExtraction(_EndpointModel):
             "ordering comparison in `stop_when` raises.\n"
             "5. *References.* Every `$ref` in this document must be an "
             "in-document JSON Pointer (`#/$defs/<name>`) landing on a schema "
-            "position. Pointer tokens are percent-decoded then RFC 6901 "
+            "position, and its path must not CROSS a conditionally-applied "
+            "keyword — `anyOf`, `oneOf`, `if`/`then`/`else`, `not`, "
+            "`dependentSchemas`, `patternProperties`, `contains`, "
+            "`additionalProperties`, `unevaluatedProperties`, "
+            "`unevaluatedItems`. `#/anyOf/0` names a real schema position, but "
+            "one that applies only to instances taking that branch, so "
+            "following it would commit the resolver to a branch — the guess "
+            "clause 3 refuses when it meets the same keyword on a node. "
+            "`allOf` is not in that set: its branches all apply, so "
+            "`#/allOf/0` resolves. Pointer tokens are percent-decoded then "
+            "RFC 6901 "
             "unescaped, and array indices follow RFC 6901 exactly (`0` or "
             "`[1-9][0-9]*`). Non-local refs, dangling refs, refs into "
             "non-schema positions such as `default`/`examples`/`const`/`enum`, "
@@ -1549,7 +1561,12 @@ class ResponseExtraction(_EndpointModel):
             "6. *Reserved scopes.* `response.headers.*`, `response.status`, "
             "`response.record_count`, `response.records` and "
             "`response.metadata.*` are engine-owned. This document describes "
-            "the BODY only, so those scopes are not resolved against it."
+            "the BODY only, so those scopes are not resolved against it. A "
+            "`response.*` reference naming any OTHER sub-scope is rejected "
+            "rather than skipped: `response.bodyy.next` is not a scope this "
+            "rule leaves alone, it is a typo that resolves to nothing on every "
+            "page. The leading token must likewise name a real resolution "
+            "scope — `responses.body` fails for the same reason."
         ),
     )
     metadata: dict[str, Expression] | None = Field(  # type: ignore[valid-type]
@@ -3338,100 +3355,77 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
     return node
 
 
-# Composition (`_property_contributors` / `materialize_node`) is a DFS over a
-# schema that is a DAG, not a tree: `$defs` entries are routinely reached from
-# several places, and `allOf` multiplies the routes. Expanding each route
-# separately is exponential in depth — a depth-18 diamond took 4.7s and each
-# further level costs ~4x, so a `response.schema` generated from a large
-# OpenAPI document (`PaginatedResponse` -> `allOf[Envelope, Meta]`, both
-# pulling a shared `Base`) hangs the validator, the engine's document load and
-# the conformance kit alike. That shape is the one ADV-ENDP-026's rejection
-# message actively tells authors to write.
+# Composition (`_property_contributors` / `materialize_node`) walks a schema that
+# is a DAG with back-edges, not a tree: `$defs` entries are routinely reached
+# from several places, `allOf` multiplies the routes, and a recursive `$defs` is
+# legal and common. Expanding each route separately is exponential in depth.
 #
-# So both walkers memoize on node identity. Cycles are handled separately from
-# sharing, because they are different problems and a guard for one is not a
-# guard for the other:
+# An earlier attempt memoized per node and refused to cache any result computed
+# under a cycle. That fixed the acyclic case and did nothing for the real one:
+# the "computed under a cycle" flag propagates to every ancestor, so a single
+# back-edge anywhere left the whole walk uncached and exponential again — and
+# slower than no memo at all, because it also paid for the bookkeeping.
 #
-#   * SHARING (a DAG) — the second visit must return the first visit's answer.
-#     That is the cache, and it is what makes the walk linear.
-#   * A CYCLE — re-entering a node still being expanded contributes nothing new,
-#     so it yields the empty result. But that answer is TRUNCATED: it is only
-#     valid inside the cycle that produced it. Caching it would poison every
-#     later visit from outside. So a result computed while any descendant hit a
-#     cycle is returned but never cached.
-#
-# The cache holds the node alongside its result: `id()` is only unique among
-# live objects, and keeping a reference stops a freed node's address being
-# reused for a different one mid-walk.
+# The fix is to stop treating this as a recursive fold at all. What both walkers
+# actually need is the SET of nodes whose declarations unconditionally apply,
+# and that set is just reachability over `allOf` and in-document `$ref` edges.
+# One iterative walk with a visited set computes it in O(V+E); a cycle is
+# nothing special — it is a node already visited, which is exactly the "a cycle
+# contributes nothing the second time" rule stated in the contract. No cache, no
+# truncation flag, no difference between the cyclic and acyclic cases.
 
 
-def _property_contributors(
-    node: dict[str, Any], root: Any
-) -> dict[str, list[Any]]:
+def _composition_chain(node: dict[str, Any], root: Any) -> list[dict[str, Any]]:
+    """Every node whose declarations unconditionally apply to ``node``.
+
+    Document order, ``node`` itself first: its own statements are the most
+    specific, and both callers depend on that position. Follows `allOf`
+    branches and in-document `$ref` targets — the two composition keywords whose
+    contributions always apply. `anyOf`/`oneOf`/`if`-`then`-`else` are
+    conditional and are not followed; a `$ref` INTO one is refused by
+    :func:`resolve_schema_ref`, so a conditional branch is unreachable either
+    way.
+
+    A node already in the chain is skipped, which is what makes a recursive
+    schema terminate and what keeps the walk linear on a shared `$defs`.
+    """
+    ordered: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    def visit(current: Any) -> None:
+        if not isinstance(current, dict) or id(current) in seen:
+            return
+        seen.add(id(current))
+        ordered.append(current)
+        branches = current.get("allOf")
+        if isinstance(branches, list):
+            for branch in branches:
+                visit(branch)
+        ref = current.get("$ref")
+        if isinstance(ref, str):
+            visit(resolve_schema_ref(root, ref))
+
+    visit(node)
+    return ordered
+
+
+def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
     """Every UNCONDITIONAL declaration of each property name, in document order.
 
-    The contributors are ``node.properties``, every object branch of
-    ``node.allOf``, and ``node.$ref``'s in-document target — recursively, since
-    a contributor may carry its own `allOf`/`$ref`. Those are the composition
-    keywords whose contributions ALWAYS apply; `anyOf`/`oneOf`/`if`-`then`-
-    `else` are conditional and are deliberately not collected (see the
-    ambiguity check in :func:`resolve_declared_path`). A `$ref` INTO one of
-    those is refused by :func:`resolve_schema_ref`, so a conditional branch
-    cannot be reached by pointer either.
-
+    The `properties` maps of every node in :func:`_composition_chain`.
     Declarations are deduplicated by equality, so a harmless restatement of the
     same shape in two branches yields one contributor, not two.
     """
-    return _property_contributors_memo(node, root, {}, set())[0]
-
-
-def _property_contributors_memo(
-    node: dict[str, Any],
-    root: Any,
-    cache: dict[int, tuple[Any, dict[str, list[Any]]]],
-    active: set[int],
-) -> tuple[dict[str, list[Any]], bool]:
-    """Memoized worker. Returns ``(contributors, hit_a_cycle)`` — see the note above."""
-    key = id(node)
-    cached = cache.get(key)
-    if cached is not None:
-        return cached[1], False
-    if key in active:
-        return {}, True
-    active.add(key)
-
     contributors: dict[str, list[Any]] = {}
-    truncated = False
-
-    def _absorb(source: dict[str, list[Any]]) -> None:
-        for name, declarations in source.items():
+    for source in _composition_chain(node, root):
+        own = source.get("properties")
+        if not isinstance(own, dict):
+            continue
+        for name, declaration in own.items():
             bucket = contributors.setdefault(name, [])
-            for declaration in declarations:
-                if not any(declaration == seen for seen in bucket):
-                    bucket.append(declaration)
-
-    own = node.get("properties")
-    if isinstance(own, dict):
-        _absorb({name: [declaration] for name, declaration in own.items()})
-    branches = node.get("allOf")
-    if isinstance(branches, list):
-        for branch in branches:
-            if isinstance(branch, dict):
-                sub, sub_truncated = _property_contributors_memo(branch, root, cache, active)
-                truncated = truncated or sub_truncated
-                _absorb(sub)
-    ref = node.get("$ref")
-    if isinstance(ref, str):
-        target = resolve_schema_ref(root, ref)
-        if isinstance(target, dict):
-            sub, sub_truncated = _property_contributors_memo(target, root, cache, active)
-            truncated = truncated or sub_truncated
-            _absorb(sub)
-
-    active.discard(key)
-    if not truncated:
-        cache[key] = (node, contributors)
-    return contributors, truncated
+            if not any(declaration == seen for seen in bucket):
+                bucket.append(declaration)
+    return contributors
 
 
 def _declared_types(declaration: Any) -> set[str] | None:
@@ -3474,6 +3468,12 @@ def _compose_declarations(key: str, declarations: list[Any]) -> Any:
         return declarations[0]
     _refuse_disjoint_types(key, declarations)
     return {"allOf": list(declarations)}
+
+
+#: Stand-in "name" for the whole-node case. `_refuse_disjoint_types`' message is
+#: written for a property name; passing the literal "node" made it read as a
+#: field called `node`, which no document has.
+_MATERIALIZED_NODE = "<this node>"
 
 
 def _refuse_disjoint_types(where: str, sources: list[Any]) -> None:
@@ -3527,6 +3527,31 @@ def effective_properties(
     }
 
 
+def _combine_schema_values(existing: Any, incoming: Any) -> Any:
+    """Fold ``incoming`` into ``existing`` for one key of a materialized node.
+
+    Objects merge recursively — `allOf` and `$ref` are intersections, so BOTH
+    declarations apply and an `allOf` branch that refines `items` must ADD to
+    the base rather than replace it. Overwriting was a real defect: a record
+    shape whose fields came from an inline `properties` map lost them to an
+    `allOf` branch, silently changing the enumerated column set.
+
+    Everything else — scalars AND lists — is last-wins. That is the pre-existing
+    behaviour and it is genuinely lossy for `required` and `enum`, whose true
+    intersection this does not compute. The one lossy case that could produce a
+    confidently-wrong answer, mutually exclusive `type` sets, is refused
+    outright by :func:`_refuse_disjoint_types` before any merging happens.
+    """
+    if isinstance(existing, dict) and isinstance(incoming, dict):
+        merged = dict(existing)
+        for key, value in incoming.items():
+            merged[key] = (
+                _combine_schema_values(merged[key], value) if key in merged else value
+            )
+        return merged
+    return incoming
+
+
 def materialize_node(node: Any, root: Any = None) -> Any:
     """``node`` folded together with the contributors that unconditionally apply.
 
@@ -3555,61 +3580,15 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    return _materialize_memo(node, node if root is None else root, {}, set())[0]
-
-
-def _combine_schema_values(existing: Any, incoming: Any) -> Any:
-    """Fold ``incoming`` into ``existing`` for one key of a materialized node.
-
-    Objects merge recursively (both declarations apply); anything else is
-    last-wins. See :func:`materialize_node` for why combining is required.
-    """
-    if isinstance(existing, dict) and isinstance(incoming, dict):
-        merged = dict(existing)
-        for key, value in incoming.items():
-            merged[key] = (
-                _combine_schema_values(merged[key], value) if key in merged else value
-            )
-        return merged
-    return incoming
-
-
-def _materialize_memo(
-    node: dict[str, Any],
-    root: Any,
-    cache: dict[int, tuple[Any, Any]],
-    active: set[int],
-) -> tuple[Any, bool]:
-    """Memoized worker. Returns ``(materialized, hit_a_cycle)`` — see the note
-    above :func:`_property_contributors`, which uses the identical scheme."""
-    key = id(node)
-    cached = cache.get(key)
-    if cached is not None:
-        return cached[1], False
-    if key in active:
-        # A cycle contributes nothing new; `{}` is the identity for this merge.
-        return {}, True
-    active.add(key)
-
-    sources: list[dict[str, Any]] = []
-    truncated = False
-    ref = node.get("$ref")
-    if isinstance(ref, str):
-        target = resolve_schema_ref(root, ref)
-        if isinstance(target, dict):
-            sub, sub_truncated = _materialize_memo(target, root, cache, active)
-            truncated = truncated or sub_truncated
-            if isinstance(sub, dict):
-                sources.append(sub)
-    branches = node.get("allOf")
-    if isinstance(branches, list):
-        for branch in branches:
-            if isinstance(branch, dict):
-                sub, sub_truncated = _materialize_memo(branch, root, cache, active)
-                truncated = truncated or sub_truncated
-                if isinstance(sub, dict):
-                    sources.append(sub)
-    sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
+    if not isinstance(node, dict):
+        return node
+    document = node if root is None else root
+    # Reversed, so the node's OWN statements land last and win: it is the most
+    # specific declaration. Everything it composes with is folded in underneath.
+    sources = [
+        {k: v for k, v in source.items() if k not in ("$ref", "allOf")}
+        for source in reversed(_composition_chain(node, document))
+    ]
 
     # The same refusal `_compose_declarations` applies to a property name's
     # contributors. Without it the two disagree, and the PERMISSIVE one guards
@@ -3617,7 +3596,7 @@ def _materialize_memo(
     # last-wins yields a tidy `{type: "array"}` that
     # `_validate_records_in_response_schema` accepts, so a record collection no
     # instance can satisfy validates as a good array.
-    _refuse_disjoint_types("node", sources)
+    _refuse_disjoint_types(_MATERIALIZED_NODE, sources)
 
     merged: dict[str, Any] = {}
     for source in sources:
@@ -3625,11 +3604,7 @@ def _materialize_memo(
             merged[name] = (
                 _combine_schema_values(merged[name], value) if name in merged else value
             )
-
-    active.discard(key)
-    if not truncated:
-        cache[key] = (node, merged)
-    return merged, truncated
+    return merged
 
 
 #: Keywords whose presence means "this node MIGHT declare more fields, subject to

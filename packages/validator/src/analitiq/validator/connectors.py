@@ -829,11 +829,29 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
             ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)
         })
         if declared_refs:
-            findings.append(finding(
-                "endpoint-transport-ref", "warning", "/",
-                f"transport_ref {declared_refs!r} not checked: this document was "
-                "validated on its own, so the sibling connector.json's `transports` "
-                "were not available. Validate the connector to resolve it."))
+            # Resolve the sibling connector when the layout gives us one:
+            # `endpoints/{id}.json` sits one level below `connector.json`. The
+            # connector-builder skill validates each endpoint on its own, so a
+            # blind warning here would fire on every pass of its fix loop and
+            # could never be cleared — an alarm that cannot be acted on trains
+            # authors to ignore the id. Only warn when the connector genuinely
+            # is not reachable.
+            sibling = doc_path.parent.parent / "connector.json" if doc_path else None
+            connector_doc = None
+            if sibling is not None and sibling.is_file():
+                connector_doc, load_findings = _load_type_map(sibling)
+                findings.extend(load_findings)
+            if isinstance(connector_doc, dict):
+                findings.extend(_endpoint_transport_ref_findings(
+                    doc, connector_doc.get("transports"),
+                    label=doc_path.name if doc_path else ""))
+            else:
+                findings.append(finding(
+                    "endpoint-transport-ref", "warning", "/",
+                    f"transport_ref {declared_refs!r} not checked: no sibling "
+                    "connector.json was reachable from this document's path, so "
+                    "its `transports` could not be read. Validate the connector "
+                    "to resolve it."))
     if doc_path is not None:
         findings += endpoint_filename_findings(doc, doc_path.name)
     return findings

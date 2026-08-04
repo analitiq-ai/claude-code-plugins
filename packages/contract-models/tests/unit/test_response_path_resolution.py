@@ -978,7 +978,13 @@ class TestCompositionIsLinearNotExponential:
     existing recursion tests only cover CYCLES, which terminate by construction;
     sharing does not."""
 
-    def test_a_deep_diamond_resolves_promptly(self):
+    @pytest.mark.parametrize("back_edge", [False, True], ids=["acyclic", "cyclic"])
+    def test_a_deep_diamond_resolves_promptly(self, back_edge):
+        # BOTH shapes. The first attempt at this fix memoized per node but
+        # refused to cache anything computed under a cycle — which fixed the
+        # acyclic case and left the cyclic one exponential (depth 24 took four
+        # minutes) AND slower than no memo at all. A perf test covering only the
+        # acyclic half passed throughout. The walk must not distinguish them.
         depth = 40
         defs = {}
         for i in range(depth):
@@ -986,7 +992,10 @@ class TestCompositionIsLinearNotExponential:
                                        {"$ref": f"#/$defs/B{i + 1}"}]}
             defs[f"A{i + 1}"] = {"allOf": [{"$ref": f"#/$defs/L{i + 1}"}]}
             defs[f"B{i + 1}"] = {"allOf": [{"$ref": f"#/$defs/L{i + 1}"}]}
-        defs[f"L{depth}"] = {"type": "object", "properties": {"leaf": {"type": "string"}}}
+        leaf = {"type": "object", "properties": {"leaf": {"type": "string"}}}
+        if back_edge:
+            leaf["allOf"] = [{"$ref": "#/$defs/L0"}]  # closes the cycle
+        defs[f"L{depth}"] = leaf
         root = {"type": "object", "$defs": defs, "allOf": [{"$ref": "#/$defs/L0"}]}
 
         started = time.monotonic()
