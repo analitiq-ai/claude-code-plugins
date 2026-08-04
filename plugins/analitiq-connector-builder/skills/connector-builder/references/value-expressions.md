@@ -46,22 +46,40 @@ operation is swept — `pagination` (every `stop_when` operand included),
 slots, and each `params.<name>.default`. For most scopes only the **leading
 token** is checked, so `connection.discovered.nope` passes and resolves empty.
 
-Two `response` sub-scopes are resolved in full (ADV-ENDP-023). A
-`response.body.<path>` must resolve against `response.schema` by declared-path
-resolution to a node that declares a type — `response.body.nope` is an error,
-not a silent one-page sync — and `response.metadata.<key>` must name a key the
-document declares. `response.records` additionally must land on an array node
-(ADV-ENDP-012).
+What is actually proved, by sub-scope. Everything is spelling-checked (a bad
+sub-scope like `response.bodyy` is always an error); only the first two rows
+have their **path** resolved, and only on a read:
 
-The other `response` sub-scopes are checked for spelling only, and cannot be
-more: `response.headers.<name>`, `response.status`, `response.record_count`
-are runtime values the document declares nothing about, so
-`response.headers.X-Made-Up` validates clean and pages once. Trace those
-against the provider's actual response yourself.
+| Ref | Read op | Write op |
+|---|---|---|
+| `response.body.<path>` | resolved against `response.schema`, must declare a type (ADV-ENDP-023) | **not resolved** — see below |
+| `response.metadata.<key>` | must name a declared key | must name a declared key |
+| `response.records.<path>` | spelling only | spelling only |
+| `response.headers.<name>` | spelling only | spelling only |
+| `response.status` | spelling only | spelling only |
+| `response.record_count` | spelling only | **barred** — read-only scope |
+
+So `response.body.nope` in a read pagination block is an error rather than a
+silent one-page sync — but `response.records.next_cursor` and
+`response.headers.X-Made-Up` are not, and cannot be: headers, status and
+record counts are runtime values this document declares nothing about, and the
+`response.records` **scope** is not the `response.records` **field**. (That
+field — the `{ref: response.body.<path>}` selecting the record collection — IS
+resolved, and must land on an array node, ADV-ENDP-012. Referencing
+`response.records.<something>` from a pagination or metadata expression is a
+different thing and is unchecked.)
+
+**A write mode has no `response.schema`**, so nothing under
+`operations.write.<mode>.response` is path-resolved at all: a typo in
+`success_when`, `affected_records` or `error.*` validates clean. That is the
+worst cell in the table — a `success_when` predicate over a ref that resolves
+to nothing holds unconditionally, so every write reports success, including
+the ones whose rejected rows the provider listed. Trace write response refs
+against the provider's real payload yourself.
 
 Wherever it appears, a `response.*` ref in a request slot or a param `default`
-is refused outright, whatever it names: the request is built before the
-response exists, so it could only interpolate to nothing.
+is refused outright, whatever it names and on either operation: the request is
+built before the response exists, so it could only interpolate to nothing.
 
 In a **connector** document (a transport header, an auth template) there is no
 check at all — treat every ref there as unverified and trace it to the

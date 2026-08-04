@@ -95,15 +95,18 @@ do not rely on them, and treat these as author-side discipline:
 
 - **Function names are never checked.** An unregistered or misspelled
   `{"function": …}` passes validation and fails at connect time.
-- **Ref *resolvability* is checked for exactly two things.** A
-  `response.body.<path>` is resolved against `response.schema`, and a
-  `response.metadata.<key>` against the declared keys, so those typos are
-  errors. Nothing else is proved — including other `response` sub-scopes:
-  `response.headers.<name>` is a runtime value, so a made-up header name
-  validates clean. Every remaining scope is checked on its leading token
-  only, and a connector document is not ref-checked at all — so a
-  `connection.discovered.*` ref with no post-auth output that produces it
-  validates clean, on either document.
+- **Ref *resolvability* is checked for exactly two things, one of them
+  read-only.** On a READ, a `response.body.<path>` is resolved against
+  `response.schema`; on either operation, a `response.metadata.<key>` is
+  checked against the declared keys. Those typos are errors. Nothing else is
+  proved, and three cases in particular look proved and are not:
+  `response.records.<path>` and `response.headers.<name>` are spelling-checked
+  only, and a WRITE mode has no `response.schema`, so no write-side
+  `response.body` path is resolved — a `success_when` typo validates clean and
+  the predicate then holds unconditionally. Every remaining scope is checked
+  on its leading token only, and a connector document is not ref-checked at
+  all — so a `connection.discovered.*` ref with no post-auth output that
+  produces it validates clean, on either document.
 - **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**
 
 ## Output
