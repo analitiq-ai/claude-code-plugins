@@ -806,14 +806,53 @@ RENDERERS: dict[str, Callable[[], str]] = {
 }
 
 
-def rendered_block_probe_ids() -> set[str]:
-    """Every probe id a rendered block stands on."""
-    ids = scope_table_probe_ids()
-    ids.update(_SCOPE_GUARANTEES_EXTRA_PROBES)
-    ids.update(_BLIND_SPOT_PROBES)
-    for claim in CLAIMS:
-        ids.update(claim.probes)
+def block_probe_ids(block_id: str) -> set[str]:
+    """The probe ids one block stands on."""
+    if block_id == "scope-guarantees":
+        return scope_table_probe_ids() | set(_SCOPE_GUARANTEES_EXTRA_PROBES)
+    if block_id == "validator-blind-spots":
+        return set(_BLIND_SPOT_PROBES)
+    if block_id.startswith("claim:"):
+        return set(CLAIMS_BY_ID[block_id[len("claim:"):]].probes)
+    raise UnknownBlock(block_id)
+
+
+def embedded_block_ids() -> set[str]:
+    """Block ids actually embedded (well-formed marker pair) in some doc."""
+    ids: set[str] = set()
+    for path in generated_docs():
+        for match in _BLOCK_RE.finditer(path.read_text(encoding="utf-8")):
+            ids.add(match.group("id"))
     return ids
+
+
+def rendered_block_probe_ids() -> set[str]:
+    """Every probe id an *embedded* block stands on.
+
+    Counting a renderer's probes unconditionally would let a deleted block
+    keep its probes "referenced" while the prose they pin no longer exists —
+    the vacuity `unreferenced probe(s)` exists to prevent.
+    """
+    ids: set[str] = set()
+    for block_id in embedded_block_ids():
+        ids |= block_probe_ids(block_id)
+    return ids
+
+
+def malformed_marker_docs() -> list[str]:
+    """Docs where a BEGIN marker exists but no well-formed pair matches it.
+
+    An unpaired or typo'd marker silently degrades: `render_text` leaves the
+    region untouched (nothing to substitute) and the sync test sees no diff,
+    so the region becomes hand-editable while still LOOKING generated.
+    """
+    broken: list[str] = []
+    for path in generated_docs():
+        text = path.read_text(encoding="utf-8")
+        begins = text.count("<!-- BEGIN GENERATED:")
+        if begins != len(_BLOCK_RE.findall(text)):
+            broken.append(path.relative_to(REPO_ROOT).as_posix())
+    return broken
 
 
 # ---------------------------------------------------------------------------
@@ -1112,8 +1151,26 @@ def main(argv: list[str]) -> int:
     violations, dangling, stale_waivers = scan()
     referenced = rendered_block_probe_ids() | fence_probe_ids()
     unreferenced = sorted(set(PROBES_BY_ID) - referenced)
+    unembedded = sorted(set(RENDERERS) - embedded_block_ids())
+    broken_markers = malformed_marker_docs()
 
     ok = True
+    if unembedded:
+        ok = False
+        print(
+            f"\nrenderer(s) with no embedded block: {', '.join(unembedded)} — "
+            "a renderer no document embeds is dead code and its probes pin "
+            "nothing; embed the block or delete the renderer.",
+            file=sys.stderr,
+        )
+    if broken_markers:
+        ok = False
+        print(
+            f"\nmalformed generated-block markers in: {', '.join(broken_markers)} "
+            "— a BEGIN marker with no matching END (or a typo'd id) leaves the "
+            "region looking generated while nothing regenerates or checks it.",
+            file=sys.stderr,
+        )
     if stale_docs:
         ok = False
         print(f"\n{len(stale_docs)} document(s) stale: {', '.join(stale_docs)}\n"

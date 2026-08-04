@@ -123,6 +123,125 @@ def test_every_probe_is_referenced() -> None:
     assert not unreferenced, f"unreferenced probes: {unreferenced}"
 
 
+def test_every_renderer_is_embedded_and_renders() -> None:
+    """A renderer no document embeds is dead code whose probes pin nothing.
+
+    This is what actually executes `render_scope_guarantees` and its
+    `_CELL_KINDS` consistency check on every run: the sync test only renders
+    blocks that exist in docs, so without this manifest a deleted marker pair
+    would silence a renderer (and orphan its probes) with everything green.
+    Also fails on a BEGIN marker whose pair is malformed — that region would
+    look generated while nothing regenerates it.
+    """
+    embedded = _REGISTRY.embedded_block_ids()
+    missing = sorted(set(_REGISTRY.RENDERERS) - embedded)
+    assert not missing, f"renderers with no embedded block: {missing}"
+    assert not _REGISTRY.malformed_marker_docs()
+    for block_id, renderer in _REGISTRY.RENDERERS.items():
+        body = renderer()
+        assert body.endswith("\n") and body.strip(), f"{block_id}: bad render"
+
+
+_SPECIMENS = {
+    r"validates?\s+(?:clean|cleanly|with\s+zero\s+findings)": "it validates **clean** today",
+    r"passes?\s+(?:validation|every\s+check)": "the typo passes validation",
+    "still_passes": "a map missing all of these still passes.",
+    r"(?:is|are)\s+(?:not|never)\s+(?:checked|validated|resolved|proved|proven|enforced|caught)":
+        "runnability is not checked for a draft",
+    r"(?:never|nothing)\s+(?:checks?|checked|validates?|rejects?|proves?|enforces?|catch(?:es)?)":
+        "Nothing\nvalidates the function name",
+    r"(?:does|do)\s+not\s+(?:check|validate|resolve|read\s+filter)":
+        "the local validator does **not** resolve column names",
+    r"\bnot\s+checked\b": "consistency is not checked.",
+    r"\bno\s+(?:check\b|backstop|validator\s+(?:checks|will))": "there is no check at all",
+    r"\bunchecked\b": "that path is unchecked",
+    r"spelling[-\s](?:checked|only)": "headers are spelling-checked only",
+    r"\bleading\s+token\b": "checked on its leading token",
+    r"read-?only\s+scope": "barred — read-only scope",
+    r"accepts?\s+nothing\s+else": "path_params accepts nothing else",
+    r"slips?\s+past": "a template slips past it",
+}
+
+
+def test_every_trigger_alternate_matches_a_specimen() -> None:
+    """Each trigger stays individually alive.
+
+    Live prose exercises almost none of them (pinned blocks are skipped before
+    matching), so a broken alternate would silently stop covering that
+    phrasing class for all future prose. One specimen per alternate, matched
+    through `_normalize` exactly as the scanner matches; plus the negative
+    that guards the `still passes` lookahead's intent.
+    """
+    triggers = list(_REGISTRY.CLAIM_TRIGGERS)
+    assert len(triggers) == len(_SPECIMENS), (
+        "CLAIM_TRIGGERS and the specimen table are out of step — add a "
+        "specimen for the new/changed trigger"
+    )
+    for pattern, specimen in _SPECIMENS.items():
+        import re
+
+        compiled = _REGISTRY._TRIGGER_RE
+        normalized = _REGISTRY._normalize(specimen)
+        assert compiled.search(normalized), f"no trigger matches specimen {specimen!r}"
+        if pattern != "still_passes":
+            assert re.search(pattern, normalized, re.IGNORECASE), (
+                f"specimen {specimen!r} no longer matches its own alternate "
+                f"{pattern!r} — realign the table"
+            )
+    assert not _REGISTRY._TRIGGER_RE.search(
+        _REGISTRY._normalize("aiomysql still passes the deprecated argument")
+    ), "'still passes the …' must stay excluded (an argument, not validation)"
+
+
+def test_scanner_positive_control(monkeypatch, tmp_path: Path) -> None:
+    """The scan's violation path must actually fire — on the right line.
+
+    On a green tree every claim is pinned, so without this control a
+    regression in the trigger regex, block splitting, span mapping, or
+    normalization would turn the gate vacuously green. The line-number assert
+    is what catches a `_normalize` change that drops newlines (violations
+    would then map to the wrong line and pinned-span checks misclassify).
+    """
+    doc = tmp_path / "plugins" / "synthetic.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        "# Synthetic\n"
+        "\n"
+        "An innocent paragraph.\n"
+        "\n"
+        "A bold claim: response typos are **not checked** on reads.\n"
+        "\n"
+        "<!-- PROBE: read-body-path-typo -->\n"
+        "A fenced claim: this one is not checked either.\n"
+        "\n"
+        "<!-- BEGIN GENERATED: claim:tls-coherence-unchecked -->\n"
+        "inside a block: validates clean.\n"
+        "<!-- END GENERATED: claim:tls-coherence-unchecked -->\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_REGISTRY, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(_REGISTRY, "_scannable_docs", lambda: [doc])
+    monkeypatch.setattr(
+        _REGISTRY, "WAIVERS",
+        (_REGISTRY.Waiver("plugins/synthetic.md", "no such sentence", "stale on purpose"),),
+    )
+
+    violations, dangling, stale = _REGISTRY.scan()
+    assert [(v.line, v.text) for v in violations] == [(5, "are not checked")], (
+        f"expected exactly the unpinned claim on line 5, got "
+        f"{[(v.line, v.text) for v in violations]}"
+    )
+    assert not dangling
+    assert [w.contains for w in stale] == ["no such sentence"]
+
+    with pytest.raises(_REGISTRY.UnknownBlock):
+        _REGISTRY.render_text(
+            "<!-- BEGIN GENERATED: no-such-block -->\nx\n"
+            "<!-- END GENERATED: no-such-block -->",
+            "synthetic",
+        )
+
+
 def test_probe_expectations_are_well_formed() -> None:
     """`expect="error"` requires a message pattern; others must not carry one."""
     for probe in _REGISTRY.PROBES:
