@@ -129,6 +129,7 @@ EXPECTED_VALIDATOR_IDS = {
     "endpoint-filename",
     "endpoint-id-unique",
     "endpoint-id-locator",
+    "endpoint-transport-ref",
     "embedded-json-schema",
 }
 # Resolution scopes a `ref` / `${...}` placeholder may lead with — restated as the

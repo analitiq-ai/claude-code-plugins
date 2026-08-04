@@ -23,7 +23,11 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from dataclasses import dataclass
+from enum import Enum
+from collections.abc import Iterator, Sequence
 from typing import Annotated, Any, Literal, Union, get_args
+from urllib.parse import unquote
 
 from pydantic import (
     ConfigDict,
@@ -391,6 +395,11 @@ class Param(_EndpointModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "Param":
+        # `default` IS an expression tree, but it is swept by the OPERATION, not
+        # here: `Param` is shared by reads and writes and cannot tell which it is
+        # in, so a sweep here reported a paging consequence to write authors and
+        # could not reach `response.schema` for declared-path resolution. See
+        # `_sweep_expression_sites`.
         if _collect_singleton_values(self.default, "from_input"):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
@@ -899,6 +908,20 @@ _REQUEST_SCHEMA_RULES: dict[str, Any] = {
 }
 
 
+#: Request fields that carry author-written value expressions, and so must be
+#: swept. Stated once because both operations build their site tables from it:
+#: dropping a slot from one table and not the other is how `request.path_params`
+#: came to be checked on reads and not on writes. `_EXPRESSION_SLOTS_ARE_COMPLETE`
+#: pins it against the models, so a new expression-carrying request field cannot
+#: be added without either landing here or failing the suite.
+_REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
+    "path_params",
+    "headers",
+    "query",
+    "body",
+)
+
+
 class _RequestBase(AdvisoryValidated, _EndpointModel):
     """Common request fields shared by read and write operations."""
 
@@ -906,7 +929,34 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
 
     transport_ref: str | None = Field(
         default=None,
-        description="Named transport this operation dispatches through; defaults to `default_transport`.",
+        description=(
+            "Named transport this operation dispatches through; defaults to "
+            "`default_transport`. **Containment** (spec: §Transport Selection) "
+            "has two halves, and they are guaranteed differently. "
+            "(1) NAME: the value must be one the sibling `connector.json` "
+            "declares in `transports` — a request dispatches only through a "
+            "transport the connector declares. This half is checked at author "
+            "time by the validator's `endpoint-transport-ref` check (the "
+            "endpoint and the connector are separate documents, so no "
+            "single-document model validator can see both sides). It is an "
+            "ERROR only when the sibling `connector.json` is in hand; "
+            "validating an endpoint file whose connector is not reachable "
+            "emits a warning saying the name was not checked, because a check "
+            "that cannot see the other document cannot refuse the name. "
+            "(2) ORIGIN: the intended rule is that every URL this request "
+            "produces, including a next-page link followed from "
+            "`pagination.link.next_url`, lands on the origin of a declared "
+            "transport. **This half is enforced by nothing today** — not by "
+            "this contract, not by `analitiq-validator`, and not by the engine "
+            "as it stands: the engine opens ONE session at connect time from "
+            "`default_transport` and pins the read path to that single origin, "
+            "the write path has no origin guard at all, and no production call "
+            "site selects a transport per operation. So declaring a second "
+            "transport does NOT today make a second origin reachable — a "
+            "next-page link that leaves the connection origin is refused. "
+            "Stated here as the contract's intent, not as a guarantee; "
+            "implementing it is analitiq-engine#454 / #124."
+        ),
     )
     path: str = Field(
         ...,
@@ -916,7 +966,19 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
     )
     path_params: dict[str, Any] | None = Field(
         default=None,
-        description="Bindings for `{name}` placeholders in `path`. Values are `{from_param}` expressions.",
+        description=(
+            "Bindings for `{name}` placeholders in `path`. Each value is a "
+            "`{from_param: <name>}` expression naming a declared `in: path` "
+            "param. `{from_input: ...}` is NOT permitted here on a read "
+            "operation — no record is in scope when a read request is built "
+            "(the write form is documented on the write request's own "
+            "`path_params`). **Encoding is engine-owned**: the engine "
+            "percent-encodes each substituted value as ONE path segment, so a "
+            "binding must not wrap its value in `url_encode` or "
+            "`base64_encode` — that double-encodes (`a b` arrives as "
+            "`a%2520b`) and the provider 404s or matches the wrong resource. "
+            "Spec: §Request Parameter Binding."
+        ),
     )
     headers: dict[str, Any] | None = Field(
         default=None,
@@ -1007,6 +1069,30 @@ class WriteRequest(_RequestBase):
     method: Literal["POST", "PUT", "PATCH"] = Field(
         ..., description="Write HTTP method (closed v1 enum).",
     )
+    # Redeclared solely to carry the write-side description. A write is the one
+    # place a record IS in scope when the request is built, so `path_params`
+    # admits a second binding form here that `_RequestBase` refuses.
+    path_params: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Bindings for `{name}` placeholders in `path`. A value is either "
+            "`{from_param: <name>}`, naming a declared `in: path` param that "
+            "must itself carry a `default` (a write param has no other source, "
+            "so a sourceless one can never resolve), or "
+            '`{from_input: "record.<dotted>"}`, which reads one field of the '
+            "record being written (`PATCH /contacts/{id}`) and declares no "
+            "param at all. `record` and `records[.<dotted>]` are refused — a "
+            "path segment carries exactly one value — and the field a "
+            "`record.<dotted>` binding addresses must be declared in this "
+            "mode's `input.schema`. A `from_input` path_param is mutually "
+            "exclusive with `batching`: a multi-record request has no single "
+            "record to take the segment from. **Encoding is engine-owned**: "
+            "the engine percent-encodes each substituted value as ONE path "
+            "segment, so a binding must not wrap its value in `url_encode` or "
+            "`base64_encode` — that double-encodes. Spec: §Request Parameter "
+            "Binding."
+        ),
+    )
     body: Any | None = Field(
         default=None,
         description="JSON request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
@@ -1017,17 +1103,25 @@ class WriteRequest(_RequestBase):
 # lists of schemas). Used by the arrow_type walker to recurse only through
 # structural positions — never through `default`, `examples`, `const`, etc.,
 # which can legally carry arbitrary user data shaped like a schema.
-_JSON_SCHEMA_SUBSCHEMA_KEYS: frozenset[str] = frozenset({
+JSON_SCHEMA_SUBSCHEMA_KEYS: frozenset[str] = frozenset({
     "properties", "patternProperties", "$defs", "definitions",
     "dependentSchemas",
 })
-_JSON_SCHEMA_LIST_OF_SCHEMA_KEYS: frozenset[str] = frozenset({
+JSON_SCHEMA_LIST_OF_SCHEMA_KEYS: frozenset[str] = frozenset({
     "allOf", "anyOf", "oneOf", "prefixItems",
 })
-_JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
+JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
     "items", "contains", "additionalProperties", "propertyNames",
     "unevaluatedItems", "unevaluatedProperties",
     "not", "if", "then", "else",
+    # 2020-12 §8.5. An annotation rather than an assertion, but it IS a schema
+    # position: a subtree here would otherwise escape both walkers below, which
+    # is the one thing the shared sets exist to prevent. Draft-07 `dependencies`
+    # is deliberately absent — 2020-12 does not define it, so a conformant
+    # validator never applies its subtree at all (it is inert data, like
+    # `default`), and treating its property-name-array form as a schema map
+    # would reject legal draft-07 shapes.
+    "contentSchema",
 })
 
 
@@ -1178,21 +1272,21 @@ def _validate_arrow_type_in_json_schema(
     # Each traversal always re-enters the walker so its entry-point bool/dict
     # check (above) runs on every visited slot — that's the only place
     # malformed schema positions (e.g. `items: "Int64"`) get surfaced.
-    for key in _JSON_SCHEMA_SUBSCHEMA_KEYS:
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
         child = schema.get(key)
         if isinstance(child, dict):
             for sub_key, sub_schema in child.items():
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}.{sub_key}", errors
                 )
-    for key in _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
         child = schema.get(key)
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}[{idx}]", errors
                 )
-    for key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
         if key not in schema:
             continue
         child = schema[key]
@@ -1207,6 +1301,188 @@ def _validate_arrow_type_in_json_schema(
                 )
         else:
             _validate_arrow_type_in_json_schema(child, f"{path}.{key}", errors)
+
+
+#: Reference keywords the contract does not author, and why each is refused
+#: rather than tolerated. Every one of them would let a subtree escape both
+#: structural walkers, which is the single harm ADV-ENDP-026 exists to close.
+_REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
+    "$id": (
+        "declares a new base URI, which under 2020-12 retargets every `#`-leading "
+        "reference in its subtree at another document — so a reference this "
+        "contract would resolve locally is external to a conformant resolver, and "
+        "the two disagree about which subschema applied. An embedded schema is "
+        "not separately addressable, so it has no use for an identity"
+    ),
+    "$anchor": (
+        "names a plain-name fragment target. This contract addresses subschemas "
+        "only by JSON Pointer (`#/$defs/<name>`), so an anchor is unreachable "
+        "here — declare the shape under `$defs` and point at it"
+    ),
+    "$dynamicRef": (
+        "resolves against the dynamic scope at evaluation time, so its target "
+        "cannot be determined by reading this document; nothing offline can "
+        "annotation-check it or cover it with a type map. Use `$ref` to "
+        "`#/$defs/<name>`"
+    ),
+    "$dynamicAnchor": (
+        "exists only to be a `$dynamicRef` target, and `$dynamicRef` is not "
+        "authorable here"
+    ),
+    "$recursiveRef": (
+        "is the draft 2019-09 spelling of `$dynamicRef` and is refused for the "
+        "same reason. Use `$ref` to `#/$defs/<name>`"
+    ),
+    "$recursiveAnchor": (
+        "is the draft 2019-09 spelling of `$dynamicAnchor` and is refused for "
+        "the same reason"
+    ),
+}
+
+
+def _validate_schema_refs(
+    schema: Any, path: str, errors: list[str], root: Any = None
+) -> None:
+    """Every reference in an embedded schema must be IN-DOCUMENT, must resolve,
+    and must land on a schema.
+
+    ADV-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
+    `$defs` as a recursive position and the arrow_type walker below descends
+    into it, so a `#/$defs/...` target is annotation-checked like any other
+    Several spellings are not, and each fails silently (a count here would rot —
+    this list grew by three after it was first written):
+
+    * a NON-LOCAL ref (`https://…`, `common.json#/…`) names a document that is
+      not here. Nothing in this contract's path is allowed to fetch it — the
+      validator runs offline by design, the engine resolves the endpoint
+      document with no network, and the conformance kit executes a read with no
+      network. So the target is never annotation-checked, never covered by the
+      connector's type map, and never seen by anything that could object. The
+      subtree simply is not validated, and the author is told nothing.
+    * a DANGLING local ref (`#/$defs/Typo`) points at nothing. It asserts no
+      constraint, so every instance satisfies it — an "everything passes" hole
+      wearing the shape of a declaration.
+    * a local ref into a NON-SCHEMA position (`#/properties/x/default`). Both
+      walkers deliberately skip `default`/`examples`/`const`/`enum`, because
+      those carry arbitrary user data that can be shaped exactly like a schema.
+      A pointer into one reaches a subtree nothing checked — the same hole as a
+      non-local ref, spelled locally.
+    * the reference keywords in :data:`_REFUSED_REFERENCE_KEYWORDS` (`$id`,
+      `$dynamicRef`, anchors), each of which either moves the base URI out from
+      under the resolver or defers the target to evaluation time.
+
+    Refusing all of them is what makes it safe for declared-path resolution to
+    FOLLOW a `$ref` (see :func:`_property_contributors`): by the time a path is
+    resolved, every ref it can meet is local, real, and lands on a node both
+    walkers visited — so following one cannot land the resolver on a type
+    nothing verified.
+
+    Walks the same structural positions as
+    :func:`_validate_arrow_type_in_json_schema` — the shared
+    ``_JSON_SCHEMA_*_KEYS`` sets, so the two cannot disagree about what counts
+    as a schema position. Never follows a `$ref` itself: the walk is over the
+    document's own tree, and every local target is already part of it.
+    """
+    # `root` is threaded down so a ref deep in the tree still resolves against
+    # the WHOLE embedded schema — `$defs` lives at the top, and resolving
+    # against the current subtree would call every legitimate ref dangling.
+    root = schema if root is None else root
+    # `true` / `false` are legal whole-schema short-forms carrying no `$ref`.
+    if isinstance(schema, bool) or not isinstance(schema, dict):
+        return
+
+    for keyword, why in _REFUSED_REFERENCE_KEYWORDS.items():
+        if keyword in schema:
+            errors.append(
+                f"{path}.{keyword} is not authorable in an embedded "
+                f"response/input schema: `{keyword}` {why} "
+                "(spec: §API Response Extraction — embedded schema references)"
+            )
+
+    if "$ref" in schema:
+        ref = schema["$ref"]
+        if not isinstance(ref, str):
+            errors.append(
+                f"{path}.$ref must be a string (got {type(ref).__name__}) "
+                "(spec: §API Response Extraction — embedded schema references)"
+            )
+        elif not ref.startswith("#"):
+            errors.append(
+                f"{path}.$ref={ref!r} is not an in-document reference. Embedded "
+                "response/input schemas are resolved offline — by the validator, "
+                "by the engine and by the conformance kit — so a reference out of "
+                "the document can never be fetched and its target would go "
+                "unvalidated. Inline the shape, or put it in this document's "
+                "`$defs` and reference it as '#/$defs/<name>' "
+                "(spec: §API Response Extraction — embedded schema references)"
+            )
+        elif ref != "#" and not ref.startswith("#/"):
+            # A plain-name fragment (`#name`) is an `$anchor` reference. Saying
+            # "dangling" here would be a wrong diagnosis — the anchor may well
+            # be declared — and would send the author looking for a typo that
+            # is not there.
+            errors.append(
+                f"{path}.$ref={ref!r} is a plain-name fragment (an `$anchor` "
+                "reference). This contract addresses subschemas only by JSON "
+                "Pointer: declare the shape under `$defs` and reference it as "
+                "'#/$defs/<name>' "
+                "(spec: §API Response Extraction — embedded schema references)"
+            )
+        elif isinstance(resolve_schema_ref(root, ref), bool):
+            # `true`/`false` is a legal 2020-12 whole-schema short-form and both
+            # structural walkers accept it, so the target IS a schema — it just
+            # is not a dict. Without this branch it fell through to the
+            # non-schema-position message and told the author to move a shape
+            # that was already sitting in `$defs`, sending them hunting for a
+            # `default`/`examples` payload that does not exist.
+            errors.append(
+                f"{path}.$ref={ref!r} resolves to a boolean schema. `true`/`false` "
+                "declare nothing about a value's shape, so a path through this "
+                "reference can never resolve to a typed declaration — inline the "
+                "shape you mean, or point at a subschema that declares one "
+                "(spec: §API Response Extraction — embedded schema references)"
+            )
+        elif not isinstance(resolve_schema_ref(root, ref), dict):
+            if resolve_local_pointer(root, ref) is not _MISSING:
+                errors.append(
+                    f"{path}.$ref={ref!r} points into a non-schema position. "
+                    "`default`, `examples`, `const` and `enum` carry arbitrary "
+                    "data, so nothing validates what is inside them — a "
+                    "reference there is an unchecked subtree wearing the shape "
+                    "of a declaration. Move the shape to this document's "
+                    "`$defs` and reference it as '#/$defs/<name>' "
+                    "(spec: §API Response Extraction — embedded schema references)"
+                )
+            else:
+                errors.append(
+                    f"{path}.$ref={ref!r} does not resolve to a schema in this "
+                    "document. A dangling reference asserts nothing, so every "
+                    "instance satisfies it "
+                    "(spec: §API Response Extraction — embedded schema references)"
+                )
+
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+        child = schema.get(key)
+        if not isinstance(child, dict):
+            continue
+        for sub_key, sub_schema in child.items():
+            _validate_schema_refs(sub_schema, f"{path}.{key}.{sub_key}", errors, root)
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+        child = schema.get(key)
+        if not isinstance(child, list):
+            continue
+        for idx, sub_schema in enumerate(child):
+            _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        if key not in schema:
+            continue
+        child = schema[key]
+        # Draft 2019-09 tuple-form `items: [...]`, as above.
+        if isinstance(child, list):
+            for idx, sub_schema in enumerate(child):
+                _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
+        else:
+            _validate_schema_refs(child, f"{path}.{key}", errors, root)
 
 
 class ResponseExtraction(_EndpointModel):
@@ -1235,17 +1511,118 @@ class ResponseExtraction(_EndpointModel):
         ...,
         description=(
             "Expression that resolves to the iterable record collection. Must "
-            "be a `{ref}` whose path starts with `response.body`."
+            "be a `{ref}` whose path starts with `response.body`. The path "
+            "after `response.body` is subject to declared-path resolution "
+            "against `schema` (defined there) and must land on a node "
+            "declaring `type: array`."
         ),
     )
     schema_: dict[str, Any] = Field(
         ...,
         alias="schema",
-        description="JSON Schema Draft 2020-12 document describing the full response body.",
+        description=(
+            "JSON Schema Draft 2020-12 document describing the full response "
+            "body.\n"
+            "\n"
+            "**Declared-path resolution.** Every `response.body[.<path>]` this "
+            "endpoint reads — `records` above, each replication "
+            "`cursor_field` and `pagination.keyset.order_by_field` (both "
+            "resolved relative to the record shape but against this document as "
+            "root), and every `{ref}` and `${...}` placeholder inside "
+            "`pagination`, `response.metadata`, the `request` "
+            "`path_params`/`headers`/`query`/`body` slots and every "
+            "`params.<name>.default` — must "
+            "resolve against this document by the following algorithm. It is "
+            "stated in full because the validator, the engine and the "
+            "conformance kit must all reproduce it identically.\n"
+            "\n"
+            "1. *Declaration.* A segment resolves when the current node "
+            "declares it under `properties`, counting the declarations "
+            "contributed by every object branch of `allOf` and by the target "
+            "of an in-document `$ref`, applied recursively (a cycle "
+            "contributes nothing the second time it is met). Those are the "
+            "keywords whose contributions always apply.\n"
+            "2. *Composition.* Contributors declaring the same name compose "
+            "into one declaration: identical declarations collapse, differing "
+            "ones fold into an `allOf` (an `allOf` branch narrowing a base "
+            "declaration is the idiom `allOf` exists for). Composition fails on "
+            "a contradiction that can be PROVED, and only then: when the "
+            "contributors' `type` sets are provably disjoint, so no instance "
+            "could satisfy all of them, and when an `allOf` branch is the "
+            "boolean schema `false`, which no instance satisfies and which "
+            "therefore empties the whole intersection. The disjoint-type test "
+            "runs for the name "
+            "being resolved, and again on the node a path finally lands on "
+            "(and on a records array's record shape), because a terminal node "
+            "assembled from contradictory `allOf`/`$ref` sources is unsatisfiable "
+            "whether or not any further segment is read from it. Folding a node "
+            "together with the sources that unconditionally apply — its `$ref` "
+            "target and `allOf` branches, that order, itself last — is how any "
+            "consumer reads `type`/`items`/`properties` off it.\n"
+            "3. *Refusal to guess.* Nothing else declares a segment. If a "
+            "segment is absent and the node carries `anyOf`, `oneOf`, "
+            "`if`/`then`/`else`, `patternProperties`, `dependentSchemas`, a "
+            "schema-valued `additionalProperties`/`unevaluatedProperties`, or "
+            "a `$ref` that does not resolve, the path is not statically "
+            "resolvable and the document is rejected — declare the segment "
+            "under `properties`. With none of those present the segment is "
+            "simply undeclared (the typo case). A node declaring BOTH the "
+            "segment and one of those keywords resolves through `properties`; "
+            "the ambiguity check runs only on a miss.\n"
+            "4. *Typedness.* A node any checked `response.body` path resolves "
+            "to — in `pagination`, in `response.metadata`, or in a `request` "
+            "`headers`/`query`/`body` slot — must declare a `type` (or a "
+            "`native_type`/`arrow_type` pair). "
+            "A declaration that says nothing leaves whatever plants a value "
+            "there to invent its type, which is what decides whether an "
+            "ordering comparison in `stop_when` raises.\n"
+            "5. *References.* Every `$ref` in this document must be an "
+            "in-document JSON Pointer (`#`, or `#/…`) whose EVERY token — the "
+            "last one included — is an unconditionally-applied schema position. "
+            "Exactly eight keywords qualify: `properties`, `$defs`, "
+            "`definitions` as maps; `allOf`, `prefixItems` as lists; `items`, "
+            "`propertyNames`, `contentSchema` singly. Every OTHER keyword this "
+            "document's `JsonSchemaPropertyNode` constrains — `anyOf`, `oneOf`, "
+            "`if`/`then`/`else`, `not`, `dependentSchemas`, `patternProperties`, "
+            "`contains`, `additionalProperties`, `unevaluatedProperties`, "
+            "`unevaluatedItems` — applies conditionally, and a pointer may "
+            "neither cross one NOR END ON one. `#/anyOf/0` names a real schema "
+            "position, but one that applies only to instances taking that "
+            "branch, so following it would commit the resolver to a branch — "
+            "the guess clause 3 refuses when it meets the same keyword on a "
+            "node. `allOf` is not in that set: its branches all apply, so "
+            "`#/allOf/0` resolves. Pointer tokens are percent-decoded then "
+            "RFC 6901 "
+            "unescaped, and array indices follow RFC 6901 exactly (`0` or "
+            "`[1-9][0-9]*`). Non-local refs, dangling refs, refs into "
+            "non-schema positions such as `default`/`examples`/`const`/`enum`, "
+            "refs whose target is a boolean schema (`true`/`false` declare "
+            "nothing about a value's shape, so no path through them can reach a "
+            "typed declaration), and the `$id`, `$anchor`, "
+            "`$dynamicRef`/`$dynamicAnchor`, "
+            "`$recursiveRef`/`$recursiveAnchor` keywords are all refused: "
+            "nothing on the offline validate/author/execute path can fetch a "
+            "second document or retarget a base URI, and a subtree reached "
+            "that way would escape every annotation check.\n"
+            "6. *Reserved scopes.* `response.headers.*`, `response.status`, "
+            "`response.record_count`, `response.records` and "
+            "`response.metadata.*` are engine-owned. This document describes "
+            "the BODY only, so those scopes are not resolved against it. A "
+            "`response.*` reference naming any OTHER sub-scope is rejected "
+            "rather than skipped: `response.bodyy.next` is not a scope this "
+            "rule leaves alone, it is a typo that resolves to nothing on every "
+            "page. The leading token must likewise name a real resolution "
+            "scope — `responses.body` fails for the same reason."
+        ),
     )
     metadata: dict[str, Expression] | None = Field(  # type: ignore[valid-type]
         default=None,
-        description="Optional named metadata extractions; each value is a value expression.",
+        description=(
+            "Optional named metadata extractions; each value is a value "
+            "expression. Every `response.body[.<path>]` any of them "
+            "references is subject to declared-path resolution against "
+            "`schema`."
+        ),
     )
 
     @model_validator(mode="after")
@@ -1270,6 +1647,7 @@ class ResponseExtraction(_EndpointModel):
                     )
         errors: list[str] = []
         _validate_arrow_type_in_json_schema(self.schema_, "response.schema", errors)
+        _validate_schema_refs(self.schema_, "response.schema", errors)
         if errors:
             raise ValueError("; ".join(errors))
         return self
@@ -1284,10 +1662,15 @@ class WriteInput(_EndpointModel):
         description="JSON Schema Draft 2020-12 for one provider-facing destination record.",
     )
 
+    # Named `_validate` (not `_validate_arrow_types`) because it now enforces two
+    # rules — ADV-ENDP-006's arrow_type walk and ADV-ENDP-026's `$ref` walk — and
+    # the advisory registry needs ONE enforcer name that exists on both this model
+    # and `ResponseExtraction` for the pair of rules they share.
     @model_validator(mode="after")
-    def _validate_arrow_types(self) -> "WriteInput":
+    def _validate(self) -> "WriteInput":
         errors: list[str] = []
         _validate_arrow_type_in_json_schema(self.schema_, "input.schema", errors)
+        _validate_schema_refs(self.schema_, "input.schema", errors)
         if errors:
             raise ValueError("; ".join(errors))
         return self
@@ -1436,7 +1819,19 @@ class ReadOperation(_EndpointModel):
     request: ReadRequest = Field(...)
     params: dict[str, Param] = Field(default_factory=dict)
     response: ResponseExtraction = Field(...)
-    pagination: Pagination | None = Field(default=None)  # type: ignore[type-arg]
+    pagination: Pagination | None = Field(  # type: ignore[type-arg]
+        default=None,
+        description=(
+            "Pagination strategy. Every `response.body[.<path>]` this block "
+            "references — anywhere in it, including `stop_when` predicates, "
+            "`cursor.next_cursor`, `link.next_url`, `offset.increment_by`, "
+            "`page.initial`/`increment_by` and `keyset.initial`, and including "
+            "refs inside `${...}` templates — is subject to declared-path "
+            "resolution against `response.schema` (defined there). A path that "
+            "does not resolve is a typo that would silently stop paging after "
+            "one page."
+        ),
+    )
     replication: Replication | None = Field(default=None)
 
     @model_validator(mode="after")
@@ -1463,71 +1858,113 @@ class ReadOperation(_EndpointModel):
         # validation (avoiding a second walk of the same JSON Schema).
         records_array_node = _validate_records_in_response_schema(self.response)
         if self.replication is not None:
-            _validate_cursor_fields_in_record_shape(self.replication, records_array_node)
+            _validate_cursor_fields_in_record_shape(
+                self.replication, records_array_node, self.response.schema_
+            )
+
+        # `keyset.order_by_field` is a RECORD path, not a `response.body` ref, so
+        # the sweep below never sees it — `_response_body_segments` returns None
+        # and it is skipped. It needs the record-shape walk instead, the same one
+        # replication `cursor_field` gets: both name a field the engine reads off
+        # a record to advance from, and an undeclared one truncates or repeats
+        # pages exactly as #123 describes. Until this it was guarded by nothing
+        # but `RECORD_FIELD_PATH_PATTERN` — a shape check, not an existence one.
+        if isinstance(self.pagination, KeysetPagination):
+            _validate_record_field_path(
+                self.pagination.keyset.order_by_field,
+                records_array_node,
+                self.response.schema_,
+                where="pagination.keyset.order_by_field",
+            )
+
+        # Last: the records anchor and the cursor fields are the paths an author
+        # is most likely to have got right, so reporting them first keeps the
+        # broader pagination/metadata sweep from masking a simpler error.
+        _validate_response_body_paths(
+            self.response, self.pagination, self.request, self.params
+        )
 
         return self
 
 
-def _json_schema_top_level_fields(schema: dict[str, Any]) -> set[str] | None:
+def _json_schema_top_level_fields(
+    schema: dict[str, Any], root: Any = None
+) -> set[str] | None:
     """Top-level object field names declared by a JSON Schema record shape.
 
     The names a write mode's `conflict_keys` can target. Returns `None` when the
-    schema declares no object `properties` map (e.g. a `$ref` record) —
+    schema declares no object `properties` map even after composition —
     "unknowable, skip the check" — distinct from an explicit empty `properties:
     {}`, which returns an empty set ("zero declared fields", so any conflict key
     is invalid).
+
+    Composed with :func:`materialize_node` against ``root`` (the whole
+    `input.schema`), so a record assembled from `allOf` branches or reached
+    through an in-document `$ref` enumerates the fields it actually declares.
+    Reading `properties` raw made this return `None` for exactly the
+    `$defs` + `$ref` shape ADV-ENDP-026's rejection message tells authors to
+    write — silently disabling both this check and ADV-ENDP-024's membership
+    rule for every document that followed the advice.
     """
-    props = schema.get("properties")
+    materialized = materialize_node(schema, root if root is not None else schema)
+    props = materialized.get("properties") if isinstance(materialized, dict) else None
     return set(props) if isinstance(props, dict) else None
 
 
-def _walk_input_schema_path(schema: dict[str, Any], from_input: str) -> dict[str, Any] | None:
+def _walk_input_schema_path(
+    schema: dict[str, Any], from_input: str, root: Any = None
+) -> dict[str, Any] | None:
     """Resolve the ``input.schema`` subschema a write-body `from_input` addresses.
 
-    ``record`` → the schema itself; ``record.<a>.<b>`` → a ``properties`` walk.
-    Returns ``None`` when the expression is not record-addressed or a segment
-    is not declared — statically unknowable, per the contract's
-    unknowable→skip convention (the engine owns the resolved shape at
-    configure time).
+    ``record`` → the schema itself; ``record.<a>.<b>`` → a composed `properties`
+    walk (:func:`materialize_node` per step, see
+    :func:`_json_schema_top_level_fields`). Returns ``None`` when the expression
+    is not record-addressed or a segment is not declared — statically
+    unknowable, per the contract's unknowable→skip convention (the engine owns
+    the resolved shape at configure time).
     """
+    root = schema if root is None else root
     if from_input == "record":
-        return schema
+        return materialize_node(schema, root)
     if not from_input.startswith("record."):
         return None
-    node = schema
+    node = materialize_node(schema, root)
     for seg in from_input.removeprefix("record.").split("."):
-        props = node.get("properties")
+        props = node.get("properties") if isinstance(node, dict) else None
         if not isinstance(props, dict) or not isinstance(props.get(seg), dict):
             return None
-        node = props[seg]
-    return node
+        node = materialize_node(props[seg], root)
+    return node if isinstance(node, dict) else None
 
 
 def _undeclared_from_input_field(schema: dict[str, Any], from_input: str) -> str | None:
     """The first ``record.<dotted>`` segment the declared ``input.schema``
     provably does not contain, or ``None`` when the path is not checkable.
 
-    Walks ``properties`` maps segment by segment. A segment is a violation only
-    when its parent declares an object ``properties`` map that omits it — a
-    genuinely absent field. A parent that declares no ``properties`` map (a bare
-    ``$ref``, an unconstrained object) is unknowable, so the walk stops and the
-    path is accepted, per the contract's unknowable→skip convention (the engine
-    owns the resolved shape at configure time). Whole-``record`` and ``records``
+    Walks COMPOSED ``properties`` maps segment by segment
+    (:func:`_json_schema_top_level_fields`, so `allOf` branches and in-document
+    `$ref` targets count). A segment is a violation only when its parent
+    declares an object ``properties`` map that omits it — a genuinely absent
+    field. A parent that declares no ``properties`` map even after composition
+    (an unconstrained object) is unknowable, so the walk stops and the path is
+    accepted, per the contract's unknowable→skip convention (the engine owns the
+    resolved shape at configure time). Whole-``record`` and ``records``
     expressions carry no field path and are always ``None``.
     """
     if not from_input.startswith("record."):
         return None
-    node = schema
+    root = schema
+    node: Any = materialize_node(schema, root)
     walked = "record"
     for seg in from_input.removeprefix("record.").split("."):
         if not isinstance(node, dict):
             return None  # a non-object subschema (e.g. a boolean) is not walkable
-        fields = _json_schema_top_level_fields(node)
+        fields = _json_schema_top_level_fields(node, root)
         if fields is None:
             return None
         if seg not in fields:
             return f"{walked}.{seg}"
-        node = node["properties"][seg]
+        node = materialize_node(node["properties"][seg], root)
         walked = f"{walked}.{seg}"
     return None
 
@@ -1624,6 +2061,67 @@ class WriteOperation(_EndpointModel):
     def _wiring(self) -> "WriteOperation":
         _validate_param_wiring(self.request, self.params, allow_from_input=True)
         _validate_param_binding_uniqueness(self.request, self.params)
+
+        # ADV-ENDP-025. Held here rather than in `_validate_param_wiring`
+        # because `batching` is a property of the write MODE, not of the request,
+        # so this is the innermost scope that can see both.
+        # A write has no `response.schema`, so declared-path resolution has
+        # nothing to resolve against — but both SCOPE checks apply, and they are
+        # what catches this class. `success_when` is the predicate that decides
+        # whether a write SUCCEEDED: `{"empty": {"ref": "response.bodyy.errors"}}`
+        # resolves to nothing on every response, so `empty` holds unconditionally
+        # and every write reports success, including the ones whose rejected rows
+        # the provider listed in `body.errors`. Partial data loss, green run —
+        # strictly worse than the paging truncation #123 was filed for. The
+        # request slots are swept for the same reason the read side is.
+        write_sites: list[_ExpressionSite] = [
+            _ExpressionSite(
+                where=f"operations.write.request.{slot}",
+                payload=getattr(self.request, slot, None),
+                operation=_OperationKind.WRITE,
+                can_read_response=False,
+            )
+            for slot in _REQUEST_EXPRESSION_SLOTS
+        ]
+        write_sites.append(_ExpressionSite(
+            where="operations.write.response",
+            payload=self.response.model_dump() if self.response is not None else None,
+            operation=_OperationKind.WRITE_RESPONSE,
+            can_read_response=True,
+        ))
+        write_sites += [
+            _ExpressionSite(
+                where=f"operations.write.params[{name!r}].default",
+                payload=param.default,
+                operation=_OperationKind.WRITE,
+                # A param default feeds the REQUEST, so it is built before the
+                # response too.
+                can_read_response=False,
+            )
+            for name, param in self.params.items()
+        ]
+        # `metadata_keys` too: `WriteResponse.metadata` has the identical closed,
+        # author-declared key set, and the harm string for an undeclared key here
+        # is the worst one in the contract — a `success_when` predicate over a ref
+        # that resolves to nothing holds unconditionally, so every write reports
+        # success including the ones whose rejected rows the provider listed.
+        # That message was already written and already selected by
+        # WRITE_RESPONSE; only the check that emits it was wired to the read
+        # sweep alone.
+        _sweep_expression_sites(
+            [s for s in write_sites if s.payload is not None],
+            metadata_keys=frozenset(
+                (self.response.metadata or {}) if self.response is not None else {}
+            ),
+        )
+
+        path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
+        if path_from_inputs and self.batching is not None:
+            raise ValueError(
+                "from_input in request.path_params cannot be combined with batching — "
+                "a path segment takes one record's value and a multi-record request "
+                "has no single record to take it from (spec: §Write Modes)"
+            )
 
         if self.conflict_keys is not None:
             known = _json_schema_top_level_fields(self.input.schema_)
@@ -1735,6 +2233,17 @@ class WriteOperation(_EndpointModel):
                 raise ValueError(
                     f"from_input {fi!r} references undeclared input.schema field "
                     f"{missing!r} (spec: §Cross-Field Validation)"
+                )
+
+        # ADV-ENDP-024: the same membership rule for path_params, reported
+        # against its own site so the author is sent to the binding that is
+        # actually wrong rather than to the body.
+        for fi in path_from_inputs:
+            missing = _undeclared_from_input_field(self.input.schema_, fi)
+            if missing is not None:
+                raise ValueError(
+                    f"request.path_params from_input {fi!r} references undeclared "
+                    f"input.schema field {missing!r} (spec: §Cross-Field Validation)"
                 )
         return self
 
@@ -2053,6 +2562,51 @@ _ALL_EXPRESSION_KEYS: frozenset[str] = _BINDING_KEYS | _VALUE_EXPRESSION_KEYS
 # touches one place — the validator follows automatically.
 _FUNCTION_EXPRESSION_FIELDS: frozenset[str] = frozenset(FunctionExpression.model_fields.keys())
 
+# Callable functions whose whole job is to escape a value for the wire. Naming
+# one inside a `path_params` binding double-encodes, because the engine already
+# percent-encodes each substituted path segment (ADV-ENDP-027). This is a
+# judgement about what each function DOES, not a mechanical subset of the
+# callable catalog — `basic_auth` and `lookup` are equally callable and neither
+# escapes anything — so it is stated here and pinned against the catalog by
+# `test_the_refused_encoders_are_real_catalog_functions`.
+_WIRE_ENCODING_FUNCTIONS: frozenset[str] = frozenset({"url_encode", "base64_encode"})
+
+
+def _collect_function_names(value: Any) -> list[str]:
+    """Every `function` name declared anywhere inside ``value``.
+
+    A function expression can be nested as another expression's `input`, so the
+    check has to reach the whole subtree rather than only its head.
+
+    One subtree is deliberately not reached: a `literal` payload.
+    `resolve_value_expression` returns a literal's contents verbatim
+    (`value_expression.py` — `if "literal" in value: return value["literal"]`),
+    so `{"literal": {"function": "url_encode"}}` is data and nothing is called.
+
+    `x-*` siblings ARE reached, and an earlier revision of this function was
+    wrong to skip them. `resolve_template_deep` walks every key of a request
+    slot, extension keys included: `{"x-why": {"function": "url_encode",
+    "input": "a b"}}` really does resolve to `{"x-why": "a%20b"}`. Whatever the
+    extension namespace is for, the engine executes what is in it, so a rule
+    about what the engine executes must look there too. This matches
+    :func:`_expression_tokens` / ``iter_expression_strings``, which also recurse
+    into `x-*` — a validator should see exactly what the resolver will resolve,
+    no more and no less.
+    """
+    found: list[str] = []
+    if isinstance(value, dict):
+        if "literal" in value:
+            return found
+        name = value.get("function")
+        if isinstance(name, str):
+            found.append(name)
+        for child in value.values():
+            found.extend(_collect_function_names(child))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_collect_function_names(item))
+    return found
+
 
 def _validate_expression_shapes(value: Any, where: str) -> None:
     """Walk ``value``; raise when a dict has expression-like keys but is structurally malformed.
@@ -2093,9 +2647,21 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
                     f"{non_x_others!r}; expressions must be the documented shape "
                     "(spec: §Value Expressions)"
                 )
+            if primary == "literal":
+                # A `literal` payload is opaque data — `resolve_value_expression`
+                # returns it verbatim, and `_collect_singleton_values`,
+                # `_collect_function_names` and `_expression_tokens` all skip it.
+                # So this walker must not RECURSE into it (a provider-shaped
+                # default carrying a field named `template`/`function`/`ref` was
+                # otherwise unauthorable with no working escape) — but it must
+                # still CHECK the dict that carries it. Skipping the dict too
+                # accepted `{"ref": "totally.bogus", "literal": 5}`: the resolver
+                # dispatches `literal` before `ref`, so the value went out as 5
+                # and the author's ref was silently inert.
+                return
             # Recurse into the expression's argument(s). For `function`, this
             # walks `input` (which may itself be an expression) and `map`'s
-            # values; for `template`/`ref`/`literal` the inner is leaf data.
+            # values; for `template`/`ref` the inner is leaf data.
             for v_inner in value.values():
                 _validate_expression_shapes(v_inner, f"{where}.<{primary}>")
             return
@@ -2127,11 +2693,24 @@ def _matches_singleton(value: Any, key: str) -> bool:
 
 
 def _collect_singleton_values(value: Any, key: str) -> list[str]:
-    """Walk ``value``; return every string from a ``{key: str}`` singleton dict (x-* tolerant)."""
+    """Walk ``value``; return every string from a ``{key: str}`` singleton dict (x-* tolerant).
+
+    A `literal` payload is NOT walked. `resolve_value_expression` returns a
+    literal's contents verbatim, so a `from_param`/`from_input` inside one is
+    inert data, not a binding — the engine never resolves it. Walking in made
+    `{"literal": {"from_input": "record.id"}}` satisfy the "this placeholder has
+    a binding" test in `_validate_param_wiring`, pass the `record.<dotted>`
+    shape check, pass the `input.schema` membership check, and then put the
+    literal dict itself on the wire as the path segment. A wrong URL with no
+    error anywhere — the shape #125 was filed to eliminate, re-entering through
+    the door this PR opened.
+    """
     found: list[str] = []
     if isinstance(value, dict):
         if _matches_singleton(value, key):
             found.append(value[key])
+            return found
+        if "literal" in value:
             return found
         for v in value.values():
             found.extend(_collect_singleton_values(v, key))
@@ -2163,17 +2742,33 @@ def _has_disallowed_dynamic_refs(value: Any) -> str | None:
     return None
 
 
+def _expression_tokens(value: Any) -> Iterator[str]:
+    """Yield every resolution token reachable in ``value``, stripped like the
+    resolver strips before lookup.
+
+    A token is a whole `{ref}` path or one `${...}` placeholder key inside a
+    template — the two things that address the resolution scopes. Parsed with
+    the shared resolver grammar (``iter_expression_strings``), so refs nested in
+    ``Any``-typed slots and bare-string templates are reached while protected
+    ``literal`` subtrees are skipped: the validators see exactly what the
+    resolver will resolve, no more and no less.
+    """
+    for kind, s in iter_expression_strings(value):
+        if kind == "ref":
+            yield s.strip()
+        else:
+            yield from template_placeholders(s)
+
+
 def _first_unscoped_expression(value: Any) -> str | None:
     """Return the first ref or `${...}` template placeholder whose leading token
     is not a known resolution scope, or ``None``. Complements ``RefExpression``'s
     published ``pattern`` (typed nodes) by reaching refs *and* templates buried in
     ``Any``-typed request slots, parsed via the shared resolver grammar
     (``iter_expression_strings`` skips protected ``literal`` subtrees)."""
-    for kind, s in iter_expression_strings(value):
-        tokens = [s] if kind == "ref" else template_placeholders(s)
-        for token in tokens:
-            if not _has_known_scope(token):
-                return token
+    for token in _expression_tokens(value):
+        if not _has_known_scope(token):
+            return token
     return None
 
 
@@ -2194,20 +2789,89 @@ def _validate_param_wiring(
     _validate_expression_shapes(request.query, "request.query")
     _validate_expression_shapes(getattr(request, "body", None), "request.body")
 
-    for where, value in (
-        ("request.path_params", request.path_params),
+    # `path_params` is a from_input site on WRITE operations only (#125): a REST
+    # write addresses one record by its own key (`PATCH /contacts/{id}`), and the
+    # id lives in the record, not in a declared param. On a read there is no
+    # record in scope at request time, so the original ban stands unchanged —
+    # same message, same site.
+    banned_from_input_sites: list[tuple[str, Any]] = []
+    if not allow_from_input:
+        banned_from_input_sites.append(("request.path_params", request.path_params))
+    banned_from_input_sites += [
         ("request.headers", request.headers),
         ("request.query", request.query),
-    ):
+    ]
+    for where, value in banned_from_input_sites:
         if _collect_singleton_values(value, "from_input"):
             raise ValueError(
-                f"from_input is invalid in {where}; it is allowed only in "
-                "operations.write.<mode>.request.body (spec: §Cross-Field Validation)"
+                f"from_input is invalid in {where}; on a write it is allowed in "
+                "operations.write.<mode>.request.body and, as "
+                "`record.<field>`, in operations.write.<mode>.request.path_params "
+                "— nowhere on a read (spec: §Cross-Field Validation)"
             )
 
     for placeholder, expr in (request.path_params or {}).items():
+        # ADV-ENDP-027. Percent-encoding a path segment is the ENGINE's job, and
+        # it does it unconditionally. An author reaching for `url_encode` here
+        # is not adding safety, they are adding a second pass: a record id
+        # containing `/` or a space goes on the wire as `a%2520b`, and the
+        # provider 404s or matches the wrong resource. Nothing downstream can
+        # tell that apart from a value that genuinely contained `%25`, so it is
+        # refused at authoring time. Same shape as the idempotency refusals
+        # above: the value is engine-owned, so the document does not get to
+        # produce it.
+        for function_name in _collect_function_names(expr):
+            if function_name in _WIRE_ENCODING_FUNCTIONS:
+                raise ValueError(
+                    f"request.path_params[{placeholder!r}] must not apply "
+                    f"{function_name!r}: the engine percent-encodes each "
+                    "substituted path segment, so encoding it here sends the "
+                    "value double-escaped. Bind the raw value "
+                    "(spec: §Request Parameter Binding)"
+                )
+
+        from_inputs = (
+            _collect_singleton_values(expr, "from_input") if allow_from_input else []
+        )
+        for from_input in from_inputs:
+            # A path segment carries ONE value. Only `record.<dotted>` addresses
+            # one; the batch forms address many and the bare record addresses a
+            # structure. Each is rejected with the reason it cannot work, so the
+            # author is not left guessing which spelling was meant.
+            if from_input == "record":
+                raise ValueError(
+                    f"request.path_params[{placeholder!r}] cannot bind "
+                    "`from_input: 'record'` — a whole record is not a single path "
+                    "segment; address one field as `record.<dotted>` "
+                    "(spec: §Request Parameter Binding)"
+                )
+            if from_input == "records" or from_input.startswith("records."):
+                raise ValueError(
+                    f"request.path_params[{placeholder!r}] cannot bind `from_input: "
+                    f"{from_input!r}` — a batch has no single value for a path "
+                    "segment (spec: §Request Parameter Binding)"
+                )
+            if not from_input.startswith("record.") or not RECORD_FIELD_PATH_RE.match(
+                from_input.removeprefix("record.")
+            ):
+                # The dotted REMAINDER must be a real field path, not merely
+                # start with `record.`. Without the pattern check `"record."`
+                # and `"record..id"` passed here, then passed the input.schema
+                # membership check too (an empty segment is vacuously "not
+                # provably absent"), and bound a URL segment to no field at
+                # all — #125's own failure mode, re-entering through the door
+                # this rule opened. Same regex the contract already uses for
+                # every other dotted record path.
+                raise ValueError(
+                    f"request.path_params[{placeholder!r}] from_input value "
+                    f"{from_input!r} must be `record.<dotted>` "
+                    "(spec: §Request Parameter Binding)"
+                )
+
         names = _collect_singleton_values(expr, "from_param")
-        if not names:
+        # A `from_input` path_param binds the record directly and declares no
+        # param, so it satisfies the "must be a binding" requirement on its own.
+        if not names and not from_inputs:
             raise ValueError(
                 f"request.path_params[{placeholder!r}] must be a `{{from_param: <name>}}` expression "
                 "(spec: §Request Parameter Binding)"
@@ -2223,6 +2887,25 @@ def _validate_param_wiring(
                 raise ValueError(
                     f"request.path_params[{placeholder!r}] binds to param {name!r} which has "
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
+                )
+            # ADV-ENDP-028, on WRITES only. A write param has exactly one
+            # source: its own `default`. `operators` makes a param
+            # stream-filterable and `controlled_by` hands it to
+            # pagination/replication — both read-side, neither reachable from a
+            # write. So a write path param with no `default` provably cannot
+            # resolve, and the placeholder it fills can never be substituted.
+            # That is issue #125's headline document: contract-valid, and dead
+            # at the engine handshake. It is refused here, naming the binding
+            # that replaces it. Reads keep the old latitude: a read path param
+            # can be supplied by a stream filter.
+            if allow_from_input and param.default is None:
+                raise ValueError(
+                    f"request.path_params[{placeholder!r}] binds to param {name!r}, "
+                    "which declares no `default` — on a write operation a param "
+                    "has no other source, so the placeholder can never be "
+                    "substituted. Give the param a `default`, or bind the "
+                    'placeholder to the record with `{"from_input": '
+                    '"record.<field>"}` (spec: §Request Parameter Binding)'
                 )
 
     for header_name, value in (request.headers or {}).items():
@@ -2288,7 +2971,8 @@ def _validate_param_wiring(
         from_inputs = _collect_singleton_values(body, "from_input")
         if not allow_from_input and from_inputs:
             raise ValueError(
-                "from_input is allowed only in write request bodies "
+                "from_input is allowed only on write operations — in the request "
+                "body, or as `record.<field>` in request.path_params "
                 "(spec: §Cross-Field Validation)"
             )
         # Disjoint cases: 'record', 'records', or 'record.<dotted>'. Anything
@@ -2351,6 +3035,110 @@ def _validate_pagination_wiring(pagination: Any, params: dict[str, Param]) -> No
             )
 
 
+def _declares_a_type(node: Any) -> bool:
+    """Whether a resolved node says what kind of value lives there.
+
+    `type` is the JSON Schema statement; the `native_type`/`arrow_type` pair is
+    the contract's own, and either answers the question ADV-ENDP-023 asks.
+    """
+    if not isinstance(node, dict):
+        return False
+    if _declared_types(node):
+        return True
+    return node.get("native_type") is not None and node.get("arrow_type") is not None
+
+
+def _validate_response_body_paths(
+    response: ResponseExtraction,
+    pagination: Any,
+    request: Any = None,
+    params: dict[str, "Param"] | None = None,
+) -> None:
+    """ADV-ENDP-023 (#123): every `response.body[.<path>]` a read operation reads
+    OUTSIDE `response.records` must resolve against `response.schema`.
+
+    `response.records` was already anchored to the declared schema; pagination
+    and `response.metadata` were not, so a typo'd `response.body.nextt_page`
+    silently resolved to nothing at run time and paging stopped after one page —
+    a wrong-data bug the document could have been rejected for. The same
+    *declared-path resolution* the records anchor uses answers it here, so
+    `response.schema` is the one thing an author has to keep honest.
+
+    Scope, deliberately:
+
+    * The WHOLE `pagination` block is walked rather than the known ref sites
+      (`stop_when` predicates, `cursor.next_cursor`, `link.next_url`,
+      `offset.increment_by`, `page.initial`/`increment_by`, `keyset.initial`).
+      Enumerating sites would mean a new strategy field silently escapes the
+      rule; walking the block cannot.
+    * Every `response.metadata` value, likewise.
+    * Tokens are collected with the shared resolver grammar, so a ref buried in
+      a `${...}` template counts and a `{literal}` payload does not.
+    * Only `response.body[.<path>]` is resolved against `response.schema`.
+      `headers`, `status`, `record_count` and `records` are reserved and
+      engine-owned — the schema describes the BODY, so it has no opinion about
+      them (see :func:`_response_body_segments`).
+    * `metadata` is the exception, and is checked by KEY rather than by path:
+      its key set is closed and declared in this same document, so
+      `response.metadata.<key>` is exactly as checkable as `response.body`.
+      Lumping it in with the genuinely engine-owned scopes let
+      `response.metadata.nope` through — paging stops after page one, run
+      reports success.
+    * The addressed node must declare a `type` (or the `native_type`/
+      `arrow_type` pair). Resolving a path to `{}` would satisfy the letter of
+      the rule and none of its purpose: a conformance kit planting a value at
+      that path still has to invent its type, and the invented type is what
+      decides whether an ordering comparison in `stop_when` raises. A
+      declaration that says nothing is not a declaration.
+    """
+    sites: list[_ExpressionSite] = []
+    if pagination is not None:
+        # `model_dump()` rather than the model: predicates nest arbitrarily deep
+        # inside `stop_when`, and a plain dict is what the shared token walker
+        # knows how to traverse.
+        sites.append(_ExpressionSite(
+            where="pagination",
+            payload=pagination.model_dump(),
+            operation=_OperationKind.READ,
+            # Pagination is the one request-shaping block that legitimately
+            # reads the PREVIOUS page's response.
+            can_read_response=True,
+        ))
+    for key, expression in (response.metadata or {}).items():
+        sites.append(_ExpressionSite(
+            where=f"response.metadata[{key!r}]",
+            payload=expression.model_dump(),
+            operation=_OperationKind.READ,
+            can_read_response=True,
+        ))
+    # The REQUEST slots too. A request is built before the response exists, so a
+    # `response.*` ref there is refused outright — and it was accepted:
+    # `request.query = {"c": {"ref": "response.body.nope"}}` interpolated
+    # nothing, the provider answered 200, and the run went green. #123's failure
+    # at the site where the value actually goes onto the wire.
+    for slot in _REQUEST_EXPRESSION_SLOTS:
+        value = getattr(request, slot, None)
+        if value is not None:
+            sites.append(_ExpressionSite(
+                where=f"request.{slot}",
+                payload=value,
+                operation=_OperationKind.READ,
+                can_read_response=False,
+            ))
+    for name, param in (params or {}).items():
+        if param.default is not None:
+            sites.append(_ExpressionSite(
+                where=f"params[{name!r}].default",
+                payload=param.default,
+                operation=_OperationKind.READ,
+                can_read_response=False,
+            ))
+
+    _sweep_expression_sites(
+        sites, response.schema_, frozenset(response.metadata or {})
+    )
+
+
 def _validate_replication_wiring(replication: Replication, params: dict[str, Param]) -> None:
     """Validate replication param references and ``controlled_by`` markers."""
     referenced: list[str] = []
@@ -2407,26 +3195,1129 @@ def _validate_param_binding_uniqueness(
             )
 
 
-def _walk_response_schema(
-    response_schema: dict[str, Any], dotted_path: str
-) -> tuple[dict[str, Any] | None, str | None]:
-    """Walk JSON Schema following dotted ``properties.<seg>`` chain.
+# ---------------------------------------------------------------------------
+# Declared-path resolution
+#
+# ONE algorithm answers "does this dotted path address something the document
+# declares?" for every site that asks: `response.records`, replication
+# `cursor_field`, and (since #123) every `response.body` path pagination and
+# `response.metadata` read. Before this there were two half-answers — a
+# `properties`-only walk for records/cursor_field and nothing at all for
+# pagination — which is why a typo in a pagination ref could ship.
+#
+# The rule, in one sentence: a segment resolves when the current node declares
+# it under `properties`, counting the declarations `allOf` branches and an
+# in-document `$ref` target contribute, because those always apply.
+#
+# What it deliberately does NOT do is guess. `anyOf` / `oneOf` / `if`-`then`-
+# `else` / `patternProperties` / a dict-valued `additionalProperties` may or may
+# not declare a field depending on the instance; picking one branch would make
+# the contract's answer depend on authoring order. So when a segment is absent
+# and one of those keywords is present, the document is reported as not
+# statically resolvable, with the fix named ("declare it under `properties`")
+# rather than silently accepted or silently rejected as a typo.
+#
+# MONOTONICITY is the load-bearing property, and the ambiguity check is ordered
+# to preserve it: it runs ONLY when the segment was not found. A node that
+# declares BOTH `properties.next` and a `oneOf` still resolves `next` through
+# `properties`, exactly as before. Every path the old walk resolved still
+# resolves, to the same node — so turning this rule on cannot invalidate a
+# document that was honest about its schema. The deliberate exceptions are the
+# two contradictions composition can PROVE, and it refuses only on those:
+# disjoint `type` sets contributed for one name (`_compose_declarations`,
+# `_refuse_disjoint_types`), and an `allOf` branch that is the boolean schema
+# `false` (`_reject_unsatisfiable_branch`, reached from BOTH walkers). `allOf`
+# refinement — a branch narrowing a base declaration — is the idiom `allOf`
+# exists for, so it composes rather than failing.
+# ---------------------------------------------------------------------------
 
-    Returns ``(node, error_segment)``: ``node`` is the resolved subschema or
-    ``None``; ``error_segment`` is the failing segment when traversal stops.
-    Spec: §API Response Extraction — schema traversal rule.
+
+class SchemaResolutionError(ValueError):
+    """Base for the two ways declared-path resolution refuses to answer.
+
+    A caller that only needs "this did not resolve, and here is why" catches
+    this; one that needs the failing position catches
+    :class:`DeclaredPathError` specifically. Both carry ``reason`` — the
+    resolver's half of the message, kept free of site framing so every call
+    site reports the same diagnosis in its own words.
     """
-    node: Any = response_schema
-    if not dotted_path:
-        return (node if isinstance(node, dict) else None), None
-    for seg in dotted_path.split("."):
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        #: The diagnosis, without any site framing.
+        self.reason = reason
+
+
+class DeclarationConflictError(SchemaResolutionError):
+    """Contributors for one name cannot all hold. Carries NO path coordinates.
+
+    Raised wherever composition proves a contradiction — `_refuse_disjoint_types`
+    (from :func:`_compose_declarations`, :func:`_combine_schema_values` and
+    :func:`_materialize`) and `_reject_unsatisfiable_branch` (from BOTH walkers).
+    Each inspects a node or a name; none knows where it sits in anyone's path.
+    :func:`resolve_declared_path` catches every one of them and re-raises a
+    :class:`DeclaredPathError` carrying the segment it was resolving, so a
+    caller may catch only the narrow class.
+
+    A separate class, rather than a :class:`DeclaredPathError` with placeholder
+    coordinates: the placeholder (`segment=None, index=-1`) was constructible,
+    reachable through the public :func:`effective_properties`, and actively
+    misleading — `segments[-1]` silently yields the LAST segment rather than
+    "no segment", so a consumer following the in-repo idiom reported the failure
+    at the wrong end of the path.
+    """
+
+class DeclaredPathError(SchemaResolutionError):
+    """A declared path did not resolve AT A KNOWN POSITION.
+
+    Call sites frame the failure with their own site name (which block the path
+    came from) and re-raise a plain ``ValueError``; the ``reason`` is the
+    resolver's half of the message, kept separate so every site reports the
+    same diagnosis in its own words.
+
+    ``segment`` and ``index`` always locate a real position in the path that was
+    requested — ``index`` is a valid subscript of the caller's ``segments``, so
+    ``".".join(segments[: exc.index + 1])`` is the walked prefix. A failure with
+    no position is a :class:`DeclarationConflictError` instead.
+    """
+
+    def __init__(self, reason: str, segment: str, index: int) -> None:
+        if index < 0:
+            raise ValueError(
+                f"DeclaredPathError.index must be a position in the path, got {index!r}; "
+                "a failure with no position is a DeclarationConflictError"
+            )
+        super().__init__(reason)
+        #: The segment that failed.
+        self.segment = segment
+        #: Position of ``segment`` in the requested path.
+        self.index = index
+
+
+def _unescape_pointer_token(token: str) -> str:
+    """One JSON Pointer reference token, decoded.
+
+    Two decodings, in the order the specs stack them:
+
+    1. **Percent-decoding** (RFC 6901 §6). A `$ref` is a URI-reference and its
+       fragment is the URI-fragment form of a pointer, so `%XX` escapes are the
+       URI layer and are decoded FIRST. This is not cosmetic: a stock
+       JSON-Pointer library decodes them, so skipping it would make this
+       resolver disagree with the engine and the conformance kit about which
+       refs are dangling (`#/$defs/my%20def` would resolve there and not here).
+       A literal `%` in a key must therefore be written `%25`, exactly as the
+       spec requires.
+    2. **Pointer unescaping** (RFC 6901 §3): `~1` is `/` and `~0` is `~`, in
+       that order — reversing them would turn an encoded `~1` into `/` twice.
+    """
+    return unquote(token).replace("~1", "/").replace("~0", "~")
+
+
+def _pointer_array_index(token: str, array: list[Any]) -> int | None:
+    """RFC 6901 §4 array index, or ``None`` when the token is not one.
+
+    The index production is `0 | [1-9][0-9]*` — ASCII digits only, no leading
+    zero, no sign. `str.isdigit()` is NOT that test: it accepts superscripts and
+    other Unicode digit forms that `int()` then rejects with a raw `ValueError`,
+    which would escape a resolver whose callers only catch
+    :class:`DeclaredPathError`. It also accepts `00`, which the spec forbids and
+    which would otherwise resolve while `01` did not — two spellings, two
+    answers.
+    """
+    if token != "0" and not (token[:1] in "123456789" and token.isascii() and token.isdigit()):
+        return None
+    index = int(token)
+    return index if index < len(array) else None
+
+
+def resolve_local_pointer(root: Any, ref: str) -> Any:
+    """Resolve an in-document `$ref` (`#`, `#/a/b`) to its node, or ``_MISSING``.
+
+    The raw RFC 6901 walk over the document. Returns the sentinel — not
+    ``None`` — because ``None`` is a legal thing to find at a JSON pointer and
+    "found null" must not read as "not found".
+
+    Three rules a re-implementation must match, stated because a stock library
+    settles them differently or not at all:
+
+    * tokens are percent-decoded then pointer-unescaped
+      (:func:`_unescape_pointer_token`);
+    * array indices follow RFC 6901 §4 exactly (:func:`_pointer_array_index`);
+    * a plain-name fragment (`#name`) resolves to nothing here. It is an
+      `$anchor` reference, and this contract does not author anchors — the
+      guard rejects both the anchor declaration and the reference to it with
+      their own message, so an author is never told a working anchor is
+      "dangling".
+
+    A non-local `ref` (anything not starting with `#`) is never resolved here:
+    the contract refuses those outright (:func:`_validate_schema_refs`), because
+    nothing in the offline validate/author/execute path can fetch them.
+
+    This walk is position-blind: it will happily land inside a `default` or an
+    `examples` payload. Everything that *follows* a ref goes through
+    :func:`resolve_schema_ref`, which does not.
+    """
+    if not isinstance(ref, str) or not ref.startswith("#"):
+        return _MISSING
+    node: Any = root
+    fragment = ref[1:]
+    if not fragment:
+        return node
+    if not fragment.startswith("/"):
+        return _MISSING
+    for token in fragment[1:].split("/"):
+        key = _unescape_pointer_token(token)
+        if isinstance(node, dict):
+            if key not in node:
+                return _MISSING
+            node = node[key]
+        elif isinstance(node, list):
+            index = _pointer_array_index(key, node)
+            if index is None:
+                return _MISSING
+            node = node[index]
+        else:
+            return _MISSING
+    return node
+
+
+#: Schema positions a JSON Pointer must not CROSS. Each holds a real subschema,
+#: but one that applies only to some instances — a branch of a choice, an arm of
+#: a condition, a rule for names or extras the document did not name outright.
+#: A pointer that lands inside one addresses a conditional declaration, and
+#: declared-path resolution reports only unconditional ones, so following it
+#: would smuggle in exactly the guess the algorithm refuses to make when it
+#: meets the same keyword on a node directly.
+#:
+#: `allOf` is absent on purpose: its branches all apply, so a pointer through
+#: one addresses something unconditional. `properties`, `items`, `prefixItems`,
+#: `$defs` and `definitions` are likewise unconditional positions.
+_CONDITIONAL_POINTER_KEYWORDS: frozenset[str] = frozenset({
+    "anyOf", "oneOf", "if", "then", "else", "not",
+    "dependentSchemas", "patternProperties", "contains",
+    "additionalProperties", "unevaluatedProperties", "unevaluatedItems",
+})
+
+
+def resolve_schema_ref(root: Any, ref: str) -> Any:
+    """Resolve an in-document `$ref` that lands on a SCHEMA, or ``_MISSING``.
+
+    :func:`resolve_local_pointer` restricted to pointers that stay inside
+    schema positions — the same ``_JSON_SCHEMA_*_KEYS`` inventory both
+    structural walkers recurse through, plus the `$defs`/`definitions` maps.
+
+    Why the restriction is load-bearing: the walkers deliberately do NOT descend
+    into `default`, `examples`, `const` or `enum`, because those carry arbitrary
+    user data that may be shaped exactly like a schema. A pointer such as
+    `#/properties/x/default` would therefore reach a subtree that no walker ever
+    annotation-checked and no type map ever covered — and declared-path
+    resolution would then hand that unvalidated node to its callers as if it
+    were a declaration. Refusing to resolve there is what makes
+    :func:`_validate_schema_refs`' guarantee true rather than aspirational.
+
+    A pointer whose path CROSSES a conditional keyword is refused for the same
+    reason, and it is the subtler half. `#/anyOf/0` names a perfectly real
+    schema position — but that subschema applies only to instances that take
+    that branch, so following the pointer would let the resolver commit to one
+    branch of an `anyOf` and report its fields as unconditionally declared.
+    That is precisely the guess the whole algorithm refuses to make when it
+    meets `anyOf` on a node directly; reaching the same branch through a `$ref`
+    must not be a way around it. Refused with the rest, so "never picks a
+    branch" holds however the branch is addressed.
+
+    Note this deliberately ignores `$id`. Under 2020-12 an `$id` retargets the
+    base URI, which would make a `#`-leading ref external; the contract refuses
+    `$id` in an embedded schema outright (:func:`_validate_schema_refs`) rather
+    than tracking base URIs, so by the time anything resolves a ref there is
+    exactly one base — the embedded document.
+    """
+    if not isinstance(ref, str) or not ref.startswith("#"):
+        return _MISSING
+    fragment = ref[1:]
+    if not fragment:
+        return root
+    if not fragment.startswith("/"):
+        return _MISSING
+    tokens = [_unescape_pointer_token(t) for t in fragment[1:].split("/")]
+    node: Any = root
+    index = 0
+    while index < len(tokens):
         if not isinstance(node, dict):
-            return None, seg
-        props = node.get("properties")
-        if not isinstance(props, dict) or seg not in props:
-            return None, seg
-        node = props[seg]
-    return (node if isinstance(node, dict) else None), None
+            return _MISSING
+        key = tokens[index]
+        if key in _CONDITIONAL_POINTER_KEYWORDS:
+            return _MISSING
+        child = node.get(key, _MISSING)
+        if child is _MISSING:
+            return _MISSING
+        if key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+            # A map of schemas: the next token names one of them.
+            if not isinstance(child, dict) or index + 1 >= len(tokens):
+                return _MISSING
+            name = tokens[index + 1]
+            if name not in child:
+                return _MISSING
+            node = child[name]
+            index += 2
+            continue
+        if key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS or key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+            if isinstance(child, list):
+                # A list of schemas (including draft-07 tuple-form `items`):
+                # the next token is the position.
+                if index + 1 >= len(tokens):
+                    return _MISSING
+                position = _pointer_array_index(tokens[index + 1], child)
+                if position is None:
+                    return _MISSING
+                node = child[position]
+                index += 2
+                continue
+            if key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+                node = child
+                index += 1
+                continue
+            return _MISSING
+        # Any other key is not a schema position — see the docstring.
+        return _MISSING
+    return node
+
+
+# Composition (`_property_contributors` / `materialize_node`) walks a schema that
+# is a DAG with back-edges, not a tree: `$defs` entries are routinely reached
+# from several places, `allOf` multiplies the routes, and a recursive `$defs` is
+# legal and common. Expanding each route separately is exponential in depth.
+#
+# An earlier attempt memoized per node and refused to cache any result computed
+# under a cycle. That fixed the acyclic case and did nothing for the real one:
+# the "computed under a cycle" flag propagates to every ancestor, so a single
+# back-edge anywhere left the whole walk uncached and exponential again — and
+# slower than no memo at all, because it also paid for the bookkeeping.
+#
+# What both walkers do instead: ONE recursive fold, memoized on the RESULT, with
+# a separate `on_path` set for cycles. Those two sets answer different questions
+# and conflating them was the bug — a node already VISITED returns its cached
+# result, while a node on the CURRENT path contributes nothing (the contract's
+# "a cycle contributes nothing the second time it is met"). Memoizing the result
+# reproduces the fold exactly on any acyclic document and visits each node once,
+# so cyclic and acyclic cost the same.
+#
+# ORDER IS PART OF THE ANSWER, not an implementation detail. Flattening the fold
+# into a single pre-order and reversing it looked equivalent and was not: it
+# inverted precedence between a DIRECT later branch and a transitively-reached
+# contributor of an earlier one, so a nearby `allOf` override silently lost to a
+# distant base and a destination column changed type with no error anywhere.
+#
+# Both walkers therefore use the SAME source order — `$ref` target, then `allOf`
+# branches in document order, then the node itself — with the last contributor
+# winning. They are one fold seen from two angles: `_contributors` keeps each
+# name's declarations as a list, `_materialize` folds them into a value. Every
+# time the two were computed differently they disagreed, silently, about which
+# declaration wins.
+
+
+def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
+    """Every UNCONDITIONAL declaration of each property name, LOWEST precedence
+    first.
+
+    Structurally identical to :func:`_materialize` — same recursion, same source
+    order (`$ref` target, `allOf` branches in document order, then the node
+    itself), same memo. That is not a coincidence to be optimised away: the two
+    are the same fold seen from two angles, and every time they were computed
+    differently they disagreed, silently, about which declaration wins.
+
+    The ordering contract is the whole point. `_compose_declarations` wraps these
+    into `{"allOf": [...]}` and every consumer materializes that LAST-WINS, so
+    the list must run lowest-precedence first: a node's own `properties.<name>`
+    beats its `$ref` base's, and a later `allOf` branch beats an earlier one.
+    Three previous attempts got this wrong in three different ways — a reversed
+    pre-order inverted sibling branches, an un-reversed one let the base beat the
+    refinement, a flattened post-order emitted a shared node at its first
+    (lowest) position — and all three shipped green, because the failure is a
+    different `arrow_type` on a derived column, not an error.
+
+    Declarations are deduplicated by equality, and a declaration re-contributed
+    by a LATER source moves to the end — its highest-precedence position. Keeping
+    the first occurrence is NOT safe and was one of the three bugs above; the
+    inline comment at the dedup states the failure.
+    """
+    return _contributors(node, root, {}, set())
+
+
+def _contributors(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, dict[str, list[Any]]]],
+    on_path: set[int],
+) -> dict[str, list[Any]]:
+    """Memoized worker. See :func:`_materialize` for the memo/cycle scheme."""
+    key = id(node)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached[1]
+    if key in on_path:
+        return {}
+    on_path.add(key)
+
+    sources: list[dict[str, list[Any]]] = []
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            sources.append(_contributors(target, root, memo, on_path))
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            _reject_unsatisfiable_branch(branch)
+            if isinstance(branch, dict):
+                sources.append(_contributors(branch, root, memo, on_path))
+    own = node.get("properties")
+    if isinstance(own, dict):
+        sources.append({name: [declaration] for name, declaration in own.items()})
+
+    contributors: dict[str, list[Any]] = {}
+    for source in sources:
+        for name, declarations in source.items():
+            bucket = contributors.setdefault(name, [])
+            for declaration in declarations:
+                # A declaration contributed again by a LATER source moves to the
+                # end — its highest-precedence position. Keeping the first
+                # occurrence and skipping the rest was the bug: an identical
+                # declaration reached early through a base pinned itself below a
+                # later sibling that restated it, so the sibling lost. Dedup is
+                # about not stacking the same shape twice, not about which
+                # position it holds.
+                for index, seen in enumerate(bucket):
+                    if declaration == seen:
+                        bucket.pop(index)
+                        break
+                bucket.append(declaration)
+
+    on_path.discard(key)
+    memo[key] = (node, contributors)
+    return contributors
+
+
+def _reject_unsatisfiable_branch(branch: Any) -> None:
+    """`allOf: [false, …]` is an empty intersection.
+
+    Checked in BOTH walkers rather than only the materializing one: a rule
+    enforced by one view and not the other is how `effective_properties` came to
+    answer `{}` where `materialize_node` raised, which crashed a public helper on
+    a document the gate had accepted. `true` is vacuous and is simply skipped.
+    """
+    if branch is False:
+        raise DeclarationConflictError(
+            "an `allOf` branch is the boolean schema `false`, which no instance "
+            "satisfies, so the whole intersection is empty"
+        )
+
+
+def _declared_types(declaration: Any) -> set[str] | None:
+    """The `type` values a declaration allows, or ``None`` when it declares none."""
+    if not isinstance(declaration, dict):
+        return None
+    declared = declaration.get("type")
+    if isinstance(declared, str):
+        return {declared}
+    if isinstance(declared, list) and all(isinstance(t, str) for t in declared):
+        return set(declared)
+    return None
+
+
+def _compose_declarations(key: str, declarations: list[Any]) -> Any:
+    """The single declaration a name resolves to, given its contributors.
+
+    One contributor resolves to itself. Several compose as `allOf` — which is
+    exactly what the document said: `allOf` and `$ref` are intersections, so a
+    branch that NARROWS a base declaration (`{type: string}` refined to
+    `{type: string, format: date-time}`) is the dominant real-world idiom and
+    must resolve, not fail. The resolver's job is to LOCATE a declaration, not
+    to decide its content, so it composes rather than picks.
+
+    The one refusal is a contradiction it can prove: contributors whose `type`
+    sets are disjoint cannot both hold, so nothing satisfies the intersection
+    and no answer about the field is honest. Proof is required — mere
+    inequality is not a contradiction — because rejecting on difference alone
+    would break monotonicity with the `properties`-only walk this replaced.
+    """
+    if not declarations:
+        # Unreachable via `_property_contributors`, which only creates a bucket
+        # when it has something to put in it. Asserted rather than assumed: the
+        # natural "empty" answer here is `{"allOf": []}`, a vacuous schema
+        # meaning "anything" — the one answer a resolver must never invent.
+        raise DeclarationConflictError(
+            f"no contributor declares {key!r}; refusing to compose a vacuous declaration"
+        )
+    if len(declarations) == 1:
+        return declarations[0]
+    _refuse_disjoint_types(key, declarations)
+    # NOT reversed. `_contributors` already emits lowest-precedence first, in
+    # the fold's own source order, which is exactly what a last-wins `allOf`
+    # needs. Reversing here was an attempt to compensate for a pre-order walk
+    # and it inverted sibling `allOf` branches instead.
+    return {"allOf": list(declarations)}
+
+
+#: Stand-in "name" for the whole-node case. `_refuse_disjoint_types`' message is
+#: written for a property name; passing the literal "node" made it read as a
+#: field called `node`, which no document has.
+_MATERIALIZED_NODE = "<this node>"
+
+
+def _refuse_disjoint_types(where: str, sources: list[Any]) -> None:
+    """Raise when ``sources`` declare `type` sets whose intersection is empty.
+
+    The one contradiction declared-path resolution can PROVE. Shared by
+    :func:`_compose_declarations` (the contributors of one property name) and
+    :func:`materialize_node` (a node folded with its `$ref`/`allOf` sources) so
+    that the two agree: composing and materializing are the same intersection
+    seen from two directions, and a rule enforced by only one of them is a gate
+    the other walks past. Proof is required — mere inequality is not a
+    contradiction — or monotonicity with the `properties`-only walk breaks.
+
+    Raises :class:`DeclarationConflictError`, which carries no path coordinates:
+    both callers inspect a node or a name and neither knows where it sits in
+    anyone's path. :func:`resolve_declared_path` re-raises it with the segment
+    it was resolving.
+    """
+    type_sets = [t for t in (_declared_types(s) for s in sources) if t is not None]
+    if len(type_sets) > 1 and not set.intersection(*type_sets):
+        raise DeclarationConflictError(
+            f"conflicting redeclaration of {where!r} across allOf/$ref branches: "
+            f"the declared types {sorted({t for s in type_sets for t in s})!r} "
+            "are disjoint, so no instance can satisfy all of them"
+        )
+
+
+def effective_properties(
+    node: dict[str, Any], root: Any = None
+) -> dict[str, Any]:
+    """The property declarations that UNCONDITIONALLY apply to ``node``.
+
+    :func:`_property_contributors` composed per name
+    (:func:`_compose_declarations`).
+
+    ``root`` is the document `$ref` pointers resolve against; it defaults to
+    ``node``, which is correct when ``node`` IS the whole embedded schema.
+    Callers walking INTO a schema must pass the original root, or a `$ref`
+    would resolve against a subtree and silently miss `$defs`.
+
+    This composes EVERY name, so it reports a provable contradiction anywhere in
+    the node — it is the whole-node view. :func:`resolve_declared_path` composes
+    only the segment it is looking for, so a contradiction on an unrelated key
+    never blocks an unrelated path; that difference is deliberate and is the
+    reason the resolver does not simply call this.
+    """
+    root = node if root is None else root
+    return {
+        key: _compose_declarations(key, declarations)
+        for key, declarations in _property_contributors(node, root).items()
+    }
+
+
+#: How a key's value should be merged. Only a SCHEMA position can hold a
+#: contradiction worth proving; `default`, `const`, `examples` and `x-*` carry
+#: arbitrary user data that may be shaped exactly like a schema, and running the
+#: `type` check there proved two `default` objects "contradictory" because both
+#: happened to have a field named `type`.
+class _Position(str, Enum):
+    """What a key's value IS, which decides how it merges and whether a
+    contradiction in it is worth proving."""
+
+    SCHEMA = "schema"
+    SCHEMA_MAP = "schema_map"
+    DATA = "data"
+
+
+_SCHEMA_POSITION = _Position.SCHEMA
+_SCHEMA_MAP_POSITION = _Position.SCHEMA_MAP
+_DATA_POSITION = _Position.DATA
+
+
+def _position_kind(key: str) -> _Position:
+    if key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+        return _SCHEMA_MAP_POSITION
+    if key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        return _SCHEMA_POSITION
+    return _DATA_POSITION
+
+
+def _combine_schema_values(
+    existing: Any, incoming: Any, *, kind: _Position = _Position.DATA
+) -> Any:
+    """Fold ``incoming`` into ``existing`` for one key of a materialized node.
+
+    Objects merge recursively — `allOf` and `$ref` are intersections, so BOTH
+    declarations apply and an `allOf` branch that refines `items` must ADD to
+    the base rather than replace it. Overwriting was a real defect: a record
+    shape whose fields came from an inline `properties` map lost them to an
+    `allOf` branch, silently changing the enumerated column set.
+
+    Everything else — scalars AND lists — is last-wins. That is the pre-existing
+    behaviour and it is genuinely lossy for `required` and `enum`, whose true
+    intersection this does not compute. The one lossy case that could produce a
+    confidently-wrong answer, mutually exclusive `type` sets, is refused
+    outright by :func:`_refuse_disjoint_types` before any merging happens.
+    """
+    if isinstance(existing, dict) and isinstance(incoming, dict):
+        if kind == _SCHEMA_POSITION:
+            # Only here. This is a real subschema, so two contributors declaring
+            # disjoint `type`s cannot both hold — the same proof
+            # `_compose_declarations` applies to a property name's contributors,
+            # so the two views of one document cannot disagree. Applying it at
+            # every depth instead read `default`/`const`/`x-*` payloads as
+            # schemas and refused documents that were merely carrying data.
+            _refuse_disjoint_types(_MATERIALIZED_NODE, [existing, incoming])
+        child_kind = {
+            _SCHEMA_MAP_POSITION: _SCHEMA_POSITION,
+            _SCHEMA_POSITION: None,
+            _DATA_POSITION: _DATA_POSITION,
+        }[kind]
+        merged = dict(existing)
+        for key, value in incoming.items():
+            merged[key] = (
+                _combine_schema_values(
+                    merged[key], value,
+                    kind=_position_kind(key) if child_kind is None else child_kind,
+                )
+                if key in merged
+                else value
+            )
+        return merged
+    return incoming
+
+
+def materialize_node(node: Any, root: Any = None) -> Any:
+    """``node`` folded together with the contributors that unconditionally apply.
+
+    The inspection counterpart of :func:`effective_properties`: it answers
+    "what does this node say about `type` / `items` / `properties`?" when the
+    answer is spread across a `$ref` target and `allOf` branches. Without it a
+    consumer reading `node["type"]` off a `{"$ref": "#/$defs/Coll"}` sees
+    nothing — which is how a document following ADV-ENDP-026's own advice
+    ("put it in this document's `$defs`") could validate and then yield zero
+    record fields.
+
+    `$ref` and `allOf` are CONSUMED, so a materialized node never carries them.
+    Sources apply in the order `$ref` target, `allOf` branches, then the node
+    itself, each already materialized — so the node's own statements win, and
+    among its contributors the LAST one stated wins. That is what makes the
+    canonical `allOf: [{$ref: Base}, {refinement}]` idiom mean what it says.
+    Object values (`items`, a nested `properties` map) merge recursively rather
+    than replace, because `allOf` is an intersection and both declarations
+    apply.
+
+    ``root`` is the document `$ref` pointers resolve against; it defaults to
+    ``node``, which is correct only when ``node`` IS the whole embedded schema.
+    Pass the real root when materializing a subtree, or `$defs` is unreachable.
+    """
+    if not isinstance(node, dict):
+        return node
+    return _materialize(node, node if root is None else root, {}, set())
+
+
+def _materialize(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, Any]],
+    on_path: set[int],
+) -> Any:
+    """Memoized fold. Each node is materialized ONCE and its RESULT reused.
+
+    Two earlier shapes of this were wrong, both silently, and the reason is
+    worth keeping:
+
+    * Refusing to cache anything computed under a cycle made a single `$ref`
+      back-edge disable the cache for every ancestor, so the walk stayed
+      exponential on exactly the schemas that motivated the cache.
+    * Flattening the fold into one ordered chain with a global visited set
+      cannot express the fold at all. A node reached from two places was
+      emitted at its FIRST position — the LOWEST precedence in a last-wins
+      merge — while the fold re-merged it at every position, giving it the
+      precedence of its LAST. On 4000 acyclic shared-`$defs` schemas the two
+      disagreed 1502 times: a nearby refinement lost to a distant base, and a
+      destination column was created `Utf8` instead of `Timestamp` with no
+      error anywhere.
+
+    Memoizing the RESULT is what the fold did, so it reproduces the fold
+    exactly on any acyclic document, and it visits each node once. A node
+    already on the current path is a cycle: it contributes nothing the second
+    time it is met, which is the rule the contract states. The memo holds the
+    node beside its result so a freed node's `id()` cannot be reused mid-walk.
+    """
+    key = id(node)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached[1]
+    if key in on_path:
+        return {}
+    on_path.add(key)
+
+    sources: list[Any] = []
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            sources.append(_materialize(target, root, memo, on_path))
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            _reject_unsatisfiable_branch(branch)
+            if isinstance(branch, dict):
+                sources.append(_materialize(branch, root, memo, on_path))
+    sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
+
+    # The same refusal `_compose_declarations` applies to a property name's
+    # contributors. Without it the two disagree, and the PERMISSIVE one guards
+    # the gate: `allOf: [{type: object}, {type: array, items: …}]` merged
+    # last-wins yields a tidy `{type: "array"}` that
+    # `_validate_records_in_response_schema` accepts, so a record collection no
+    # instance can satisfy validates as a good array.
+    _refuse_disjoint_types(_MATERIALIZED_NODE, sources)
+
+    merged: dict[str, Any] = {}
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        for name, value in source.items():
+            if name == "properties":
+                continue  # composed below, from the shared contributor walk
+            merged[name] = (
+                _combine_schema_values(merged[name], value, kind=_position_kind(name))
+                if name in merged
+                else value
+            )
+
+    # `properties` is composed per NAME here, and the satisfiability proof below
+    # reads the same raw contributor list `_compose_declarations` proves, so the
+    # two views cannot disagree about whether a name is self-contradictory.
+    # Merging the maps as an ordinary dict key instead was how `materialize_node`
+    # came to answer where `effective_properties` refused — and the permissive
+    # one is what derives the destination column.
+    #
+    # Each declaration is FOLDED but NOT recursively materialized: a caller
+    # reading an annotation off a child descriptor must materialize that
+    # descriptor itself. `find_record_field_properties` and
+    # `_walk_input_schema_path` both do exactly that, and the comment at the
+    # former explains why — materializing only the walk left a field declared as
+    # `{"$ref": "#/$defs/Addr"}` coming back raw, with no `type` and no
+    # `arrow_type`.
+    #
+    # The emptiness test is on DECLARATION, not on the composed result: an
+    # explicit `properties: {}` means "zero fields", which
+    # `_json_schema_top_level_fields` must be able to tell apart from "no
+    # `properties` map anywhere", its unknowable→skip case. Dropping the key
+    # when the map is empty collapsed the two and turned `conflict_keys` and the
+    # `from_input` membership check back off.
+    own_properties = [
+        source["properties"] for source in sources
+        if isinstance(source, dict) and isinstance(source.get("properties"), dict)
+    ]
+    if own_properties:
+        # The proof reads the RAW contributors — the same list
+        # `_compose_declarations` proves — and NOT the maps hanging off
+        # `sources`. Those sources have each already been materialized, and
+        # `type` is a data position that merges last-wins, so a nested level
+        # collapses its own contributors before this one can see them:
+        # `{string,integer}` then `{integer,boolean}` folds to
+        # `{integer,boolean}`, and the three-way emptiness against
+        # `{string,boolean}` becomes a two-way overlap on `boolean`. Proving
+        # from the folded maps therefore refused single-level contradictions
+        # and accepted nested ones, which is `effective_properties` refusing a
+        # record shape `materialize_node` was happy to derive columns from.
+        #
+        # The walk starts FRESH, exactly as `effective_properties(node, root)`
+        # would run it. No second cache: `_materialize`'s own memo already
+        # guarantees each node's body runs once per materialization, so a
+        # proved-nodes cache here never gets a hit (measured: 0 hits across the
+        # full suite and 40k random cyclic documents) — and the SHARED variant
+        # that would get hits was the bug. `_contributors` caches `{}` for a
+        # node it meets on the CURRENT path, so a shared entry computed while
+        # some ancestor was mid-walk carries that truncation, and a later node
+        # reads a weaker contributor set than `effective_properties` would
+        # compute from a standing start:
+        #
+        #   A: {$ref: C, properties: {x: {type: [string, boolean]}}}
+        #   B: {$ref: A, properties: {x: {type: [integer, boolean]}}}
+        #   C: {$ref: A, properties: {x: {type: [string, integer]}}}
+        #
+        # gave `materialize_node(B)` an accepted `[integer, boolean]` while
+        # `effective_properties(B)` refused. Truncation-tainting a shared cache
+        # instead was tried earlier in this PR and is exponential — the taint
+        # propagates to every ancestor, so one back-edge uncaches the whole walk.
+        #
+        # THE PRICE, stated because nothing else in this file will: one full
+        # contributor walk per node that declares `properties`, which is cubic
+        # on a deep UNSHARED `allOf` chain (measured ~3s at depth 400, ~44ms at
+        # depth 100). Real record shapes nest < 10 deep, where this is ~0.2ms;
+        # the linearity pins bound the shared/cyclic shapes that actually occur.
+        raw = _property_contributors(node, root)
+        by_name: dict[str, list[Any]] = {}
+        for source_map in own_properties:
+            for name, declaration in source_map.items():
+                by_name.setdefault(name, []).append(declaration)
+        properties: dict[str, Any] = {}
+        for name, declarations in by_name.items():
+            # Fall back to the folded declarations only for a name the raw walk
+            # cannot see (a cycle truncated it); never prove on the weaker set
+            # when the stronger one exists.
+            contributors = raw.get(name) or declarations
+            if len(contributors) > 1:
+                _refuse_disjoint_types(name, contributors)
+            folded = declarations[0]
+            for declaration in declarations[1:]:
+                folded = _combine_schema_values(
+                    folded, declaration, kind=_SCHEMA_POSITION
+                )
+            properties[name] = folded
+        merged["properties"] = properties
+
+    on_path.discard(key)
+    memo[key] = (node, merged)
+    return merged
+
+
+#: Keywords whose presence means "this node MIGHT declare more fields, subject to
+#: the instance". Their mere presence is enough to make a missing segment
+#: ambiguous rather than absent.
+_CONDITIONAL_DECLARATION_KEYWORDS: tuple[str, ...] = (
+    "anyOf", "oneOf", "if", "then", "else", "patternProperties", "dependentSchemas",
+)
+#: Catch-alls that only widen the declared set when they carry a SCHEMA. As
+#: `true`/`false` (or absent) they say nothing about names, so they must not
+#: turn a plain typo into an "ambiguous" report.
+_SCHEMA_VALUED_CATCHALL_KEYWORDS: tuple[str, ...] = (
+    "additionalProperties", "unevaluatedProperties",
+)
+
+
+def _conditional_declaration_keywords(node: dict[str, Any], root: Any) -> list[str]:
+    """Keywords on ``node`` that could conditionally declare an absent segment.
+
+    Returned in a fixed order so error messages are stable and greppable.
+    """
+    found = [k for k in _CONDITIONAL_DECLARATION_KEYWORDS if k in node]
+    found += [
+        k for k in _SCHEMA_VALUED_CATCHALL_KEYWORDS if isinstance(node.get(k), dict)
+    ]
+    ref = node.get("$ref")
+    # A `$ref` that DID resolve has already contributed everything it declares,
+    # so it cannot be the reason a segment is missing. One that did not resolve
+    # can be — and `_validate_schema_refs` will have rejected it in its own
+    # right.
+    if ref is not None and not isinstance(resolve_schema_ref(root, ref), dict):
+        found.append("$ref")
+    return found
+
+
+def resolve_declared_path(
+    start_node: Any, segments: Sequence[str], *, root: Any = None
+) -> Any:
+    """Resolve ``segments`` against ``start_node`` by declared-path resolution.
+
+    THE contract's path-resolution rule (see the module comment above). For each
+    segment: the current node must be an object schema; the segment must be
+    declared by one of that node's unconditional contributors
+    (:func:`_property_contributors`); resolution moves to the composition of
+    that name's declarations (:func:`_compose_declarations`). An empty
+    ``segments`` resolves to ``start_node`` itself.
+
+    ``root`` is the document `$ref` pointers resolve against, and defaults to
+    ``start_node``. A caller that starts the walk at a SUBTREE — the record
+    shape under `items`, say — must pass the whole embedded schema as ``root``,
+    or a `#/$defs/...` ref inside that subtree resolves against the subtree,
+    finds no `$defs`, and the path is misreported as undeclared.
+
+    Only the segment being looked for is composed, so a provable contradiction
+    on some unrelated property of the same node does not block this path;
+    :func:`effective_properties` is the whole-node view that does report those.
+
+    Raises :class:`DeclaredPathError` — never returns a sentinel — so no caller
+    can accidentally treat "unresolvable" as "resolved to nothing". The
+    exception's ``reason`` distinguishes the failure modes an author fixes
+    differently: a non-object intermediate, a conditionally-declared
+    (untightened) schema, a contradiction, and a plain undeclared segment (the
+    typo case).
+    """
+    node: Any = start_node
+    document: Any = start_node if root is None else root
+    for index, segment in enumerate(segments):
+        if not isinstance(node, dict):
+            raise DeclaredPathError(
+                "intermediate node is not an object schema",
+                segment=segment,
+                index=index,
+            )
+        # `_property_contributors` raises `DeclarationConflictError` too (an
+        # `allOf` branch that is boolean `false`), so it sits INSIDE the same
+        # try as the compose: a conflict raised while collecting contributors is
+        # every bit as positioned as one raised while folding them, and leaving
+        # it outside sent the bare conflict past the three narrow
+        # `except DeclaredPathError` handlers — the document was still refused,
+        # but the author lost the field name and the walked prefix.
+        try:
+            contributors = _property_contributors(node, document)
+            if segment in contributors:
+                node = _compose_declarations(segment, contributors[segment])
+        except DeclarationConflictError as exc:
+            # Neither callee has path context of its own (one inspects a node,
+            # the other a name); re-raise with the segment/index this walk is at
+            # so the caller can say where in the path the contradiction sits.
+            raise DeclaredPathError(
+                exc.reason, segment=segment, index=index
+            ) from None
+        if segment in contributors:
+            continue
+
+        # Not declared. Only NOW does ambiguity matter — checking it earlier
+        # would reject paths that resolve perfectly well through `properties`.
+        conditional = _conditional_declaration_keywords(node, document)
+        if conditional:
+            raise DeclaredPathError(
+                "path is not statically resolvable: this node declares "
+                f"{', '.join(conditional)}; declare {segment!r} under 'properties'",
+                segment=segment,
+                index=index,
+            )
+        raise DeclaredPathError(
+            f"{segment!r} is not declared", segment=segment, index=index
+        )
+    return node
+
+
+class _OperationKind(str, Enum):
+    """Which operation a swept site belongs to.
+
+    Passed explicitly rather than inferred from the site label. Prefix-matching
+    a caller-supplied string already produced one wrong message: `Param` is
+    shared by reads and writes, so its label matched neither operation prefix
+    and write authors were told "paging stops after the first page" about an
+    operation that does not page.
+    """
+
+    READ = "read"
+    WRITE = "write"
+    WRITE_RESPONSE = "write_response"
+
+
+@dataclass(frozen=True, slots=True)
+class _ExpressionSite:
+    """One swept slot, with everything the checks need STATED by its producer.
+
+    `operation` used to be a per-call default and `WRITE_RESPONSE` was then
+    re-derived by prefix-matching `where` — the very inference this enum's
+    docstring says it replaced, one field rename away from firing again. A
+    producer knows which operation it is and whether its slot is built before
+    the response exists; neither is recoverable from a display label, so
+    neither is inferred from one.
+    """
+
+    where: str
+    payload: Any
+    operation: _OperationKind
+    #: False for a slot built BEFORE the response exists — every `request.*`
+    #: slot. A `response.*` ref there resolves to nothing at request-build time
+    #: whatever it names, so it is refused on scope alone.
+    can_read_response: bool
+
+
+def _sweep_expression_sites(
+    sites: "list[_ExpressionSite]",
+    response_schema: Any = None,
+    metadata_keys: "frozenset[str] | None" = None,
+) -> None:
+    """Run EVERY expression check over every site, from one table.
+
+    The four checks — expression shape, leading scope, response sub-scope, and
+    (where a `response.schema` exists) declared-path resolution with typedness —
+    were wired per CALL SITE rather than per slot, and every hole this PR closed
+    after the first was the same shape: a site that was not on somebody's list.
+    `request.path_params` was missing from two tables; `pagination` and the write
+    `response` never reached the shape walk; `params.<name>.default` was added to
+    three walks and not the fourth. `_validate_response_body_paths`' own
+    docstring rejects exactly this reasoning for the INSIDE of `pagination`
+    ("enumerating sites would mean a new strategy field silently escapes the
+    rule; walking the block cannot") — it just was not applied to the
+    enumeration of the blocks themselves.
+
+    So: one function, all four checks, and each operation states its slots once.
+    A slot added to the table gets every check by construction.
+    """
+    for site in sites:
+        where, payload = site.where, site.payload
+        _validate_expression_shapes(payload, where)
+        for token in _expression_tokens(payload):
+            _reject_unknown_scope(where, token, site.operation)
+            _reject_unknown_response_scope(where, token, site.operation)
+            if not site.can_read_response and token.split(".")[0] == "response":
+                # Scope-level, not path-level. Checking only whether the path
+                # RESOLVES let `request.query = {"ref":
+                # "response.body.next_cursor"}` through whenever the response
+                # schema happened to declare that path — and every `response.*`
+                # ref in a write request slot through unconditionally, since a
+                # write has no `response.schema` to resolve against. The request
+                # is built before the response exists, so the ref interpolates
+                # nothing regardless of what it names: the provider is called
+                # with the value missing and answers 200.
+                raise ValueError(
+                    f"{where} references {token!r}, but a request is built "
+                    "before the response exists, so no `response.*` value is "
+                    "available here — it would interpolate to nothing and the "
+                    "request would go out with the value missing. Use a "
+                    "`params` entry or a literal "
+                    "(spec: §Value Expressions — scopes)"
+                )
+            if metadata_keys is not None and token.startswith("response.metadata."):
+                # `metadata` is the ONE reserved response sub-scope whose key set
+                # is closed and author-declared, in this same document. The other
+                # reserved scopes (`headers`, `status`, `record_count`,
+                # `records`) really are engine-owned and unknowable here, but
+                # lumping `metadata` in with them let `response.metadata.nope`
+                # through — which resolves to nothing on every page, so paging
+                # stops after page one and the run reports success. That is #123
+                # verbatim, one segment to the right of where it was fixed.
+                key = token.split(".", 2)[2].split(".")[0]
+                if key not in metadata_keys:
+                    raise ValueError(
+                        f"{where} references {token!r}, but "
+                        f"{key!r} is not a declared `response.metadata` key "
+                        f"(declared: {sorted(metadata_keys)!r}). "
+                        f"{_unresolved_harm(site.operation)} "
+                        "(spec: §API Response Extraction)"
+                    )
+            segments = _response_body_segments(token)
+            if segments is None or response_schema is None:
+                continue
+            try:
+                node = resolve_declared_path(response_schema, segments)
+            except SchemaResolutionError as exc:
+                raise ValueError(
+                    f"{where} references {token!r}, which does not resolve in "
+                    f"response.schema: {exc.reason} "
+                    "(spec: §API Response Extraction — declared-path resolution)"
+                ) from None
+            try:
+                materialized = materialize_node(node, response_schema)
+            except SchemaResolutionError as exc:
+                raise ValueError(
+                    f"{where} references {token!r}, which resolves in "
+                    f"response.schema to a self-contradictory node: {exc.reason} "
+                    "(spec: §API Response Extraction — declared-path resolution)"
+                ) from None
+            if not _declares_a_type(materialized):
+                raise ValueError(
+                    f"{where} references {token!r}, which resolves in "
+                    "response.schema to a node that declares no `type` (and no "
+                    "`native_type`/`arrow_type` pair). Declare the type of the "
+                    "value the engine reads there, or nothing can tell what it "
+                    "planted (spec: §API Response Extraction — declared-path "
+                    "resolution)"
+                )
+
+
+
+def _unresolved_harm(operation: _OperationKind) -> str:
+    """What actually goes wrong when a token resolves to nothing.
+
+    The consequence is the actionable half of these messages, and it differs by
+    operation: a success predicate reading nothing holds unconditionally, which
+    is not the same failure as paging stopping after one page.
+    """
+    if operation is _OperationKind.WRITE_RESPONSE:
+        return (
+            "It resolves to nothing on every response, so a `success_when` "
+            "predicate over it holds unconditionally and every write reports "
+            "success — including the ones whose rejected rows the provider "
+            "listed."
+        )
+    if operation is _OperationKind.WRITE:
+        return (
+            "It resolves to nothing at run time, so the request goes out with "
+            "that value missing and the provider answers whatever it answers."
+        )
+    if operation is _OperationKind.READ:
+        return (
+            "It resolves to nothing at run time, so paging stops after the "
+            "first page and the run still reports success."
+        )
+    # Exhaustive on purpose. With the read text as the fall-through, a raw
+    # `"write"` string — `==`-equal to the member but not `is`-identical — got
+    # paging advice, which is the wrong-message bug this enum replaced; and a
+    # member added later would inherit it silently.
+    raise AssertionError(f"unhandled operation kind {operation!r}")
+
+
+def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> None:
+    """The LEADING token must name a real resolution scope.
+
+    :func:`_reject_unknown_response_scope` catches a bad SUB-scope
+    (`response.bodyy`); this catches a bad scope (`responses.body`,
+    `respons.body`, `Response.body`). Both halves are needed — a typo lands
+    either side of the dot and the run-time failure is identical.
+
+    The typed `Expression` fields are already covered by the published
+    `_RESOLUTION_SCOPE_PATTERN`, but the `Any`-typed paging slots
+    (`keyset.initial`, `offset.initial`, `page.initial`, every `Predicate`
+    operand) are covered by nothing, and those are the most load-bearing paging
+    sites in the contract.
+    """
+    if _has_known_scope(token):
+        return
+    raise ValueError(
+        f"{where} references {token!r}, whose leading token is not a known "
+        f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). {_unresolved_harm(operation)} "
+        "(spec: §Value Expressions)"
+    )
+
+
+def _reject_unknown_response_scope(
+    where: str, token: str, operation: _OperationKind
+) -> None:
+    """A `response.*` token must name a real response sub-scope.
+
+    The hole this closes is the one ADV-ENDP-023 exists to close, one segment
+    to the left. `_response_body_segments` returns ``None`` for anything that is
+    not `response.body[.…]`, and the caller skips it — on the stated grounds
+    that every OTHER `response.*` scope is reserved and engine-owned. Nothing
+    checked that the token actually named one of them, so
+    `response.bodyy.next_cursor` was not "a reserved scope this rule leaves
+    alone", it was a typo that resolved to nothing at run time. Paging stopped
+    after page one and the sync reported success — the identical silent
+    truncation #123 was filed for, reachable by misspelling `body` instead of
+    the field after it.
+
+    `_has_known_scope` cannot catch it: it inspects only the LEADING token, and
+    `response` is a real scope. The sub-scope needs its own check.
+    """
+    stripped = token.strip()
+    if stripped != "response" and not stripped.startswith("response."):
+        return
+    sub_scope = stripped[len("response."):].split(".", 1)[0] if "." in stripped else ""
+    if sub_scope in RESERVED_RESPONSE_SCOPES:
+        return
+    raise ValueError(
+        f"{where} references {token!r}, whose response sub-scope "
+        f"{sub_scope or '(none)'!r} is not one of "
+        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. {_unresolved_harm(operation)} "
+        "(spec: §API Response Extraction)"
+    )
+
+
+def _response_body_segments(token: str) -> list[str] | None:
+    """Segments a `response.body[.<path>]` token addresses, or ``None``.
+
+    ``None`` means "not a `response.body` token" — every other response scope
+    (`response.headers.*`, `response.status`, `response.record_count`,
+    `response.records`, `response.metadata`) is RESERVED and engine-owned, so it
+    has nothing to resolve against `response.schema` and is not checked here.
+    A bare `response.body` addresses the schema root and yields ``[]``.
+    """
+    stripped = token.strip()
+    if stripped == "response.body":
+        return []
+    if stripped.startswith("response.body."):
+        return stripped[len("response.body."):].split(".")
+    return None
 
 
 def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
@@ -2435,15 +4326,18 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     ``response.schema`` describes the FULL provider response body, not just the
     records; ``records`` is a ``{ref}`` selecting the record collection inside
     it. Per the api-endpoint contract the ref is anchored at ``response.body``
-    (the schema root), and each dotted segment after it maps to
-    ``properties.<segment>`` (via :func:`_walk_response_schema`). The addressed
+    (the schema root), and the dotted remainder resolves by *declared-path
+    resolution* (:func:`resolve_declared_path`). The addressed
     node's ``items`` (when it is an ``array``) is the record shape — so a
     nested collection like ``response.body.objects`` yields the real record
     columns, not the wrapper key ``objects``.
 
-    Falls back to ``response_schema`` when ``records`` is absent, non-spec, or
-    does not resolve to a schema node — preserving extraction for schemas whose
-    record shape already sits at the root.
+    Returns ``None`` when the ref does not resolve, is not `response.body`-
+    anchored, or lands on something that is not a schema node. ``None`` means
+    "this document does not say" — never a fallback to ``response_schema``,
+    which is the ENVELOPE and whose keys a caller would then enumerate as the
+    record's fields. Callers must branch on it; the gate
+    (:func:`_validate_records_in_response_schema`) reports the real reason.
 
     The single record-locator shared by every consumer of the read contract
     (field extraction and arrow_type stamping): they MUST target the same
@@ -2454,20 +4348,49 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     records = response.get("records") if isinstance(response, dict) else response
     ref = records.get("ref") if isinstance(records, dict) else records
     if not isinstance(ref, str):
-        return response_schema
-    if ref == "response.body":
-        node: Any = response_schema
-    elif ref.startswith("response.body."):
-        node, _ = _walk_response_schema(response_schema, ref[len("response.body."):])
-    else:
-        # Non-spec ref (e.g. a bare JSONPath) — cannot map onto the schema.
-        return response_schema
+        # Absent, null or non-string `records`. `None` for the same reason every
+        # other unresolvable case returns it: `response_schema` is the ENVELOPE,
+        # and an ungated caller enumerates its keys as the record's fields. An
+        # absent `records` is exactly what ungated input looks like.
+        return None
+    segments = _response_body_segments(ref)
+    if segments is None:
+        # Non-spec ref (e.g. a bare JSONPath). The gate rejects this exactly as
+        # it rejects a typo, so returning the envelope here reproduces the bug
+        # the typo branch was just fixed for: `find_record_field_properties`
+        # would enumerate `data`/`has_more` as the table's columns.
+        return None
+    try:
+        node: Any = resolve_declared_path(response_schema, segments)
+    except SchemaResolutionError:
+        # Do NOT fall back to `response_schema` here. That returned the response
+        # ENVELOPE, so a one-character typo in `records.ref` silently enumerated
+        # `data`/`has_more`/`next_cursor` as the destination table's columns —
+        # a confident wrong answer handed to the one caller the fallback existed
+        # to serve (the pipeline plugin's prose calls this without running the
+        # gate first). `None` says "I could not resolve this", which is the only
+        # honest answer; the gate still reports the ref properly for anyone who
+        # does run it.
+        return None
+    # Materialize before reading `type`/`items`, and again on the record shape:
+    # the collection may be reached through a `$ref` (`{"$ref": "#/$defs/Coll"}`)
+    # and the record shape is very often `items: {"$ref": "#/$defs/Record"}` —
+    # the exact shape ADV-ENDP-026's rejection message tells authors to write.
+    # Reading the raw node there would return a bare `{"$ref": …}` and every
+    # consumer would enumerate zero fields.
+    node = materialize_node(node, response_schema)
     if isinstance(node, dict) and node.get("type") == "array" and isinstance(node.get("items"), dict):
-        return node["items"]
-    return node if isinstance(node, dict) else response_schema
+        return materialize_node(node["items"], response_schema)
+    # Not a schema node (e.g. `properties.data` declared as boolean `true`).
+    # `None`, for the same reason the other branches return it: handing back
+    # `response_schema` is handing back the ENVELOPE, whose keys a caller then
+    # enumerates as the record's fields.
+    return node if isinstance(node, dict) else None
 
 
-def find_record_field_properties(record_schema: Any) -> dict[str, Any] | None:
+def find_record_field_properties(
+    record_schema: Any, root: Any = None
+) -> dict[str, Any] | None:
     """Return a record schema's top-level field-descriptor map, or ``None``.
 
     Walks the ``items`` chain (an array-of-records envelope may nest the record
@@ -2478,16 +4401,34 @@ def find_record_field_properties(record_schema: Any) -> dict[str, Any] | None:
     these top-level descriptors
     only; nested sub-properties, ``items`` elements and composition branches
     are not separately mappable.
+
+    Each step is materialized (:func:`materialize_node`), so a record shape
+    assembled from `allOf` branches or reached through an in-document `$ref`
+    enumerates the same fields an inline one would. Pass ``root`` (the whole
+    embedded schema) whenever ``record_schema`` is a subtree, or its `$ref`s
+    have no `$defs` to resolve against.
     """
-    current = record_schema
+    document = record_schema if root is None else root
+    current = materialize_node(record_schema, document)
     while isinstance(current, dict):
         props = current.get("properties")
         if isinstance(props, dict):
-            return props
+            # Materialize each DESCRIPTOR too. Materializing only the walk left
+            # a field declared as `{"$ref": "#/$defs/Addr"}` coming back raw —
+            # no `type`, no `arrow_type` — and the documented consumer
+            # (plugins/analitiq-pipeline-builder/skills/endpoint-spec/
+            # spec-new-table.md) reads exactly those annotations off exactly
+            # this map. With nothing to read it invents a column type, which is
+            # the silent wrong-data outcome this whole PR exists to remove, one
+            # level below where it was fixed.
+            return {
+                name: materialize_node(declaration, document)
+                for name, declaration in props.items()
+            }
         items = current.get("items")
         if not isinstance(items, dict):
             return None
-        current = items
+        current = materialize_node(items, document)
     return None
 
 
@@ -2502,38 +4443,96 @@ def _validate_records_in_response_schema(
     ``response.schema``, and that schema location must be an array.
     """
     ref: str = response.records.ref  # validated upstream to start with response.body
-    suffix = ref[len("response.body"):]
-    if suffix.startswith("."):
-        suffix = suffix[1:]
-    node, error_segment = _walk_response_schema(response.schema_, suffix)
-    if node is None:
-        if error_segment is None:
-            raise ValueError(
-                f"response.records ref {ref!r} resolved to a non-object schema location "
-                "(spec: §API Response Extraction — schema traversal rule)"
-            )
+    segments = _response_body_segments(ref) or []
+    try:
+        node = resolve_declared_path(response.schema_, segments)
+    except DeclaredPathError as exc:
         raise ValueError(
             f"response.records ref {ref!r} traversal failed at segment "
-            f"{error_segment!r}; not declared as `properties.{error_segment}` in "
-            "response.schema (spec: §API Response Extraction — schema traversal rule)"
+            f"{exc.segment!r}: {exc.reason} "
+            "(spec: §API Response Extraction — declared-path resolution)"
+        ) from None
+    # `resolve_declared_path` returns whatever the path addressed; a non-object
+    # there means the declaration itself is not a schema (e.g. `properties.x`
+    # holding a string), which no later check would catch.
+    if not isinstance(node, dict):
+        raise ValueError(
+            f"response.records ref {ref!r} resolved to a non-object schema location "
+            "(spec: §API Response Extraction — declared-path resolution)"
         )
+    # `type`/`items` may be contributed by a `$ref` target or an `allOf` branch
+    # rather than stated inline, so read them off the materialized node — the
+    # raw one would report `type=None` for a perfectly good `{"$ref": …}`
+    # collection. The materialized node is what the caller drills into, so the
+    # record shape it sees is composed the same way.
+    try:
+        node = materialize_node(node, response.schema_)
+    except SchemaResolutionError as exc:
+        raise ValueError(
+            f"response.records ref {ref!r} resolves to a self-contradictory node "
+            f"in response.schema: {exc.reason} "
+            "(spec: §API Response Extraction — declared-path resolution)"
+        ) from None
     if node.get("type") != "array":
         raise ValueError(
             f"response.records ref {ref!r} resolves to a non-array node in "
             f"response.schema (got type={node.get('type')!r}); spec requires "
             "the schema location to be an array (spec: §Cross-Field Validation)"
         )
+    # Gate the RECORD SHAPE too, not just the array node. Without this a
+    # contradictory `items` (or a `$defs` entry it references) validated here and
+    # then raised out of `resolve_read_record_schema` /
+    # `find_record_field_properties` — public helpers the pipeline plugin's
+    # prose calls directly — as a bare traceback with no endpoint, no ref and no
+    # `$defs` name. A gate that lets the bad document through and lets a
+    # downstream script crash on it is not a gate.
+    items = node.get("items")
+    if isinstance(items, dict):
+        try:
+            materialized_items = materialize_node(items, response.schema_)
+        except SchemaResolutionError as exc:
+            raise ValueError(
+                f"response.records ref {ref!r} resolves to an array whose record "
+                f"shape is self-contradictory: {exc.reason} "
+                "(spec: §API Response Extraction — declared-path resolution)"
+            ) from None
+        # And the shape must declare SOMETHING. Materializing purely to catch an
+        # exception inferred validity from the absence of one, so a record shape
+        # that composes down to nothing at all passed: `items: {}`, and a `$defs`
+        # entry that only `$ref`s itself, which the cycle rule collapses to `{}`
+        # without raising. The second is newly reachable because this PR made
+        # `$ref` following legal in the record locator.
+        #
+        # Deliberately NOT "must declare fields": `{"type": "object"}` with no
+        # `properties` is the documented unknowable-shape case the corpus uses,
+        # and `_json_schema_top_level_fields` returns None for it too. Emptiness
+        # is what separates "I am not telling you the fields" from "I am not
+        # telling you anything", and only the latter is unauthorable.
+        if not materialized_items:
+            raise ValueError(
+                f"response.records ref {ref!r} resolves to an array whose record "
+                "shape declares nothing at all, so nothing downstream can tell "
+                "what a record is. Declare at least the record's `type` (a "
+                "`$defs` entry that only references itself composes to nothing) "
+                "(spec: §Cross-Field Validation)"
+            )
     return node
 
 
 def _validate_cursor_fields_in_record_shape(
-    replication: Replication, array_node: dict[str, Any]
+    replication: Replication, array_node: dict[str, Any], root: Any
 ) -> None:
     """Each ``cursor_field`` path must exist under the array's ``items`` subschema.
 
     Spec: §Cross-Field Validation — "Each replication ``cursor_field`` must
     correspond to a field path in ``response.schema`` under the extracted
     record-shape branch."
+
+    ``root`` is the whole ``response.schema``. The record shape is a SUBTREE of
+    it, and `items: {"$ref": "#/$defs/Record"}` is the ordinary way to write one
+    — so the walk must keep resolving pointers against the document, not against
+    the subtree it starts at. Rooting at the subtree would find no `$defs` and
+    report a field that IS declared as undeclared.
     """
     items = array_node.get("items")
     cursor_fields = [_cursor_field_of(cm) for cm in replication.cursor_mappings]
@@ -2561,7 +4560,7 @@ def _validate_cursor_fields_in_record_shape(
                     "(spec: §Cross-Field Validation)"
                 )
             for cf in cursor_fields:
-                _check_cursor_field_in_node(cf, sub, where=f"items[{idx}]")
+                _check_cursor_field_in_node(cf, sub, where=f"items[{idx}]", root=root)
         return
     if not isinstance(items, dict):
         raise ValueError(
@@ -2570,7 +4569,42 @@ def _validate_cursor_fields_in_record_shape(
         )
 
     for cf in cursor_fields:
-        _check_cursor_field_in_node(cf, items, where="items")
+        _check_cursor_field_in_node(cf, items, where="items", root=root)
+
+
+def _validate_record_field_path(
+    field_path: str, array_node: dict[str, Any], root: Any, *, where: str
+) -> None:
+    """A dotted RECORD field path must resolve under the records array's ``items``.
+
+    The generic form of the `cursor_field` check, for any site that names a
+    field the engine reads off a record rather than off the response body.
+    `pagination.keyset.order_by_field` is the other one: the seek order is
+    defined over it, so a path the record shape does not declare means pages
+    advance from a value the engine cannot read — silently truncating or
+    repeating, which is the #123 failure with a different cause.
+
+    Unknowable shapes are reported, not skipped: this is `response.schema`,
+    which the contract holds to the strict standard (see
+    :func:`_validate_cursor_fields_in_record_shape`).
+    """
+    items = array_node.get("items")
+    if not isinstance(items, dict):
+        raise ValueError(
+            f"{where} is declared but the response.schema records array has no "
+            f"object `items` subschema, so {field_path!r} cannot be verified — "
+            "tighten the response schema (spec: §Cross-Field Validation)"
+        )
+    segments = field_path.split(".")
+    try:
+        resolve_declared_path(items, segments, root=root)
+    except DeclaredPathError as exc:
+        walked = ".".join(segments[: exc.index + 1])
+        raise ValueError(
+            f"{where} {field_path!r} is not declared in the response.schema "
+            f"record shape at {walked!r}: {exc.reason} "
+            "(spec: §Cross-Field Validation)"
+        ) from None
 
 
 def _cursor_field_of(cm: Any) -> str:
@@ -2583,24 +4617,24 @@ def _cursor_field_of(cm: Any) -> str:
 
 
 def _check_cursor_field_in_node(
-    cursor_field: str, items_node: dict[str, Any], *, where: str
+    cursor_field: str, items_node: dict[str, Any], *, where: str, root: Any
 ) -> None:
-    node: Any = items_node
+    """A ``cursor_field`` must resolve under the record shape by declared-path
+    resolution — the same algorithm `response.records` and the pagination /
+    metadata refs use, so an author never has to hold two traversal rules.
+
+    The walk STARTS at the record shape but resolves `$ref`s against ``root``
+    (the whole ``response.schema``) — see
+    :func:`_validate_cursor_fields_in_record_shape`."""
     segments = cursor_field.split(".")
-    for i, seg in enumerate(segments):
-        if not isinstance(node, dict):
-            walked = ".".join(segments[: i + 1])
-            raise ValueError(
-                f"replication cursor_field {cursor_field!r} traversal failed at "
-                f"{walked!r} (under {where!r}); intermediate node is not an object "
-                "(spec: §Cross-Field Validation)"
-            )
-        props = node.get("properties")
-        if not isinstance(props, dict) or seg not in props:
-            walked = ".".join(segments[: i + 1])
-            raise ValueError(
-                f"replication cursor_field {cursor_field!r} not declared in "
-                f"response.schema record-shape branch at {walked!r} (under {where!r}) "
-                "(spec: §Cross-Field Validation)"
-            )
-        node = props[seg]
+    try:
+        resolve_declared_path(items_node, segments, root=root)
+    except DeclaredPathError as exc:
+        # Name the prefix that WAS walked, up to and including the failing
+        # segment: for a dotted path, "which hop broke" is the whole diagnosis.
+        walked = ".".join(segments[: exc.index + 1])
+        raise ValueError(
+            f"replication cursor_field {cursor_field!r} not declared in "
+            f"response.schema record-shape branch at {walked!r} (under {where!r}): "
+            f"{exc.reason} (spec: §Cross-Field Validation)"
+        ) from None

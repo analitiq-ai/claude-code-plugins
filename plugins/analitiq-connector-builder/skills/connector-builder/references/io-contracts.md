@@ -270,6 +270,7 @@ access and may not guess field types).
               "endpoint-filename",
               "endpoint-id-unique",
               "endpoint-id-locator",
+              "endpoint-transport-ref",
               "embedded-json-schema"
             ]
           },

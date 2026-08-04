@@ -91,7 +91,7 @@ Schemas are generated from — so there is no schema fetch. It runs:
    `skills/connector-builder/references/advisory-rules.md`.
 2. **Checks the contract models can't express** — cross-file relationships
    (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
-   `endpoint-id-locator`), embedded-schema validity
+   `endpoint-id-locator`, `endpoint-transport-ref`), embedded-schema validity
    (`embedded-json-schema`), and quality warnings on a type map
    (`type-map-rule`, `type-map-write-coverage`). A document matching no known
    artifact kind reports under `document`.

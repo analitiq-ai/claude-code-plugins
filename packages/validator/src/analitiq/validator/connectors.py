@@ -22,6 +22,12 @@ module adds only what a single-document model cannot express:
   a database id from its verbatim
   `database_object` (`slug(schema)__slug(table)[__slug(catalog)]__hash8`, via the
   shared `analitiq.contracts.endpoint_identity`);
+- **endpoint → transport** (`endpoint-transport-ref`): an endpoint's
+  `request.transport_ref` must name a transport the sibling connector.json
+  declares. `ConnectorBase._transport_refs_resolvable` enforces the same rule for
+  every connector-internal ref site, but an endpoint document is a separate file
+  and structurally invisible to that model validator — so the cross-file half of
+  the rule lives here;
 - **advisory quality warnings** the contract tolerates: duplicate type-map
   rules, dead uppercase-only read patterns, and write-map vocabulary gaps.
 
@@ -55,7 +61,14 @@ try:
     with contract_model_domain():
         from pydantic import TypeAdapter
         from analitiq.contracts.connector import Connector
-        from analitiq.contracts.endpoints import ApiEndpointDoc, DatabaseEndpointDoc, SLUG_RE
+        from analitiq.contracts.endpoints import (
+            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            JSON_SCHEMA_SUBSCHEMA_KEYS,
+            ApiEndpointDoc,
+            DatabaseEndpointDoc,
+            SLUG_RE,
+        )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
@@ -85,6 +98,7 @@ register_validator_ids({
     "endpoint-filename",
     "endpoint-id-unique",
     "endpoint-id-locator",
+    "endpoint-transport-ref",
     "embedded-json-schema",
 })
 
@@ -188,14 +202,15 @@ def _canonical_eq(a: str, b: str) -> bool:
 # a schema-aware walk recurses only through these — never through data keywords
 # like `const`/`default`/`enum`, and it treats `properties` children as field
 # names (a field literally named `default` is still walked as a sub-schema).
-_SUBSCHEMA_MAP_KEYS = frozenset({
-    "properties", "patternProperties", "$defs", "definitions", "dependentSchemas",
-})
-_SUBSCHEMA_LIST_KEYS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
-_SUBSCHEMA_SINGLE_KEYS = frozenset({
-    "items", "contains", "additionalProperties", "propertyNames",
-    "unevaluatedItems", "unevaluatedProperties", "not", "if", "then", "else",
-})
+# The JSON-Schema keyword vocabulary is OWNED by the contract package and
+# imported, not restated. It used to be a third hand-maintained copy: adding
+# `contentSchema` meant editing three, and the one that was missed left the
+# rendered schema's prose contradicting its own constraints. `_walk_schema_pairs`
+# must descend exactly where the contract's walkers do, or a `native_type`
+# declared in a position only one of them visits escapes type-map coverage.
+_SUBSCHEMA_MAP_KEYS = JSON_SCHEMA_SUBSCHEMA_KEYS
+_SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+_SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
 
 def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
@@ -445,6 +460,69 @@ def _api_operation_paths(ep_doc: dict) -> list[tuple[str, str]]:
     return out
 
 
+def _api_operation_transport_refs(ep_doc: dict) -> list[tuple[str, Any]]:
+    """`(pointer, request.transport_ref)` for every operation of an api-endpoint
+    doc that DECLARES one — the read request and each write mode's request.
+
+    An absent or `null` `transport_ref` is omitted: it means "use the connector's
+    `default_transport`", which is always resolvable, so there is nothing to
+    check. Malformed shapes (a non-dict `operations`/`write` mode, a request that
+    is not an object) are skipped rather than probed — they are already recorded
+    as model errors, and this walk must not crash on them."""
+    out: list[tuple[str, Any]] = []
+    ops = ep_doc.get("operations")
+    if not isinstance(ops, dict):
+        return out
+
+    def _collect(block: Any, pointer: str) -> None:
+        if not isinstance(block, dict):
+            return
+        request = block.get("request")
+        if not isinstance(request, dict) or request.get("transport_ref") is None:
+            return
+        out.append((f"{pointer}/request/transport_ref", request["transport_ref"]))
+
+    _collect(ops.get("read"), "/operations/read")
+    write = ops.get("write")
+    if isinstance(write, dict):
+        for mode, block in write.items():
+            _collect(block, f"/operations/write/{mode}")
+    return out
+
+
+def _endpoint_transport_ref_findings(ep_doc: Any, transports: Any,
+                                     label: str = "") -> list[dict]:
+    """Cross-file gate: every `request.transport_ref` an endpoint declares must
+    name a transport the sibling connector.json declares in `transports`.
+
+    This is the cross-file half of the contract's §Transport Selection rule.
+    `ConnectorBase._transport_refs_resolvable` already enforces it for every
+    connector-INTERNAL ref site (auth ops, post-auth requests, resource
+    discovery), but an endpoint lives in its own document, so no single-document
+    model validator can see both sides — only a connector-anchored walk can.
+    The wording mirrors that model validator's so one rule reads the same
+    wherever it fires.
+
+    A non-string ref is left alone (the model already reports the type error),
+    and a `transports` value that is not a dict means the connector itself is
+    malformed — its own model error stands, and fabricating "declared: []"
+    findings on top of it would only bury it."""
+    if not isinstance(ep_doc, dict) or not isinstance(transports, dict):
+        return []
+    findings: list[dict] = []
+    for pointer, ref in _api_operation_transport_refs(ep_doc):
+        if not isinstance(ref, str) or ref in transports:
+            continue
+        where = f"{label}{pointer}" if label else pointer
+        findings.append(finding(
+            "endpoint-transport-ref", "error", pointer,
+            f"{where} transport_ref={ref!r} is not declared in the sibling "
+            f"connector.json `transports` (declared: {sorted(transports)!r}; "
+            "spec: §Transport Selection). A request dispatches only through a "
+            "transport the connector declares."))
+    return findings
+
+
 def _endpoint_locator_findings(ep_doc: Any) -> list[dict]:
     """Gate: an API `endpoint_id` must equal the handle derived from its resource
     locator — the read `request.path` when present, else the first write path
@@ -564,13 +642,27 @@ def is_stem_addressed_endpoint_path(doc_path: Path) -> bool:
     return parent.name == "endpoints" and parent.parent.name == "definition"
 
 
-def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
+def _load_json_sibling(path: Path, validator_id: str) -> tuple[Any, list[dict]]:
+    """Read a sibling JSON document, reporting a read/parse failure under
+    ``validator_id``.
+
+    The id is a parameter because the callers are different checks. It used to
+    be hardcoded to `type-map-coverage` and the endpoint-anchored caller
+    relabelled the findings afterwards — so a connector.json that would not
+    parse was reported against an endpoint under the type-map id, invisible to a
+    fix loop filtering on the check that actually failed. Naming the reporter at
+    the call site fixes that at the source instead of rewriting its output.
+    """
     try:
-        doc = json.loads(path.read_text())
+        return json.loads(path.read_text()), []
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return None, [finding("type-map-coverage", "error", "/",
+        return None, [finding(validator_id, "error", "/",
                               f"sibling {path.name} could not be read or parsed ({exc}).")]
-    return doc, []
+
+
+def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
+    """A type-map document, or `None` plus a `type-map-coverage` finding."""
+    return _load_json_sibling(path, "type-map-coverage")
 
 
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:
@@ -673,7 +765,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                                     f"endpoint file 'endpoints/{rel}' is nested; endpoints must be flat "
                                     "at 'endpoints/{endpoint_id}.json' (the engine resolves them by id)."))
             continue
-        ep_doc, load = _load_type_map(ep_path)  # generic JSON reader (reused)
+        ep_doc, load = _load_json_sibling(ep_path, "type-map-coverage")
         if ep_doc is None:
             findings.extend(load)
             continue
@@ -698,6 +790,11 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+        # Cross-file: the endpoint's transport_ref sites resolve against THIS
+        # connector's `transports` — checkable only here, where both documents
+        # are in hand.
+        findings.extend(_endpoint_transport_ref_findings(
+            ep_doc, doc.get("transports"), label=ep_path.name))
         for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
             rendered = _render_canonical(native, read_doc)
             site = f"{ep_path.name}{pointer}"
@@ -738,6 +835,77 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
+        # `endpoint-transport-ref` is cross-document: it needs the sibling
+        # connector.json's `transports`, which only `check_coverage` has. Say so
+        # rather than returning a silent clean pass — an author validating a
+        # single endpoint file would otherwise read `passed: true` as "the
+        # transport_ref is fine", which is the unearned reassurance this whole
+        # PR is about. Warning, not error, matching `endpoint-filename`'s
+        # convention for a check it cannot perform from the given path.
+        declared_refs = sorted({
+            ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)
+        })
+        if declared_refs:
+            # Resolve the sibling connector when the layout gives us one:
+            # `endpoints/{id}.json` sits one level below `connector.json`. The
+            # connector-builder skill validates each endpoint on its own, so a
+            # blind warning here would fire on every pass of its fix loop and
+            # could never be cleared — an alarm that cannot be acted on trains
+            # authors to ignore the id. Only warn when the connector genuinely
+            # is not reachable.
+            # `.resolve()` first: `Path("things.json").parent.parent` is `.`, so
+            # validating with a relative `--document` from inside `endpoints/`
+            # missed the sibling and downgraded a genuinely broken ref to a
+            # warning — a silent pass on the one check this adds. `..` in the
+            # path failed the same way.
+            sibling = (
+                doc_path.resolve().parent.parent / "connector.json"
+                if doc_path
+                else None
+            )
+            connector_doc = None
+            sibling_exists = sibling is not None and sibling.is_file()
+            if sibling_exists:
+                connector_doc, load_findings = _load_json_sibling(
+                    sibling, "endpoint-transport-ref"
+                )
+                findings.extend(load_findings)
+            transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
+            if isinstance(transports, dict):
+                findings.extend(_endpoint_transport_ref_findings(
+                    doc, transports, label=doc_path.name if doc_path else ""))
+            elif connector_doc is not None:
+                # Connector found, but its `transports` is missing or not an
+                # object. `_endpoint_transport_ref_findings` returns [] there —
+                # correct at the CONNECTOR-anchored call site, where the
+                # connector's own model error already stands. Here the connector
+                # model never runs, so returning [] would report a clean pass on
+                # an endpoint whose `transport_ref` resolves to nothing. Say what
+                # could not be checked and why.
+                findings.append(finding(
+                    "endpoint-transport-ref", "warning", "/",
+                    f"transport_ref {declared_refs!r} not checked: the sibling "
+                    "connector.json was read but declares no usable `transports` "
+                    "object, so there was nothing to resolve the name against. "
+                    "Validate the connector to see why."))
+            elif sibling_exists:
+                # The file IS there and WAS read — it just did not parse.
+                # Branching on `connector_doc is None` alone said "not
+                # reachable", contradicting the parse error emitted beside it
+                # under the same id.
+                findings.append(finding(
+                    "endpoint-transport-ref", "warning", "/",
+                    f"transport_ref {declared_refs!r} not checked: the sibling "
+                    f"connector.json at {sibling} could not be parsed, so its "
+                    "`transports` could not be read. Fix the error reported "
+                    "above and re-run."))
+            else:
+                findings.append(finding(
+                    "endpoint-transport-ref", "warning", "/",
+                    f"transport_ref {declared_refs!r} not checked: no sibling "
+                    "connector.json was reachable from this document's path, so "
+                    "its `transports` could not be read. Validate the connector "
+                    "to resolve it."))
     if doc_path is not None:
         findings += endpoint_filename_findings(doc, doc_path.name)
     return findings

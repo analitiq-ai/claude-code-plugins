@@ -13,7 +13,7 @@ These are not independent projects that happen to share a directory. The plugin
 prose, the Pydantic contract models, the validator, and the published JSON
 Schemas are four expressions of one set of rules. They live together so a rule
 changes in one place — every boundary between them would be a surface a human
-has to keep in sync by hand. See `.claude/rules/no-drift-surfaces.md`.
+has to keep in sync by hand.
 
 This repo is also a **Claude Code plugin marketplace**. `.claude-plugin/marketplace.json`
 declares the marketplace `analitiq-claude-code-plugins`; each entry's `source`
@@ -55,8 +55,9 @@ the publish workflow globs `**/*.json`, and `render_schemas.py check` never
 inspects them.
 
 **The canonical Arrow type vocabulary is engine-owned.** The set of type
-families the platform executes is a capability surface (issue #81): analitiq-core
-publishes it as versioned artifacts (`arrow-type-grammar`, `conversion-matrix`
+families the platform executes is a capability surface owned by the engine, not
+by this repo: analitiq-core publishes it as versioned artifacts
+(`arrow-type-grammar`, `conversion-matrix`
 at `schemas.analitiq.ai`), and this repo vendors one pinned grammar version at
 `packages/contract-models/src/analitiq/contracts/arrow_type_grammar.json`.
 `ARROW_TYPE_PATTERN`, the canonical-types `$defs`, and the container-head set
@@ -181,8 +182,6 @@ is engine-owned" above). Craft the schema never defined (the `ssl_mode`
 vocabulary, the driver-selection decision order, datetime naive/tz judgment) is
 not drift-exposed and stays.
 
-The behavioural checklist for this policy is `.claude/rules/no-drift-surfaces.md`.
-
 ## Conventions
 
 - JSON Schema Draft 2020-12 throughout.
@@ -191,154 +190,21 @@ The behavioural checklist for this policy is `.claude/rules/no-drift-surfaces.md
 
 ## Tests
 
-```bash
-pip install -r requirements-dev.txt
-pytest
-```
-
-`testpaths = tests` in `pytest.ini`, so a bare `pytest` runs every plugin's
-suite. The connector drift guards additionally honour
+The connector drift guards honour
 `DRIFT_REQUIRE_CONTRACT_MODELS=1`, which turns a missing contract package into a
 hard failure instead of an all-skipped green run — CI sets it so the gate can
 never pass without actually running.
 
-## Releases
+## Releases and credentials
 
-Each publishable artifact carries **its own version and its own tag prefix**
-(`analitiq-connector-builder-v*`, `analitiq-pipeline-builder-v*`,
-`contract-models-v*`, `validator-v*`), but they are released two different ways.
+Four artifacts, four tag prefixes. The two plugins are release-please-managed —
+never bump a `plugin.json` version by hand. The two packages are released by
+hand as ONE PR, merged with a merge commit, never a squash. Publishing is OIDC
+only — never add a static credential as a repo or environment secret, and never
+use `pull_request_target` with a checkout of PR code.
 
-**The two plugins** are managed by release-please. Their versions are
-derived by **release-please in monorepo mode** from Conventional Commit types —
-never bump a `plugin.json` version by hand.
-
-- `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → major.
-  Non-release types (`chore:`, `docs:`, `ci:`, `refactor:`, `test:`) don't bump.
-- **Agent prose is behaviour, not documentation.** A change to an `agents/*.md`,
-  `SKILL.md`, or a `references/` file alters what the plugin does, so it takes
-  `feat:` or `fix:` — never `docs:`. Committing it as `docs:` ships changed agent
-  behaviour under the old version, and nothing catches that afterwards.
-  `docs:` is for README / CLAUDE.md / anything an agent never loads.
-- Release-please routes a commit to a train by **path**, so an edit under
-  `plugins/<name>/` bumps that plugin and nothing else. The bump comes from the
-  type; the train comes from the path.
-- Both plugins are pre-1.0, so breaking changes bump the minor and features bump
-  the patch (`bump-minor-pre-major` / `bump-patch-for-minor-pre-major`).
-- release-please maintains a rolling Release PR per artifact; merging it bumps
-  the version, regenerates that artifact's `CHANGELOG.md`, and tags it.
-- When squash-merging, the PR title is what release-please parses — it must be a
-  valid Conventional Commit. A commit lands in a train by the **path** it
-  touches, not by its scope; the scope is for the changelog, so use the
-  component id (`feat(analitiq-connector-builder): …`).
-
-**The two packages are released by hand**, by pushing a `contract-models-v*` or
-`validator-v*` tag. They are deliberately NOT in release-please: it speaks
-SemVer, and their versions are PEP 440 pre-releases (`1.0.0rc12`). A dry run
-resolved `1.0.0rc12` as plain `1.0.0` and proposed `1.1.0` — silently dropping
-the rc suffix and jumping the train to a final release.
-
-Manual tagging also matches their discipline: `packages/validator` pins
-contract-models with an exact `==`, `test_contract_models_pin.py` fails on any
-skew, so several values must move together; and a minor bump is a coordinated
-engine rollout, not something a commit type should infer.
-
-**A package release is ONE PR.** All five values move in a single commit — both
-`[project].version`s, validator's `==` dep on contract-models, `VALIDATOR_PIN`,
-and the connector agent's self-install line. The publish happens *from the PR
-branch, before the merge*, so main is only ever updated to a pin that is already
-on PyPI:
-
-1. Open the PR with all five bumped. `pinned-validator-guard` goes **red** —
-   expected, the new version isn't published yet.
-2. Push the release tag at the PR head: `git tag validator-v1.0.0rc20 <sha> &&
-   git push origin validator-v1.0.0rc20`. The publish workflow is tag-triggered
-   and checks out the tagged commit; it does not care whether that commit is on
-   main yet, and asserts tag == pyproject version before building.
-3. Approve the publish in the `pypi` environment (Analitiq-Bot).
-4. Re-run the `pinned-validator-guard` job. It now installs the published wheel
-   and goes green — that red→green flip **is** the release gate.
-5. **Merge with a merge commit, not a squash.** A squash rewrites the commit the
-   tag points at, orphaning the released artifact's provenance: the tag would
-   reference a commit that is in no branch. This is the one place the repo's
-   squash convention does not apply. (Live-settings caveat: nothing enforces
-   this — it is discipline, like the environment reviewer rules.)
-
-Both packages release together when their versions move together; push both tags
-at the same commit.
-
-Config: `release-please-config.json` + `.release-please-manifest.json`.
-Workflow: `.github/workflows/release-please.yml`.
-
-A **human-pushed** tag triggers the publish workflows normally. A tag created by
-the release-please action would not — GitHub suppresses triggers from
-`GITHUB_TOKEN` to prevent loops — which is why no publish job can be wired to
-release-please output, and another reason the packages stay on manual tags.
-
-## Credentials
-
-No long-lived credentials in this repo. Publishing authenticates by OIDC — PyPI
-Trusted Publishing for packages, an assumed IAM role for anything touching AWS —
-scoped by a GitHub Environment.
-
-### The `pypi` environment
-
-PyPI Trusted Publishers are registered for both `analitiq-contract-models` and
-`analitiq-validator` against:
-
-| | |
-|---|---|
-| Owner | `analitiq-ai` |
-| Repository | `claude-code-plugins` (matched **literally** — GitHub rename redirects do not apply) |
-| Workflow | `contract-models-release.yml` / `validator-release.yml` |
-| Environment | `pypi` |
-
-**Every publish job must therefore declare `environment: pypi`.** PyPI checks the
-environment on both sides; a job without it is rejected, and the failure surfaces
-at the last step of an otherwise green release run. Both release workflows carry
-it.
-
-The environment's deployment rules permit **only** `contract-models-v*` and
-`validator-v*`. Publishing is always tag-triggered, so the job's ref is always
-the release tag; `main` is deliberately excluded. Adding a branch here would
-widen what can reach PyPI for no gain.
-
-The environment's **sole required reviewer is `Analitiq-Bot`**. Every publish
-pauses at the `environment: pypi` job until it is approved, and no other account
-can approve it — so while anyone with push access can *push* a release tag, only
-Analitiq-Bot can let the publish through. That is the "only Analitiq-Bot
-publishes" boundary, and it is the human gate that the release-please Release PR
-used to provide before the packages moved to hand-pushed tags.
-
-`prevent_self_review` is deliberately **off**: with Analitiq-Bot as the only
-reviewer, blocking self-review would deadlock any release Analitiq-Bot itself
-pushes. The trade-off is that this is single-account control, not four-eyes — to
-require a second approver, add them to the environment and turn self-review
-prevention back on.
-
-These are live GitHub environment settings, not repo files, so they are not
-covered by any test here; changing the reviewer or the tag rules is a settings
-edit in the repo's Environments page.
-
-### The `schemas` environment
-
-`schemas-publish.yml` publishes `schemas/` to the serving bucket through the
-`schemas` environment, built to mirror `pypi`'s reviewer gate: **sole required
-reviewer Analitiq-Bot** (same single-account trade-off as above),
-`prevent_self_review` off, deployment branches restricted to `main` (where
-`pypi` restricts to release tags). It holds three environment **variables**,
-none of them secrets: `AWS_ROLE_ARN`, `AWS_REGION`, `SCHEMAS_BUCKET`. The role
-is specified by infrastructure#1018 (not yet applied there): OIDC trust pinned
-to this repo's `schemas` environment, permissions `s3:PutObject` +
-`s3:GetObject` on objects (GetObject authorizes the first-write-wins probe)
-and `s3:ListBucket` — no delete, matching the workflow's additive publish
-semantics. The same live-settings caveat as `pypi` applies: the reviewer,
-branch rule, and variables are Environments-page settings, covered by no test
-here.
-
-The repo is **public**. Its workflow files are world-readable and that is fine:
-the gate is authorization, not secrecy. Two rules follow from it — never use
-`pull_request_target` with a checkout of PR code, and never add a static
-credential as a repo or environment secret.
+Full procedure, commit-type rules, and the `pypi` / `schemas` environment
+settings: see the `releasing` skill (`.claude/skills/releasing/SKILL.md`).
 
 ## PR Review Process
 
