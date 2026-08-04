@@ -50,7 +50,8 @@ token** is checked, so `connection.discovered.nope` passes and resolves empty.
 
 What is actually proved, by sub-scope. Everything is spelling-checked (a bad
 sub-scope like `response.bodyy` is always an error); only the first two rows
-have their **path** resolved, and only on a read:
+are resolved against something declared — `response.body` paths only on a
+read, `response.metadata` keys on either operation:
 
 | Ref | Read op | Write op |
 |---|---|---|

@@ -280,8 +280,8 @@ def test_scan_exemption_boundaries(monkeypatch, tmp_path: Path) -> None:
         "# Boundaries",                                        # 1
         "",
         "enforced by ADV-ENDP-023, and the tail is not checked here.",  # 3: ADV same line -> pinned
-        "an ADV citation two lines up cannot pin this: not checked.",   # 4
-        f"see ADV-CTOR-001 above, {_REGISTRY.ADV_REACH + 1} lines away", # 5
+        "one line from the citation, still pinned: not checked.",       # 4: distance 1
+        "two lines from the citation, still pinned: not checked.",      # 5: distance 2 == ADV_REACH
         "",
         "<!-- PROBE: read-body-path-typo -->",                 # 7: fence
         *filler,                                               # 8 .. 7+reach: within reach
@@ -293,8 +293,6 @@ def test_scan_exemption_boundaries(monkeypatch, tmp_path: Path) -> None:
         "",
         "<!-- PROBE: no-such-probe -->",                       # dangling fence id
     ]
-    # Make line 4's distance from line 3's ADV exceed ADV_REACH by padding:
-    # instead of relying on layout above, compute the two ADV cases directly.
     assert _REGISTRY.ADV_REACH == 2, (
         "ADV_REACH changed — rework this fixture's line geometry with it"
     )
@@ -328,18 +326,38 @@ def test_scan_exemption_boundaries(monkeypatch, tmp_path: Path) -> None:
     violations, _, _ = _REGISTRY.scan()
     assert [(v.line, v.text) for v in violations] == [(4, "not checked")]
 
-    # Waiver-at-the-hit: both conditions must fail independently. The first
-    # waiver's text is real but sits outside the hit's one-line window; the
-    # second sits ON the hit line but does not contain the trigger phrase.
-    # Neither may apply, both come back stale, and the violation stays.
+    # Waiver-at-the-hit, the phrase condition alone: a waiver ON the hit line
+    # whose `contains` lacks the trigger phrase must not apply, and comes back
+    # stale, loudly.
     monkeypatch.setattr(
         _REGISTRY, "WAIVERS",
-        (_REGISTRY.Waiver("plugins/adv-far.md", "enforced by ADV-ENDP-023", "wrong place"),
-         _REGISTRY.Waiver("plugins/adv-far.md", "three lines from the citation", "wrong phrase")),
+        (_REGISTRY.Waiver("plugins/adv-far.md", "three lines from the citation", "wrong phrase"),),
     )
     violations, _, stale = _REGISTRY.scan()
     assert [(v.line, v.text) for v in violations] == [(4, "not checked")]
-    assert sorted(w.reason for w in stale) == ["wrong phrase", "wrong place"]
+    assert [w.reason for w in stale] == ["wrong phrase"]
+
+    # The location condition ALONE: a waiver whose `contains` DOES carry the
+    # hit's trigger phrase, but sits in another paragraph. Without
+    # `contains in window` this waiver would swallow the unrelated claim too —
+    # and four of the live waivers carry a trigger phrase, so each would
+    # silently widen from one sentence to every same-trigger claim in its file.
+    two = tmp_path / "plugins" / "two.md"
+    two.write_text(
+        "The waived sentence: refs are not checked here.\n"
+        "\n"
+        "A totally different paragraph.\n"
+        "An unrelated new claim: names are not checked.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_REGISTRY, "_scannable_docs", lambda: [two])
+    monkeypatch.setattr(
+        _REGISTRY, "WAIVERS",
+        (_REGISTRY.Waiver("plugins/two.md", "refs are not checked here", "legit"),),
+    )
+    violations, _, stale = _REGISTRY.scan()
+    assert [(v.line, v.text) for v in violations] == [(4, "are not checked")]
+    assert not stale
 
 
 def test_scope_table_refuses_probeless_cells() -> None:
@@ -357,7 +375,7 @@ def test_scope_table_refuses_probeless_cells() -> None:
 def test_run_probe_branches() -> None:
     """Every verdict branch in `run_probe` fires on a synthetic probe.
 
-    The 44 live probes all pass, so on a green tree none of these branches
+    The live probes all pass, so on a green tree none of these branches
     executes — round-2 mutation testing removed the crash guard and the
     forbid/require checks with everything staying green.
     """
