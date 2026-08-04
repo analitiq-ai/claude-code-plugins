@@ -393,6 +393,16 @@ class Param(_EndpointModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "Param":
+        # `default` is an expression tree the resolver evaluates, but it was
+        # reached by NO check: not `_validate_expression_shapes`, not the scope
+        # guards, not the response-path sweep. On a `controlled_by: "pagination"`
+        # param it is the paging SEED, so a ref that resolves to nothing starts
+        # paging from an unresolved value and the run reports success — #123's
+        # failure on the one slot the sweep never enumerated.
+        _validate_expression_shapes(self.default, "params.<name>.default")
+        for token in _expression_tokens(self.default):
+            _reject_unknown_scope("params.<name>.default", token)
+            _reject_unknown_response_scope("params.<name>.default", token)
         if _collect_singleton_values(self.default, "from_input"):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
@@ -3524,7 +3534,13 @@ def _compose_declarations(key: str, declarations: list[Any]) -> Any:
     if len(declarations) == 1:
         return declarations[0]
     _refuse_disjoint_types(key, declarations)
-    return {"allOf": list(declarations)}
+    # REVERSED: most specific LAST. `_property_contributors` walks pre-order, so
+    # `declarations` is [the node's own, then its `$ref`/`allOf` bases], while
+    # every consumer runs the composed node through `materialize_node`, which is
+    # last-wins. Emitting contributor order would let the BASE override the
+    # refinement — a record narrowing its envelope's `data` to the current row
+    # shape derived the legacy column type, silently, with the document valid.
+    return {"allOf": list(reversed(declarations))}
 
 
 #: Stand-in "name" for the whole-node case. `_refuse_disjoint_types`' message is
@@ -3600,6 +3616,13 @@ def _combine_schema_values(existing: Any, incoming: Any) -> Any:
     outright by :func:`_refuse_disjoint_types` before any merging happens.
     """
     if isinstance(existing, dict) and isinstance(incoming, dict):
+        # Refuse a contradiction wherever it sits, not only on the node's own
+        # `type`. Two `allOf`/`$ref` contributors declaring one field as `string`
+        # and `integer` used to merge last-wins here, so the answer depended on
+        # which branch was written first — while `effective_properties` on the
+        # same node refused. Two views of one document, one answering and one
+        # refusing, with the permissive one deriving the column.
+        _refuse_disjoint_types(_MATERIALIZED_NODE, [existing, incoming])
         merged = dict(existing)
         for key, value in incoming.items():
             merged[key] = (
@@ -3684,6 +3707,11 @@ def _materialize(
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
+            if branch is False:
+                raise DeclarationConflictError(
+                    "an `allOf` branch is the boolean schema `false`, which no "
+                    "instance satisfies, so the whole intersection is empty"
+                )
             if isinstance(branch, dict):
                 sources.append(_materialize(branch, root, memo, on_path))
     sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
@@ -3826,6 +3854,32 @@ def _reject_unknown_scopes_in(sites: dict[str, Any]) -> None:
             _reject_unknown_response_scope(where, token)
 
 
+def _unresolved_harm(where: str) -> str:
+    """What actually goes wrong when a token at ``where`` resolves to nothing.
+
+    The consequence is the actionable half of these messages, and it is not the
+    same on both sides. Telling a write author that "paging stops after the
+    first page" — there is no paging on a write — buries the real outcome, which
+    is that a success predicate reading nothing holds unconditionally.
+    """
+    if where.startswith("operations.write.response"):
+        return (
+            "It resolves to nothing on every response, so a `success_when` "
+            "predicate over it holds unconditionally and every write reports "
+            "success — including the ones whose rejected rows the provider "
+            "listed."
+        )
+    if where.startswith("operations.write"):
+        return (
+            "It resolves to nothing at run time, so the request goes out with "
+            "that value missing and the provider answers whatever it answers."
+        )
+    return (
+        "It resolves to nothing at run time, so paging stops after the first "
+        "page and the run still reports success."
+    )
+
+
 def _reject_unknown_scope(where: str, token: str) -> None:
     """The LEADING token must name a real resolution scope.
 
@@ -3844,9 +3898,8 @@ def _reject_unknown_scope(where: str, token: str) -> None:
         return
     raise ValueError(
         f"{where} references {token!r}, whose leading token is not a known "
-        f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). It resolves to "
-        "nothing at run time, so paging stops after the first page and the run "
-        "still reports success (spec: §Value Expressions)"
+        f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). {_unresolved_harm(where)} "
+        "(spec: §Value Expressions)"
     )
 
 
@@ -3876,9 +3929,8 @@ def _reject_unknown_response_scope(where: str, token: str) -> None:
     raise ValueError(
         f"{where} references {token!r}, whose response sub-scope "
         f"{sub_scope or '(none)'!r} is not one of "
-        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. A misspelled scope resolves to "
-        "nothing on every page, so paging stops after the first one and the run "
-        "still reports success (spec: §API Response Extraction)"
+        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. {_unresolved_harm(where)} "
+        "(spec: §API Response Extraction)"
     )
 
 
@@ -3911,9 +3963,12 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     nested collection like ``response.body.objects`` yields the real record
     columns, not the wrapper key ``objects``.
 
-    Falls back to ``response_schema`` when ``records`` is absent, non-spec, or
-    does not resolve to a schema node — preserving extraction for schemas whose
-    record shape already sits at the root.
+    Returns ``None`` when the ref does not resolve, is not `response.body`-
+    anchored, or lands on something that is not a schema node. ``None`` means
+    "this document does not say" — never a fallback to ``response_schema``,
+    which is the ENVELOPE and whose keys a caller would then enumerate as the
+    record's fields. Callers must branch on it; the gate
+    (:func:`_validate_records_in_response_schema`) reports the real reason.
 
     The single record-locator shared by every consumer of the read contract
     (field extraction and arrow_type stamping): they MUST target the same
@@ -3927,8 +3982,11 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
         return response_schema
     segments = _response_body_segments(ref)
     if segments is None:
-        # Non-spec ref (e.g. a bare JSONPath) — cannot map onto the schema.
-        return response_schema
+        # Non-spec ref (e.g. a bare JSONPath). The gate rejects this exactly as
+        # it rejects a typo, so returning the envelope here reproduces the bug
+        # the typo branch was just fixed for: `find_record_field_properties`
+        # would enumerate `data`/`has_more` as the table's columns.
+        return None
     try:
         node: Any = resolve_declared_path(response_schema, segments)
     except SchemaResolutionError:

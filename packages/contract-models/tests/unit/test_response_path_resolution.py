@@ -1075,3 +1075,49 @@ class TestRequestSlotsAreSweptToo:
         }
         with pytest.raises(ValidationError, match="is not one of"):
             parse_endpoint(payload)
+
+
+class TestParamDefaultIsAnExpressionSlot:
+    """`params.<name>.default` is an expression tree the resolver evaluates, and
+    it was reached by no check at all — not the shape check, not the scope
+    guards. On a `controlled_by: "pagination"` param it is the paging SEED, so a
+    ref resolving to nothing starts paging from an unresolved value and the run
+    reports success: #123's failure on the one slot the sweep never enumerated."""
+
+    def _payload(self, default):
+        payload = _read_payload("cursor")
+        payload["operations"]["read"]["params"]["c"]["default"] = default
+        return payload
+
+    @pytest.mark.parametrize(
+        "default",
+        [
+            {"ref": "response.bodyy.next"},
+            {"ref": "responses.body.next"},
+            {"ref": "Response.body.next"},
+            {"ref": "totally.bogus"},
+            {"template": "${Response.body.next}"},
+        ],
+    )
+    def test_unresolvable_scope_in_a_param_default_is_rejected(self, default):
+        with pytest.raises(ValidationError):
+            parse_endpoint(self._payload(default))
+
+    @pytest.mark.parametrize(
+        "default",
+        [
+            {"ref": "connection.parameters.page_size"},
+            {"literal": "abc"},
+            {"template": "${connection.parameters.base}/x"},
+        ],
+    )
+    def test_legitimate_param_defaults_still_validate(self, default):
+        parse_endpoint(self._payload(default))
+
+    def test_a_two_key_expression_is_rejected_rather_than_silently_dispatched(self):
+        # `iter_expression_strings` dispatches `template` before `ref`, so the
+        # `ref` the author wrote first would be silently ignored.
+        with pytest.raises(ValidationError):
+            parse_endpoint(
+                self._payload({"ref": "connection.a", "template": "${connection.b}"})
+            )

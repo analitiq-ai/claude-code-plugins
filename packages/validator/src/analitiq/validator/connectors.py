@@ -852,7 +852,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
             if isinstance(transports, dict):
                 findings.extend(_endpoint_transport_ref_findings(
                     doc, transports, label=doc_path.name if doc_path else ""))
-            elif isinstance(connector_doc, dict):
+            elif connector_doc is not None:
                 # Connector found, but its `transports` is missing or not an
                 # object. `_endpoint_transport_ref_findings` returns [] there —
                 # correct at the CONNECTOR-anchored call site, where the
@@ -863,9 +863,9 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
                 findings.append(finding(
                     "endpoint-transport-ref", "warning", "/",
                     f"transport_ref {declared_refs!r} not checked: the sibling "
-                    "connector.json declares no usable `transports` object, so "
-                    "there was nothing to resolve the name against. Validate the "
-                    "connector to see why."))
+                    "connector.json was read but declares no usable `transports` "
+                    "object, so there was nothing to resolve the name against. "
+                    "Validate the connector to see why."))
             else:
                 findings.append(finding(
                     "endpoint-transport-ref", "warning", "/",
