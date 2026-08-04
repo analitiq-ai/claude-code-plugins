@@ -255,7 +255,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     ),
     AdvisoryRule(
         id="ADV-ENDP-023", kind="custom", resource="api-endpoint",
-        prose="Every response.body path referenced by pagination or response.metadata must resolve by declared-path resolution against response.schema, to a node that declares a type; a response.* reference naming no known sub-scope, and a keyset order_by_field absent from the record shape, are refused with it.",
+        prose="Every response.body path referenced by pagination, response.metadata, a request path_params/headers/query/body slot, or a params.<name>.default must resolve by declared-path resolution against response.schema, to a node that declares a type; a response.* reference in a request slot is refused outright (the request is built before the response exists), as are a response.* reference naming no known sub-scope, a response.metadata.<key> naming an undeclared key, and a keyset order_by_field absent from the record shape.",
         targets=("ReadOperation",), enforcer="_wiring",
     ),
     # Stated as the CONSTRAINT, not as a grant. This registry renders verbatim

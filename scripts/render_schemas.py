@@ -421,9 +421,11 @@ def _json_schema_node_properties() -> dict[str, Any]:
     walkers in `analitiq.contracts.endpoints`, and the validator's
     `_SUBSCHEMA_*_KEYS`. Adding `contentSchema` meant editing all three, and the
     fourth expression of it (this node's own description, below) was missed, so
-    the published contract constrained a keyword while its prose said it did not
-    recurse there. The contract package owns the vocabulary; both consumers
-    import it.
+    the RENDERED schema constrained a keyword its own prose said it did not
+    recurse into. Caught in review before any version carrying it reached the
+    bucket — which is the only reason it is describable in the past tense, since
+    a pinned `X.Y.Z.json` is immutable once published. The contract package owns
+    the vocabulary; both consumers import it.
     """
     properties: dict[str, Any] = {
         "arrow_type": {"type": "string", "pattern": ARROW_TYPE_PATTERN},

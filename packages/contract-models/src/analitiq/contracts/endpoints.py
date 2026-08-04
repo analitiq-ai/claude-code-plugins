@@ -935,10 +935,14 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
             "has two halves, and they are guaranteed differently. "
             "(1) NAME: the value must be one the sibling `connector.json` "
             "declares in `transports` — a request dispatches only through a "
-            "transport the connector declares. This half is **enforced at "
-            "author time** by the validator's `endpoint-transport-ref` check "
-            "(the endpoint and the connector are separate documents, so no "
-            "single-document model validator can see both sides). "
+            "transport the connector declares. This half is checked at author "
+            "time by the validator's `endpoint-transport-ref` check (the "
+            "endpoint and the connector are separate documents, so no "
+            "single-document model validator can see both sides). It is an "
+            "ERROR only when the sibling `connector.json` is in hand; "
+            "validating an endpoint file whose connector is not reachable "
+            "emits a warning saying the name was not checked, because a check "
+            "that cannot see the other document cannot refuse the name. "
             "(2) ORIGIN: the intended rule is that every URL this request "
             "produces, including a next-page link followed from "
             "`pagination.link.next_url`, lands on the origin of a declared "
@@ -1345,7 +1349,8 @@ def _validate_schema_refs(
     ADV-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
     `$defs` as a recursive position and the arrow_type walker below descends
     into it, so a `#/$defs/...` target is annotation-checked like any other
-    node. Four spellings are not, and all four fail silently:
+    Several spellings are not, and each fails silently (a count here would rot —
+    this list grew by three after it was first written):
 
     * a NON-LOCAL ref (`https://…`, `common.json#/…`) names a document that is
       not here. Nothing in this contract's path is allowed to fetch it — the
@@ -3204,9 +3209,11 @@ def _validate_param_binding_uniqueness(
 # declares BOTH `properties.next` and a `oneOf` still resolves `next` through
 # `properties`, exactly as before. Every path the old walk resolved still
 # resolves, to the same node — so turning this rule on cannot invalidate a
-# document that was honest about its schema. The single deliberate exception is
-# `_compose_declarations`' conflicting-redeclaration error, and it fires only on
-# a contradiction it can PROVE (disjoint `type` sets on one name): `allOf`
+# document that was honest about its schema. The deliberate exceptions are the
+# two contradictions composition can PROVE, and it refuses only on those:
+# disjoint `type` sets contributed for one name (`_compose_declarations`,
+# `_refuse_disjoint_types`), and an `allOf` branch that is the boolean schema
+# `false` (`_reject_unsatisfiable_branch`, reached from BOTH walkers). `allOf`
 # refinement — a branch narrowing a base declaration — is the idiom `allOf`
 # exists for, so it composes rather than failing.
 # ---------------------------------------------------------------------------
@@ -3231,10 +3238,13 @@ class SchemaResolutionError(ValueError):
 class DeclarationConflictError(SchemaResolutionError):
     """Contributors for one name cannot all hold. Carries NO path coordinates.
 
-    Raised by :func:`_compose_declarations` and :func:`materialize_node`, which
-    inspect a node or a name — neither knows where it sits in anyone's path.
-    :func:`resolve_declared_path` catches it and re-raises a
-    :class:`DeclaredPathError` carrying the segment it was resolving.
+    Raised wherever composition proves a contradiction — `_refuse_disjoint_types`
+    (from :func:`_compose_declarations`, :func:`_combine_schema_values` and
+    :func:`_materialize`) and `_reject_unsatisfiable_branch` (from BOTH walkers).
+    Each inspects a node or a name; none knows where it sits in anyone's path.
+    :func:`resolve_declared_path` catches every one of them and re-raises a
+    :class:`DeclaredPathError` carrying the segment it was resolving, so a
+    caller may catch only the narrow class.
 
     A separate class, rather than a :class:`DeclaredPathError` with placeholder
     coordinates: the placeholder (`segment=None, index=-1`) was constructible,
@@ -3470,28 +3480,26 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 # back-edge anywhere left the whole walk uncached and exponential again — and
 # slower than no memo at all, because it also paid for the bookkeeping.
 #
-# The fix is to stop treating this as a recursive fold at all. What both walkers
-# actually need is the SET of nodes whose declarations unconditionally apply,
-# and that set is just reachability over `allOf` and in-document `$ref` edges.
-# One walk with a visited set computes it in O(V+E); a cycle is nothing special
-# — it is a node already visited, which is exactly the "a cycle contributes
-# nothing the second time" rule stated in the contract. No cache, no truncation
-# flag, no difference between the cyclic and acyclic cases. (The walk recurses
-# per node, so it is bounded by schema nesting depth like every other walker in
-# this module; it is not an explicit-stack loop.)
+# What both walkers do instead: ONE recursive fold, memoized on the RESULT, with
+# a separate `on_path` set for cycles. Those two sets answer different questions
+# and conflating them was the bug — a node already VISITED returns its cached
+# result, while a node on the CURRENT path contributes nothing (the contract's
+# "a cycle contributes nothing the second time it is met"). Memoizing the result
+# reproduces the fold exactly on any acyclic document and visits each node once,
+# so cyclic and acyclic cost the same.
 #
 # ORDER IS PART OF THE ANSWER, not an implementation detail. Flattening the fold
 # into a single pre-order and reversing it looked equivalent and was not: it
 # inverted precedence between a DIRECT later branch and a transitively-reached
 # contributor of an earlier one, so a nearby `allOf` override silently lost to a
 # distant base and a destination column changed type with no error anywhere.
-# The two callers therefore ask for the two different orders the fold produced:
 #
-#   PRE  (self, then `allOf` branches, then `$ref`) — `_property_contributors`,
-#        which absorbed the node's own `properties` first.
-#   POST (`$ref`, then `allOf` branches, then self) — `materialize_node`, whose
-#        sources were `[ref, *branches, own]` with the LAST merged winning, so
-#        every node must appear after everything it composes with.
+# Both walkers therefore use the SAME source order — `$ref` target, then `allOf`
+# branches in document order, then the node itself — with the last contributor
+# winning. They are one fold seen from two angles: `_contributors` keeps each
+# name's declarations as a list, `_materialize` folds them into a value. Every
+# time the two were computed differently they disagreed, silently, about which
+# declaration wins.
 
 
 def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
@@ -3514,8 +3522,10 @@ def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[An
     (lowest) position — and all three shipped green, because the failure is a
     different `arrow_type` on a derived column, not an error.
 
-    Declarations are deduplicated by equality; for equal declarations position is
-    immaterial, so keeping the first is safe.
+    Declarations are deduplicated by equality, and a declaration re-contributed
+    by a LATER source moves to the end — its highest-precedence position. Keeping
+    the first occurrence is NOT safe and was one of the three bugs above; the
+    inline comment at the dedup states the failure.
     """
     return _contributors(node, root, {}, set())
 
@@ -3868,16 +3878,20 @@ def _materialize(
                 else value
             )
 
-    # `properties` is composed per NAME by the same function `effective_properties`
-    # uses, so the two views cannot disagree about which declaration wins or
-    # about whether a name is self-contradictory. Merging the maps here instead
-    # was how `materialize_node` came to answer where `effective_properties`
-    # refused — and the permissive one is what derives the destination column.
+    # `properties` is composed per NAME here, and the satisfiability proof below
+    # reads the same raw contributor list `_compose_declarations` proves, so the
+    # two views cannot disagree about whether a name is self-contradictory.
+    # Merging the maps as an ordinary dict key instead was how `materialize_node`
+    # came to answer where `effective_properties` refused — and the permissive
+    # one is what derives the destination column.
     #
-    # Each composed declaration is then materialized in turn, so a caller reading
-    # `materialize_node(n)["properties"][x]["arrow_type"]` still gets a merged
-    # descriptor rather than a bare `{"allOf": [...]}` it would have to fold
-    # itself.
+    # Each declaration is FOLDED but NOT recursively materialized: a caller
+    # reading an annotation off a child descriptor must materialize that
+    # descriptor itself. `find_record_field_properties` and
+    # `_walk_input_schema_path` both do exactly that, and the comment at the
+    # former explains why — materializing only the walk left a field declared as
+    # `{"$ref": "#/$defs/Addr"}` coming back raw, with no `type` and no
+    # `arrow_type`.
     #
     # The emptiness test is on DECLARATION, not on the composed result: an
     # explicit `properties: {}` means "zero fields", which
