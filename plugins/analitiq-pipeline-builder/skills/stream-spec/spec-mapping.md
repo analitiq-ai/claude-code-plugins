@@ -171,6 +171,7 @@ expressed by `arrow_type` + `properties`/`items`. Saying it a second way, as a
 dotted target, was the defect — two spellings of one thing, one of which the
 engine rejected after splitting it.
 
+<!-- PROBE: stream-mapping-target-unresolved-locally -->
 Cross-document: each `target.path` must exist in the resolved destination
 endpoint schema. Endpoint resolution is server-side at save time; the local
 validator does **not** check this.

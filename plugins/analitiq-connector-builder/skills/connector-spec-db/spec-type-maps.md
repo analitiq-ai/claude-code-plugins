@@ -78,6 +78,7 @@ Uppercase remains the house style for `exact` natives too — it reads
 consistently against the regex rules that sit beside them — but it is a
 convention there, not a correctness requirement.
 
+<!-- PROBE: write-map-regex-canonical-case-unchecked -->
 Write-map matchers run against PascalCase canonical strings **case-preserving**
 (the Arrow vocabulary is mixed-case), so case *is* significant there. How
 loudly a mistake fails depends on the rule kind: a lowercase **`exact`**
@@ -140,6 +141,7 @@ vocabulary is trimmed to the executable set (issue #81), so a rule that
 renders one now fails validation at author time instead of freezing a
 canonical that would die at schema construction.
 
+<!-- PROBE: read-map-native-semantics-unchecked -->
 > **Only the syntactic half is enforced** (ADV-TMAP-001/002). The contract
 > flags a native whose *shape* is visibly a container — angle brackets
 > (`array<object>`) or a `[]` suffix (`integer[]`). A bare vendor spelling is
@@ -221,6 +223,7 @@ mechanical — the same judgment transfers across providers:
 
 ## API coverage (read map)
 
+<!-- PROBE: endpoint-pair-unresolved-through-read-map -->
 For API connectors, the validator walks every endpoint file under
 `{connector_id}/definition/endpoints/`, collects every `(native_type,
 arrow_type)` pair from typed fields, and asserts each one resolves
@@ -299,6 +302,7 @@ over that family's rendering via a `render_column_type` override (BigQuery
 ships no Decimal rule because NUMERIC/BIGNUMERIC selection needs
 precision-range arithmetic rules cannot express), never as a way to cut scope.
 
+<!-- PROBE: write-coverage-sample-gap -->
 **A clean warning is not proof of coverage.** The check probes a representative
 sample, so whole families go unexercised — a map missing all of these still
 passes. Verify by hand at least:

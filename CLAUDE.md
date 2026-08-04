@@ -173,6 +173,10 @@ defines — reference or load it.** Carry only craft the schema can't express
   pinned `analitiq-contract-models` package and fails the build if a plugin's
   enum targets diverge. The pipeline plugin solves the same problem by
   *generating* contract-owned facts into its prose — see its `CLAUDE.md`.
+  Prose statements about **what the validator does or does not check** are a
+  fourth surface, pinned by executable probes in
+  `scripts/render_validator_claims.py` — see the connector plugin's
+  `CLAUDE.md` ("Validator-behavior claims").
 
 Enum lists appearing in this file or in skill prose are **illustrative**; the
 authoritative definition is always the live schema (or, for canonical Arrow

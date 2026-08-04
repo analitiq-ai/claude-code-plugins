@@ -63,6 +63,34 @@ Database connectors author no endpoints and skip the fan-out entirely.
 - **`validate`** — read-only pass over an on-disk connector. Reports diagnostics
   without researching, authoring, or writing. To fix findings, re-run `update`.
 
+## Validator-behavior claims — the CI gate
+
+<!-- PROBE: write-body-path-typo-unresolved, connector-function-name-unchecked -->
+Prose in BOTH plugins states what the validator checks and does not check
+("a `success_when` typo validates clean", "function names are never checked").
+Every such sentence is pinned by `scripts/render_validator_claims.py` (issue
+#133), which carries an executable **probe** per claim — a document run through
+the in-repo validator with an asserted outcome:
+
+```bash
+python3 scripts/render_validator_claims.py write   # regenerate marked blocks
+python3 scripts/render_validator_claims.py check   # CI: probes + blocks + scan
+```
+
+Rules when editing prose in this plugin (and validator claims in the sibling):
+
+- **Never hand-edit between a `BEGIN GENERATED` / `END GENERATED` marker
+  pair** — the script overwrites it and CI fails.
+- A sentence asserting validator behavior outside a generated block must sit
+  in a block carrying a `PROBE:` fence comment naming the probe(s) that prove
+  it, cite the `ADV-*` rule that enforces it, or be registered as a `Waiver`
+  in the script with the reason it cannot be pinned. The `check` mode's
+  trigger-phrase scan fails on anything else.
+- A probe that stops matching the contract means the contract moved: update
+  the prose AND the probe together, then re-run `write`.
+- `tests/connector_builder/test_validator_claims.py` runs the same predicate
+  in pytest.
+
 ## Where the authoring rules live
 
 Every rule about *how* to author lives in `skills/`, loaded by the agent that

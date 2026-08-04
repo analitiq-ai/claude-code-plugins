@@ -18,8 +18,9 @@ documentation URL, the plugin:
    package files (dialect + connector class, requirements, pyproject).
 4. Authors endpoint files alongside (API connectors only — DB endpoints are
    discovered at runtime).
-5. Validates everything against the published JSON schemas plus a layer of
-   semantic validators (DSN bindings, auth shape, type-map coverage, etc.).
+5. Validates everything against the published contract — offline, via the
+   contract models — plus a layer of semantic validators (DSN bindings, auth
+   shape, type-map coverage, etc.).
 6. Classifies version drift against the previous release and bumps `version`
    accordingly.
 7. Writes the connector and endpoint files to disk at predictable paths.
@@ -124,8 +125,10 @@ Without the package installed the guards skip.
 - The published schemas are hosted at `https://schemas.analitiq.ai`. The
   validator enforces the contract **offline** (via the contract models) and does
   not fetch them.
-- Authored documents declare `$schema` with the same host — the URL is
-  locked by a `const` inside the published schema.
+- Authored documents declare `$schema` with the same host. How hard that is
+  enforced varies by document family — endpoint documents lock the URL with a
+  `const`, a connector's `$schema` is optional and pattern-matched — see
+  `skills/connector-builder/references/metadata-and-versioning.md`.
 
 ## File output
 
@@ -179,7 +182,7 @@ pipeline-builder plugin, and how to develop against a local checkout.
 ## Links
 
 - [Analitiq DIP Registry](https://github.com/orgs/analitiq-dip-registry/repositories) — community connector submissions.
-- [Published schemas](https://schemas.analitiq.ai) — the authoritative JSON Schemas the validator runs against.
+- [Published schemas](https://schemas.analitiq.ai) — the authoritative JSON Schemas, rendered from the same contract models the validator enforces offline.
 
 ## License
 
