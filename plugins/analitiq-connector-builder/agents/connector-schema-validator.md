@@ -87,6 +87,7 @@ Do not expect a finding id per rule; match on the message, not on a guessed id.
 | `endpoint-filename` | An endpoint file's basename must equal `{endpoint_id}.json` — the engine resolves an endpoint as `endpoints/{endpoint_id}.json`, so a divergent filename is unreachable. **Error** on divergence; **warning** when the basename can't be compared (no filesystem-anchored path, or a missing/non-string `endpoint_id`). |
 | `endpoint-id-unique` | Each `endpoint_id` is unique within the connector release. |
 | `endpoint-id-locator` | An `endpoint_id` must equal the handle derived from its locator — for an API endpoint, its `request.path` (the read operation's, or the first write path on a write-only endpoint) lowercased with `__` between segments and `{placeholder}` segments dropped, so `/v1/x` and `/v2/x` cannot collide. |
+| `endpoint-transport-ref` | An endpoint operation's `request.transport_ref` must name a transport the sibling `connector.json` declares in `transports`. Cross-file, so only a connector-anchored run can see it; the connector-internal ref sites are covered by `contract-model`. |
 | `embedded-json-schema` | An embedded JSON Schema (e.g. `response.schema`, `input.schema`) must be valid Draft 2020-12 and must not declare a different `$schema`. |
 
 Checks the plugin's prose once claimed but the validator does **not** perform —

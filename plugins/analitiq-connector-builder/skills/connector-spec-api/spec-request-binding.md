@@ -112,9 +112,10 @@ satisfy two bindings (ADV-ENDP-009 counts bindings per param).
 
 ## Write bodies: `from_input`
 
-`{"from_input": ...}` addresses the record being written. It is legal **only**
-inside `operations.write.<mode>.request.body` — never in `path_params`,
-`headers`, `query`, a read body, or a param `default`.
+`{"from_input": ...}` addresses the record being written. Author it inside
+`operations.write.<mode>.request.body`. It is never legal in `headers`,
+`query`, a read body, or a param `default`. Bind `path_params` with
+`{"from_param": ...}`.
 
 | Value | Means |
 |---|---|
