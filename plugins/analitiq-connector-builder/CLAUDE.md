@@ -81,11 +81,14 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 
 - **Never hand-edit between a `BEGIN GENERATED` / `END GENERATED` marker
   pair** — the script overwrites it and CI fails.
-- A sentence asserting validator behavior outside a generated block must sit
-  in a block carrying a `PROBE:` fence comment naming the probe(s) that prove
-  it, cite the `ADV-*` rule that enforces it, or be registered as a `Waiver`
-  in the script with the reason it cannot be pinned. The `check` mode's
-  trigger-phrase scan fails on anything else.
+- A sentence asserting validator behavior outside a generated block must have
+  a `PROBE:` fence comment naming the probe(s) that prove it placed directly
+  above it (a fence reaches only a few lines down — it cannot pin a whole
+  checklist), cite the `ADV-*` rule that enforces it in the same sentence, or
+  be registered as a `Waiver` in the script with the reason it cannot be
+  pinned. The `check` mode's trigger-phrase scan fails on anything else.
+  (Code fences are exempt spans — example output is not a claim — so never
+  quote a claim as prose inside one to dodge the gate.)
 - A probe that stops matching the contract means the contract moved: update
   the prose AND the probe together, then re-run `write`.
 - `tests/connector_builder/test_validator_claims.py` runs the same predicate

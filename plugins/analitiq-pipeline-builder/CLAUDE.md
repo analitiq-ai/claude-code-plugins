@@ -77,6 +77,24 @@ Rules when editing this plugin's prose:
 - This file is excluded from the generator (`NOT_GENERATED` in the script)
   because it *documents* the markers rather than carrying a real block.
 
+## Validator-behavior claims — the repo-wide gate
+
+<!-- PROBE: pipeline-draft-runnability-unchecked -->
+A second gate, `scripts/render_validator_claims.py` (repo root, issue #133),
+scans THIS plugin's prose too: a sentence stating what the validator checks or
+does not check ("runnability is not checked for a draft") must be pinned by a
+`<!-- PROBE: <id> -->` fence placed directly above it, naming an executable
+probe in that script — or registered there as a `Waiver` with a reason. Full
+rules: the connector plugin's `CLAUDE.md`, "Validator-behavior claims". Two
+things specific to this plugin:
+
+- The claims gate's `BEGIN GENERATED` blocks (`claim:*` and friends) are
+  rendered **only into the connector plugin's tree**. Never author one here:
+  this plugin's generator cannot parse those ids, nothing would render it, and
+  the gate fails the build on the orphaned markers.
+- `gen_contract_docs.py` blocks in this plugin's docs stay exempt from the
+  scan — they are pinned by their own `--check`.
+
 ## Where the authoring rules live
 
 Every rule about *how* to author lives in `skills/`, loaded by the agent that

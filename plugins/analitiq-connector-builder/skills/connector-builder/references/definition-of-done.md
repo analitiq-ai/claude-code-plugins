@@ -14,9 +14,9 @@ in the validator, not on this list.
 
 <!-- PROBE: connector-function-name-unchecked, write-body-path-typo-unresolved, tls-coherence-unchecked -->
 Three things authors often assume are validated but are not — a `function`
-name, a ref's resolvability outside a READ operation's `response.body` and
-`response.metadata`, and TLS mode ↔ CA-certificate coherence. Those belong on
-this list, not in the validator's column.
+name, a ref's resolvability outside a READ's `response.body` and either
+operation's `response.metadata`, and TLS mode ↔ CA-certificate coherence.
+Those belong on this list, not in the validator's column.
 
 The kind-specific lists live at the end of each creator agent
 (`api-connector-creator` / `db-connector-creator`); both also apply this

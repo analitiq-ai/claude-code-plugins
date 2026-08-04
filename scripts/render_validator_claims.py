@@ -19,15 +19,17 @@ This module is the fix, in three parts:
    the probes that prove it. Marked regions in the plugin docs
    (`<!-- BEGIN GENERATED: <block-id> -->` … `END GENERATED`, the same marker
    grammar as the pipeline plugin's `gen_contract_docs.py`) are rendered from
-   claims, so the dense clusters (the response-scope table, the validator
-   blind-spot list) cannot drift from the measurement behind them.
+   this registry — `claim:<id>` blocks from the `Claim` records, the dense
+   clusters (the response-scope table, the validator blind-spot list) by the
+   dedicated `render_*` functions whose probe couplings sit beside them — so
+   neither can drift from the measurement behind it.
 3. **The scan** — a trigger-phrase gate over every markdown file in BOTH
    plugins. A sentence that asserts validator behavior (matches
-   `CLAIM_TRIGGERS`) must be pinned: inside a generated region, inside a
-   contiguous block carrying a `<!-- PROBE: <id>[, <id>…] -->` fence or an
-   `ADV-*` citation, or explicitly waived in `WAIVERS` with a reason. An
-   unpinned, unwaived claim fails the build — that is what covers the class
-   rather than the instances.
+   `CLAIM_TRIGGERS`) must be pinned: inside a generated region, within reach
+   of a `<!-- PROBE: <id>[, <id>…] -->` fence placed above it or of an
+   `ADV-*` citation beside it (see `FENCE_REACH` / `ADV_REACH`), or
+   explicitly waived in `WAIVERS` with a reason. An unpinned, unwaived claim
+   fails the build — that is what covers the class rather than the instances.
 
 Stated limits (deliberate, in the repo tradition of measured gates):
 
@@ -39,6 +41,9 @@ Stated limits (deliberate, in the repo tradition of measured gates):
   the wording of a fenced sentence is still hand-maintained. The dense clusters
   are generated for exactly that reason — prefer a generated block when a whole
   section states validator behavior.
+* Text inside markdown code fences is treated as a pinned span (validator
+  output shown as an example is not a claim), so a claim written inside a
+  ``` block escapes the scan.
 * Probes grade the IN-REPO packages (`packages/*/src`), like every other drift
   gate in this repo — during a release window prose describes the contract
   about to be published, not the previous pin.
@@ -98,9 +103,16 @@ class Probe:
     expect: str
     build: Callable[[], list[dict]]
     message_re: str = ""
-    #: No finding of any severity may match this — used to pin a *gap* in a
-    #: warning's coverage (e.g. families the write-coverage sample never probes).
+    #: No finding of any severity may match this. Two uses: pinning a *gap* in
+    #: a warning's coverage (families the write-coverage sample never probes),
+    #: and hardening a "nothing checks X" claim beyond expect="clean" — a
+    #: warning-tier check for X would falsify the sentence while leaving the
+    #: document error-free.
     forbid_re: str = ""
+    #: At least one finding of any severity must match this — for claims that
+    #: describe a warning's behavior, so the probe fails if the warning itself
+    #: disappears rather than merely lacking the forbidden families.
+    require_re: str = ""
 
 
 def _validate(doc: Any, doc_path: Path | None = None, schema_url: str | None = None) -> list[dict]:
@@ -522,7 +534,8 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"must be a `\{from_param"),
     Probe("endpoint-schema-host-locked", "error", _p_endpoint_schema_host,
           message_re=r"schemas\.analitiq\.ai/api-endpoint/latest\.json"),
-    Probe("endpoint-function-name-unchecked", "clean", _p_endpoint_function_name),
+    Probe("endpoint-function-name-unchecked", "clean", _p_endpoint_function_name,
+          forbid_re=r"(?i)function"),
     # write-side scope guarantees
     Probe("write-body-path-typo-unresolved", "clean", _p_write_body_path_typo),
     Probe("write-subscope-typo", "error", _p_write_subscope_typo,
@@ -534,32 +547,49 @@ PROBES: tuple[Probe, ...] = (
     Probe("write-request-slot-response-ref", "error", _p_write_request_slot_response_ref,
           message_re=r"built before the response exists"),
     Probe("write-truncate-insert-accepted", "clean", _p_write_truncate_insert),
-    # connector documents
+    # connector documents. The forbid_re on the "nothing checks X" probes is
+    # what expect="clean" alone cannot give: a warning-tier check for X would
+    # falsify the sentence while leaving the document error-free.
     Probe("connector-refs-unchecked", "clean", _p_connector_refs_unchecked),
-    Probe("connector-function-name-unchecked", "clean", _p_connector_function_name),
-    Probe("connector-lookup-map-unvalidated", "clean", _p_connector_lookup_map),
+    Probe("connector-function-name-unchecked", "clean", _p_connector_function_name,
+          forbid_re=r"(?i)function"),
+    Probe("connector-lookup-map-unvalidated", "clean", _p_connector_lookup_map,
+          forbid_re=r"(?i)lookup"),
     Probe("connector-schema-optional", "clean", _p_connector_schema_optional),
-    Probe("connector-secret-literal-undetected", "clean", _p_connector_secret_literal),
-    Probe("tls-coherence-unchecked", "clean", _p_tls_coherence),
-    Probe("read-map-completeness-unchecked", "clean", _p_read_map_completeness),
+    Probe("connector-secret-literal-undetected", "clean", _p_connector_secret_literal,
+          forbid_re=r"(?i)secret|literal"),
+    Probe("tls-coherence-unchecked", "clean", _p_tls_coherence,
+          forbid_re=r"(?i)tls|ssl|certificate"),
+    Probe("read-map-completeness-unchecked", "clean", _p_read_map_completeness,
+          forbid_re=r"(?i)read.?map|type-map-read|coverage"),
     Probe("read-map-native-semantics-unchecked", "clean", _p_read_map_native_semantics),
     Probe("endpoint-pair-unresolved-through-read-map", "error", _p_endpoint_pair_unresolved,
           message_re=r"native_type 'MYSTERY_TYPE'"),
     # type maps
     Probe("write-map-regex-canonical-case-unchecked", "silent", _p_write_map_regex_case),
+    # require_re holds the coverage warning itself in existence: without it,
+    # deleting the whole type-map-write-coverage check would leave this probe
+    # green while spec-type-maps.md keeps instructing authors to reconcile a
+    # warning that no longer fires.
     Probe("write-coverage-sample-gap", "clean", _p_write_coverage_sample_gap,
-          forbid_re=r"FixedSizeBinary|Time32|Decimal256"),
+          forbid_re=r"FixedSizeBinary|Time32|Decimal256",
+          require_re=r"no rule rendering"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
           message_re=r"greater than 0"),
     Probe("pagination-limit-literal-zero-accepted", "clean", _p_pagination_limit_literal_zero),
     # connection / pipeline / stream
-    Probe("connection-sidecar-name-unconstrained", "clean", _p_connection_sidecar_name),
+    Probe("connection-sidecar-name-unconstrained", "clean", _p_connection_sidecar_name,
+          forbid_re=r"(?i)sidecar"),
     Probe("pipeline-active-empty-streams-rejected", "error", _p_pipeline_active_empty,
           message_re=r"at least one stream"),
-    Probe("pipeline-draft-runnability-unchecked", "clean", _p_pipeline_draft_runnability),
-    Probe("stream-filter-field-unresolved-locally", "clean", _p_stream_filter_field_local),
-    Probe("stream-selected-columns-unresolved-locally", "clean", _p_stream_selected_columns),
-    Probe("stream-mapping-target-unresolved-locally", "clean", _p_stream_mapping_target),
+    Probe("pipeline-draft-runnability-unchecked", "clean", _p_pipeline_draft_runnability,
+          forbid_re=r"(?i)runnab"),
+    Probe("stream-filter-field-unresolved-locally", "clean", _p_stream_filter_field_local,
+          forbid_re=r"(?i)filter"),
+    Probe("stream-selected-columns-unresolved-locally", "clean", _p_stream_selected_columns,
+          forbid_re=r"(?i)column"),
+    Probe("stream-mapping-target-unresolved-locally", "clean", _p_stream_mapping_target,
+          forbid_re=r"(?i)target"),
 )
 
 PROBES_BY_ID: dict[str, Probe] = {p.id: p for p in PROBES}
@@ -574,7 +604,19 @@ class ProbeFailure:
 
 
 def run_probe(probe: Probe) -> ProbeFailure | None:
+    if probe.expect not in ("clean", "error", "silent"):
+        raise ValueError(f"probe {probe.id!r}: unknown expectation {probe.expect!r}")
     findings = probe.build()
+    # The validator's own last-resort guard converts a crash into an error
+    # finding whose message embeds the exception text. That text can contain
+    # the same vocabulary as the real rejection message, so a crashed check
+    # could otherwise satisfy an expect="error" probe while every user gets
+    # "validator bug — please report" instead of the rejection the prose
+    # promises. A crash never proves a claim, in either direction.
+    crashed = [f for f in findings
+               if re.search(r"crashed unexpectedly", f.get("message", ""))]
+    if crashed:
+        return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
     errors = [f for f in findings if f.get("severity") == "error"]
     if probe.expect == "silent" and findings:
         return ProbeFailure(probe.id, "expected zero findings", findings)
@@ -590,6 +632,11 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
         re.search(probe.forbid_re, f.get("message", "")) for f in findings
     ):
         return ProbeFailure(probe.id, f"a finding matched forbidden {probe.forbid_re!r}", findings)
+    if probe.require_re and not any(
+        re.search(probe.require_re, f.get("message", "")) for f in findings
+    ):
+        return ProbeFailure(
+            probe.id, f"no finding matched required {probe.require_re!r}", findings)
     return None
 
 
@@ -651,7 +698,8 @@ assert len(CLAIMS_BY_ID) == len(CLAIMS), "duplicate claim id"
 # The response-scope table, rendered from probe expectations
 # ---------------------------------------------------------------------------
 
-#: cell kind -> (expectation every backing probe must state, rendered cell text)
+#: cell kind -> (expectation class every backing probe must land in, cell text).
+#: The class is binary: "error", or "clean" (a `silent` probe counts as clean).
 _CELL_KINDS: dict[str, tuple[str, str]] = {
     "path-resolved": ("error", "resolved against `response.schema`, must declare a type (ADV-ENDP-023)"),
     "declared-key": ("error", "must name a declared key"),
@@ -839,18 +887,67 @@ def rendered_block_probe_ids() -> set[str]:
     return ids
 
 
-def malformed_marker_docs() -> list[str]:
-    """Docs where a BEGIN marker exists but no well-formed pair matches it.
+_PIPELINE_GEN = None
 
-    An unpaired or typo'd marker silently degrades: `render_text` leaves the
-    region untouched (nothing to substitute) and the sync test sees no diff,
-    so the region becomes hand-editable while still LOOKING generated.
+
+def _pipeline_gen():
+    """The pipeline plugin's generator module, imported by path (cached).
+
+    Its renderer registry decides which pipeline-plugin generated blocks are
+    real; restating that set (or its marker grammar) here would be a drift
+    surface. Import is side-effect-free — the dependency bootstrap only runs
+    when its `main()` calls it.
+    """
+    global _PIPELINE_GEN
+    if _PIPELINE_GEN is None:
+        import importlib.util
+
+        scripts_dir = str(PIPELINE_PLUGIN / "scripts")
+        spec = importlib.util.spec_from_file_location(
+            "_pipeline_gen_contract_docs", PIPELINE_PLUGIN / "scripts" / "gen_contract_docs.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        sys.path.insert(0, scripts_dir)  # gen_contract_docs imports _bootstrap
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            sys.path.remove(scripts_dir)
+        _PIPELINE_GEN = module
+    return _PIPELINE_GEN
+
+
+def _known_block_ids_for(path: Path) -> set[str]:
+    """The block ids a real renderer stands behind, for this doc's tree.
+
+    Only these pin content during the scan. A marker pair with any other id is
+    prose that LOOKS machine-pinned while nothing renders or checks it — the
+    exact artifact this gate exists to prevent — so it pins nothing and
+    `malformed_marker_docs` reports it.
+    """
+    if PIPELINE_PLUGIN in path.parents:
+        return set(_pipeline_gen().RENDERERS)
+    return set(RENDERERS)
+
+
+def malformed_marker_docs() -> list[str]:
+    """Docs whose BEGIN markers don't all resolve to a real, well-formed block.
+
+    Covers two silent degradations: an unpaired or typo'd marker (`render_text`
+    leaves the region untouched and the sync test sees no diff), and — in
+    either plugin — a marker pair whose id no renderer owns. The pipeline
+    generator's grammar rejects e.g. `claim:*` ids without raising, so such a
+    pair would otherwise be checked by nobody while exempting nothing-checks-it
+    prose from this scan.
     """
     broken: list[str] = []
-    for path in generated_docs():
+    for path in sorted(PLUGINS_ROOT.rglob("*.md")):
         text = path.read_text(encoding="utf-8")
         begins = text.count("<!-- BEGIN GENERATED:")
-        if begins != len(_BLOCK_RE.findall(text)):
+        if not begins:
+            continue
+        known = _known_block_ids_for(path)
+        matched = [m.group("id") for m in _BLOCK_RE.finditer(text)]
+        if begins != len(matched) or any(block_id not in known for block_id in matched):
             broken.append(path.relative_to(REPO_ROOT).as_posix())
     return broken
 
@@ -887,10 +984,12 @@ def render_text(text: str, source: str) -> str:
 
 
 def generated_docs() -> list[Path]:
-    """Connector-plugin docs carrying a block this script owns.
+    """Connector-plugin docs carrying a generated-block marker.
 
-    The pipeline plugin's generated blocks belong to its own
-    `gen_contract_docs.py`; this renderer never touches that tree.
+    Any block id found here must have a renderer in this script — an unknown
+    id fails loud (`UnknownBlock`), never skips. The pipeline plugin's
+    generated blocks belong to its own `gen_contract_docs.py`; this renderer
+    never touches that tree.
     """
     return sorted(
         p for p in CONNECTOR_PLUGIN.rglob("*.md")
@@ -938,9 +1037,10 @@ class Violation:
 class Waiver:
     """A validator claim declared unpinnable, with the reason on record.
 
-    A waiver must keep matching a trigger-hit line in its file — a waiver that
-    matches nothing is stale and fails the scan, so the registry cannot
-    accumulate dead exemptions.
+    `contains` is matched against the whole contiguous block a trigger hit
+    sits in, and one matching waiver suppresses every hit in that block. A
+    waiver that matches no trigger-carrying block is stale and fails the scan,
+    so the registry cannot accumulate dead exemptions.
     """
 
     path: str  # repo-relative
@@ -949,6 +1049,12 @@ class Waiver:
 
 
 WAIVERS: tuple[Waiver, ...] = (
+    Waiver(
+        "plugins/analitiq-connector-builder/agents/db-connector-creator.md",
+        "Nothing validates the match; a",
+        "resource_discovery strategy fit is a property of the live database's "
+        "object hierarchy at run time; no authored document exists to probe.",
+    ),
     Waiver(
         "plugins/analitiq-connector-builder/skills/connector-builder/SKILL.md",
         "are NOT validated here",
@@ -981,9 +1087,41 @@ WAIVERS: tuple[Waiver, ...] = (
 )
 
 
-def _line_spans(text: str) -> list[tuple[int, int]]:
-    """(start, end) line-index spans of generated regions and fenced code."""
+def _code_fence_spans(lines: list[str]) -> list[tuple[int, int]]:
+    """(start, end) line-index spans of ``` / ~~~ code fences.
+
+    Paired line-wise, tolerating indentation (fences inside list items are
+    common in both plugins) — a single multiline regex anchored at column 0
+    mis-paired an indented opener with a later column-0 closer and silently
+    swallowed the prose between two code blocks. An unclosed fence runs to
+    EOF, which can only over-exempt the tail of that one file, loudly visible
+    in the doc itself.
+    """
     spans: list[tuple[int, int]] = []
+    open_at: int | None = None
+    marker = ""
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if open_at is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                open_at, marker = i, stripped[:3]
+        elif stripped.startswith(marker):
+            spans.append((open_at, i))
+            open_at = None
+    if open_at is not None:
+        spans.append((open_at, len(lines) - 1))
+    return spans
+
+
+def _line_spans(text: str, known_block_ids: set[str]) -> list[tuple[int, int]]:
+    """(start, end) line-index spans the scan treats as pinned.
+
+    Two kinds: generated regions whose block id a real renderer owns (an
+    unknown id pins nothing — see `_known_block_ids_for`), and code fences
+    (example output is not a claim).
+    """
+    lines = text.splitlines()
+    spans = _code_fence_spans(lines)
     offsets = [0]
     for line in text.splitlines(keepends=True):
         offsets.append(offsets[-1] + len(line))
@@ -999,9 +1137,8 @@ def _line_spans(text: str) -> list[tuple[int, int]]:
         return lo
 
     for match in _BLOCK_RE.finditer(text):
-        spans.append((to_line(match.start()), to_line(match.end())))
-    for match in re.finditer(r"^```.*?^```[^\n]*$", text, flags=re.S | re.M):
-        spans.append((to_line(match.start()), to_line(match.end())))
+        if match.group("id") in known_block_ids:
+            spans.append((to_line(match.start()), to_line(match.end())))
     return spans
 
 
@@ -1024,10 +1161,14 @@ def _blocks(lines: list[str]) -> list[tuple[int, int]]:
 def _scannable_docs() -> list[Path]:
     docs = []
     for path in sorted(PLUGINS_ROOT.rglob("*.md")):
-        if path.name == "CHANGELOG.md":
-            continue  # release-please owned
+        if path.name == "CHANGELOG.md" and path.parent.parent == PLUGINS_ROOT:
+            continue  # release-please owned; only at a plugin root
         if path.name == "advisory-rules.md":
-            continue  # fully generated by render_advisory.py
+            # Exempt only while the premise holds — verify, don't trust the
+            # filename (the gen_contract_docs NOT_GENERATED pattern).
+            first = path.read_text(encoding="utf-8").split("\n", 1)[0]
+            if "GENERATED by scripts/render_advisory.py" in first:
+                continue
         docs.append(path)
     return docs
 
@@ -1041,14 +1182,27 @@ def _normalize(text: str) -> str:
     return re.sub(r"[*_`]", "", text)
 
 
+#: A fence pins its own line and the lines below it, this far. Directional on
+#: purpose: fences are placed ABOVE the sentence they prove, and a downward-only
+#: reach stops a fence from retroactively pinning an unrelated claim that
+#: happens to sit just above it in the same list.
+FENCE_REACH = 10
+#: An ADV-* citation pins its own sentence, which may wrap — a couple of lines
+#: either side, no more. A citation of rule X two paragraphs up must not exempt
+#: a negative claim about Y.
+ADV_REACH = 2
+
+
 def scan() -> tuple[list[Violation], list[str], list[Waiver]]:
     """Returns (violations, dangling fence ids, stale waivers).
 
     Matching runs over each contiguous block's joined, emphasis-normalized text,
     so a trigger phrase wrapped across lines ("Nothing\\nvalidates …") is still
-    caught. Pinning granularity is the block: a fence or ADV-* citation anywhere
-    in a block pins the whole block — coarse by design; the alternative
-    (per-sentence anchoring) trips on every unrelated wording edit.
+    caught. Pinning is windowed, not block-wide: a fence covers its own line
+    plus `FENCE_REACH` lines below it, an ADV citation `ADV_REACH` lines either
+    side, and a waiver's `contains` must match within one line of the hit —
+    a 50-line checklist is one contiguous "block", and block-wide pinning let
+    one fence exempt every other bullet in it.
     """
     violations: list[Violation] = []
     dangling: list[str] = []
@@ -1058,28 +1212,42 @@ def scan() -> tuple[list[Violation], list[str], list[Waiver]]:
         text = path.read_text(encoding="utf-8")
         rel = path.relative_to(REPO_ROOT).as_posix()
         lines = text.splitlines()
-        pinned_spans = _line_spans(text)
+        pinned_spans = _line_spans(text, _known_block_ids_for(path))
+        fence_lines = [i for i, line in enumerate(lines) if _FENCE_RE.search(line)]
+        adv_lines = [i for i, line in enumerate(lines) if _ADV_RE.search(line)]
 
         for fence in _FENCE_RE.finditer(text):
             for fence_id in re.split(r"\s*,\s*", fence.group("ids")):
                 if fence_id not in PROBES_BY_ID:
                     dangling.append(f"{rel}: fence names unknown probe {fence_id!r}")
 
-        def _pinned(i: int) -> bool:
-            return any(start <= i <= end for start, end in pinned_spans)
+        def _pinned(i: int, block: tuple[int, int]) -> bool:
+            start, end = block
+            if any(s <= i <= e for s, e in pinned_spans):
+                return True
+            if any(start <= f <= end and f <= i <= f + FENCE_REACH for f in fence_lines):
+                return True
+            return any(start <= a <= end and abs(a - i) <= ADV_REACH for a in adv_lines)
 
-        for start, end in _blocks(lines):
-            raw_block = "\n".join(lines[start:end + 1])
-            if _FENCE_RE.search(raw_block) or _ADV_RE.search(raw_block):
-                continue
-            normalized = _normalize(raw_block)
+        for block in _blocks(lines):
+            start, end = block
+            normalized = _normalize("\n".join(lines[start:end + 1]))
             for match in _TRIGGER_RE.finditer(normalized):
                 line_index = start + normalized[:match.start()].count("\n")
-                if _pinned(line_index):
+                if _pinned(line_index, block):
                     continue
+                window = "\n".join(
+                    lines[max(start, line_index - 1):min(end, line_index + 1) + 1])
+                # Both conditions are load-bearing: `contains in window` binds
+                # the waiver to the hit's location, and `match in contains`
+                # binds it to this specific trigger phrase — without the
+                # second, a new claim appended beside a waived sentence would
+                # ride its neighbour's waiver.
                 waiver = next(
                     (w for w in WAIVERS
-                     if w.path == rel and (w.contains in raw_block or w.contains in normalized)),
+                     if w.path == rel
+                     and (w.contains in window or w.contains in _normalize(window))
+                     and match.group(0) in _normalize(w.contains)),
                     None)
                 if waiver is not None:
                     used_waivers.add(waiver)

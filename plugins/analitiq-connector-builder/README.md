@@ -125,7 +125,8 @@ Without the package installed the guards skip.
 - The published schemas are hosted at `https://schemas.analitiq.ai`. The
   validator enforces the contract **offline** (via the contract models) and does
   not fetch them.
-- Authored documents declare `$schema` with the same host. How hard that is
+- <!-- PROBE: connector-schema-optional, endpoint-schema-host-locked -->
+  Authored documents declare `$schema` with the same host. How hard that is
   enforced varies by document family — endpoint documents lock the URL with a
   `const`, a connector's `$schema` is optional and pattern-matched — see
   `skills/connector-builder/references/metadata-and-versioning.md`.

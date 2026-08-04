@@ -12,9 +12,10 @@ The scan spans every plugin (like `test_advisory_sync.py`'s citation gate):
 the validator the claims describe is one shared artifact, so one scanner pins
 every claim site rather than a per-plugin copy that would itself drift.
 
-Same environment contract as the other drift guards: skipped when the pinned
-packages are absent (offline dev), hard-failed in CI via
-`DRIFT_REQUIRE_CONTRACT_MODELS=1`.
+Same environment contract as the other drift guards — skipped when the
+contract packages fail to import (an incomplete checkout or missing runtime
+deps; the packages themselves are the in-repo source, put on `sys.path` by the
+root conftest), hard-failed in CI via `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
 """
 
 from __future__ import annotations
@@ -53,8 +54,9 @@ def test_probe_holds(probe) -> None:
     """Every claim's probe must still measure what the prose asserts.
 
     A failure here means the contract moved under a sentence in plugin prose:
-    find the claim the probe backs (its id appears in a `PROBE:` fence or a
-    rendered block), update the prose AND the probe together in
+    find the claim the probe backs — grep the plugins for a `PROBE:` fence
+    naming the id, or look it up in the script's block→probe couplings
+    (`block_probe_ids`) — update the prose AND the probe together in
     `scripts/render_validator_claims.py`, then regenerate.
     """
     failure = _REGISTRY.run_probe(probe)
@@ -142,52 +144,64 @@ def test_every_renderer_is_embedded_and_renders() -> None:
         assert body.endswith("\n") and body.strip(), f"{block_id}: bad render"
 
 
+# Keyed by the VERBATIM pattern string in CLAIM_TRIGGERS — a reworded alternate
+# raises KeyError here, forcing this table to move with the trigger list. Each
+# specimen must be matched by its own alternate and by NO other, so a broken
+# alternate cannot hide behind an overlapping neighbour.
 _SPECIMENS = {
     r"validates?\s+(?:clean|cleanly|with\s+zero\s+findings)": "it validates **clean** today",
     r"passes?\s+(?:validation|every\s+check)": "the typo passes validation",
-    "still_passes": "a map missing all of these still passes.",
+    "still\\s+passes\\b(?!\\s+(?:the|a|an)\\b)": "a broken map still passes.",
     r"(?:is|are)\s+(?:not|never)\s+(?:checked|validated|resolved|proved|proven|enforced|caught)":
-        "runnability is not checked for a draft",
+        "the field is not validated",
     r"(?:never|nothing)\s+(?:checks?|checked|validates?|rejects?|proves?|enforces?|catch(?:es)?)":
-        "Nothing\nvalidates the function name",
+        "Nothing\nrejects it at authoring time",
     r"(?:does|do)\s+not\s+(?:check|validate|resolve|read\s+filter)":
         "the local validator does **not** resolve column names",
-    r"\bnot\s+checked\b": "consistency is not checked.",
-    r"\bno\s+(?:check\b|backstop|validator\s+(?:checks|will))": "there is no check at all",
+    r"\bnot\s+checked\b": "TLS coherence: not checked here.",
+    r"\bno\s+(?:check\b|backstop|validator\s+(?:checks|will))": "there is no backstop here",
     r"\bunchecked\b": "that path is unchecked",
-    r"spelling[-\s](?:checked|only)": "headers are spelling-checked only",
-    r"\bleading\s+token\b": "checked on its leading token",
-    r"read-?only\s+scope": "barred — read-only scope",
+    r"spelling[-\s](?:checked|only)": "headers are spelling-checked",
+    r"\bleading\s+token\b": "only the leading token counts",
+    r"read-?only\s+scope": "barred as a read-only scope",
     r"accepts?\s+nothing\s+else": "path_params accepts nothing else",
     r"slips?\s+past": "a template slips past it",
 }
 
 
 def test_every_trigger_alternate_matches_a_specimen() -> None:
-    """Each trigger stays individually alive.
+    """Each trigger stays individually alive — and provably so.
 
-    Live prose exercises almost none of them (pinned blocks are skipped before
+    Live prose exercises almost none of them (pinned claims are skipped before
     matching), so a broken alternate would silently stop covering that
-    phrasing class for all future prose. One specimen per alternate, matched
-    through `_normalize` exactly as the scanner matches; plus the negative
-    that guards the `still passes` lookahead's intent.
+    phrasing class for all future prose. Iterating `CLAIM_TRIGGERS` itself
+    (not the table) and requiring each specimen to match ONLY its own
+    alternate is what makes this structural: a mutation to one alternate
+    cannot be absorbed by an overlapping neighbour, and a reworded alternate
+    fails the lookup. Plus the negative that guards the `still passes`
+    lookahead's intent.
     """
-    triggers = list(_REGISTRY.CLAIM_TRIGGERS)
-    assert len(triggers) == len(_SPECIMENS), (
-        "CLAIM_TRIGGERS and the specimen table are out of step — add a "
-        "specimen for the new/changed trigger"
-    )
-    for pattern, specimen in _SPECIMENS.items():
-        import re
+    import re
 
-        compiled = _REGISTRY._TRIGGER_RE
-        normalized = _REGISTRY._normalize(specimen)
-        assert compiled.search(normalized), f"no trigger matches specimen {specimen!r}"
-        if pattern != "still_passes":
-            assert re.search(pattern, normalized, re.IGNORECASE), (
-                f"specimen {specimen!r} no longer matches its own alternate "
-                f"{pattern!r} — realign the table"
-            )
+    triggers = list(_REGISTRY.CLAIM_TRIGGERS)
+    assert len(triggers) == len(set(triggers)) == len(_SPECIMENS)
+    for i, pattern in enumerate(triggers):
+        assert pattern in _SPECIMENS, (
+            f"no specimen for trigger {pattern!r} — CLAIM_TRIGGERS changed; "
+            "move the specimen table with it"
+        )
+        specimen = _REGISTRY._normalize(_SPECIMENS[pattern])
+        assert re.search(pattern, specimen, re.IGNORECASE), (
+            f"specimen {specimen!r} does not match its alternate {pattern!r}"
+        )
+        others = re.compile(
+            "|".join(f"(?:{t})" for j, t in enumerate(triggers) if j != i),
+            re.IGNORECASE,
+        )
+        assert not others.search(specimen), (
+            f"specimen {specimen!r} is matched by another alternate too — it "
+            f"cannot prove {pattern!r} is alive; pick a phrasing unique to it"
+        )
     assert not _REGISTRY._TRIGGER_RE.search(
         _REGISTRY._normalize("aiomysql still passes the deprecated argument")
     ), "'still passes the …' must stay excluded (an argument, not validation)"
@@ -240,6 +254,40 @@ def test_scanner_positive_control(monkeypatch, tmp_path: Path) -> None:
             "<!-- END GENERATED: no-such-block -->",
             "synthetic",
         )
+
+
+def test_unknown_block_id_pins_nothing_and_is_reported(monkeypatch, tmp_path: Path) -> None:
+    """A GENERATED pair whose id no renderer owns must not exempt its contents.
+
+    The pipeline generator's grammar silently ignores ids it cannot parse
+    (e.g. `claim:*` — no colon in its id charset), so such a pair used to be
+    rendered by nobody, checked by nobody, and still exempt everything inside
+    it from the scan — prose that LOOKS machine-pinned. Now the claim inside
+    is flagged and `malformed_marker_docs` names the file.
+    """
+    _REGISTRY._pipeline_gen()  # warm the cache before the paths are patched
+    fake_pipeline = tmp_path / "plugins" / "analitiq-pipeline-builder"
+    doc = fake_pipeline / "skills" / "bogus.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text(
+        "# Bogus\n\n"
+        "<!-- BEGIN GENERATED: claim:totally-made-up -->\n"
+        "Function names: never checked, honest.\n"
+        "<!-- END GENERATED: claim:totally-made-up -->\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_REGISTRY, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(_REGISTRY, "PLUGINS_ROOT", tmp_path / "plugins")
+    monkeypatch.setattr(_REGISTRY, "PIPELINE_PLUGIN", fake_pipeline)
+    monkeypatch.setattr(_REGISTRY, "WAIVERS", ())
+
+    violations, _dangling, _stale = _REGISTRY.scan()
+    # `checks?` carries no trailing \b, so the match inside "never checked"
+    # stops at "never check" — the detection is what matters, not the tail.
+    assert [(v.line, v.text) for v in violations] == [(4, "never check")]
+    assert _REGISTRY.malformed_marker_docs() == [
+        "plugins/analitiq-pipeline-builder/skills/bogus.md"
+    ]
 
 
 def test_probe_expectations_are_well_formed() -> None:
