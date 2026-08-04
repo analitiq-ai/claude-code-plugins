@@ -3813,7 +3813,7 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    return _materialize(node, node if root is None else root, {}, set(), {})
+    return _materialize(node, node if root is None else root, {}, set())
 
 
 def _materialize(
@@ -3821,7 +3821,6 @@ def _materialize(
     root: Any,
     memo: dict[int, tuple[Any, Any]],
     on_path: set[int],
-    contrib_memo: dict[int, tuple[Any, dict[str, list[Any]]]],
 ) -> Any:
     """Memoized fold. Each node is materialized ONCE and its RESULT reused.
 
@@ -3859,15 +3858,13 @@ def _materialize(
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
         if isinstance(target, dict):
-            sources.append(_materialize(target, root, memo, on_path, contrib_memo))
+            sources.append(_materialize(target, root, memo, on_path))
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
             _reject_unsatisfiable_branch(branch)
             if isinstance(branch, dict):
-                sources.append(
-                    _materialize(branch, root, memo, on_path, contrib_memo)
-                )
+                sources.append(_materialize(branch, root, memo, on_path))
     sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
 
     # The same refusal `_compose_declarations` applies to a property name's
@@ -3929,29 +3926,32 @@ def _materialize(
         # and accepted nested ones, which is `effective_properties` refusing a
         # record shape `materialize_node` was happy to derive columns from.
         #
-        # The walk starts FRESH — its own memo, `contrib_memo` used only to skip
-        # nodes already proved. Sharing one contributor memo across the
-        # materialization was faster and wrong: `_contributors` caches `{}` for a
-        # node it meets on the CURRENT path, so an entry computed while some
-        # ancestor was mid-walk carries that truncation, and a later node reads a
-        # weaker contributor set than `effective_properties` would compute for it
-        # from a standing start. That is the same two-view disagreement this
-        # proof exists to prevent, reintroduced by the cache meant to make it
-        # cheap:
+        # The walk starts FRESH, exactly as `effective_properties(node, root)`
+        # would run it. No second cache: `_materialize`'s own memo already
+        # guarantees each node's body runs once per materialization, so a
+        # proved-nodes cache here never gets a hit (measured: 0 hits across the
+        # full suite and 40k random cyclic documents) — and the SHARED variant
+        # that would get hits was the bug. `_contributors` caches `{}` for a
+        # node it meets on the CURRENT path, so a shared entry computed while
+        # some ancestor was mid-walk carries that truncation, and a later node
+        # reads a weaker contributor set than `effective_properties` would
+        # compute from a standing start:
         #
         #   A: {$ref: C, properties: {x: {type: [string, boolean]}}}
         #   B: {$ref: A, properties: {x: {type: [integer, boolean]}}}
         #   C: {$ref: A, properties: {x: {type: [string, integer]}}}
         #
         # gave `materialize_node(B)` an accepted `[integer, boolean]` while
-        # `effective_properties(B)` refused. Truncation-tainting the cache
+        # `effective_properties(B)` refused. Truncation-tainting a shared cache
         # instead was tried earlier in this PR and is exponential — the taint
         # propagates to every ancestor, so one back-edge uncaches the whole walk.
-        if id(node) not in contrib_memo:
-            raw = _property_contributors(node, root)
-            contrib_memo[id(node)] = (node, raw)
-        else:
-            raw = contrib_memo[id(node)][1]
+        #
+        # THE PRICE, stated because nothing else in this file will: one full
+        # contributor walk per node that declares `properties`, which is cubic
+        # on a deep UNSHARED `allOf` chain (measured ~3s at depth 400, ~44ms at
+        # depth 100). Real record shapes nest < 10 deep, where this is ~0.2ms;
+        # the linearity pins bound the shared/cyclic shapes that actually occur.
+        raw = _property_contributors(node, root)
         by_name: dict[str, list[Any]] = {}
         for source_map in own_properties:
             for name, declaration in source_map.items():

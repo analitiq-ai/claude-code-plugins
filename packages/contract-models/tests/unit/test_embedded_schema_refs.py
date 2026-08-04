@@ -1687,9 +1687,12 @@ class TestMaterializeMatchesTheNaiveFold:
         Chains are 2-4 levels deep so a level's own contributors are folded
         before the level above reads them, which is exactly the case a
         single-level fixture cannot reach. A third of the shapes close a
-        back-edge: the proof walk shares one memo across the whole
-        materialization, so a node's contributor set can be computed while some
-        ancestor is mid-walk, and the two views must still land together.
+        back-edge: under a cycle both walks truncate at the node they re-meet,
+        and they must truncate IDENTICALLY — a proof walk that reused state
+        from mid-materialization truncated differently than a standing start
+        (the shared-cache bug pinned deterministically by
+        `test_a_shared_contributor_cache_cannot_answer_another_walks_question`;
+        this generator hits it ~0.4% per seed, hence 240 seeds AND the pin).
         """
         rng = random.Random(seed)
         universe = ["string", "integer", "boolean", "number"]
