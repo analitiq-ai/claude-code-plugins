@@ -918,14 +918,19 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
             "author time** by the validator's `endpoint-transport-ref` check "
             "(the endpoint and the connector are separate documents, so no "
             "single-document model validator can see both sides). "
-            "(2) ORIGIN: every URL this request produces, INCLUDING a next-page "
-            "link followed from `pagination.link.next_url`, must land on the "
-            "origin of a declared transport — so a connector that pages onto, "
-            "or downloads from, a second origin declares a transport for that "
-            "origin too. This half is a RUNTIME rule the engine enforces when "
-            "it follows the URL; nothing in this contract or in "
-            "`analitiq-validator` checks it, because the URLs do not exist "
-            "until the provider answers."
+            "(2) ORIGIN: the intended rule is that every URL this request "
+            "produces, including a next-page link followed from "
+            "`pagination.link.next_url`, lands on the origin of a declared "
+            "transport. **This half is enforced by nothing today** — not by "
+            "this contract, not by `analitiq-validator`, and not by the engine "
+            "as it stands: the engine opens ONE session at connect time from "
+            "`default_transport` and pins the read path to that single origin, "
+            "the write path has no origin guard at all, and no production call "
+            "site selects a transport per operation. So declaring a second "
+            "transport does NOT today make a second origin reachable — a "
+            "next-page link that leaves the connection origin is refused. "
+            "Stated here as the contract's intent, not as a guarantee; "
+            "implementing it is analitiq-engine#454 / #124."
         ),
     )
     path: str = Field(
@@ -1812,7 +1817,7 @@ class ReadOperation(_EndpointModel):
         # Last: the records anchor and the cursor fields are the paths an author
         # is most likely to have got right, so reporting them first keeps the
         # broader pagination/metadata sweep from masking a simpler error.
-        _validate_response_body_paths(self.response, self.pagination)
+        _validate_response_body_paths(self.response, self.pagination, self.request)
 
         return self
 
@@ -2458,30 +2463,29 @@ def _collect_function_names(value: Any) -> list[str]:
     A function expression can be nested as another expression's `input`, so the
     check has to reach the whole subtree rather than only its head.
 
-    Two subtrees are deliberately NOT reached, because the engine never executes
-    what is in them and a rule fired on them is a false rejection:
+    One subtree is deliberately not reached: a `literal` payload.
+    `resolve_value_expression` returns a literal's contents verbatim
+    (`value_expression.py` — `if "literal" in value: return value["literal"]`),
+    so `{"literal": {"function": "url_encode"}}` is data and nothing is called.
 
-    * a `literal` payload — opaque data by definition. `{"literal": {"function":
-      "url_encode"}}` resolves to that dict verbatim; nothing is called.
-    * an `x-*` sibling — the extension namespace the contract reserves for
-      annotations (§Extension Policy). An author documenting *why* they are not
-      encoding, in the one namespace set aside for saying so, must not have the
-      rule fired at them for it.
-
-    This is the same discipline :func:`_expression_tokens` follows via
-    ``iter_expression_strings``: a validator should see exactly what the
-    resolver will resolve, no more and no less.
+    `x-*` siblings ARE reached, and an earlier revision of this function was
+    wrong to skip them. `resolve_template_deep` walks every key of a request
+    slot, extension keys included: `{"x-why": {"function": "url_encode",
+    "input": "a b"}}` really does resolve to `{"x-why": "a%20b"}`. Whatever the
+    extension namespace is for, the engine executes what is in it, so a rule
+    about what the engine executes must look there too. This matches
+    :func:`_expression_tokens` / ``iter_expression_strings``, which also recurse
+    into `x-*` — a validator should see exactly what the resolver will resolve,
+    no more and no less.
     """
     found: list[str] = []
     if isinstance(value, dict):
-        if _matches_singleton(value, "literal") or "literal" in value:
+        if "literal" in value:
             return found
         name = value.get("function")
         if isinstance(name, str):
             found.append(name)
-        for child_key, child in value.items():
-            if isinstance(child_key, str) and child_key.startswith("x-"):
-                continue
+        for child in value.values():
             found.extend(_collect_function_names(child))
     elif isinstance(value, list):
         for item in value:
@@ -2720,7 +2724,17 @@ def _validate_param_wiring(
                     f"{from_input!r}` — a batch has no single value for a path "
                     "segment (spec: §Request Parameter Binding)"
                 )
-            if not from_input.startswith("record."):
+            if not from_input.startswith("record.") or not RECORD_FIELD_PATH_RE.match(
+                from_input.removeprefix("record.")
+            ):
+                # The dotted REMAINDER must be a real field path, not merely
+                # start with `record.`. Without the pattern check `"record."`
+                # and `"record..id"` passed here, then passed the input.schema
+                # membership check too (an empty segment is vacuously "not
+                # provably absent"), and bound a URL segment to no field at
+                # all — #125's own failure mode, re-entering through the door
+                # this rule opened. Same regex the contract already uses for
+                # every other dotted record path.
                 raise ValueError(
                     f"request.path_params[{placeholder!r}] from_input value "
                     f"{from_input!r} must be `record.<dotted>` "
@@ -2908,7 +2922,7 @@ def _declares_a_type(node: Any) -> bool:
 
 
 def _validate_response_body_paths(
-    response: ResponseExtraction, pagination: Any
+    response: ResponseExtraction, pagination: Any, request: Any = None
 ) -> None:
     """ADV-ENDP-023 (#123): every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
@@ -2949,9 +2963,19 @@ def _validate_response_body_paths(
         sites.append(("pagination", pagination.model_dump()))
     for key, expression in (response.metadata or {}).items():
         sites.append((f"response.metadata[{key!r}]", expression.model_dump()))
+    # The REQUEST slots too. A request is built before the response exists, so a
+    # `response.*` ref there is doubly wrong — and it was accepted:
+    # `request.query = {"c": {"ref": "response.body.nope"}}` interpolated
+    # nothing, the provider answered 200, and the run went green. #123's failure
+    # at the site where the value actually goes onto the wire.
+    for slot in ("headers", "query", "body"):
+        value = getattr(request, slot, None)
+        if value is not None:
+            sites.append((f"request.{slot}", value))
 
     for where, payload in sites:
         for token in _expression_tokens(payload):
+            _reject_unknown_scope(where, token)
             _reject_unknown_response_scope(where, token)
             segments = _response_body_segments(token)
             if segments is None:
@@ -3706,6 +3730,30 @@ def resolve_declared_path(
             f"{segment!r} is not declared", segment=segment, index=index
         )
     return node
+
+
+def _reject_unknown_scope(where: str, token: str) -> None:
+    """The LEADING token must name a real resolution scope.
+
+    :func:`_reject_unknown_response_scope` catches a bad SUB-scope
+    (`response.bodyy`); this catches a bad scope (`responses.body`,
+    `respons.body`, `Response.body`). Both halves are needed — a typo lands
+    either side of the dot and the run-time failure is identical.
+
+    The typed `Expression` fields are already covered by the published
+    `_RESOLUTION_SCOPE_PATTERN`, but the `Any`-typed paging slots
+    (`keyset.initial`, `offset.initial`, `page.initial`, every `Predicate`
+    operand) are covered by nothing, and those are the most load-bearing paging
+    sites in the contract.
+    """
+    if _has_known_scope(token):
+        return
+    raise ValueError(
+        f"{where} references {token!r}, whose leading token is not a known "
+        f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). It resolves to "
+        "nothing at run time, so paging stops after the first page and the run "
+        "still reports success (spec: §Value Expressions)"
+    )
 
 
 def _reject_unknown_response_scope(where: str, token: str) -> None:

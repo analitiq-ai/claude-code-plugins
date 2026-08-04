@@ -1020,3 +1020,49 @@ class TestRefIntoAConditionalBranchIsRefused:
             "properties": {"x": {"$ref": "#/allOf/0"}},
         }
         assert resolve_declared_path(root, ["x", "shared"]) == {"type": "string"}
+
+
+class TestScopeTyposOnEitherSideOfTheDot:
+    """A misspelled SCOPE (`responses.body`) and a misspelled SUB-SCOPE
+    (`response.bodyy`) fail identically at run time, so both are refused. The
+    typed Expression fields carry a published pattern; the `Any`-typed paging
+    slots — where these were accepted — carry nothing."""
+
+    @pytest.mark.parametrize(
+        "token",
+        ["responses.body.last", "respons.body.last", "Response.body.last"],
+    )
+    def test_misspelled_leading_scope_is_rejected(self, token):
+        payload = _read_payload("keyset")
+        payload["operations"]["read"]["pagination"]["keyset"]["initial"] = {"ref": token}
+        with pytest.raises(ValidationError, match="not a known resolution scope"):
+            parse_endpoint(payload)
+
+    def test_misspelled_scope_in_a_predicate_operand_is_rejected(self):
+        payload = _read_payload(
+            "cursor", stop_when={"missing": {"ref": "responses.body.has_more"}}
+        )
+        with pytest.raises(ValidationError, match="not a known resolution scope"):
+            parse_endpoint(payload)
+
+
+class TestRequestSlotsAreSweptToo:
+    """A request is built before the response exists, so a `response.*` ref in
+    `request.query`/`headers`/`body` is doubly wrong — and it was accepted. It
+    is also the site where the value goes onto the wire."""
+
+    def test_undeclared_response_body_path_in_query_is_rejected(self):
+        payload = _read_payload("cursor")
+        payload["operations"]["read"]["request"]["query"]["extra"] = {
+            "ref": "response.body.nope"
+        }
+        with pytest.raises(ValidationError, match="does not resolve in response.schema"):
+            parse_endpoint(payload)
+
+    def test_misspelled_sub_scope_in_headers_is_rejected(self):
+        payload = _read_payload("cursor")
+        payload["operations"]["read"]["request"]["headers"] = {
+            "X-A": {"ref": "response.bodyy.x"}
+        }
+        with pytest.raises(ValidationError, match="is not one of"):
+            parse_endpoint(payload)
