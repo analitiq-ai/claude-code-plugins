@@ -393,16 +393,11 @@ class Param(_EndpointModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "Param":
-        # `default` is an expression tree the resolver evaluates, but it was
-        # reached by NO check: not `_validate_expression_shapes`, not the scope
-        # guards, not the response-path sweep. On a `controlled_by: "pagination"`
-        # param it is the paging SEED, so a ref that resolves to nothing starts
-        # paging from an unresolved value and the run reports success — #123's
-        # failure on the one slot the sweep never enumerated.
-        _validate_expression_shapes(self.default, "params.<name>.default")
-        for token in _expression_tokens(self.default):
-            _reject_unknown_scope("params.<name>.default", token)
-            _reject_unknown_response_scope("params.<name>.default", token)
+        # `default` IS an expression tree, but it is swept by the OPERATION, not
+        # here: `Param` is shared by reads and writes and cannot tell which it is
+        # in, so a sweep here reported a paging consequence to write authors and
+        # could not reach `response.schema` for declared-path resolution. See
+        # `sweep_expression_sites`.
         if _collect_singleton_values(self.default, "from_input"):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
@@ -1862,7 +1857,9 @@ class ReadOperation(_EndpointModel):
         # Last: the records anchor and the cursor fields are the paths an author
         # is most likely to have got right, so reporting them first keeps the
         # broader pagination/metadata sweep from masking a simpler error.
-        _validate_response_body_paths(self.response, self.pagination, self.request)
+        _validate_response_body_paths(
+            self.response, self.pagination, self.request, self.params
+        )
 
         return self
 
@@ -2054,16 +2051,19 @@ class WriteOperation(_EndpointModel):
         # the provider listed in `body.errors`. Partial data loss, green run —
         # strictly worse than the paging truncation #123 was filed for. The
         # request slots are swept for the same reason the read side is.
-        _reject_unknown_scopes_in(
-            {
-                "operations.write.request.headers": self.request.headers,
-                "operations.write.request.query": self.request.query,
-                "operations.write.request.body": self.request.body,
-                "operations.write.response": (
-                    self.response.model_dump() if self.response is not None else None
-                ),
-            }
-        )
+        write_sites: list[tuple[str, Any]] = [
+            (f"operations.write.request.{slot}", getattr(self.request, slot, None))
+            for slot in ("path_params", "headers", "query", "body")
+        ]
+        write_sites.append((
+            "operations.write.response",
+            self.response.model_dump() if self.response is not None else None,
+        ))
+        write_sites += [
+            (f"operations.write.params[{name!r}].default", param.default)
+            for name, param in self.params.items()
+        ]
+        sweep_expression_sites([(w, p) for w, p in write_sites if p is not None])
 
         path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
         if path_from_inputs and self.batching is not None:
@@ -2572,6 +2572,14 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
     pointer to the bad fragment instead of a downstream "param not
     referenced" error from the param-binding walk that runs after.
     """
+    if isinstance(value, dict) and "literal" in value:
+        # A `literal` payload is opaque data — `resolve_value_expression` returns
+        # it verbatim. `_collect_singleton_values`, `_collect_function_names` and
+        # `_expression_tokens` all say so and all skip it; this walker did not,
+        # and it is the one that REJECTS. A provider-shaped default carrying a
+        # field named `template`/`function`/`ref` was unauthorable with no
+        # working escape, which is what the escape hatch is for.
+        return
     if isinstance(value, dict):
         present_expr_keys = [k for k in value if k in _ALL_EXPRESSION_KEYS]
         if present_expr_keys:
@@ -2987,7 +2995,10 @@ def _declares_a_type(node: Any) -> bool:
 
 
 def _validate_response_body_paths(
-    response: ResponseExtraction, pagination: Any, request: Any = None
+    response: ResponseExtraction,
+    pagination: Any,
+    request: Any = None,
+    params: dict[str, "Param"] | None = None,
 ) -> None:
     """ADV-ENDP-023 (#123): every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
@@ -3033,36 +3044,15 @@ def _validate_response_body_paths(
     # `request.query = {"c": {"ref": "response.body.nope"}}` interpolated
     # nothing, the provider answered 200, and the run went green. #123's failure
     # at the site where the value actually goes onto the wire.
-    for slot in ("headers", "query", "body"):
+    for slot in ("path_params", "headers", "query", "body"):
         value = getattr(request, slot, None)
         if value is not None:
             sites.append((f"request.{slot}", value))
+    for name, param in (params or {}).items():
+        if param.default is not None:
+            sites.append((f"params[{name!r}].default", param.default))
 
-    for where, payload in sites:
-        for token in _expression_tokens(payload):
-            _reject_unknown_scope(where, token)
-            _reject_unknown_response_scope(where, token)
-            segments = _response_body_segments(token)
-            if segments is None:
-                continue
-            try:
-                node = resolve_declared_path(response.schema_, segments)
-            except SchemaResolutionError as exc:
-                raise ValueError(
-                    f"{where} references {token!r}, which does not resolve in "
-                    f"response.schema: {exc.reason} "
-                    "(spec: §API Response Extraction — declared-path resolution)"
-                ) from None
-            materialized = materialize_node(node, response.schema_)
-            if not _declares_a_type(materialized):
-                raise ValueError(
-                    f"{where} references {token!r}, which resolves in "
-                    "response.schema to a node that declares no `type` (and no "
-                    "`native_type`/`arrow_type` pair). Declare the type of the "
-                    "value the engine reads there, or nothing can tell what it "
-                    "planted (spec: §API Response Extraction — declared-path "
-                    "resolution)"
-                )
+    sweep_expression_sites(sites, response.schema_)
 
 
 def _validate_replication_wiring(replication: Replication, params: dict[str, Param]) -> None:
@@ -3725,7 +3715,16 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    return _materialize(node, node if root is None else root, {}, set())
+    document = node if root is None else root
+    # The merge below is PAIRWISE (it mirrors the fold, and the fold is the
+    # pinned reference), so a `type` contradiction across three-plus
+    # contributors — pairwise compatible, jointly empty — would slip past it
+    # while `_compose_declarations` refused the same document. Run the n-way
+    # proof once here, for its refusal only: `effective_properties` intersects
+    # every contributor of every name, which is exactly the missing check. Its
+    # result is discarded; the merge is unchanged.
+    effective_properties(node, document)
+    return _materialize(node, document, {}, set())
 
 
 def _materialize(
@@ -3939,6 +3938,61 @@ def resolve_declared_path(
     return node
 
 
+def sweep_expression_sites(
+    sites: "list[tuple[str, Any]]", response_schema: Any = None
+) -> None:
+    """Run EVERY expression check over every site, from one table.
+
+    The four checks — expression shape, leading scope, response sub-scope, and
+    (where a `response.schema` exists) declared-path resolution with typedness —
+    were wired per CALL SITE rather than per slot, and every hole this PR closed
+    after the first was the same shape: a site that was not on somebody's list.
+    `request.path_params` was missing from two tables; `pagination` and the write
+    `response` never reached the shape walk; `params.<name>.default` was added to
+    three walks and not the fourth. `_validate_response_body_paths`' own
+    docstring rejects exactly this reasoning for the INSIDE of `pagination`
+    ("enumerating sites would mean a new strategy field silently escapes the
+    rule; walking the block cannot") — it just was not applied to the
+    enumeration of the blocks themselves.
+
+    So: one function, all four checks, and each operation states its slots once.
+    A slot added to the table gets every check by construction.
+    """
+    for where, payload in sites:
+        _validate_expression_shapes(payload, where)
+        for token in _expression_tokens(payload):
+            _reject_unknown_scope(where, token)
+            _reject_unknown_response_scope(where, token)
+            segments = _response_body_segments(token)
+            if segments is None or response_schema is None:
+                continue
+            try:
+                node = resolve_declared_path(response_schema, segments)
+            except SchemaResolutionError as exc:
+                raise ValueError(
+                    f"{where} references {token!r}, which does not resolve in "
+                    f"response.schema: {exc.reason} "
+                    "(spec: §API Response Extraction — declared-path resolution)"
+                ) from None
+            try:
+                materialized = materialize_node(node, response_schema)
+            except SchemaResolutionError as exc:
+                raise ValueError(
+                    f"{where} references {token!r}, which resolves in "
+                    f"response.schema to a self-contradictory node: {exc.reason} "
+                    "(spec: §API Response Extraction — declared-path resolution)"
+                ) from None
+            if not _declares_a_type(materialized):
+                raise ValueError(
+                    f"{where} references {token!r}, which resolves in "
+                    "response.schema to a node that declares no `type` (and no "
+                    "`native_type`/`arrow_type` pair). Declare the type of the "
+                    "value the engine reads there, or nothing can tell what it "
+                    "planted (spec: §API Response Extraction — declared-path "
+                    "resolution)"
+                )
+
+
 def _reject_unknown_scopes_in(sites: dict[str, Any]) -> None:
     """Run both scope checks over every expression token in ``sites``.
 
@@ -4089,7 +4143,11 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     records = response.get("records") if isinstance(response, dict) else response
     ref = records.get("ref") if isinstance(records, dict) else records
     if not isinstance(ref, str):
-        return response_schema
+        # Absent, null or non-string `records`. `None` for the same reason every
+        # other unresolvable case returns it: `response_schema` is the ENVELOPE,
+        # and an ungated caller enumerates its keys as the record's fields. An
+        # absent `records` is exactly what ungated input looks like.
+        return None
     segments = _response_body_segments(ref)
     if segments is None:
         # Non-spec ref (e.g. a bare JSONPath). The gate rejects this exactly as
