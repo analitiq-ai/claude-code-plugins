@@ -48,8 +48,8 @@ on first use, then invoke it:
 # Ensure the pinned validator is present — it pins analitiq-contract-models with
 # an exact `==`, so installing it fixes both. Installs only if the exact version
 # is missing; pip output goes to stderr so it can't contaminate the Diagnostics JSON.
-python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc19' else 1)" 2>/dev/null \
-  || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc19" 1>&2
+python3 -c "import sys; from importlib.metadata import version; sys.exit(0 if version('analitiq-validator') == '1.0.0rc20' else 1)" 2>/dev/null \
+  || python3 -m pip install --quiet --disable-pip-version-check --pre "analitiq-validator==1.0.0rc20" 1>&2
 
 # Run it — prints the Diagnostics JSON verbatim, exits non-zero on any error finding.
 python3 - "<schema_url>" "<document_path>" <<'PY'
@@ -90,16 +90,26 @@ Do not expect a finding id per rule; match on the message, not on a guessed id.
 | `endpoint-transport-ref` | An endpoint operation's `request.transport_ref` must name a transport the sibling `connector.json` declares in `transports`. Cross-file, so only a connector-anchored run can see it; the connector-internal ref sites are covered by `contract-model`. |
 | `embedded-json-schema` | An embedded JSON Schema (e.g. `response.schema`, `input.schema`) must be valid Draft 2020-12 and must not declare a different `$schema`. |
 
+<!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —
 do not rely on them, and treat these as author-side discipline:
 
 - **Function names are never checked.** An unregistered or misspelled
   `{"function": …}` passes validation and fails at connect time.
-- **Ref *resolvability* is never checked on a connector.** Only the leading
-  scope token of an endpoint expression is validated; a
-  `connection.discovered.*` ref with no post-auth output that produces it
-  validates clean.
+- **Ref *resolvability* is checked for exactly two things, one of them
+  read-only.** On a READ, a `response.body.<path>` is resolved against
+  `response.schema`; on either operation, a `response.metadata.<key>` is
+  checked against the declared keys. Those typos are errors. Nothing else is
+  proved, and three cases in particular look proved and are not:
+  `response.records.<path>` and `response.headers.<name>` are spelling-checked
+  only, and a WRITE mode has no `response.schema`, so no write-side
+  `response.body` path is resolved — a `success_when` typo validates clean and
+  the predicate then holds unconditionally. Every remaining scope is checked
+  on its leading token only, and a connector document is not ref-checked at
+  all — so a `connection.discovered.*` ref with no post-auth output that
+  produces it validates clean, on either document.
 - **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**
+<!-- END GENERATED: validator-blind-spots -->
 
 ## Output
 

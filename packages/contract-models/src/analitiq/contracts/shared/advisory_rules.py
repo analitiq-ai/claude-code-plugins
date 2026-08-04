@@ -258,12 +258,14 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="Every response.body path referenced by pagination, response.metadata, a request path_params/headers/query/body slot, or a params.<name>.default must resolve by declared-path resolution against response.schema, to a node that declares a type; a response.* reference in a request slot is refused outright (the request is built before the response exists), as are a response.* reference naming no known sub-scope, a response.metadata.<key> naming an undeclared key, and a keyset order_by_field absent from the record shape.",
         targets=("ReadOperation",), enforcer="_wiring",
     ),
-    # Stated as the CONSTRAINT, not as a grant. This registry renders verbatim
-    # into `references/advisory-rules.md`, which ships in the plugin cache
-    # alongside hand-authored authoring prose; a row reading "a write path_param
-    # MAY bind from_input" reads as an instruction to use it, and the shipped
-    # runtime validator pin does not accept it yet. The rule is the same either
-    # way — what changes is whether the reference table teaches.
+    # Stated as the CONSTRAINT, not as a grant — the registry's general style.
+    # This table renders verbatim into `references/advisory-rules.md` and sits
+    # beside hand-authored authoring prose, so a row reading "a write path_param
+    # MAY bind from_input" would read as an instruction to use it; teaching
+    # belongs in `spec-request-binding.md`, which owns the craft (when to choose
+    # it over `from_param`, the batching exclusion, engine-owned encoding).
+    # The rule is the same either way — what changes is whether the reference
+    # table teaches.
     AdvisoryRule(
         id="ADV-ENDP-024", kind="custom", resource="api-endpoint",
         prose="A path_param from_input binding is invalid on a read operation, and on a write must address exactly one record field (record.<dotted>, never record or records) that input.schema declares.",

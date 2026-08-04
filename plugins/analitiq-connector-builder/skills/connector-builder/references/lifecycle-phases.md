@@ -3,11 +3,14 @@
 Which values exist when, so a transport or operation only references values
 that can actually resolve at the point it runs.
 
-> **This is entirely author-side.** No validator checks phase resolvability: a
-> transport referencing `connection.discovered.api_domain` with no post-auth
-> output producing it validates clean and fails at connect. On a connector
-> document refs are not checked *at all* — even a nonsense scope passes — so
-> there is no backstop here whatsoever. Walk the phases by hand.
+<!-- BEGIN GENERATED: claim:phase-resolvability-unchecked -->
+> **This is entirely author-side.** No validator checks phase
+> resolvability: a transport referencing `connection.discovered.api_domain`
+> with no post-auth output producing it validates clean and fails at
+> connect. On a connector document refs are not checked *at all* — even a
+> nonsense scope passes — so there is no backstop here whatsoever. Walk
+> the phases by hand.
+<!-- END GENERATED: claim:phase-resolvability-unchecked -->
 
 ## Phases
 
@@ -54,6 +57,7 @@ mirror image is declaring an input's `phase` too late for the transport that
 needs it (a `base_url` component declared `phase: "auth"` cannot serve a
 pre-auth request).
 
+<!-- PROBE: connector-refs-unchecked -->
 Neither is caught by validation. Before returning a connector, trace each
 transport's refs to the declaration that produces them and confirm the
 producing phase is no later than the consuming one.

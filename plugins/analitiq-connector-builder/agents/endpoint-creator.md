@@ -86,11 +86,13 @@ was raised.
      type, not an Arrow type), `required`, optional `default` (value
      expression), `operators` for stream-filterable params, and
      `controlled_by` when pagination / replication owns it.
-   - `request.query` / `request.headers` / `request.path_params` /
+   - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
+     `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are
      bound to declared params with `{"from_param": "<name>"}`, **not** with
-     a bare `ref`; `path_params` accepts nothing else, and a direct
-     `stream.*` / `state.*` / `runtime.*` ref anywhere in a request slot is
+     a bare `ref`; on a READ, `path_params` accepts nothing else (a write
+     path_param may also bind `from_input` — see the write block below), and
+     a direct `stream.*` / `state.*` / `runtime.*` ref anywhere in a request slot is
      rejected. Fixed protocol values stay direct (`{"literal": …}`, or a
      `connection.parameters.*` / `secrets.*` ref). Every declared param must
      be bound by exactly one binding. Full rules: `spec-request-binding.md`.
@@ -136,6 +138,7 @@ was raised.
    shared with database destinations, so the schema also permits
    `truncate_insert` (empty the destination, reload it) — that mode belongs to
    the SQL write path and has no defined meaning for an API destination, so a
+   <!-- PROBE: write-truncate-insert-accepted -->
    connector keying it passes validation while declaring something no HTTP
    provider was asked to do. If a provider genuinely exposes a
    replace-the-collection operation, raise it as a contract gap rather than
@@ -143,13 +146,24 @@ was raised.
    block shape and differ only in `conflict_keys`. Each mode block holds:
    - `request` (required) — `method` (`POST` / `PUT` / `PATCH`), `path`,
      and the same optional `query` / `headers` / `path_params` / `body`
-     / `transport_ref` keys as the read request. The **body must reference
-     the record being written** via `{"from_input": …}` — `record` (or
-     `record.<field>`) when unbatched, `records` when `batching` is
-     declared (ADV-ENDP-017). Author the provider's envelope literally
-     around it (`{"data": {"from_input": "records"}}`); no wrapper key is
-     special. `from_input` is legal **only** here, never in a read request,
-     a header, a query, or a param default.
+     / `transport_ref` keys as the read request — except that `path_params`
+     diverges here (below). The **body must reference the record being
+     written** via `{"from_input": …}` — `record` (or `record.<field>`)
+     when unbatched, `records` when `batching` is declared (ADV-ENDP-017).
+     Author the provider's envelope literally around it
+     (`{"data": {"from_input": "records"}}`); no wrapper key is special.
+     A write **`path_params`** may also bind `from_input`, as
+     `{"from_input": "record.<dotted>"}` — this is how `PUT /Contact/{id}`
+     takes its segment from the record, declaring no param at all. Only
+     `record.<dotted>` (a segment carries one value, ADV-ENDP-024), never
+     alongside `batching` (ADV-ENDP-025), and never wrapped in
+     `url_encode` / `base64_encode` — the engine encodes each segment
+     (ADV-ENDP-027). Use `{"from_param"}` instead when the segment comes
+     from configuration rather than the record; a write param bound that way
+     must carry a `default` (ADV-ENDP-028). Outside the write body and write
+     `path_params`, `from_input` is illegal: never in a read request, a
+     header, a query, or a param default. Full rules:
+     `spec-request-binding.md`.
    - `input` (required) — `{"schema": <JsonSchemaPropertyNode>}`
      describing one provider-facing destination record. Every field a
      `from_input` path addresses must be declared here.

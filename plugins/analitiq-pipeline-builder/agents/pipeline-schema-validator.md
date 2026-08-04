@@ -57,7 +57,8 @@ Analitiq services enforce) and normalizes every result into one envelope.
 - Do not loop. One invocation = one validation run. The orchestrator owns the
   fix-and-revalidate loop (≤ 5 passes per artifact, see
   `skills/pipeline-builder/references/pipeline.md`).
-- `passed` is `true` iff there is no `error`-severity finding; warnings are
+- <!-- PROBE: pipeline-draft-runnability-unchecked -->
+  `passed` is `true` iff there is no `error`-severity finding; warnings are
   allowed. (A draft pipeline's runnability is not checked — the plugin authors
   drafts by design — so a draft produces no not-runnable finding; runnability is
   enforced once the pipeline is `active`.) A `connector-endpoint-ref` **warning**

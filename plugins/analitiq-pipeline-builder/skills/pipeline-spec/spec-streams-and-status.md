@@ -48,7 +48,9 @@ value means operationally:
 `streams` list is rejected at the single-document contract-model level (no
 `--bundle-root` needed). The remaining rule — that at least one referenced stream
 is itself `active` — needs the bundle: run with `--bundle-root` and the referential
-checks error when no referenced stream is `active`. A **draft** pipeline is
+checks error when no referenced stream is `active`.
+<!-- PROBE: pipeline-active-empty-streams-rejected, pipeline-draft-runnability-unchecked -->
+A **draft** pipeline is
 legitimately not yet runnable, so runnability is not checked for a draft
 (`require_runnable=False`); it is enforced only once the pipeline is `active`.
 
