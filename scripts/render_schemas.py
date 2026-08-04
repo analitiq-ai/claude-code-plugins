@@ -77,6 +77,9 @@ from analitiq.contracts.credentials_file import CredentialsFile  # noqa: E402
 from analitiq.contracts.connector import Connector  # noqa: E402
 from analitiq.contracts.endpoints import (  # noqa: E402
     ARROW_TYPE_PATTERN,
+    JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+    JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+    JSON_SCHEMA_SUBSCHEMA_KEYS,
     WRITE_MODES,
     ApiEndpointDoc,
     DatabaseEndpointDoc,
@@ -408,87 +411,63 @@ def _connector_post_process(schema: dict[str, Any]) -> None:
 # a recursive `$def` so external validators reject bare parameterized forms
 # (`Timestamp`, `Decimal128`, …) at author time, matching the runtime walker on
 # ResponseExtraction / WriteInput.
-_JSON_SCHEMA_PROPERTY_NODE_DEF: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": True,
-    "description": (
+_JSON_SCHEMA_NODE_REF: dict[str, Any] = {"$ref": "#/$defs/JsonSchemaPropertyNode"}
+
+
+def _json_schema_node_properties() -> dict[str, Any]:
+    """The node's constrained keywords, DERIVED from the contract's own sets.
+
+    These were three hand-maintained copies of one vocabulary — here, the
+    walkers in `analitiq.contracts.endpoints`, and the validator's
+    `_SUBSCHEMA_*_KEYS`. Adding `contentSchema` meant editing all three, and the
+    fourth expression of it (this node's own description, below) was missed, so
+    the published contract constrained a keyword while its prose said it did not
+    recurse there. The contract package owns the vocabulary; both consumers
+    import it.
+    """
+    properties: dict[str, Any] = {
+        "arrow_type": {"type": "string", "pattern": ARROW_TYPE_PATTERN},
+        "native_type": {"type": "string"},
+    }
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+        properties[key] = {"type": "object", "additionalProperties": _JSON_SCHEMA_NODE_REF}
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+        properties[key] = {"type": "array", "items": _JSON_SCHEMA_NODE_REF}
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        # `additionalProperties` also takes the boolean short-form, and the
+        # walkers treat it as a schema position only when it is a dict.
+        properties[key] = (
+            {"anyOf": [{"type": "boolean"}, _JSON_SCHEMA_NODE_REF]}
+            if key == "additionalProperties"
+            else _JSON_SCHEMA_NODE_REF
+        )
+    return properties
+
+
+def _json_schema_node_description() -> str:
+    """The prose, derived from the same sets, so it cannot contradict them."""
+    def names(keys: "frozenset[str]") -> str:
+        return ", ".join(f"`{k}`" for k in sorted(keys))
+
+    return (
         "JSON Schema Draft 2020-12 node carrying the Analitiq `native_type` / "
         "`arrow_type` annotations on typed field schemas. Recursive: every "
         "JSON Schema keyword whose value is itself a schema (or a map/list of "
         "schemas) is constrained back to this node. Specifically: "
-        "`properties`, `patternProperties`, `$defs`, `definitions`, "
-        "`dependentSchemas` (maps); `prefixItems`, `allOf`, `anyOf`, `oneOf` "
-        "(lists); `items`, `contains`, `contentSchema`, "
-        "`additionalProperties`, "
-        "`propertyNames`, `unevaluatedItems`, `unevaluatedProperties`, `not`, "
-        "`if`, `then`, `else` (single). Issue #424 — canonical `arrow_type` "
+        f"{names(JSON_SCHEMA_SUBSCHEMA_KEYS)} (maps); "
+        f"{names(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS)} (lists); "
+        f"{names(JSON_SCHEMA_SINGLE_SCHEMA_KEYS)} (single). "
+        "Issue #424 — canonical `arrow_type` "
         "must carry parameters when the type requires them; `native_type` and "
         "`arrow_type` are paired."
-    ),
-    "properties": {
-        "arrow_type": {
-            "type": "string",
-            "pattern": ARROW_TYPE_PATTERN,
-        },
-        "native_type": {"type": "string"},
-        "properties": {
-            "type": "object",
-            "additionalProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "patternProperties": {
-            "type": "object",
-            "additionalProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "$defs": {
-            "type": "object",
-            "additionalProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "definitions": {
-            "type": "object",
-            "additionalProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "dependentSchemas": {
-            "type": "object",
-            "additionalProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "items": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "contains": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        # Kept in step with `analitiq.contracts.endpoints._JSON_SCHEMA_*_KEYS`
-        # and the validator's `_SUBSCHEMA_*_KEYS`: the published node must
-        # constrain every position those walkers descend into, or the rendered
-        # contract permits a subtree they annotation-check while it claims not
-        # to know about it.
-        "contentSchema": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "propertyNames": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "unevaluatedItems": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "unevaluatedProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "not": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "if": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "then": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "else": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        "additionalProperties": {
-            "anyOf": [
-                {"type": "boolean"},
-                {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-            ]
-        },
-        "prefixItems": {
-            "type": "array",
-            "items": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "allOf": {
-            "type": "array",
-            "items": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "anyOf": {
-            "type": "array",
-            "items": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-        "oneOf": {
-            "type": "array",
-            "items": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
-        },
-    },
+    )
+
+
+_JSON_SCHEMA_PROPERTY_NODE_DEF: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": True,
+    "description": _json_schema_node_description(),
+    "properties": _json_schema_node_properties(),
     "dependentRequired": {
         "arrow_type": ["native_type"],
         "native_type": ["arrow_type"],

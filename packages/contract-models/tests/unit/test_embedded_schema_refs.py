@@ -1111,17 +1111,17 @@ class TestKeywordVocabularyHasOneOwner:
         from analitiq.contracts import endpoints as ep
         from analitiq.validator import connectors as vc
 
-        assert vc._SUBSCHEMA_MAP_KEYS == ep._JSON_SCHEMA_SUBSCHEMA_KEYS
-        assert vc._SUBSCHEMA_LIST_KEYS == ep._JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-        assert vc._SUBSCHEMA_SINGLE_KEYS == ep._JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        assert vc._SUBSCHEMA_MAP_KEYS == ep.JSON_SCHEMA_SUBSCHEMA_KEYS
+        assert vc._SUBSCHEMA_LIST_KEYS == ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+        assert vc._SUBSCHEMA_SINGLE_KEYS == ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
     def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
         from analitiq.contracts import endpoints as ep
 
         vocabulary = (
-            ep._JSON_SCHEMA_SUBSCHEMA_KEYS
-            | ep._JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | ep._JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
+            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
         )
         rendered = set(self._rendered_node()["properties"]) - {"arrow_type", "native_type"}
         assert rendered == vocabulary
@@ -1130,9 +1130,9 @@ class TestKeywordVocabularyHasOneOwner:
         from analitiq.contracts import endpoints as ep
 
         vocabulary = (
-            ep._JSON_SCHEMA_SUBSCHEMA_KEYS
-            | ep._JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | ep._JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
+            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
         )
         description = self._rendered_node()["description"]
         missing = sorted(k for k in vocabulary if f"`{k}`" not in description)

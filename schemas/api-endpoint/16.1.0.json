@@ -353,7 +353,7 @@
           "arrow_type"
         ]
       },
-      "description": "JSON Schema Draft 2020-12 node carrying the Analitiq `native_type` / `arrow_type` annotations on typed field schemas. Recursive: every JSON Schema keyword whose value is itself a schema (or a map/list of schemas) is constrained back to this node. Specifically: `properties`, `patternProperties`, `$defs`, `definitions`, `dependentSchemas` (maps); `prefixItems`, `allOf`, `anyOf`, `oneOf` (lists); `items`, `contains`, `contentSchema`, `additionalProperties`, `propertyNames`, `unevaluatedItems`, `unevaluatedProperties`, `not`, `if`, `then`, `else` (single). Issue #424 \u2014 canonical `arrow_type` must carry parameters when the type requires them; `native_type` and `arrow_type` are paired.",
+      "description": "JSON Schema Draft 2020-12 node carrying the Analitiq `native_type` / `arrow_type` annotations on typed field schemas. Recursive: every JSON Schema keyword whose value is itself a schema (or a map/list of schemas) is constrained back to this node. Specifically: `$defs`, `definitions`, `dependentSchemas`, `patternProperties`, `properties` (maps); `allOf`, `anyOf`, `oneOf`, `prefixItems` (lists); `additionalProperties`, `contains`, `contentSchema`, `else`, `if`, `items`, `not`, `propertyNames`, `then`, `unevaluatedItems`, `unevaluatedProperties` (single). Issue #424 \u2014 canonical `arrow_type` must carry parameters when the type requires them; `native_type` and `arrow_type` are paired.",
       "properties": {
         "$defs": {
           "additionalProperties": {

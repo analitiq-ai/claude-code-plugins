@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from enum import Enum
 from collections.abc import Iterator, Sequence
 from typing import Annotated, Any, Literal, Union, get_args
 from urllib.parse import unquote
@@ -397,7 +398,7 @@ class Param(_EndpointModel):
         # here: `Param` is shared by reads and writes and cannot tell which it is
         # in, so a sweep here reported a paging consequence to write authors and
         # could not reach `response.schema` for declared-path resolution. See
-        # `sweep_expression_sites`.
+        # `_sweep_expression_sites`.
         if _collect_singleton_values(self.default, "from_input"):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
@@ -1083,14 +1084,14 @@ class WriteRequest(_RequestBase):
 # lists of schemas). Used by the arrow_type walker to recurse only through
 # structural positions — never through `default`, `examples`, `const`, etc.,
 # which can legally carry arbitrary user data shaped like a schema.
-_JSON_SCHEMA_SUBSCHEMA_KEYS: frozenset[str] = frozenset({
+JSON_SCHEMA_SUBSCHEMA_KEYS: frozenset[str] = frozenset({
     "properties", "patternProperties", "$defs", "definitions",
     "dependentSchemas",
 })
-_JSON_SCHEMA_LIST_OF_SCHEMA_KEYS: frozenset[str] = frozenset({
+JSON_SCHEMA_LIST_OF_SCHEMA_KEYS: frozenset[str] = frozenset({
     "allOf", "anyOf", "oneOf", "prefixItems",
 })
-_JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
+JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
     "items", "contains", "additionalProperties", "propertyNames",
     "unevaluatedItems", "unevaluatedProperties",
     "not", "if", "then", "else",
@@ -1252,21 +1253,21 @@ def _validate_arrow_type_in_json_schema(
     # Each traversal always re-enters the walker so its entry-point bool/dict
     # check (above) runs on every visited slot — that's the only place
     # malformed schema positions (e.g. `items: "Int64"`) get surfaced.
-    for key in _JSON_SCHEMA_SUBSCHEMA_KEYS:
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
         child = schema.get(key)
         if isinstance(child, dict):
             for sub_key, sub_schema in child.items():
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}.{sub_key}", errors
                 )
-    for key in _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
         child = schema.get(key)
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}[{idx}]", errors
                 )
-    for key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
         if key not in schema:
             continue
         child = schema[key]
@@ -1440,19 +1441,19 @@ def _validate_schema_refs(
                     "(spec: §API Response Extraction — embedded schema references)"
                 )
 
-    for key in _JSON_SCHEMA_SUBSCHEMA_KEYS:
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
         child = schema.get(key)
         if not isinstance(child, dict):
             continue
         for sub_key, sub_schema in child.items():
             _validate_schema_refs(sub_schema, f"{path}.{key}.{sub_key}", errors, root)
-    for key in _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
         child = schema.get(key)
         if not isinstance(child, list):
             continue
         for idx, sub_schema in enumerate(child):
             _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
-    for key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
         if key not in schema:
             continue
         child = schema[key]
@@ -2063,7 +2064,10 @@ class WriteOperation(_EndpointModel):
             (f"operations.write.params[{name!r}].default", param.default)
             for name, param in self.params.items()
         ]
-        sweep_expression_sites([(w, p) for w, p in write_sites if p is not None])
+        _sweep_expression_sites(
+            [(w, p) for w, p in write_sites if p is not None],
+            operation=_OperationKind.WRITE,
+        )
 
         path_from_inputs = _collect_singleton_values(self.request.path_params, "from_input")
         if path_from_inputs and self.batching is not None:
@@ -3052,7 +3056,7 @@ def _validate_response_body_paths(
         if param.default is not None:
             sites.append((f"params[{name!r}].default", param.default))
 
-    sweep_expression_sites(sites, response.schema_)
+    _sweep_expression_sites(sites, response.schema_)
 
 
 def _validate_replication_wiring(replication: Replication, params: dict[str, Param]) -> None:
@@ -3361,7 +3365,7 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
         child = node.get(key, _MISSING)
         if child is _MISSING:
             return _MISSING
-        if key in _JSON_SCHEMA_SUBSCHEMA_KEYS:
+        if key in JSON_SCHEMA_SUBSCHEMA_KEYS:
             # A map of schemas: the next token names one of them.
             if not isinstance(child, dict) or index + 1 >= len(tokens):
                 return _MISSING
@@ -3371,7 +3375,7 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
             node = child[name]
             index += 2
             continue
-        if key in _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS or key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        if key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS or key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
             if isinstance(child, list):
                 # A list of schemas (including draft-07 tuple-form `items`):
                 # the next token is the position.
@@ -3383,7 +3387,7 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
                 node = child[position]
                 index += 2
                 continue
-            if key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+            if key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
                 node = child
                 index += 1
                 continue
@@ -3631,21 +3635,30 @@ def effective_properties(
 #: arbitrary user data that may be shaped exactly like a schema, and running the
 #: `type` check there proved two `default` objects "contradictory" because both
 #: happened to have a field named `type`.
-_SCHEMA_POSITION = "schema"
-_SCHEMA_MAP_POSITION = "schema_map"
-_DATA_POSITION = "data"
+class _Position(str, Enum):
+    """What a key's value IS, which decides how it merges and whether a
+    contradiction in it is worth proving."""
+
+    SCHEMA = "schema"
+    SCHEMA_MAP = "schema_map"
+    DATA = "data"
 
 
-def _position_kind(key: str) -> str:
-    if key in _JSON_SCHEMA_SUBSCHEMA_KEYS:
+_SCHEMA_POSITION = _Position.SCHEMA
+_SCHEMA_MAP_POSITION = _Position.SCHEMA_MAP
+_DATA_POSITION = _Position.DATA
+
+
+def _position_kind(key: str) -> _Position:
+    if key in JSON_SCHEMA_SUBSCHEMA_KEYS:
         return _SCHEMA_MAP_POSITION
-    if key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    if key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
         return _SCHEMA_POSITION
     return _DATA_POSITION
 
 
 def _combine_schema_values(
-    existing: Any, incoming: Any, *, kind: str = _DATA_POSITION
+    existing: Any, incoming: Any, *, kind: _Position = _Position.DATA
 ) -> Any:
     """Fold ``incoming`` into ``existing`` for one key of a materialized node.
 
@@ -3715,16 +3728,7 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    document = node if root is None else root
-    # The merge below is PAIRWISE (it mirrors the fold, and the fold is the
-    # pinned reference), so a `type` contradiction across three-plus
-    # contributors — pairwise compatible, jointly empty — would slip past it
-    # while `_compose_declarations` refused the same document. Run the n-way
-    # proof once here, for its refusal only: `effective_properties` intersects
-    # every contributor of every name, which is exactly the missing check. Its
-    # result is discarded; the merge is unchanged.
-    effective_properties(node, document)
-    return _materialize(node, document, {}, set())
+    return _materialize(node, node if root is None else root, {}, set())
 
 
 def _materialize(
@@ -3821,16 +3825,32 @@ def _materialize(
         if isinstance(source, dict) and isinstance(source.get("properties"), dict)
     ]
     if own_properties:
-        properties: dict[str, Any] = {}
+        # Collect each name's contributors ACROSS sources first, then prove the
+        # whole set at once. Merging pairwise and checking each pair only ever
+        # compares the accumulator's LAST `type` against the next one, so three
+        # contributors that are pairwise compatible but jointly empty slipped
+        # through — while `_compose_declarations`, which does intersect n-way,
+        # refused the same document. The two views must agree, and the
+        # permissive one is what derives the destination column.
+        #
+        # Proving here rather than by calling `effective_properties` for its
+        # exception: a call whose result is discarded reads as dead, costs a
+        # second full walk (measured 1.6x), and would eventually be deleted —
+        # taking the proof with it.
+        by_name: dict[str, list[Any]] = {}
         for source_map in own_properties:
             for name, declaration in source_map.items():
-                properties[name] = (
-                    _combine_schema_values(
-                        properties[name], declaration, kind=_SCHEMA_POSITION
-                    )
-                    if name in properties
-                    else declaration
+                by_name.setdefault(name, []).append(declaration)
+        properties: dict[str, Any] = {}
+        for name, declarations in by_name.items():
+            if len(declarations) > 1:
+                _refuse_disjoint_types(name, declarations)
+            folded = declarations[0]
+            for declaration in declarations[1:]:
+                folded = _combine_schema_values(
+                    folded, declaration, kind=_SCHEMA_POSITION
                 )
+            properties[name] = folded
         merged["properties"] = properties
 
     on_path.discard(key)
@@ -3938,8 +3958,25 @@ def resolve_declared_path(
     return node
 
 
-def sweep_expression_sites(
-    sites: "list[tuple[str, Any]]", response_schema: Any = None
+class _OperationKind(str, Enum):
+    """Which operation a swept site belongs to.
+
+    Passed explicitly rather than inferred from the site label. Prefix-matching
+    a caller-supplied string already produced one wrong message: `Param` is
+    shared by reads and writes, so its label matched neither operation prefix
+    and write authors were told "paging stops after the first page" about an
+    operation that does not page.
+    """
+
+    READ = "read"
+    WRITE = "write"
+    WRITE_RESPONSE = "write_response"
+
+
+def _sweep_expression_sites(
+    sites: "list[tuple[str, Any]]",
+    response_schema: Any = None,
+    operation: _OperationKind = _OperationKind.READ,
 ) -> None:
     """Run EVERY expression check over every site, from one table.
 
@@ -3961,8 +3998,14 @@ def sweep_expression_sites(
     for where, payload in sites:
         _validate_expression_shapes(payload, where)
         for token in _expression_tokens(payload):
-            _reject_unknown_scope(where, token)
-            _reject_unknown_response_scope(where, token)
+            site_operation = (
+                _OperationKind.WRITE_RESPONSE
+                if operation is _OperationKind.WRITE
+                and where.startswith("operations.write.response")
+                else operation
+            )
+            _reject_unknown_scope(where, token, site_operation)
+            _reject_unknown_response_scope(where, token, site_operation)
             segments = _response_body_segments(token)
             if segments is None or response_schema is None:
                 continue
@@ -3993,50 +4036,25 @@ def sweep_expression_sites(
                 )
 
 
-def _reject_unknown_scopes_in(sites: dict[str, Any]) -> None:
-    """Run both scope checks over every expression token in ``sites``.
 
-    The scope half of the response-path sweep, for blocks that have no
-    `response.schema` to resolve against — the write request and the write
-    response. Path resolution needs a declared body shape; catching a
-    misspelled scope does not.
+def _unresolved_harm(operation: _OperationKind) -> str:
+    """What actually goes wrong when a token resolves to nothing.
+
+    The consequence is the actionable half of these messages, and it differs by
+    operation: a success predicate reading nothing holds unconditionally, which
+    is not the same failure as paging stopping after one page.
     """
-    for where, payload in sites.items():
-        if payload is None:
-            continue
-        for token in _expression_tokens(payload):
-            _reject_unknown_scope(where, token)
-            _reject_unknown_response_scope(where, token)
-
-
-def _unresolved_harm(where: str) -> str:
-    """What actually goes wrong when a token at ``where`` resolves to nothing.
-
-    The consequence is the actionable half of these messages, and it is not the
-    same on both sides. Telling a write author that "paging stops after the
-    first page" — there is no paging on a write — buries the real outcome, which
-    is that a success predicate reading nothing holds unconditionally.
-    """
-    if where.startswith("operations.write.response"):
+    if operation is _OperationKind.WRITE_RESPONSE:
         return (
             "It resolves to nothing on every response, so a `success_when` "
             "predicate over it holds unconditionally and every write reports "
             "success — including the ones whose rejected rows the provider "
             "listed."
         )
-    if where.startswith("operations.write"):
+    if operation is _OperationKind.WRITE:
         return (
             "It resolves to nothing at run time, so the request goes out with "
             "that value missing and the provider answers whatever it answers."
-        )
-    if where.startswith("params."):
-        # `Param` is shared by read and write operations, so this slot cannot
-        # know which it is in. Say the part that is true of both rather than
-        # asserting a paging consequence at a write author.
-        return (
-            "It resolves to nothing at run time, so the parameter is sent "
-            "unresolved — and where the parameter seeds pagination, paging "
-            "starts from a value that was never read."
         )
     return (
         "It resolves to nothing at run time, so paging stops after the first "
@@ -4044,7 +4062,7 @@ def _unresolved_harm(where: str) -> str:
     )
 
 
-def _reject_unknown_scope(where: str, token: str) -> None:
+def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> None:
     """The LEADING token must name a real resolution scope.
 
     :func:`_reject_unknown_response_scope` catches a bad SUB-scope
@@ -4062,12 +4080,14 @@ def _reject_unknown_scope(where: str, token: str) -> None:
         return
     raise ValueError(
         f"{where} references {token!r}, whose leading token is not a known "
-        f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). {_unresolved_harm(where)} "
+        f"resolution scope ({', '.join(RESOLUTION_SCOPES)}). {_unresolved_harm(operation)} "
         "(spec: §Value Expressions)"
     )
 
 
-def _reject_unknown_response_scope(where: str, token: str) -> None:
+def _reject_unknown_response_scope(
+    where: str, token: str, operation: _OperationKind
+) -> None:
     """A `response.*` token must name a real response sub-scope.
 
     The hole this closes is the one ADV-ENDP-023 exists to close, one segment
@@ -4093,7 +4113,7 @@ def _reject_unknown_response_scope(where: str, token: str) -> None:
     raise ValueError(
         f"{where} references {token!r}, whose response sub-scope "
         f"{sub_scope or '(none)'!r} is not one of "
-        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. {_unresolved_harm(where)} "
+        f"{sorted(RESERVED_RESPONSE_SCOPES)!r}. {_unresolved_harm(operation)} "
         "(spec: §API Response Extraction)"
     )
 

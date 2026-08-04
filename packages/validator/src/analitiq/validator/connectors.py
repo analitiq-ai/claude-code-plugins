@@ -61,7 +61,14 @@ try:
     with contract_model_domain():
         from pydantic import TypeAdapter
         from analitiq.contracts.connector import Connector
-        from analitiq.contracts.endpoints import ApiEndpointDoc, DatabaseEndpointDoc, SLUG_RE
+        from analitiq.contracts.endpoints import (
+            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            JSON_SCHEMA_SUBSCHEMA_KEYS,
+            ApiEndpointDoc,
+            DatabaseEndpointDoc,
+            SLUG_RE,
+        )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
@@ -195,19 +202,15 @@ def _canonical_eq(a: str, b: str) -> bool:
 # a schema-aware walk recurses only through these — never through data keywords
 # like `const`/`default`/`enum`, and it treats `properties` children as field
 # names (a field literally named `default` is still walked as a sub-schema).
-_SUBSCHEMA_MAP_KEYS = frozenset({
-    "properties", "patternProperties", "$defs", "definitions", "dependentSchemas",
-})
-_SUBSCHEMA_LIST_KEYS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
-_SUBSCHEMA_SINGLE_KEYS = frozenset({
-    "items", "contains", "additionalProperties", "propertyNames",
-    "unevaluatedItems", "unevaluatedProperties", "not", "if", "then", "else",
-    # `contentSchema` is a schema position like any other. Omitting it let a
-    # `native_type` declared under one escape type-map coverage entirely, which
-    # is the same class of hole the contract package closed on its own walkers.
-    # Kept in step with `analitiq.contracts.endpoints._JSON_SCHEMA_*_KEYS`.
-    "contentSchema",
-})
+# The JSON-Schema keyword vocabulary is OWNED by the contract package and
+# imported, not restated. It used to be a third hand-maintained copy: adding
+# `contentSchema` meant editing three, and the one that was missed shipped a
+# published schema whose prose contradicted its own constraints. `_walk_schema_pairs`
+# must descend exactly where the contract's walkers do, or a `native_type`
+# declared in a position only one of them visits escapes type-map coverage.
+_SUBSCHEMA_MAP_KEYS = JSON_SCHEMA_SUBSCHEMA_KEYS
+_SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+_SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
 
 def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
@@ -639,13 +642,27 @@ def is_stem_addressed_endpoint_path(doc_path: Path) -> bool:
     return parent.name == "endpoints" and parent.parent.name == "definition"
 
 
-def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
+def _load_json_sibling(path: Path, validator_id: str) -> tuple[Any, list[dict]]:
+    """Read a sibling JSON document, reporting a read/parse failure under
+    ``validator_id``.
+
+    The id is a parameter because the callers are different checks. It used to
+    be hardcoded to `type-map-coverage` and the endpoint-anchored caller
+    relabelled the findings afterwards — so a connector.json that would not
+    parse was reported against an endpoint under the type-map id, invisible to a
+    fix loop filtering on the check that actually failed. Naming the reporter at
+    the call site fixes that at the source instead of rewriting its output.
+    """
     try:
-        doc = json.loads(path.read_text())
+        return json.loads(path.read_text()), []
     except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-        return None, [finding("type-map-coverage", "error", "/",
+        return None, [finding(validator_id, "error", "/",
                               f"sibling {path.name} could not be read or parsed ({exc}).")]
-    return doc, []
+
+
+def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
+    """A type-map document, or `None` plus a `type-map-coverage` finding."""
+    return _load_json_sibling(path, "type-map-coverage")
 
 
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:
@@ -748,7 +765,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                                     f"endpoint file 'endpoints/{rel}' is nested; endpoints must be flat "
                                     "at 'endpoints/{endpoint_id}.json' (the engine resolves them by id)."))
             continue
-        ep_doc, load = _load_type_map(ep_path)  # generic JSON reader (reused)
+        ep_doc, load = _load_json_sibling(ep_path, "type-map-coverage")
         if ep_doc is None:
             findings.extend(load)
             continue
@@ -839,15 +856,10 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
             sibling = doc_path.parent.parent / "connector.json" if doc_path else None
             connector_doc = None
             if sibling is not None and sibling.is_file():
-                connector_doc, load_findings = _load_type_map(sibling)
-                # `_load_type_map` is reused here as a generic JSON reader, but
-                # its error path is labelled `type-map-coverage`. Relabel: an
-                # endpoint validation reporting a type-map finding about
-                # connector.json is invisible to a fix loop filtering on this
-                # check's own id, and wrong about which check failed.
-                findings.extend(
-                    {**f, "validator": "endpoint-transport-ref"} for f in load_findings
+                connector_doc, load_findings = _load_json_sibling(
+                    sibling, "endpoint-transport-ref"
                 )
+                findings.extend(load_findings)
             transports = connector_doc.get("transports") if isinstance(connector_doc, dict) else None
             if isinstance(transports, dict):
                 findings.extend(_endpoint_transport_ref_findings(

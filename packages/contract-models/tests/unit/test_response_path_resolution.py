@@ -868,16 +868,16 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
     def test_every_conditional_keyword_is_a_known_schema_position(self):
         from analitiq.contracts.endpoints import (
             _CONDITIONAL_DECLARATION_KEYWORDS,
-            _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-            _JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-            _JSON_SCHEMA_SUBSCHEMA_KEYS,
+            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            JSON_SCHEMA_SUBSCHEMA_KEYS,
             _SCHEMA_VALUED_CATCHALL_KEYWORDS,
         )
 
         walker_keywords = (
-            _JSON_SCHEMA_SUBSCHEMA_KEYS
-            | _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | _JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+            JSON_SCHEMA_SUBSCHEMA_KEYS
+            | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | JSON_SCHEMA_SINGLE_SCHEMA_KEYS
         )
         classified = set(_CONDITIONAL_DECLARATION_KEYWORDS) | set(
             _SCHEMA_VALUED_CATCHALL_KEYWORDS
@@ -890,16 +890,16 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
     def test_every_walker_keyword_is_triaged(self):
         from analitiq.contracts.endpoints import (
             _CONDITIONAL_DECLARATION_KEYWORDS,
-            _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-            _JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-            _JSON_SCHEMA_SUBSCHEMA_KEYS,
+            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            JSON_SCHEMA_SUBSCHEMA_KEYS,
             _SCHEMA_VALUED_CATCHALL_KEYWORDS,
         )
 
         walker_keywords = (
-            _JSON_SCHEMA_SUBSCHEMA_KEYS
-            | _JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | _JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+            JSON_SCHEMA_SUBSCHEMA_KEYS
+            | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | JSON_SCHEMA_SINGLE_SCHEMA_KEYS
         )
         classified = set(_CONDITIONAL_DECLARATION_KEYWORDS) | set(
             _SCHEMA_VALUED_CATCHALL_KEYWORDS
