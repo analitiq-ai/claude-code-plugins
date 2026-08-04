@@ -1,7 +1,7 @@
 # Orchestration pipeline
 
-Phase-by-phase contract for the `connector-builder` orchestrator. Loaded
-on demand by the orchestrator skill.
+Phase-by-phase contract for the `connector-builder` orchestrator —
+always loaded by the orchestrator skill (`SKILL.md` §Required reading).
 
 ## Modes
 

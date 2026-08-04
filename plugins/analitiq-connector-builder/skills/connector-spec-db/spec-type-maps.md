@@ -91,11 +91,12 @@ simply never fires.
 
 When a `regex` rule's rendered side carries `${name}` placeholders,
 every placeholder must be backed by a matching **named capture group**
-in the matcher side. On the **read** side the contract enforces both
-halves — backing captures (ADV-TMAP-003) and the ECMA-262 capture form
-`(?<name>…)`, rejecting Python-only `(?P<name>…)` syntax (ADV-TMAP-005).
-The **write** side checks only placeholder syntax: an unbacked `${name}`
-surfaces first at DDL render — verify write captures yourself.
+in the matcher side. Both directions compile the matcher as ECMA-262,
+so write the capture form `(?<name>…)` — Python-only `(?P<name>…)` is
+rejected on either side (ADV-TMAP-005 on the read side; model-level on
+the write side). The backing-captures half is enforced on the read side
+only (ADV-TMAP-003): an unbacked write-side `${name}` surfaces first at
+DDL render — verify that half yourself.
 
 - Read map: placeholders in `canonical`, captures in `native` —
   `native: "^NUMERIC\\((?<precision>[0-9]+),\\s*(?<scale>[0-9]+)\\)$"`,

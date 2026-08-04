@@ -79,7 +79,7 @@ writes a secret value into the document.
 Author an **`env:` pointer** by default — portable and resolved from the runtime
 environment:
 
-<!-- validate: connection#/ -->
+<!-- validate: connection -->
 ```jsonc
 {
   "connector_id": "postgresql",
