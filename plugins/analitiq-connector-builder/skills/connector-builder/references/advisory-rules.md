@@ -64,7 +64,7 @@ tools, and database endpoints are generated at runtime by the connector's
 | ADV-ENDP-020 | A column field's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. | `ColumnFieldSpec` |
 | ADV-ENDP-021 | A column's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. | `Column` |
 | ADV-ENDP-022 | Every expression dict in a request slot must declare exactly one primary key (ref/template/literal/function/from_param/from_input) alongside only x-* siblings. | `ReadOperation`, `WriteOperation` |
-| ADV-ENDP-023 | Every response.body path referenced by pagination or response.metadata must resolve by declared-path resolution against response.schema. | `ReadOperation` |
+| ADV-ENDP-023 | Every response.body path referenced by pagination or response.metadata must resolve by declared-path resolution against response.schema, to a node that declares a type; a response.* reference naming no known sub-scope, and a keyset order_by_field absent from the record shape, are refused with it. | `ReadOperation` |
 | ADV-ENDP-024 | A path_param from_input binding is invalid on a read operation, and on a write must address exactly one record field (record.<dotted>, never record or records) that input.schema declares. | `ReadOperation`, `WriteOperation` |
 | ADV-ENDP-025 | from_input in request.path_params and batching are mutually exclusive on a write operation. | `WriteOperation` |
 | ADV-ENDP-026 | Every $ref in an embedded response/input schema must be an in-document reference that resolves to a schema in the same document. | `ResponseExtraction`, `WriteInput` |

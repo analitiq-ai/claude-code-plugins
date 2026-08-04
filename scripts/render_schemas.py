@@ -452,6 +452,12 @@ _JSON_SCHEMA_PROPERTY_NODE_DEF: dict[str, Any] = {
         },
         "items": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
         "contains": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
+        # Kept in step with `analitiq.contracts.endpoints._JSON_SCHEMA_*_KEYS`
+        # and the validator's `_SUBSCHEMA_*_KEYS`: the published node must
+        # constrain every position those walkers descend into, or the rendered
+        # contract permits a subtree they annotation-check while it claims not
+        # to know about it.
+        "contentSchema": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
         "propertyNames": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
         "unevaluatedItems": {"$ref": "#/$defs/JsonSchemaPropertyNode"},
         "unevaluatedProperties": {"$ref": "#/$defs/JsonSchemaPropertyNode"},

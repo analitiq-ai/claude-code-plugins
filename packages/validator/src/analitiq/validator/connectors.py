@@ -202,6 +202,11 @@ _SUBSCHEMA_LIST_KEYS = frozenset({"allOf", "anyOf", "oneOf", "prefixItems"})
 _SUBSCHEMA_SINGLE_KEYS = frozenset({
     "items", "contains", "additionalProperties", "propertyNames",
     "unevaluatedItems", "unevaluatedProperties", "not", "if", "then", "else",
+    # `contentSchema` is a schema position like any other. Omitting it let a
+    # `native_type` declared under one escape type-map coverage entirely, which
+    # is the same class of hole the contract package closed on its own walkers.
+    # Kept in step with `analitiq.contracts.endpoints._JSON_SCHEMA_*_KEYS`.
+    "contentSchema",
 })
 
 
@@ -813,6 +818,22 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
+        # `endpoint-transport-ref` is cross-document: it needs the sibling
+        # connector.json's `transports`, which only `check_coverage` has. Say so
+        # rather than returning a silent clean pass — an author validating a
+        # single endpoint file would otherwise read `passed: true` as "the
+        # transport_ref is fine", which is the unearned reassurance this whole
+        # PR is about. Warning, not error, matching `endpoint-filename`'s
+        # convention for a check it cannot perform from the given path.
+        declared_refs = sorted({
+            ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)
+        })
+        if declared_refs:
+            findings.append(finding(
+                "endpoint-transport-ref", "warning", "/",
+                f"transport_ref {declared_refs!r} not checked: this document was "
+                "validated on its own, so the sibling connector.json's `transports` "
+                "were not available. Validate the connector to resolve it."))
     if doc_path is not None:
         findings += endpoint_filename_findings(doc, doc_path.name)
     return findings

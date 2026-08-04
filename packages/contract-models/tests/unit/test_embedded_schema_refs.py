@@ -25,6 +25,7 @@ from pydantic import ValidationError
 from analitiq.contracts.endpoints import (
     _MISSING,
     ApiEndpointDoc,
+    DeclarationConflictError,
     DeclaredPathError,
     ResponseExtraction,
     WriteInput,
@@ -570,8 +571,18 @@ class TestEffectivePropertiesFollowsRefs:
             "properties": {"x": {"type": "string"}},
             "$defs": {"Base": {"properties": {"x": {"type": "integer"}}}},
         }
-        with pytest.raises(DeclaredPathError, match="conflicting redeclaration of 'x'"):
+        # A contradiction has no path coordinates: `effective_properties`
+        # inspects a NODE, so it cannot know where that node sits in anyone's
+        # path. It raises the coordinate-free half of the pair; only
+        # `resolve_declared_path` — which knows the segment it was resolving —
+        # converts it into a `DeclaredPathError`. Pinning the base class here
+        # would let the old placeholder (`segment=None, index=-1`) back in.
+        with pytest.raises(
+            DeclarationConflictError, match="conflicting redeclaration of 'x'"
+        ) as exc:
             effective_properties(node, node)
+        assert not isinstance(exc.value, DeclaredPathError)
+        assert not hasattr(exc.value, "segment")
 
     def test_root_defaults_to_the_node_itself(self):
         # Documented default: when the node IS the whole embedded schema, its

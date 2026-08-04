@@ -19,6 +19,8 @@ through `properties`. Every path the old properties-only walk resolved must
 still resolve — that is what guarantees no document that validates today starts
 failing. One test per conditional construct pins it.
 """
+import time
+
 import pytest
 from pydantic import ValidationError
 
@@ -910,3 +912,111 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
             "so resolve_declared_path stops calling such a path a typo) or they "
             "cannot (add them to NON_DECLARING here, with the reason)"
         )
+
+
+# ---------------------------------------------------------------------------
+# Review findings (PR #131) — each of these shipped as an ACCEPTED document
+# until the review probed it. Every test here is a regression pin for one.
+# ---------------------------------------------------------------------------
+
+
+class TestMisspelledResponseScopeIsRefused:
+    """`response.bodyy.x` was skipped, not checked.
+
+    `_response_body_segments` returns None for anything that is not
+    `response.body[.…]`, on the stated grounds that every other `response.*`
+    scope is reserved and engine-owned. Nothing checked that the token actually
+    NAMED one, so misspelling `body` bought the same silent truncation #123
+    exists to close — one segment to the left of where the rule was looking.
+    `_has_known_scope` cannot catch it either: it inspects only the leading
+    token, and `response` is real.
+    """
+
+    @pytest.mark.parametrize(
+        "token",
+        ["response.bodyy.next_cursor", "response.bod.next_cursor",
+         "response.data.next_cursor", "response.nope"],
+    )
+    def test_unknown_response_sub_scope_is_rejected(self, token):
+        payload = _read_payload("cursor", ref=token)
+        with pytest.raises(ValidationError, match="is not one of"):
+            parse_endpoint(payload)
+
+    @pytest.mark.parametrize(
+        "token",
+        ["response.headers.x_next", "response.status", "response.record_count"],
+    )
+    def test_reserved_sub_scopes_still_pass(self, token):
+        # Engine-owned: `response.schema` describes the BODY and has no opinion
+        # about them, so they must stay unchecked rather than become collateral.
+        parse_endpoint(_read_payload("cursor", stop_when={"missing": {"ref": token}}))
+
+
+class TestKeysetOrderByFieldResolves:
+    """`order_by_field` is a RECORD path, so the `response.body` sweep never saw
+    it and its only guard was a shape regex. A seek order defined over a field
+    the record shape does not declare advances from a value the engine cannot
+    read — truncating or repeating pages, the #123 failure by another route."""
+
+    def _payload(self, order_by_field):
+        payload = _read_payload("keyset")
+        payload["operations"]["read"]["pagination"]["keyset"]["order_by_field"] = order_by_field
+        return payload
+
+    def test_declared_order_by_field_is_accepted(self):
+        parse_endpoint(self._payload("id"))
+
+    def test_undeclared_order_by_field_is_rejected(self):
+        with pytest.raises(ValidationError, match="order_by_field"):
+            parse_endpoint(self._payload("totally_bogus_field"))
+
+
+class TestCompositionIsLinearNotExponential:
+    """A shared `$defs` reached through several `allOf` branches is a DAG, not a
+    tree. Expanding each route separately was exponential in depth, and that
+    shape is what following ADV-ENDP-026's own advice produces at scale. The
+    existing recursion tests only cover CYCLES, which terminate by construction;
+    sharing does not."""
+
+    def test_a_deep_diamond_resolves_promptly(self):
+        depth = 40
+        defs = {}
+        for i in range(depth):
+            defs[f"L{i}"] = {"allOf": [{"$ref": f"#/$defs/A{i + 1}"},
+                                       {"$ref": f"#/$defs/B{i + 1}"}]}
+            defs[f"A{i + 1}"] = {"allOf": [{"$ref": f"#/$defs/L{i + 1}"}]}
+            defs[f"B{i + 1}"] = {"allOf": [{"$ref": f"#/$defs/L{i + 1}"}]}
+        defs[f"L{depth}"] = {"type": "object", "properties": {"leaf": {"type": "string"}}}
+        root = {"type": "object", "$defs": defs, "allOf": [{"$ref": "#/$defs/L0"}]}
+
+        started = time.monotonic()
+        assert resolve_declared_path(root, ["leaf"]) == {"type": "string"}
+        # Generous on purpose: the assertion is linear-vs-exponential, not a
+        # benchmark. Before the memo, depth 24 alone ran for minutes.
+        assert time.monotonic() - started < 5.0
+
+
+class TestRefIntoAConditionalBranchIsRefused:
+    """`#/anyOf/0` names a real schema position, but one that applies only to
+    instances taking that branch. Following it let the resolver commit to a
+    branch — the exact guess it refuses to make when it meets `anyOf` on a node
+    directly. Reaching the branch by pointer must not be a way around it."""
+
+    def test_pointer_through_anyOf_does_not_resolve(self):
+        root = {
+            "type": "object",
+            "anyOf": [{"properties": {"only_in_branch_0": {"type": "string"}}}],
+            "properties": {"x": {"$ref": "#/anyOf/0"}},
+        }
+        with pytest.raises(DeclaredPathError):
+            resolve_declared_path(root, ["x", "only_in_branch_0"])
+
+    def test_pointer_through_allOf_still_resolves(self):
+        # `allOf` branches all apply, so a pointer through one addresses
+        # something unconditional and must keep working.
+        root = {
+            "type": "object",
+            "allOf": [{"properties": {"shared": {"type": "string"}}}],
+            "properties": {"x": {"$ref": "#/allOf/0"}},
+        }
+        assert resolve_declared_path(root, ["x", "shared"]) == {"type": "string"}

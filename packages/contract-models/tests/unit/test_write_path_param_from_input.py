@@ -651,3 +651,75 @@ class TestAWritePathParamMustBeAbleToResolve:
             }},
         }
         parse_endpoint(payload)
+
+
+# ---------------------------------------------------------------------------
+# Review finding (PR #131): the membership rule no-opped on the very shape
+# ADV-ENDP-026's rejection message tells authors to write.
+# ---------------------------------------------------------------------------
+
+
+class TestMembershipHoldsThroughRefsAndAllOf:
+    """`_json_schema_top_level_fields` read `properties` raw, so an
+    `input.schema` written as `{"$ref": "#/$defs/Rec"}` — exactly what
+    ADV-ENDP-026 instructs when it refuses a non-local ref — made
+    ADV-ENDP-024's membership check, the body `from_input` check and
+    `conflict_keys` all silently pass. A `{id}` placeholder bound to a field
+    that does not exist then ships: the wrong-URL failure #125 was filed for.
+
+    The read half of this PR had already been fixed this way; the write half
+    had not, and every existing test in this module used an inline schema.
+    """
+
+    REF_SCHEMA = {
+        "$schema": JSON_SCHEMA,
+        "$ref": "#/$defs/Rec",
+        "$defs": {
+            "Rec": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "name": {"type": "string"}},
+            }
+        },
+    }
+    ALLOF_SCHEMA = {
+        "$schema": JSON_SCHEMA,
+        "type": "object",
+        "properties": {"name": {"type": "string"}},
+        "allOf": [{"$ref": "#/$defs/Ids"}],
+        "$defs": {"Ids": {"type": "object", "properties": {"id": {"type": "string"}}}},
+    }
+
+    @pytest.mark.parametrize("schema_name", ["REF_SCHEMA", "ALLOF_SCHEMA"])
+    def test_declared_field_through_composition_is_accepted(self, schema_name):
+        op = _write_op(path_params={"id": {"from_input": "record.id"}})
+        op["input"]["schema"] = getattr(self, schema_name)
+        parse_endpoint(_api_payload({"insert": op}))
+
+    @pytest.mark.parametrize("schema_name", ["REF_SCHEMA", "ALLOF_SCHEMA"])
+    def test_undeclared_field_through_composition_is_rejected(self, schema_name):
+        op = _write_op(path_params={"id": {"from_input": "record.nope"}})
+        op["input"]["schema"] = getattr(self, schema_name)
+        with pytest.raises(ValidationError, match="record.nope"):
+            parse_endpoint(_api_payload({"insert": op}))
+
+    @pytest.mark.parametrize("schema_name", ["REF_SCHEMA", "ALLOF_SCHEMA"])
+    def test_conflict_keys_membership_holds_through_composition(self, schema_name):
+        op = _write_op(
+            path_params={"id": {"from_input": "record.id"}}, conflict_keys=["nope"]
+        )
+        op["input"]["schema"] = getattr(self, schema_name)
+        with pytest.raises(ValidationError, match="conflict_keys"):
+            parse_endpoint(_api_payload({"upsert": op}))
+
+
+class TestLiteralWrappedBindingIsNotABinding:
+    """`resolve_value_expression` returns a literal's contents verbatim, so a
+    `from_input` inside one is inert data the engine never resolves. Collecting
+    it satisfied "this placeholder has a binding", passed the `record.<dotted>`
+    shape check and the membership check — and then put the literal dict itself
+    on the wire as the path segment."""
+
+    def test_literal_wrapped_from_input_does_not_bind_the_placeholder(self):
+        op = _write_op(path_params={"id": {"literal": {"from_input": "record.id"}}})
+        with pytest.raises(ValidationError, match="from_param"):
+            parse_endpoint(_api_payload({"insert": op}))
