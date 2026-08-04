@@ -1197,30 +1197,106 @@ class TestMaterializeMatchesTheNaiveFold:
         import random
 
         random.seed(20260804)  # fixed: a flaky differential test is worthless
-        names = [f"D{i}" for i in range(8)]
+        names = [f"D{i}" for i in range(10)]
         divergences = []
-        for _ in range(1500):
+        for trial in range(1500):
+            # Every third graph may close a BACK-EDGE. The generator was
+            # forward-only, so it could not produce a cycle at all — which is
+            # why a missing cycle guard, and a memo that behaved differently on
+            # cyclic input, both survived it. A cyclic graph makes the naive
+            # fold non-terminating by construction, so those trials compare the
+            # two only where the fold can answer: the guard below bounds it.
+            allow_cycle = trial % 3 == 0
             defs = {}
             for i, name in enumerate(names):
                 entry = {}
                 if random.random() < 0.7:
                     entry["properties"] = {
-                        "f": {"native_type": f"NT{i}", "arrow_type": f"AT{i}"}
+                        "f": {"native_type": f"NT{i}", "arrow_type": f"AT{i}"},
+                        f"own{i}": {"type": "string"},
                     }
-                later = names[i + 1:]
-                picks = random.sample(later, min(len(later), random.randint(0, 2)))
+                reachable = names[i + 1:] + ([names[0]] if allow_cycle and i else [])
+                picks = random.sample(reachable, min(len(reachable), random.randint(0, 2)))
                 if picks:
                     entry["allOf"] = [{"$ref": f"#/$defs/{p}"} for p in picks]
-                if later and random.random() < 0.35:
-                    entry["$ref"] = f"#/$defs/{random.choice(later)}"
+                if names[i + 1:] and random.random() < 0.35:
+                    entry["$ref"] = f"#/$defs/{random.choice(names[i + 1:])}"
                 defs[name] = entry
             root = {"$defs": defs, "allOf": [{"$ref": "#/$defs/D0"}]}
-            if materialize_node(root, root) != self._naive_fold(root, root):
+            try:
+                reference = self._naive_fold(root, root)
+            except RecursionError:
+                # Cyclic: the reference cannot answer. `materialize_node` still
+                # must — terminating is the whole point of the cycle guard.
+                materialize_node(root, root)
+                continue
+            if materialize_node(root, root) != reference:
                 divergences.append(root)
         assert not divergences, (
             f"{len(divergences)} schemas materialize differently from the "
             f"reference fold; first: {divergences[0]!r}"
         )
+
+    def test_materialize_terminates_and_unions_on_mutual_recursion(self):
+        # `materialize_node` carries its own cycle guard, separate from
+        # `_contributors`'. Nothing timed or tested it: removing it left the
+        # suite green and made a legal recursive `$defs` raise RecursionError.
+        root = {
+            "$defs": {
+                "A": {"properties": {"a": {"type": "string"}},
+                      "allOf": [{"$ref": "#/$defs/B"}]},
+                "B": {"properties": {"b": {"type": "string"}},
+                      "allOf": [{"$ref": "#/$defs/A"}]},
+            },
+            "$ref": "#/$defs/A",
+        }
+        assert sorted(materialize_node(root, root)["properties"]) == ["a", "b"]
+
+    def test_materialize_is_linear_on_a_shared_defs_diamond(self):
+        # `materialize_node` is a SECOND walk with its own memo, and the only
+        # perf test drove `resolve_declared_path`. Deleting this memo left the
+        # suite green while a depth-22 diamond went from 0s to 72s.
+        import time
+
+        depth = 40
+        defs = {}
+        for i in range(depth):
+            defs[f"L{i}"] = {"allOf": [{"$ref": f"#/$defs/A{i + 1}"},
+                                       {"$ref": f"#/$defs/B{i + 1}"}]}
+            defs[f"A{i + 1}"] = {"allOf": [{"$ref": f"#/$defs/L{i + 1}"}]}
+            defs[f"B{i + 1}"] = {"allOf": [{"$ref": f"#/$defs/L{i + 1}"}]}
+        defs[f"L{depth}"] = {"type": "object", "properties": {"leaf": {"type": "string"}}}
+        root = {"type": "object", "$defs": defs, "allOf": [{"$ref": "#/$defs/L0"}]}
+
+        started = time.monotonic()
+        assert "leaf" in materialize_node(root, root)["properties"]
+        assert time.monotonic() - started < 5.0
+
+    def test_a_contradictory_field_across_branches_is_refused_by_both_views(self):
+        # The refusal `materialize_node` applies at a schema position, and the
+        # one `_compose_declarations` applies per name, must fire together — a
+        # document where only one fires is a document where the two views
+        # disagree about which declaration derives the column.
+        node = {"allOf": [
+            {"properties": {"id": {"type": "string", "arrow_type": "Utf8"}}},
+            {"properties": {"id": {"type": "integer", "arrow_type": "Int64"}}},
+        ]}
+        with pytest.raises(DeclarationConflictError):
+            materialize_node(node, node)
+        with pytest.raises(DeclarationConflictError):
+            effective_properties(node, node)
+
+    def test_a_data_payload_shaped_like_a_schema_is_not_read_as_one(self):
+        # `default`/`const`/`examples`/`x-*` carry arbitrary user data. Running
+        # the type-contradiction proof at every depth read two `default` objects
+        # that both happened to have a field named `type` as contradictory.
+        node = {"allOf": [
+            {"type": "object", "default": {"type": "premium", "seats": 1}},
+            {"type": "object", "default": {"type": "basic"}},
+        ]}
+        # Merged, not refused. (Data dicts deep-merge last-wins like any other
+        # dict value — the point here is that no contradiction is proved.)
+        assert materialize_node(node, node)["default"] == {"type": "basic", "seats": 1}
 
     def test_a_near_refinement_beats_a_distant_base(self):
         # The shape that survived three rounds: `Overrides` is BOTH a

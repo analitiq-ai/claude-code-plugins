@@ -3438,61 +3438,99 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 #        every node must appear after everything it composes with.
 
 
-def _composition_chain(node: dict[str, Any], root: Any) -> list[dict[str, Any]]:
-    """Every node whose declarations unconditionally apply to ``node``.
-
-    ``node`` first, then its `allOf` branches, then its `$ref` target — the
-    order :func:`_property_contributors` absorbed them in. Only that caller uses
-    this: contributor sets UNION, so a node's position is immaterial and one
-    visit each is exactly right. :func:`materialize_node` cannot use it, because
-    merging is last-wins and position IS the answer there; it memoizes the fold
-    instead. See the note above. Follows `allOf`
-    branches and in-document `$ref` targets — the two composition keywords whose
-    contributions always apply. `anyOf`/`oneOf`/`if`-`then`-`else` are
-    conditional and are not followed; a `$ref` INTO one is refused by
-    :func:`resolve_schema_ref`, so a conditional branch is unreachable either
-    way.
-
-    A node already in the chain is skipped, which is what makes a recursive
-    schema terminate and what keeps the walk linear on a shared `$defs`.
-    """
-    ordered: list[dict[str, Any]] = []
-    seen: set[int] = set()
-
-    def visit(current: Any) -> None:
-        if not isinstance(current, dict) or id(current) in seen:
-            return
-        seen.add(id(current))
-        ordered.append(current)
-        branches = current.get("allOf")
-        if isinstance(branches, list):
-            for branch in branches:
-                visit(branch)
-        ref = current.get("$ref")
-        if isinstance(ref, str):
-            visit(resolve_schema_ref(root, ref))
-
-    visit(node)
-    return ordered
-
-
 def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
-    """Every UNCONDITIONAL declaration of each property name, in document order.
+    """Every UNCONDITIONAL declaration of each property name, LOWEST precedence
+    first.
 
-    The `properties` maps of every node in :func:`_composition_chain`.
-    Declarations are deduplicated by equality, so a harmless restatement of the
-    same shape in two branches yields one contributor, not two.
+    Structurally identical to :func:`_materialize` — same recursion, same source
+    order (`$ref` target, `allOf` branches in document order, then the node
+    itself), same memo. That is not a coincidence to be optimised away: the two
+    are the same fold seen from two angles, and every time they were computed
+    differently they disagreed, silently, about which declaration wins.
+
+    The ordering contract is the whole point. `_compose_declarations` wraps these
+    into `{"allOf": [...]}` and every consumer materializes that LAST-WINS, so
+    the list must run lowest-precedence first: a node's own `properties.<name>`
+    beats its `$ref` base's, and a later `allOf` branch beats an earlier one.
+    Three previous attempts got this wrong in three different ways — a reversed
+    pre-order inverted sibling branches, an un-reversed one let the base beat the
+    refinement, a flattened post-order emitted a shared node at its first
+    (lowest) position — and all three shipped green, because the failure is a
+    different `arrow_type` on a derived column, not an error.
+
+    Declarations are deduplicated by equality; for equal declarations position is
+    immaterial, so keeping the first is safe.
     """
+    return _contributors(node, root, {}, set())
+
+
+def _contributors(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, dict[str, list[Any]]]],
+    on_path: set[int],
+) -> dict[str, list[Any]]:
+    """Memoized worker. See :func:`_materialize` for the memo/cycle scheme."""
+    key = id(node)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached[1]
+    if key in on_path:
+        return {}
+    on_path.add(key)
+
+    sources: list[dict[str, list[Any]]] = []
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            sources.append(_contributors(target, root, memo, on_path))
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            _reject_unsatisfiable_branch(branch)
+            if isinstance(branch, dict):
+                sources.append(_contributors(branch, root, memo, on_path))
+    own = node.get("properties")
+    if isinstance(own, dict):
+        sources.append({name: [declaration] for name, declaration in own.items()})
+
     contributors: dict[str, list[Any]] = {}
-    for source in _composition_chain(node, root):
-        own = source.get("properties")
-        if not isinstance(own, dict):
-            continue
-        for name, declaration in own.items():
+    for source in sources:
+        for name, declarations in source.items():
             bucket = contributors.setdefault(name, [])
-            if not any(declaration == seen for seen in bucket):
+            for declaration in declarations:
+                # A declaration contributed again by a LATER source moves to the
+                # end — its highest-precedence position. Keeping the first
+                # occurrence and skipping the rest was the bug: an identical
+                # declaration reached early through a base pinned itself below a
+                # later sibling that restated it, so the sibling lost. Dedup is
+                # about not stacking the same shape twice, not about which
+                # position it holds.
+                for index, seen in enumerate(bucket):
+                    if declaration == seen:
+                        bucket.pop(index)
+                        break
                 bucket.append(declaration)
+
+    on_path.discard(key)
+    memo[key] = (node, contributors)
     return contributors
+
+
+def _reject_unsatisfiable_branch(branch: Any) -> None:
+    """`allOf: [false, …]` is an empty intersection.
+
+    Checked in BOTH walkers rather than only the materializing one: a rule
+    enforced by one view and not the other is how `effective_properties` came to
+    answer `{}` where `materialize_node` raised, which crashed a public helper on
+    a document the gate had accepted. `true` is vacuous and is simply skipped.
+    """
+    if branch is False:
+        raise DeclarationConflictError(
+            "an `allOf` branch is the boolean schema `false`, which no instance "
+            "satisfies, so the whole intersection is empty"
+        )
 
 
 def _declared_types(declaration: Any) -> set[str] | None:
@@ -3534,13 +3572,11 @@ def _compose_declarations(key: str, declarations: list[Any]) -> Any:
     if len(declarations) == 1:
         return declarations[0]
     _refuse_disjoint_types(key, declarations)
-    # REVERSED: most specific LAST. `_property_contributors` walks pre-order, so
-    # `declarations` is [the node's own, then its `$ref`/`allOf` bases], while
-    # every consumer runs the composed node through `materialize_node`, which is
-    # last-wins. Emitting contributor order would let the BASE override the
-    # refinement — a record narrowing its envelope's `data` to the current row
-    # shape derived the legacy column type, silently, with the document valid.
-    return {"allOf": list(reversed(declarations))}
+    # NOT reversed. `_contributors` already emits lowest-precedence first, in
+    # the fold's own source order, which is exactly what a last-wins `allOf`
+    # needs. Reversing here was an attempt to compensate for a pre-order walk
+    # and it inverted sibling `allOf` branches instead.
+    return {"allOf": list(declarations)}
 
 
 #: Stand-in "name" for the whole-node case. `_refuse_disjoint_types`' message is
@@ -3600,7 +3636,27 @@ def effective_properties(
     }
 
 
-def _combine_schema_values(existing: Any, incoming: Any) -> Any:
+#: How a key's value should be merged. Only a SCHEMA position can hold a
+#: contradiction worth proving; `default`, `const`, `examples` and `x-*` carry
+#: arbitrary user data that may be shaped exactly like a schema, and running the
+#: `type` check there proved two `default` objects "contradictory" because both
+#: happened to have a field named `type`.
+_SCHEMA_POSITION = "schema"
+_SCHEMA_MAP_POSITION = "schema_map"
+_DATA_POSITION = "data"
+
+
+def _position_kind(key: str) -> str:
+    if key in _JSON_SCHEMA_SUBSCHEMA_KEYS:
+        return _SCHEMA_MAP_POSITION
+    if key in _JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        return _SCHEMA_POSITION
+    return _DATA_POSITION
+
+
+def _combine_schema_values(
+    existing: Any, incoming: Any, *, kind: str = _DATA_POSITION
+) -> Any:
     """Fold ``incoming`` into ``existing`` for one key of a materialized node.
 
     Objects merge recursively — `allOf` and `$ref` are intersections, so BOTH
@@ -3616,17 +3672,28 @@ def _combine_schema_values(existing: Any, incoming: Any) -> Any:
     outright by :func:`_refuse_disjoint_types` before any merging happens.
     """
     if isinstance(existing, dict) and isinstance(incoming, dict):
-        # Refuse a contradiction wherever it sits, not only on the node's own
-        # `type`. Two `allOf`/`$ref` contributors declaring one field as `string`
-        # and `integer` used to merge last-wins here, so the answer depended on
-        # which branch was written first — while `effective_properties` on the
-        # same node refused. Two views of one document, one answering and one
-        # refusing, with the permissive one deriving the column.
-        _refuse_disjoint_types(_MATERIALIZED_NODE, [existing, incoming])
+        if kind == _SCHEMA_POSITION:
+            # Only here. This is a real subschema, so two contributors declaring
+            # disjoint `type`s cannot both hold — the same proof
+            # `_compose_declarations` applies to a property name's contributors,
+            # so the two views of one document cannot disagree. Applying it at
+            # every depth instead read `default`/`const`/`x-*` payloads as
+            # schemas and refused documents that were merely carrying data.
+            _refuse_disjoint_types(_MATERIALIZED_NODE, [existing, incoming])
+        child_kind = {
+            _SCHEMA_MAP_POSITION: _SCHEMA_POSITION,
+            _SCHEMA_POSITION: None,
+            _DATA_POSITION: _DATA_POSITION,
+        }[kind]
         merged = dict(existing)
         for key, value in incoming.items():
             merged[key] = (
-                _combine_schema_values(merged[key], value) if key in merged else value
+                _combine_schema_values(
+                    merged[key], value,
+                    kind=_position_kind(key) if child_kind is None else child_kind,
+                )
+                if key in merged
+                else value
             )
         return merged
     return incoming
@@ -3707,11 +3774,7 @@ def _materialize(
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
-            if branch is False:
-                raise DeclarationConflictError(
-                    "an `allOf` branch is the boolean schema `false`, which no "
-                    "instance satisfies, so the whole intersection is empty"
-                )
+            _reject_unsatisfiable_branch(branch)
             if isinstance(branch, dict):
                 sources.append(_materialize(branch, root, memo, on_path))
     sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
@@ -3729,9 +3792,47 @@ def _materialize(
         if not isinstance(source, dict):
             continue
         for name, value in source.items():
+            if name == "properties":
+                continue  # composed below, from the shared contributor walk
             merged[name] = (
-                _combine_schema_values(merged[name], value) if name in merged else value
+                _combine_schema_values(merged[name], value, kind=_position_kind(name))
+                if name in merged
+                else value
             )
+
+    # `properties` is composed per NAME by the same function `effective_properties`
+    # uses, so the two views cannot disagree about which declaration wins or
+    # about whether a name is self-contradictory. Merging the maps here instead
+    # was how `materialize_node` came to answer where `effective_properties`
+    # refused — and the permissive one is what derives the destination column.
+    #
+    # Each composed declaration is then materialized in turn, so a caller reading
+    # `materialize_node(n)["properties"][x]["arrow_type"]` still gets a merged
+    # descriptor rather than a bare `{"allOf": [...]}` it would have to fold
+    # itself.
+    #
+    # The emptiness test is on DECLARATION, not on the composed result: an
+    # explicit `properties: {}` means "zero fields", which
+    # `_json_schema_top_level_fields` must be able to tell apart from "no
+    # `properties` map anywhere", its unknowable→skip case. Dropping the key
+    # when the map is empty collapsed the two and turned `conflict_keys` and the
+    # `from_input` membership check back off.
+    own_properties = [
+        source["properties"] for source in sources
+        if isinstance(source, dict) and isinstance(source.get("properties"), dict)
+    ]
+    if own_properties:
+        properties: dict[str, Any] = {}
+        for source_map in own_properties:
+            for name, declaration in source_map.items():
+                properties[name] = (
+                    _combine_schema_values(
+                        properties[name], declaration, kind=_SCHEMA_POSITION
+                    )
+                    if name in properties
+                    else declaration
+                )
+        merged["properties"] = properties
 
     on_path.discard(key)
     memo[key] = (node, merged)
@@ -3874,6 +3975,15 @@ def _unresolved_harm(where: str) -> str:
             "It resolves to nothing at run time, so the request goes out with "
             "that value missing and the provider answers whatever it answers."
         )
+    if where.startswith("params."):
+        # `Param` is shared by read and write operations, so this slot cannot
+        # know which it is in. Say the part that is true of both rather than
+        # asserting a paging consequence at a write author.
+        return (
+            "It resolves to nothing at run time, so the parameter is sent "
+            "unresolved — and where the parameter seeds pagination, paging "
+            "starts from a value that was never read."
+        )
     return (
         "It resolves to nothing at run time, so paging stops after the first "
         "page and the run still reports success."
@@ -4008,7 +4118,11 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     node = materialize_node(node, response_schema)
     if isinstance(node, dict) and node.get("type") == "array" and isinstance(node.get("items"), dict):
         return materialize_node(node["items"], response_schema)
-    return node if isinstance(node, dict) else response_schema
+    # Not a schema node (e.g. `properties.data` declared as boolean `true`).
+    # `None`, for the same reason the other branches return it: handing back
+    # `response_schema` is handing back the ENVELOPE, whose keys a caller then
+    # enumerates as the record's fields.
+    return node if isinstance(node, dict) else None
 
 
 def find_record_field_properties(
