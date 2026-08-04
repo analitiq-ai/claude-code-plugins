@@ -159,18 +159,22 @@ Choosing between the two binding kinds: `from_input` when the segment
 identifies the record being written (the update/delete-by-id shape);
 `{from_param}` when it comes from configuration (an account id, a workspace
 slug) — a write param must then carry a `default`, since a write has no other
-source to fill it.
+source to fill it (ADV-ENDP-028).
 
 The rules that bite:
 
-- **`record.<dotted>` only.** A path segment carries exactly one value, so the
-  whole `record` and any `records[...]` form are refused, and the field it
-  names must exist in the mode's `input.schema` (membership is checked through
-  `$ref` / `allOf`, so a shared `$defs` shape works).
-- **Mutually exclusive with `batching`.** A multi-record request has no single
-  record to take the segment from. An update-by-id endpoint is per-record by
-  nature; if the provider also offers a bulk route, that is a separate mode.
-- **Never wrap the binding in `url_encode` / `base64_encode`.** Encoding is
-  engine-owned: the engine percent-encodes each substituted value as one path
-  segment, so wrapping double-encodes (`a b` arrives as `a%2520b`) and the
-  provider 404s or matches the wrong resource.
+- **`record.<dotted>` only** (ADV-ENDP-024). A path segment carries exactly one
+  value, so the whole `record` and any `records[...]` form are refused, and the
+  field it names must exist in the mode's `input.schema` (membership is checked
+  through `$ref` / `allOf`, so a shared `$defs` shape works — but the `$defs`
+  must live inside `input.schema`, since a ref out of it dangles and is refused
+  by ADV-ENDP-026). The binding is write-only: on a read, `path_params` takes
+  `{from_param}` and nothing else.
+- **Mutually exclusive with `batching`** (ADV-ENDP-025). A multi-record request
+  has no single record to take the segment from. An update-by-id endpoint is
+  per-record by nature; if the provider also offers a bulk route, that is a
+  separate mode.
+- **Never wrap the binding in `url_encode` / `base64_encode`** (ADV-ENDP-027).
+  Encoding is engine-owned: the engine percent-encodes each substituted value as
+  one path segment, so wrapping double-encodes (`a b` arrives as `a%2520b`) and
+  the provider 404s or matches the wrong resource.

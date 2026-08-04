@@ -95,10 +95,13 @@ do not rely on them, and treat these as author-side discipline:
 
 - **Function names are never checked.** An unregistered or misspelled
   `{"function": …}` passes validation and fails at connect time.
-- **Ref *resolvability* is never checked on a connector.** Only the leading
-  scope token of an endpoint expression is validated; a
+- **Ref *resolvability* is checked only for `response.*` on an endpoint.**
+  A `response.body.<path>` is resolved against `response.schema` and a
+  `response.metadata.<key>` against the declared keys, so those typos are
+  errors. Every other scope is checked on its leading token only, and a
+  connector document is not ref-checked at all — so a
   `connection.discovered.*` ref with no post-auth output that produces it
-  validates clean.
+  validates clean, on either document.
 - **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**
 
 ## Output

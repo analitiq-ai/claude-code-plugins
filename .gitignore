@@ -24,3 +24,7 @@ docs/
 .envrc
 .env
 .env.*
+
+# Local MCP server config — machine-specific tooling, not project contract.
+.mcp.json
+
