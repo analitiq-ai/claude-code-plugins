@@ -31,6 +31,7 @@ from analitiq.contracts.endpoints import (
     WriteInput,
     effective_properties,
     find_record_field_properties,
+    materialize_node,
     parse_endpoint,
     resolve_declared_path,
     resolve_local_pointer,
@@ -1139,3 +1140,103 @@ class TestKeywordVocabularyHasOneOwner:
             f"the published node constrains {missing!r} but its description does "
             "not name them — the contract contradicts its own prose"
         )
+
+
+class TestMaterializeMatchesTheNaiveFold:
+    """Differential pin: the memoized fold must equal an uncached recursive one.
+
+    Three successive attempts at making composition fast changed what it
+    COMPUTES, and the suite caught none of them:
+
+    * reversing a pre-order chain inverted sibling precedence, so in
+      `allOf: [{$ref: Base}, {refinement}]` the base beat the refinement — the
+      idiom `allOf` exists for, backwards;
+    * a real post-order still emitted a node reached twice at its FIRST
+      position, the LOWEST precedence under last-wins, while the fold re-merged
+      it at every position. 1502 of 4000 random acyclic schemas disagreed.
+
+    Both were silent: no error, no rejection, just a different `arrow_type` on
+    a destination column. Only a differential test catches that class, so this
+    is the pin. `materialize_node` may be reimplemented however is fastest; it
+    may not change the answer.
+    """
+
+    @staticmethod
+    def _naive_fold(node, root):
+        """The reference: no memo, no visited set, re-merged at every position.
+        Exponential — the generated graphs below are forward-only and small."""
+        from analitiq.contracts.endpoints import (
+            _MATERIALIZED_NODE,
+            _combine_schema_values,
+            _refuse_disjoint_types,
+            resolve_schema_ref,
+        )
+
+        if not isinstance(node, dict):
+            return node
+        sources = []
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            target = resolve_schema_ref(root, ref)
+            if isinstance(target, dict):
+                sources.append(TestMaterializeMatchesTheNaiveFold._naive_fold(target, root))
+        for branch in node.get("allOf") or []:
+            if isinstance(branch, dict):
+                sources.append(TestMaterializeMatchesTheNaiveFold._naive_fold(branch, root))
+        sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
+        _refuse_disjoint_types(_MATERIALIZED_NODE, sources)
+        merged = {}
+        for source in sources:
+            for name, value in source.items():
+                merged[name] = (
+                    _combine_schema_values(merged[name], value) if name in merged else value
+                )
+        return merged
+
+    def test_agrees_with_the_fold_on_random_shared_defs_graphs(self):
+        import random
+
+        random.seed(20260804)  # fixed: a flaky differential test is worthless
+        names = [f"D{i}" for i in range(8)]
+        divergences = []
+        for _ in range(1500):
+            defs = {}
+            for i, name in enumerate(names):
+                entry = {}
+                if random.random() < 0.7:
+                    entry["properties"] = {
+                        "f": {"native_type": f"NT{i}", "arrow_type": f"AT{i}"}
+                    }
+                later = names[i + 1:]
+                picks = random.sample(later, min(len(later), random.randint(0, 2)))
+                if picks:
+                    entry["allOf"] = [{"$ref": f"#/$defs/{p}"} for p in picks]
+                if later and random.random() < 0.35:
+                    entry["$ref"] = f"#/$defs/{random.choice(later)}"
+                defs[name] = entry
+            root = {"$defs": defs, "allOf": [{"$ref": "#/$defs/D0"}]}
+            if materialize_node(root, root) != self._naive_fold(root, root):
+                divergences.append(root)
+        assert not divergences, (
+            f"{len(divergences)} schemas materialize differently from the "
+            f"reference fold; first: {divergences[0]!r}"
+        )
+
+    def test_a_near_refinement_beats_a_distant_base(self):
+        # The shape that survived three rounds: `Overrides` is BOTH a
+        # contributor of `Legacy` (distant) and the document's last word
+        # (direct). Last wins.
+        root = {
+            "$defs": {
+                "Overrides": {"properties": {"updated_at": {
+                    "native_type": "TIMESTAMP", "arrow_type": "Timestamp(MICROSECOND)"}}},
+                "Legacy": {
+                    "allOf": [{"$ref": "#/$defs/Overrides"}],
+                    "properties": {"updated_at": {
+                        "native_type": "STRING", "arrow_type": "Utf8"}},
+                },
+            },
+            "items": {"allOf": [{"$ref": "#/$defs/Legacy"}, {"$ref": "#/$defs/Overrides"}]},
+        }
+        resolved = materialize_node(root["items"], root)["properties"]["updated_at"]
+        assert resolved["arrow_type"] == "Timestamp(MICROSECOND)"

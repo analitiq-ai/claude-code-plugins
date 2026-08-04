@@ -268,3 +268,88 @@ class TestOriginContainmentGapIsRecorded:
             },
         }
         parse_endpoint(doc)  # must not raise: no origin rule exists to violate
+
+
+class TestStandaloneEndpointValidation:
+    """`_validate_api_endpoint` — the path the connector-builder skill actually
+    takes when it validates one endpoint file at a time.
+
+    Every other test in this module drives `check_coverage` via the connector.
+    That is why two defects shipped here unnoticed: a connector whose
+    `transports` was unusable produced NO finding at all (a clean pass on an
+    endpoint whose `transport_ref` resolves to nothing), and a connector that
+    would not parse was reported as a `type-map-coverage` ERROR against an
+    otherwise-valid endpoint, under an id the fix loop does not filter on.
+    """
+
+    def _endpoint(self, ref="api"):
+        return {
+            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+            "endpoint_id": "thing",
+            "operations": {
+                "read": {
+                    "request": {"method": "GET", "path": "/v1/things", "transport_ref": ref},
+                    "params": {},
+                    "response": {
+                        "records": {"ref": "response.body.data"},
+                        "schema": {
+                            "type": "object",
+                            "properties": {"data": {
+                                "type": "array",
+                                "items": {"type": "object",
+                                          "properties": {"id": {"type": "string"}}},
+                            }},
+                        },
+                    },
+                }
+            },
+        }
+
+    def _run(self, tmp_path, connector_body):
+        import json
+
+        from analitiq.validator.connectors import _validate_api_endpoint
+
+        pkg = tmp_path / "pkg"
+        (pkg / "endpoints").mkdir(parents=True)
+        if connector_body is not None:
+            (pkg / "connector.json").write_text(connector_body)
+        doc_path = pkg / "endpoints" / "thing.json"
+        doc = self._endpoint()
+        doc_path.write_text(json.dumps(doc))
+        return _validate_api_endpoint(doc, doc_path, None)
+
+    def _ids(self, findings):
+        return {(f["validator"], f["severity"]) for f in findings}
+
+    def test_declared_transport_resolves_clean(self, tmp_path):
+        findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}')
+        assert not [f for f in findings if f["validator"] == "endpoint-transport-ref"]
+
+    def test_undeclared_transport_is_an_error(self, tmp_path):
+        findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}')
+        assert ("endpoint-transport-ref", "error") in self._ids(findings)
+
+    def test_connector_without_transports_warns_rather_than_passing_clean(self, tmp_path):
+        # The silent-clean-pass case. `_endpoint_transport_ref_findings` returns
+        # [] here, which is right when the CONNECTOR is under validation (its own
+        # model error stands) and wrong here, where that model never runs.
+        findings = self._run(tmp_path, '{"kind":"api"}')
+        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+
+    def test_connector_with_non_dict_transports_warns(self, tmp_path):
+        findings = self._run(tmp_path, '{"kind":"api","transports":[]}')
+        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+
+    def test_absent_connector_warns(self, tmp_path):
+        findings = self._run(tmp_path, None)
+        assert ("endpoint-transport-ref", "warning") in self._ids(findings)
+
+    def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path):
+        findings = self._run(tmp_path, "{not json")
+        reported = {f["validator"] for f in findings}
+        assert "endpoint-transport-ref" in reported
+        assert "type-map-coverage" not in reported, (
+            "a connector-read failure surfaced under the type-map id; a fix loop "
+            "filtering on endpoint-transport-ref would never see it"
+        )

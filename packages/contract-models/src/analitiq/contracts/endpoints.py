@@ -3428,16 +3428,15 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 #        every node must appear after everything it composes with.
 
 
-def _composition_chain(
-    node: dict[str, Any], root: Any, order: str = "pre"
-) -> list[dict[str, Any]]:
+def _composition_chain(node: dict[str, Any], root: Any) -> list[dict[str, Any]]:
     """Every node whose declarations unconditionally apply to ``node``.
 
-    ``order="pre"`` emits ``node`` first, then its `allOf` branches, then its
-    `$ref` target. ``order="post"`` emits the `$ref` target first, then the
-    branches, then ``node`` — the source order the recursive fold merged in, so
-    a caller that folds "last wins" gets the precedence the fold gave it. The
-    distinction is load-bearing; see the note above. Follows `allOf`
+    ``node`` first, then its `allOf` branches, then its `$ref` target — the
+    order :func:`_property_contributors` absorbed them in. Only that caller uses
+    this: contributor sets UNION, so a node's position is immaterial and one
+    visit each is exactly right. :func:`materialize_node` cannot use it, because
+    merging is last-wins and position IS the answer there; it memoizes the fold
+    instead. See the note above. Follows `allOf`
     branches and in-document `$ref` targets — the two composition keywords whose
     contributions always apply. `anyOf`/`oneOf`/`if`-`then`-`else` are
     conditional and are not followed; a `$ref` INTO one is refused by
@@ -3454,24 +3453,14 @@ def _composition_chain(
         if not isinstance(current, dict) or id(current) in seen:
             return
         seen.add(id(current))
-        if order == "pre":
-            ordered.append(current)
-        else:
-            # `$ref` before `allOf` before self — the source order the recursive
-            # fold merged in, so "later wins" keeps meaning what it meant.
-            ref_first = current.get("$ref")
-            if isinstance(ref_first, str):
-                visit(resolve_schema_ref(root, ref_first))
+        ordered.append(current)
         branches = current.get("allOf")
         if isinstance(branches, list):
             for branch in branches:
                 visit(branch)
-        if order == "pre":
-            ref = current.get("$ref")
-            if isinstance(ref, str):
-                visit(resolve_schema_ref(root, ref))
-        else:
-            ordered.append(current)
+        ref = current.get("$ref")
+        if isinstance(ref, str):
+            visit(resolve_schema_ref(root, ref))
 
     visit(node)
     return ordered
@@ -3632,15 +3621,13 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     record fields.
 
     `$ref` and `allOf` are CONSUMED, so a materialized node never carries them.
-    Contributions COMBINE rather than overwrite, because `allOf` and `$ref` are
-    intersections — every source applies. Two sources declaring the same key as
-    an object (`items`, a nested `properties` map) merge recursively, so an
-    `allOf` branch that refines `items` ADDS to the base declaration instead of
-    replacing it. Overwriting was a real monotonicity break: a record shape
-    whose fields came from an inline `properties` map lost them to an `allOf`
-    branch, silently changing the enumerated column set. Only non-object values
-    (`type`, `format`, …) are last-wins, and the one case that could matter
-    there — mutually exclusive `type` sets — is refused outright below.
+    Sources apply in the order `$ref` target, `allOf` branches, then the node
+    itself, each already materialized — so the node's own statements win, and
+    among its contributors the LAST one stated wins. That is what makes the
+    canonical `allOf: [{$ref: Base}, {refinement}]` idiom mean what it says.
+    Object values (`items`, a nested `properties` map) merge recursively rather
+    than replace, because `allOf` is an intersection and both declarations
+    apply.
 
     ``root`` is the document `$ref` pointers resolve against; it defaults to
     ``node``, which is correct only when ``node`` IS the whole embedded schema.
@@ -3648,15 +3635,58 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    document = node if root is None else root
-    # Post-order: every node appears after everything it composes with, so the
-    # node's OWN statements land last and win. Reversing a pre-order is NOT the
-    # same thing — it also reverses sibling order and lifts a distant
-    # contributor above a direct one.
-    sources = [
-        {k: v for k, v in source.items() if k not in ("$ref", "allOf")}
-        for source in _composition_chain(node, document, order="post")
-    ]
+    return _materialize(node, node if root is None else root, {}, set())
+
+
+def _materialize(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, tuple[Any, Any]],
+    on_path: set[int],
+) -> Any:
+    """Memoized fold. Each node is materialized ONCE and its RESULT reused.
+
+    Two earlier shapes of this were wrong, both silently, and the reason is
+    worth keeping:
+
+    * Refusing to cache anything computed under a cycle made a single `$ref`
+      back-edge disable the cache for every ancestor, so the walk stayed
+      exponential on exactly the schemas that motivated the cache.
+    * Flattening the fold into one ordered chain with a global visited set
+      cannot express the fold at all. A node reached from two places was
+      emitted at its FIRST position — the LOWEST precedence in a last-wins
+      merge — while the fold re-merged it at every position, giving it the
+      precedence of its LAST. On 4000 acyclic shared-`$defs` schemas the two
+      disagreed 1502 times: a nearby refinement lost to a distant base, and a
+      destination column was created `Utf8` instead of `Timestamp` with no
+      error anywhere.
+
+    Memoizing the RESULT is what the fold did, so it reproduces the fold
+    exactly on any acyclic document, and it visits each node once. A node
+    already on the current path is a cycle: it contributes nothing the second
+    time it is met, which is the rule the contract states. The memo holds the
+    node beside its result so a freed node's `id()` cannot be reused mid-walk.
+    """
+    key = id(node)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached[1]
+    if key in on_path:
+        return {}
+    on_path.add(key)
+
+    sources: list[Any] = []
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            sources.append(_materialize(target, root, memo, on_path))
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            if isinstance(branch, dict):
+                sources.append(_materialize(branch, root, memo, on_path))
+    sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
 
     # The same refusal `_compose_declarations` applies to a property name's
     # contributors. Without it the two disagree, and the PERMISSIVE one guards
@@ -3668,10 +3698,15 @@ def materialize_node(node: Any, root: Any = None) -> Any:
 
     merged: dict[str, Any] = {}
     for source in sources:
+        if not isinstance(source, dict):
+            continue
         for name, value in source.items():
             merged[name] = (
                 _combine_schema_values(merged[name], value) if name in merged else value
             )
+
+    on_path.discard(key)
+    memo[key] = (node, merged)
     return merged
 
 

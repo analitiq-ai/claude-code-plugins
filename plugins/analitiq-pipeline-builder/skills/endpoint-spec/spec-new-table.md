@@ -35,7 +35,12 @@ Columns mirror the source that will feed the table:
   selects. Field enumeration is owned by the published package — resolve the
   record shape with `analitiq.contracts.endpoints.resolve_read_record_schema`
   / `find_record_field_properties` (an addressed array node's `items` is the
-  record shape), never by eyeballing `response.schema`. Per field: `name`
+  record shape), never by eyeballing `response.schema`. Pass the whole
+  `response.schema` as the second argument to both, or a record declared as a
+  `$ref` has no `$defs` to resolve against and enumerates nothing. If either
+  returns `None` the ref did not resolve — stop and fix the endpoint document;
+  do NOT fall back to reading `response.schema` by hand, which is how the
+  response envelope's keys end up as the table's columns. Per field: `name`
   from the key, `arrow_type` from its annotation, `nullable` when the schema
   states it; nested declared shapes become `ColumnFieldSpec` container specs
   (each nested node needs its own `arrow_type`). A field with no `arrow_type`
