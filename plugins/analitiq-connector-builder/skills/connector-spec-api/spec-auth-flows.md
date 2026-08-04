@@ -59,7 +59,9 @@ the authorize URL can be built (a region, or a tenant slug in the authorize
 host). Asking the user for anything the redirect already yields is noise.
 
 This does not mean an empty `inputs` map: the app's own `client_id` /
-`client_secret` are still declared, as `source: "platform"` (above). Nothing
+`client_secret` are still declared, as `source: "platform"` (above).
+<!-- PROBE: connector-refs-unchecked -->
+Nothing
 validates that a ref resolves, so dropping them leaves a connector that passes
 validation and fails at connect with no credentials.
 
@@ -115,12 +117,15 @@ the `Authorization` header from the minted token:
 }
 ```
 
+<!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
 > **Inline signing is not yet available.** The `jwt_sign` function that
 > would mint `auth.access_token` from the declared key/claims is **planned,
-> not registered** in the engine — connector validation rejects it. Until it
-> lands, a `jwt`-auth connector can declare its inputs but cannot mint the
-> token inline; do not author a `jwt_sign` call. Flag this capability gap
-> before shipping a `jwt` connector that depends on local signing.
+> not registered** in the engine — and nothing rejects the call at authoring
+> time: a `jwt_sign` reference validates clean and fails only at connect,
+> when the engine cannot resolve the function. Until it lands, a `jwt`-auth
+> connector can declare its inputs but cannot mint the token inline; do not
+> author a `jwt_sign` call. Flag this capability gap before shipping a `jwt`
+> connector that depends on local signing.
 
 ## `credentials`
 

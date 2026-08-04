@@ -234,7 +234,8 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **`resource_discovery` declares a strategy that matches this system's
   object hierarchy** and reaches columns. (Nothing validates the match; a
   strategy that flattens a level just hides objects.)
-- [ ] **TLS is declared in the right place for the transport**:
+- [ ] <!-- PROBE: tls-coherence-unchecked -->
+  **TLS is declared in the right place for the transport**:
   SQLAlchemy → the generic `tls` block; ADBC → driver-namespaced
   `db_kwargs` entries with no `tls` block. **And** any
   certificate-verification mode in the `ssl_mode` enum has a matching

@@ -86,7 +86,8 @@ was raised.
      type, not an Arrow type), `required`, optional `default` (value
      expression), `operators` for stream-filterable params, and
      `controlled_by` when pagination / replication owns it.
-   - `request.query` / `request.headers` / `request.path_params` /
+   - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
+     `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are
      bound to declared params with `{"from_param": "<name>"}`, **not** with
      a bare `ref`; on a READ, `path_params` accepts nothing else (a write
@@ -137,6 +138,7 @@ was raised.
    shared with database destinations, so the schema also permits
    `truncate_insert` (empty the destination, reload it) — that mode belongs to
    the SQL write path and has no defined meaning for an API destination, so a
+   <!-- PROBE: write-truncate-insert-accepted -->
    connector keying it passes validation while declaring something no HTTP
    provider was asked to do. If a provider genuinely exposes a
    replace-the-collection operation, raise it as a contract gap rather than

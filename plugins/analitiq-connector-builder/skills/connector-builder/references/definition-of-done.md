@@ -3,18 +3,20 @@
 A self-check the creator agents run against their own output **before
 returning `CreatorOutput`**. It is a gate, not a substitute for the
 `connector-schema-validator`: the validator owns structural and cross-field
-conformance (see `plugins/analitiq-connector-builder/agents/connector-schema-validator.md` for what it does
-and does not check). This checklist deliberately covers **only what the
-validator cannot enforce** — classification correctness, completeness against
-the provider's documentation, the both-directions principle, driver-choice
-discipline, and the non-JSON artifacts (package files, README) the in-plugin
-validator never sees. Do NOT restate validator rules here; if an item is
-mechanically checkable, it belongs in the validator, not on this list.
+conformance (see `plugins/analitiq-connector-builder/agents/connector-schema-validator.md` for the
+authoritative list of its checks and blind spots). This checklist deliberately
+covers **only what the validator cannot enforce** — classification
+correctness, completeness against the provider's documentation, the
+both-directions principle, driver-choice discipline, and the non-JSON
+artifacts (package files, README) the in-plugin validator never sees. Do NOT
+restate validator rules here; if an item is mechanically checkable, it belongs
+in the validator, not on this list.
 
+<!-- PROBE: connector-function-name-unchecked, write-body-path-typo-unresolved, tls-coherence-unchecked -->
 Three things authors often assume are validated but are not — a `function`
-name, a ref's resolvability outside a READ operation's `response.body` and
-`response.metadata`, and TLS mode ↔ CA-certificate coherence. Those belong on
-this list, not in the validator's column.
+name, a ref's resolvability outside a READ's `response.body` and either
+operation's `response.metadata`, and TLS mode ↔ CA-certificate coherence.
+Those belong on this list, not in the validator's column.
 
 The kind-specific lists live at the end of each creator agent
 (`api-connector-creator` / `db-connector-creator`); both also apply this
@@ -32,34 +34,31 @@ shared core.
   user/provider actually means.)
 - [ ] **`display_name`, `description`, and `tags` are meaningful**, not
   placeholders.
-- [ ] **The read map covers the provider's documented native
+- [ ] <!-- PROBE: read-map-completeness-unchecked, endpoint-pair-unresolved-through-read-map -->
+  **The read map covers the provider's documented native
   vocabulary**, not just the subset that happened to appear in a sample.
   (Nothing checks read-map completeness for a database connector; for an
   API connector the validator only checks the natives the endpoints
   reference.)
-- [ ] **No secret value is embedded as a literal** anywhere (passwords,
+- [ ] <!-- PROBE: connector-secret-literal-undetected -->
+  **No secret value is embedded as a literal** anywhere (passwords,
   tokens, keys) — every credential is a `ref` / `template` / `function`
   into `secrets.*`. (Nothing can tell a literal default from a leaked
   secret.)
 - [ ] **No customer-specific value is baked into the connector** — no real
   host, tenant id, account id, or database name. The connector declares the
   input's shape; the connection supplies the value.
-- [ ] **Every `function` name is in the registered catalog.** Nothing
+- [ ] <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
+  **Every `function` name is in the registered catalog.** Nothing
   validates function names, so a typo or a planned-but-unregistered function
   (e.g. `jwt_sign`) ships silently and fails at connect.
-- [ ] **Every ref resolves to something a declaration produces.** The
-  validator proves only two of them, and only on a READ: a
-  `response.body.<path>` against `response.schema`, and a
-  `response.metadata.<key>` against the declared key set (that second one
-  holds on a write too). See the table in `value-expressions.md`.
-  Everything else is on you, including three that look proved and are not:
-  `response.records.<path>` and `response.headers.<name>` are spelling-checked
-  only, and **a write mode has no `response.schema`, so no write-side
-  `response.body` path is resolved at all** — a typo in `success_when` makes
-  the predicate hold unconditionally and every write reports success. Beyond
-  `response.*`, every scope is checked on its leading token only and a
-  connector document is not ref-checked at all, so a `connection.discovered.*`
-  ref with no post-auth output behind it passes. Trace all of those by hand
+- [ ] <!-- PROBE: write-body-path-typo-unresolved, scope-tail-unchecked -->
+  **Every ref resolves to something a declaration produces.** What the
+  validator proves is exactly the measured table in `value-expressions.md`
+  (§Logical scopes) — read it before trusting any ref. Everything outside
+  those cells is on you; the worst case is the write side, where a
+  `success_when` typo makes the predicate hold unconditionally and every
+  write reports success. Trace every unproved ref by hand
   (`lifecycle-phases.md`).
 - [ ] **`default_transport` is the right default**, and any
   multi-transport split (auth / discovery / api origins) reflects the

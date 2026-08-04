@@ -26,6 +26,7 @@ with one of the contract's resolution scopes. The authoritative set is
 `tests/connector_builder/`); the table below is the authoring guide to the ones a
 connector or endpoint actually writes.
 
+<!-- PROBE: runtime-tail-unchecked -->
 | Scope | Phase available | Holds |
 |---|---|---|
 | `secrets.*` | `auth` and later | User-entered or platform-injected secret values, opaque references. |
@@ -40,6 +41,7 @@ connector or endpoint actually writes.
 | `state.*` | per run | Replication watermarks and other carried-over run state. |
 | `connector.*` | any | Connector-level declared values. |
 
+<!-- BEGIN GENERATED: scope-guarantees -->
 **Scope checking is two-tier on an endpoint.** Every expression slot on an
 operation is swept — `pagination` (every `stop_when` operand included),
 `response.metadata`, the `request` `path_params` / `headers` / `query` / `body`
@@ -48,7 +50,8 @@ token** is checked, so `connection.discovered.nope` passes and resolves empty.
 
 What is actually proved, by sub-scope. Everything is spelling-checked (a bad
 sub-scope like `response.bodyy` is always an error); only the first two rows
-have their **path** resolved, and only on a read:
+are resolved against something declared — `response.body` paths only on a
+read, `response.metadata` keys on either operation:
 
 | Ref | Read op | Write op |
 |---|---|---|
@@ -84,16 +87,19 @@ built before the response exists, so it could only interpolate to nothing.
 In a **connector** document (a transport header, an auth template) there is no
 check at all — treat every ref there as unverified and trace it to the
 declaration that produces it yourself.
+<!-- END GENERATED: scope-guarantees -->
 
 (`request.path_params` takes bindings, not raw refs: `{from_param: …}` on a
 read, and on a write also `{from_input: "record.<dotted>"}` — see
 `connector-spec-api/spec-request-binding.md`.)
 
+<!-- PROBE: request-slot-direct-runtime-ref -->
 > **`stream.*`, `state.*`, and `runtime.*` are barred from endpoint request
 > slots.** They may not appear as direct refs in `request.headers` / `query` /
 > `body` / `path_params`; route them through a declared param instead. See
 > `connector-spec-api/spec-request-binding.md`.
 
+<!-- PROBE: auth-state-tail-unchecked -->
 Two paths that *look* like scopes but are not, and so fail at runtime after
 passing validation (the leading token `connection` is legal, the rest is not):
 `connection.auth_state.*` and `connection.secret_refs.*`.
@@ -108,6 +114,7 @@ engine's `DEFAULT_FUNCTIONS` registry. Current catalog:
 - `lookup` — map an input value through a connector-declared inline `map`, returning the mapped value.
 - `url_encode` — percent-encode a scalar for a URL component. Escapes every reserved character by default (`safe: ""`); pass a `safe` field to widen the unescaped set.
 
+<!-- PROBE: connector-lookup-map-unvalidated -->
 **`lookup` maps must be total.** The inline `map` has to cover every value of
 the input's declared `enum`, and add no keys outside it. Nothing validates this
 — a value with no entry resolves to nothing and the request goes out missing
@@ -118,6 +125,7 @@ than loudly at authoring time.
 `encoding` already owns percent-encoding; wrapping the value encodes it twice.
 `url_encode` is for URL components you build yourself in a `template`.
 
+<!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
 **Planned — NOT yet registered; do not reference:** `jwt_sign` (sign a JWT from
 key/algorithm/claims) and `pkce_challenge_s256` (derive a PKCE S256 challenge
 from a runtime verifier). Nothing rejects them at authoring time (see below),
@@ -125,11 +133,15 @@ so calling one ships a connector that fails at connect. Until the engine
 registers a function, connectors must not call it — this includes the
 inline-signing path for `jwt` auth.
 
+<!-- BEGIN GENERATED: claim:function-names-unchecked -->
 **Nothing validates the function name.** An unregistered name (including
-`jwt_sign`) passes every check and fails only when the engine tries to resolve
-it at connect time. Treat the catalog above as closed and verify by hand; the
-validator will not catch a typo or a planned-but-unregistered function. To
-extend the catalog, the engine's function registry must be updated first.
+`jwt_sign`) passes every check and fails only when the engine tries to
+resolve it at connect time — on a connector document and on an endpoint
+alike. Treat the catalog above as closed and verify by hand; the
+validator will not catch a typo or a planned-but-unregistered function.
+To extend the catalog, the engine's function registry must be updated
+first.
+<!-- END GENERATED: claim:function-names-unchecked -->
 
 ## DSN placeholders are not value expressions
 

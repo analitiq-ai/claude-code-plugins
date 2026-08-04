@@ -90,6 +90,7 @@ Do not expect a finding id per rule; match on the message, not on a guessed id.
 | `endpoint-transport-ref` | An endpoint operation's `request.transport_ref` must name a transport the sibling `connector.json` declares in `transports`. Cross-file, so only a connector-anchored run can see it; the connector-internal ref sites are covered by `contract-model`. |
 | `embedded-json-schema` | An embedded JSON Schema (e.g. `response.schema`, `input.schema`) must be valid Draft 2020-12 and must not declare a different `$schema`. |
 
+<!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —
 do not rely on them, and treat these as author-side discipline:
 
@@ -108,6 +109,7 @@ do not rely on them, and treat these as author-side discipline:
   all — so a `connection.discovered.*` ref with no post-auth output that
   produces it validates clean, on either document.
 - **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**
+<!-- END GENERATED: validator-blind-spots -->
 
 ## Output
 

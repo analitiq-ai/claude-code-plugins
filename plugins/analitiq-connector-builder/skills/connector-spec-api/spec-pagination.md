@@ -65,6 +65,7 @@ be marked `controlled_by`). A `controlled_by` param must **not** declare
   through, rather than hardcoding a number and overriding the operator's
   choice. Hardcode only when the provider's usable page size is genuinely
   fixed, and then write it as a **bare positive integer** (`"default": 50`) —
+  <!-- PROBE: pagination-limit-bare-zero-rejected, pagination-limit-literal-zero-accepted -->
   that spelling is bounded by the contract, so a zero or negative size is
   rejected at authoring time rather than at the first request. Do **not**
   hardcode it as `{"literal": 50}`: that is the expression form, it carries no
@@ -166,7 +167,8 @@ Prefer a body field that already holds the bare URL:
 
 A raw `Link:` header is **not** directly usable — its value is
 `<https://…>; rel="next"`, angle brackets and rel-parameters included, not a
-bare URL. Nothing validates this, so pointing `next_url` at
+bare URL. <!-- PROBE: read-headers-tail-unchecked -->
+Nothing validates this, so pointing `next_url` at
 `response.headers.link` produces a request to a malformed URL at runtime. When
 the provider only offers the header, confirm the response exposes a parsed form
 before choosing `link`.

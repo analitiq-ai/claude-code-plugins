@@ -40,6 +40,7 @@ downstream, or ask the connector to expose a suitable parameter.
 
 ## What the local validator still cannot check
 
+<!-- PROBE: stream-filter-field-unresolved-locally -->
 Field-existence is **not** resolved locally — the validator does not read filter
 fields against endpoint files, so a typo in `field` passes here and fails
 server-side at save time. Read the field name back to the user rather than

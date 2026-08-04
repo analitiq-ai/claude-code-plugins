@@ -91,6 +91,14 @@ jobs:
         # registry; stale prose here misleads every creator agent that reads it.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_advisory.py check
+      - name: Check validator-behavior claims against the in-repo contract
+        # Prose in both plugins states what the validator checks and does not
+        # check; each such sentence is pinned by an executable probe (issue
+        # #133). tests/connector_builder/test_validator_claims.py computes the
+        # same predicate, so on a failure pytest goes red first and this step
+        # is what prints the diff / the flagged sentences.
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: python3 scripts/render_validator_claims.py check
       - name: Package build guards
         # These are what keep the private runtime out of the public wheels:
         # build.py AST-scans for imports outside (stdlib + pydantic/jsonschema),

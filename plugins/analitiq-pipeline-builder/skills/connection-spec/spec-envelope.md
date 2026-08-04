@@ -122,7 +122,8 @@ The two look alike and resolve completely differently. Do not conflate them:
 - The plugin's template is keyed by **env-var name** and paired with `env:`
   pointers. The user resolves it by exporting those variables; nothing reads the
   file itself. This pairing is a plugin convention.
-- The `sidecar:<name>` scheme names an entry in a credentials file the engine
+- <!-- PROBE: connection-sidecar-name-unconstrained -->
+  The `sidecar:<name>` scheme names an entry in a credentials file the engine
   reads directly, keyed by the **connection-contract input name** — the same
   `<name>` that keys `secret_refs`, not an env-var name. Alone among the
   schemes it constrains nothing after its prefix, so a wrong name validates
