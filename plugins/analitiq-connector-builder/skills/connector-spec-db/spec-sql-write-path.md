@@ -267,6 +267,7 @@ versions the connector targets.
 
 ## Enforcement
 
+<!-- PROBE: sql-capabilities-shape-checked, sql-capabilities-pairing-unchecked -->
 The plugin's schema validator checks the `sql_capabilities` **shape**
 (required facts, closed value sets, the `dedicated_schema` rule). It never
 sees `connector.py`, so the declaration ↔ hook pairing is the CDK

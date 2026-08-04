@@ -258,7 +258,9 @@ discipline, and dialect behavior. Do not restate validator rules.
   `provider_facts` field, or the two that are authoring decisions
   (`bulk_load`, `stage.schema`) — never copied from another connector or
   assumed, and `catalog` consistent with the system's real object
-  hierarchy. (The validator checks the block's shape;
+  hierarchy.
+  <!-- PROBE: sql-capabilities-shape-checked, sql-capabilities-pairing-unchecked -->
+  (The validator checks the block's shape;
   nothing checks the values are *true of this system*, and the engine
   refuses every write mode at handshake if the block is missing
   entirely.)
