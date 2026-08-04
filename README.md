@@ -67,7 +67,9 @@ pytest
 ```
 
 Contributor guidance lives in `CLAUDE.md` (repo-wide) and
-`plugins/<name>/CLAUDE.md` (per plugin).
+`plugins/<name>/CLAUDE.md` (per plugin);
+[CONTRIBUTING.md](CONTRIBUTING.md) carries the filing and closing discipline —
+read it before opening or closing an issue.
 
 Releases are handled by **release-please** in monorepo mode — each plugin has its
 own version, changelog, and `<component>-vX.Y.Z` tag. Never bump a `plugin.json`
