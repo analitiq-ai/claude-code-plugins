@@ -58,10 +58,11 @@ and bound this way.
 
 Every strategy requires a `stop_when` — the condition that ends the page
 loop. It is **not** a string like `"page_empty"`; it is a predicate object
-from the contract's predicate grammar (`#/$defs/PredEmpty`,
-`#/$defs/PredMissing`, `#/$defs/PredExists`, the comparison predicates
-`PredEq`/`PredLt`/…, and the combinators `PredAnd`/`PredOr`/`PredNot`).
-Each leaf wraps a single key over a value expression:
+from the contract's predicate grammar. Predicate keys (closed set): `eq`,
+`neq`, `lt`, `lte`, `gt`, `gte`, `exists`, `missing`, `empty`, `not_empty`,
+and the combinators `and`, `or`, `not` — exactly one key per predicate
+object. The same grammar backs a write mode's `success_when`. Each leaf
+wraps a single key over a value expression:
 
 - `{ "empty": <expr> }` — stop when the expression resolves to nothing
   (an empty record array → no more pages).

@@ -58,7 +58,8 @@ order, stopping at the first match (full guide:
 `connector-spec-db/spec-driver-selection.md`):
 
 1. **A first-class ADBC driver exists and is in the schema's
-   `AdbcTransport.driver` enum** (the enum is the sole validator —
+   `AdbcTransport.driver` enum** — currently `postgresql`, `snowflake`,
+   `bigquery`; the enum is the sole validator (rationale and packaging:
    `spec-driver-selection.md` §1) → `adbc`. Redshift is
    postgres-wire-compatible but does NOT take this tier: its canonical
    path is the sync SQLAlchemy `redshift+redshift_connector` driver.

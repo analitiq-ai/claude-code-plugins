@@ -499,6 +499,41 @@ def test_pagination_styles_match_schema(api_endpoint_schema: dict) -> None:
     )
 
 
+def test_pagination_prose_names_every_predicate_key() -> None:
+    """spec-pagination.md's predicate-key list is the one agent-loadable copy.
+
+    The `stop_when` / `success_when` operator vocabulary appears nowhere else
+    an authoring agent can reach: `endpoint-creator.md` points at
+    spec-pagination.md for it, and the agent has no fetch tool to recover a
+    spelling from the published schema. Pin the hand-typed list to
+    `_PRED_BRANCHES` — the contract module's own single source for the
+    predicate union — so a new operator lands in the prose in the same change,
+    and a reworded sentence that drops the list turns the build red instead of
+    silently stranding the vocabulary.
+    """
+    from analitiq.contracts.endpoints import _PRED_BRANCHES
+
+    doc = PLUGIN_ROOT / "skills" / "connector-spec-api" / "spec-pagination.md"
+    match = re.search(
+        r"Predicate keys \(closed set\):(?P<line>.+?)(?:\.\s|\.$)",
+        doc.read_text(encoding="utf-8"),
+        re.S,
+    )
+    assert match, (
+        f"{doc.name}: the 'Predicate keys (closed set):' sentence is gone — "
+        "restore it (or repoint this guard); it is the only copy of the "
+        "predicate grammar's key set an authoring agent can load."
+    )
+    stated = set(re.findall(r"`([a-z_]+)`", match.group("line")))
+    expected = {tag for tag, _ in _PRED_BRANCHES}
+    assert stated == expected, _diff_msg(
+        "predicate key",
+        expected,
+        stated,
+        "update the closed-set sentence in spec-pagination.md §stop_when.",
+    )
+
+
 def test_bare_marker_arrow_types_match_schema() -> None:
     schema_set = _bare_marker_arrow_types()
     assert schema_set == EXPECTED_BARE_MARKER_ARROW_TYPES, _diff_msg(

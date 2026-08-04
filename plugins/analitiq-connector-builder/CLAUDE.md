@@ -108,7 +108,10 @@ an extraction gate lands):
 - `<!-- validate: <resource> -->` — a full document; must validate against
   that resource's contract.
 - `<!-- validate: <resource>#/<pointer> -->` — a fragment; must validate
-  against the sub-model at that pointer.
+  against the sub-model at that pointer. A fragment may show its enclosing
+  key for context (`"replication": { … }`, wrapped or not) — the pointer
+  names the deepest shown node, and a gate unwraps the key before
+  validating.
 - `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail with exactly
   that diagnostic.
 - `<!-- illustrative -->` — outside the published contract's validation

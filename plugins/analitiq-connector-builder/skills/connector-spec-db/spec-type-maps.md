@@ -91,9 +91,11 @@ simply never fires.
 
 When a `regex` rule's rendered side carries `${name}` placeholders,
 every placeholder must be backed by a matching **named capture group**
-in the matcher side (ADV-TMAP-003). Authors write the ECMA-262 capture
-form `(?<name>…)` — Python-only `(?P<name>…)` syntax is rejected
-(ADV-TMAP-005).
+in the matcher side. On the **read** side the contract enforces both
+halves — backing captures (ADV-TMAP-003) and the ECMA-262 capture form
+`(?<name>…)`, rejecting Python-only `(?P<name>…)` syntax (ADV-TMAP-005).
+The **write** side checks only placeholder syntax: an unbacked `${name}`
+surfaces first at DDL render — verify write captures yourself.
 
 - Read map: placeholders in `canonical`, captures in `native` —
   `native: "^NUMERIC\\((?<precision>[0-9]+),\\s*(?<scale>[0-9]+)\\)$"`,
@@ -107,9 +109,10 @@ types (`Decimal128(${precision}, ${scale})`, `FixedSizeBinary(${n})` on
 the read side; `NUMERIC(${p}, ${s})`, `VARCHAR(${len})` and similar on
 the write side).
 
-On the **read** side a templated render is only legal on a `regex` rule
-(ADV-TMAP-003) — an `exact` native has no captures to substitute from, so its
-`canonical` must be a fully-resolved literal.
+On the **read** side a templated render is only legal on a `regex` rule —
+an `exact` rule's `canonical` must be a fully-resolved Arrow type (the
+type-pattern constraint rejects `${…}` there), and an `exact` native has
+no captures to substitute from.
 
 On the **write** side the contract *accepts* `${…}` in an `exact` rule's
 rendered `native` (the placeholder would be filled from a per-column hint
@@ -177,10 +180,12 @@ The shape markers `Object` and `List` split by direction:
   `List`. A write map without rules for them hard-errors the stream at
   configuration time. Render both exactly like `Json`:
 
-  <!-- validate: type-map-write#/ -->
+  <!-- validate: type-map-write -->
   ```json
-  { "match": "exact", "canonical": "Object", "native": "JSONB" },
-  { "match": "exact", "canonical": "List",   "native": "JSONB" }
+  [
+    { "match": "exact", "canonical": "Object", "native": "JSONB" },
+    { "match": "exact", "canonical": "List",   "native": "JSONB" }
+  ]
   ```
 
   Author these as `exact` rules over the bare markers — do **not** widen

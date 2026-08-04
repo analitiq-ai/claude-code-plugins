@@ -16,7 +16,9 @@ A value expression is one of:
 | `function` | `{"function": "<name>", "input": {...}}` | Call a registered function with named inputs. |
 
 Anywhere the schema accepts a value expression, exactly one of the four
-shapes is allowed — in endpoint request slots this is ADV-ENDP-022.
+shapes is allowed. (Endpoint request slots additionally admit the binding
+forms `from_param` / `from_input`; the exactly-one-key rule there is
+ADV-ENDP-022 — see `connector-spec-api/spec-request-binding.md`.)
 
 ## Logical scopes
 

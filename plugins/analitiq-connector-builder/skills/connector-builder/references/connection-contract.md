@@ -112,8 +112,8 @@ and where the boundary sits.
 | `present` | has any value at all (use for "the user filled this in") |
 | `regex` | matches the pattern |
 
-Write the `message` for the person filling in the form, naming the field they
-must fix.
+Exactly one operator key per predicate (ADV-CTOR-012). Write the `message`
+for the person filling in the form, naming the field they must fix.
 
 **Scope boundary.** These predicates are for *cross-input* validation only —
 relationships among values already on the form. They are not a place to express:
@@ -130,4 +130,4 @@ here.
 
 The `connection_contract` block has no standalone `version`. Drift detection
 rides on the connector's top-level `version` semver — bump rules:
-`metadata-and-versioning.md` §release table.
+`metadata-and-versioning.md` §Release version (`version`).
