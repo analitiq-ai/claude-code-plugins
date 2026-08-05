@@ -35,10 +35,12 @@ from analitiq.contracts.shared.advisory_prose import (
 )
 
 
-def _reraise(_name):
+def _reraise(name):
     # walk_packages swallows a subpackage that fails to import unless onerror
-    # propagates — and a silently skipped subtree is a silently skipped census.
-    raise
+    # raises — and a silently skipped subtree is a silently skipped census.
+    raise ImportError(
+        f"contract module {name!r} failed to import during the census scan"
+    ) from sys.exc_info()[1]
 
 
 def _contract_classes() -> list[type[BaseModel]]:
