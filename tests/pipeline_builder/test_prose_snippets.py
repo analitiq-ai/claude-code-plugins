@@ -145,6 +145,11 @@ def _discover_blocks(root: Path) -> tuple[dict[tuple[str, int], Block], list[str
     unaccounted: list[str] = []
     for md in sorted(root.rglob("*.md")):
         rel = md.relative_to(root).as_posix()
+        # Generated, not authored: release-please writes CHANGELOG.md from
+        # commit bodies, so a fenced block there is nobody's teaching example
+        # and cannot carry an annotation.
+        if rel == "CHANGELOG.md":
+            continue
         lines = md.read_text().splitlines()
         accounted: set[int] = set()
         index = 0
