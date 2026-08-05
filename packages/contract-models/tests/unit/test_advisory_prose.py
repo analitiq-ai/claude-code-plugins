@@ -1,17 +1,18 @@
-"""Prose-completeness lint — the advisory census's missing other half (issue #127).
+"""Prose-completeness lint — the advisory census's missing other half.
 
 `test_advisory_registry.py` verifies the integrity of rules that EXIST; every
 one of its checks starts from a registered rule, so an obligation stated in
-prose and never registered is invisible to it (that is how #123 shipped). This
-suite closes that hole from the prose side: every field description and model
-docstring in ``analitiq.contracts`` that states an obligation — the modal set
-from #127 — must resolve to a :class:`ProseObligation` entry binding it to an
-``ADV-*`` rule, a structural mechanism, or an explicit waiver.
+prose and never registered is invisible to it — the hole the unenforced
+pagination `response.body.*` rule shipped through. This suite closes that hole
+from the prose side: every field description and model docstring in
+``analitiq.contracts`` that states an obligation (``NORMATIVE_PATTERN``) must
+resolve to a :class:`ProseObligation` entry binding it to an ``ADV-*`` rule, a
+structural mechanism, or an explicit waiver.
 
 The lint is bidirectional so the census cannot rot in either direction: a
-normative site with no entry fails (the #123 direction), and an entry whose
-prose site disappeared or lost its normative language also fails (the stale
-direction).
+normative site with no entry fails (the unenforced-obligation direction), and
+an entry whose prose site disappeared or lost its normative language also
+fails (the stale direction).
 """
 from __future__ import annotations
 
@@ -132,7 +133,7 @@ def test_census_has_no_duplicate_sites():
 
 
 def test_every_normative_site_is_catalogued():
-    """The #123 direction: an obligation stated in prose and bound to nothing.
+    """The unenforced-obligation direction: prose stating a rule bound to nothing.
 
     Fix by binding the new prose in ``advisory_prose.PROSE_OBLIGATIONS`` — to
     the ``ADV-*`` rule enforcing it, to the structural mechanism carrying it,

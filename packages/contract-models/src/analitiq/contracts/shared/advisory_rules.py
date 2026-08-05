@@ -11,11 +11,11 @@ relational rule is a data edit here — never new imperative code.
 IDs are ``ADV-<AREA>-NNN``, stable and never reused. ``targets`` name model
 classes by string; a rule on a base class covers its subclasses (MRO match).
 
-:mod:`advisory_prose` is this census's other half (issue #127): it binds every
-normative sentence in the contract's own prose — field descriptions and model
-docstrings — to the rule, structural mechanism, or registered waiver carrying
-it, so an obligation stated here in prose and enforced nowhere fails the build
-instead of shipping silently.
+:mod:`advisory_prose` is this census's other half: it binds every normative
+sentence in the contract's own prose — field descriptions and model docstrings
+— to the rule, structural mechanism, or registered waiver carrying it, so an
+obligation stated in prose and enforced nowhere fails the build instead of
+shipping silently.
 """
 from __future__ import annotations
 

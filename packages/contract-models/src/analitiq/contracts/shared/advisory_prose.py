@@ -1,12 +1,12 @@
 """The prose-obligation census — every normative statement in the contract's
-own prose, bound to what enforces it (issue #127).
+own prose, bound to what enforces it.
 
 :mod:`advisory_rules` is the census of relational rules; this module is its
 missing other half. The registry's tests verify the integrity of rules that
 EXIST — every check starts from a registered rule, so an obligation stated in a
 field description or model docstring and never registered was invisible (that
-is exactly how #123 shipped: the pagination `response.body.*` rule lived in
-``ResponseExtraction.schema``'s description for months, enforced by nothing).
+is exactly how the pagination `response.body.*` rule shipped: it lived in
+``ResponseExtraction.schema``'s description, enforced by nothing).
 
 Every field description and model docstring in ``analitiq.contracts`` whose
 text matches :data:`NORMATIVE_PATTERN` must carry exactly one
@@ -36,10 +36,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-#: Normative-language detector — the union modal set from #126/#127. A field
-#: description or model docstring matching this states an obligation and must
-#: be catalogued in :data:`PROSE_OBLIGATIONS`. Two-word phrases tolerate any
-#: whitespace (docstrings wrap); ``\bmust\b`` covers "must not".
+#: Normative-language detector — the fixed modal set. A field description or
+#: model docstring matching this states an obligation and must be catalogued
+#: in :data:`PROSE_OBLIGATIONS`. Two-word phrases tolerate any whitespace
+#: (docstrings wrap); ``\bmust\b`` covers "must not".
 NORMATIVE_PATTERN = re.compile(
     r"\bmust\b|\bevery\b|\brequires\b|\bmay\s+not\b|\bdefaults\s+to\b"
     r"|\bis\s+required\s+to\b|\bonly\b",
@@ -53,9 +53,9 @@ NORMATIVE_PATTERN = re.compile(
 # category everywhere. A bespoke reason is still the right choice when the
 # site's situation is not one of these.
 
-#: The contract's unknowable→skip convention, as registry data (issue #127
-#: asked for exactly this: the convention lived only in the docstrings of
-#: ``resolve_read_record_schema`` and ``_walk_input_schema_path``). Where an
+#: The contract's unknowable→skip convention, as registry data — previously it
+#: lived only in the docstrings of ``resolve_read_record_schema`` and
+#: ``_walk_input_schema_path``, a convention nobody could review. Where an
 #: enforced rule resolves an authored path against a declared schema, a path
 #: the document provably contradicts is an error, and a path the document
 #: simply does not decide is SKIPPED — the engine owns the resolved shape at
@@ -316,9 +316,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         waiver=(
             "the NAME half is cross-document — enforced by analitiq-validator's "
             "endpoint-transport-ref check, which a single-document model cannot "
-            "run; the ORIGIN half is enforced by nothing today (the prose says "
-            "so; analitiq-engine#454 / #124); the defaulting to "
-            "default_transport is engine-owned"
+            "run; the ORIGIN half is enforced by nothing today, as the prose "
+            "itself states; the defaulting to default_transport is engine-owned"
         ),
     ),
     ProseObligation(
