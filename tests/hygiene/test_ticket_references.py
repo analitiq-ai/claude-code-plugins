@@ -15,9 +15,33 @@ or the mechanism, self-containedly.** Ticket numbers belong to GitHub-native
 surfaces — commit messages, PR bodies, issue threads — where the tracker is the
 medium rather than a dangling reference out of one.
 
-Nothing enforced this before, so the refs accumulated to 231 sites across 53
+Nothing enforced this before, so the refs accumulated to 230 sites across 53
 files. Sweeping them without a guard would just restart the accumulation, which
 is why this file exists: it is the half of the fix that keeps the class closed.
+
+## What it scans, and why the scope is not a list of directories
+
+Every file git tracks, minus `schemas/` and minus `_EXCLUDED_PATHS`.
+
+An earlier draft named the trees to walk — `packages/`, `plugins/`, `scripts/`,
+… — and that shape is the wrong default in a way worth recording, because it
+failed twice. It fails **open**: a tree nobody listed is a tree nobody lints,
+which is how `CONTRIBUTING.md` and `.claude-plugin/` sat outside the gate. And
+it is a hand-maintained parallel copy of the repo layout, so it drifts exactly
+like the values `.claude/rules/no-drift-surfaces.md` forbids duplicating — and
+worse, narrowing it is the cheapest way to turn a red gate green. Enumerating
+from git inverts both: a new authored tree is scanned the day it lands, nothing
+restates the layout, and the only way to shrink the scan is to add a line to
+`_EXCLUDED_PATHS`, which is pinned literally and lands in a diff a reviewer
+reads.
+
+`schemas/` is the one tree excluded structurally rather than by path, and
+permanently so: it is generated from the contract models, and its pinned
+`X.Y.Z.json` objects are immutable once published (the publish is
+first-write-wins and byte-compares on re-runs). Roughly forty already-published
+pins still carry the old ticket text and always will. The only way that text
+leaves the served schemas is a re-render advancing the version — driven from the
+models this guard does scan.
 
 ## What counts as a ticket reference
 
@@ -27,7 +51,8 @@ Four shapes:
   by a number.
 - `analitiq-engine#454`, `engine#413`, `infrastructure#1018` — the
   cross-repo form GitHub itself renders as a link.
-- A bare `#108` / `(#890)` — the dominant form in this repo's older prose.
+- A bare `#108` / `(#890)` / `pre-#125` — the dominant form in this repo's
+  older prose.
 - `https://github.com/analitiq-ai/analitiq-engine/issues/406` — the full URL.
   No swept site used it, and it is here precisely for that reason: it is the
   spelling closest to hand for an author whose `analitiq-engine#406` just went
@@ -42,58 +67,34 @@ flagging those would make the gate cost more than it returns. This is a real
 hole, not a costless narrowing: single-digit issues exist in this tracker and
 `CONTRIBUTING.md` cites one. The keyword and cross-repo forms still catch
 `issue #7` and `analitiq-engine#7` at any digit count, so what actually escapes
-is the bare single-digit `(#7)`. Widen `_BARE_TICKET` if that starts happening.
+is the bare single-digit `(#7)`.
+
+**A bare `#N` followed by `-` and a word** — `#12-era`, `(#12-section)`. That
+shape is how a markdown anchor into a numbered heading is written, and no ticket
+in this repo has ever been cited that way, so the ambiguity resolves toward the
+anchor. A hyphen *range* (`#150-#152`) is not affected: both ends are caught.
 
 **A keyword with no `#`** — `settled in issue 89`, `tracked as GH-123` — is not
 matched. Both read as unnatural enough that they are unlikely to be reached for,
 and a bare `issues?` + digits pattern over prose that says "issue 3 of the four"
 would cost more in false positives than it buys.
-
-## What is out of scope, and why
-
-`_EXCLUDED_PATHS` carries every exclusion, each with its reason inline.
-`test_the_guard_excludes_only_the_paths_it_records` pins the tuple exactly — so
-an exemption cannot be added without landing in a diff a reviewer reads — and
-`test_exclusions_are_all_live` fails if one stops matching anything, so the list
-cannot outlive its reasons.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Trees holding text this repo authors, plus `""` for the repo root's own files
-# (CLAUDE.md, README.md, conftest.py, …). The root is listed explicitly because
-# a directory-only list silently exempts the files a new contributor reads
-# first, and an exemption nobody can see is the thing this guard exists to
-# prevent.
-#
-# `schemas/` is absent, and permanently so rather than by oversight: the tree is
-# generated from the contract models, and its pinned `X.Y.Z.json` objects are
-# immutable once published (the publish is first-write-wins and byte-compares on
-# re-runs). Forty already-published pins still carry the old ticket text and
-# always will. The only way that text leaves the served schemas is a re-render
-# advancing the version, which is driven from the models this guard does scan.
-_SCANNED_ROOTS = (
-    "",
-    "packages",
-    "plugins",
-    "scripts",
-    "tests",
-    ".github",
-)
+# Generated, and its published pins are immutable — see the module docstring.
+_UNSCANNED_TREE = "schemas/"
 
-# Text formats. Anything else in these trees (fixtures, binaries) carries no
-# prose a reader would mistake for an explanation.
-_SCANNED_SUFFIXES = frozenset({".py", ".md", ".yml", ".yaml", ".json", ".toml", ".txt"})
-
-# Repo-relative posix path prefixes (or exact paths) the sweep does not reach.
-# Every entry names a surface where a ticket number is either GitHub-native,
-# immutable, or not ours to edit. `test_the_guard_excludes_only_the_paths_it
-# _records` pins this tuple exactly, so nothing joins it without review.
+# Repo-relative posix paths the sweep does not reach. Every entry names a
+# surface where a ticket number is either GitHub-native, immutable, or not ours
+# to edit. `test_the_guard_excludes_only_the_paths_it_records` pins this tuple
+# exactly, so nothing joins it without review.
 _EXCLUDED_PATHS = (
     # A contributor-facing process document about the issue tracker itself: it
     # teaches the consolidation rule by walking real issues as worked precedent
@@ -124,17 +125,27 @@ _KEYWORD_TICKET = re.compile(
 )
 
 # `analitiq-engine#406`, `engine#413`, `analitiq-ai/analitiq-engine#392`. What
-# separates this from a bare ref is a slug character butted against the `#` —
-# not just a word character: `.`, `/` and `-` are all in the charset, which is
-# how the `org/repo#N` form matches. The trailing `(?![\w-])` keeps a markdown
-# anchor into a numbered heading (`README.md#2-layout`) from reading as a ref.
-_CROSS_REPO_TICKET = re.compile(r"\b[A-Za-z][A-Za-z0-9._/-]*#\d+(?![\w-])")
+# separates this from a bare ref is a slug butted against the `#` — `.`, `/` and
+# `-` are all inside the slug, which is how the `org/repo#N` form matches, but
+# the character immediately before `#` must be alphanumeric: a repo name never
+# ends in punctuation, and requiring it keeps prose like `pre-#125` reporting as
+# the bare ref it is rather than as a repo called `pre-`.
+#
+# `\d+\b` is load-bearing, not decorative. Without the `\b` the engine backtracks
+# when the lookahead fails — `README.md#12-layout` would fail at `#12` and then
+# happily match `README.md#1` — which silently defeats the anchor exclusion.
+_CROSS_REPO_TICKET = re.compile(
+    r"\b[A-Za-z][A-Za-z0-9._/-]*[A-Za-z0-9]#\d+\b(?!-[^#])"
+)
 
 # A bare `#108`. Two-digit floor per the module docstring. The lookbehind keeps
-# it from re-matching the tail of a cross-repo ref, from firing on `##123`, and
-# from firing on a JSON-Pointer `#/$defs/…`; the lookahead mirrors the anchor
-# exclusion above.
-_BARE_TICKET = re.compile(r"(?<![\w#/.-])#\d{2,}(?![\w-])")
+# it from re-matching the tail of a cross-repo ref (including a markdown anchor
+# like `README.md#12-layout`), from firing on `##123`, and from firing on a
+# JSON-Pointer `#/$defs/…`. `-` is deliberately NOT in the lookbehind, so
+# `pre-#125` and the far end of a `#150-#152` range are both caught; the
+# trailing lookahead is what separates a range from an anchor, and `\b` stops
+# the backtracking that would otherwise slip under it.
+_BARE_TICKET = re.compile(r"(?<![\w#/.])#\d{2,}\b(?!-[^#])")
 
 # `https://github.com/analitiq-ai/analitiq-engine/issues/406`. Host-anchored, so
 # it does not fire on an ordinary path that happens to end in a number.
@@ -147,32 +158,39 @@ _PATTERNS = (_KEYWORD_TICKET, _CROSS_REPO_TICKET, _BARE_TICKET, _URL_TICKET)
 
 
 def _is_excluded(relpath: str) -> bool:
-    return any(
-        relpath == excluded or relpath.startswith(excluded + "/")
-        for excluded in _EXCLUDED_PATHS
-    )
+    """Exact-match only.
 
-
-def _files_under(root: str) -> list[Path]:
-    """Candidate files for one scanned root.
-
-    The `""` root means the repo's own top-level files and is deliberately NOT
-    recursive: recursing from the root would pull in `schemas/`, `.git/`, and
-    every other tree the roots list exists to choose between.
+    Prefix and suffix matching have both been tried and both leak: a `startswith`
+    arm exempts `CONTRIBUTING.md.bak`, an `endswith` arm exempts
+    `docs/CONTRIBUTING.md`. Every entry is one file, so equality is the whole
+    rule — and `test_exclusion_matching_is_exact` pins the near-misses.
     """
-    base = REPO_ROOT / root
-    return list(base.glob("*") if root == "" else base.rglob("*"))
+    return relpath in _EXCLUDED_PATHS
 
 
-def _scanned_files() -> list[Path]:
-    """Every authored text file the guard reaches, sorted."""
+def _tracked_files() -> list[str]:
+    """Every path git tracks, as repo-relative posix strings.
+
+    Enumerating from git rather than from the filesystem is what makes the scope
+    fail closed (see the module docstring). A failure here is raised, never
+    swallowed: a guard that cannot list the repo must not report it clean.
+    """
+    result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return [line for line in result.stdout.split("\0") if line]
+
+
+def _scanned_files() -> list[str]:
+    """Every tracked file the guard reads, sorted."""
     return sorted(
-        path
-        for root in _SCANNED_ROOTS
-        for path in _files_under(root)
-        if path.is_file()
-        and path.suffix in _SCANNED_SUFFIXES
-        and not _is_excluded(path.relative_to(REPO_ROOT).as_posix())
+        relpath
+        for relpath in _tracked_files()
+        if not relpath.startswith(_UNSCANNED_TREE) and not _is_excluded(relpath)
     )
 
 
@@ -193,7 +211,9 @@ def _matches_in_line(line: str) -> list[str]:
         matched
         for start, end, matched in spans
         if not any(
-            other_start <= start and end <= other_end and (other_start, other_end) != (start, end)
+            other_start <= start
+            and end <= other_end
+            and (other_start, other_end) != (start, end)
             for other_start, other_end, _ in spans
         )
     ]
@@ -211,9 +231,11 @@ def scan_text(text: str) -> list[tuple[int, str]]:
 def _references() -> list[tuple[str, int, str]]:
     """Every (relpath, lineno, matched-text) ticket reference in the repo."""
     return [
-        (path.relative_to(REPO_ROOT).as_posix(), lineno, matched)
-        for path in _scanned_files()
-        for lineno, matched in scan_text(path.read_text(encoding="utf-8"))
+        (relpath, lineno, matched)
+        for relpath in _scanned_files()
+        for lineno, matched in scan_text(
+            (REPO_ROOT / relpath).read_text(encoding="utf-8", errors="strict")
+        )
     ]
 
 
@@ -229,60 +251,38 @@ def test_no_ticket_references_in_authored_text() -> None:
     )
 
 
-# The trees and formats the gate must reach. Asserted as literals rather than by
-# iterating `_SCANNED_ROOTS` / `_SCANNED_SUFFIXES`, because a loop over the
-# config deletes its own assertion when someone trims the config: dropping
-# `plugins` or `.md` narrows the scan by a third and a self-referential loop
-# stays green through it. Every entry here is a surface whose prose ships —
-# to the published schemas, to users' plugin caches, or to contributors.
-_REQUIRED_ROOTS = ("", "packages", "plugins", "scripts", "tests", ".github")
-_REQUIRED_SUFFIXES = (".py", ".md", ".yml")
+def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
+    """Guard the guard: extent, not a sample.
 
-# One named file per required root: proof the root resolves to the tree meant,
-# not merely to something. The two contract modules are the highest-stakes
-# surface in scope — their descriptions render into the published JSON Schemas.
-_REQUIRED_FILES = (
-    "CLAUDE.md",
-    "packages/contract-models/src/analitiq/contracts/connector.py",
-    "packages/contract-models/src/analitiq/contracts/endpoints.py",
-    "plugins/analitiq-connector-builder/CLAUDE.md",
-    "scripts/render_schemas.py",
-    "tests/connector_builder/test_schema_drift.py",
-    ".github/workflows/tests.yml",
-)
+    The gate asserts a list is empty, so a scan reaching fewer files is
+    indistinguishable from a clean repo — and narrowing the scan is the cheapest
+    way to turn it green. The earlier version of this test sampled: it named a
+    few roots, a few suffixes, one file per root. Sampling only ever proves the
+    scan touches *something* in a tree, never that it touches *everything*, so
+    swapping a root for one of its own subdirectories (dropping the whole
+    `analitiq-pipeline-builder` plugin, say) passed clean.
 
-
-def test_the_guard_reaches_the_trees_it_claims_to() -> None:
-    """Guard the guard: a scan that walks nothing passes vacuously.
-
-    The whole gate is an assertion that a list is empty, so a scan reaching zero
-    files is indistinguishable from a clean repo — and narrowing the scan is the
-    cheapest way to make a red gate green. Pin the required roots, suffixes, and
-    a representative file per root, all as literals independent of the config
-    they check.
+    So assert extent directly, against git rather than against a second copy of
+    the layout: every tracked file is scanned unless `schemas/` or
+    `_EXCLUDED_PATHS` says otherwise, and nothing else may be skipped for any
+    reason.
     """
-    scanned = {path.relative_to(REPO_ROOT).as_posix() for path in _scanned_files()}
-    for root in _REQUIRED_ROOTS:
-        prefix = root + "/" if root else ""
-        matched = [
-            rel
-            for rel in scanned
-            if rel.startswith(prefix) and (root or "/" not in rel)
-        ]
-        assert matched, (
-            f"required root {root!r} matched no files — it was renamed, moved, "
-            "or dropped from _SCANNED_ROOTS, and the gate is now blind to "
-            "everything under it."
-        )
-    for suffix in _REQUIRED_SUFFIXES:
-        assert any(rel.endswith(suffix) for rel in scanned), (
-            f"required suffix {suffix!r} matched no files — it was dropped from "
-            "_SCANNED_SUFFIXES, and every document in that format is unlinted."
-        )
-    missing = [required for required in _REQUIRED_FILES if required not in scanned]
+    expected = {
+        relpath
+        for relpath in _tracked_files()
+        if not relpath.startswith(_UNSCANNED_TREE) and relpath not in _EXCLUDED_PATHS
+    }
+    missing = sorted(expected - set(_scanned_files()))
     assert not missing, (
-        f"files the gate must reach are outside the scan: {missing}. Either the "
-        "layout moved and the roots need repointing, or the scan was narrowed."
+        f"{len(missing)} tracked files are not scanned but carry no exemption: "
+        f"{missing[:10]}. The gate is blind to them — either scan them or "
+        "record the exemption in _EXCLUDED_PATHS with its reason."
+    )
+    # Sanity floor: `git ls-files` returning nothing (wrong cwd, no checkout)
+    # would make `expected` empty and the assertion above vacuous.
+    assert len(expected) > 200, (
+        f"only {len(expected)} tracked files enumerated — git listed far less "
+        "than this repo holds, so the extent check above proved nothing."
     )
 
 
@@ -307,51 +307,116 @@ def test_the_guard_excludes_only_the_paths_it_records() -> None:
     )
 
 
+def test_exclusion_matching_is_exact() -> None:
+    """A look-alike path must not inherit an exemption.
+
+    Both loosenings are one character away and neither would fail any other
+    test: a prefix match exempts a `.bak`, a suffix match exempts a same-named
+    file in another directory.
+    """
+    assert _is_excluded("CONTRIBUTING.md")
+    assert not _is_excluded("CONTRIBUTING.md.bak")
+    assert not _is_excluded("CONTRIBUTING.mdx")
+    assert not _is_excluded("docs/CONTRIBUTING.md")
+    assert not _is_excluded("plugins/analitiq-connector-builder/CONTRIBUTING.md")
+    assert not _is_excluded("plugins/analitiq-connector-builder/spec-CHANGELOG.md")
+
+
 def test_exclusions_are_all_live() -> None:
-    """An exclusion matching nothing is dead config that can mask a later file."""
+    """An exemption must still be doing work, not just naming a file that exists.
+
+    Existence alone is too weak for `CONTRIBUTING.md`: its stated reason is that
+    the file *cites real issues as worked precedent*. If those citations were
+    ever rewritten out, a whole-file exemption would persist over a file nobody
+    watches — which is exactly the state this guard was written to end. So for
+    the excluded files that are exempt because of what they contain, assert they
+    still contain it.
+    """
     stale = [
-        excluded
-        for excluded in _EXCLUDED_PATHS
-        if not (REPO_ROOT / excluded).exists()
+        excluded for excluded in _EXCLUDED_PATHS if not (REPO_ROOT / excluded).exists()
     ]
     assert not stale, (
         f"_EXCLUDED_PATHS entries {stale} name nothing in the tree — drop them "
         "so the exclusion list keeps meaning what it says."
+    )
+    citation_exemptions = (
+        "CONTRIBUTING.md",
+        "plugins/analitiq-connector-builder/CHANGELOG.md",
+        "plugins/analitiq-pipeline-builder/CHANGELOG.md",
+    )
+    inert = [
+        excluded
+        for excluded in citation_exemptions
+        if not scan_text((REPO_ROOT / excluded).read_text(encoding="utf-8"))
+    ]
+    assert not inert, (
+        f"{inert} are exempt because they cite tickets, but no longer cite any. "
+        "Drop the exemption so the file rejoins the gate."
     )
 
 
 # --- Acceptance: each recognised shape, and each deliberate non-match -------
 #
 # The real-tree sweep above goes green the moment the repo is clean, and would
-# stay green if a pattern were later broken. These pin the detector itself.
+# stay green if a pattern were later broken. These pin the detector itself —
+# asserting the matched TEXT, not merely that something matched, so an arm
+# cannot be deleted and quietly covered by a broader pattern's tail.
+
 
 def test_keyword_form_is_flagged() -> None:
-    for line in (
-        "# Capability block v2 (issue " + "#89) adds three facts.",
-        "Issue " + "#424 — canonical arrow_type parameters.",
-        "# Review findings (PR " + "#131) — each shipped as a document.",
-        "See pull request " + "#7 for the rationale.",
-    ):
-        assert scan_text(line), f"keyword ticket ref not detected: {line!r}"
+    """Every arm at a single digit, where no other pattern can cover for it.
+
+    At two or more digits `_BARE_TICKET` matches the tail regardless, so a
+    two-digit case proves nothing about the keyword arm that produced it.
+    """
+    cases = {
+        "the block (issue " + "#7) adds three facts": "issue " + "#7",
+        "Issue " + "#4 — canonical arrow_type parameters": "Issue " + "#4",
+        "Review findings (PR " + "#3) shipped as documents": "PR " + "#3",
+        "See pull request " + "#7 for the rationale": "pull request " + "#7",
+        "See pull requests " + "#7 and elsewhere": "pull requests " + "#7",
+        "the two issues " + "#8 and later": "issues " + "#8",
+        # Whitespace runs: a reflowed comment collapses to two spaces or a tab
+        # far more often than anyone reaches for a second space on purpose.
+        "see pull  request  " + "#9 for this": "pull  request  " + "#9",
+        "settled in issue\t" + "#6 upstream": "issue\t" + "#6",
+    }
+    for line, expected in cases.items():
+        assert scan_text(line) == [(1, expected)], f"keyword arm missed: {line!r}"
 
 
 def test_cross_repo_form_is_flagged() -> None:
-    for line in (
-        "the engine's SQL write path (analitiq-engine" + "#390, settled).",
-        "Both artifacts self-declare their version (engine" + "#413).",
-        "the publisher IAM role is specified by infrastructure" + "#1018",
-        "Adopted verbatim from analitiq-ai/analitiq-engine" + "#392.",
-    ):
-        assert scan_text(line), f"cross-repo ticket ref not detected: {line!r}"
+    cases = {
+        "the SQL write path (analitiq-engine" + "#390, settled)":
+            "analitiq-engine" + "#390",
+        "artifacts self-declare their version (engine" + "#413)":
+            "engine" + "#413",
+        "the IAM role is specified by infrastructure" + "#1018":
+            "infrastructure" + "#1018",
+        "Adopted verbatim from analitiq-ai/analitiq-engine" + "#392.":
+            "analitiq-ai/analitiq-engine" + "#392",
+        # Single digit: only this arm can catch it.
+        "settled in analitiq-engine" + "#7 last year": "analitiq-engine" + "#7",
+    }
+    for line, expected in cases.items():
+        assert scan_text(line) == [(1, expected)], f"cross-repo arm missed: {line!r}"
 
 
 def test_bare_form_is_flagged() -> None:
-    for line in (
-        "Why a token array rather than the dotted string this replaced (" + "#108).",
-        "the shape " + "#125 was filed to eliminate.",
-        "ADV-STRM-008 retired in 1.0.0rc19 (" + "#108).",
-    ):
-        assert scan_text(line), f"bare ticket ref not detected: {line!r}"
+    cases = {
+        "a token array rather than the dotted string (" + "#108).": "#108",
+        "the shape " + "#125 was filed to eliminate.": "#125",
+        "ADV-STRM-008 retired in 1.0.0rc19 (" + "#108).": "#108",
+        # A hyphen prefix is a ref, not an anchor: the lookbehind must allow it.
+        "the pre-" + "#125 spelling stayed valid": "#125",
+    }
+    for line, expected in cases.items():
+        assert scan_text(line) == [(1, expected)], f"bare arm missed: {line!r}"
+    # A range: both ends, not just the first.
+    assert scan_text("closes " + "#150-" + "#152 in one PR") == [
+        (1, "#150"),
+        (1, "#152"),
+    ]
 
 
 def test_url_form_is_flagged() -> None:
@@ -361,12 +426,19 @@ def test_url_form_is_flagged() -> None:
     and it reads like a citation rather than a shorthand. It rots identically —
     a private repo refuses the reader either way.
     """
-    for line in (
-        "See https://github.com/analitiq-ai/analitiq-engine/issues/406 for why.",
-        "Adopted from https://github.com/analitiq-ai/analitiq-engine/pull/392.",
-        "* tracked at github.com/analitiq-ai/claude-code-plugins/issues/150",
-    ):
-        assert scan_text(line), f"URL ticket ref not detected: {line!r}"
+    cases = {
+        "See https://github.com/analitiq-ai/analitiq-engine/issues/406 for why":
+            "github.com/analitiq-ai/analitiq-engine/issues/406",
+        "Adopted from https://github.com/analitiq-ai/analitiq-engine/pull/392":
+            "github.com/analitiq-ai/analitiq-engine/pull/392",
+        "tracked at github.com/analitiq-ai/claude-code-plugins/issues/150":
+            "github.com/analitiq-ai/claude-code-plugins/issues/150",
+        # Case-insensitive: a pasted link is not always lowercased.
+        "see GitHub.com/analitiq-ai/analitiq-engine/Issues/406":
+            "GitHub.com/analitiq-ai/analitiq-engine/Issues/406",
+    }
+    for line, expected in cases.items():
+        assert scan_text(line) == [(1, expected)], f"URL arm missed: {line!r}"
     # Not host-anchored prose: an ordinary path ending in a number is untouched.
     assert scan_text("the fixture lives at corpus/connectors/postgres/17") == []
 
@@ -400,11 +472,11 @@ def test_overlapping_forms_report_one_site() -> None:
 def test_ordinary_prose_is_not_flagged() -> None:
     """False positives would make the gate unusable, so pin the near-misses.
 
-    The last two are the boundary `_CROSS_REPO_TICKET` sits closest to: it is
-    the loosest pattern (`slug#digits`), and a JSON-Pointer `$ref` or a markdown
-    anchor into a numbered heading is exactly `slug` + `#` + something. The
-    scanned trees carry hundreds of the former. Both pass today — these pin that
-    a future widening of the charset cannot quietly break them.
+    The last three are the boundaries the patterns sit closest to.
+    `_CROSS_REPO_TICKET` is the loosest (`slug#digits`), and a JSON-Pointer
+    `$ref` or a markdown anchor into a numbered heading is exactly `slug` + `#` +
+    something; the scanned trees carry hundreds of the former. `##123` is what a
+    doubled comment marker in front of a number looks like.
     """
     for line in (
         "#!/usr/bin/env python3",
@@ -414,6 +486,8 @@ def test_ordinary_prose_is_not_flagged() -> None:
         "run: pip install -r requirements-dev.txt",
         "python-version: ['3.12', '3.13']",
         '"$ref": "connector.json#/$defs/Transport"',
-        "see [the layout](../README.md#2-layout) for the tree",
+        "see [the layout](../README.md#12-layout) for the tree",
+        "##" + "123 — a doubled marker, not a ref",
+        "jump to [the section](" + "#12-section) below",
     ):
         assert scan_text(line) == [], f"false positive on: {line!r}"

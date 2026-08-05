@@ -67,10 +67,11 @@ def test_from_input_defect_is_caught(validator):
 
 
 def test_bare_sqlalchemy_driver_is_a_contract_model_finding(validator):
-    """The sync-driver boundary — a transport's `driver` must name a full
-    `dialect+driver` pair, never a bare dialect — exercised end-to-end: the
-    valid corpus twin (`valid_connector_sync_driver.json`, driver
-    `redshift+redshift_connector`) passes in DOC_CASES above; here the bare
+    """The sync-driver boundary — the driver pattern was async-only and now
+    accepts a sync DBAPI too, so long as the value stays a full `dialect+driver`
+    pair — exercised end-to-end: the valid corpus twin
+    (`valid_connector_sync_driver.json`, driver `redshift+redshift_connector`)
+    passes in DOC_CASES above; here the bare
     variant (no `dialect+` segment) must surface as a contract-model finding
     on the transport's driver field — the model rejection reaching a consumer
     of validate_document, not just the pydantic layer."""

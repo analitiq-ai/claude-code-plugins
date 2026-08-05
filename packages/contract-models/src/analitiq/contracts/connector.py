@@ -1663,9 +1663,9 @@ class SqlCapabilities(StrictModel):
     "Refuse, don't guess": the engine reads these facts instead of probing the
     live database, and refuses at handshake time when a needed fact was not
     declared. Optional as a block, but when present every shape fact is
-    required — a partial declaration is a config error. `limits` (capability
-    block v2) is the one additive member: it and each cap inside it may be
-    omitted, meaning "no declared cap".
+    required — a partial declaration is a config error. `limits` is the one
+    additive member: it and each cap inside it may be omitted, meaning "no
+    declared cap".
     """
 
     catalog: Literal["none", "read", "full"] = Field(

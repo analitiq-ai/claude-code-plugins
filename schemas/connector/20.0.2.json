@@ -3734,7 +3734,7 @@
     },
     "SqlCapabilities": {
       "additionalProperties": false,
-      "description": "SQL write-path capabilities declared by a database connector (ADR \u00a75).\n\n\"Refuse, don't guess\": the engine reads these facts instead of probing the\nlive database, and refuses at handshake time when a needed fact was not\ndeclared. Optional as a block, but when present every shape fact is\nrequired \u2014 a partial declaration is a config error. `limits` (capability\nblock v2) is the one additive member: it and each cap inside it may be\nomitted, meaning \"no declared cap\".",
+      "description": "SQL write-path capabilities declared by a database connector (ADR \u00a75).\n\n\"Refuse, don't guess\": the engine reads these facts instead of probing the\nlive database, and refuses at handshake time when a needed fact was not\ndeclared. Optional as a block, but when present every shape fact is\nrequired \u2014 a partial declaration is a config error. `limits` is the one\nadditive member: it and each cap inside it may be omitted, meaning \"no\ndeclared cap\".",
       "properties": {
         "bulk_load": {
           "$ref": "#/$defs/SqlBulkLoad",

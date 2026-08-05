@@ -465,7 +465,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities",
-        prose_hash="7dace9198066",
+        prose_hash="6b83bfc7f0a6",
         structural=(
             "the required shape facts are non-optional fields on the closed "
             "model; `limits` defaults"

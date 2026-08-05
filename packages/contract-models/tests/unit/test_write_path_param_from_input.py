@@ -590,8 +590,8 @@ class TestPathSegmentEncodingIsEngineOwned:
 
 
 class TestAWritePathParamMustBeAbleToResolve:
-    """ADV-ENDP-028. The document this whole module exists to unblock is
-    contract-valid and unimplementable: a write binding `{id}` to an `in: path`
+    """ADV-ENDP-028. The shape this class refuses used to be contract-valid and
+    unimplementable: a write binding `{id}` to an `in: path`
     param that carries no `default`. On a write a param has exactly ONE source —
     its own `default`.
     `operators` makes a param stream-filterable and `controlled_by` hands it to
