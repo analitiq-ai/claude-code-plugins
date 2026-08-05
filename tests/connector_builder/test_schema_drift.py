@@ -1048,21 +1048,16 @@ def test_write_path_table_parser_reads_the_real_tables() -> None:
     assert _documented_values("bulk_load") is None
     # A label that does not exist at all.
     assert _documented_values("no_such_field") is None
-    # The label cell must match EXACTLY one backticked token, so a header row
-    # cannot be mistaken for a vocabulary row.
+    # A header row carries no code span at all, so it is never a vocabulary row.
     assert _documented_values("Fact") is None
 
-    # `_table_cells_containing` keys on the FIRST code span, so a Fact cell
-    # carrying a cross-reference stays visible. Pin that: reverting it to
-    # "exactly one" would drop such a row from the declaration table, and a
-    # dropped row is a fact the completeness guard never sees.
+    # `_row_cells` keys on the FIRST code span, so a label cell carrying a
+    # cross-reference stays visible — a dropped row is a fact the completeness
+    # guard never sees. Call the real helper: building the same comprehension
+    # here would grade a copy of the rule, and reverting `_row_cells` to the old
+    # "exactly one code span" would leave this green.
     block = ["| `hints` (`spec-hints.md`) | object, optional | Tuning. |"]
-    labels = {
-        found[0]
-        for row in block
-        if (m := _TABLE_ROW.match(row)) and (found := _BACKTICKED.findall(m.group(1)))
-    }
-    assert labels == {"hints"}, (
+    assert set(_row_cells(block)) == {"hints"}, (
         "a table row whose label cell carries a cross-reference must still be "
         "read, keyed on its first code span"
     )
