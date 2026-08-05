@@ -102,8 +102,9 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 Prefer pointing prose at a validated file under a skill's `examples/` tree
 (gated by `tests/*/test_examples*.py`) over an inline fence. An inline
 `json` / `jsonc` fence that stays carries an HTML comment directly above it
-declaring how it is verified (applies to BOTH plugins; review-enforced until
-an extraction gate lands):
+declaring how it is verified (applies to BOTH plugins; machine-enforced for
+the pipeline plugin by `tests/pipeline_builder/test_prose_snippets.py`,
+review-enforced here until a matching gate lands):
 
 - `<!-- validate: <resource> -->` — a full document; must validate against
   that resource's contract.
