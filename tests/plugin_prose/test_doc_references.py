@@ -10,7 +10,7 @@ Two claims, both checked, for **every** plugin under `plugins/`. The roots are
 discovered rather than listed, so a plugin cannot land unnoticed: until it has
 entries in the three per-plugin registries below, this suite is red.
 
-1. **The file exists.** Five citation forms carry it:
+1. **The file exists.** Six citation forms carry it:
 
    - `${CLAUDE_PLUGIN_ROOT}/skills/…/spec-x.md` — the absolute form the agent
      frontmatter uses for required reading. It also names scripts an agent
@@ -33,13 +33,21 @@ entries in the three per-plugin registries below, this suite is red.
      files do not exist, a link out of the tree dangles. A link's `#fragment`
      is checked as a section, below.
 
+   - Backticked paths with any other extension — `` `examples/api-key/
+     api-key.example.json` ``, `` `scripts/endpoint_id.py` `` — when the
+     citation's leading segment names a directory this plugin has. That is the
+     rule that tells a file of this plugin from `definition/connector.json`,
+     which is what the connector *author* writes, and from
+     `connection/latest.json` or `America/New_York`, which are not files at
+     all. An example an agent is told to copy starves it exactly as a missing
+     spec does.
+
    What is **not** checked, each a decision rather than an oversight:
 
-   - A non-`.md` path in any form but the first. A backticked `connector.py`
-     or `definition/connector.json` names an artifact the connector author
-     writes, not a file of this plugin, and telling the two apart needs a rule
-     this guard does not have. Agent-run scripts are covered because agents
-     invoke them through `${CLAUDE_PLUGIN_ROOT}`.
+   - A path with no directory segment, and a path whose leading segment names
+     no directory of this plugin. The first is indistinguishable from an
+     ordinary prose word; the second is addressing something else — an
+     authored artifact, a schema URL's tail, a timezone.
    - A same-document link, `](#a-heading)`. No plugin writes one; adding an
      extractor for a form with no sites would be a pattern nothing can floor,
      which is the shape of a guard that dies without anyone noticing.
@@ -132,6 +140,15 @@ _BARE_PATH_REF = re.compile(
 
 _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 
+# A backticked path with any other extension: `examples/api-key/api-key.
+# example.json`, `scripts/endpoint_id.py`. Most such paths in prose are
+# artifacts the *author* writes (`definition/connector.json`) or addresses
+# elsewhere entirely (`connection/latest.json`, `America/New_York`), which is
+# why this form is filtered rather than swept — see `_asset_citations`.
+_BARE_ASSET_REF = re.compile(
+    r"`((?:\.{1,2}/)*(?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)`"
+)
+
 # A markdown link target and its optional fragment: `](spec-columns.md)`,
 # `](../endpoint-spec/x.md)`, `](x.md#uniqueness)`. Kept apart from the
 # patterns above because it resolves differently — relative to the citing file,
@@ -214,7 +231,12 @@ _EXTERNAL_REFS: dict[str, set[str]] = {
         # write path. The citing prose attributes it to the engine.
         "docs/sql-write-path-v2.md",
     },
-    "analitiq-pipeline-builder": set(),
+    "analitiq-pipeline-builder": {
+        # A repo-root script, cited from this plugin's contributor guidance
+        # because it is what renders the validator-behaviour claims. It lives
+        # in the repo, not in the installed plugin.
+        "scripts/render_validator_claims.py",
+    },
 }
 
 # Every citation form this suite extracts, and the extractor that finds it.
@@ -227,6 +249,7 @@ _FORM_PATTERNS = {
     "backticked": _BARE_REF,
     "bare_path": _BARE_PATH_REF,
     "link": _LINK_REF,
+    "asset": _BARE_ASSET_REF,
 }
 _FORMS = (*_FORM_PATTERNS, "anchor")
 
@@ -247,6 +270,7 @@ _REPO_FLOORS: dict[str, int] = {
     "backticked": 120,
     "bare_path": 6,
     "link": 3,
+    "asset": 15,
     "anchor": 20,
 }
 
@@ -262,12 +286,14 @@ _FLOORS: dict[str, dict[str, int]] = {
         "plugin_root": 10,
         "backticked": 70,
         "bare_path": 5,
+        "asset": 7,
         "anchor": 15,
     },
     "analitiq-pipeline-builder": {
         "plugin_root": 2,
         "backticked": 50,
         "link": 3,
+        "asset": 7,
         "anchor": 4,
     },
 }
@@ -303,6 +329,8 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             "plugin_root": "skills/connector-spec-db/spec-connector-package.md",
             "bare_path": "skills/connector-builder/references/metadata-and-versioning.md",
             "backticked": "spec-sql-write-path.md",
+            # The archetype an API creator copies, cited by three specs.
+            "asset": "skills/connector-spec-api/examples/api-key/api-key.example.json",
         },
         "fixture": (
             "skills/connector-builder/references/metadata-and-versioning.md",
@@ -321,6 +349,8 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             # The one link in either plugin that routes an agent rather than a
             # reader: a stream spec sending its author to the column spec.
             "link": "skills/endpoint-spec/spec-columns.md",
+            # The script six documents tell an agent to run for derived ids.
+            "asset": "scripts/endpoint_id.py",
         },
         "fixture": (
             "skills/pipeline-builder/references/identity-and-versioning.md",
@@ -602,6 +632,54 @@ def _anchor_resolves(anchor: str, headings: list[str], exact: bool = False) -> b
     return False
 
 
+@cache
+def _plugin_dirs(plugin: str) -> frozenset[str]:
+    """Every directory name the plugin contains, at any depth — the vocabulary
+    that tells a citation of a plugin file from a path about something else."""
+    root = _plugin_root(plugin)
+    return frozenset(
+        Path(path).name for path in _plugin_paths(plugin) if (root / path).is_dir()
+    )
+
+
+def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
+    """Backticked non-`.md` citations that name a file of *this plugin*.
+
+    Prose writes two very different things in this form. `examples/api-key/
+    api-key.example.json` and `scripts/endpoint_id.py` are files an agent is
+    sent to read, and renaming one starves it exactly as a missing spec does.
+    `definition/connector.json`, `.secrets/credentials.json`,
+    `connection/latest.json`, `America/New_York` are not files of this plugin
+    at all — they are what the *author* writes, a schema URL's tail, a
+    timezone.
+
+    The discriminator is the plugin's own directory vocabulary: a citation
+    whose leading segment names a directory this plugin has is addressing this
+    plugin. Measured over every backticked non-`.md` path in both plugins, that
+    separates them with one exception — a repo-root script cited from plugin
+    prose, which is what `_EXTERNAL_REFS` is for.
+    """
+    root = _plugin_root(plugin)
+    return [
+        (rel, lineno, target)
+        for path in _prose_files(plugin)
+        for rel in [path.relative_to(root).as_posix()]
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        for match in _BARE_ASSET_REF.finditer(line)
+        for target in [match.group(1)]
+        if _addresses_this_plugin(target, plugin)
+    ]
+
+
+def _addresses_this_plugin(target: str, plugin: str) -> bool:
+    """Is this backticked path a file of this plugin, or something else the
+    prose merely names? The one filter — the sweep and its tests read it, so
+    they cannot disagree about what an asset citation is."""
+    if target.endswith(".md"):
+        return False  # the `.md` forms already read it
+    return _clean(target).lstrip("./").split("/")[0] in _plugin_dirs(plugin)
+
+
 def _references(plugin: str) -> list[tuple[str, int, str]]:
     """Every (relpath, lineno, target) path citation in the plugin."""
     root = _plugin_root(plugin)
@@ -609,7 +687,7 @@ def _references(plugin: str) -> list[tuple[str, int, str]]:
         (path.relative_to(root).as_posix(), lineno, target)
         for path in _prose_files(plugin)
         for lineno, target in _scan_text(path.read_text(encoding="utf-8"))
-    ]
+    ] + _asset_citations(plugin)
 
 
 def _links_in(text: str) -> list[tuple[int, str, str]]:
@@ -962,9 +1040,13 @@ def _form_counts(plugin: str) -> dict[str, int]:
             for line in text.splitlines()
         )
         for form in _FORM_PATTERNS
+        if form != "asset"
     }
     _dangling, checked = _anchor_checks(plugin, _anchor_references(plugin))
-    return per_line | {"anchor": checked}
+    # `asset` counts what the filter kept, not what the pattern matched: the
+    # pattern also sees paths this plugin does not own, and a floor on those
+    # would be met by prose about `definition/connector.json`.
+    return per_line | {"anchor": checked, "asset": len(_asset_citations(plugin))}
 
 
 def _unreached_sentinels(plugin: str, sentinels: dict[str, str]) -> dict[str, str]:
@@ -1136,6 +1218,10 @@ def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
     reader-facing README link from one that routes an agent."""
     if form == "link":
         return [(rel, target) for rel, _lineno, target, _frag in _link_references(plugin)]
+    if form == "asset":
+        # Filtered by the plugin's own directory vocabulary, so the raw pattern
+        # would over-count by half with paths this plugin does not own.
+        return [(rel, target) for rel, _lineno, target in _asset_citations(plugin)]
     root = _plugin_root(plugin)
     return [
         (path.relative_to(root).as_posix(), match.group(1))
@@ -1568,6 +1654,52 @@ def test_resolving_citations_pass(plugin: str) -> None:
     assert [target for _lineno, target in _scan_text(twin)].count(existing) == 2
     # … and resolve, so nothing dangles.
     assert _dangling_in(twin, plugin) == []
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_cited_example_file_is_guarded(plugin: str) -> None:
+    """An example an agent is told to copy is a citation like any other —
+    renaming it starves the agent the same way a missing spec does. The `.md`
+    passes cannot see these, and the census cannot either: `.md` is its
+    trigger, so this form needs its own extractor and its own floor."""
+    citations = _asset_citations(plugin)
+    assert citations, "no plugin-owned non-`.md` citation found at all"
+    # Each resolves from the document it is written in — the same predicate
+    # the file pass runs, so this is the sweep, not a second opinion.
+    unresolved = [
+        (rel, lineno, target)
+        for rel, lineno, target in citations
+        if _is_dangling(target, plugin, rel)
+    ]
+    assert not unresolved, unresolved
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_only_this_plugins_files_are_read_as_asset_citations(plugin: str) -> None:
+    """The discriminator, both ways. A leading segment this plugin has means
+    the citation addresses this plugin; anything else is the author's artifact,
+    a schema URL's tail, or a timezone — and grading those would fail the build
+    on prose that is correct."""
+    assert {"examples", "skills"} <= _plugin_dirs(plugin)
+    assert _addresses_this_plugin("examples/nowhere/gone.example.json", plugin)
+    for elsewhere in (
+        "definition/connector.json",  # what the connector author writes
+        "connection/latest.json",  # a published schema URL's tail
+        "America/New_York",  # not a file
+        ".secrets/credentials.json",  # the user's, not the plugin's
+        "skills/x/spec-y.md",  # a `.md`, read by the other passes
+    ):
+        assert not _addresses_this_plugin(elsewhere, plugin), elsewhere
+    # And the floor counts what the filter kept. Counting raw matches would
+    # let prose about `definition/connector.json` satisfy a floor meant to
+    # prove this plugin's own examples are still cited.
+    raw = sum(
+        len(_BARE_ASSET_REF.findall(line))
+        for path in _prose_files(plugin)
+        for line in path.read_text(encoding="utf-8").splitlines()
+    )
+    kept = len(_asset_citations(plugin))
+    assert _form_counts(plugin)["asset"] == kept < raw
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
