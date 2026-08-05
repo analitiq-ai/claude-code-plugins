@@ -111,10 +111,10 @@ def test_extraction_finds_the_grounding_bullets() -> None:
     # reworded away and its tokens would silently leave the guard. Adding or
     # removing a `- For databases:` bullet is a recorded decision — update
     # this count with it.
-    assert len(bullets) == 2, (
-        f"expected exactly 2 '- For databases:' bullets under '## Hard rules' "
-        f"in {RESEARCHER.name}, found {len(bullets)} — if the prose "
-        "restructured deliberately, update this count."
+    assert len(bullets) == 3, (
+        f"expected exactly 3 '- For databases:' bullets under '## Hard rules' "
+        f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(bullets)} — if the "
+        "prose restructured deliberately, update this count."
     )
     tokens = {t for b in bullets for t in _FIELD_TOKEN.findall(b)}
     assert tokens, "no backticked field tokens extracted from the bullets"
@@ -150,10 +150,24 @@ def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
     next edited."""
     known = _known_fields(_provider_facts_schema())
     expected = {"adbc_driver_package", "flight_sql_endpoint", "bulk_load_protocol",
-                "sqlalchemy_driver", "tls", "tls.supported_modes"}
+                "sqlalchemy_driver", "tls", "tls.supported_modes",
+                # The RESEARCHED subset of the sql_capabilities inputs —
+                # `bulk_load` and `stage.schema` are authoring decisions with no
+                # carrier here, by design. The creator declares the rest to an
+                # engine that refuses rather than guesses, so losing a carrier
+                # would silently push it back to assuming them.
+                "sql_write_path", "sql_write_path.upsert_grammar",
+                "sql_write_path.catalog_model",
+                "sql_write_path.qualified_statement_targeting",
+                "sql_write_path.temp_table_support",
+                "sql_write_path.transactional_ddl",
+                "sql_write_path.identifier_limits"}
     missing = sorted(expected - known)
     assert not missing, (
         f"ProviderFacts database branch lost field(s) {missing} — if the "
-        "rename/removal is intentional, update the researcher prose bullets "
+        "rename/removal is intentional, update the fragment in "
+        f"{IO_CONTRACTS.relative_to(REPO_ROOT)}, the grounding bullets in "
+        f"{RESEARCHER.relative_to(REPO_ROOT)}, the per-fact sources in "
+        "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
         "and this expectation together."
     )

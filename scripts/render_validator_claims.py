@@ -427,6 +427,28 @@ def _p_tls_coherence() -> list[dict]:
     return _staged_connector(mutate, DB_EXAMPLE)
 
 
+def _p_sql_capabilities_shape_checked() -> list[dict]:
+    """The half `spec-sql-write-path.md` claims the validator DOES do: the
+    `sql_capabilities` value sets are closed, so a bogus `merge_form` errors."""
+    def mutate(doc: dict) -> dict:
+        doc["sql_capabilities"]["merge_form"] = "not_a_real_form"
+        return doc
+    return _staged_connector(mutate, DB_EXAMPLE)
+
+
+def _p_sql_capabilities_pairing_unchecked() -> list[dict]:
+    """The half it claims the validator does NOT do. A declared `bulk_load`
+    mechanism obliges the package to implement the `bulk_land` hook, but the
+    validator only ever sees JSON — `connector.py` is the CDK conformance kit's
+    surface — so the declaration↔hook pairing cannot be checked here. This is
+    what "validates cleanly and is refused at handshake" means, and it is why
+    the sentence has to warn rather than rely on the validator."""
+    def mutate(doc: dict) -> dict:
+        doc["sql_capabilities"]["bulk_load"] = {"sqlalchemy": "copy_from"}
+        return doc
+    return _staged_connector(mutate, DB_EXAMPLE)
+
+
 def _p_read_map_completeness() -> list[dict]:
     read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map[:1])
@@ -582,6 +604,13 @@ PROBES: tuple[Probe, ...] = (
     # what expect="clean" alone cannot give: a warning-tier check for X would
     # falsify the sentence while leaving the document error-free.
     Probe("connector-refs-unchecked", "clean", _p_connector_refs_unchecked),
+    # The closed-value-set error names the ALLOWED values, not the field, so the
+    # pattern pins the vocabulary rather than the key — which is the half of the
+    # sentence that matters ("closed value sets").
+    Probe("sql-capabilities-shape-checked", "error", _p_sql_capabilities_shape_checked,
+          message_re=r"insert_on_conflict.*insert_on_duplicate_key"),
+    Probe("sql-capabilities-pairing-unchecked", "clean", _p_sql_capabilities_pairing_unchecked,
+          forbid_re=r"(?i)bulk_l(oad|and)|connector\.py|conformance"),
     Probe("connector-function-name-unchecked", "clean", _p_connector_function_name,
           forbid_re=r"(?i)function"),
     Probe("connector-lookup-map-unvalidated", "clean", _p_connector_lookup_map,
@@ -1101,11 +1130,16 @@ WAIVERS: tuple[Waiver, ...] = (
         "imperative workflow instruction to the orchestrator, not a claim about "
         "what the validator checks.",
     ),
+    # The BigQuery "primary keys are NOT ENFORCED" waiver was dropped here: the
+    # sentence lived in the rc13 `_record_batch_commit_via_adbc` section that
+    # the rc17 write-path rewrite deleted (issue #95). A waiver matching nothing
+    # is exactly what `check`'s stale-waiver arm exists to catch.
     Waiver(
-        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-connector-package.md",
-        "BigQuery primary keys\nare NOT ENFORCED",
-        "a statement about BigQuery's database semantics, not about this "
-        "repo's validator.",
+        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-sql-write-path.md",
+        "Nothing catches this: the engine verifies",
+        "engine RUNTIME behavior (what the write path verifies after landing "
+        "rows), not this repo's validator. No model here can probe it, and the "
+        "engine is the authority — so it is declared rather than pinned.",
     ),
     Waiver(
         "plugins/analitiq-pipeline-builder/agents/stream-creator.md",

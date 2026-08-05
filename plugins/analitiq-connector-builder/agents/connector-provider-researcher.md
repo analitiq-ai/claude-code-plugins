@@ -132,6 +132,24 @@ When the resource is writable, also ground:
   `mysql+aiomysql` or `redshift+redshift_connector`). Leave each unset when
   the docs don't establish it — the JDBC bridge never counts as an ADBC
   driver.
+- For databases: ground the **write-path** facts into `sql_write_path` —
+  `sql_write_path.upsert_grammar` (the documented native upsert statement,
+  verbatim, or null when the system has none),
+  `sql_write_path.catalog_model`,
+  `sql_write_path.qualified_statement_targeting`,
+  `sql_write_path.temp_table_support`,
+  `sql_write_path.transactional_ddl`, and both caps under
+  `sql_write_path.identifier_limits` —
+  `sql_write_path.identifier_limits.max_identifier_len` (in bytes) and
+  `sql_write_path.identifier_limits.max_bind_params`, which is a
+  statement cap rather than an identifier one and is easy to overlook.
+  The creator declares these to
+  the engine, which **refuses rather than guesses**, so a fact the docs do
+  not establish must be left unset and reported as a gap — never inferred
+  from a similar or wire-compatible system. Omitting a field and setting
+  it null are different signals: omit what the docs do not establish; use
+  null only where the field allows it to record a documented absence
+  (`upsert_grammar: null` = "this system documents no native upsert").
 - WebSearch is for locating the official docs only (when the user did not
   supply a URL) — never a source of facts. Every extracted fact must come from
   a first-party documentation page fetched with WebFetch; never cite blogs,

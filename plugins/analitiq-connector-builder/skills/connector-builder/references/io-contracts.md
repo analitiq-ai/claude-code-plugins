@@ -144,7 +144,41 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "bulk_load_protocol": {
           "type": "string",
-          "description": "The system's native bulk-load path when no ADBC driver exists (e.g. 'LOAD DATA LOCAL INFILE', 'COPY FROM stdin BINARY', 'fast_executemany'). Drives step 3 — SQLAlchemy transport with the bulk path implemented in the connector class."
+          "description": "The system's native bulk-load protocol when no ADBC driver exists, as the vendor documents it (e.g. 'LOAD DATA LOCAL INFILE', 'COPY FROM stdin BINARY'). A driver-side executemany tuning knob (SQL Server's fast_executemany, oracledb's arraysize) is NOT one — record it in notes instead, since it makes the ordinary executemany landing fast rather than adding a protocol. Informs step 3 of the driver-selection order, but only a protocol in the closed sql_capabilities.bulk_load vocabulary can actually be declared; anything else lands via executemany at tier 4."
+        },
+        "sql_write_path": {
+          "type": ["object", "null"],
+          "description": "Documented facts the creator needs to declare sql_capabilities (connector-spec-db/spec-sql-write-path.md). The engine refuses, it does not guess, so an ungrounded fact must be left unset and reported as a gap rather than assumed. Two signals, deliberately distinct: OMIT a field the docs do not establish (the creator reports a research gap), and use NULL only where the field admits it to record a documented ABSENCE — `upsert_grammar: null` means the system documents no native upsert, which is a fact the creator maps to merge_form 'none'.",
+          "properties": {
+            "upsert_grammar": {
+              "type": ["string", "null"],
+              "description": "The system's documented native upsert statement, verbatim (e.g. 'INSERT ... ON CONFLICT DO UPDATE', 'INSERT ... ON DUPLICATE KEY UPDATE', 'MERGE'); null when the system documents none."
+            },
+            "catalog_model": {
+              "type": "string",
+              "description": "How the system addresses catalogs/databases: whether ONE CONNECTION can reference across them (the deciding fact — not merely whether a database level exists above the schema, which it does on Postgres and MySQL without being cross-addressable), and whether the docs permit creating/dropping them."
+            },
+            "qualified_statement_targeting": {
+              "type": "boolean",
+              "description": "True when statements may fully qualify the target (schema.table); false when the write target must be established as session state (e.g. USE / search_path)."
+            },
+            "temp_table_support": {
+              "type": "string",
+              "description": "The documented session/transaction-scoped temporary relation syntax, or a note that the system has none (which forces a real staging table)."
+            },
+            "transactional_ddl": {
+              "type": "boolean",
+              "description": "Whether CREATE/DROP TABLE participate in a transaction. False for engines documenting an implicit commit on DDL (MySQL). Omit when the docs do not establish it — a boolean has no 'documented absence' state, so omission is the only unknown signal, and this is a correctness fact the creator must not assume."
+            },
+            "identifier_limits": {
+              "type": "object",
+              "description": "Documented driver/engine caps: max identifier length in bytes, max bind parameters per statement. Omit a cap the docs do not state.",
+              "properties": {
+                "max_identifier_len": { "type": "integer" },
+                "max_bind_params": { "type": "integer" }
+              }
+            }
+          }
         },
         "sqlalchemy_driver": {
           "type": "string",
@@ -313,7 +347,8 @@ access and may not guess field types).
               "input-removed", "input-renamed", "input-type-changed",
               "input-enum-narrowed", "storage-changed",
               "non-optional-input-added", "auth-shape-changed",
-              "discovery-shape-changed", "optional-input-added",
+              "discovery-shape-changed", "sql-capabilities-changed",
+              "optional-input-added",
               "optional-output-added", "optional-endpoint-added",
               "type-map-rule-added", "type-map-rule-removed",
               "type-map-rule-reordered", "type-map-canonical-changed",
@@ -393,7 +428,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
           "additionalProperties": false,
           "description": "Python package files for kind=database connectors (the connector root IS the package). MUST be null for kind=api. Written by the orchestrator to {connector_id}/connector.py, __init__.py, requirements.txt, pyproject.toml. Contents follow the connector-package contract in connector-spec-db/spec-connector-package.md; enforcement (wheel build, entry points) is registry CI's job, not the schema validator's.",
           "properties": {
-            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector); CDK imports only." },
+            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector); imports per connector-spec-db/spec-connector-package.md section Import rules." },
             "init_py":          { "type": "string", "minLength": 1, "description": "Re-exports the connector + dialect classes." },
             "requirements_txt": { "type": "string", "minLength": 1, "description": "THIS connector's driver(s) only — the SQLAlchemy DBAPI (sync or async) and/or adbc-driver-{driver} wheel." },
             "pyproject_toml":   { "type": "string", "minLength": 1, "description": "name=analitiq-connector-{connector_id}; dynamic dependencies from requirements.txt; package-dir maps the repo root; entry points named {connector_id} under analitiq.source_connectors AND analitiq.destination_connectors." }

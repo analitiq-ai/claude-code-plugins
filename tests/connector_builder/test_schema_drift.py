@@ -29,6 +29,7 @@ failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 
@@ -72,8 +73,8 @@ EXPECTED_ADBC_DRIVERS = {"postgresql", "snowflake", "bigquery"}
 # SqlAlchemyTransport.driver is deliberately an OPEN `dialect+driver` pattern —
 # no driver allow-list (sync and async DBAPIs are both authorable; dispatch is
 # engine-side). The openness itself is what the prose restates as decision
-# logic (spec-driver-selection.md §Constraints, the Redshift routing, the
-# db-connector-creator checklist), so pin the pattern: a re-tightening — e.g.
+# logic (spec-driver-selection.md §Constraints and its sync/async guidance,
+# the db-connector-creator checklist), so pin the pattern: a re-tightening — e.g.
 # a revert to the old async-only alternation — must fail here and move the
 # prose in the same change.
 EXPECTED_SQLALCHEMY_DRIVER_PATTERN = r"^[a-z][a-z0-9_]*\+[a-z][a-z0-9_]*$"
@@ -84,6 +85,47 @@ EXPECTED_DSN_ENCODINGS = {
     "url_path_segment",
     "url_query_key",
     "url_query_value",
+}
+# The SQL write-path declaration (`sql_capabilities`, engine ADR §5). The
+# creator agent must pick each value from researched provider facts, so
+# spec-sql-write-path.md restates the vocabularies as decision logic — the
+# "mapping logic" exemption — and pins them here. The five required shape facts
+# are pinned too: the spec teaches that a declared block is COMPLETE and a
+# partial one is a config error, which is only true while these five are the
+# required set. (`limits` stays out — it is the additive member.)
+EXPECTED_SQL_CAPABILITY_FACTS = {
+    "catalog",
+    "session_targeting",
+    "merge_form",
+    "bulk_load",
+    "stage",
+}
+EXPECTED_SQL_CATALOG_MODES = {"none", "read", "full"}
+EXPECTED_SQL_SESSION_TARGETING = {"per_statement", "session_default"}
+EXPECTED_SQL_MERGE_FORMS = {
+    "merge",
+    "insert_on_conflict",
+    "insert_on_duplicate_key",
+    "none",
+}
+EXPECTED_SQL_STAGE_FACTS = {"scope", "schema", "transactional_ddl"}
+# The full property set, i.e. the three above plus the conditional
+# `dedicated_schema` — which is restated in the prose (the required-iff rule)
+# but, being conditional, never appears in `required`.
+EXPECTED_SQL_STAGE_PROPERTIES = EXPECTED_SQL_STAGE_FACTS | {"dedicated_schema"}
+EXPECTED_SQL_STAGE_SCOPES = {"temp", "real"}
+EXPECTED_SQL_STAGE_SCHEMAS = {"target", "dedicated"}
+# Additive, so neither cap is in any `required` list — but both names are
+# restated in prose, and `max_bind_params` appears in no example, so nothing
+# else would notice a rename.
+EXPECTED_SQL_LIMIT_CAPS = {"max_bind_params", "max_identifier_len"}
+# Per-transport, not connector-wide: `adbc_ingest` is the ADBC backend's own
+# landing and is unrepresentable under `sqlalchemy`. The split is what the
+# prose teaches — declaring it "involves no dialect code" — so pin both
+# families; a collapse back to one shared set must move the prose with it.
+EXPECTED_SQL_BULK_MECHANISMS = {
+    "sqlalchemy": {"copy_from", "load_data_local_infile", "load_job"},
+    "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # WriteOperation.idempotency `in` targets (api-endpoint ≥ 9.1.0,
@@ -317,7 +359,7 @@ def _slug_literal_sites() -> list[tuple[str, int, str]]:
     return [
         (path.relative_to(PLUGIN_ROOT).as_posix(), lineno, match.group(0))
         for path in sorted(PLUGIN_ROOT.rglob("*.md"))
-        for lineno, line in enumerate(path.read_text().splitlines(), 1)
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         for match in _SLUG_LITERAL_RE.finditer(line)
     ]
 
@@ -414,6 +456,448 @@ def test_dsn_encodings_match_schema(connector_schema: dict) -> None:
         "update the Encoding values table in "
         "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-dsn-bindings.md.",
     )
+
+
+# Every prose site restating a write-path vocabulary. `spec-driver-selection.md`
+# is on the list because its tier-3 table names the mechanisms verbatim, and
+# `io-contracts.md` because `qualified_statement_targeting` is a BOOLEAN carrier
+# for the two-valued `session_targeting` — widening that enum leaves the
+# ProviderFacts fragment unable to express the new value.
+_WRITE_PATH_FIX = (
+    "update the decision tables in "
+    "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-sql-write-path.md, "
+    "the mechanism table in "
+    "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-driver-selection.md, "
+    "the authoring order in "
+    "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
+    "both archetypes under "
+    "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/, "
+    "and the ProviderFacts carriers in "
+    "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md."
+)
+
+
+def test_driver_selection_mechanism_table_matches_the_contract() -> None:
+    """`spec-driver-selection.md` maps a researched protocol onto the closed set.
+
+    That mapping is the sanctioned decision-logic copy — the whole point of the
+    tier-3 section after the per-system table was removed — so the names in it
+    must be exactly the dialect-implemented mechanisms. `adbc_ingest` is
+    excluded: it belongs to tier 1 and obliges no dialect code, which is why the
+    SQLAlchemy family IS the dialect-implemented set.
+    """
+    rows = {
+        found[0]
+        for line in DRIVER_SELECTION_SPEC.read_text(encoding="utf-8").splitlines()
+        if (m := _TABLE_ROW.match(line))
+        and len(found := _BACKTICKED.findall(m.group(1))) == 1
+    }
+    expected = EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]
+    assert rows == expected, (
+        f"the mechanism table in {DRIVER_SELECTION_SPEC.relative_to(REPO_ROOT)} "
+        f"names different mechanisms than the contract — "
+        f"prose-only={sorted(rows - expected)} "
+        f"contract-only={sorted(expected - rows)}. {_WRITE_PATH_FIX}"
+    )
+
+
+def _required_at(schema: dict, def_name: str) -> set[str] | None:
+    """The `required` set of a `$def`, or None when the def/list is gone.
+
+    Deliberately not routed through `_enum_at`/`_diff_msg`'s enum wording: a
+    required set is not an enum, and reporting "enum not found at the expected
+    pointer" for a renamed `$def` sends the reader looking for the wrong thing.
+    """
+    node = (schema.get("$defs") or {}).get(def_name)
+    if not isinstance(node, dict) or not isinstance(node.get("required"), list):
+        return None
+    return set(node["required"])
+
+
+def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str:
+    """Diff message for a NAME set (required list or property keys).
+
+    Separate from `_diff_msg` because these are not enums: reporting "enum not
+    found at the expected pointer" for a renamed `$def` sends the reader
+    looking for the wrong thing. The missing-node wording is deliberately
+    generic ("not found at that $def") so the same helper can serve both a
+    `required` list and a `properties` key set without lying about which it
+    read.
+    """
+    if found is None:
+        return (
+            f"{label}: not found at that $def — the contract was "
+            f"restructured. {_WRITE_PATH_FIX}"
+        )
+    return (
+        f"{label} drift — {_WRITE_PATH_FIX} "
+        f"schema-only={sorted(found - expected)} "
+        f"plugin-only={sorted(expected - found)}"
+    )
+
+
+def test_sql_capability_facts_match_schema(connector_schema: dict) -> None:
+    """The five shape facts a declared `sql_capabilities` block must carry.
+
+    `limits` is excluded deliberately — it is the additive member, and the
+    prose says so. If it ever became required (or one of the five optional),
+    "a declared block is complete" would stop being true.
+    """
+    required = _required_at(connector_schema, "SqlCapabilities")
+    assert required == EXPECTED_SQL_CAPABILITY_FACTS, _set_diff_msg(
+        "sql_capabilities required facts", required, EXPECTED_SQL_CAPABILITY_FACTS
+    )
+
+
+def test_sql_stage_facts_match_schema(connector_schema: dict) -> None:
+    """Same claim, one level down: the stage block's three required fields.
+
+    `spec-sql-write-path.md` presents `scope` / `schema` / `transactional_ddl`
+    as the complete stage declaration and `db-connector-creator.md` checklists
+    against it. Without this, making `transactional_ddl` optional (the fact an
+    author is most likely to want to skip) leaves the whole plugin suite green.
+    `dedicated_schema` is conditional, so it is never in `required`.
+    """
+    required = _required_at(connector_schema, "SqlStageCapabilities")
+    assert required == EXPECTED_SQL_STAGE_FACTS, _set_diff_msg(
+        "sql_capabilities.stage required facts", required, EXPECTED_SQL_STAGE_FACTS
+    )
+    # `dedicated_schema` is conditional, so `required` alone cannot catch it
+    # being renamed out from under the prose's required-iff rule.
+    node = (connector_schema.get("$defs") or {}).get("SqlStageCapabilities")
+    props = set((node.get("properties") or {})) if isinstance(node, dict) else None
+    assert props == EXPECTED_SQL_STAGE_PROPERTIES, _set_diff_msg(
+        "sql_capabilities.stage properties", props, EXPECTED_SQL_STAGE_PROPERTIES
+    )
+
+
+def test_sql_catalog_modes_match_schema(connector_schema: dict) -> None:
+    schema_set = _enum_at(
+        connector_schema, "$defs", "SqlCapabilities", "properties", "catalog"
+    )
+    assert schema_set == EXPECTED_SQL_CATALOG_MODES, _diff_msg(
+        "sql_capabilities.catalog", schema_set, EXPECTED_SQL_CATALOG_MODES,
+        _WRITE_PATH_FIX,
+    )
+
+
+def test_sql_session_targeting_matches_schema(connector_schema: dict) -> None:
+    schema_set = _enum_at(
+        connector_schema, "$defs", "SqlCapabilities", "properties", "session_targeting"
+    )
+    assert schema_set == EXPECTED_SQL_SESSION_TARGETING, _diff_msg(
+        "sql_capabilities.session_targeting", schema_set,
+        EXPECTED_SQL_SESSION_TARGETING, _WRITE_PATH_FIX,
+    )
+
+
+def test_sql_merge_forms_match_schema(connector_schema: dict) -> None:
+    """The upsert grammars — each obliging `merge_statement_sql` except `none`."""
+    schema_set = _enum_at(
+        connector_schema, "$defs", "SqlCapabilities", "properties", "merge_form"
+    )
+    assert schema_set == EXPECTED_SQL_MERGE_FORMS, _diff_msg(
+        "sql_capabilities.merge_form", schema_set, EXPECTED_SQL_MERGE_FORMS,
+        _WRITE_PATH_FIX,
+    )
+
+
+def test_sql_stage_vocabularies_match_schema(connector_schema: dict) -> None:
+    scopes = _enum_at(
+        connector_schema, "$defs", "SqlStageCapabilities", "properties", "scope"
+    )
+    assert scopes == EXPECTED_SQL_STAGE_SCOPES, _diff_msg(
+        "sql_capabilities.stage.scope", scopes, EXPECTED_SQL_STAGE_SCOPES,
+        _WRITE_PATH_FIX,
+    )
+    # Wire name, not the Python `schema_` alias.
+    schemas = _enum_at(
+        connector_schema, "$defs", "SqlStageCapabilities", "properties", "schema"
+    )
+    assert schemas == EXPECTED_SQL_STAGE_SCHEMAS, _diff_msg(
+        "sql_capabilities.stage.schema", schemas, EXPECTED_SQL_STAGE_SCHEMAS,
+        _WRITE_PATH_FIX,
+    )
+
+
+def test_sql_bulk_mechanisms_match_schema(connector_schema: dict) -> None:
+    """Per-transport bulk mechanisms, pinned per family.
+
+    Comparing a flattened union would let `adbc_ingest` migrate onto the
+    SQLAlchemy family unnoticed — and the prose's "involves no dialect code"
+    carve-out is stated for the ADBC family alone.
+    """
+    node = (connector_schema.get("$defs") or {}).get("SqlBulkLoad")
+    families = set((node.get("properties") or {})) if isinstance(node, dict) else None
+    # Iterating EXPECTED alone is one-directional: a REMOVED family surfaces (as
+    # a restructure), an ADDED one is invisible. The prose states the family set
+    # as closed, so pin the set itself.
+    assert families == set(EXPECTED_SQL_BULK_MECHANISMS), _set_diff_msg(
+        "sql_capabilities.bulk_load families", families, set(EXPECTED_SQL_BULK_MECHANISMS)
+    )
+    for family, expected in EXPECTED_SQL_BULK_MECHANISMS.items():
+        schema_set = _enum_at(
+            connector_schema, "$defs", "SqlBulkLoad", "properties", family
+        )
+        assert schema_set == expected, _diff_msg(
+            f"sql_capabilities.bulk_load.{family}", schema_set, expected,
+            _WRITE_PATH_FIX,
+        )
+
+
+def test_sql_limit_caps_match_schema(connector_schema: dict) -> None:
+    """`limits` member names, restated in spec-sql-write-path.md + io-contracts.md.
+
+    Both caps are optional, so neither appears in a `required` list, and
+    `max_bind_params` appears in no shipped example — a rename would leave the
+    plugin suite green with two prose sites naming a field that no longer
+    exists.
+    """
+    node = (connector_schema.get("$defs") or {}).get("SqlLimits")
+    caps = set((node.get("properties") or {})) if isinstance(node, dict) else None
+    assert caps == EXPECTED_SQL_LIMIT_CAPS, _set_diff_msg(
+        "sql_capabilities.limits caps", caps, EXPECTED_SQL_LIMIT_CAPS
+    )
+
+
+# --- the write-path pins, read from the PROSE side --------------------------
+# Every other pin in this file is one-sided: contract -> a constant here. That
+# leaves a hole exactly the shape of issue #95 — update the contract AND the
+# constant, forget the spec table, and the suite stays green while the document
+# an agent actually reads has gone stale. `test_slug_pattern_restatements_*`
+# already closes that loop for the slug charset by reading prose; these do the
+# same for the write-path vocabularies.
+
+WRITE_PATH_SPEC = (
+    PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-sql-write-path.md"
+)
+DRIVER_SELECTION_SPEC = (
+    PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-driver-selection.md"
+)
+
+# `| `<label>` | `a` / `b` / `c` | …` — the label cell, then the values cell.
+# Only the SECOND cell is read: the "How to choose" cell is full of backticked
+# SQL and field names that are not vocabulary members.
+_TABLE_ROW = re.compile(r"^\|([^|]*)\|([^|]*)\|")
+_BACKTICKED = re.compile(r"`([^`]+)`")
+
+
+def _table_blocks() -> list[list[str]]:
+    """Maximal runs of consecutive `|`-leading lines — one per markdown table."""
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
+        if line.startswith("|"):
+            current.append(line)
+        elif current:
+            blocks.append(current)
+            current = []
+    if current:
+        blocks.append(current)
+    return blocks
+
+
+def _labels_of_table_containing(label: str) -> set[str] | None:
+    """The full label-column set of the table whose rows include `label`.
+
+    Both directions, unlike a subset check: a contract fact with no prose row
+    fails, and a prose row for a fact the contract dropped fails too. Without
+    it the fact NAMES are pinned contract-side only — so making `limits`
+    required would fail one test, the fixer would add it to the expected set,
+    and the two prose files still claiming "all five shape facts" would stay
+    green. That is issue #95's two-step, in miniature.
+    """
+    tables = [
+        labels
+        for block in _table_blocks()
+        if label
+        in (
+            labels := {
+                found[0]
+                for row in block
+                if (m := _TABLE_ROW.match(row))
+                and len(found := _BACKTICKED.findall(m.group(1))) == 1
+            }
+        )
+    ]
+    return tables[0] if len(tables) == 1 else None
+
+
+def _vocabulary_rows() -> list[tuple[str, set[str]]]:
+    """Every (label, values) table row whose label cell is one backticked token."""
+    rows = []
+    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
+        row = _TABLE_ROW.match(line)
+        if not row:
+            continue
+        label = _BACKTICKED.findall(row.group(1))
+        values = set(_BACKTICKED.findall(row.group(2)))
+        if len(label) == 1 and values:
+            rows.append((label[0], values))
+    return rows
+
+
+def _documented_values(label: str) -> set[str] | None:
+    """Backticked tokens in the Values cell of the row labelled `label`.
+
+    None when no such row exists — the table was restructured or the row
+    renamed, which the caller turns into an explicit failure rather than a
+    vacuous pass against an empty set.
+
+    Collects ALL matching rows rather than returning the first: a summary
+    table added above the real one could otherwise shadow it with a stale
+    copy, and this guard exists precisely to never pass vacuously.
+    """
+    matches = [values for row_label, values in _vocabulary_rows() if row_label == label]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+@pytest.mark.parametrize(
+    "label, expected",
+    [
+        ("catalog", EXPECTED_SQL_CATALOG_MODES),
+        ("session_targeting", EXPECTED_SQL_SESSION_TARGETING),
+        ("merge_form", EXPECTED_SQL_MERGE_FORMS),
+        ("scope", EXPECTED_SQL_STAGE_SCOPES),
+        ("schema", EXPECTED_SQL_STAGE_SCHEMAS),
+        ("sqlalchemy", EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]),
+        ("adbc", EXPECTED_SQL_BULK_MECHANISMS["adbc"]),
+    ],
+)
+def test_write_path_spec_tables_state_the_pinned_vocabularies(
+    label: str, expected: set[str]
+) -> None:
+    """The spec's own tables must list exactly what the contract defines.
+
+    Paired with the contract-side tests above, this makes the vocabularies
+    genuinely single-sourced: contract -> constant -> prose, all three checked.
+    """
+    documented = _documented_values(label)
+    assert documented is not None, (
+        f"no `{label}` row with a backticked Values cell found in "
+        f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — the table was "
+        "restructured, so this guard would have passed vacuously. Restore the "
+        "row or re-anchor the parser."
+    )
+    assert documented == expected, (
+        f"`{label}` values in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} disagree "
+        f"with the pinned contract set — "
+        f"prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}. {_WRITE_PATH_FIX}"
+    )
+
+
+@pytest.mark.parametrize(
+    "anchor, expected",
+    [
+        # The declaration table lists the five shape facts AND `limits`; the
+        # prose calls the latter optional, but it still needs a row.
+        ("catalog", EXPECTED_SQL_CAPABILITY_FACTS | {"limits"}),
+        ("scope", EXPECTED_SQL_STAGE_FACTS),
+        ("sqlalchemy", set(EXPECTED_SQL_BULK_MECHANISMS)),
+    ],
+)
+def test_write_path_spec_tables_state_the_pinned_fact_names(
+    anchor: str, expected: set[str]
+) -> None:
+    """The spec's tables must name exactly the facts the contract defines."""
+    documented = _labels_of_table_containing(anchor)
+    assert documented is not None, (
+        f"no single table in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} has a "
+        f"`{anchor}` row — the spec was restructured (or two tables now claim "
+        "the same fact), so this guard would have passed vacuously."
+    )
+    assert documented == expected, (
+        f"the `{anchor}` table in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} "
+        f"names different facts than the contract — "
+        f"prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}. {_WRITE_PATH_FIX}"
+    )
+
+
+def test_write_path_spec_example_matches_the_contract() -> None:
+    """The spec's worked example must be a document the contract accepts.
+
+    It is the ONLY artifact in the repo covering `insert_on_duplicate_key`, an
+    empty `bulk_load`, and `transactional_ddl: false` — both shipped archetypes
+    declare the Postgres-shaped combination — and an agent copies it verbatim.
+    Nothing else validates a fenced code block.
+    """
+    from analitiq.contracts.connector import SqlCapabilities
+
+    fences = re.findall(
+        r"```json\n(.*?)```", WRITE_PATH_SPEC.read_text(encoding="utf-8"), re.S
+    )
+    examples = [
+        block["sql_capabilities"]
+        for fence in fences
+        # The fence is an excerpt (`"sql_capabilities": {...}`), so wrap it back
+        # into an object before parsing.
+        if "sql_capabilities" in (block := json.loads("{" + fence.strip() + "}"))
+    ]
+    assert examples, (
+        f"no `sql_capabilities` json fence found in "
+        f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — the worked example moved "
+        "or changed shape, so this guard is checking nothing."
+    )
+    for example in examples:
+        SqlCapabilities.model_validate(example)
+
+
+def test_write_path_spec_code_examples_parse() -> None:
+    """The spec's Python examples must be syntactically valid.
+
+    Same reasoning as the JSON guard above: agents copy these blocks
+    verbatim, and a template that does not parse is worse than no template.
+    Each block is a class-level excerpt, so the placeholder dialect name and
+    the CDK imports are stubbed before parsing — this checks syntax, which is
+    the part a reader cannot eyeball reliably, not resolvability.
+    """
+    blocks = re.findall(
+        r"```python\n(.*?)```", WRITE_PATH_SPEC.read_text(encoding="utf-8"), re.S
+    )
+    assert blocks, (
+        f"no python fences in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — the "
+        "worked examples moved, so this guard is checking nothing."
+    )
+    preamble = (
+        "from collections.abc import Sequence\n"
+        "def await_only(x): pass\n"
+        "class SqlDialect: pass\n"
+        "class TableAddress: pass\n"
+    )
+    for block in blocks:
+        # `{Name}` is the spec's placeholder for the connector's class prefix.
+        compile(preamble + block.replace("{Name}", "Example"), "<spec>", "exec")
+
+
+def test_write_path_table_parser_reads_the_real_tables() -> None:
+    """Pin the parser: its recall is what the seven checks above stand on.
+
+    Recall first — a parser that matched nothing would leave every check above
+    resting on its `is None` guard, which is a real failure but for the wrong
+    reason, and a future "simplification" could pass the negative cases below
+    while reading no rows at all.
+    """
+    rows = _vocabulary_rows()
+    assert len(rows) >= 7, (
+        f"the parser found only {len(rows)} vocabulary rows in "
+        f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — it must read at least the "
+        "seven the tests above pin, or those tests are resting on None-guards."
+    )
+    assert _documented_values("catalog") == EXPECTED_SQL_CATALOG_MODES
+
+    # Precision: a Values cell that is prose, not vocabulary. `bulk_load` reads
+    # "per-transport object" — no backticks, so it must come back None rather
+    # than an empty set masquerading as a match.
+    assert _documented_values("bulk_load") is None
+    # A label that does not exist at all.
+    assert _documented_values("no_such_field") is None
+    # The label cell must match EXACTLY one backticked token, so a header row
+    # cannot be mistaken for a vocabulary row.
+    assert _documented_values("Fact") is None
 
 
 def test_idempotency_targets_match_schema(api_endpoint_schema: dict) -> None:

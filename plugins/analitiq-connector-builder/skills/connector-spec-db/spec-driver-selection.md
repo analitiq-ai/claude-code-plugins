@@ -6,6 +6,17 @@ via `transport_type` (`sqlalchemy` or `adbc`). This is the decision
 guide for choosing the driver and bulk-write path when authoring a
 connector for a new system.
 
+**It is a decision procedure, not a lookup table.** What a given system
+supports is a researched fact — `provider_facts.adbc_driver_package`,
+`.flight_sql_endpoint`, `.bulk_load_protocol`, `.sqlalchemy_driver`,
+grounded from the vendor's own documentation at author time. This file
+supplies the *order* and the *closed vocabularies* the contract owns; it
+deliberately does not carry a per-system capability table, because a
+frozen copy of researched facts rots silently and biases authoring
+toward whichever systems happen to be listed. Never infer a system's
+capability from a similar one, however wire-compatible
+(`spec-tls.md` states the same rule for TLS vocabularies).
+
 ## Decision order
 
 Apply in order; stop at the first match.
@@ -17,27 +28,35 @@ Apply in order; stop at the first match.
 2. **The server exposes an Arrow Flight SQL endpoint** → ADBC via the
    generic Flight SQL driver. Currently unreachable — see §2.
 3. **Neither, but the system has a native bulk-load protocol** →
-   SQLAlchemy transport for connect/DDL, with the bulk path implemented
-   in the connector's own class (the thick path) against the raw
-   cursor.
-4. **None of the above** → SQLAlchemy transport with batched INSERT.
+   SQLAlchemy transport for connect/DDL, with the bulk path **declared**
+   in `sql_capabilities.bulk_load` and implemented in the dialect's
+   `bulk_land` hook (`spec-sql-write-path.md`).
+4. **None of the above** → SQLAlchemy transport, landing via executemany.
    This is the fallback, not the default — pick it last.
+
+Tiers 3 and 4 differ only in the `bulk_load` declaration: every SQL write
+rides the same stage-then-merge primitive, and the mechanism chosen here
+is how the batch **lands in the stage**. Declaring no mechanism (`{}`) is
+tier 4.
 
 ## 1. First-class ADBC drivers
 
-`cursor.adbc_ingest(...)` genuinely skips a row-by-row insert path for
-exactly these:
+`cursor.adbc_ingest(...)` hands Arrow buffers to the system's own bulk
+protocol with no row-by-row path. This tier is reachable only for the
+values the contract's `AdbcTransport.driver` enum admits — currently
+`postgresql`, `snowflake`, `bigquery` — so the enum, not a curated list
+of systems, is what decides eligibility. Confirm the system has a
+production ADBC driver via `provider_facts.adbc_driver_package`; an
+upstream driver that exists but is absent from the enum does not qualify
+(see below).
 
-| System | Package | Bulk path |
-|---|---|---|
-| PostgreSQL | `adbc-driver-postgresql` | libpq `COPY BINARY`. Production-ready. |
-| Snowflake | `adbc-driver-snowflake` | Native Arrow ingestion via the internal Go-Snowflake driver. |
-| BigQuery | `adbc-driver-bigquery` | Storage Write API (Arrow-native). |
-| DuckDB *(not in the enum — gap path below)* | shipped with `duckdb` itself | Zero-copy in-process. |
-| SQLite *(not in the enum — gap path below)* | `adbc-driver-sqlite` | Production-ready; mainly useful for testing, not volume. |
+An ADBC transport declares that landing as
+`sql_capabilities.bulk_load: {"adbc": "adbc_ingest"}`. It is the backend's
+own native path, so — unlike every other mechanism — it obliges **no**
+dialect code, which is what makes this tier cheap
+(`spec-sql-write-path.md`).
 
-The schema's `AdbcTransport.driver` enum is the **sole validator** for
-ADBC driver values (currently `postgresql`, `snowflake`, `bigquery`).
+That enum is the **sole validator** for ADBC driver values.
 The engine derives the dbapi module from the `driver` value by the
 upstream packaging convention `adbc_driver_{driver}.dbapi` — the
 connector's `requirements.txt` must ship the matching
@@ -50,29 +69,23 @@ support for it, so treat it as coordinated work with the contract and platform
 owners rather than something a connector author can unblock alone. Until the
 enum entry exists, select the next tier in the decision order.
 
-**Redshift** takes the SQLAlchemy transport with the **sync**
-`redshift+redshift_connector` driver — the canonical Redshift path.
-`redshift_connector` is a sync DBAPI; the engine runs it on the sync
-SQLAlchemy engine automatically (see "Constraints" below), so no ADBC
-entry is needed. That dispatch is all the engine contributes: as with
-every SQLAlchemy connector, system-specific interpretation — TLS,
-upsert SQL — ships in the connector package's own dialect, never the
-engine (see `spec-connector-package.md`). DSN template
-`redshift+redshift_connector://{username}:{password}@{host}:{port}/{database}`.
-The libpq-compatible PostgreSQL ADBC driver (`transport_type: "adbc"`,
-driver `postgresql`) also reaches Redshift over the postgres wire, but
-wire compatibility does not extend to the driver's option surface
-(TLS parameters differ — research the actual driver, per
-`spec-tls.md`), and the sync SQLAlchemy path is the canonical one.
+**Wire compatibility is not driver compatibility.** A system reachable
+over another system's wire protocol may still take an entirely different
+option surface — TLS parameters especially — so an ADBC driver that
+*connects* is not evidence that it is the right transport. Research the
+actual driver the connector will ship (`spec-tls.md`), and prefer the
+system's own canonical path even when a compatible driver exists.
 
 ## 2. Flight SQL
 
-| Driver | Package | Covers |
-|---|---|---|
-| Flight SQL generic | `adbc-driver-flightsql` | Any server implementing the Arrow Flight SQL protocol — Dremio, Doris, InfluxDB 3.x, Databricks (in some configs), and a growing set of newer warehouses. |
-
-Caveat: this only helps if the target server actually exposes a Flight
-SQL endpoint. Ordinary MySQL/Postgres deployments do not.
+`adbc-driver-flightsql` reaches any server implementing the Arrow Flight
+SQL protocol, which is what makes it a tier of its own rather than a
+per-system entry. Two caveats: the target must genuinely expose a Flight
+SQL endpoint — established from the vendor's docs into
+`provider_facts.flight_sql_endpoint`, never assumed from a system being
+"modern" — and `flightsql` is not currently in the `AdbcTransport.driver`
+enum, so this tier needs the same contract change as any other missing
+driver before it can be declared.
 
 Today this tier is **unreachable**: `flightsql` is not in the
 `AdbcTransport.driver` enum, so selecting it is the same contract-gap
@@ -81,27 +94,47 @@ author the transport.
 
 ## Do not use the JDBC bridge
 
-| Driver | Package | What it does |
-|---|---|---|
-| JDBC bridge | `adbc-driver-jdbc` | Wraps any JDBC driver — gives an ADBC API surface over Oracle/MSSQL/MariaDB/MySQL/Redshift, but underneath it still binds row-by-row through JDBC. |
-
-A connector that needs one of these systems takes the SQLAlchemy
-transport (or the native bulk path below) instead.
+`adbc-driver-jdbc` wraps any JDBC driver and presents an ADBC API over
+it, but underneath it still binds row-by-row through JDBC. It buys the
+interface, not the performance, and it is never the right answer here —
+a system whose only ADBC-shaped option is the JDBC bridge takes the
+SQLAlchemy transport instead, at tier 3 or 4.
 
 ## 3. Native bulk-load protocols (no ADBC)
 
-Each of these is roughly 10x faster than parameterized INSERT, even
-batched. The connect/DDL layer stays on the SQLAlchemy transport; the
-bulk write runs against the raw driver cursor in the connector's own
-class.
+The connect/DDL layer stays on the SQLAlchemy transport; the bulk write
+goes through the **declared** mechanism — the connector names it under
+`sql_capabilities.bulk_load.sqlalchemy` and implements the dialect's
+`bulk_land` hook. Declaring a mechanism without the hook (or the hook
+without a declaration) fails the CDK conformance kit.
 
-| System | Driver | Bulk path |
-|---|---|---|
-| MySQL / MariaDB | aiomysql (SQLAlchemy async) | `LOAD DATA LOCAL INFILE` via raw cursor — stream Arrow → CSV/TSV → server reads it directly. |
-| PostgreSQL (when not on ADBC) | psycopg | `COPY FROM stdin BINARY`. |
-| Oracle | python-oracledb (SQLAlchemy) | `cursor.executemany(sql, rows)` with tuned `arraysize` — the standard fast path; SQL*Loader is not practical from Python. |
-| MSSQL / SQL Server | pyodbc (SQLAlchemy) | `fast_executemany=True` on the cursor — TDS batched parameter stream; single-line change. |
-| ClickHouse | clickhouse-connect (skip SQLAlchemy) | `client.insert_arrow(table_name, arrow_table)` — first-class Arrow ingest, just not branded ADBC. |
+The mechanism vocabulary is **closed and contract-owned**, so this tier
+is reachable only when the system's documented protocol maps onto one of:
+
+| Mechanism | The protocol it names |
+|---|---|
+| `copy_from` | A server-side copy of a bulk stream (`COPY FROM stdin`) |
+| `load_data_local_infile` | A server-side read of a client-supplied delimited file |
+| `load_job` | A batch-load API job submitted out of band |
+
+Three consequences, and they are where authors go wrong:
+
+- **A tuning knob is not a protocol.** Where the driver's fast path *is*
+  `executemany` with the right settings — a raised array size, a batched
+  parameter stream — there is no mechanism to declare. That is tier 4
+  with `bulk_load: {}`, and it is the correct answer, not a shortfall.
+- **A real bulk protocol outside the vocabulary is a contract gap**, to
+  raise with the contract owners rather than route through a private
+  override. Until it is added, take the next tier.
+- **A protocol the deployment cannot rely on is tier 4.** Some require
+  server- *and* client-side opt-in that is off by default, so a connector
+  that cannot guarantee both declares `bulk_load: {}` instead of shipping
+  a path that fails at runtime. `provider_facts.bulk_load_protocol` names
+  the protocol; whether the deployment can actually use it is an
+  authoring judgement.
+
+Which mechanism (if any) a given system supports comes from research, not
+from this file — see the note at the top.
 
 ## Constraints from the engine contract
 

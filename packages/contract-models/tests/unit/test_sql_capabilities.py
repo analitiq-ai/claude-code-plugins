@@ -544,7 +544,14 @@ def test_database_connector_carries_both_blocks(db_example):
 
 def test_both_blocks_are_optional(db_example):
     # Omission is legal — every connector authored before #87 stays valid.
-    connector = parse_connector(copy.deepcopy(db_example))
+    # Strip explicitly rather than relying on the shared example not to carry
+    # them: it is a plugin authoring archetype, so it declares whatever the
+    # current authoring guidance teaches, and this assertion is about the
+    # model, not about that example's content.
+    doc = copy.deepcopy(db_example)
+    doc.pop("sql_capabilities", None)
+    doc.pop("write_unit", None)
+    connector = parse_connector(doc)
     assert connector.sql_capabilities is None
     assert connector.write_unit is None
 
