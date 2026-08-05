@@ -88,7 +88,9 @@ _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _fetch(url: str) -> bytes:
-    if not url.startswith(BASE_URL):
+    # The trailing slash matters: a bare prefix would admit a host that merely
+    # STARTS with the pinned one (schemas.analitiq.ai.evil.example).
+    if not url.startswith(f"{BASE_URL}/"):
         raise GuardError(f"refusing non-{BASE_URL} URL: {url}")
     try:
         # Scheme pinned by the BASE_URL check above.

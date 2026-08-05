@@ -32,12 +32,12 @@ name = "python"
   # analyzer block from the parsed config.
   runtime_version = "3.x.x"
 
-# PY-R1000 (cyclomatic complexity) is ignored repo-wide by a server-side
-# DeepSource ignore rule (registered 2026-08-05; the rule itself stores the
-# full rationale). Complexity over the threshold is accepted across the
-# repo; the canonical offenders are cross-field contract validators whose
-# branching IS the contract — splitting one to satisfy a metric would
-# scatter a single rule across several functions.
+  # PY-R1000 (cyclomatic complexity) is ignored repo-wide by a server-side
+  # DeepSource ignore rule (registered 2026-08-05). Complexity over the
+  # threshold is accepted across the repo; the canonical offenders are
+  # cross-field contract validators whose branching IS the contract —
+  # splitting one to satisfy a metric would scatter a single rule across
+  # several functions.
 
 # Flags hardcoded credentials before they land. Needs no CI wiring — relevant
 # here because a token has slipped into a local, gitignored `.envrc` before.
