@@ -64,11 +64,13 @@ the Analitiq document envelope. Only the document's own top level is reserved.
 Authored top-level `version` is a semver string. It bumps according to
 the connector release table:
 
+<!-- BEGIN GENERATED: release-table -->
 | Bump | Meaning | Examples |
 |---|---|---|
 | Patch | No connection drift. | Bug fixes, doc fixes, transport implementation tuning, type-map rule reordered (when the reorder does not change first-match resolution for any existing input). |
 | Minor | Additive, non-drifting. | Optional input added, optional discovery output added, optional endpoint added, type-map rule added. |
-| Major | Possible connection drift. | Input removed, renamed, type-changed, enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, `sql_capabilities` shape fact narrowed, removed, or replaced with one an existing connection may not satisfy (any `stage.scope` or `stage.schema` change), type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
+| Major | Possible connection drift. | Input removed, input renamed, input type changed, input enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, `sql_capabilities` shape fact narrowed, removed, or replaced with one an existing connection may not satisfy (any `stage.scope` or `stage.schema` change), type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
+<!-- END GENERATED: release-table -->
 
 Type-map drift categories apply per file: `type-map-read.json` and
 `type-map-write.json` are diffed independently, and a change in either

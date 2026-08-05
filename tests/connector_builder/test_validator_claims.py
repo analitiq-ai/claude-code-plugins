@@ -144,6 +144,146 @@ def test_every_renderer_is_embedded_and_renders() -> None:
         assert body.endswith("\n") and body.strip(), f"{block_id}: bad render"
 
 
+# Where each release-policy projection must live. `unembedded` in the script's
+# check only proves a block is embedded SOMEWHERE; each block here has a
+# designated reader anchored to this exact path (the bump table is part of the
+# classifier's own prompt file, agents load the two references), so a block
+# that migrates out of its file starves that reader while every other gate
+# stays green.
+RELEASE_POLICY_PLACEMENTS = {
+    "bump-table":
+        "plugins/analitiq-connector-builder/agents/connector-drift-classifier.md",
+    "release-table":
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/metadata-and-versioning.md",
+    "drift-verdict-envelope":
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md",
+}
+
+
+def test_release_policy_blocks_sit_where_their_readers_read() -> None:
+    """Each projection of the release table is embedded in its reader's file.
+
+    Also pins the projection set both ways: a renderer added to
+    `connector_release_table.py` without a placement decision here fails, and
+    a placement whose renderer is gone fails. Presence-only — it does not
+    detect the same block embedded in a second file, which would be
+    machine-regenerated and in sync rather than a drift surface.
+    """
+    assert set(RELEASE_POLICY_PLACEMENTS) == set(
+        _REGISTRY._release_table().RENDERERS
+    ), "release-policy projections changed — decide each one's reader here"
+    for block_id, rel_path in RELEASE_POLICY_PLACEMENTS.items():
+        text = (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+        assert f"<!-- BEGIN GENERATED: {block_id} -->" in text, (
+            f"{rel_path} no longer embeds generated block {block_id!r} — its "
+            "reader now sees a hand copy or nothing"
+        )
+
+
+def test_release_policy_data_guards_fire(monkeypatch) -> None:
+    """`_validate`'s divergence guards must actually raise.
+
+    On green data none of these branches executes, and each guards a failure
+    that survives the write-and-commit path: the sync test compares the docs
+    against a fresh render of the same broken data, so corrupted output
+    round-trips green forever. Positive controls, same idiom as
+    `test_scanner_positive_control`.
+    """
+    rt = _REGISTRY._release_table()
+    original = rt.CATEGORIES
+
+    # A duplicate slug would list one category under two tiers.
+    monkeypatch.setattr(
+        rt, "CATEGORIES",
+        (*original, rt.Category("input-removed", "patch", "Duplicate")))
+    with pytest.raises(ValueError, match="duplicate"):
+        rt._validate()
+
+    # A misspelled tier drops the category from both tables but not the enum.
+    monkeypatch.setattr(
+        rt, "CATEGORIES", (*original, rt.Category("x-changed", "Major", "X")))
+    with pytest.raises(ValueError, match="tier vocabulary"):
+        rt._validate()
+
+    # A `|` in a meaning splits its markdown-table row into extra columns.
+    monkeypatch.setattr(
+        rt, "CATEGORIES",
+        (*original, rt.Category("pipe-fix", "patch", "Has | a pipe")))
+    with pytest.raises(ValueError, match="markdown table"):
+        rt._validate()
+
+    # A template whose enum stops varying with the data is the drift class
+    # this module exists to kill; the parse-and-compare is its only guard.
+    monkeypatch.setattr(rt, "CATEGORIES", original)
+    monkeypatch.setattr(
+        rt, "_DRIFT_VERDICT_TEMPLATE",
+        rt._DRIFT_VERDICT_TEMPLATE.replace("@CATEGORY_ENUM@", '"bogus"'))
+    with pytest.raises(ValueError, match="category enum diverged"):
+        rt._validate()
+
+
+def test_bump_table_keeps_every_slug_greppable() -> None:
+    """Each category slug survives line wrapping intact, on a single line.
+
+    Pins the no-token-splitting property behaviorally: `textwrap`'s defaults
+    would break slugs at their hyphens, and the sync test cannot catch that —
+    it compares the docs against a fresh render wrapped the same wrong way.
+    """
+    rt = _REGISTRY._release_table()
+    lines = rt.render_bump_table().splitlines()
+    for category in rt.CATEGORIES:
+        assert any(category.slug in line for line in lines), (
+            f"slug {category.slug!r} no longer appears intact on one line")
+    # The rollup line carries hyphenated tokens the slug loop never sees.
+    assert not any(line.rstrip().endswith("-") for line in lines), (
+        "a token split across lines stops being greppable")
+
+
+def test_every_fill_in_the_release_module_forbids_token_splitting() -> None:
+    """Every `textwrap.fill` call site carries `**_NO_TOKEN_SPLIT`.
+
+    The behavioral asserts above cannot see a site whose current data wraps
+    identically with or without the hardening (today's rollup line does), so
+    the policy is pinned structurally: a fill added or unhardened goes red
+    here even while its rendered output is still innocent.
+    """
+    import ast
+
+    source = (REPO_ROOT / "scripts" / "connector_release_table.py").read_text(
+        encoding="utf-8")
+    fills = [
+        node for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute) and node.func.attr == "fill"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "textwrap"
+    ]
+    assert len(fills) >= 3, "the module's fill sites moved — update this guard"
+    for call in fills:
+        assert any(
+            kw.arg is None and isinstance(kw.value, ast.Name)
+            and kw.value.id == "_NO_TOKEN_SPLIT"
+            for kw in call.keywords
+        ), f"textwrap.fill at line {call.lineno} lacks **_NO_TOKEN_SPLIT"
+
+
+def test_release_policy_blocks_carry_no_validator_claims() -> None:
+    """A release-policy block's render must never state validator behavior.
+
+    Generated regions are pinned spans for the scan — an exemption earned by
+    the probes behind them, which these blocks don't have. A validator claim
+    written into a `Category.note` would render into the classifier's prompt
+    looking machine-pinned while backed by nothing. The CLI check enforces
+    the same rule; this is its pytest twin.
+    """
+    rt = _REGISTRY._release_table()
+    for block_id, renderer in rt.RENDERERS.items():
+        rendered = _REGISTRY._normalize(renderer())
+        assert not _REGISTRY._TRIGGER_RE.search(rendered), (
+            f"{block_id}: rendered text states validator behavior — carry it "
+            "as a Claim with a probe instead, or reword it")
+
+
 # Keyed by the VERBATIM pattern string in CLAIM_TRIGGERS — a reworded alternate
 # raises KeyError here, forcing this table to move with the trigger list. Each
 # specimen must be matched by its own alternate and by NO other, so a broken

@@ -29,38 +29,38 @@ object.
    your reasoning against the rules below.
 3. For each change, classify it under the categories in the `DriftVerdict`
    schema (see connector-builder/references/io-contracts.md).
-4. Apply this rollup:
-   - Any major-tier category → bump = `major`.
-   - Else any minor-tier category → bump = `minor`.
-   - Else any patch-tier category → bump = `patch`.
-   - Else → bump = `none`.
+4. Apply the rollup stated under the bump table below.
 5. Compute `next_version` from the previous version's semver.
 6. Return `DriftVerdict` as a JSON block.
 
-## Bump table (must match connector release table)
+## Bump table
 
+<!-- BEGIN GENERATED: bump-table -->
 - **major**: input-removed, input-renamed, input-type-changed,
   input-enum-narrowed, storage-changed, non-optional-input-added,
-  auth-shape-changed, discovery-shape-changed, sql-capabilities-changed
-  (a declared `sql_capabilities` shape fact **narrowed, removed, or
-  replaced with one an existing connection may not satisfy** — the engine
-  reads these at handshake. Narrowing: `merge_form` → `none`, `catalog` →
-  `none`, or dropping the block. Replacement: any change to
-  `stage.scope` or `stage.schema`, which is neither a narrowing nor a
-  widening but can break every saved connection whose credentials cannot
-  create a persistent stage table, or lack rights on a newly-named
-  `dedicated_schema`. Widening alone is not drift: adding a `bulk_load`
-  mechanism or gaining a `merge_form` is strictly enabling and
-  classifies as `tuning`), type-map-rule-removed,
+  auth-shape-changed, discovery-shape-changed, sql-capabilities-changed (a
+  declared `sql_capabilities` shape fact **narrowed, removed, or replaced
+  with one an existing connection may not satisfy** — the engine reads these
+  at handshake. Narrowing: `merge_form` → `none`, `catalog` → `none`, or
+  dropping the block. Replacement: any change to `stage.scope` or
+  `stage.schema`, which is neither a narrowing nor a widening but can break
+  every saved connection whose credentials cannot create a persistent stage
+  table, or lack rights on a newly-named `dedicated_schema`. Widening alone
+  is not drift: adding a `bulk_load` mechanism or gaining a `merge_form` is
+  strictly enabling and classifies as `tuning`), type-map-rule-removed,
   type-map-canonical-changed (an existing matcher now resolves to a
-  different render — read map: an existing `native` resolves to a
-  different canonical; write map: an existing `canonical` renders a
-  different native DDL — either invalidates downstream consumers).
+  different render — read map: an existing `native` resolves to a different
+  canonical; write map: an existing `canonical` renders a different native
+  DDL — either invalidates downstream consumers).
 - **minor**: optional-input-added, optional-output-added,
   optional-endpoint-added, type-map-rule-added.
 - **patch**: bug-fix, doc-fix, tuning, type-map-rule-reordered (when the
-  reorder doesn't change first-match resolution for any existing input
-  in that map's direction).
+  reorder doesn't change first-match resolution for any existing input in
+  that map's direction).
+
+Rollup: any major-tier category → bump = `major`; else any minor-tier →
+`minor`; else any patch-tier → `patch`; else → `none`.
+<!-- END GENERATED: bump-table -->
 
 ## Hard rules
 
