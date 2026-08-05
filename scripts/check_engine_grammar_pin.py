@@ -35,9 +35,14 @@ ties the vendored file to the engine's published truth:
   4. The published `latest.json` pointers are consulted: a newer engine
      version than the pin is a NOTICE, not a failure — contract ⊆ engine
      still holds; adopting the new version is a deliberate pin bump
-     (re-render + doc regeneration), never an automatic one. A pin AHEAD of
-     the published latest fails: the contract would be promising a manifest
-     the engine has not published.
+     (re-render + doc regeneration), never an automatic one. A pointer BELOW
+     the pin fails, as a POINTER problem, not an unpublished pin: this step
+     runs only after steps 2-3 fetched the pinned immutable objects (a
+     genuinely unpublished pin dies there as a GuardError, exit 2), so the
+     mutable pointer is lagging a published object — a stale latest.json
+     (the pointers rely on a 5-minute TTL, not invalidation) or a
+     half-completed publish. Remediation: re-check after the TTL and repair
+     the pointer if it persists — never re-vendor.
 
 Exit codes: 0 ok (including the newer-version notice), 1 divergence, 2
 GuardError. Every infrastructure failure — missing vendored file, fetch
@@ -407,10 +412,21 @@ def check_published(failures: list[str]) -> list[str]:
                 "bump (re-vendor, re-render schemas, regenerate docs)"
             )
         elif latest_v < pinned_v:
+            # Reachable only AFTER steps 2-3 fetched the pinned immutable
+            # objects successfully (a genuinely unpublished pin raises
+            # GuardError at that fetch, exit 2, and never gets here) — so
+            # "the engine has not published the pin" would be provably false.
+            # It is the mutable pointer that lags. Still exit 1: a red state
+            # a human must look at, but with the pointer's remediation, not
+            # the divergence default of re-vendoring.
             failures.append(
-                f"{resource}: pin v{pinned} is AHEAD of the published latest "
-                f"v{latest} — the contract promises a manifest the engine has "
-                "not published"
+                f"{resource}: latest.json says v{latest}, but the pinned "
+                f"v{pinned} object is published — this same run just fetched "
+                "it. The mutable pointer lags a published pinned object: a "
+                "stale latest.json (the pointers rely on a 5-minute TTL, not "
+                "invalidation) or a half-completed publish. Re-check after "
+                "the TTL and repair the pointer if it persists — never "
+                "re-vendor"
             )
     return notices
 

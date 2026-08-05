@@ -146,7 +146,20 @@ def test_newer_engine_publication_is_a_notice_not_a_failure(guard, monkeypatch, 
     assert "::notice::" in capsys.readouterr().out
 
 
-def test_pin_ahead_of_published_latest_fails(guard, monkeypatch, capsys):
+def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
+    guard, monkeypatch, capsys
+):
+    """latest.json names a version BELOW the pin. The old diagnosis — the pin
+    is AHEAD of latest, "the contract promises a manifest the engine has not
+    published" — is provably wrong whenever this branch is reachable: steps
+    2-3 of the SAME run already fetched the pinned immutable objects
+    successfully (a genuinely unpublished pin raises GuardError at that fetch,
+    exit 2, and never reaches step 4). The truthful reading is a mutable
+    pointer lagging a published object — a stale latest.json (the pointers
+    rely on a 5-minute TTL, not invalidation) or a half-completed publish.
+    Still exit 1: a red state a human must look at, with a remediation of
+    re-checking after the TTL and repairing the pointer if it persists —
+    never re-vendoring."""
     _stub_fetch(
         guard,
         monkeypatch,
@@ -155,7 +168,16 @@ def test_pin_ahead_of_published_latest_fails(guard, monkeypatch, capsys):
         matrix_latest=guard.arrow_grammar.CONVERSION_MATRIX_VERSION,
     )
     assert guard.main([]) == 1
-    assert "AHEAD" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    # The truthful diagnosis: the pointer lags a published, just-fetched object.
+    assert "lags" in err
+    assert "stale latest.json" in err
+    # The truthful remediation: wait out the TTL, repair the pointer, and
+    # explicitly NOT the exit-1 default of re-vendoring.
+    assert "Re-check after the TTL" in err
+    assert "never re-vendor" in err
+    # The disproven diagnosis must be gone.
+    assert "has not published" not in err
 
 
 def test_matrix_family_divergence_fails(guard, monkeypatch, capsys):
