@@ -31,11 +31,16 @@ entries in the three per-plugin registries below, this suite is red.
      READMEs link the repo root's). A link's `#fragment` is checked as a
      section, below.
 
-   What is **not** checked: a non-`.md` path in any form but the first. A
-   backticked `connector.py` or `definition/connector.json` names an artifact
-   the connector author writes, not a file of this plugin, and telling the two
-   apart needs a rule this guard does not have. Agent-run scripts are covered
-   because agents invoke them through `${CLAUDE_PLUGIN_ROOT}`.
+   What is **not** checked, each a decision rather than an oversight:
+
+   - A non-`.md` path in any form but the first. A backticked `connector.py`
+     or `definition/connector.json` names an artifact the connector author
+     writes, not a file of this plugin, and telling the two apart needs a rule
+     this guard does not have. Agent-run scripts are covered because agents
+     invoke them through `${CLAUDE_PLUGIN_ROOT}`.
+   - A same-document link, `](#a-heading)`. No plugin writes one; adding an
+     extractor for a form with no sites would be a pattern nothing can floor,
+     which is the shape of a guard that dies without anyone noticing.
 
 2. **The section exists.** A `path.md §Heading` citation, and a link's
    `#fragment`, make a second claim the file check never opens: that the
@@ -126,7 +131,14 @@ _SLUG_DROP = re.compile(r"[^\w\- ]")
 # citation. Missing a comma or a dash here does not merely lose the binding —
 # it silently re-points the anchor at the citing document and reports a section
 # of the wrong file as missing.
-_ANCHOR_BINDING = re.compile(r"([A-Za-z0-9_./-]+\.md)[`\"'\s(,—–-]{0,8}$")
+# A blank line is not glue, however few characters it spends: the paragraph
+# that named the file ended, so a `§` opening the next one is document-local.
+# Dashes are the typographic ones only — an ASCII `-` is how a list item
+# starts, and `- §Rules` under `- \`SKILL.md\`` is a new item, not a
+# continuation of the last one.
+_ANCHOR_BINDING = re.compile(
+    r"([A-Za-z0-9_./-]+\.md)(?:[`\"'(,—–]|[ \t]|\n(?![ \t]*\n)){0,8}$"
+)
 
 # How far past a `§` an anchor may reach. One bound, used by both the quoted
 # and the unquoted form — two would cut the two forms at different lengths.
@@ -232,7 +244,10 @@ _FLOORS: dict[str, dict[str, int]] = {
 # Floors prove a form still matches *something*; sentinels prove the wiring an
 # agent depends on is still written down — a creator routed to its spec skill,
 # a classifier routed to the release table. A rename here is a review moment,
-# not a silent pass.
+# not a silent pass. Written at full plugin-relative depth even where the prose
+# cites the file more shortly: the check compares the *file* each side resolves
+# to, and spelling a sentinel exactly as the prose spells it would let that
+# comparison rot back into string equality unnoticed.
 #
 # `fixture` is a real file plus the opening words of a heading it carries (the
 # citation form the prose uses — `## Release version (`version`)` is cited as
@@ -242,7 +257,7 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
     "analitiq-connector-builder": {
         "sentinels": {
             "plugin_root": "skills/connector-spec-db/spec-connector-package.md",
-            "bare_path": "connector-builder/references/metadata-and-versioning.md",
+            "bare_path": "skills/connector-builder/references/metadata-and-versioning.md",
             "backticked": "spec-sql-write-path.md",
         },
         "fixture": (
@@ -253,7 +268,7 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
     "analitiq-pipeline-builder": {
         "sentinels": {
             "plugin_root": "scripts/validate.py",
-            "bare_path": "pipeline-builder/references/io-contracts.md",
+            "bare_path": "skills/pipeline-builder/references/io-contracts.md",
             "backticked": "spec-database-object.md",
         },
         "fixture": (
@@ -384,12 +399,18 @@ def _anchor_sites(text: str) -> list[Anchor]:
     ``§Dialect\\n  hooks)`` — is one citation, and a per-line scan would read
     half of it.
     """
+    fenced = _fenced_lines(text)
     sites: list[Anchor] = []
     for marker in re.finditer("§", text):
         rest = text[marker.end() :]
+        lineno = text.count("\n", 0, marker.start()) + 1
+        # A `§` inside a fence is an example of the citation form, not a
+        # citation — this repo's own prose documents its conventions that way.
+        if lineno in fenced:
+            continue
         sites.append(
             Anchor(
-                lineno=text.count("\n", 0, marker.start()) + 1,
+                lineno=lineno,
                 target=(
                     binding.group(1)
                     if (binding := _ANCHOR_BINDING.search(text[: marker.start()]))
@@ -416,18 +437,29 @@ def _anchor_text(rest: str) -> str:
     return (window[: stop.start()] if stop else window).strip().rstrip("`").strip()
 
 
+def _fenced_lines(text: str) -> set[int]:
+    """The 1-based line numbers inside a fenced block, the fence lines
+    included. What is inside a fence is an example of markdown, not markdown:
+    neither its `#` lines nor its `§` citations are real."""
+    fenced, inside = set(), False
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if _FENCE.match(line):
+            inside = not inside
+            fenced.add(lineno)
+        elif inside:
+            fenced.add(lineno)
+    return fenced
+
+
 def _headings(text: str) -> list[str]:
     """Every ATX heading in a document, fenced blocks excluded — a `# comment`
     inside a fenced example is not a section anyone can cite."""
-    headings, fenced = [], False
-    for line in text.splitlines():
-        if _FENCE.match(line):
-            fenced = not fenced
-            continue
-        match = None if fenced else _HEADING.match(line)
-        if match:
-            headings.append(match.group(2))
-    return headings
+    fenced = _fenced_lines(text)
+    return [
+        match.group(2)
+        for lineno, line in enumerate(text.splitlines(), 1)
+        if lineno not in fenced and (match := _HEADING.match(line))
+    ]
 
 
 def _tokens(text: str) -> tuple[str, ...]:
@@ -651,8 +683,10 @@ def test_section_anchors_resolve(plugin: str) -> None:
             for rel, lineno, target, anchor in dangling
         )
         + "\nRepoint the citation at the heading as it now reads, or restore "
-        "the heading. A citation must name the heading's opening words: prose "
-        "that continues past it is fine, but a paraphrase is not."
+        "the heading. A citation must name the heading's opening words — at "
+        "least two of them, so prose may run on past a multi-word heading but "
+        "a one-word heading has to end the citation (`§Process, and then …`, "
+        "or quote it). A paraphrase never resolves."
     )
 
 
@@ -706,6 +740,20 @@ def test_every_plugin_is_covered() -> None:
     assert not unknown, (
         f"per-plugin floors name forms the extractor does not produce: "
         f"{unknown} — a floor on a form nobody counts never fails."
+    )
+    # Sentinels are per form too: a form with no sentinel is pinned by its
+    # count alone, which an over-matching pattern satisfies while losing the
+    # citation that mattered.
+    unsentinelled = {
+        plugin: sorted(set(_FORM_PATTERNS) - set(_sentinels(plugin)) - {"link"})
+        for plugin in _plugin_names()
+        if set(_FORM_PATTERNS) - set(_sentinels(plugin)) - {"link"}
+    }
+    assert not unsentinelled, (
+        f"citation forms with no sentinel: {unsentinelled} — name one real "
+        "routing citation per form, so the extractor stays pinned to prose an "
+        "agent actually follows. (`link` is exempt: both plugins write links "
+        "in READMEs, which route nobody.)"
     )
 
 
@@ -823,6 +871,11 @@ def test_sentinel_citations_are_still_found(plugin: str) -> None:
     # die while another's citations kept every sentinel green.
     misfiled = {"link": _sentinels(plugin)["backticked"]}
     assert _unreached_sentinels(plugin, misfiled) == misfiled
+    # And the comparison is by resolved file, not by the string as written —
+    # the `bare_path` sentinel is deliberately spelled at a depth no prose
+    # uses, so a rewrite of this check into string equality fails here.
+    bare = _sentinels(plugin)["bare_path"]
+    assert bare not in _form_targets(plugin, "bare_path")
 
 
 # A synthetic agent document shaped like the real ones: an unbackticked
@@ -941,6 +994,22 @@ def test_dangling_markdown_link_is_flagged(plugin: str) -> None:
     assert _link_dangles(own, "section-that-was-renamed", citing, plugin)
 
 
+def test_a_heading_slugs_the_way_a_link_writes_it() -> None:
+    """Stated as literals, not round-tripped through `_slug` on both sides —
+    comparing the function to itself would accept any slug rule at all, and
+    the fragment check is only as good as this mapping. These are the shapes
+    plugin headings actually take: backticked identifiers, parenthesised
+    qualifiers, an em-dash."""
+    assert _slug("Derived `endpoint_id`") == "derived-endpoint_id"
+    assert _slug("Release version (`version`)") == "release-version-version"
+    assert _slug("Cross-field rules the contract enforces") == (
+        "cross-field-rules-the-contract-enforces"
+    )
+    assert _slug("Fenced JSON examples — the annotation convention") == (
+        "fenced-json-examples--the-annotation-convention"
+    )
+
+
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_dangling_anchor_in_a_resolving_file_is_flagged(plugin: str) -> None:
     """Acceptance: the half-dangling case. The file opens; the section named
@@ -999,6 +1068,24 @@ def test_ambiguous_citation_is_still_checked(plugin: str) -> None:
     solo_doc = f"Author per `SKILL.md §{solo}`.\n"
     solo_sites = [(citing, site) for site in _anchor_sites(solo_doc)]
     assert _anchor_checks(plugin, solo_sites) == ([], 1)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_sibling_citation_resolves_to_its_own_skill(plugin: str) -> None:
+    """The other half of the ambiguity policy: when the citing document *has*
+    an ancestor carrying the path, that one file is the answer and the four or
+    five namesakes elsewhere are not consulted. Without this narrowing, a
+    heading renamed in one skill is covered by the same heading surviving in
+    another — two of the pipeline plugin's `SKILL.md` files carry
+    `## Cross-field rules …` today, so the citation would resolve against the
+    wrong document and never fail."""
+    citing, _heading = _fixture(plugin)  # skills/<skill>/references/<file>.md
+    skill_dir = Path(citing).parent.parent
+    assert _resolve_files("SKILL.md", citing, plugin) == [
+        _plugin_root(plugin) / skill_dir / "SKILL.md"
+    ]
+    # And the lenient branch stays lenient where there is no ancestor to use.
+    assert len(_resolve_files("SKILL.md", "agents/x.md", plugin)) > 1
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -1108,7 +1195,9 @@ def test_tokens_keep_hyphens_and_underscores_whole() -> None:
 def test_a_heading_inside_a_fence_is_not_a_section() -> None:
     """`# Encoding values` in a shell or python example is a comment. Treating
     it as a heading would resolve citations of a section that does not
-    exist — in a backtick fence, a tilde fence, or an indented code block."""
+    exist — in a backtick fence or a tilde fence. An indented `#` is not a
+    heading either, but for a different reason: `_HEADING` anchors at column
+    zero, so indentation alone already disqualifies it."""
     doc = "# Real\n\n```python\n# Encoding values\n```\n"
     assert _headings(doc) == ["Real"]
     assert not _anchor_resolves("Encoding values", _headings(doc))
@@ -1150,6 +1239,11 @@ def test_a_one_word_heading_does_not_swallow_a_renamed_section() -> None:
     assert _anchor_resolves("Output", ["Output", "Inputs to collect"])
     # Two words is enough to be a citation rather than a coincidence.
     assert _anchor_resolves("Import rules owns the list", ["Import rules"])
+    # The cost, stated so it is a decision and not a surprise: prose cannot run
+    # on past a one-word heading — it has to end the citation with punctuation
+    # the stop set knows. The failure message says so.
+    assert not _anchor_resolves("Process and run in order", ["Process"])
+    assert _anchor_resolves(_anchor_text("Process, and run in order"), ["Process"])
 
 
 def test_a_citation_may_abbreviate_and_run_on_at_once() -> None:
@@ -1198,7 +1292,22 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
         assert _anchor_sites(text)[0][1] == "SKILL.md", glue
     # A sentence-final period is not glue: the clause naming the file ended, so
     # what follows is a citation of the document being read.
-    assert _anchor_sites("see `SKILL.md`. §Closed vocabularies.")[0][1] is None
+    assert _anchor_sites("see `SKILL.md`. §Closed vocabularies.")[0].target is None
+    # Nor is a blank line, however few characters it spends — the paragraph
+    # that named the file is over. Same for a list that moves to a new item.
+    assert _anchor_sites("see `SKILL.md`\n\n§Closed vocabularies.")[0].target is None
+    assert _anchor_sites("- `SKILL.md`\n- §Closed vocabularies.")[0].target is None
+
+
+def test_a_citation_inside_a_fence_is_an_example_not_a_citation() -> None:
+    """Prose that documents the citation convention writes `§` inside a fence.
+    Grading those would fail the build for a heading nobody claimed exists —
+    and this repo documents its conventions exactly that way."""
+    doc = "# Real\n\n```markdown\nsee `spec-tls.md` §Some invented heading\n```\n"
+    assert _anchor_sites(doc) == []
+    assert _fenced_lines(doc) == {3, 4, 5}
+    # Outside the fence the same line is a citation.
+    assert _anchor_sites("see `spec-tls.md` §Shape")[0].target == "spec-tls.md"
 
 
 def test_anchored_forms_are_not_double_counted() -> None:
