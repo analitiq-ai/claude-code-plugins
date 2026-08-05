@@ -81,6 +81,7 @@ guard — this always runs.
 from __future__ import annotations
 
 import re
+import sys
 from bisect import bisect_right
 from collections import Counter
 from functools import cache
@@ -1254,7 +1255,9 @@ def test_the_waiver_check_reads_real_prose(plugin: str) -> None:
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
-def test_every_anchor_in_the_tree_is_graded(plugin: str) -> None:
+def test_every_anchor_in_the_tree_is_graded(
+    plugin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The `anchor` floor counts anchors compared against real headings, and
     on this tree that is every `§` there is. Stated as equality because the
     gap is the interesting quantity: any citation the pass skips — an
@@ -1265,16 +1268,14 @@ def test_every_anchor_in_the_tree_is_graded(plugin: str) -> None:
     # `§` characters instead of asking the pass, this equality would be `x ==
     # x` and the anchor floor would be satisfiable by citations nobody graded.
     # Rebinding the pass proves the count follows it.
-    global _anchor_checks  # noqa: PLW0603 — restored in `finally`
-    real = _anchor_checks
-    try:
-        _anchor_checks = lambda *_args, **_kwargs: ([], 0)  # noqa: E731
+    with monkeypatch.context() as patched:
+        patched.setattr(
+            sys.modules[__name__], "_anchor_checks", lambda *_a, **_k: ([], 0)
+        )
         assert _form_counts(plugin)["anchor"] == 0, (
             "the `anchor` count does not come from the anchor pass, so the "
             "floor it feeds is a count of `§` characters"
         )
-    finally:
-        _anchor_checks = real
     graded = _form_counts(plugin)["anchor"]
     written = len(_anchor_references(plugin))
     assert graded == written, (
