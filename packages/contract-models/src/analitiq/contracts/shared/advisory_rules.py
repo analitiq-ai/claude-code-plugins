@@ -10,6 +10,12 @@ relational rule is a data edit here — never new imperative code.
 
 IDs are ``ADV-<AREA>-NNN``, stable and never reused. ``targets`` name model
 classes by string; a rule on a base class covers its subclasses (MRO match).
+
+:mod:`advisory_prose` is this census's other half (issue #127): it binds every
+normative sentence in the contract's own prose — field descriptions and model
+docstrings — to the rule, structural mechanism, or registered waiver carrying
+it, so an obligation stated here in prose and enforced nowhere fails the build
+instead of shipping silently.
 """
 from __future__ import annotations
 
@@ -348,6 +354,11 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
         targets=("StreamDestination",), enforcer="_validate_db_write_mode",
     ),
+    AdvisoryRule(
+        id="ADV-STRM-014", kind="custom", resource="stream",
+        prose="selected_columns and replication.tie_breaker_fields are database-source features: a connector-scope (API) source must not declare them.",
+        targets=("StreamSource",), enforcer="_validate_database_only_read_features",
+    ),
     # --- connector (ConnectionContractInput + connector document) -----------
     AdvisoryRule(
         id="ADV-CONN-003", kind="custom", resource="connector",
@@ -409,6 +420,21 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-CTOR-012", kind="custom", resource="connector",
         prose="A connection condition predicate must declare field and exactly one operator key (eq/in/not_in/present/regex).",
         targets=("ConnectionConditionPredicate",), enforcer="_exactly_one_operator",
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-013", kind="custom", resource="connector",
+        prose="dedicated_schema is required when the stage schema is 'dedicated' and must be omitted or null otherwise.",
+        targets=("SqlStageCapabilities",), enforcer="_dedicated_schema_matches_scope",
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-014", kind="custom", resource="connector",
+        prose="A write_unit must declare at least one of rows / bytes.",
+        targets=("WriteUnit",), enforcer="_at_least_one_bound",
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-015", kind="custom", resource="connector",
+        prose="An explicit null bulk-load mechanism is refused: absence of the family key is the only 'none'.",
+        targets=("SqlBulkLoad",), enforcer="_null_is_not_a_mechanism",
     ),
     # --- type-map -----------------------------------------------------------
     AdvisoryRule(

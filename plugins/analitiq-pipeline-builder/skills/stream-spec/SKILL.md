@@ -115,6 +115,7 @@ emits each one's stable id in the finding message, so a failure like
 | `ADV-STRM-011` | conflict_keys is required for a connection-scope upsert destination and forbidden for a connector-scope or non-upsert destination. |
 | `ADV-STRM-012` | A filter operator must belong to the source scope's vocabulary: the database operator set for a connection source, the API operator set for a connector source. |
 | `ADV-STRM-013` | A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key. |
+| `ADV-STRM-014` | selected_columns and replication.tie_breaker_fields are database-source features: a connector-scope (API) source must not declare them. |
 <!-- END GENERATED: advisory-stream -->
 
 ## Output rules

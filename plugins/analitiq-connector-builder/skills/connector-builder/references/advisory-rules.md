@@ -18,7 +18,7 @@ connection, and database-endpoint rules are excluded — they belong to other
 tools, and database endpoints are generated at runtime by the connector's
 `resource_discovery`, never authored here.
 
-**52 rules** across 4 resources.
+**55 rules** across 4 resources.
 
 ## connector
 | ID | Rule | Enforced on |
@@ -38,6 +38,9 @@ tools, and database endpoints are generated at runtime by the connector's
 | ADV-CTOR-010 | file/s3/stdout connectors must not declare post_auth_outputs or required_for_activation. | `FileConnector`, `S3Connector`, `StdoutConnector` |
 | ADV-CTOR-011 | Every {placeholder} in a url_template DSN must have a matching entry in bindings, and every binding must be referenced by the template. | `UrlTemplateDsn` |
 | ADV-CTOR-012 | A connection condition predicate must declare field and exactly one operator key (eq/in/not_in/present/regex). | `ConnectionConditionPredicate` |
+| ADV-CTOR-013 | dedicated_schema is required when the stage schema is 'dedicated' and must be omitted or null otherwise. | `SqlStageCapabilities` |
+| ADV-CTOR-014 | A write_unit must declare at least one of rows / bytes. | `WriteUnit` |
+| ADV-CTOR-015 | An explicit null bulk-load mechanism is refused: absence of the family key is the only 'none'. | `SqlBulkLoad` |
 
 ## api-endpoint
 | ID | Rule | Enforced on |

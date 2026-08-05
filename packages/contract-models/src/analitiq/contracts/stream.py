@@ -448,6 +448,33 @@ class StreamSource(StrictModel):
                 )
         return self
 
+    @model_validator(mode="after")
+    def _validate_database_only_read_features(self) -> "StreamSource":
+        # `selected_columns` and `replication.tie_breaker_fields` describe how a
+        # database read is shaped; an API (connector-scope) read has no column
+        # projection or cursor tie-breaking to configure, and the structural
+        # types cannot see the source scope — only the binding (endpoint_ref)
+        # knows it, same as the filter-operator vocabulary above (ADV-STRM-014).
+        if self.endpoint_ref.scope == SCOPE_CONNECTION:
+            return self
+        declared = [
+            name
+            for name, value in (
+                ("selected_columns", self.selected_columns),
+                (
+                    "replication.tie_breaker_fields",
+                    self.replication.tie_breaker_fields if self.replication else None,
+                ),
+            )
+            if value is not None
+        ]
+        if declared:
+            raise ValueError(
+                f"{' and '.join(declared)} are database-source features and are "
+                f"not valid for a {self.endpoint_ref.scope} source"
+            )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # Destination — write selection, execution overrides (spec §Destinations, §Write Selection, §Execution)
