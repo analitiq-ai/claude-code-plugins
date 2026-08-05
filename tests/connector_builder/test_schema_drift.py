@@ -494,10 +494,9 @@ def test_driver_selection_mechanism_table_matches_the_contract() -> None:
     SQLAlchemy family IS the dialect-implemented set.
     """
     rows = {
-        found[0]
-        for line in DRIVER_SELECTION_SPEC.read_text(encoding="utf-8").splitlines()
-        if (m := _TABLE_ROW.match(line))
-        and len(found := _BACKTICKED.findall(m.group(1))) == 1
+        label
+        for block in _table_blocks(DRIVER_SELECTION_SPEC)
+        for label in _row_cells(block)
     }
     expected = EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]
     assert rows == expected, (
@@ -698,7 +697,7 @@ _TABLE_ROW = re.compile(r"^\|([^|]*)\|([^|]*)\|")
 _BACKTICKED = re.compile(r"`([^`]+)`")
 
 
-def _table_blocks(spec: Path = None) -> list[list[str]]:
+def _table_blocks(spec: Path | None = None) -> list[list[str]]:
     """Maximal runs of consecutive `|`-leading lines — one per markdown table."""
     blocks: list[list[str]] = []
     current: list[str] = []
@@ -713,8 +712,29 @@ def _table_blocks(spec: Path = None) -> list[list[str]]:
     return blocks
 
 
-def _table_cells_containing(label: str) -> dict[str, str] | None:
-    """`{row label: Values-cell text}` for the table whose rows include `label`.
+def _row_cells(block: list[str]) -> dict[str, str]:
+    """`{row label: Values-cell text}` for one markdown table.
+
+    THE one label rule for this module. A row's label is the FIRST code span
+    in its label cell, not its only one: requiring exactly one silently
+    dropped any row whose label cell also carried a cross-reference, and a
+    dropped row is invisible to every caller — so a fact could be added to a
+    table a guard calls complete in a form that guard never reads. Header and
+    separator rows carry no code span and still fall out.
+
+    Every table reader below routes through this. They previously each
+    inlined the same walk with two different label rules, which is the drift
+    this module exists to prevent, one level up.
+    """
+    return {
+        found[0]: m.group(2).strip()
+        for row in block
+        if (m := _TABLE_ROW.match(row)) and (found := _BACKTICKED.findall(m.group(1)))
+    }
+
+
+def _table_cells_containing(label: str, spec: Path | None = None) -> dict[str, str] | None:
+    """`_row_cells` for the one table in `spec` whose rows include `label`.
 
     Both directions, unlike a subset check: a contract fact with no prose row
     fails, and a prose row for a fact the contract dropped fails too. Without
@@ -723,28 +743,14 @@ def _table_cells_containing(label: str) -> dict[str, str] | None:
     and the prose claiming the block is complete would stay green. That is
     issue #95's two-step, in miniature.
 
-    A row's label is the FIRST code span in its label cell, not its only one.
-    Requiring exactly one silently dropped any row whose Fact cell also
-    carried a cross-reference — and a dropped row is invisible to every caller
-    below, so a fact could be added to the "complete" table in a form no guard
-    reads. Header and separator rows carry no code span and still fall out.
-
     None when no single table matches, so a restructure (or two tables both
     claiming the label) surfaces as an explicit failure rather than a pass
     against an empty set.
     """
     tables = [
         cells
-        for block in _table_blocks()
-        if label
-        in (
-            cells := {
-                found[0]: m.group(2).strip()
-                for row in block
-                if (m := _TABLE_ROW.match(row))
-                and (found := _BACKTICKED.findall(m.group(1)))
-            }
-        )
+        for block in _table_blocks(spec)
+        if label in (cells := _row_cells(block))
     ]
     return tables[0] if len(tables) == 1 else None
 
@@ -755,18 +761,18 @@ def _labels_of_table_containing(label: str) -> set[str] | None:
     return None if cells is None else set(cells)
 
 
-def _vocabulary_rows() -> list[tuple[str, set[str]]]:
-    """Every (label, values) table row whose label cell is one backticked token."""
-    rows = []
-    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
-        row = _TABLE_ROW.match(line)
-        if not row:
-            continue
-        label = _BACKTICKED.findall(row.group(1))
-        values = set(_BACKTICKED.findall(row.group(2)))
-        if len(label) == 1 and values:
-            rows.append((label[0], values))
-    return rows
+def _vocabulary_rows(spec: Path | None = None) -> list[tuple[str, set[str]]]:
+    """Every (label, values) row whose Values cell holds backticked tokens.
+
+    Flattened across tables — callers key on the label, and `_documented_values`
+    fails loudly when one label appears in more than one row.
+    """
+    return [
+        (label, tokens)
+        for block in _table_blocks(spec)
+        for label, values in _row_cells(block).items()
+        if (tokens := set(_BACKTICKED.findall(values)))
+    ]
 
 
 def _documented_values(label: str) -> set[str] | None:
@@ -786,18 +792,21 @@ def _documented_values(label: str) -> set[str] | None:
     return matches[0]
 
 
-@pytest.mark.parametrize(
-    "label, expected",
-    [
-        ("catalog", EXPECTED_SQL_CATALOG_MODES),
-        ("session_targeting", EXPECTED_SQL_SESSION_TARGETING),
-        ("merge_form", EXPECTED_SQL_MERGE_FORMS),
-        ("scope", EXPECTED_SQL_STAGE_SCOPES),
-        ("schema", EXPECTED_SQL_STAGE_SCHEMAS),
-        ("sqlalchemy", EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]),
-        ("adbc", EXPECTED_SQL_BULK_MECHANISMS["adbc"]),
-    ],
-)
+#: The write-path vocabularies the spec's tables must state, label -> members.
+#: The recall pin below derives its floor from this rather than hand-stating a
+#: length, so adding an entry raises the floor instead of leaving it stale.
+PINNED_WRITE_PATH_VOCABULARIES = [
+    ("catalog", EXPECTED_SQL_CATALOG_MODES),
+    ("session_targeting", EXPECTED_SQL_SESSION_TARGETING),
+    ("merge_form", EXPECTED_SQL_MERGE_FORMS),
+    ("scope", EXPECTED_SQL_STAGE_SCOPES),
+    ("schema", EXPECTED_SQL_STAGE_SCHEMAS),
+    ("sqlalchemy", EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]),
+    ("adbc", EXPECTED_SQL_BULK_MECHANISMS["adbc"]),
+]
+
+
+@pytest.mark.parametrize("label, expected", PINNED_WRITE_PATH_VOCABULARIES)
 def test_write_path_spec_tables_state_the_pinned_vocabularies(
     label: str, expected: set[str]
 ) -> None:
@@ -824,11 +833,15 @@ def test_write_path_spec_tables_state_the_pinned_vocabularies(
 @pytest.mark.parametrize(
     "anchor, expected",
     [
-        # The declaration table needs a row per property, optional ones
-        # included — the prose calls `limits` additive, but it still documents
-        # it. Derived, so a new optional member lands here on its own.
+        # A row per PROPERTY, optional and conditional ones included — the
+        # prose calls `limits` additive and `dedicated_schema` conditional, but
+        # each still needs a row. Both expectations are derived, so a new
+        # optional member lands here on its own instead of waiting for someone
+        # to widen a literal; without that, the contract-side pin fails alone,
+        # the fixer widens it, and the table keeps advertising itself as the
+        # complete declaration.
         ("catalog", EXPECTED_SQL_CAPABILITY_PROPERTIES),
-        ("scope", EXPECTED_SQL_STAGE_FACTS),
+        ("scope", EXPECTED_SQL_STAGE_PROPERTIES),
         ("sqlalchemy", set(EXPECTED_SQL_BULK_MECHANISMS)),
     ],
 )
@@ -866,9 +879,7 @@ def _prose_diff_msg(label: str, documented: set[str], expected: set[str]) -> str
     )
 
 
-def test_write_path_spec_marks_exactly_the_optional_facts_optional(
-    connector_schema: dict,
-) -> None:
+def test_write_path_spec_marks_exactly_the_optional_facts_optional() -> None:
     """The declaration table's required/optional split must match the contract.
 
     This stands in for a count. The spec used to assert completeness as a
@@ -981,12 +992,12 @@ def test_write_path_table_parser_reads_the_real_tables() -> None:
     parser reading zero rows fails on its own.)
     """
     rows = _vocabulary_rows()
-    expected_vocabulary_rows = 7
-    assert len(rows) >= expected_vocabulary_rows, (
+    floor = len(PINNED_WRITE_PATH_VOCABULARIES)
+    assert len(rows) >= floor, (
         f"the parser found only {len(rows)} vocabulary rows in "
         f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — it must read at least the "
-        f"{expected_vocabulary_rows} the tests above pin, or those tests are "
-        "resting on None-guards."
+        f"{floor} the tests above pin, or those tests are resting on "
+        "None-guards."
     )
     assert _documented_values("catalog") == EXPECTED_SQL_CATALOG_MODES
 
@@ -1038,38 +1049,65 @@ EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
 EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
-def _sentence_tokens(spec: Path, anchor: str) -> set[str] | None:
-    """Backticked tokens from `anchor` to the end of its sentence.
+def _sentence(spec: Path, anchor: str) -> str | None:
+    """The text from `anchor` to the end of its sentence.
 
     Prose wraps, so the text is flattened first and the span runs to the next
     period — scoping to one line would silently read half a claim. None when
     the anchor is absent or ambiguous, which the caller fails on rather than
     comparing against an empty set.
+
+    Code spans are masked before the terminator is located: a cross-reference
+    like `spec-tls.md` or `type-map-read.json` carries a period that would cut
+    the claim mid-span, and the resulting token mismatch would read as contract
+    drift rather than as the parsing accident it is.
     """
     flat = " ".join(spec.read_text(encoding="utf-8").split())
     if flat.count(anchor) != 1:
         return None
     tail = flat.split(anchor, 1)[1]
-    return set(_BACKTICKED.findall(tail.split(".")[0]))
+    masked = _BACKTICKED.sub(lambda m: "`" + "_" * len(m.group(1)) + "`", tail)
+    end = masked.find(".")
+    return tail if end < 0 else tail[:end]
 
 
 @pytest.mark.parametrize(
-    "spec, anchor, expected",
+    "spec, anchor, closure, expected",
     [
-        (REPLICATION_SPEC, "the block carries", EXPECTED_REPLICATION_KEYS),
-        (DISCOVERY_SPEC, "exposes exactly these actions:", EXPECTED_DISCOVERY_ACTIONS),
+        (
+            REPLICATION_SPEC,
+            "the block carries",
+            "nothing else",
+            EXPECTED_REPLICATION_KEYS,
+        ),
+        (
+            DISCOVERY_SPEC,
+            "exposes exactly these actions:",
+            "exactly these",
+            EXPECTED_DISCOVERY_ACTIONS,
+        ),
     ],
 )
 def test_prose_closure_claims_name_exactly_the_contract_members(
-    spec: Path, anchor: str, expected: set[str]
+    spec: Path, anchor: str, closure: str, expected: set[str]
 ) -> None:
     """A "nothing else" sentence must enumerate exactly what the model carries."""
-    named = _sentence_tokens(spec, anchor)
-    assert named is not None, (
+    sentence = _sentence(spec, anchor)
+    assert sentence is not None, (
         f"{spec.relative_to(REPO_ROOT)}: the phrase {anchor!r} is missing or "
         "appears more than once — the claim was reworded, so this guard would "
         "have passed vacuously. Re-anchor it on the new wording."
     )
+    # Grade the closure, not just the enumeration. Dropping "and nothing else"
+    # leaves a weaker-but-true sentence and would otherwise pass here, quietly
+    # retiring the claim this guard exists to hold.
+    assert closure in anchor + sentence, (
+        f"{spec.relative_to(REPO_ROOT)}: the sentence after {anchor!r} no "
+        f"longer closes the set ({closure!r} is gone). Either restore the "
+        "closure or drop this case — a guard for a claim nobody makes is worse "
+        "than no guard."
+    )
+    named = set(_BACKTICKED.findall(sentence))
     assert named == expected, (
         f"{spec.relative_to(REPO_ROOT)}: the closure claim after {anchor!r} "
         f"names different members than the contract — "
@@ -1080,11 +1118,22 @@ def test_prose_closure_claims_name_exactly_the_contract_members(
 
 
 def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
-    """The contract side of the `spec-replication.md` closure claim."""
+    """The contract side of the `spec-replication.md` closure claim.
+
+    Both `properties` and `required`: the spec's bullet says the block carries
+    these keys AND that each is required. Pinning properties alone would let
+    either move to optional with the "each required" claim still green — the
+    same half-measure that left a new optional `SqlCapabilities` member
+    invisible.
+    """
     node = (api_endpoint_schema.get("$defs") or {}).get("Replication")
     props = set(node.get("properties") or {}) if isinstance(node, dict) else None
     assert props == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
         "Replication properties", props, EXPECTED_REPLICATION_KEYS
+    )
+    required = _required_at(api_endpoint_schema, "Replication")
+    assert required == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
+        "Replication required", required, EXPECTED_REPLICATION_KEYS
     )
 
 
@@ -1097,26 +1146,133 @@ def test_discovery_actions_match_schema(connector_schema: dict) -> None:
     )
 
 
+def test_db_creator_step_accounts_for_every_shape_fact() -> None:
+    """The authoring step must name every fact it tells the agent to declare.
+
+    Removing the count left the sub-bullets as the only place this agent
+    enumerates the fact set, and nothing read them: deleting the `merge_form`
+    bullet outright kept the suite green while the agent stopped authoring a
+    required fact. `_WRITE_PATH_FIX` names this file as somewhere to go fix,
+    but a fix-hint is not a guard.
+
+    Scoped to the ONE numbered step that authors `sql_capabilities`, so a fact
+    mentioned elsewhere in the document cannot stand in for the guidance. A
+    fact is "named" by its own bullet or by a dotted child (`stage.scope`
+    accounts for `stage`), matching how the step is written.
+    """
+    doc = PLUGIN_ROOT / "agents" / "db-connector-creator.md"
+    step = re.search(
+        r"^\d+\.\s+\*\*SQL write-path capabilities\*\*(.*?)(?=^\d+\. )",
+        doc.read_text(encoding="utf-8"),
+        re.M | re.S,
+    )
+    assert step, (
+        f"{doc.name}: no `SQL write-path capabilities` numbered step — the "
+        "authoring order was restructured; re-scope this gate."
+    )
+    tokens = set(_BACKTICKED.findall(step.group(1)))
+    missing = {
+        fact
+        for fact in EXPECTED_SQL_CAPABILITY_FACTS
+        if not any(t == fact or t.startswith(f"{fact}.") for t in tokens)
+    }
+    assert not missing, (
+        f"{doc.name}'s `sql_capabilities` step never names {sorted(missing)} — "
+        "the agent is told the block must be complete but not what to put in "
+        f"it. {_WRITE_PATH_FIX}"
+    )
+
+
+def test_database_endpoints_carry_no_replication_block() -> None:
+    """`enum-mappers.md` reasons from an ABSENCE, so pin the absence.
+
+    The pipeline plugin tells the author that a database endpoint declares no
+    support set, and derives from that which `replication.method` values are
+    selectable. An absence claim never fails on its own — adding `replication`
+    to the database endpoint contract would make the guidance silently wrong
+    while every other guard stayed green.
+    """
+    from analitiq.contracts.endpoints import DatabaseEndpointDoc
+
+    schema = json.dumps(TypeAdapter(DatabaseEndpointDoc).json_schema())
+    assert "replication" not in schema, (
+        "the database-endpoint contract now mentions `replication`, so "
+        "\"a database endpoint carries no replication block\" in "
+        "plugins/analitiq-pipeline-builder/skills/pipeline-builder/references/"
+        "enum-mappers.md is false. Rewrite that guidance in this change."
+    )
+
+
+def test_cursor_mapping_variants_match_the_spec() -> None:
+    """`spec-replication.md` enumerates the cursor-mapping variants by `$defs` id.
+
+    `CursorMapping` is a discriminated union, so a third variant is a plausible
+    contract change — and the page presents its list as the choice an author
+    picks from. Read the union's members and compare to the ids the page cites.
+    """
+    from analitiq.contracts.endpoints import CursorMapping
+
+    schema = TypeAdapter(CursorMapping).json_schema()
+    variants = {
+        ref.rsplit("/", 1)[-1]
+        for branch in schema.get("oneOf") or schema.get("anyOf") or []
+        if (ref := branch.get("$ref"))
+    }
+    assert variants, (
+        "no `$ref` branches found for CursorMapping — the union was "
+        "restructured, so this guard would have passed vacuously."
+    )
+    cited = {
+        token.rsplit("/", 1)[-1]
+        for token in _BACKTICKED.findall(
+            REPLICATION_SPEC.read_text(encoding="utf-8")
+        )
+        if token.startswith("#/$defs/") and token.endswith("CursorMapping")
+    }
+    assert cited == variants, (
+        f"{REPLICATION_SPEC.relative_to(REPO_ROOT)} cites different cursor "
+        f"mapping variants than the contract — prose-only={sorted(cited - variants)} "
+        f"contract-only={sorted(variants - cited)}. A new variant must reach "
+        "the page that teaches an author how to choose one."
+    )
+
+
 def test_type_map_rule_keys_match_schema_and_prose() -> None:
     """`spec-type-maps.md` says a rule carries "exactly the keys named below".
 
     Both sides: the contract's rule keys, and the Key column of the table the
     sentence defers to. Nothing else in this suite reads either.
-    """
-    from analitiq.contracts.type_map import TypeMapReadExactRule
 
-    contract_keys = set(TypeAdapter(TypeMapReadExactRule).json_schema()["properties"])
-    assert contract_keys == EXPECTED_TYPE_MAP_RULE_KEYS, _set_diff_msg(
-        "type-map rule keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
+    EVERY variant, not just the read/exact one. The table the sentence points
+    at carries a Write-map column, so the claim spans all four; checking one
+    would leave a key added to a write variant — the likelier direction, since
+    `canonical` is already overridden per variant — falsifying the sentence
+    with the suite green.
+    """
+    from analitiq.contracts.type_map import (
+        TypeMapReadExactRule,
+        TypeMapReadRegexRule,
+        TypeMapWriteExactRule,
+        TypeMapWriteRegexRule,
     )
-    documented = {
-        found[0]
-        for block in _table_blocks(TYPE_MAPS_SPEC)
-        if "match" in {f[0] for r in block
-                       if (m := _TABLE_ROW.match(r)) and (f := _BACKTICKED.findall(m.group(1)))}
-        for row in block
-        if (m := _TABLE_ROW.match(row)) and (found := _BACKTICKED.findall(m.group(1)))
-    }
+
+    for rule in (
+        TypeMapReadExactRule,
+        TypeMapReadRegexRule,
+        TypeMapWriteExactRule,
+        TypeMapWriteRegexRule,
+    ):
+        contract_keys = set(TypeAdapter(rule).json_schema()["properties"])
+        assert contract_keys == EXPECTED_TYPE_MAP_RULE_KEYS, _set_diff_msg(
+            f"{rule.__name__} keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
+        )
+    cells = _table_cells_containing("match", TYPE_MAPS_SPEC)
+    assert cells is not None, (
+        f"no single table in {TYPE_MAPS_SPEC.relative_to(REPO_ROOT)} has a "
+        "`match` row — the rule-shape table was restructured (or two tables "
+        "now claim it), so this guard would have passed vacuously."
+    )
+    documented = set(cells)
     assert documented == EXPECTED_TYPE_MAP_RULE_KEYS, (
         f"{TYPE_MAPS_SPEC.relative_to(REPO_ROOT)}: the rule-shape table names "
         f"different keys than the contract — "

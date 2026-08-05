@@ -124,7 +124,7 @@ another connector and never imports an engine/runtime. MariaDB ships its
 own copy of the mysql-shaped dialect rather than importing the mysql
 connector.
 
-The two write-path **renderers** return statement text, so they need no
+The write-path **renderers** return statement text, so they need no
 SQLAlchemy construct helpers (`sqlalchemy.dialects.*.insert` and friends
 belonged to the removed record-executor surface). `bulk_land` is the
 exception: it performs the landing itself, so it reaches for the driver's

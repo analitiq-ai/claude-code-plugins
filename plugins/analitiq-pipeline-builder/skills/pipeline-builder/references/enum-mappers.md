@@ -48,8 +48,9 @@ the watermark.
 `replication.method` must be in the source endpoint's declared support
 set. For API endpoints, the connector document lists
 `operations.read.replication.supported_methods`. A database endpoint carries
-no `replication` block, so it declares no support set and nothing constrains
-the choice.
+no `replication` block, so no endpoint-declared support set constrains the
+method — the stream-side rule above still does: `incremental` requires a
+`cursor_field`.
 
 ## WriteModeMapper
 

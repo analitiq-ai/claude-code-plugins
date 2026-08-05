@@ -71,8 +71,9 @@ mechanism.
 | Field | Values | How to choose |
 |---|---|---|
 | `scope` | `temp` / `real` | `temp` — a session/transaction-scoped temporary table. `real` — an ordinary table the engine creates and drops around the write, for systems with no usable temp relation. The engine passes this through to `stage_table_sql`'s `temp` argument. |
-| `schema` | `target` / `dedicated` | `target` co-locates the stage in the target's own schema. `dedicated` places it in a separate schema, and then `dedicated_schema` names it — required exactly when `schema` is `dedicated`, and omitted (or explicitly `null`) otherwise. |
+| `schema` | `target` / `dedicated` | `target` co-locates the stage in the target's own schema. `dedicated` places it in a separate schema, named by `dedicated_schema` below. |
 | `transactional_ddl` | `true` / `false` | Whether the system runs `CREATE`/`DROP` **inside** the write transaction. `false` for engines that auto-commit DDL (MySQL), which forces the engine onto a per-step staging strategy. A guess here is a correctness bug, not a tuning knob — take it from the system's documented DDL behaviour. |
+| `dedicated_schema` | string, conditional | The schema name the stage goes in. Required exactly when `schema` is `dedicated`, and omitted (or explicitly `null`) otherwise — which is why it is never in the block's required set. |
 
 ## The dialect renderers
 
