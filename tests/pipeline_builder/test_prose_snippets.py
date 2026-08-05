@@ -40,20 +40,23 @@ pytest.importorskip("analitiq.validator",
 # Discovery: every ```json / ```jsonc fence under skills/**/*.md
 # ---------------------------------------------------------------------------
 
-_OPEN_FENCE = re.compile(r"^```(\S+)\s*$")
+_OPEN_FENCE = re.compile(r"^```(\S*)")
 _CLOSE_FENCE = re.compile(r"^```\s*$")
+_COLLECTED_LANGS = ("json", "jsonc")
 
 
-def _discover_blocks() -> dict[tuple[str, int], str]:
-    """Map (path relative to skills/, zero-based json[c]-block index) -> body.
+def _discover_blocks(root: Path) -> dict[tuple[str, int], str]:
+    """Map (path relative to root, zero-based json[c]-block index) -> body.
 
-    Every fence with an info string opens a block (so a ```python fence's
-    contents can never be mistaken for a json fence's opener); only json/jsonc
-    fences are collected, and the index counts those alone.
+    EVERY triple-backtick line toggles fence state — including bare ``` and
+    other-language fences — so no fence's contents can ever be mistaken for
+    top-level markdown (a ```jsonc line quoted inside a bare fence is content,
+    not an opener). Only fences whose opening line is exactly ```json or
+    ```jsonc are collected, and the index counts those alone.
     """
     blocks: dict[tuple[str, int], str] = {}
-    for md in sorted(SKILLS.rglob("*.md")):
-        rel = md.relative_to(SKILLS).as_posix()
+    for md in sorted(root.rglob("*.md")):
+        rel = md.relative_to(root).as_posix()
         index = 0
         lang: str | None = None
         body: list[str] = []
@@ -61,20 +64,42 @@ def _discover_blocks() -> dict[tuple[str, int], str]:
             if lang is None:
                 m = _OPEN_FENCE.match(line)
                 if m:
-                    lang = m.group(1)
+                    # Exact-form openers collect; any other ```… line still
+                    # opens an (uncollected) fence so its body stays opaque.
+                    exact = line.rstrip() == f"```{m.group(1)}"
+                    lang = m.group(1) if exact else ""
                     body = []
                 continue
             if _CLOSE_FENCE.match(line):
-                if lang in ("json", "jsonc"):
+                if lang in _COLLECTED_LANGS:
                     blocks[(rel, index)] = "\n".join(body)
                     index += 1
                 lang = None
                 continue
             body.append(line)
+        # An unterminated fence would silently discard its body — and with it
+        # a block this gate exists to check. Fail loud instead.
+        assert lang is None, f"{rel}: unterminated ``` fence at end of file"
     return blocks
 
 
-DISCOVERED = _discover_blocks()
+DISCOVERED = _discover_blocks(SKILLS)
+
+
+def test_discovery_scanner(tmp_path):
+    """Guard the scanner: collection is exact-form, other fences are opaque."""
+    (tmp_path / "probe.md").write_text(
+        "```jsonc\n{}\n```\n"           # collected: index 0
+        "```bash\necho hi\n```\n"       # other language: opaque
+        "```\n```jsonc\nquoted\n```\n"  # bare fence quoting an opener: opaque
+        "```json\n[1]\n```\n"           # collected: index 1
+    )
+    assert _discover_blocks(tmp_path) == {
+        ("probe.md", 0): "{}", ("probe.md", 1): "[1]"}
+
+    (tmp_path / "probe.md").write_text("```jsonc\n{}\n")  # never closed
+    with pytest.raises(AssertionError, match="unterminated"):
+        _discover_blocks(tmp_path)
 
 
 # ---------------------------------------------------------------------------
