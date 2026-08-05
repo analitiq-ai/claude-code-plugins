@@ -5,19 +5,19 @@ The connector plugin's release policy surfaces in three places, each read by a
 different consumer: the release table (`metadata-and-versioning.md` §Release
 version, read by authoring skills), the drift classifier's bump table
 (`agents/connector-drift-classifier.md`, the mapping the classifier applies at
-run time), and the `DriftVerdict` envelope's `category` enum
-(`references/io-contracts.md`, the verdict's output vocabulary). All three are
-projections of one vocabulary — which change categories exist, which semver
-tier each triggers, and what each means — and hand-maintaining three copies is
-the drift surface `.claude/rules/no-drift-surfaces.md` forbids.
+run time), and the `DriftVerdict` envelope (`references/io-contracts.md`),
+whose `bump` and `category` enums are the verdict's output vocabulary. All
+three are projections of one vocabulary — which change categories exist, which
+semver tier each triggers, and what each means — and hand-maintaining three
+copies is the drift surface `.claude/rules/no-drift-surfaces.md` forbids.
 
 This module is the one owner. The policy is the plugin's own — no contract
-model or engine artifact defines it (`metadata-and-versioning.md` says so) —
-which is why the source is data here rather than a pinned package import.
-`scripts/render_validator_claims.py` registers the renderers below and writes
-each projection into its `BEGIN GENERATED` block: that script owns every
-generated block in the connector plugin's tree, and a marker id it does not
-know fails loud rather than rendering nothing.
+model or engine artifact defines it, and `metadata-and-versioning.md`'s intro
+states it is the plugin's own policy — which is why the source is data here
+rather than a pinned package import. `scripts/render_validator_claims.py`
+registers the renderers below and writes each projection into its
+`BEGIN GENERATED` block; why they live in that script's registry is
+documented on its `_release_table` hook.
 """
 
 from __future__ import annotations
@@ -28,8 +28,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 #: Rollup precedence, highest first: any major-tier change makes the bump
-#: `major`, else any minor-tier makes it `minor`, else patch. The classifier's
-#: process prose applies this order; a verdict with no change at all is `none`.
+#: `major`, else any minor-tier makes it `minor`, else patch. The rollup is
+#: rendered into the bump-table block by `render_bump_table`; a verdict with
+#: no change at all is `none`.
 TIERS: tuple[str, ...] = ("major", "minor", "patch")
 
 #: What each tier means for a saved connection — the release table's
@@ -121,8 +122,11 @@ def _tier_categories(tier: str) -> tuple[Category, ...]:
 
 
 def _decapitalize(phrase: str) -> str:
-    """Lower a leading ASCII capital so joined phrases read as one sentence."""
-    if phrase[:1].isascii() and phrase[:1].isupper():
+    """Lower a leading ASCII capital so joined phrases read as one sentence.
+
+    A phrase opening with an acronym (`API endpoint …`) is left alone.
+    """
+    if phrase[:1].isascii() and phrase[:1].isupper() and not phrase[1:2].isupper():
         return phrase[0].lower() + phrase[1:]
     return phrase
 
@@ -140,7 +144,7 @@ def render_release_table() -> str:
 
 
 def render_bump_table() -> str:
-    """The classifier's category → tier mapping, notes attached in place."""
+    """The classifier's category → tier mapping and rollup, notes in place."""
     bullets = []
     for tier in TIERS:
         items = [
@@ -152,10 +156,19 @@ def render_bump_table() -> str:
                 f"- **{tier}**: " + ", ".join(items) + ".",
                 width=76,
                 subsequent_indent="  ",
-                break_on_hyphens=False,  # a slug split across lines stops being greppable
+                # Neither a hyphenated slug nor a long code span may split
+                # across lines: a broken token stops being greppable.
+                break_on_hyphens=False,
+                break_long_words=False,
             )
         )
-    return "\n".join(bullets) + "\n"
+    first, *rest = TIERS
+    rollup = "; ".join(
+        [f"Rollup: any {first}-tier category → bump = `{first}`"]
+        + [f"else any {tier}-tier → `{tier}`" for tier in rest]
+        + [f"else → `{BUMP_VALUES[-1]}`"]
+    )
+    return "\n".join(bullets) + "\n\n" + textwrap.fill(rollup + ".", width=76) + "\n"
 
 
 # The envelope's fixed shape, kept compact by hand because the fence is loaded
@@ -205,6 +218,7 @@ def render_drift_verdict() -> str:
         initial_indent=" " * 14,
         subsequent_indent=" " * 14,
         break_on_hyphens=False,
+        break_long_words=False,
     )
     body = _DRIFT_VERDICT_TEMPLATE.replace(
         "@BUMP_ENUM@", ", ".join(json.dumps(v) for v in BUMP_VALUES)
@@ -234,6 +248,16 @@ def _validate() -> None:
     for tier in TIERS:
         if not _tier_categories(tier):
             raise ValueError(f"tier {tier!r} has no categories — dead table row")
+    # The markdown projections get no parse-back like the envelope's, so bad
+    # cell content must be refused at the data layer or it ships silently.
+    for c in CATEGORIES:
+        if not c.slug.strip() or not c.meaning.strip():
+            raise ValueError(f"category {c.slug!r}: empty slug or meaning")
+        if "|" in c.meaning or "\n" in c.meaning:
+            raise ValueError(
+                f"category {c.slug!r}: meaning would break the markdown table")
+    if any("|" in m or "\n" in m for m in TIER_MEANINGS.values()):
+        raise ValueError("a tier meaning would break the markdown table")
     envelope = _rendered_envelope()  # raises on malformed JSON in the template
     rationale = envelope["properties"]["rationale"]["items"]["properties"]
     if rationale["category"]["enum"] != slugs:

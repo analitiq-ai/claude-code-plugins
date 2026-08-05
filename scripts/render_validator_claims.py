@@ -22,11 +22,9 @@ This module is the fix, in three parts:
    this registry — `claim:<id>` blocks from the `Claim` records, the dense
    clusters (the response-scope table, the validator blind-spot list) by the
    dedicated `render_*` functions whose probe couplings sit beside them — so
-   neither can drift from the measurement behind it. One block family is not
-   a validator claim at all: the connector release-policy projections,
-   rendered from `connector_release_table.py`'s data (`_release_table`) —
-   registered here because this script owns every generated block in the
-   connector plugin's tree.
+   neither can drift from the measurement behind it. One block family stands
+   on data instead of probes: the connector release-policy projections (see
+   `_release_table`).
 3. **The scan** — a trigger-phrase gate over every markdown file in BOTH
    plugins. A sentence that asserts validator behavior (matches
    `CLAIM_TRIGGERS`) must be pinned: inside a generated region, within reach
@@ -940,32 +938,34 @@ def _release_table():
     import importlib.util
 
     spec = importlib.util.spec_from_file_location(
-        "_connector_release_table",
-        Path(__file__).resolve().parent / "connector_release_table.py")
+        "_connector_release_table", REPO_ROOT / "scripts" / "connector_release_table.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
 
-RENDERERS: dict[str, Callable[[], str]] = {
+_DEDICATED_RENDERERS: dict[str, Callable[[], str]] = {
     "scope-guarantees": render_scope_guarantees,
     "validator-blind-spots": render_validator_blind_spots,
-    **{f"claim:{c.id}": (lambda cid=c.id: _render_claim(cid)) for c in CLAIMS},
-    **_release_table().RENDERERS,
 }
-# A colliding id would let one registry silently shadow the other's renderer.
-assert len(RENDERERS) == 2 + len(CLAIMS) + len(_release_table().RENDERERS), (
-    "block-id collision between the claims registry and connector_release_table"
-)
+_CLAIM_RENDERERS: dict[str, Callable[[], str]] = {
+    f"claim:{c.id}": (lambda cid=c.id: _render_claim(cid)) for c in CLAIMS
+}
+RENDERERS: dict[str, Callable[[], str]] = {
+    **_DEDICATED_RENDERERS, **_CLAIM_RENDERERS, **_release_table().RENDERERS,
+}
+# A colliding id would let one registry silently shadow another's renderer —
+# and worse, `block_probe_ids` would then report the shadowed block probeless.
+if len(RENDERERS) != len(_DEDICATED_RENDERERS) + len(_CLAIM_RENDERERS) + len(
+        _release_table().RENDERERS):
+    raise RuntimeError("block-id collision between renderer registries")
 
 
 def block_probe_ids(block_id: str) -> set[str]:
     """The probe ids one block stands on."""
     if block_id in _release_table().RENDERERS:
-        # Release-policy blocks stand on the data module, not on probes: the
-        # bump policy is the plugin's own, not a validator behavior to measure.
-        return set()
+        return set()  # data-backed, not probe-backed — see `_release_table`
     if block_id == "scope-guarantees":
         return scope_table_probe_ids() | set(_SCOPE_GUARANTEES_EXTRA_PROBES)
     if block_id == "validator-blind-spots":
@@ -1433,8 +1433,22 @@ def _check_problems(stale_docs: list[str]) -> list[str]:
     unreferenced = sorted(set(PROBES_BY_ID) - referenced)
     unembedded = sorted(set(RENDERERS) - embedded_block_ids())
     broken_markers = malformed_marker_docs()
+    # Generated regions are pinned spans for the scan, an exemption earned by
+    # the probes behind them — which the release-policy blocks don't have. A
+    # validator claim rendered into one would ship looking machine-pinned
+    # while backed by nothing, so their output faces the same trigger gate.
+    unprobed_claims = sorted(
+        block_id for block_id in _release_table().RENDERERS
+        if _TRIGGER_RE.search(_normalize(RENDERERS[block_id]()))
+    )
 
     problems: list[str] = []
+    if unprobed_claims:
+        problems.append(
+            "release-policy block(s) state validator behavior: "
+            f"{', '.join(unprobed_claims)} — these blocks stand on data, not "
+            "probes, so such a sentence is pinned by nothing; carry it as a "
+            "Claim with a probe instead, or reword it.")
     if unembedded:
         problems.append(
             f"renderer(s) with no embedded block: {', '.join(unembedded)} — "

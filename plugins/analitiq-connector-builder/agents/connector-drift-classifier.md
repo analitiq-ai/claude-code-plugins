@@ -29,11 +29,7 @@ object.
    your reasoning against the rules below.
 3. For each change, classify it under the categories in the `DriftVerdict`
    schema (see connector-builder/references/io-contracts.md).
-4. Apply this rollup:
-   - Any major-tier category → bump = `major`.
-   - Else any minor-tier category → bump = `minor`.
-   - Else any patch-tier category → bump = `patch`.
-   - Else → bump = `none`.
+4. Apply the rollup stated under the bump table below.
 5. Compute `next_version` from the previous version's semver.
 6. Return `DriftVerdict` as a JSON block.
 
@@ -61,6 +57,9 @@ object.
 - **patch**: bug-fix, doc-fix, tuning, type-map-rule-reordered (when the
   reorder doesn't change first-match resolution for any existing input in
   that map's direction).
+
+Rollup: any major-tier category → bump = `major`; else any minor-tier →
+`minor`; else any patch-tier → `patch`; else → `none`.
 <!-- END GENERATED: bump-table -->
 
 ## Hard rules

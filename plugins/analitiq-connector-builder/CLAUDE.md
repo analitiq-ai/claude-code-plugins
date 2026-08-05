@@ -98,7 +98,8 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   projections (the release table, the drift classifier's bump table, the
   `DriftVerdict` envelope), owned as data by
   `scripts/connector_release_table.py`. Change the bump policy there, then
-  re-run `write` — never in the prose.
+  re-run `write` — never in the prose. (`write` verifies probes before
+  rendering anything, so the whole gate must be green first.)
 - `tests/connector_builder/test_validator_claims.py` runs the same predicate
   in pytest.
 
