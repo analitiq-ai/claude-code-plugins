@@ -134,8 +134,12 @@ _KEYWORD_TICKET = re.compile(
 # `\d+\b` is load-bearing, not decorative. Without the `\b` the engine backtracks
 # when the lookahead fails — `README.md#12-layout` would fail at `#12` and then
 # happily match `README.md#1` — which silently defeats the anchor exclusion.
+#
+# The slug body is optional so a one-character name still matches: requiring two
+# characters left `x#123` matched by nothing at all, since the bare pattern's
+# lookbehind rejects a `#` preceded by a word character.
 _CROSS_REPO_TICKET = re.compile(
-    r"\b[A-Za-z][A-Za-z0-9._/-]*[A-Za-z0-9]#\d+\b(?!-[^#])"
+    r"\b[A-Za-z](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?#\d+\b(?!-[^#])"
 )
 
 # A bare `#108`. Two-digit floor per the module docstring. The lookbehind keeps
@@ -173,15 +177,29 @@ def _tracked_files() -> list[str]:
 
     Enumerating from git rather than from the filesystem is what makes the scope
     fail closed (see the module docstring). A failure here is raised, never
-    swallowed: a guard that cannot list the repo must not report it clean.
+    swallowed: a guard that cannot list the repo must not report it clean. The
+    suite only ever runs from a checkout — `pytest.ini` and `conftest.py` live at
+    the repo root and no wheel ships tests — so "git cannot list this tree" means
+    the environment is wrong, not that the check is inapplicable.
+
+    `cwd=REPO_ROOT` is correct inside a git worktree too, where `.git` is a file
+    pointing at the parent repo: `git ls-files` resolves it and lists the
+    worktree's own index.
     """
-    result = subprocess.run(
-        ["git", "ls-files", "-z"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(
+            f"could not enumerate tracked files under {REPO_ROOT} — this gate "
+            "derives its scope from git, so it cannot run against a tree git "
+            "does not know. Run the suite from a checkout."
+        ) from exc
     return [line for line in result.stdout.split("\0") if line]
 
 
@@ -397,6 +415,10 @@ def test_cross_repo_form_is_flagged() -> None:
             "analitiq-ai/analitiq-engine" + "#392",
         # Single digit: only this arm can catch it.
         "settled in analitiq-engine" + "#7 last year": "analitiq-engine" + "#7",
+        # A one-character slug. No other arm can reach it — the bare pattern's
+        # lookbehind rejects a `#` preceded by a word character — so requiring
+        # two characters here left this shape matched by nothing.
+        "tracked on x" + "#123 upstream": "x" + "#123",
     }
     for line, expected in cases.items():
         assert scan_text(line) == [(1, expected)], f"cross-repo arm missed: {line!r}"
