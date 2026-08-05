@@ -334,8 +334,7 @@ def test_cross_params_checks_literals_only():
 def test_timestamp_offset_uses_the_manifest_pattern_verbatim():
     """The fixed-offset grammar is manifest-owned; the derived pattern must
     embed it unchanged (no hand-tightened hour range — issue #81's deltas)."""
-    # The test asserts the param exists — StopIteration is the failure signal
-    # working, not a case to guard.
+    # StopIteration here is the failure signal working, not a case to guard.
     tz_param = next(  # skipcq: PTC-W0063
         p
         for p in arrow_grammar.FAMILIES["Timestamp"]["params"]

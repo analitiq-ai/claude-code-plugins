@@ -88,15 +88,15 @@ _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _fetch(url: str) -> bytes:
+    if not url.startswith(BASE_URL):
+        raise GuardError(f"refusing non-{BASE_URL} URL: {url}")
     try:
-        # The URL derives from the hardcoded https constant BASE_URL, so the
-        # scheme cannot vary.
+        # Scheme pinned by the BASE_URL check above.
         with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310  # skipcq: BAN-B310
             return resp.read()
     except (
-        # IncompleteRead/BadStatusLine are not OSError; URLError and
-        # TimeoutError ARE OSError subclasses, so this pair catches exactly
-        # what a longer tuple naming them would.
+        # URLError and TimeoutError are OSError subclasses; HTTPException
+        # (IncompleteRead/BadStatusLine) is not.
         http.client.HTTPException,
         OSError,
     ) as exc:

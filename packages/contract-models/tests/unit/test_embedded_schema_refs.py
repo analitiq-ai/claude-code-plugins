@@ -25,10 +25,13 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.endpoints import (
+    _MATERIALIZED_NODE,
     _MISSING,
     _OperationKind,
+    _combine_schema_values,
     _compose_declarations,
     _property_contributors,
+    _refuse_disjoint_types,
     _unresolved_harm,
     ApiEndpointDoc,
     DeclarationConflictError,
@@ -1295,13 +1298,6 @@ class TestMaterializeMatchesTheNaiveFold:
     def _naive_fold(node, root):
         """The reference: no memo, no visited set, re-merged at every position.
         Exponential — the generated graphs below are forward-only and small."""
-        from analitiq.contracts.endpoints import (
-            _MATERIALIZED_NODE,
-            _combine_schema_values,
-            _refuse_disjoint_types,
-            resolve_schema_ref,
-        )
-
         if not isinstance(node, dict):
             return node
         sources = []
@@ -1359,8 +1355,6 @@ class TestMaterializeMatchesTheNaiveFold:
         re-contributed by a later source MOVES to the end). Exponential, which
         is why the graphs are small.
         """
-        from analitiq.contracts.endpoints import resolve_schema_ref
-
         if not isinstance(node, dict):
             return {}
         recurse = TestMaterializeMatchesTheNaiveFold._naive_contributors
@@ -1391,8 +1385,6 @@ class TestMaterializeMatchesTheNaiveFold:
         return contributors
 
     def test_agrees_with_the_fold_on_random_shared_defs_graphs(self):
-        import random
-
         random.seed(20260804)  # fixed: a flaky differential test is worthless
         names = [f"D{i}" for i in range(10)]
         divergences = []
@@ -1449,8 +1441,6 @@ class TestMaterializeMatchesTheNaiveFold:
         because the failure mode is a different `arrow_type` on a derived
         column rather than an error.
         """
-        import random
-
         random.seed(20260805)
         names = [f"D{i}" for i in range(9)]
         types = ["string", "integer", "boolean", "number"]
@@ -1509,15 +1499,18 @@ class TestMaterializeMatchesTheNaiveFold:
                 except DeclarationConflictError as exc:
                     return ("refused", exc.reason)
 
-            actual = attempt(lambda: _property_contributors(root, root))
+            # Default-arg binding: each thunk is called by `attempt` within
+            # this same iteration, so binding at definition time is equivalent
+            # — it only stops the closure reading the loop cell.
+            actual = attempt(lambda root=root: _property_contributors(root, root))
             if actual != ("ok", reference):
                 divergences.append(root)
                 continue
-            composed = attempt(lambda: {
+            composed = attempt(lambda reference=reference: {
                 name: _compose_declarations(name, declarations)
                 for name, declarations in reference.items()
             })
-            if attempt(lambda: effective_properties(root, root)) != composed:
+            if attempt(lambda root=root: effective_properties(root, root)) != composed:
                 divergences.append(root)
         assert not divergences, (
             f"{len(divergences)} graphs contribute differently from the "
@@ -1527,9 +1520,9 @@ class TestMaterializeMatchesTheNaiveFold:
     @pytest.mark.parametrize(
         "view",
         [
-            pytest.param(lambda n, r: _property_contributors(n, r), id="contributors"),
-            pytest.param(lambda n, r: effective_properties(n, r), id="effective"),
-            pytest.param(lambda n, r: materialize_node(n, r), id="materialize"),
+            pytest.param(_property_contributors, id="contributors"),
+            pytest.param(effective_properties, id="effective"),
+            pytest.param(materialize_node, id="materialize"),
         ],
     )
     @pytest.mark.parametrize(
