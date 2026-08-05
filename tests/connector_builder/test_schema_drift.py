@@ -817,6 +817,66 @@ def test_write_path_spec_tables_state_the_pinned_fact_names(
     )
 
 
+def _declaration_table_cells() -> dict[str, str] | None:
+    """`{fact: Values-cell text}` for the declaration table, or None if restructured.
+
+    `_vocabulary_rows` cannot serve here: it keeps only rows whose Values cell
+    holds backticked tokens, which drops the very row this reads (`limits` is
+    documented as "object, optional", no code spans).
+    """
+    tables = [
+        cells
+        for block in _table_blocks()
+        if "catalog"
+        in (
+            cells := {
+                found[0]: m.group(2).strip()
+                for row in block
+                if (m := _TABLE_ROW.match(row))
+                and len(found := _BACKTICKED.findall(m.group(1))) == 1
+            }
+        )
+    ]
+    return tables[0] if len(tables) == 1 else None
+
+
+def test_write_path_spec_marks_exactly_the_optional_facts_optional() -> None:
+    """The declaration table's required/optional split must match the contract.
+
+    This replaces a count. The spec used to assert completeness as a cardinality
+    ("all five shape facts are required"), which no guard could check: adding a
+    sixth required fact updates the contract and `EXPECTED_SQL_CAPABILITY_FACTS`
+    and leaves the sentence green while it says something false. The sentence now
+    states the mechanism instead — every fact the table does not mark optional is
+    required — and that is only true while this split holds.
+
+    Both directions matter. A fact silently gaining "optional" in its Values cell
+    would narrow the rule the agent applies; `limits` losing the marker would
+    widen it into demanding a block the contract calls additive.
+    """
+    cells = _declaration_table_cells()
+    assert cells is not None, (
+        f"no single table in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} has a "
+        "`catalog` row — the declaration table was restructured (or two tables "
+        "now claim it), so this guard would have passed vacuously."
+    )
+    documented_optional = {
+        fact for fact, values in cells.items() if "optional" in values.lower()
+    }
+    documented_required = set(cells) - documented_optional
+    assert documented_required == EXPECTED_SQL_CAPABILITY_FACTS, _set_diff_msg(
+        "facts the declaration table leaves unmarked as optional",
+        documented_required,
+        EXPECTED_SQL_CAPABILITY_FACTS,
+    )
+    # Pinned by name, not by count: the additive member is the one the prose's
+    # "not marked optional" carve-out exists for, and a second one appearing
+    # must reach the sentence rather than silently widening it.
+    assert documented_optional == {"limits"}, _set_diff_msg(
+        "facts the declaration table marks optional", documented_optional, {"limits"}
+    )
+
+
 def test_write_path_spec_example_matches_the_contract() -> None:
     """The spec's worked example must be a document the contract accepts.
 

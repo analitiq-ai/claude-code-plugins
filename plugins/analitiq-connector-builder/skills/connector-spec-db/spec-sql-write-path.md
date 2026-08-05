@@ -30,8 +30,9 @@ write-capable connector** — omit it and every write mode is refused at
 handshake. A database connector is write-capable by definition (read and
 write are both first-class), so declare it.
 
-A declared block is **complete**: all five shape facts are required.
-A partial declaration is a config error, not a request for defaults.
+A declared block is **complete**: every shape fact below that is not marked
+optional is required. A partial declaration is a config error, not a request
+for defaults.
 
 | Fact | Values | How to choose |
 |---|---|---|

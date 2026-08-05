@@ -102,7 +102,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      obligates the package dialect's TLS hook — the engine has no
      built-in TLS interpretation for any driver (`spec-tls.md`).
 
-   Both transport types use the same `dsn.kind: "url_template"` with a
+   Every transport type uses the same `dsn.kind: "url_template"` with a
    connector-specific `template` and one binding per logical field. Each
    binding carries a `value` expression and an `encoding` from the
    closed enum (`spec-dsn-bindings.md` §Encoding values).
@@ -127,14 +127,14 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 6. **SQL write-path capabilities** — author the top-level
    `sql_capabilities` block per `spec-sql-write-path.md`. The contract
    makes it optional; the engine refuses **every** write mode at
-   handshake without it, so a database connector always declares it. All
-   five shape facts are required — `catalog`, `session_targeting`,
-   `merge_form`, `bulk_load`, `stage` — and a partial block is a config
-   error, not a request for defaults. Never carry a value over from
-   another connector. Most of these are **researched facts**: where the
-   sub-bullet below names a `provider_facts` field and the researcher
-   left it unset, that is a research gap to report, not a value to
-   assume. Two are not researched facts and are called out as such.
+   handshake without it, so a database connector always declares it.
+   Every shape fact the spec's declaration table leaves unmarked as
+   optional is required, and a partial block is a config error, not a
+   request for defaults. Never carry a value over from another
+   connector. Most are **researched facts**: where a sub-bullet below
+   names a `provider_facts` field and the researcher left it unset, that
+   is a research gap to report, not a value to assume. The rest are
+   authoring decisions, and each is called out as such below.
    - `catalog` — from `provider_facts.sql_write_path.catalog_model`. The
      test is cross-catalog **addressability**, not depth: Postgres and
      MySQL are `none` despite having a database above the schema, because
@@ -253,12 +253,11 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **The dialect implements exactly the hooks its transports require**
   (the step-9 hook mapping, TLS pair included) and ships **no Python
   type-rendering table** — the write map owns the write direction.
-- [ ] **`sql_capabilities` is declared and complete.** All five shape
-  facts present, each traced to its source per step 6 — a researched
-  `provider_facts` field, or the two that are authoring decisions
-  (`bulk_load`, `stage.schema`) — never copied from another connector or
-  assumed, and `catalog` consistent with the system's real object
-  hierarchy.
+- [ ] **`sql_capabilities` is declared and complete.** Every required
+  shape fact present, each traced to its source per step 6 — a
+  researched `provider_facts` field, or an authoring decision step 6
+  marks as one — never copied from another connector or assumed, and
+  `catalog` consistent with the system's real object hierarchy.
   <!-- PROBE: sql-capabilities-shape-checked, sql-capabilities-pairing-unchecked -->
   (The validator checks the block's shape;
   nothing checks the values are *true of this system*, and the engine

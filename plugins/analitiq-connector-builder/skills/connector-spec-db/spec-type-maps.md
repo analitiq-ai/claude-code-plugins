@@ -26,7 +26,7 @@ Both files are **standalone** siblings of `connector.json`:
 
 The read map validates against
 `https://schemas.analitiq.ai/type-map-read/latest.json`. The write map
-shares the same three-key rule shape but inverts the direction
+shares the same rule shape but inverts the direction
 (`canonical` matches, `native` renders) and validates against its own
 published schema, `https://schemas.analitiq.ai/type-map-write/latest.json`;
 the validator derives the direction from the filename and runs the full
@@ -41,8 +41,8 @@ it and the validator rejects it with a migration finding.
 
 Each file is a top-level JSON array of rule objects. Order is
 significant: **first match wins** during resolution. Each rule object
-has exactly three required keys and no others — but which key is the
-*matcher* and which is *rendered* depends on the direction:
+carries exactly the keys named below and no others — but which key is
+the *matcher* and which is *rendered* depends on the direction:
 
 | Key | Read map (`type-map-read.json`) | Write map (`type-map-write.json`) |
 |---|---|---|
