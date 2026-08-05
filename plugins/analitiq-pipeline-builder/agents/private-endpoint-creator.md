@@ -39,6 +39,7 @@ The agent has four modes; one invocation runs exactly one mode.
    `sys`, `INFORMATION_SCHEMA`, etc.).
 5. Return:
 
+   <!-- illustrative -->
    ```jsonc
    {"mode": "discover-schemas", "schemas": ["public", "analytics", "ops"]}
    ```
@@ -50,6 +51,7 @@ The agent has four modes; one invocation runs exactly one mode.
    collections.
 3. Return:
 
+   <!-- illustrative -->
    ```jsonc
    {
      "mode": "discover-tables",
@@ -87,6 +89,7 @@ The agent has four modes; one invocation runs exactly one mode.
 5. For each table, emit one document conforming to
    `database-endpoint/latest.json`:
 
+   <!-- illustrative -->
    ```jsonc
    {
      "$schema": "https://schemas.analitiq.ai/database-endpoint/latest.json",
@@ -134,6 +137,7 @@ The agent has four modes; one invocation runs exactly one mode.
      ships a map, return the existing rules with the new ones appended after.
 8. Return a `CreatorOutput[]` (one per table) plus the type-map result:
 
+   <!-- illustrative -->
    ```jsonc
    {
      "mode": "create-endpoints",
@@ -190,6 +194,7 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
 5. Return the `create-endpoints` shape with `"mode": "author-new-table"`
    (one `CreatorOutput`, the same `type_maps` object) plus one addition:
 
+   <!-- illustrative -->
    ```jsonc
    "type_maps": { /* write / notes */, "read": null, "ambiguities": [], "write_gaps": ["<canonical>"] }
    ```

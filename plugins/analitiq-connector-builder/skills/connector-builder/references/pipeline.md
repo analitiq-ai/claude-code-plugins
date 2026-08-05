@@ -1,7 +1,7 @@
 # Orchestration pipeline
 
-Phase-by-phase contract for the `connector-builder` orchestrator. Loaded
-on demand by the orchestrator skill.
+Phase-by-phase contract for the `connector-builder` orchestrator —
+always loaded by the orchestrator skill (`SKILL.md` §Required reading).
 
 ## Modes
 
@@ -64,18 +64,10 @@ tell the user.
 research, authoring, or writing. If `connector_path` does NOT exist, halt
 and tell the user there is nothing to validate.
 
-**Why this exists.** The plugin authors connectors against the
-published schema contract. Pre-existing connectors authored against
-older shapes (e.g. with `placeholders` arrays or a `manifest.json`,
-or with the plugin pre-rewriting on top of an existing tree) are not
-migrated by this plugin. Stopping early avoids partial-state writes
-and keeps the build path simple. A future migrator agent could relax
-this check; for now, manual removal is the contract.
-
-**Failure mode.** If the user reports they cannot remove the directory
-(permissions, dirty tree under VCS, etc.), do not attempt workarounds.
-Surface the OS-level error and let the user resolve it before
-re-running.
+No migration of legacy connector shapes — stopping early avoids
+partial-state writes. If the user cannot remove the directory
+(permissions, dirty tree under VCS), do not attempt workarounds:
+surface the OS-level error and let them resolve it before re-running.
 
 ### 1. Research (domain)
 
@@ -174,11 +166,7 @@ orchestrator — decides whether each finding is a real defect or a
 validator false positive; it owns the spec. Pass `Diagnostics.findings`
 verbatim; do not pre-filter, pre-diagnose, or read spec material to
 interpret them. If `error`-severity findings persist after 5 passes, halt
-and surface the diagnostics; do not write partial files. The validator
-script is single-shot; iteration discipline lives in the orchestrator's
-prose, not in the script. The cap is best-effort and not runtime-enforced;
-runtime enforcement is tracked at
-https://github.com/analitiq-ai/claude-code-plugins/issues/3.
+and surface the diagnostics; do not write partial files.
 
 ### 5. Endpoint fan-out (api only)
 

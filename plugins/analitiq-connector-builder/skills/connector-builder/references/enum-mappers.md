@@ -57,32 +57,25 @@ For databases, apply the driver-selection decision order — in this
 order, stopping at the first match (full guide:
 `connector-spec-db/spec-driver-selection.md`):
 
-1. **A first-class ADBC driver exists** (the schema's
-   `AdbcTransport.driver` enum is the sole validator — currently
-   `postgresql`, `snowflake`, `bigquery`) → `adbc`. The driver hands
-   Arrow buffers to the system's native bulk protocol; no row-by-row
-   path. Redshift is postgres-wire-compatible but does NOT take this
-   tier: its canonical path is the sync SQLAlchemy
-   `redshift+redshift_connector` driver — see `spec-driver-selection.md`.
+1. **A first-class ADBC driver exists and is in the schema's
+   `AdbcTransport.driver` enum** — currently `postgresql`, `snowflake`,
+   `bigquery`; the enum is the sole validator (rationale and packaging:
+   `spec-driver-selection.md` §1) → `adbc`. Redshift is
+   postgres-wire-compatible but does NOT take this tier: its canonical
+   path is the sync SQLAlchemy `redshift+redshift_connector` driver.
 2. **The server exposes an Arrow Flight SQL endpoint** → `adbc` via the
-   generic Flight SQL driver. `flightsql` is **not yet in the
-   `AdbcTransport.driver` enum** (`postgresql`, `snowflake`, `bigquery`),
-   so this tier is currently unreachable — selecting it requires adding
-   the enum value first (a schema-contract change; see
-   `spec-driver-selection.md`). Ordinary MySQL/Postgres deployments do
-   not expose Flight SQL.
+   generic Flight SQL driver — currently unreachable (`flightsql` is
+   not in the enum; `spec-driver-selection.md` §2).
 3. **Neither, but the system has a native bulk-load protocol** →
-   `sqlalchemy` for connect/DDL, with the bulk write implemented in
-   the connector's own class against the raw cursor (the thick path).
-4. **None of the above** → `sqlalchemy` with batched INSERT. This is
-   the fallback, not the default — pick it last.
+   `sqlalchemy` for connect/DDL, bulk write in the connector's own
+   class (the thick path).
+4. **None of the above** → `sqlalchemy` with batched INSERT. The
+   fallback, not the default — pick it last.
 
-Never select the JDBC bridge (`adbc-driver-jdbc`): it provides the ADBC
-API surface over row-by-row JDBC binding — the interface without the
-performance. SQLAlchemy transports accept a **sync or async** DBAPI
-(`postgresql+asyncpg`, `mysql+aiomysql`, `redshift+redshift_connector`;
-dispatch is engine-side — see `spec-driver-selection.md` §Constraints).
-Prefer async where the system has a working async driver.
+Never select the JDBC bridge — the ADBC interface without the
+performance (`spec-driver-selection.md` §Do not use the JDBC bridge).
+Sync vs async DBAPI dispatch is engine-side
+(`spec-driver-selection.md` §Constraints).
 
 ## Failing closed
 

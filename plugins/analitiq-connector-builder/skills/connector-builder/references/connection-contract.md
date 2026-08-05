@@ -24,7 +24,7 @@ Required: `source`, `phase`, `storage`, `type`, `required`.
 | `storage` | Closed enum for inputs: `"connection.parameters"` (non-secret, durable) or `"secrets"` (secret, durable, materialized via secret refs). Inputs **cannot** target `"connection.selections"` / `"connection.discovered"` — those are produced by `post_auth_outputs` (below), never collected as inputs. |
 | `type` | JSON Schema type: `string`, `integer`, `boolean`, `number`. |
 | `required` | Boolean. |
-| `secret` | Boolean (default false). Must be true for any input stored in `secrets`. |
+| `secret` | Boolean (default false). True if and only if storage is `secrets` (ADV-CONN-003). |
 | `enum` | Array of allowed values (closed enum). |
 | `default` | Default value (for non-required inputs). |
 | `format` / `pattern` | Optional string validation — `format: "uri"` or a regex `pattern`. The published schema names this field `pattern`; the input field set is closed (`additionalProperties: false`). |
@@ -64,7 +64,7 @@ is never "where is this interpolated from?" but "whose value is this?":
 context. Required fields per output:
 
 - `mode` — closed enum: `user_selection` (a value the user picks from an `options_request`) or `auto_discovery` (a value read from a `discovery_request`).
-- `storage` — closed enum `"connection.selections"` (user choices, `user_selection`), `"connection.discovered"` (auto-discovered values, `auto_discovery`), or `"secrets"` (secret-valued outputs). See the connection contract for the mode↔storage pairing.
+- `storage` — closed enum `"connection.selections"` (user choices, `user_selection`), `"connection.discovered"` (auto-discovered values, `auto_discovery`), or `"secrets"` (secret-valued outputs). The mode↔storage pairing and each mode's required/forbidden request fields are ADV-CTOR-002.
 - `type` — the value's type.
 - `value_path` — the **response-extraction path**: the field read out of the
   `options_request` / `discovery_request` response (e.g. `"id"` for a
@@ -85,8 +85,8 @@ reflect what the value *is*: `connection.discovered` for auto-discovered
 context, `connection.selections` for user choices, `secrets` only for genuinely
 secret values. Routing a tenant domain or account id through `secrets` because
 it "feels safer" makes it unreadable to the refs that need it and misreports the
-connector's secret surface. (The contract enforces the mode↔storage pairing,
-but it cannot tell whether a value is truly secret.)
+connector's secret surface. (ADV-CTOR-002 enforces the mode↔storage pairing;
+it cannot tell whether a value is truly secret.)
 
 **Don't rely on output ordering.** `post_auth_outputs` is a map, and nothing in
 the contract declares or validates an execution order between entries. Author
@@ -112,9 +112,8 @@ and where the boundary sits.
 | `present` | has any value at all (use for "the user filled this in") |
 | `regex` | matches the pattern |
 
-A predicate declares exactly one of these — they don't combine inside one
-predicate. Write the `message` for the person filling in the form, naming the
-field they must fix.
+Exactly one operator key per predicate (ADV-CTOR-012). Write the `message`
+for the person filling in the form, naming the field they must fix.
 
 **Scope boundary.** These predicates are for *cross-input* validation only —
 relationships among values already on the form. They are not a place to express:
@@ -129,11 +128,6 @@ here.
 
 ## Drift detection
 
-The `connection_contract` block has no standalone `version`. Drift
-detection rides on the connector's top-level `version` semver:
-
-- Additive changes to inputs/outputs/activation/validation → minor bump.
-- Breaking changes (input removed, renamed, type-changed, enum narrowed,
-  storage moved, non-optional input added) → major bump.
-
-See `metadata-and-versioning.md` and the connector release table.
+The `connection_contract` block has no standalone `version`. Drift detection
+rides on the connector's top-level `version` semver — bump rules:
+`metadata-and-versioning.md` §Release version (`version`).

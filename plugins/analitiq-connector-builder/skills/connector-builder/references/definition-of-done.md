@@ -2,15 +2,12 @@
 
 A self-check the creator agents run against their own output **before
 returning `CreatorOutput`**. It is a gate, not a substitute for the
-`connector-schema-validator`: the validator owns structural and cross-field
-conformance (see `plugins/analitiq-connector-builder/agents/connector-schema-validator.md` for the
-authoritative list of its checks and blind spots). This checklist deliberately
-covers **only what the validator cannot enforce** — classification
-correctness, completeness against the provider's documentation, the
-both-directions principle, driver-choice discipline, and the non-JSON
-artifacts (package files, README) the in-plugin validator never sees. Do NOT
-restate validator rules here; if an item is mechanically checkable, it belongs
-in the validator, not on this list.
+`connector-schema-validator` (whose agent file owns the authoritative
+check/blind-spot list): this checklist covers **only what the validator cannot
+enforce** — classification correctness, completeness against the provider's
+documentation, the both-directions principle, driver-choice discipline, and
+the non-JSON artifacts (package files, README) the in-plugin validator never
+sees.
 
 <!-- PROBE: connector-function-name-unchecked, write-body-path-typo-unresolved, tls-coherence-unchecked -->
 Three things authors often assume are validated but are not — a `function`
@@ -49,9 +46,10 @@ shared core.
   host, tenant id, account id, or database name. The connector declares the
   input's shape; the connection supplies the value.
 - [ ] <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
-  **Every `function` name is in the registered catalog.** Nothing
-  validates function names, so a typo or a planned-but-unregistered function
-  (e.g. `jwt_sign`) ships silently and fails at connect.
+  **Every `function` name is in the registered catalog**
+  (`value-expressions.md` §Function catalog). Nothing validates function
+  names, so a typo or a planned-but-unregistered function ships silently and
+  fails at connect.
 - [ ] <!-- PROBE: write-body-path-typo-unresolved, scope-tail-unchecked -->
   **Every ref resolves to something a declaration produces.** What the
   validator proves is exactly the measured table in `value-expressions.md`

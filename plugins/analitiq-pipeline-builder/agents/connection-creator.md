@@ -60,6 +60,7 @@ The orchestrator passes:
 3. Build the `.secrets/credentials.json` template — one entry per secret,
    keyed by the env-var name the `secret_refs` pointer resolves:
 
+   <!-- illustrative -->
    ```jsonc
    {
      "ANALITIQ_<slug>_<key1>": "<paste-...-here>",
@@ -71,6 +72,7 @@ The orchestrator passes:
 
 ## Output format
 
+<!-- illustrative -->
 ```jsonc
 {
   "entity": "connection",

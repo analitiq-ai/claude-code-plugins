@@ -16,6 +16,7 @@ Carries 4 declarative cross-field `if`/`then` rule(s) — see the advisory rules
 
 The sketch below illustrates a filled-in destination.
 
+<!-- illustrative -->
 ```jsonc
 {
   "destinations": [
@@ -76,6 +77,7 @@ one of these.
 the scope. It is a **single composite key set** of destination field names — not
 a list of alternative key sets:
 
+<!-- validate: stream#/destinations/0/write/conflict_keys -->
 ```jsonc
 ["id"]                       // or ["org_id", "external_id"] for a composite key
 ```

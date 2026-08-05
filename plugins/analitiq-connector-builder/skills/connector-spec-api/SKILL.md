@@ -35,15 +35,14 @@ Pick what you need for the auth and pagination styles you're authoring:
 ## What this skill covers
 
 - HTTP transport idioms: single-origin, multi-origin, templated `base_url`.
-- All API auth-type templates: `api_key`, `basic_auth`,
-  `oauth2_authorization_code`, `oauth2_client_credentials`, `jwt`,
-  `credentials`, `aws_iam`, `none`.
+- A template per `auth.type` the contract defines (`spec-auth-flows.md`).
 - `auth.authorize` / `auth.token_exchange` / `auth.refresh` / `auth.test`
   operation templates.
-- Inline function expressions: `basic_auth`, `base64_encode`, `lookup`, `url_encode` (`jwt_sign` / `pkce_challenge_s256` are planned — not yet registered; do not use).
+- Inline function expressions — registered catalog and planned-but-unregistered
+  names: `connector-builder/references/value-expressions.md` §Function catalog.
 - `headers_remove` semantics for inheriting transports.
 - `post_auth_outputs` with `options_request` / `discovery_request`.
-- Pagination styles (offset / cursor / page / link / keyset).
+- Pagination styles — the full set and wiring: `spec-pagination.md`.
 - Replication for incremental sync.
 
 ## Endpoint `operations` shape (cross-reference)

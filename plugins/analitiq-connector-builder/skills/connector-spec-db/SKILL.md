@@ -39,13 +39,11 @@ installable Python package.
 ## What this skill covers
 
 - `dsn.kind: "url_template"` shape with `template`, `bindings`, and
-  per-binding `encoding` (closed enum: `raw`, `host`, `url_userinfo`,
-  `url_path_segment`, `url_query_key`, `url_query_value`).
+  per-binding `encoding` (closed enum — `spec-dsn-bindings.md` §Encoding
+  values).
 - `tls.mode` and `tls.ca_certificate` declarations and their rules
-  (certificate-verification modes require an `ssl_ca_certificate` input;
-  the mode vocabulary is researched per driver, never copied — `spec-tls.md`).
-  **SQLAlchemy-only**: ADBC transports express TLS via `db_kwargs`
-  entries (e.g. `adbc.postgresql.sslmode`) — they have no `tls` block.
+  (`spec-tls.md`). **SQLAlchemy-only**: ADBC transports express TLS via
+  `db_kwargs` entries — they have no `tls` block.
 - `resource_discovery` declarations for enumerating schemas / tables /
   columns at connection time.
 - Authoring the standalone `type-map-read.json` (native → Arrow) and
@@ -54,16 +52,10 @@ installable Python package.
 - The connector package files and dialect hooks — see
   `spec-connector-package.md`.
 - Transport types, chosen per the `spec-driver-selection.md` decision
-  order: `adbc` (closed `driver` enum
-  `postgresql | snowflake | bigquery`; carries `dsn` and/or `db_kwargs`
-  — **the AdbcTransport contract requires at least one of the two**;
-  TLS lives inside `db_kwargs`) and `sqlalchemy` (carries a
-  `dialect+driver`, sync or async — e.g. `postgresql+asyncpg`,
-  `mysql+aiomysql`, `redshift+redshift_connector`; supports the
-  generic `tls` block). When present, `dsn` carries the same
-  `dsn.kind: "url_template"` shape in both transport types; ADBC
-  drivers that accept all connection state via `db_kwargs` (e.g.
-  Snowflake) may omit `dsn` entirely.
+  order: `adbc` (closed `driver` enum; `dsn` and/or `db_kwargs`,
+  ADV-CTOR-004) and `sqlalchemy` (a `dialect+driver`, sync or async;
+  generic `tls` block). Both take the same `dsn.kind: "url_template"`
+  shape — `spec-dsn-bindings.md`.
 - `auth.type: "db"` — credentials live in `connection_contract.inputs`;
   `auth.test` is the connection test operation.
 

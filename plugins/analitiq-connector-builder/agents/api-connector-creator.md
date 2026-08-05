@@ -77,10 +77,11 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    one transport per origin and factor common headers into
    `transport_defaults`.
 3. **Auth** — populate `auth` per `auth.type` requirements. Use inline
-   `function` expressions (`basic_auth`; `base64_encode` / `lookup` as
-   needed) where applicable. (`jwt_sign` is planned, not yet registered —
-   do not emit it.)
-   `transport_ref` on auth ops must point at a defined transport.
+   `function` expressions where applicable — the registered catalog and
+   the planned-but-unregistered names are
+   `references/value-expressions.md` §Function catalog.
+   `transport_ref` on auth ops must point at a defined transport
+   (ADV-CTOR-005).
 4. **Connection contract** — populate `connection_contract.inputs`,
    `post_auth_outputs`, `required_for_activation`, and `validation` per
    `references/connection-contract.md`. For OAuth2, declare `client_id` and
@@ -140,10 +141,8 @@ connector body) and `type_map_read` (the top-level rules array), with
 
 ## Hard rules
 
-- The schema enums are **owned by the live published schema**, not by the
-  restated lists in the spec prose: `auth.type` and the transport
-  discriminators come from `connector/latest.json`. When the prose and the
-  schema disagree, the schema wins — the validator enforces it.
+- Schema enums are **owned by the live published schema**; when prose
+  and schema disagree, the schema wins — the validator enforces it.
 - Never author `created_at` / `updated_at` — those are registry-stamped.
   `connector_id` is author-supplied and matches the on-disk directory name.
 - Never use `${...}` interpolation outside a `template` value expression.

@@ -95,6 +95,12 @@ things specific to this plugin:
 - `gen_contract_docs.py` blocks in this plugin's docs stay exempt from the
   scan — they are pinned by their own `--check`.
 
+## Fenced JSON examples
+
+Inline `jsonc` fences in this plugin's prose follow the annotation convention
+in the connector plugin's `CLAUDE.md` § "Fenced JSON examples — the annotation
+convention".
+
 ## Where the authoring rules live
 
 Every rule about *how* to author lives in `skills/`, loaded by the agent that

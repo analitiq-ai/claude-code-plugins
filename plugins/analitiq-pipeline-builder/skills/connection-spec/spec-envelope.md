@@ -79,6 +79,7 @@ writes a secret value into the document.
 Author an **`env:` pointer** by default — portable and resolved from the runtime
 environment:
 
+<!-- validate: connection -->
 ```jsonc
 {
   "connector_id": "postgresql",
@@ -96,6 +97,7 @@ not a contract fact — the contract constrains only the `env:` grammar in the
 scheme list below, and any name matching it is legal. Keep the convention unless
 the user names their own variable. Emit the sibling template the user fills in:
 
+<!-- illustrative -->
 ```jsonc
 // .secrets/credentials.json
 {

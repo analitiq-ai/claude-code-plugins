@@ -49,6 +49,7 @@ stitches in `stream_id` UUIDs in phase 8.
 
 ## Output format
 
+<!-- illustrative -->
 ```jsonc
 {
   "entity": "pipeline",

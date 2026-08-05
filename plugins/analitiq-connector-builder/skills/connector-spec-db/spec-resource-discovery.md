@@ -22,23 +22,12 @@ system don't invent a second level to look uniform.
 
 ## Shape
 
-```json
-{
-  "resource_discovery": {
-    "strategy": "information_schema",
-    "transport_ref": "database",
-    "implementation": { "type": "builtin" },
-    "options": {
-      "exclude_schemas": ["information_schema", "pg_catalog"]
-    },
-    "produces": ["connection.endpoints", "connection.type_map"],
-    "triggers": {
-      "list_resources": "on_activation",
-      "describe_resource": "on_resource_selected"
-    }
-  }
-}
-```
+See the `resource_discovery` block in
+`examples/postgresql/postgresql.example.json` for the reference shape
+(`examples/postgresql-adbc/postgresql-adbc.example.json` carries one too).
+Add strategy-specific `options` (e.g.
+`"options": { "exclude_schemas": ["information_schema", "pg_catalog"] }`)
+per the field notes below.
 
 ## Required fields
 

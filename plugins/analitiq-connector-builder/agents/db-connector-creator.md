@@ -79,48 +79,32 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `version` (start at `1.0.0`).
 2. **Transports** — populate `transports` with one entry per logical
    transport. Set `default_transport`. Pick the transport and driver per
-   the **driver-selection decision order** in `spec-driver-selection.md`
-   (first match wins): (1) first-class ADBC driver → `adbc`; (2) Arrow
-   Flight SQL endpoint → `adbc` via the Flight SQL driver; (3) native
-   bulk-load protocol → `sqlalchemy` transport with the bulk path
-   in the connector class; (4) `sqlalchemy` with batched INSERT
-   as the last resort. Never the JDBC bridge.
+   the **decision order** in `spec-driver-selection.md` (first match
+   wins; never the JDBC bridge).
    - **`adbc`** — required field `driver` from the schema's closed enum
-     (`postgresql`, `snowflake`, `bigquery`; the enum is the sole
-     validator — extending it is a schema-contract change). Provide
-     `dsn` (the `url_template` shape) when the driver accepts a URI
-     (postgresql — but Redshift does NOT take this tier; its canonical
-     path is the sync SQLAlchemy `redshift+redshift_connector` driver,
-     see `spec-driver-selection.md`); otherwise carry connection
-     state in `db_kwargs` (snowflake authenticates entirely via kwargs;
-     bigquery typically takes a project/dataset via kwargs as well,
-     with no DSN). `db_kwargs` is a key/value object of driver-specific
-     options; values may be literals or value expressions
-     (`{"ref": "..."}`, `{"template": "..."}`, `{"function": "..."}`)
-     — the runtime resolves them before invoking the driver. **The
-     AdbcTransport contract requires at least one of `dsn` /
-     `db_kwargs`.** TLS for ADBC transports is expressed via
-     `db_kwargs` entries (e.g. `adbc.postgresql.sslmode`) — the generic
-     `tls` block is SQLAlchemy-only.
-   - **`sqlalchemy`** — carry `driver` in `dialect+driver` form (e.g.
-     `"postgresql+asyncpg"`, `"mysql+aiomysql"`, or a sync driver such
-     as `"redshift+redshift_connector"`) and `dsn`. Sync and async are
-     both supported (dispatch is engine-side — see
-     `spec-driver-selection.md` §Constraints); prefer an async driver
-     where the system has a working one and reach for a sync driver
-     only when that is the system's viable path (e.g. Redshift).
-     Author `tls.mode` (referencing
+     (the sole validator — `spec-driver-selection.md` §1). Provide `dsn`
+     (the `url_template` shape) when the driver accepts a URI
+     (postgresql); otherwise carry connection state in `db_kwargs`
+     (snowflake authenticates entirely via kwargs; bigquery typically
+     takes a project/dataset via kwargs, with no DSN). `db_kwargs` is a
+     key/value object of driver-specific options; values may be literals
+     or value expressions, resolved by the runtime before invoking the
+     driver. **The AdbcTransport contract requires at least one of
+     `dsn` / `db_kwargs`** (ADV-CTOR-004). TLS for ADBC transports is
+     expressed via `db_kwargs` entries — the generic `tls` block is
+     SQLAlchemy-only.
+   - **`sqlalchemy`** — carry `driver` in `dialect+driver` form, sync or
+     async (choice and dispatch: `spec-driver-selection.md`
+     §Constraints), and `dsn`. Author `tls.mode` (referencing
      `connection.parameters.ssl_mode`) and `tls.ca_certificate`
      (referencing `secrets.ssl_ca_certificate`). Declaring `tls`
      obligates the package dialect's TLS hook — the engine has no
      built-in TLS interpretation for any driver (`spec-tls.md`).
 
    Both transport types use the same `dsn.kind: "url_template"` with a
-   connector-specific `template` and one binding per logical field
-   (`host`, `port`, `database`, `username`, `password`, etc.). Each
+   connector-specific `template` and one binding per logical field. Each
    binding carries a `value` expression and an `encoding` from the
-   closed enum (`raw`, `host`, `url_userinfo`, `url_path_segment`,
-   `url_query_key`, `url_query_value`).
+   closed enum (`spec-dsn-bindings.md` §Encoding values).
 3. **Auth** — `auth.type: "db"`. Author `auth.test` as a no-op connection
    test if the driver supports a lightweight ping.
 4. **Connection contract** — declare the canonical DB inputs: `host`,
@@ -195,17 +179,12 @@ package files it never sees (registry CI owns the wheel build), driver
 discipline, and dialect behavior. Do not restate validator rules.
 
 - [ ] **Driver chosen strictly per the decision order** in
-  `spec-driver-selection.md` (first-class ADBC → Arrow Flight SQL →
-  SQLAlchemy + native bulk path → SQLAlchemy batched INSERT), and a
-  one-line rationale holds for why earlier tiers were skipped. (The
-  validator accepts any well-formed `dialect+driver`; it cannot check
-  the *order* was followed.)
+  `spec-driver-selection.md`, and a one-line rationale holds for why
+  earlier tiers were skipped. (The validator accepts any well-formed
+  `dialect+driver`; it cannot check the *order* was followed.)
 - [ ] **Every SQLAlchemy `driver` is in `dialect+driver` form** and
-  names a driver that actually exists (`postgresql+asyncpg`,
-  `mysql+aiomysql`, `redshift+redshift_connector`). Sync and async are
-  both accepted (see `spec-driver-selection.md` §Constraints). Prefer
-  async where the system has a working async driver; reach for a sync
-  driver only when it is the system's viable path.
+  names a driver that actually exists; the sync/async choice follows
+  `spec-driver-selection.md` §Constraints.
 - [ ] **`requirements.txt` lists only this connector's driver(s)** — no
   engine pins, no stray dependencies.
 - [ ] **`pyproject.toml` entry points are named `{connector_id}` under
@@ -217,12 +196,8 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **`connector.py` imports the CDK only** — never another connector,
   never the engine/runtime.
 - [ ] **The dialect implements exactly the hooks its transports require**
-  (SQLAlchemy + TLS → the TLS hook, `build_tls_connect_arg` or
-  `build_tls_connect_args` per the driver's connect-parameter shape;
-  upsert → `build_sqlalchemy_upsert` + `supports_upsert_sqlalchemy`;
-  ADBC upsert → `adbc_stage_table_sql` + `supports_upsert_adbc`) and
-  ships **no Python type-rendering table** — the write map owns the
-  write direction.
+  (the step-8 hook mapping) and ships **no Python type-rendering
+  table** — the write map owns the write direction.
 - [ ] **Structural overrides exist only where the portable form is
   genuinely invalid** (`batch_commits_key_type`,
   `current_timestamp_default`, and a `render_column_type` override only
@@ -250,11 +225,8 @@ disk.
 
 ## Hard rules
 
-- The schema enums are **owned by the live published schema**, not by the
-  restated lists in the spec prose: the ADBC `driver` enum
-  (`AdbcTransport.driver`) and the DSN binding `encoding` enum come from
-  `connector/latest.json`. When the prose and the schema disagree, the
-  schema wins — the validator enforces it.
+- Schema enums are **owned by the live published schema**; when prose
+  and schema disagree, the schema wins — the validator enforces it.
 - Never author `created_at` / `updated_at` — those are registry-stamped.
   `connector_id` is author-supplied and matches the on-disk directory name.
 - Never pre-encode binding values (no pre-percent-encoded usernames,

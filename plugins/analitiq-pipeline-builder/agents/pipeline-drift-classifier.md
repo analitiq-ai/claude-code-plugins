@@ -44,6 +44,7 @@ pipelines or streams (the registry stamps the integer counter).
    stream's directory slug (when applicable) so the user can locate the
    file:
 
+   <!-- illustrative -->
    ```jsonc
    {
      "changes": [

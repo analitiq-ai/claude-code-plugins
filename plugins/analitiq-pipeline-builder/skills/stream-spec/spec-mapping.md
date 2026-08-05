@@ -27,6 +27,7 @@ Each `assignments[]` entry (`analitiq.contracts.stream.Assignment`) pairs a
 `target` with a `value`, plus an optional `validate` block (see
 `spec-validation-rules.md`):
 
+<!-- validate: stream#/mapping -->
 ```jsonc
 {
   "mapping": {

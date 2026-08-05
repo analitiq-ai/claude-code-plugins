@@ -9,6 +9,7 @@ matching JSON Schema below) before passing them to the next phase.
 Discriminated by `source_kind` and `destination_kind`. Each kind has its
 own required sub-shape.
 
+<!-- illustrative -->
 ```jsonc
 {
   "pipeline_slug": "wise_to_postgresql",        // directory name only; shape per the directory-slug convention (identity-and-versioning.md)
@@ -48,6 +49,7 @@ own required sub-shape.
 After classification, the orchestrator generates UUIDs and bundles them
 so creator agents can cross-reference consistently.
 
+<!-- illustrative -->
 ```jsonc
 {
   "pipeline_id": "11111111-1111-4111-8111-111111111111",
@@ -63,13 +65,14 @@ so creator agents can cross-reference consistently.
 
 Reused on-disk connections contribute their **existing** `connection_id`
 UUID (read from the on-disk `connection.json`) instead of a freshly
-generated one.
+minted one.
 
 ## `CreatorOutput` (output of every creator agent)
 
 Each creator agent returns the JSON it would write, plus optional notes.
 The orchestrator handles disk I/O.
 
+<!-- illustrative -->
 ```jsonc
 {
   "entity": "pipeline",                       // "pipeline" | "stream" | "connection" | "database_endpoint"
@@ -95,6 +98,7 @@ agent file itself, not here.
 For unsupported cases (e.g., a connector kind the engine can't run),
 the creator returns:
 
+<!-- illustrative -->
 ```jsonc
 {
   "entity": "stream",
@@ -108,6 +112,7 @@ the creator returns:
 
 ## `Diagnostics` (output of `scripts/validate.py`)
 
+<!-- illustrative -->
 ```jsonc
 {
   "passed": false,
@@ -162,6 +167,7 @@ Informational only. The plugin does not author `version` (registry-
 stamped integer counter). The verdict's role is to flag structural
 changes the user should think about before publishing.
 
+<!-- illustrative -->
 ```jsonc
 {
   "changes": [
