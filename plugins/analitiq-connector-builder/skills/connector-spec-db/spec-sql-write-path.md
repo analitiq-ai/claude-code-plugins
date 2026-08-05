@@ -30,8 +30,9 @@ write-capable connector** — omit it and every write mode is refused at
 handshake. A database connector is write-capable by definition (read and
 write are both first-class), so declare it.
 
-A declared block is **complete**: all five shape facts are required.
-A partial declaration is a config error, not a request for defaults.
+A declared block is **complete**: every fact in the declaration table below
+that is not marked optional is required. A partial declaration is a config
+error, not a request for defaults.
 
 | Fact | Values | How to choose |
 |---|---|---|
@@ -70,14 +71,15 @@ mechanism.
 | Field | Values | How to choose |
 |---|---|---|
 | `scope` | `temp` / `real` | `temp` — a session/transaction-scoped temporary table. `real` — an ordinary table the engine creates and drops around the write, for systems with no usable temp relation. The engine passes this through to `stage_table_sql`'s `temp` argument. |
-| `schema` | `target` / `dedicated` | `target` co-locates the stage in the target's own schema. `dedicated` places it in a separate schema, and then `dedicated_schema` names it — required exactly when `schema` is `dedicated`, and omitted (or explicitly `null`) otherwise. |
+| `schema` | `target` / `dedicated` | `target` co-locates the stage in the target's own schema. `dedicated` places it in a separate schema, named by `dedicated_schema` below. |
 | `transactional_ddl` | `true` / `false` | Whether the system runs `CREATE`/`DROP` **inside** the write transaction. `false` for engines that auto-commit DDL (MySQL), which forces the engine onto a per-step staging strategy. A guess here is a correctness bug, not a tuning knob — take it from the system's documented DDL behaviour. |
+| `dedicated_schema` | string, conditional | The schema name the stage goes in. Required exactly when `schema` is `dedicated`, and omitted (or explicitly `null`) otherwise — which is why it is never in the block's required set. |
 
 ## The dialect renderers
 
 The write-path hooks are plain methods on `cdk.sql.dialects.SqlDialect`,
-overridden in the connector package's own dialect subclass. The two
-renderers return **statement text** — they execute nothing and never see
+overridden in the connector package's own dialect subclass. The renderers
+return **statement text** — they execute nothing and never see
 records. `bulk_land` is the one exception, and the only hook here that
 performs I/O: it receives a live connection and the batch itself, because
 a bulk mechanism *is* the act of landing data.

@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
+from pathlib import Path
 
 import pytest
 
@@ -89,10 +90,10 @@ EXPECTED_DSN_ENCODINGS = {
 # The SQL write-path declaration (`sql_capabilities`, engine ADR §5). The
 # creator agent must pick each value from researched provider facts, so
 # spec-sql-write-path.md restates the vocabularies as decision logic — the
-# "mapping logic" exemption — and pins them here. The five required shape facts
-# are pinned too: the spec teaches that a declared block is COMPLETE and a
-# partial one is a config error, which is only true while these five are the
-# required set. (`limits` stays out — it is the additive member.)
+# "mapping logic" exemption — and pins them here. The required shape facts are
+# pinned too: the spec teaches that a declared block is COMPLETE and a partial
+# one is a config error, which is only true while exactly these are the required
+# set. (`limits` stays out — it is the additive member.)
 EXPECTED_SQL_CAPABILITY_FACTS = {
     "catalog",
     "session_targeting",
@@ -100,6 +101,12 @@ EXPECTED_SQL_CAPABILITY_FACTS = {
     "bulk_load",
     "stage",
 }
+# The full property set. Pinning `required` alone leaves a NEW OPTIONAL member
+# invisible: it lands in the contract, reaches no prose, and the spec's
+# "a declared block is complete" goes on advertising a table that no longer
+# covers the model. Same reasoning as `EXPECTED_SQL_STAGE_PROPERTIES` below,
+# one level up.
+EXPECTED_SQL_CAPABILITY_PROPERTIES = EXPECTED_SQL_CAPABILITY_FACTS | {"limits"}
 EXPECTED_SQL_CATALOG_MODES = {"none", "read", "full"}
 EXPECTED_SQL_SESSION_TARGETING = {"per_statement", "session_default"}
 EXPECTED_SQL_MERGE_FORMS = {
@@ -469,7 +476,7 @@ _WRITE_PATH_FIX = (
     "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-driver-selection.md, "
     "the authoring order in "
     "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
-    "both archetypes under "
+    "every archetype under "
     "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/, "
     "and the ProviderFacts carriers in "
     "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md."
@@ -485,13 +492,14 @@ def test_driver_selection_mechanism_table_matches_the_contract() -> None:
     excluded: it belongs to tier 1 and obliges no dialect code, which is why the
     SQLAlchemy family IS the dialect-implemented set.
     """
-    rows = {
-        found[0]
-        for line in DRIVER_SELECTION_SPEC.read_text(encoding="utf-8").splitlines()
-        if (m := _TABLE_ROW.match(line))
-        and len(found := _BACKTICKED.findall(m.group(1))) == 1
-    }
     expected = EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]
+    cells = _table_cells_containing("copy_from", DRIVER_SELECTION_SPEC)
+    assert cells is not None, (
+        f"no single table in {DRIVER_SELECTION_SPEC.relative_to(REPO_ROOT)} has "
+        "a `copy_from` row — the mechanism table was restructured (or a second "
+        "table now claims it), so this guard would have passed vacuously."
+    )
+    rows = set(cells)
     assert rows == expected, (
         f"the mechanism table in {DRIVER_SELECTION_SPEC.relative_to(REPO_ROOT)} "
         f"names different mechanisms than the contract — "
@@ -511,6 +519,19 @@ def _required_at(schema: dict, def_name: str) -> set[str] | None:
     if not isinstance(node, dict) or not isinstance(node.get("required"), list):
         return None
     return set(node["required"])
+
+
+def _properties_at(schema: dict, def_name: str) -> set[str] | None:
+    """The `properties` key set of a `$def`, or None when the def is gone.
+
+    The sibling of `_required_at`, and the half that catches a member the
+    contract added as OPTIONAL: such a member is in no `required` list, so it
+    reaches no prose and quietly falsifies any "this is the whole block" claim.
+    """
+    node = (schema.get("$defs") or {}).get(def_name)
+    if not isinstance(node, dict) or not isinstance(node.get("properties"), dict):
+        return None
+    return set(node["properties"])
 
 
 def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str:
@@ -536,20 +557,28 @@ def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str
 
 
 def test_sql_capability_facts_match_schema(connector_schema: dict) -> None:
-    """The five shape facts a declared `sql_capabilities` block must carry.
+    """The shape facts a declared `sql_capabilities` block must carry.
 
     `limits` is excluded deliberately — it is the additive member, and the
-    prose says so. If it ever became required (or one of the five optional),
-    "a declared block is complete" would stop being true.
+    prose says so. If it ever became required (or a required fact became
+    optional), "a declared block is complete" would stop being true.
+
+    The property assertion is the other half: `required` alone cannot see a
+    NEW optional member, which reaches no prose and quietly falsifies the
+    spec's claim that its declaration table is the whole block.
     """
     required = _required_at(connector_schema, "SqlCapabilities")
     assert required == EXPECTED_SQL_CAPABILITY_FACTS, _set_diff_msg(
         "sql_capabilities required facts", required, EXPECTED_SQL_CAPABILITY_FACTS
     )
+    props = _properties_at(connector_schema, "SqlCapabilities")
+    assert props == EXPECTED_SQL_CAPABILITY_PROPERTIES, _set_diff_msg(
+        "sql_capabilities properties", props, EXPECTED_SQL_CAPABILITY_PROPERTIES
+    )
 
 
 def test_sql_stage_facts_match_schema(connector_schema: dict) -> None:
-    """Same claim, one level down: the stage block's three required fields.
+    """Same claim, one level down: the stage block's required fields.
 
     `spec-sql-write-path.md` presents `scope` / `schema` / `transactional_ddl`
     as the complete stage declaration and `db-connector-creator.md` checklists
@@ -563,8 +592,7 @@ def test_sql_stage_facts_match_schema(connector_schema: dict) -> None:
     )
     # `dedicated_schema` is conditional, so `required` alone cannot catch it
     # being renamed out from under the prose's required-iff rule.
-    node = (connector_schema.get("$defs") or {}).get("SqlStageCapabilities")
-    props = set((node.get("properties") or {})) if isinstance(node, dict) else None
+    props = _properties_at(connector_schema, "SqlStageCapabilities")
     assert props == EXPECTED_SQL_STAGE_PROPERTIES, _set_diff_msg(
         "sql_capabilities.stage properties", props, EXPECTED_SQL_STAGE_PROPERTIES
     )
@@ -626,8 +654,7 @@ def test_sql_bulk_mechanisms_match_schema(connector_schema: dict) -> None:
     SQLAlchemy family unnoticed — and the prose's "involves no dialect code"
     carve-out is stated for the ADBC family alone.
     """
-    node = (connector_schema.get("$defs") or {}).get("SqlBulkLoad")
-    families = set((node.get("properties") or {})) if isinstance(node, dict) else None
+    families = _properties_at(connector_schema, "SqlBulkLoad")
     # Iterating EXPECTED alone is one-directional: a REMOVED family surfaces (as
     # a restructure), an ADDED one is invisible. The prose states the family set
     # as closed, so pin the set itself.
@@ -652,8 +679,7 @@ def test_sql_limit_caps_match_schema(connector_schema: dict) -> None:
     plugin suite green with two prose sites naming a field that no longer
     exists.
     """
-    node = (connector_schema.get("$defs") or {}).get("SqlLimits")
-    caps = set((node.get("properties") or {})) if isinstance(node, dict) else None
+    caps = _properties_at(connector_schema, "SqlLimits")
     assert caps == EXPECTED_SQL_LIMIT_CAPS, _set_diff_msg(
         "sql_capabilities.limits caps", caps, EXPECTED_SQL_LIMIT_CAPS
     )
@@ -681,11 +707,11 @@ _TABLE_ROW = re.compile(r"^\|([^|]*)\|([^|]*)\|")
 _BACKTICKED = re.compile(r"`([^`]+)`")
 
 
-def _table_blocks() -> list[list[str]]:
+def _table_blocks(spec: Path | None = None) -> list[list[str]]:
     """Maximal runs of consecutive `|`-leading lines — one per markdown table."""
     blocks: list[list[str]] = []
     current: list[str] = []
-    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
+    for line in (spec or WRITE_PATH_SPEC).read_text(encoding="utf-8").splitlines():
         if line.startswith("|"):
             current.append(line)
         elif current:
@@ -696,44 +722,67 @@ def _table_blocks() -> list[list[str]]:
     return blocks
 
 
-def _labels_of_table_containing(label: str) -> set[str] | None:
-    """The full label-column set of the table whose rows include `label`.
+def _row_cells(block: list[str]) -> dict[str, str]:
+    """`{row label: Values-cell text}` for one markdown table.
+
+    THE one label rule for this module. A row's label is the FIRST code span
+    in its label cell, not its only one: requiring exactly one silently
+    dropped any row whose label cell also carried a cross-reference, and a
+    dropped row is invisible to every caller — so a fact could be added to a
+    table a guard calls complete in a form that guard never reads. Header and
+    separator rows carry no code span and still fall out.
+
+    Every table reader below routes through this. They previously each
+    inlined the same walk with two different label rules, which is the drift
+    this module exists to prevent, one level up.
+    """
+    return {
+        found[0]: m.group(2).strip()
+        for row in block
+        if (m := _TABLE_ROW.match(row)) and (found := _BACKTICKED.findall(m.group(1)))
+    }
+
+
+def _table_cells_containing(label: str, spec: Path | None = None) -> dict[str, str] | None:
+    """`_row_cells` for the one table in `spec` whose rows include `label`.
 
     Both directions, unlike a subset check: a contract fact with no prose row
     fails, and a prose row for a fact the contract dropped fails too. Without
     it the fact NAMES are pinned contract-side only — so making `limits`
     required would fail one test, the fixer would add it to the expected set,
-    and the two prose files still claiming "all five shape facts" would stay
-    green. That is the contract-moves-prose-doesn't two-step, in miniature.
+    and the prose claiming the block is complete would stay green. That is the
+    contract-moves-prose-doesn't two-step, in miniature.
+
+    None when no single table matches, so a restructure (or two tables both
+    claiming the label) surfaces as an explicit failure rather than a pass
+    against an empty set.
     """
     tables = [
-        labels
-        for block in _table_blocks()
-        if label
-        in (
-            labels := {
-                found[0]
-                for row in block
-                if (m := _TABLE_ROW.match(row))
-                and len(found := _BACKTICKED.findall(m.group(1))) == 1
-            }
-        )
+        cells
+        for block in _table_blocks(spec)
+        if label in (cells := _row_cells(block))
     ]
     return tables[0] if len(tables) == 1 else None
 
 
-def _vocabulary_rows() -> list[tuple[str, set[str]]]:
-    """Every (label, values) table row whose label cell is one backticked token."""
-    rows = []
-    for line in WRITE_PATH_SPEC.read_text(encoding="utf-8").splitlines():
-        row = _TABLE_ROW.match(line)
-        if not row:
-            continue
-        label = _BACKTICKED.findall(row.group(1))
-        values = set(_BACKTICKED.findall(row.group(2)))
-        if len(label) == 1 and values:
-            rows.append((label[0], values))
-    return rows
+def _labels_of_table_containing(label: str) -> set[str] | None:
+    """Just the label column of `_table_cells_containing`."""
+    cells = _table_cells_containing(label)
+    return None if cells is None else set(cells)
+
+
+def _vocabulary_rows(spec: Path | None = None) -> list[tuple[str, set[str]]]:
+    """Every (label, values) row whose Values cell holds backticked tokens.
+
+    Flattened across tables — callers key on the label, and `_documented_values`
+    fails loudly when one label appears in more than one row.
+    """
+    return [
+        (label, tokens)
+        for block in _table_blocks(spec)
+        for label, values in _row_cells(block).items()
+        if (tokens := set(_BACKTICKED.findall(values)))
+    ]
 
 
 def _documented_values(label: str) -> set[str] | None:
@@ -753,18 +802,21 @@ def _documented_values(label: str) -> set[str] | None:
     return matches[0]
 
 
-@pytest.mark.parametrize(
-    "label, expected",
-    [
-        ("catalog", EXPECTED_SQL_CATALOG_MODES),
-        ("session_targeting", EXPECTED_SQL_SESSION_TARGETING),
-        ("merge_form", EXPECTED_SQL_MERGE_FORMS),
-        ("scope", EXPECTED_SQL_STAGE_SCOPES),
-        ("schema", EXPECTED_SQL_STAGE_SCHEMAS),
-        ("sqlalchemy", EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]),
-        ("adbc", EXPECTED_SQL_BULK_MECHANISMS["adbc"]),
-    ],
-)
+#: The write-path vocabularies the spec's tables must state, label -> members.
+#: The recall pin below derives its floor from this rather than hand-stating a
+#: length, so adding an entry raises the floor instead of leaving it stale.
+PINNED_WRITE_PATH_VOCABULARIES = [
+    ("catalog", EXPECTED_SQL_CATALOG_MODES),
+    ("session_targeting", EXPECTED_SQL_SESSION_TARGETING),
+    ("merge_form", EXPECTED_SQL_MERGE_FORMS),
+    ("scope", EXPECTED_SQL_STAGE_SCOPES),
+    ("schema", EXPECTED_SQL_STAGE_SCHEMAS),
+    ("sqlalchemy", EXPECTED_SQL_BULK_MECHANISMS["sqlalchemy"]),
+    ("adbc", EXPECTED_SQL_BULK_MECHANISMS["adbc"]),
+]
+
+
+@pytest.mark.parametrize("label, expected", PINNED_WRITE_PATH_VOCABULARIES)
 def test_write_path_spec_tables_state_the_pinned_vocabularies(
     label: str, expected: set[str]
 ) -> None:
@@ -791,10 +843,15 @@ def test_write_path_spec_tables_state_the_pinned_vocabularies(
 @pytest.mark.parametrize(
     "anchor, expected",
     [
-        # The declaration table lists the five shape facts AND `limits`; the
-        # prose calls the latter optional, but it still needs a row.
-        ("catalog", EXPECTED_SQL_CAPABILITY_FACTS | {"limits"}),
-        ("scope", EXPECTED_SQL_STAGE_FACTS),
+        # A row per PROPERTY, optional and conditional ones included — the
+        # prose calls `limits` additive and `dedicated_schema` conditional, but
+        # each still needs a row. These expectations are hand-written literals,
+        # so the protection is a CHAIN, not a derivation: a new optional member
+        # first fails the contract-side properties pin, and widening that
+        # literal — the only way to clear it — then fails this guard until the
+        # table gains a row. Neither hop alone is enough.
+        ("catalog", EXPECTED_SQL_CAPABILITY_PROPERTIES),
+        ("scope", EXPECTED_SQL_STAGE_PROPERTIES),
         ("sqlalchemy", set(EXPECTED_SQL_BULK_MECHANISMS)),
     ],
 )
@@ -813,6 +870,98 @@ def test_write_path_spec_tables_state_the_pinned_fact_names(
         f"names different facts than the contract — "
         f"prose-only={sorted(documented - expected)} "
         f"contract-only={sorted(expected - documented)}. {_WRITE_PATH_FIX}"
+    )
+
+
+def _prose_diff_msg(label: str, documented: set[str], expected: set[str]) -> str:
+    """Failure text for a PROSE-side comparison.
+
+    `_set_diff_msg` cannot serve: its `schema-only` / `plugin-only` labels
+    assume the schema is the `found` argument, which is true of its
+    contract-side callers and inverted here — it would tell the reader the
+    plugin carries a fact the schema lacks when the prose is the side that
+    dropped one.
+    """
+    return (
+        f"{label} in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} disagrees with "
+        f"the contract — prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}. {_WRITE_PATH_FIX}"
+    )
+
+
+@pytest.mark.parametrize(
+    "anchor, table, required, properties",
+    [
+        (
+            "catalog",
+            "declaration",
+            EXPECTED_SQL_CAPABILITY_FACTS,
+            EXPECTED_SQL_CAPABILITY_PROPERTIES,
+        ),
+        (
+            "scope",
+            "stage",
+            EXPECTED_SQL_STAGE_FACTS,
+            EXPECTED_SQL_STAGE_PROPERTIES,
+        ),
+    ],
+)
+def test_write_path_spec_marks_exactly_the_optional_facts_optional(
+    anchor: str, table: str, required: set[str], properties: set[str]
+) -> None:
+    """A table's required/optional split must match the contract's.
+
+    This stands in for a count. The spec used to assert completeness as a
+    cardinality ("all five shape facts are required"), which no guard could
+    check: adding a sixth required fact updates the contract and
+    `EXPECTED_SQL_CAPABILITY_FACTS` together, and the sentence stays green while
+    saying something false. The prose now defers to each table's own
+    required/optional marking, which is only meaningful while the split holds.
+
+    Both tables, not just the declaration one. The stage table makes the same
+    claim about `dedicated_schema` ("never in the block's required set"), and
+    guarding one level and not the other is how the two-step this module exists
+    to stop gets back in: the contract-side pin fails alone, the fixer widens
+    the literal, and the table keeps advertising the old split.
+
+    Note what this does NOT do: it reads the table, never the sentence above it.
+    Restoring the count to that sentence leaves this green. What it buys is that
+    the mechanism the sentence delegates to cannot rot silently —
+    `test_write_path_spec_tables_state_the_pinned_fact_names` covers the row
+    set, and this covers how those rows are marked.
+
+    Both directions matter. A fact silently gaining "optional" in its Values
+    cell would narrow the rule the agent applies; an additive member losing the
+    marker would widen it into demanding a block the contract calls optional.
+    """
+    cells = _table_cells_containing(anchor)
+    assert cells is not None, (
+        f"no single table in {WRITE_PATH_SPEC.relative_to(REPO_ROOT)} has a "
+        f"`{anchor}` row — the {table} table was restructured (or two tables "
+        "now claim it), so this guard would have passed vacuously."
+    )
+    # "conditional" is the stage table's word for a member that is required
+    # only under another field's value, so it is likewise never in `required`.
+    documented_optional = {
+        fact
+        for fact, values in cells.items()
+        if "optional" in values.lower() or "conditional" in values.lower()
+    }
+    documented_required = set(cells) - documented_optional
+    assert documented_required == required, _prose_diff_msg(
+        f"facts the {table} table leaves unmarked as optional",
+        documented_required,
+        required,
+    )
+    # Computed as properties-minus-required rather than spelled out, so the
+    # optional set cannot be edited independently of the two sets that are
+    # themselves pinned to the contract. Both are still literals — widening
+    # them is the deliberate step that brings a new member here.
+    expected_optional = properties - required
+    assert documented_optional == expected_optional, _prose_diff_msg(
+        f"facts the {table} table marks optional",
+        documented_optional,
+        expected_optional,
     )
 
 
@@ -873,18 +1022,22 @@ def test_write_path_spec_code_examples_parse() -> None:
 
 
 def test_write_path_table_parser_reads_the_real_tables() -> None:
-    """Pin the parser: its recall is what the seven checks above stand on.
+    """Pin the parsers: their recall is what the table checks above stand on.
 
-    Recall first — a parser that matched nothing would leave every check above
-    resting on its `is None` guard, which is a real failure but for the wrong
-    reason, and a future "simplification" could pass the negative cases below
-    while reading no rows at all.
+    Recall first — a parser that matched nothing would leave the vocabulary
+    checks resting on their `is None` guard, which is a real failure but for the
+    wrong reason, and a future "simplification" could pass the negative cases
+    below while reading no rows at all. (The required/optional check does not
+    need this: both its assertions are equalities against non-empty sets, so a
+    parser reading zero rows fails on its own.)
     """
     rows = _vocabulary_rows()
-    assert len(rows) >= 7, (
+    floor = len(PINNED_WRITE_PATH_VOCABULARIES)
+    assert len(rows) >= floor, (
         f"the parser found only {len(rows)} vocabulary rows in "
         f"{WRITE_PATH_SPEC.relative_to(REPO_ROOT)} — it must read at least the "
-        "seven the tests above pin, or those tests are resting on None-guards."
+        f"{floor} the tests above pin, or those tests are resting on "
+        "None-guards."
     )
     assert _documented_values("catalog") == EXPECTED_SQL_CATALOG_MODES
 
@@ -894,9 +1047,284 @@ def test_write_path_table_parser_reads_the_real_tables() -> None:
     assert _documented_values("bulk_load") is None
     # A label that does not exist at all.
     assert _documented_values("no_such_field") is None
-    # The label cell must match EXACTLY one backticked token, so a header row
-    # cannot be mistaken for a vocabulary row.
+    # A header row carries no code span at all, so it is never a vocabulary row.
     assert _documented_values("Fact") is None
+
+    # `_row_cells` keys on the FIRST code span, so a label cell carrying a
+    # cross-reference stays visible — a dropped row is a fact the completeness
+    # guard never sees. Call the real helper: building the same comprehension
+    # here would grade a copy of the rule, and reverting `_row_cells` to the old
+    # "exactly one code span" would leave this green.
+    block = ["| `hints` (`spec-hints.md`) | object, optional | Tuning. |"]
+    assert set(_row_cells(block)) == {"hints"}, (
+        "a table row whose label cell carries a cross-reference must still be "
+        "read, keyed on its first code span"
+    )
+    # No table claims a label that does not exist, and the caller turns that
+    # None into an explicit failure rather than a vacuous pass.
+    assert _table_cells_containing("no_such_fact") is None
+
+
+# --- closure claims, pinned to the shapes they close over -------------------
+# Prose that says "and nothing else" / "exactly these" is a claim about a
+# CLOSED member set. It is strictly more falsifiable than a count — a count goes
+# stale, a closure claim goes actively wrong — so each one below is read back
+# from the document and compared to the contract. Without these the sentence is
+# unowned: `Replication`, `ResourceDiscoveryTriggers` and the type-map rule keys
+# appear in no other guard in this suite.
+
+REPLICATION_SPEC = PLUGIN_ROOT / "skills" / "connector-spec-api" / "spec-replication.md"
+DISCOVERY_SPEC = (
+    PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-resource-discovery.md"
+)
+TYPE_MAPS_SPEC = PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-type-maps.md"
+
+EXPECTED_REPLICATION_KEYS = {"supported_methods", "cursor_mappings"}
+EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
+EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
+
+
+def _sentence(spec: Path, anchor: str) -> str | None:
+    """The text from `anchor` to the end of its sentence.
+
+    Prose wraps, so the text is flattened first and the span runs to the next
+    period — scoping to one line would silently read half a claim. None when
+    the anchor is absent or ambiguous, which the caller fails on rather than
+    comparing against an empty set.
+
+    Code spans are masked before the terminator is located: a cross-reference
+    like `spec-tls.md` or `type-map-read.json` carries a period that would cut
+    the claim mid-span, and the resulting token mismatch would read as contract
+    drift rather than as the parsing accident it is.
+    """
+    flat = " ".join(spec.read_text(encoding="utf-8").split())
+    if flat.count(anchor) != 1:
+        return None
+    tail = flat.split(anchor, 1)[1]
+    masked = _BACKTICKED.sub(lambda m: "`" + "_" * len(m.group(1)) + "`", tail)
+    end = masked.find(".")
+    return tail if end < 0 else tail[:end]
+
+
+@pytest.mark.parametrize(
+    "spec, anchor, closure, expected",
+    [
+        (
+            REPLICATION_SPEC,
+            "the block carries",
+            "nothing else",
+            EXPECTED_REPLICATION_KEYS,
+        ),
+        (
+            DISCOVERY_SPEC,
+            "the discovery contract",
+            "exactly these",
+            EXPECTED_DISCOVERY_ACTIONS,
+        ),
+    ],
+)
+def test_prose_closure_claims_name_exactly_the_contract_members(
+    spec: Path, anchor: str, closure: str, expected: set[str]
+) -> None:
+    """A "nothing else" sentence must enumerate exactly what the model carries."""
+    # Meta-guard: a closure phrase living inside the anchor makes the closure
+    # assertion below unfailable, and the next case added that way would look
+    # graded without being graded.
+    assert closure not in anchor, (
+        f"the closure phrase {closure!r} is part of the anchor {anchor!r}, so "
+        "asserting it proves nothing. Shorten the anchor so the closure falls "
+        "inside the sentence span."
+    )
+    sentence = _sentence(spec, anchor)
+    assert sentence is not None, (
+        f"{spec.relative_to(REPO_ROOT)}: the phrase {anchor!r} is missing or "
+        "appears more than once — the claim was reworded, so this guard would "
+        "have passed vacuously. Re-anchor it on the new wording."
+    )
+    # Grade the closure, not just the enumeration. Dropping "and nothing else"
+    # leaves a weaker-but-true sentence and would otherwise pass here, quietly
+    # retiring the claim this guard exists to hold.
+    assert closure in anchor + sentence, (
+        f"{spec.relative_to(REPO_ROOT)}: the sentence after {anchor!r} no "
+        f"longer closes the set ({closure!r} is gone). Either restore the "
+        "closure or drop this case — a guard for a claim nobody makes is worse "
+        "than no guard."
+    )
+    named = set(_BACKTICKED.findall(sentence))
+    assert named == expected, (
+        f"{spec.relative_to(REPO_ROOT)}: the closure claim after {anchor!r} "
+        f"names different members than the contract — "
+        f"prose-only={sorted(named - expected)} "
+        f"contract-only={sorted(expected - named)}. A member landed (or left) "
+        "and the sentence now says something false; reword it in this change."
+    )
+
+
+def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
+    """The contract side of the `spec-replication.md` closure claim.
+
+    Both `properties` and `required`: the spec's bullet says the block carries
+    these keys AND that each is required. Pinning properties alone would let
+    either move to optional with the "each required" claim still green — the
+    same half-measure that left a new optional `SqlCapabilities` member
+    invisible.
+    """
+    props = _properties_at(api_endpoint_schema, "Replication")
+    assert props == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
+        "Replication properties", props, EXPECTED_REPLICATION_KEYS
+    )
+    required = _required_at(api_endpoint_schema, "Replication")
+    assert required == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
+        "Replication required", required, EXPECTED_REPLICATION_KEYS
+    )
+
+
+def test_discovery_actions_match_schema(connector_schema: dict) -> None:
+    """The contract side of the `spec-resource-discovery.md` closure claim."""
+    props = _properties_at(connector_schema, "ResourceDiscoveryTriggers")
+    assert props == EXPECTED_DISCOVERY_ACTIONS, _set_diff_msg(
+        "ResourceDiscoveryTriggers properties", props, EXPECTED_DISCOVERY_ACTIONS
+    )
+
+
+def test_db_creator_step_accounts_for_every_shape_fact() -> None:
+    """The authoring step must name every fact it tells the agent to declare.
+
+    Removing the count left the sub-bullets as the only place this agent
+    enumerates the fact set, and nothing read them: deleting the `merge_form`
+    bullet outright kept the suite green while the agent stopped authoring a
+    required fact. `_WRITE_PATH_FIX` names this file as somewhere to go fix,
+    but a fix-hint is not a guard.
+
+    Scoped to the ONE numbered step that authors `sql_capabilities`, so a fact
+    mentioned elsewhere in the document cannot stand in for the guidance. A
+    fact is "named" by its own bullet or by a dotted child (`stage.scope`
+    accounts for `stage`), matching how the step is written.
+    """
+    doc = PLUGIN_ROOT / "agents" / "db-connector-creator.md"
+    step = re.search(
+        r"^\d+\.\s+\*\*SQL write-path capabilities\*\*(.*?)(?=^\d+\. )",
+        doc.read_text(encoding="utf-8"),
+        re.M | re.S,
+    )
+    assert step, (
+        f"{doc.name}: no `SQL write-path capabilities` numbered step — the "
+        "authoring order was restructured; re-scope this gate."
+    )
+    tokens = set(_BACKTICKED.findall(step.group(1)))
+    missing = {
+        fact
+        for fact in EXPECTED_SQL_CAPABILITY_FACTS
+        if not any(t == fact or t.startswith(f"{fact}.") for t in tokens)
+    }
+    assert not missing, (
+        f"{doc.name}'s `sql_capabilities` step never names {sorted(missing)} — "
+        "the agent is told the block must be complete but not what to put in "
+        f"it. {_WRITE_PATH_FIX}"
+    )
+
+
+def test_cursor_mapping_variants_match_the_spec() -> None:
+    """`spec-replication.md` enumerates the cursor-mapping variants by `$defs` id.
+
+    `CursorMapping` is a discriminated union, so a third variant is a plausible
+    contract change — and the page presents its list as the choice an author
+    picks from. Read the union's members and compare to the ids the page cites.
+
+    Scoped to that top-of-page bullet list, not the whole file: a passing
+    mention deep in a gotcha paragraph would otherwise keep this green while
+    the list an author actually chooses from lost a variant. Same reasoning as
+    scoping the shape-fact guard to one numbered step.
+    """
+    from analitiq.contracts.endpoints import CursorMapping
+
+    schema = TypeAdapter(CursorMapping).json_schema()
+    variants = {
+        ref.rsplit("/", 1)[-1]
+        for branch in schema.get("oneOf") or schema.get("anyOf") or []
+        if (ref := branch.get("$ref"))
+    }
+    assert variants, (
+        "no `$ref` branches found for CursorMapping — the union was "
+        "restructured, so this guard would have passed vacuously."
+    )
+    bullets = [
+        line
+        for line in REPLICATION_SPEC.read_text(encoding="utf-8").splitlines()
+        if line.startswith("- `#/$defs/")
+    ]
+    assert bullets, (
+        f"no `- #/$defs/…` choice bullets in "
+        f"{REPLICATION_SPEC.relative_to(REPO_ROOT)} — the page was "
+        "restructured, so this guard would have passed vacuously."
+    )
+    cited = {
+        token.rsplit("/", 1)[-1]
+        for token in _BACKTICKED.findall("\n".join(bullets))
+        # The union itself is cited on the same list; only its members count.
+        if token.startswith("#/$defs/")
+        and token.endswith("CursorMapping")
+        and token != "#/$defs/CursorMapping"
+    }
+    assert cited == variants, (
+        f"{REPLICATION_SPEC.relative_to(REPO_ROOT)} cites different cursor "
+        f"mapping variants than the contract — prose-only={sorted(cited - variants)} "
+        f"contract-only={sorted(variants - cited)}. A new variant must reach "
+        "the page that teaches an author how to choose one."
+    )
+
+
+def test_type_map_rule_keys_match_schema_and_prose() -> None:
+    """`spec-type-maps.md` says a rule carries "exactly the keys named below".
+
+    Both sides: the contract's rule keys, and the Key column of the table the
+    sentence defers to. Nothing else in this suite reads either.
+
+    EVERY variant, not just the read/exact one. The table the sentence points
+    at carries a Write-map column, so the claim spans all four; checking one
+    would leave a key added to a write variant — the likelier direction, since
+    `canonical` is already overridden per variant — falsifying the sentence
+    with the suite green.
+    """
+    from analitiq.contracts.type_map import (
+        TypeMapReadExactRule,
+        TypeMapReadRegexRule,
+        TypeMapWriteExactRule,
+        TypeMapWriteRegexRule,
+    )
+
+    for rule in (
+        TypeMapReadExactRule,
+        TypeMapReadRegexRule,
+        TypeMapWriteExactRule,
+        TypeMapWriteRegexRule,
+    ):
+        contract_keys = set(TypeAdapter(rule).json_schema()["properties"])
+        assert contract_keys == EXPECTED_TYPE_MAP_RULE_KEYS, _set_diff_msg(
+            f"{rule.__name__} keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
+        )
+    # Grade the claim's existence, not only the table it defers to. Dropping
+    # "and no others" retires the closure while leaving the table intact, and
+    # this guard would have gone on passing for a sentence nobody makes.
+    claim = _sentence(TYPE_MAPS_SPEC, "carries exactly the keys named below")
+    assert claim is not None and "no others" in claim, (
+        f"{TYPE_MAPS_SPEC.relative_to(REPO_ROOT)}: the rule-shape closure claim "
+        '("carries exactly the keys named below and no others") was reworded or '
+        "removed. Re-anchor this guard, or drop it if the claim is gone."
+    )
+    cells = _table_cells_containing("match", TYPE_MAPS_SPEC)
+    assert cells is not None, (
+        f"no single table in {TYPE_MAPS_SPEC.relative_to(REPO_ROOT)} has a "
+        "`match` row — the rule-shape table was restructured (or two tables "
+        "now claim it), so this guard would have passed vacuously."
+    )
+    documented = set(cells)
+    assert documented == EXPECTED_TYPE_MAP_RULE_KEYS, (
+        f"{TYPE_MAPS_SPEC.relative_to(REPO_ROOT)}: the rule-shape table names "
+        f"different keys than the contract — "
+        f"prose-only={sorted(documented - EXPECTED_TYPE_MAP_RULE_KEYS)} "
+        f"contract-only={sorted(EXPECTED_TYPE_MAP_RULE_KEYS - documented)}."
+    )
 
 
 def test_idempotency_targets_match_schema(api_endpoint_schema: dict) -> None:
