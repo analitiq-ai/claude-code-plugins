@@ -1043,7 +1043,7 @@ def _mention_spans(text: str) -> list[tuple[int, int]]:
     return spans + [site.path_span for site in _anchor_sites(text) if site.path_span]
 
 
-class Mention(NamedTuple):
+class UnreadMention(NamedTuple):
     """One `.md` written in prose that no extractor read, and the reason it is
     not a citation — `None` when there is none, which is the failure."""
 
@@ -1054,7 +1054,7 @@ class Mention(NamedTuple):
     disposition: str | None
 
 
-def _unread_mentions(plugin: str) -> list[Mention]:
+def _unread_mentions(plugin: str) -> list[UnreadMention]:
     """Every `.md` in the plugin's prose that no extractor reads, each with its
     disposition. The census asserts on the ones that have none; the
     disposition-liveness test reads the rest, so a disposition is only 'used'
@@ -1077,7 +1077,7 @@ def _unread_mentions(plugin: str) -> list[Mention]:
             index = bisect_right(starts, start) - 1
             line, line_start = lines[index], starts[index]
             unread.append(
-                Mention(
+                UnreadMention(
                     rel=rel,
                     lineno=index + 1,
                     mention=match.group(0),
@@ -1090,7 +1090,7 @@ def _unread_mentions(plugin: str) -> list[Mention]:
     return unread
 
 
-def _uncovered_mentions(plugin: str) -> list[Mention]:
+def _uncovered_mentions(plugin: str) -> list[UnreadMention]:
     """The census's finding: read by nobody, explained by nothing."""
     return [m for m in _unread_mentions(plugin) if m.disposition is None]
 
