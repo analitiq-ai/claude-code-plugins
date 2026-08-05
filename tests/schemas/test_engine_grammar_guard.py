@@ -327,6 +327,36 @@ def test_matrix_self_declared_version_mismatch_fails(guard, monkeypatch, capsys)
     assert f"pin says {ag.CONVERSION_MATRIX_VERSION!r}" in err
 
 
+def test_mislabeled_matrix_gets_no_grid_verdicts(guard, monkeypatch, capsys):
+    """The matrix self-declares a version other than the pin AND its grid
+    diverges from the grammar families. One failure, one cause: the object was
+    rejected as mislabeled, so diffing its grid would emit a second, possibly
+    nonsense verdict about a document already disclaimed — mirroring the
+    reasoning check_offline states for its own early return after a hash
+    mismatch. Step 4 (latest.json) still runs, pinned via the newer-grammar
+    notice: the pointers are separate objects the mislabel says nothing about.
+    """
+    ag = guard.arrow_grammar
+    near_miss = ag.CONVERSION_MATRIX_VERSION[:-1] + str(
+        int(ag.CONVERSION_MATRIX_VERSION[-1]) + 1
+    )
+    families = list(ag.FAMILY_NAMES)[:-1] + ["Struct"]
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=_matrix_bytes(guard, families=families, version=near_miss),
+        grammar_latest="9.0.0",
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    captured = capsys.readouterr()
+    assert f"declares version {near_miss!r}" in captured.err
+    # No second verdict about the same rejected object.
+    assert "family keys != grammar families" not in captured.err
+    # Step 4 still ran: the newer published grammar produced its notice.
+    assert "::notice::" in captured.out
+
+
 def test_matrix_without_conversions_key_is_a_guard_error(guard, monkeypatch, capsys):
     """A well-formed envelope that self-declares the PINNED version but holds
     its grid somewhere other than `conversions`.
