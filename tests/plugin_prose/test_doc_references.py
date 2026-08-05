@@ -105,7 +105,7 @@ _PLUGIN_ROOT_REF = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)")
 # A backticked markdown filename, optionally with a leading directory path:
 # `spec-tls.md`, `references/io-contracts.md`. Bare `.md` only — see the
 # module docstring on why non-`.md` citations stay out of this form.
-_BARE_REF = re.compile(r"`((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.md)`")
+_BARE_REF = re.compile(r"`((?:\.{1,2}/)*(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.md)`")
 
 # An unbackticked `.md` path, matched on every line. At least one directory
 # segment is required: a bare filename with no slash is indistinguishable
@@ -114,12 +114,14 @@ _BARE_REF = re.compile(r"`((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.md)`")
 # citation. The lookbehind rejects starts preceded by a backtick (that is
 # `_BARE_REF`'s form) or by a path character, so the tail of a
 # `${CLAUDE_PLUGIN_ROOT}/…` reference is not re-matched. The directory-segment
-# charset mirrors `_BARE_REF`'s — no `.`, so a `./`- or `../`-prefixed
-# relative path is out of scope here; it arrives as a markdown link instead.
-# The second lookbehind hands a link target to the link pass alone: without it
-# `](skills/x/y.md)` matches here too, and one broken link fails two tests.
+# charset mirrors `_BARE_REF`'s, and both spell the `./` and `../` prefixes a
+# sibling-skill citation uses — a citation the reader resolves from the
+# document it sits in, and so does `_candidates`. The second lookbehind hands
+# a link target to the link pass alone: without it `](skills/x/y.md)` matches
+# here too, and one broken link fails two tests.
 _BARE_PATH_REF = re.compile(
-    r"(?<![\w`./-])(?<!\]\()((?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
+    r"(?<![\w`./-])(?<!\]\()"
+    r"((?:\.{1,2}/)*(?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
 )
 
 _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
@@ -135,7 +137,9 @@ _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 # as `https://…/docs/sql-write-path-v2.md` is a file this repo cannot open, and
 # resolving it relative to the citing document would report every such link
 # dangling.
-_LINK_REF = re.compile(r"\]\((?!\w+:)([^)\s#]+\.md)(#[^)\s]*)?\)")
+_LINK_REF = re.compile(
+    r"\]\((?!\w+:)<?([^)\s#<>]+\.md)>?(#[^)\s]*)?(?:\s+[\"'(][^)]*)?\)"
+)
 
 # What GitHub keeps when it slugs a heading into a fragment: case folded,
 # spaces to hyphens, everything else that is not a word character or hyphen
@@ -392,10 +396,13 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
     thing it names exists, which is the failure that silently starves an agent
     of its rules.
 
-    Two refinements on top:
+    Three refinements on top:
 
     - A citation that spells out `plugins/<name>/…` is fully qualified, may
       name a sibling plugin, and is matched exactly against the repo tree.
+    - A `./`- or `../`-prefixed citation is relative by construction: a reader
+      resolves it from the document it sits in, so this does too, and refuses
+      to leave the plugin the way the rest of the rule does.
     - Given the citing document, the nearest ancestor directory holding the
       path wins alone: `SKILL.md` cited from
       `skills/pipeline-builder/references/pipeline.md` is that skill's own
@@ -409,6 +416,12 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
         candidate = REPO_ROOT / cleaned
         return [candidate] if candidate.exists() else []
     root = _plugin_root(plugin)
+    if cleaned.startswith(("./", "../")):
+        if citing is None:
+            return []
+        candidate = (root / citing).parent / cleaned
+        inside = candidate.resolve().is_relative_to(root.resolve())
+        return [candidate] if inside and candidate.exists() else []
     if citing is not None:
         for ancestor in (root / citing).parents:
             if not ancestor.is_relative_to(root):
@@ -619,13 +632,16 @@ def _anchor_references(plugin: str) -> list[tuple[str, Anchor]]:
     ]
 
 
-def _is_dangling(target: str, plugin: str) -> bool:
+def _is_dangling(target: str, plugin: str, citing: str | None = None) -> bool:
     """The one exemption-and-resolution predicate: a citation dangles unless it
     is allow-listed as deliberately external or names something that exists.
     Both the real-tree sweep and the synthetic acceptance tests go through this,
-    so the acceptance tests exercise the exemption logic that ships."""
+    so the acceptance tests exercise the exemption logic that ships.
+
+    `citing` is what a `../`-prefixed citation is relative to; without it such a
+    citation resolves to nothing, which is why the sweep always passes it."""
     return _clean(target) not in _EXTERNAL_REFS[plugin] and not _candidates(
-        target, plugin
+        target, plugin, citing
     )
 
 
@@ -707,7 +723,7 @@ def test_doc_references_resolve(plugin: str) -> None:
     dangling = [
         (rel, lineno, target)
         for rel, lineno, target in _references(plugin)
-        if _is_dangling(target, plugin)
+        if _is_dangling(target, plugin, rel)
     ]
     assert not dangling, (
         "agent prose points at files that do not exist:\n"
@@ -965,6 +981,73 @@ def _files_reached_by(plugin: str, form: str) -> set[Path]:
     }
 
 
+# Every `.md` written anywhere in plugin prose. Not an extractor — the census
+# below uses it to ask the question the extractors cannot ask of themselves:
+# *is there a citation none of us read?* Floors, sentinels and waivers all sit
+# downstream of extraction, so none of them can see a form no regex spells.
+_MD_MENTION = re.compile(r"[A-Za-z0-9_.\-/*]*\.md\b")
+
+
+def _mention_disposition(line: str, start: int, end: int) -> str | None:
+    """Why a `.md` written in prose is not a citation any extractor should
+    read. One name per reason, and the census below fails on a mention that
+    fits none of them — that is what makes a citation form nobody spelled
+    impossible to add silently."""
+    mention = line[start:end]
+    before, after = line[:start], line[end:]
+    if _HEADING.match(line) and mention in line.split("—")[0]:
+        # `# CLAUDE.md — analitiq-connector-builder`: the document naming
+        # itself, not pointing anywhere.
+        return "document title"
+    if before.rstrip().endswith(("──", "─")):
+        # A tree diagram's leaf. The directory listing is illustrative; the
+        # files in it are cited properly elsewhere or do not exist yet.
+        return "tree diagram"
+    if before.endswith("[") or (before.rstrip("`").endswith("[") and after.startswith(("`]", "]"))):
+        # The visible half of a markdown link. The target half is checked.
+        return "link text"
+    if "*" in mention:
+        # `spec-*.md` names a set of files, not a file.
+        return "glob"
+    if "/" not in mention:
+        # The documented decision: a bare filename with no directory segment is
+        # indistinguishable from an ordinary prose word, so only its backticked
+        # form (`_BARE_REF`) is read. Unbackticked, it stays prose.
+        return "bare filename"
+    return None
+
+
+def _mention_spans(line: str) -> list[tuple[int, int]]:
+    """Where every extractor reads on one line, so a mention can be asked
+    whether anybody read it."""
+    spans = [
+        match.span(1)
+        for pattern in (*_PATH_PATTERNS, _LINK_REF)
+        for match in pattern.finditer(line)
+    ]
+    return spans + [
+        match.span(1) for match in _ANCHOR_BINDING.finditer(line)
+    ]
+
+
+def _uncovered_mentions(plugin: str) -> list[tuple[str, int, str, str]]:
+    """Every `.md` in the plugin's prose that no extractor reads and no
+    disposition explains."""
+    root = _plugin_root(plugin)
+    uncovered = []
+    for path in _prose_files(plugin):
+        rel = path.relative_to(root).as_posix()
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            spans = _mention_spans(line)
+            for match in _MD_MENTION.finditer(line):
+                start, end = match.span()
+                if any(start < span_end and span_start < end for span_start, span_end in spans):
+                    continue
+                if _mention_disposition(line, start, end) is None:
+                    uncovered.append((rel, lineno, match.group(0), line.strip()))
+    return uncovered
+
+
 def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
     """Every (citing relpath, target) one extractor finds — the form's own
     view, with the document each citation is written in, which is what tells a
@@ -1099,6 +1182,63 @@ def test_every_anchor_in_the_tree_is_graded(plugin: str) -> None:
     )
 
 
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_every_md_written_in_prose_is_read_or_dispositioned(plugin: str) -> None:
+    """The census, and the only check here that can see a citation form nobody
+    spelled. Everything else in this file sits downstream of extraction: a
+    floor counts what a regex matched, a sentinel names a citation a regex
+    finds, a waiver explains a form a regex reads. None of them can notice a
+    `.md` no pattern reaches — which is how two `../`-prefixed citations sat
+    unchecked while the suite was green and a comment said otherwise.
+
+    So: having a `.md` in prose is the trigger, and every one is either inside
+    some extractor's match or carries a named reason it is not a citation. A
+    new citation form arrives as a failure here, not as silence."""
+    uncovered = _uncovered_mentions(plugin)
+    assert not uncovered, (
+        "`.md` written in prose that no extractor reads:\n"
+        + "\n".join(
+            f"  plugins/{plugin}/{rel}:{lineno} -> {mention}\n      {line}"
+            for rel, lineno, mention, line in uncovered
+        )
+        + "\nEither it is a citation — teach the extractor its form, and pin "
+        "the form with a sentinel — or it is not, and `_mention_disposition` "
+        "needs the reason why, named."
+    )
+
+
+def test_every_mention_disposition_is_load_bearing() -> None:
+    """A disposition nobody's prose fits is dead config that can only mask a
+    real citation later. Each is exercised on the shape it was written for,
+    and the real tree is what proves they are all still needed."""
+    cases = {
+        "document title": ("# CLAUDE.md — analitiq-connector-builder", 2, 11),
+        "tree diagram": ("└── README.md", 4, 13),
+        "link text": ("[spec-envelope.md](skills/connection-spec/spec-envelope.md)", 1, 17),
+        "glob": ("- every `spec-*.md` under it.", 9, 18),
+        "bare filename": ("the rule in io-contracts.md, never a slug", 12, 27),
+    }
+    for expected, (line, start, end) in cases.items():
+        assert line[start:end].endswith(".md"), (expected, line[start:end])
+        assert _mention_disposition(line, start, end) == expected
+    # A real citation is not dispositioned away by any of them.
+    line = "see skills/nowhere/gone.md for details"
+    assert _mention_disposition(line, 4, 26) is None
+    # And every disposition still answers for something in the tree.
+    used = {
+        _mention_disposition(line, *match.span())
+        for plugin in _plugin_names()
+        for path in _prose_files(plugin)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        for match in _MD_MENTION.finditer(line)
+    }
+    unused = sorted(set(cases) - used)
+    assert not unused, (
+        f"dispositions no prose needs any more: {unused} — drop them, so the "
+        "list keeps meaning what it says."
+    )
+
+
 def test_a_starved_form_trips_its_floor() -> None:
     """The floors are this file's anti-vacuity device, and their comparison is
     only ever run on a tree that must not trip it — so the failing direction
@@ -1124,6 +1264,14 @@ def test_a_link_fragment_is_read_out_of_the_prose() -> None:
     assert _links_in("Line one\n\nSee [t](../x/y.md#a-b).") == [
         (3, "../x/y.md", "a-b")
     ]
+    # CommonMark's other spellings of the same link. Missing them is worse than
+    # missing an exotic form: `_BARE_PATH_REF` defers everything after `](` to
+    # this pattern, so a target this does not match is read by nobody.
+    assert _links_in('See [t](spec-envelope.md "Envelope").') == [
+        (1, "spec-envelope.md", "")
+    ]
+    assert _links_in('See [t](x/y.md#frag "Title").') == [(1, "x/y.md", "frag")]
+    assert _links_in("See [t](<spec-envelope.md>).") == [(1, "spec-envelope.md", "")]
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -1174,11 +1322,14 @@ tools: Read
 Body prose citing skills/nowhere/references/also-gone.md without backticks.
 """
 
-def _dangling_in(text: str, plugin: str) -> list[str]:
+def _dangling_in(text: str, plugin: str, citing: str | None = None) -> list[str]:
     """The scan-and-resolve pipeline of `test_doc_references_resolve`, on one
-    document's text."""
+    document's text. `citing` is the document the text stands in for, which a
+    `../`-prefixed citation resolves against."""
     return [
-        target for _lineno, target in _scan_text(text) if _is_dangling(target, plugin)
+        target
+        for _lineno, target in _scan_text(text)
+        if _is_dangling(target, plugin, citing)
     ]
 
 
@@ -1467,6 +1618,17 @@ def test_resolution_stops_at_the_plugin_boundary(plugin: str) -> None:
     assert _dangling_in("See `CONTRIBUTING.md` for the rules.\n", plugin) == [
         "CONTRIBUTING.md"
     ]
+    # And by the relative route, which resolves through the citing document
+    # rather than by suffix — the same boundary, a different code path.
+    citing, _heading = _fixture(plugin)  # skills/<skill>/references/<file>.md
+    assert _candidates("../../../../../CONTRIBUTING.md", plugin, citing) == []
+    assert _dangling_in(
+        "See `../../../../../CONTRIBUTING.md`.\n", plugin, citing
+    ) == ["../../../../../CONTRIBUTING.md"]
+    # The same route, staying inside: a sibling skill's reference resolves.
+    sibling = _sentinels(plugin)["bare_path"]
+    hops = "../" * (len(Path(citing).parts) - 1)
+    assert _candidates(f"{hops}{sibling}", plugin, citing)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
