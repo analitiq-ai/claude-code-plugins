@@ -121,6 +121,11 @@ def _tier_categories(tier: str) -> tuple[Category, ...]:
     return tuple(c for c in CATEGORIES if c.tier == tier)
 
 
+#: A broken token stops being greppable — no fill in this module may split
+#: one, neither at a hyphen nor mid-word in an overlong code span.
+_NO_TOKEN_SPLIT = {"break_on_hyphens": False, "break_long_words": False}
+
+
 def _decapitalize(phrase: str) -> str:
     """Lower a leading ASCII capital so joined phrases read as one sentence.
 
@@ -156,10 +161,7 @@ def render_bump_table() -> str:
                 f"- **{tier}**: " + ", ".join(items) + ".",
                 width=76,
                 subsequent_indent="  ",
-                # Neither a hyphenated slug nor a long code span may split
-                # across lines: a broken token stops being greppable.
-                break_on_hyphens=False,
-                break_long_words=False,
+                **_NO_TOKEN_SPLIT,
             )
         )
     first, *rest = TIERS
@@ -168,7 +170,8 @@ def render_bump_table() -> str:
         + [f"else any {tier}-tier → `{tier}`" for tier in rest]
         + [f"else → `{BUMP_VALUES[-1]}`"]
     )
-    return "\n".join(bullets) + "\n\n" + textwrap.fill(rollup + ".", width=76) + "\n"
+    return "\n".join(bullets) + "\n\n" + textwrap.fill(
+        rollup + ".", width=76, **_NO_TOKEN_SPLIT) + "\n"
 
 
 # The envelope's fixed shape, kept compact by hand because the fence is loaded
@@ -217,8 +220,7 @@ def render_drift_verdict() -> str:
         width=76,
         initial_indent=" " * 14,
         subsequent_indent=" " * 14,
-        break_on_hyphens=False,
-        break_long_words=False,
+        **_NO_TOKEN_SPLIT,
     )
     body = _DRIFT_VERDICT_TEMPLATE.replace(
         "@BUMP_ENUM@", ", ".join(json.dumps(v) for v in BUMP_VALUES)

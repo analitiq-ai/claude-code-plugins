@@ -234,6 +234,9 @@ def test_bump_table_keeps_every_slug_greppable() -> None:
     for category in rt.CATEGORIES:
         assert any(category.slug in line for line in lines), (
             f"slug {category.slug!r} no longer appears intact on one line")
+    # The rollup line carries hyphenated tokens the slug loop never sees.
+    assert not any(line.rstrip().endswith("-") for line in lines), (
+        "a token split across lines stops being greppable")
 
 
 def test_release_policy_blocks_carry_no_validator_claims() -> None:
