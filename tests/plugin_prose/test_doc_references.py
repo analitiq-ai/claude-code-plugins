@@ -27,9 +27,11 @@ entries in the three per-plugin registries below, this suite is red.
      `` `SKILL.md §Pipeline` `` puts the anchor inside the backticks, so the
      backticked pattern never sees a closing backtick after `.md`.
    - Markdown links, `](spec-x.md)` — resolved relative to the citing file,
-     since that is what a link means, and allowed to leave the plugin (the
-     READMEs link the repo root's). A link's `#fragment` is checked as a
-     section, below.
+     since that is what a link means. A link may leave the plugin only from
+     the plugin's own README, a page a reader browses in the repo; from a
+     skill or agent document, read out of an installed plugin cache where repo
+     files do not exist, a link out of the tree dangles. A link's `#fragment`
+     is checked as a section, below.
 
    What is **not** checked, each a decision rather than an oversight:
 
@@ -41,6 +43,15 @@ entries in the three per-plugin registries below, this suite is red.
    - A same-document link, `](#a-heading)`. No plugin writes one; adding an
      extractor for a form with no sites would be a pattern nothing can floor,
      which is the shape of a guard that dies without anyone noticing.
+   - A link whose target carries a URL scheme. `](https://…/docs/adr.md)`
+     names a file in another repo, which this one cannot open — resolving it
+     relative to the citing document would report every such link dangling.
+   - `CHANGELOG.md`. release-please generates it from commit subjects, which
+     in this repo carry both `§` and `.md` paths, so a release entry naming a
+     since-renamed spec would fail the build on text no author can correct:
+     hand-editing a generated file is undone by the next release. It is not
+     prose any agent reads. A citation *of* the changelog still resolves — it
+     is excluded as a source of citations, not from the path universe.
 
 2. **The section exists.** A `path.md §Heading` citation, and a link's
    `#fragment`, make a second claim the file check never opens: that the
@@ -275,17 +286,25 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             "skills/connector-builder/references/metadata-and-versioning.md",
             "Release version",
         ),
+        # This plugin writes exactly one markdown link, in its README, pointing
+        # at the repo README. It routes no agent, so there is no routing
+        # citation to pin — the repo-wide link floor is what guards the form.
+        "unsentinelled": {"link": "one link, in the README, routing nobody"},
     },
     "analitiq-pipeline-builder": {
         "sentinels": {
             "plugin_root": "scripts/validate.py",
             "bare_path": "skills/pipeline-builder/references/io-contracts.md",
             "backticked": "spec-database-object.md",
+            # The one link in either plugin that routes an agent rather than a
+            # reader: a stream spec sending its author to the column spec.
+            "link": "skills/endpoint-spec/spec-columns.md",
         },
         "fixture": (
             "skills/pipeline-builder/references/identity-and-versioning.md",
             "Metadata fields",
         ),
+        "unsentinelled": {},
     },
 }
 
@@ -296,6 +315,13 @@ def _sentinels(plugin: str) -> dict[str, str]:
 
 def _fixture(plugin: str) -> tuple[str, str]:
     return _PLUGIN_FIXTURES[plugin]["fixture"]  # type: ignore[return-value]
+
+
+def _unsentinelled(plugin: str) -> dict[str, str]:
+    """Forms this plugin declares it cannot pin with a routing citation, each
+    with the reason. A declared, reviewable state rather than a form quietly
+    missing from `sentinels`."""
+    return _PLUGIN_FIXTURES[plugin]["unsentinelled"]  # type: ignore[return-value]
 
 
 def _plugin_root(plugin: str) -> Path:
@@ -463,8 +489,10 @@ def _anchor_text(rest: str) -> str:
 
 def _fenced_lines(text: str) -> set[int]:
     """The 1-based line numbers inside a fenced block, the fence lines
-    included. What is inside a fence is an example of markdown, not markdown:
-    neither its `#` lines nor its `§` citations are real."""
+    included. One contract, and only one: a `#` line in a fence is a comment in
+    someone's code sample, not a section anyone can cite. Citations are *not*
+    exempted — a fenced `§` is graded like any other, because fenced examples
+    are where this repo's mission specs quote the paths a researcher reads."""
     fenced, inside = set(), False
     for lineno, line in enumerate(text.splitlines(), 1):
         if _FENCE.match(line):
@@ -775,17 +803,28 @@ def test_every_plugin_is_covered() -> None:
     # Sentinels are per form too: a form with no sentinel is pinned by its
     # count alone, which an over-matching pattern satisfies while losing the
     # citation that mattered.
-    unsentinelled = {
-        plugin: sorted(set(_FORM_PATTERNS) - set(_sentinels(plugin)) - {"link"})
+    unpinned = {
+        plugin: sorted(
+            set(_FORM_PATTERNS) - set(_sentinels(plugin)) - set(_unsentinelled(plugin))
+        )
         for plugin in _plugin_names()
-        if set(_FORM_PATTERNS) - set(_sentinels(plugin)) - {"link"}
+        if set(_FORM_PATTERNS) - set(_sentinels(plugin)) - set(_unsentinelled(plugin))
     }
-    assert not unsentinelled, (
-        f"citation forms with no sentinel: {unsentinelled} — name one real "
+    assert not unpinned, (
+        f"citation forms neither pinned nor waived: {unpinned} — name one real "
         "routing citation per form, so the extractor stays pinned to prose an "
-        "agent actually follows. (`link` is exempt — both plugins write links "
-        "only in READMEs, which route nobody — and `anchor` never reaches this "
-        "check at all, having no pattern of its own.)"
+        "agent actually follows, or record in `unsentinelled` why this plugin "
+        "has no such citation. (`anchor` never reaches this check, having no "
+        "pattern of its own; its floor counts what the pass graded.)"
+    )
+    waived_but_pinned = {
+        plugin: sorted(set(_unsentinelled(plugin)) & set(_sentinels(plugin)))
+        for plugin in _plugin_names()
+        if set(_unsentinelled(plugin)) & set(_sentinels(plugin))
+    }
+    assert not waived_but_pinned, (
+        f"forms both waived and pinned: {waived_but_pinned} — a waiver that "
+        "names a form the plugin does pin is stale; drop it."
     )
 
 
@@ -816,12 +855,24 @@ def _unreached_sentinels(plugin: str, sentinels: dict[str, str]) -> dict[str, st
     return {
         form: sentinel
         for form, sentinel in sentinels.items()
-        if not set(_candidates(sentinel, plugin))
-        & {
-            path
-            for target in _form_targets(plugin, form)
-            for path in _candidates(target, plugin)
+        if not {path.resolve() for path in _candidates(sentinel, plugin)}
+        & _files_reached_by(plugin, form)
+    }
+
+
+def _files_reached_by(plugin: str, form: str) -> set[Path]:
+    """Every file one extractor's citations resolve to. Links resolve from the
+    document they are written in, so they are read back with their citing file
+    rather than through `_candidates`, which knows nothing of `../`."""
+    if form == "link":
+        return {
+            ((_plugin_root(plugin) / rel).parent / target).resolve()
+            for rel, _lineno, target, _fragment in _link_references(plugin)
         }
+    return {
+        path.resolve()
+        for target in _form_targets(plugin, form)
+        for path in _candidates(target, plugin)
     }
 
 
@@ -1012,8 +1063,11 @@ def test_a_generated_changelog_is_not_graded_as_prose(plugin: str) -> None:
     would fail the build on text the author cannot fix: hand-editing a
     generated file is undone by the next release. It is also not prose any
     agent reads."""
-    assert (_plugin_root(plugin) / "CHANGELOG.md").is_file()
-    assert not [p for p in _prose_files(plugin) if p.name == "CHANGELOG.md"]
+    # Not "the changelog exists" — release-please writes it at a plugin's
+    # first release, so a plugin can legitimately be here without one, and a
+    # guard about citations must not demand a release train.
+    assert "CHANGELOG.md" in _GENERATED_PROSE
+    assert not [p for p in _prose_files(plugin) if p.name in _GENERATED_PROSE]
     # The shape that would break the build if it were swept: a release entry
     # naming a since-renamed spec, and one quoting a `§` from a commit subject.
     entry = (
@@ -1374,6 +1428,40 @@ def test_a_quoted_anchor_is_held_to_the_whole_heading() -> None:
     assert len(sites) == 2
     assert (sites[0].quoted, sites[0].text) == (True, "Shape")
     assert (sites[1].quoted, sites[1].text) == (False, "Shape of it")
+    # A long quoted heading stays quoted: the anchor window has to reach past
+    # it, or the citation is silently declassified to the looser rule.
+    long_heading = "Fenced JSON examples — the annotation convention"
+    assert len(long_heading) < _ANCHOR_WINDOW
+    assert _anchor_sites(f'§ "{long_heading}"')[0].quoted
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_quoted_anchor_is_graded_exactly_by_the_pass(plugin: str) -> None:
+    """The join, not the pieces: `_anchor_checks` must hand `Anchor.quoted`
+    through to the comparison. Grading a quoted citation as prose is invisible
+    on the real tree — both quoted citations there resolve by opening words
+    too — so only a mid-heading rename shows the loss."""
+    citing, _heading = _fixture(plugin)
+    # A heading long enough to rename *past* its opening words — the only
+    # rename an unquoted citation cannot see.
+    long_enough = [
+        h
+        for h in _headings((_plugin_root(plugin) / citing).read_text(encoding="utf-8"))
+        if re.fullmatch(r"[\w ]+", h) and len(h.split()) >= 3
+    ][0]
+    words = long_enough.split()
+    renamed = " ".join([*words[:2], "renamed", *words[3:]])
+    doc = f'Author per `{citing}` § "{renamed}".\n'
+    sites = [(citing, site) for site in _anchor_sites(doc)]
+    assert sites[0][1].quoted
+    dangling, checked = _anchor_checks(plugin, sites)
+    assert checked == 1
+    assert [site[3] for site in dangling] == [renamed]
+    # Unquoted, the same words resolve — two shared opening words are all an
+    # unquoted citation promises, which is exactly why quoting exists.
+    unquoted = [(citing, site) for site in _anchor_sites(f"Author per `{citing}` §{renamed}.\n")]
+    assert not unquoted[0][1].quoted
+    assert _anchor_checks(plugin, unquoted) == ([], 1)
 
 
 def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
