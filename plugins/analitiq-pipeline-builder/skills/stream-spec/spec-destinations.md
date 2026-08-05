@@ -16,7 +16,7 @@ Carries 4 declarative cross-field `if`/`then` rule(s) — see the advisory rules
 
 The sketch below illustrates a filled-in destination.
 
-<!-- illustrative -->
+<!-- validate: stream#/destinations -->
 ```jsonc
 {
   "destinations": [
