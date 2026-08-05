@@ -1,7 +1,10 @@
 """The prose census datum — every piece of prose on the contract's own surface
-(each field description and each class docstring in ``analitiq.contracts``)
-carries a :class:`ProseObligation` entry binding it to what enforces it, and a
-content hash pinning its exact wording.
+(the field descriptions and docstring of every contract model, and the
+docstring of every contract enum, in ``analitiq.contracts`` — both docstring
+kinds render into the published JSON Schema; non-model, non-enum classes such
+as the exception types publish no prose and are out of scope) carries a
+:class:`ProseObligation` entry binding it to what enforces it, and a content
+hash pinning its exact wording.
 
 :mod:`advisory_rules` is the census of relational rules; this module is its
 missing other half. The registry's tests verify the integrity of rules that
@@ -33,8 +36,9 @@ slipping into existing prose.
 ``descriptive=True`` versus the :data:`DESCRIPTIVE` waiver: plain
 ``descriptive=True`` is only for prose carrying no :data:`NORMATIVE_PATTERN`
 marker. Prose that DOES carry a modal marker yet states no obligation takes
-``waiver=DESCRIPTIVE`` instead — the tripwire in ``census_report`` rejects
-``descriptive=True`` there, deliberately, so marking modal text harmless
+``waiver=DESCRIPTIVE`` instead — the tripwire in ``census_report`` flags
+``descriptive=True`` there (its consumers, the lint suite and the CI check,
+are what fail on the finding), deliberately, so marking modal text harmless
 always costs an explicit, reviewable waiver.
 
 ``tests/unit/test_advisory_prose.py`` enforces the census bidirectionally
@@ -53,6 +57,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+# introspect's top-level imports are stdlib-only (it lazy-imports pydantic),
+# so this import keeps the census readable without pulling in pydantic.
+from analitiq.contracts.shared.introspect import SiteKey
 
 #: Modal-language tripwire — FROZEN forever. The census no longer depends on
 #: this pattern to find obligations (every prose site is catalogued, and the
@@ -135,8 +143,9 @@ class ProseObligation:
     (``introspect.prose_fingerprint``).
 
     Disposition: either ``descriptive=True`` alone (the prose states no
-    obligation an instance could violate — allowed only on non-modal prose,
-    the tripwire enforces it), or at least one of ``rule_ids`` /
+    obligation an instance could violate — allowed only on non-modal prose;
+    the tripwire in ``census_report`` surfaces a violation for the lint and
+    CI to fail on), or at least one of ``rule_ids`` /
     ``structural`` / ``waiver``. A mixed description (several obligations,
     differently carried) may combine those three — the waiver then names the
     unenforced remainder.
@@ -154,8 +163,11 @@ class ProseObligation:
         if not _PROSE_HASH_PATTERN.fullmatch(self.prose_hash):
             raise ValueError(
                 f"{self.site}: prose_hash must be the 12-lowercase-hex-char "
-                "prose fingerprint — scripts/render_prose_census.py write "
-                "prints the current one"
+                "prose fingerprint — stamp a format-valid placeholder "
+                '("0" * 12) first, then run scripts/render_prose_census.py '
+                "write to restamp it with the real fingerprint (the census "
+                "cannot import, so the script cannot run, while a malformed "
+                "hash is in place)"
             )
         if self.descriptive:
             if self.rule_ids or self.structural or self.waiver:
@@ -175,5 +187,9 @@ class ProseObligation:
                 raise ValueError(f"{self.site}: empty {label} is not a declaration")
 
     @property
+    def key(self) -> SiteKey:
+        return SiteKey(model=self.model, field=self.field)
+
+    @property
     def site(self) -> str:
-        return f"{self.model}.{self.field}" if self.field else f"{self.model} (docstring)"
+        return self.key.label

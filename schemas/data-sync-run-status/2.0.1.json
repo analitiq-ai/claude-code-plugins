@@ -155,7 +155,7 @@
       "type": "string"
     }
   },
-  "$id": "https://schemas.analitiq.ai/data-sync-run-status/latest.json",
+  "$id": "https://schemas.analitiq.ai/data-sync-run-status/2.0.1.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "PUBLIC JSON Schema contract for the SUCCESS (200) response body of the Data Sync API GET /pipelines/{pipeline_id}/runs/{invocation_id} (rest.<domain>/v1, API-key auth) \u2014 the canonical `{success, message?, data}` envelope where `data` carries the run's public status: a coarse `status`, run timestamps, record counts, and \u2014 on failure \u2014 a customer-safe error category. A deliberately small, stable projection of the internal run-log that exposes no infrastructure detail (batch job ids, raw error strings, ...). A client that accepted a run (202) polls this by invocation_id for the outcome. Error responses use the canonical error envelope and are documented in the Data Sync OpenAPI rather than here. Absent optional fields are omitted from the wire, never null. Served at schemas.<domain> for external API-key consumers.",

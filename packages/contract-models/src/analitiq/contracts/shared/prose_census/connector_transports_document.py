@@ -63,6 +63,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     # === connector: document + capabilities ==================================
     ProseObligation(
+        model="ConnectorKind",
+        prose_hash="0d2449f64148",
+        structural="the `ConnectorKind` `Enum`'s own closed membership",
+    ),
+    ProseObligation(
         model="ConnectorBase", waiver=DESCRIPTIVE,
         prose_hash="a77be2f3abf3",
     ),
@@ -241,9 +246,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="65e82367c2b4",
         structural=(
             "declared on `DatabaseConnector` alone — every other kind's "
-            "closed model rejects it as an unknown key; the "
-            "five-facts-required shape is `SqlCapabilities`'s own "
-            "requiredness, with `limits` the sole defaulted member"
+            "closed model rejects it as an unknown key; the required shape "
+            "facts are `SqlCapabilities`'s own non-optional fields, with "
+            "`limits` the sole defaulted member"
         ),
         waiver=ENGINE_CONDUCT,
     ),
@@ -463,8 +468,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="SqlCapabilities",
         prose_hash="223ee609863a",
         structural=(
-            "the five shape facts are required (non-optional) fields on the "
-            "closed model; `limits` alone defaults"
+            "the required shape facts are non-optional fields on the closed "
+            "model; `limits` alone defaults"
         ),
         waiver=ENGINE_CONDUCT,
     ),

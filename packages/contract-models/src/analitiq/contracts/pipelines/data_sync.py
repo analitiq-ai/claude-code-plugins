@@ -56,8 +56,8 @@ class PublicRunStatus(str, Enum):
 # import the engine enum to "stay in sync" — that would create a hard cross-repo
 # dependency for no gain over the safe soft-degrade.
 class PublicErrorCode(str, Enum):
-    """Customer-safe failure category. Mirrors the engine's `ErrorCode`
-    (analitiq-engine #258). `INTERNAL` is the catch-all for failures with no
+    """Customer-safe failure category. Mirrors the `ErrorCode` set the engine
+    publishes. `INTERNAL` is the catch-all for failures with no
     engine-reported category (e.g. a failure before the engine started)."""
 
     SOURCE_AUTH_FAILED = "SOURCE_AUTH_FAILED"

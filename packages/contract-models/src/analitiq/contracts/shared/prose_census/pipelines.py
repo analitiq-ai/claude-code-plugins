@@ -65,6 +65,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="743cc6a95785",
     ),
     ProseObligation(
+        model="PublicErrorCode", waiver=ENGINE_CONDUCT,
+        prose_hash="572b0067b359",
+    ),
+    ProseObligation(model="PublicRunStatus", prose_hash="93f2100839f3", descriptive=True),
+    ProseObligation(
         model="PipelineTerminateData", waiver=ENGINE_CONDUCT,
         prose_hash="aaf019dace56",
     ),

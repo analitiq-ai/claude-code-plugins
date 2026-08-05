@@ -125,8 +125,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="Idempotency",
         prose_hash="b0adc4f0fe7c",
         structural=(
-            "the closed model declares no value slot at all — `location` and "
-            "`name` only, extra='forbid'"
+            "the closed model declares no value slot at all — the Literal on "
+            "`location` and the plain string `name` are placement facts, and "
+            "extra='forbid' rejects anything more"
         ),
     ),
     ProseObligation(
@@ -360,4 +361,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="endpoints.Batching", prose_hash="6d788e505a0c", descriptive=True),
     ProseObligation(model="endpoints.RefExpression", prose_hash="533282983d9a", descriptive=True),
     ProseObligation(model="endpoints.TemplateExpression", prose_hash="5f7be25f35b6", descriptive=True),
+    # === internal helper enums ===============================================
+    ProseObligation(model="_OperationKind", prose_hash="ee035b231e28", descriptive=True),
+    ProseObligation(model="_Position", prose_hash="c7ba54dc10fa", descriptive=True),
 )

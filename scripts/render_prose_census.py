@@ -2,8 +2,9 @@
 """Check or restamp the prose census against the live contract prose.
 
 The census (`analitiq.contracts.shared.prose_census`) catalogues EVERY prose
-site in the contract models — each field description and each class docstring —
-binding it to a disposition and pinning its exact wording with a content hash
+site in the contract models and enums — each field description, each model
+docstring, and each enum docstring — binding it to a disposition and pinning
+its exact wording with a content hash
 (`analitiq.contracts.shared.introspect.prose_fingerprint`). The diff this
 script prints is computed once, in `introspect.census_report`, the same
 function `tests/unit/test_advisory_prose.py` asserts on — the lint and this
@@ -14,7 +15,11 @@ Usage:
                                     # hash-mismatch / tripwire finding (CI)
     render_prose_census.py write    # restamp changed hashes in the census
                                     # area files; print skeleton entries for
-                                    # uncatalogued sites
+                                    # uncatalogued sites. Exits non-zero when
+                                    # manual work remains after its edits
+                                    # (an entry it could not restamp, a stale
+                                    # entry, an uncatalogued site); exits 0
+                                    # only when the census is fully current.
 
 `write` never invents dispositions: it rewrites only the `prose_hash` of
 entries whose prose was re-worded (re-affirm each disposition when committing
@@ -70,49 +75,75 @@ def _print_group(title: str, records, module_of, line_of) -> None:
             print(f"    {line_of(record)}")
 
 
-def _entry_spans(lines: list[str]) -> list[tuple[int, int]]:
+def _entry_spans(lines: list[str], source: str) -> list[tuple[int, int]]:
     """(start, end) line index of every ProseObligation(...) block.
 
     Entries are in canonical census format: a block opens with an indented
     ``ProseObligation(`` and closes either on the same line (the one-line
-    descriptive form) or on a line that is exactly ``),`` at the same indent.
+    form, recognizable by its inline ``prose_hash="``: a first line merely
+    ending in ``),`` may be a multi-line entry whose opening line ends with a
+    tuple kwarg) or on a later line that is exactly ``),`` at the same
+    indent. A block that never closes is malformed and reported with its
+    source file and opening line rather than walked off the end.
     """
     spans = []
     i = 0
     while i < len(lines):
         if lines[i].startswith("    ProseObligation("):
-            if lines[i].rstrip().endswith("),"):
+            if lines[i].rstrip().endswith("),") and 'prose_hash="' in lines[i]:
                 spans.append((i, i))
             else:
                 j = i + 1
-                while lines[j].rstrip() != "    ),":
+                while j < len(lines) and lines[j].rstrip() != "    ),":
                     j += 1
+                if j >= len(lines):
+                    raise ValueError(
+                        f"{source}: unclosed ProseObligation block starting at "
+                        f"line {i + 1}: {lines[i].strip()!r} — expected a "
+                        'closing "    )," line'
+                    )
                 spans.append((i, j))
                 i = j
         i += 1
     return spans
 
 
-def _block_key(block: str) -> tuple[str, str | None]:
-    model = re.search(r'model="([^"]+)"', block).group(1)
-    field_match = re.search(r'field="([^"]+)"', block)
-    return (model, field_match.group(1) if field_match else None)
+def _block_key(block: str):
+    from analitiq.contracts.shared.introspect import SiteKey
+
+    # Key kwargs (`model=`, `field=`) always precede the quote-delimited
+    # structural/waiver texts, which may themselves contain `field="..."` —
+    # so only the head of the block, up to the first of those kwargs, is
+    # searched.
+    head = re.split(r"\b(?:structural|waiver)\s*=", block)[0]
+    model = re.search(r'model="([^"]+)"', head).group(1)
+    field_match = re.search(r'field="([^"]+)"', head)
+    return SiteKey(model=model, field=field_match.group(1) if field_match else None)
 
 
-def _restamp(key: tuple[str, str | None], new_hash: str) -> Path | None:
-    """Rewrite the entry's prose_hash in whichever area file holds it."""
+def _restamp(key, new_hash: str) -> Path | None:
+    """Rewrite the entry's prose_hash in whichever area file holds it.
+
+    Returns the rewritten file, or ``None`` when no entry was actually
+    restamped — either no area file holds the entry, or the matched block
+    carries no substitutable ``prose_hash="..."`` (both mean: restamp by
+    hand).
+    """
     for path in sorted(CENSUS_DIR.glob("*.py")):
         if path.name == "__init__.py":
             continue
         text = path.read_text(encoding="utf-8")
         lines = text.splitlines(keepends=True)
-        for start, end in _entry_spans([l.rstrip("\n") for l in lines]):
+        stripped = [l.rstrip("\n") for l in lines]
+        for start, end in _entry_spans(stripped, path.name):
             block = "".join(lines[start : end + 1])
             if _block_key(block) != key:
                 continue
-            new_block = re.sub(
+            new_block, count = re.subn(
                 r'prose_hash="[0-9a-f]{12}"', f'prose_hash="{new_hash}"', block
             )
+            if count == 0:
+                return None
             lines[start : end + 1] = [new_block]
             path.write_text("".join(lines), encoding="utf-8")
             return path
@@ -137,8 +168,8 @@ def check(report) -> int:
     )
     if report.stale:
         print(f"\nstale census entries — no matching prose site ({len(report.stale)}):")
-        for model, field in report.stale:
-            print(f"    {model}.{field or '(docstring)'}")
+        for key in report.stale:
+            print(f"    {key.label}")
     _print_group(
         "hash mismatches — prose re-worded since its disposition was "
         "affirmed (re-affirm, then `write` restamps)",
@@ -160,11 +191,13 @@ def check(report) -> int:
 
 
 def write(report) -> int:
+    unrestamped = 0
     if report.hash_mismatches:
         print(f"restamped — RE-AFFIRM each disposition ({len(report.hash_mismatches)}):")
         for mismatch in report.hash_mismatches:
             path = _restamp(mismatch.site.key, mismatch.site.fingerprint)
             if path is None:
+                unrestamped += 1
                 print(
                     f"    {mismatch.site.label}: entry not found in any census "
                     "area file (non-canonical format?) — restamp by hand"
@@ -176,8 +209,8 @@ def write(report) -> int:
                 )
     if report.stale:
         print(f"\nstale entries — remove or re-key by hand ({len(report.stale)}):")
-        for model, field in report.stale:
-            print(f"    {model}.{field or '(docstring)'}")
+        for key in report.stale:
+            print(f"    {key.label}")
     if report.missing:
         print(
             f"\nnew sites needing entries ({len(report.missing)}) — skeletons "
@@ -190,7 +223,10 @@ def write(report) -> int:
                 print(_skeleton(site))
     if report.clean:
         print("prose census is complete and current — nothing to do")
-    return 0
+        return 0
+    # Restamps are the only edit `write` makes itself; everything else above
+    # is manual work still to do, so the exit code must say so.
+    return 1 if (unrestamped or report.stale or report.missing) else 0
 
 
 def main(argv: list[str]) -> int:

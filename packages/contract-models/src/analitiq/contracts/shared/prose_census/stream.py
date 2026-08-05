@@ -1,5 +1,4 @@
-"""Census entries for ``analitiq.contracts.stream`` and
-``analitiq.contracts.value_expression``."""
+"""Census entries for ``analitiq.contracts.stream``."""
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (

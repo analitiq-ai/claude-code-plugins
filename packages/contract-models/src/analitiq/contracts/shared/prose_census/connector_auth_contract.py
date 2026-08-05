@@ -262,6 +262,23 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="ConnectionContractInputUI", field="label", prose_hash="55785e933aa6", descriptive=True),
     ProseObligation(model="ConnectionContractInputUI", field="placeholder", prose_hash="e929661d00b6", descriptive=True),
     ProseObligation(model="ConnectionContractInputUI", field="widget", prose_hash="7a3b208e3ef3", descriptive=True),
+    ProseObligation(
+        model="InputPhase",
+        prose_hash="f676d0310d71",
+        structural=(
+            "the `InputPhase` `Enum`'s own closed membership — it declares no "
+            "post-auth member, so `inputs` cannot claim a post-auth `phase`"
+        ),
+    ),
+    ProseObligation(
+        model="InputSource",
+        prose_hash="06e5c3a50b08",
+        structural=(
+            "the `InputSource` `Enum`'s own closed membership — it declares no "
+            "post-auth member, so `inputs` cannot claim a post-auth `source`"
+        ),
+    ),
+    ProseObligation(model="PostAuthOutputMode", prose_hash="52af6dd1ce37", descriptive=True),
     ProseObligation(model="ConnectionContractValidation", prose_hash="776265d26114", descriptive=True),
     ProseObligation(
         model="ConnectionContractValidation", field="rules",

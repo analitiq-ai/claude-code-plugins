@@ -4,8 +4,11 @@
 one of its checks starts from a registered rule, so an obligation stated in
 prose and never registered is invisible to it — the hole the unenforced
 pagination `response.body.*` rule shipped through. This suite closes that hole
-from the prose side: EVERY prose site in ``analitiq.contracts`` — each field
-description and each class docstring, not just sites matching a modal
+from the prose side: EVERY prose site in ``analitiq.contracts`` — each model
+field description, each model docstring, and each enum docstring (pydantic
+publishes both docstring kinds into the JSON Schema; non-model, non-enum
+classes such as the exception types publish no prose and are out of scope),
+not just sites matching a modal
 vocabulary — must carry a :class:`ProseObligation` entry binding it to an
 ``ADV-*`` rule, a structural mechanism, an explicit waiver, or a
 ``descriptive=True`` marking, and pinning its exact wording by content hash.
@@ -21,9 +24,12 @@ tool can never disagree.
 """
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 import sys
 from enum import Enum
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -33,15 +39,21 @@ from analitiq.contracts.shared.advisory_prose import (
     NORMATIVE_PATTERN,
     ProseObligation,
 )
-from analitiq.contracts.shared.introspect import census_report, contract_classes
+from analitiq.contracts.shared.introspect import (
+    ProseSite,
+    SiteKey,
+    census_report,
+    contract_classes,
+    prose_fingerprint,
+)
 from analitiq.contracts.shared.prose_census import PROSE_OBLIGATIONS
 
 REPORT = census_report()
 
 
 def test_census_has_no_duplicate_sites():
-    keys = [(o.model, o.field) for o in PROSE_OBLIGATIONS]
-    dupes = sorted({k for k in keys if keys.count(k) > 1})
+    keys = [o.key for o in PROSE_OBLIGATIONS]
+    dupes = sorted({k.label for k in keys if keys.count(k) > 1})
     assert not dupes, f"duplicate census entries: {dupes}"
 
 
@@ -77,9 +89,7 @@ def test_no_stale_census_entries():
     being reviewable. ``scripts/render_prose_census.py check`` prints the same
     list.
     """
-    lines = [
-        f"  {model}.{field or '(docstring)'}" for model, field in REPORT.stale
-    ]
+    lines = [f"  {key.label}" for key in REPORT.stale]
     assert not REPORT.stale, (
         "census entries with no matching prose site:\n" + "\n".join(lines)
     )
@@ -252,3 +262,108 @@ def test_normative_pattern_tolerates_wrapped_modal_phrases():
         assert NORMATIVE_PATTERN.search(f"lead {phrase} trail"), (
             f"modal phrase not detected when wrapped: {phrase!r}"
         )
+
+
+def test_normative_pattern_source_is_frozen():
+    # The freeze is deliberate: the census no longer detects obligations by
+    # modal vocabulary — every site is catalogued and the per-entry hash
+    # ratchet catches new phrasings — so this pin failing means someone
+    # widened (or narrowed) the frozen pattern. The answer to a review
+    # proposing a wider modal set is: rely on the ratchet, not this pattern.
+    assert NORMATIVE_PATTERN.pattern == (
+        r"\bmust\b|\bevery\b|\brequires\b|\bmay\s+not\b|\bdefaults\s+to\b"
+        r"|\bis\s+required\s+to\b|\bonly\b"
+    )
+
+
+def test_census_stays_importable_without_pydantic():
+    """The census is registry data — tooling must be able to read it without
+    the contract models' dependency stack. A stray top-level import would
+    silently couple every census consumer to pydantic."""
+    src = Path(__file__).resolve().parents[2] / "src"
+    env = dict(os.environ, PYTHONPATH=str(src))
+    env.setdefault("DOMAIN", "analitiq.ai")
+    code = (
+        "import sys\n"
+        "import analitiq.contracts.shared.advisory_prose\n"
+        "import analitiq.contracts.shared.prose_census\n"
+        "assert 'pydantic' not in sys.modules, 'census import pulled in pydantic'\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True, env=env)
+
+
+# --- The detectors must be provably able to fire ------------------------------
+#
+# The real census is asserted CLEAN above, so on a healthy tree none of the
+# four report groups ever goes non-empty there — these synthetic diffs are the
+# proof each detector still fires at all.
+
+
+def _synthetic_site(model: str, field: str | None, text: str) -> ProseSite:
+    return ProseSite(key=SiteKey(model=model, field=field), module="synthetic", text=text)
+
+
+def test_census_report_flags_an_uncatalogued_site():
+    site = _synthetic_site("SyntheticModel", "f", "plain prose")
+    report = census_report(live={site.key: site}, census=())
+    assert report.missing == (site,)
+    assert not report.clean
+
+
+def test_census_report_flags_a_stale_entry():
+    entry = ProseObligation(model="GoneModel", prose_hash="0" * 12, descriptive=True)
+    report = census_report(live={}, census=(entry,))
+    assert report.stale == (SiteKey(model="GoneModel", field=None),)
+    assert not report.clean
+
+
+def test_census_report_flags_a_hash_mismatch():
+    site = _synthetic_site("SyntheticModel", "f", "reworded prose")
+    stale_hash = "0" * 12
+    assert stale_hash != site.fingerprint
+    entry = ProseObligation(
+        model="SyntheticModel", field="f", prose_hash=stale_hash, descriptive=True
+    )
+    report = census_report(live={site.key: site}, census=(entry,))
+    assert [(m.site, m.recorded) for m in report.hash_mismatches] == [(site, stale_hash)]
+    assert not report.clean
+
+
+def test_census_report_flags_a_descriptive_tripwire():
+    site = _synthetic_site("SyntheticModel", None, "authors must do a thing")
+    entry = ProseObligation(
+        model="SyntheticModel", prose_hash=site.fingerprint, descriptive=True
+    )
+    report = census_report(live={site.key: site}, census=(entry,))
+    assert report.tripwires == (site,)
+    assert not report.hash_mismatches
+    assert not report.clean
+
+
+def test_census_report_is_clean_on_a_matching_pair():
+    site = _synthetic_site("SyntheticModel", "f", "plain prose")
+    entry = ProseObligation(
+        model="SyntheticModel", field="f", prose_hash=site.fingerprint, descriptive=True
+    )
+    assert census_report(live={site.key: site}, census=(entry,)).clean
+
+
+# --- prose_fingerprint: the ratchet's hash function ----------------------------
+
+
+def test_prose_fingerprint_is_rewrap_invariant():
+    assert prose_fingerprint("a  b\n   c") == prose_fingerprint("a b c")
+
+
+def test_prose_fingerprint_is_word_sensitive():
+    assert prose_fingerprint("a b c") != prose_fingerprint("a b d")
+
+
+def test_prose_fingerprint_shape():
+    assert re.fullmatch(r"[0-9a-f]{12}", prose_fingerprint("any prose at all"))
+
+
+def test_prose_fingerprint_known_vector():
+    # sha256("a b c")[:12] — pins the normalization + truncation convention
+    # every stamped prose_hash in the census depends on.
+    assert prose_fingerprint("a b c") == "0e9f64031fcb"
