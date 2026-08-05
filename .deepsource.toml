@@ -36,3 +36,8 @@ name = "python"
 # here because a token has slipped into a local, gitignored `.envrc` before.
 [[analyzers]]
 name = "secrets"
+
+# PY-R1000 (cyclomatic complexity) is suppressed repo-wide by a server-side
+# DeepSource ignore rule, not by config here: functions over the threshold are
+# cross-field contract validators whose branching IS the contract; splitting
+# them to satisfy a metric would scatter one rule across several functions.

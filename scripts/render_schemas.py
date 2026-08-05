@@ -1089,7 +1089,9 @@ def _units(family: str) -> str:
 
 def _precision_bounds(family: str) -> str:
     """`min-max` of the family's precision param, from the manifest."""
-    param = next(
+    # Absence must raise: a family routed here without a precision param is a
+    # hard failure of the render, not a case to default.
+    param = next(  # skipcq: PTC-W0063
         p
         for p in arrow_grammar.FAMILIES[family]["params"]
         if p["name"] == "precision"

@@ -57,7 +57,6 @@ import http.client
 import json
 import re
 import sys
-import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -90,13 +89,16 @@ _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 def _fetch(url: str) -> bytes:
     try:
-        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
+        # The URL derives from the hardcoded https constant BASE_URL, so the
+        # scheme cannot vary.
+        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310  # skipcq: BAN-B310
             return resp.read()
     except (
-        urllib.error.URLError,
-        http.client.HTTPException,  # IncompleteRead/BadStatusLine are not OSError
+        # IncompleteRead/BadStatusLine are not OSError; URLError and
+        # TimeoutError ARE OSError subclasses, so this pair catches exactly
+        # what a longer tuple naming them would.
+        http.client.HTTPException,
         OSError,
-        TimeoutError,
     ) as exc:
         raise GuardError(f"fetch failed for {url}: {exc}") from exc
 
@@ -180,7 +182,9 @@ def check_offline() -> list[str]:
     step 1 fails, since `main` then skips step 2) this asserts the vendored
     copy only — which is still the file every derivation is built from.
     """
-    vendored = arrow_grammar._GRAMMAR_PATH
+    # Inspecting the vendored path IS the guard's purpose; the underscore marks
+    # not-public-API, not not-touchable. (Same at the read in check_published.)
+    vendored = arrow_grammar._GRAMMAR_PATH  # skipcq: PYL-W0212
     raw = vendored.read_bytes()
     digest = _sha256(raw)
     if digest != arrow_grammar.ENGINE_GRAMMAR_SHA256:
@@ -222,7 +226,7 @@ def check_published(failures: list[str]) -> list[str]:
         f"{arrow_grammar.ENGINE_GRAMMAR_FILENAME}"
     )
     published = _fetch(grammar_url)
-    if published != arrow_grammar._GRAMMAR_PATH.read_bytes():
+    if published != arrow_grammar._GRAMMAR_PATH.read_bytes():  # skipcq: PYL-W0212
         failures.append(
             f"published {grammar_url} differs from the vendored copy — "
             "re-vendor the published object (and re-render schemas + docs)"
