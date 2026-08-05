@@ -50,9 +50,14 @@ entries in the three per-plugin registries below, this suite is red.
    document itself, and is resolved against it. The two forms differ in how
    exactly they name the heading: prose abbreviates and runs on, so `§` is
    matched by opening words; a fragment is generated from the whole heading,
-   so it is matched by slug. A `§` inside a fenced block is an example of the
-   citation form — this repo's prose documents its own conventions that way —
-   and is not graded, exactly as a `#` line in a fence is not a heading.
+   so it is matched by slug. Fences are not an exemption: eight real citations
+   sit inside fenced examples today (a mission spec quoting the paths its
+   researcher must read), so a `§` in a fence is graded like any other. What a
+   fence *does* suppress is a `#` line being read as a heading — that is a
+   markdown comment in someone's code sample, not a section anyone can cite.
+   The cost of grading every `§` is that one which is not a plugin-section
+   citation at all — an RFC clause, say — has to be written another way; the
+   failure message says so.
 
 Pure text-vs-filesystem: no contract packages involved, so no `_pins` skip
 guard — this always runs.
@@ -115,7 +120,11 @@ _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 # captured, not discarded: it is the same claim a `§` citation makes, and
 # leaving it unread would close the section-citation hole in one form while
 # leaving it open in the other.
-_LINK_REF = re.compile(r"\]\(([^)\s#]+\.md)(#[^)\s]*)?\)")
+# The leading lookahead drops anything with a URL scheme: an engine ADR linked
+# as `https://…/docs/sql-write-path-v2.md` is a file this repo cannot open, and
+# resolving it relative to the citing document would report every such link
+# dangling.
+_LINK_REF = re.compile(r"\]\((?!\w+:)([^)\s#]+\.md)(#[^)\s]*)?\)")
 
 # What GitHub keeps when it slugs a heading into a fragment: case folded,
 # spaces to hyphens, everything else that is not a word character or hyphen
@@ -293,6 +302,24 @@ def _plugin_root(plugin: str) -> Path:
     return PLUGINS_DIR / plugin
 
 
+# Generated, not authored: release-please writes `CHANGELOG.md` from commit
+# subjects, and this repo's subjects carry both `§` and `.md` paths — including
+# paths that were renamed after the commit landed. Sweeping it would fail the
+# build on text no author can correct, since the next release regenerates
+# whatever was hand-edited. Every other `.md` under a plugin is authored prose.
+_GENERATED_PROSE = {"CHANGELOG.md"}
+
+
+def _prose_files(plugin: str) -> list[Path]:
+    """Every authored markdown document in the plugin — what an agent reads,
+    and the only text this guard grades."""
+    return [
+        path
+        for path in sorted(_plugin_root(plugin).rglob("*.md"))
+        if path.name not in _GENERATED_PROSE
+    ]
+
+
 @cache
 def _plugin_paths(plugin: str) -> tuple[str, ...]:
     """Every file and directory in the plugin, as plugin-root-relative posix
@@ -401,15 +428,10 @@ def _anchor_sites(text: str) -> list[Anchor]:
     ``§Dialect\\n  hooks)`` — is one citation, and a per-line scan would read
     half of it.
     """
-    fenced = _fenced_lines(text)
     sites: list[Anchor] = []
     for marker in re.finditer("§", text):
         rest = text[marker.end() :]
         lineno = text.count("\n", 0, marker.start()) + 1
-        # A `§` inside a fence is an example of the citation form, not a
-        # citation — this repo's own prose documents its conventions that way.
-        if lineno in fenced:
-            continue
         sites.append(
             Anchor(
                 lineno=lineno,
@@ -519,7 +541,7 @@ def _references(plugin: str) -> list[tuple[str, int, str]]:
     root = _plugin_root(plugin)
     return [
         (path.relative_to(root).as_posix(), lineno, target)
-        for path in sorted(root.rglob("*.md"))
+        for path in _prose_files(plugin)
         for lineno, target in _scan_text(path.read_text(encoding="utf-8"))
     ]
 
@@ -535,7 +557,7 @@ def _link_references(plugin: str) -> list[tuple[str, int, str, str]]:
             match.group(1),
             (match.group(2) or "").lstrip("#"),
         )
-        for path in sorted(root.rglob("*.md"))
+        for path in _prose_files(plugin)
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         for match in _LINK_REF.finditer(line)
     ]
@@ -546,7 +568,7 @@ def _anchor_references(plugin: str) -> list[tuple[str, Anchor]]:
     root = _plugin_root(plugin)
     return [
         (path.relative_to(root).as_posix(), site)
-        for path in sorted(root.rglob("*.md"))
+        for path in _prose_files(plugin)
         for site in _anchor_sites(path.read_text(encoding="utf-8"))
     ]
 
@@ -571,13 +593,21 @@ def _link_dangles(target: str, fragment: str, citing: str, plugin: str) -> bool:
     """Does a markdown link point at something that is not there?
 
     The file resolves relative to the document the link is written in — that is
-    what a link means — and may leave the plugin, which is how a plugin README
-    links the repo root's. A fragment is the same claim a `§` citation makes,
-    so it is held to the same standard: the heading it slugs to must exist in
-    the file the link opens.
+    what a link means. It may leave the plugin only from a plugin-root README,
+    which is a page a reader browses in the repo; a skill or agent document is
+    read out of an installed plugin cache, where a repo file does not exist, so
+    a link out of the tree from there dangles for the same reason
+    `_candidates` refuses to walk past the plugin root.
+
+    A fragment is the same claim a `§` citation makes, so it is held to the
+    same standard: the heading it slugs to must exist in the file the link
+    opens.
     """
-    path = (_plugin_root(plugin) / citing).parent / target
+    root = _plugin_root(plugin)
+    path = (root / citing).parent / target
     if not path.is_file():
+        return True
+    if not path.resolve().is_relative_to(root.resolve()) and citing != "README.md":
         return True
     if not fragment:
         return False
@@ -605,15 +635,11 @@ def _anchor_checks(
         #
         # No path in front of the `§`: the citation names a section of the
         # document it sits in.
-        candidates = [
-            path
-            for path in (
-                _resolve_files(site.target, rel, plugin)
-                if site.target
-                else [_plugin_root(plugin) / rel]
-            )
-            if path.is_file()
-        ]
+        candidates = (
+            _resolve_files(site.target, rel, plugin)
+            if site.target
+            else [_plugin_root(plugin) / rel]
+        )
         if not candidates:
             continue
         checked += 1
@@ -688,7 +714,10 @@ def test_section_anchors_resolve(plugin: str) -> None:
         "the heading. A citation must name the heading's opening words — at "
         "least two of them, so prose may run on past a multi-word heading but "
         "a one-word heading has to end the citation (`§Process, and then …`, "
-        "or quote it). A paraphrase never resolves."
+        "or quote it). A paraphrase never resolves. And if the `§` is not a "
+        "citation of a section in this plugin at all — an RFC clause, a "
+        "statute — spell the word 'section' instead: every `§` in plugin prose "
+        "is read as a citation."
     )
 
 
@@ -754,8 +783,9 @@ def test_every_plugin_is_covered() -> None:
     assert not unsentinelled, (
         f"citation forms with no sentinel: {unsentinelled} — name one real "
         "routing citation per form, so the extractor stays pinned to prose an "
-        "agent actually follows. (`link` is exempt: both plugins write links "
-        "in READMEs, which route nobody.)"
+        "agent actually follows. (`link` is exempt — both plugins write links "
+        "only in READMEs, which route nobody — and `anchor` never reaches this "
+        "check at all, having no pattern of its own.)"
     )
 
 
@@ -766,7 +796,7 @@ def _form_counts(plugin: str) -> dict[str, int]:
     counted as working."""
     texts = [
         path.read_text(encoding="utf-8")
-        for path in sorted(_plugin_root(plugin).rglob("*.md"))
+        for path in _prose_files(plugin)
     ]
     per_line = {
         form: sum(
@@ -800,7 +830,7 @@ def _form_targets(plugin: str, form: str) -> set[str]:
     not the union `_references` returns."""
     return {
         match.group(1)
-        for path in sorted(_plugin_root(plugin).rglob("*.md"))
+        for path in _prose_files(plugin)
         for line in path.read_text(encoding="utf-8").splitlines()
         for match in _FORM_PATTERNS[form].finditer(line)
     }
@@ -976,6 +1006,61 @@ def test_resolving_citations_pass(plugin: str) -> None:
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_generated_changelog_is_not_graded_as_prose(plugin: str) -> None:
+    """release-please writes `CHANGELOG.md` from commit subjects, and this
+    repo's subjects carry `§` and `.md` paths — this PR's own does. Grading it
+    would fail the build on text the author cannot fix: hand-editing a
+    generated file is undone by the next release. It is also not prose any
+    agent reads."""
+    assert (_plugin_root(plugin) / "CHANGELOG.md").is_file()
+    assert not [p for p in _prose_files(plugin) if p.name == "CHANGELOG.md"]
+    # The shape that would break the build if it were swept: a release entry
+    # naming a since-renamed spec, and one quoting a `§` from a commit subject.
+    entry = (
+        "* guard every plugin's citations — the section a § names "
+        "([#151](https://github.com/analitiq-ai/x/issues/151))\n"
+        "* fix drift in skills/stream-spec/spec-renamed-away.md\n"
+    )
+    assert _dangling_in(entry, plugin) == ["skills/stream-spec/spec-renamed-away.md"]
+    assert _anchor_sites(entry)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_link_to_another_repo_is_not_a_broken_link(plugin: str) -> None:
+    """An engine ADR linked by URL is a file this repo cannot open. Resolving
+    it relative to the citing document would report every such link dangling —
+    and the one ADR already allow-listed for the file pass is exactly the link
+    someone would write."""
+    doc = (
+        "See [the ADR](https://github.com/analitiq-ai/analitiq-engine/blob/"
+        "main/docs/sql-write-path-v2.md).\n"
+    )
+    assert [m.group(1) for m in _LINK_REF.finditer(doc)] == []
+    # A repo-relative link on the same line is still read.
+    assert [
+        m.group(1) for m in _LINK_REF.finditer("[a](x.md) and [b](http://y/z.md)")
+    ] == ["x.md"]
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_link_out_of_the_plugin_is_a_readme_privilege(plugin: str) -> None:
+    """The file pass refuses to resolve past the plugin root, because an agent
+    reads an installed plugin cache where repo files do not exist. The link
+    pass has to agree — except from the plugin's own README, a page a reader
+    browses in the repo, which is the only place either plugin links out
+    today."""
+    assert (REPO_ROOT / "README.md").is_file()
+    assert not _link_dangles("../../README.md", "", "README.md", plugin)
+    # The same target, from a document an agent reads out of the plugin cache.
+    deep, _heading = _fixture(plugin)  # skills/<skill>/references/<file>.md
+    hops = "../" * 5  # references -> skill -> skills -> plugin -> plugins -> repo
+    assert (_plugin_root(plugin) / deep).parent.joinpath(
+        f"{hops}README.md"
+    ).is_file(), "the link resolves — it is the plugin boundary that rejects it"
+    assert _link_dangles(f"{hops}README.md", "", deep, plugin)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
 def test_dangling_markdown_link_is_flagged(plugin: str) -> None:
     """Acceptance: a link target is resolved from the citing file's directory,
     so a `../` hop that lands nowhere fails while the same hop that lands on a
@@ -1009,6 +1094,13 @@ def test_a_heading_slugs_the_way_a_link_writes_it() -> None:
     )
     assert _slug("Fenced JSON examples — the annotation convention") == (
         "fenced-json-examples--the-annotation-convention"
+    )
+    # A fragment is compared case-insensitively: a link may spell it either
+    # way and lands on the same anchor in a browser.
+    citing, _heading = _fixture("analitiq-connector-builder")
+    own = Path(citing).name
+    assert not _link_dangles(
+        own, "RELEASE-VERSION-VERSION", citing, "analitiq-connector-builder"
     )
 
 
@@ -1301,15 +1393,28 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
     assert _anchor_sites("- `SKILL.md`\n- §Closed vocabularies.")[0].target is None
 
 
-def test_a_citation_inside_a_fence_is_an_example_not_a_citation() -> None:
-    """Prose that documents the citation convention writes `§` inside a fence.
-    Grading those would fail the build for a heading nobody claimed exists —
-    and this repo documents its conventions exactly that way."""
-    doc = "# Real\n\n```markdown\nsee `spec-tls.md` §Some invented heading\n```\n"
-    assert _anchor_sites(doc) == []
+def test_a_citation_inside_a_fence_is_still_a_citation() -> None:
+    """A fence is where this repo's mission specs quote the paths a researcher
+    must read — eight real citations sit inside one today — so a fenced `§` is
+    graded like any other, file half and section half both. What a fence
+    suppresses is the opposite direction: a `#` line inside it is a comment in
+    someone's code sample, not a section anyone can cite."""
+    doc = "# Real\n\n```markdown\nsee `spec-tls.md` §Shape of it\n```\n"
+    assert [(site.target, site.text) for site in _anchor_sites(doc)] == [
+        ("spec-tls.md", "Shape of it")
+    ]
+    assert [target for _lineno, target in _scan_text(doc)] == ["spec-tls.md"]
+    # Fences bind headings, not citations.
     assert _fenced_lines(doc) == {3, 4, 5}
-    # Outside the fence the same line is a citation.
-    assert _anchor_sites("see `spec-tls.md` §Shape")[0].target == "spec-tls.md"
+    assert _headings(doc) == ["Real"]
+
+
+def test_fences_are_recognised_when_indented() -> None:
+    """Fenced blocks nested in a list item are indented — 32 lines of real
+    prose are — and an unindented fence pattern would read their contents as
+    document structure."""
+    assert _fenced_lines("   ```jsonc\n   {}\n   ```\n") == {1, 2, 3}
+    assert _headings("# Real\n\n  ```md\n# Not a heading\n  ```\n") == ["Real"]
 
 
 def test_anchored_forms_are_not_double_counted() -> None:
