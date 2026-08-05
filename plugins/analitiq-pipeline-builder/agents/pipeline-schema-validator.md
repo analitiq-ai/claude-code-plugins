@@ -38,8 +38,7 @@ Analitiq services enforce) and normalizes every result into one envelope.
 
 2. Capture stdout. It is a single JSON object:
 
-   <!-- illustrative -->
-   ```jsonc
+   ```text
    {
      "passed": true | false,
      "findings": [

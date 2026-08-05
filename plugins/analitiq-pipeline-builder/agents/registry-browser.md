@@ -112,8 +112,7 @@ and you do not author anything.
    otherwise skip with a note.
 6. **Return a summary.** On a successful download, report:
 
-   <!-- illustrative -->
-   ```jsonc
+   ```text
    {
      "status": "downloaded",
      "connector_slug": "<slug>",
@@ -137,8 +136,7 @@ whenever any of the following trips:
   `target_dir` is created, a refusal never leaves a partial directory
   behind.
 
-<!-- illustrative -->
-```jsonc
+```text
 {
   "status": "refused",
   "reason": "target_exists" | "fetch_failed" | "registry_missing",

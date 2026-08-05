@@ -194,8 +194,7 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
 5. Return the `create-endpoints` shape with `"mode": "author-new-table"`
    (one `CreatorOutput`, the same `type_maps` object) plus one addition:
 
-   <!-- illustrative -->
-   ```jsonc
+   ```text
    "type_maps": { /* write / notes */, "read": null, "ambiguities": [], "write_gaps": ["<canonical>"] }
    ```
 
