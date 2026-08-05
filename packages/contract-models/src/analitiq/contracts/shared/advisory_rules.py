@@ -380,6 +380,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="secret must be true if and only if storage is 'secrets'.",
         targets=("ConnectionContractInput",), enforcer="_consistency",
     ),
+    # --- connection stored maps ---------------------------------------------
     AdvisoryRule(
         id="ADV-CONN-004", kind="custom", resource="connection",
         prose="parameters, selections and discovered keys must not be secret-shaped; a secret lives in secret storage and is referenced via secret_refs.",

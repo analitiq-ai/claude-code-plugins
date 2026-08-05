@@ -183,13 +183,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "ConnectorBase._inherit_transport_type"
         ),
         waiver=(
-            "the deep-merge of the remaining defaults (headers, timeouts, "
-            "options) is engine-owned at configure time"
+            "the deep-merge of the remaining defaults (`headers`, "
+            "`headers_remove`, `timeout_seconds`, `rate_limit`, `options`) is "
+            "engine-owned at configure time"
         ),
     ),
     ProseObligation(
         model="LiteralStringExpression",
-        structural="literal is typed as a required, non-empty-constrained string",
+        structural=(
+            "`literal` is typed as a required, non-empty-constrained string"
+        ),
     ),
     # === connector: auth =====================================================
     ProseObligation(
@@ -202,19 +205,23 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="NoneAuth",
         structural=(
-            "closed StrictModel declaring neither authorize, token_exchange "
-            "nor refresh; extra='forbid' rejects them as unknown keys"
+            "closed StrictModel declaring neither `authorize`, "
+            "`token_exchange` nor `refresh`; extra='forbid' rejects them as "
+            "unknown keys"
         ),
     ),
     ProseObligation(
         model="OAuth2AuthorizationCodeAuth",
-        structural="authorize and token_exchange are required (non-optional) fields",
+        structural=(
+            "`authorize` and `token_exchange` are required (non-optional) "
+            "fields"
+        ),
     ),
     ProseObligation(
         model="OAuth2ClientCredentialsAuth",
         structural=(
-            "token_exchange is a required field; authorize is absent from the "
-            "closed model, so extra='forbid' rejects it"
+            "`token_exchange` is a required field; `authorize` is absent from "
+            "the closed model, so extra='forbid' rejects it"
         ),
     ),
     ProseObligation(
@@ -243,8 +250,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "ConnectorBase._inherit_transport_type"
         ),
         waiver=(
-            "the deep-merge of the remaining defaults (headers, timeouts, "
-            "options) is engine-owned at configure time"
+            "the deep-merge of the remaining defaults (`headers`, "
+            "`headers_remove`, `timeout_seconds`, `rate_limit`, `options`) is "
+            "engine-owned at configure time"
         ),
     ),
     ProseObligation(
@@ -267,9 +275,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="SqlBulkLoad", rule_ids=("ADV-CTOR-015",),
         structural=(
-            "per-family Literal types keep adbc_ingest out of the sqlalchemy "
-            "family; the _undeclared_families_stay_absent serializer omits "
-            "undeclared families from dumps"
+            "per-family Literal types keep adbc_ingest out of the "
+            "`sqlalchemy` family; the _undeclared_families_stay_absent "
+            "serializer omits undeclared families from dumps"
         ),
     ),
     ProseObligation(
@@ -352,15 +360,15 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="Cursor", field="next_cursor",
         structural=(
-            "typed as the Expression discriminated union; a bare string or a "
-            "response_path shape selects no branch"
+            "typed as the `Expression` discriminated union; a bare string or "
+            "a response_path shape selects no branch"
         ),
     ),
     ProseObligation(
         model="Link", field="next_url",
         structural=(
-            "typed as the Expression discriminated union; a bare string or a "
-            "response_path shape selects no branch"
+            "typed as the `Expression` discriminated union; a bare string or "
+            "a response_path shape selects no branch"
         ),
     ),
     ProseObligation(
@@ -414,8 +422,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="Idempotency",
         structural=(
-            "the closed model declares no value slot at all — location and "
-            "name only, extra='forbid'"
+            "the closed model declares no value slot at all — `location` and "
+            "`name` only, extra='forbid'"
         ),
     ),
     ProseObligation(
@@ -536,7 +544,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="PipelineRunAcceptedResponse", field="data",
         structural=(
-            "data is required; PipelineRunAcceptedData declares exactly the "
+            "`data` is required; PipelineRunAcceptedData declares exactly the "
             "two tracking identifiers"
         ),
     ),

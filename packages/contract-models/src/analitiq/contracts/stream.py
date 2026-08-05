@@ -412,9 +412,10 @@ class StreamSource(StrictModel):
     database_pagination: DatabasePagination | None = Field(
         default=None,
         description=(
-            "Database source read-page configuration. Defaults to offset "
-            "pagination with page size from pipeline.runtime.batching.batch_size "
-            "when omitted for database sources."
+            "Database source read-page configuration; database sources only. "
+            "Defaults to offset pagination with page size from "
+            "pipeline.runtime.batching.batch_size when omitted for database "
+            "sources."
         ),
     )
     primary_keys: list[str] | None = Field(
@@ -475,9 +476,14 @@ class StreamSource(StrictModel):
             if value is not None
         ]
         if declared:
+            label = (
+                "a database-source feature"
+                if len(declared) == 1
+                else "database-source features"
+            )
             raise ValueError(
                 f"a {self.endpoint_ref.scope} source must not declare "
-                f"{' or '.join(declared)} — database-source features"
+                f"{' or '.join(declared)} — {label}"
             )
         return self
 

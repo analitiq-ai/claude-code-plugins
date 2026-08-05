@@ -16,8 +16,6 @@ fails (the stale direction).
 """
 from __future__ import annotations
 
-import importlib
-import pkgutil
 import re
 import sys
 from enum import Enum
@@ -26,47 +24,13 @@ from typing import get_args
 import pytest
 from pydantic import BaseModel
 
-import analitiq.contracts
+from _contract_walk import contract_classes as _contract_classes
 from analitiq.contracts.shared.advisory import all_rules
 from analitiq.contracts.shared.advisory_prose import (
     NORMATIVE_PATTERN,
     PROSE_OBLIGATIONS,
     ProseObligation,
 )
-
-
-def _reraise(name):
-    # walk_packages swallows a subpackage that fails to import unless onerror
-    # raises — and a silently skipped subtree is a silently skipped census.
-    raise ImportError(
-        f"contract module {name!r} failed to import during the census scan"
-    ) from sys.exc_info()[1]
-
-
-def _contract_classes() -> list[type[BaseModel]]:
-    """Every distinct pydantic model defined under ``analitiq.contracts``.
-
-    Walks the whole namespace package rather than a hand-kept module list, so a
-    new contract module is scanned the moment it exists.
-    """
-    for info in pkgutil.walk_packages(
-        analitiq.contracts.__path__, prefix="analitiq.contracts.", onerror=_reraise
-    ):
-        importlib.import_module(info.name)
-    seen: dict[int, type[BaseModel]] = {}
-    for module_name, module in list(sys.modules.items()):
-        if not module_name.startswith("analitiq.contracts"):
-            continue
-        for name in dir(module):
-            obj = getattr(module, name, None)
-            if (
-                isinstance(obj, type)
-                and issubclass(obj, BaseModel)
-                and obj is not BaseModel
-                and obj.__module__.startswith("analitiq.contracts")
-            ):
-                seen[id(obj)] = obj
-    return list(seen.values())
 
 
 def _is_contract_model(obj: object) -> bool:
@@ -201,9 +165,13 @@ def test_census_rule_ids_resolve():
 
 #: Identifier-shaped tokens inside structural/waiver texts: helper and
 #: validator names, snake_case fields/functions/vocabulary values, ALL_CAPS
-#: constants, CamelCase class names.
+#: constants, multi-hump CamelCase class names — plus ANY backticked word.
+#: A single plain word ("headers", "authorize", "Expression") is
+#: indistinguishable from English by shape, so it is checked only when
+#: backticked: backtick every identifier a census text names.
 _IDENTIFIER_TOKENS = re.compile(
-    r"\b_[a-z][a-z0-9_]*\b"
+    r"(?<=`)[A-Za-z_][A-Za-z0-9_]*(?=`)"
+    r"|\b_[a-z][a-z0-9_]*\b"
     r"|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b"
     r"|\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b"
     r"|\b(?:[A-Z][a-z0-9]+){2,}\b"
@@ -229,9 +197,10 @@ def _literal_strings(annotation) -> set[str]:
 
 def test_census_texts_reference_live_names():
     """Structural/waiver texts name validators, constants and classes; a
-    rename must fail here instead of leaving the census pointing at nothing.
-    (The texts deliberately never restate constraint VALUES — those live in
-    the model, the single source — so names are the only thing that can rot.)
+    rename of any identifier-shaped or backticked token must fail here
+    instead of leaving the census pointing at nothing. (The texts
+    deliberately never restate constraint VALUES — those live in the model,
+    the single source — so names are the only thing that can rot.)
     """
     universe: set[str] = set(_FOREIGN_TOKENS)
     for module_name, module in list(sys.modules.items()):
