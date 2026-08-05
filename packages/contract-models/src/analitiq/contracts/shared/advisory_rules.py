@@ -386,6 +386,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="parameters, selections and discovered keys must not be secret-shaped; a secret lives in secret storage and is referenced via secret_refs.",
         targets=("ConnectionStoredMaps",), enforcer="_validate_no_secret_keys",
     ),
+    # --- connector document (post-auth, discovery, DSN, capabilities) -------
     AdvisoryRule(
         id="ADV-CTOR-002", kind="custom", resource="connector",
         prose="A user_selection post-auth output requires options_request and forbids discovery_request; an auto_discovery output requires discovery_request and forbids options_request/options_path/label_path; storage is constrained by mode.",

@@ -183,6 +183,23 @@ def test_every_model_validator_is_registered_or_exempt():
     )
 
 
+def test_exemptions_name_live_validators():
+    """The rot direction of the exemption table: an exemption whose validator
+    is gone stays green forever, and silently exempts the next validator to
+    reuse the (class, method) name."""
+    walked = {
+        (dec.func.__qualname__.rsplit(".", 2)[-2], name)
+        for cls in contract_classes()
+        for name, dec in cls.__pydantic_decorators__.model_validators.items()
+    }
+    stale = sorted(
+        f"{owner}.{name}"
+        for owner, name in EXEMPT_MODEL_VALIDATORS
+        if (owner, name) not in walked
+    )
+    assert not stale, f"exemptions naming no live model validator: {stale}"
+
+
 def test_rule_targets_are_unambiguous_class_names():
     """Rules bind targets (and fixture models) by bare class name; two
     contract classes sharing a bound name would make every name-based

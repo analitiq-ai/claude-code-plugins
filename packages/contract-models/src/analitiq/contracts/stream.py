@@ -458,9 +458,10 @@ class StreamSource(StrictModel):
         # (endpoint_ref) knows it, like `_validate_filter_operator_scope`
         # above (ADV-STRM-012). This check is ADV-STRM-014. `is not None`
         # rather than truthiness: declaring an empty list is still declaring
-        # the feature. The published-schema `if`/`then` mirror (the
-        # StreamDestination precedent) lands with the next stream schema
-        # version — adding it now would change the pinned rendering.
+        # the feature. StreamSource publishes no scope-conditioned `if`/`then`
+        # mirror (ADV-STRM-012 has none either; only StreamDestination
+        # carries them) — adding one is a restriction, hence a major stream
+        # schema bump, and belongs in its own change.
         if self.endpoint_ref.scope == SCOPE_CONNECTION:
             return self
         declared = [
