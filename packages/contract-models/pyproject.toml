@@ -41,7 +41,15 @@ Documentation = "https://schemas.analitiq.ai"
 # modules and are not included. `analitiq` is a PEP 420 namespace shared with
 # `analitiq-validator`, so it has no top-level `__init__.py`.
 [tool.setuptools]
-packages = ["analitiq.contracts", "analitiq.contracts.pipelines", "analitiq.contracts.shared"]
+# Must list EVERY package directory under src/analitiq/contracts — a missing
+# entry ships a wheel that silently drops the subpackage.
+# tests/unit/test_wheel_packages.py asserts the list against the source tree.
+packages = [
+    "analitiq.contracts",
+    "analitiq.contracts.pipelines",
+    "analitiq.contracts.shared",
+    "analitiq.contracts.shared.prose_census",
+]
 
 # The vendored engine-published Arrow type grammar manifest
 # (`arrow_grammar.py` loads it at import time to build ARROW_TYPE_PATTERN) —

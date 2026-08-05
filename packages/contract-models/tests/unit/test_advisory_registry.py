@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from _contract_walk import contract_classes
+from analitiq.contracts.shared.introspect import contract_classes
 
 from analitiq.contracts import connection, connector, endpoints, stream, type_map
 from analitiq.contracts.pipelines import config as pipeline_config

@@ -32,8 +32,8 @@ class PublicRunStatus(str, Enum):
 
     A deliberate reduction of the internal run lifecycle so the public contract
     stays stable and infra-agnostic: the execution states we run on can change
-    without reshaping what an external consumer sees. The last four members are
-    terminal."""
+    without reshaping what an external consumer sees. Terminal members are
+    those the engine never transitions a run out of."""
 
     QUEUED = "queued"
     """Accepted; waiting to run (Batch submitted/pending/runnable/starting)."""
@@ -56,8 +56,8 @@ class PublicRunStatus(str, Enum):
 # import the engine enum to "stay in sync" — that would create a hard cross-repo
 # dependency for no gain over the safe soft-degrade.
 class PublicErrorCode(str, Enum):
-    """Customer-safe failure category. Mirrors the engine's `ErrorCode`
-    (analitiq-engine #258). `INTERNAL` is the catch-all for failures with no
+    """Customer-safe failure category. Mirrors the `ErrorCode` set the engine
+    publishes. `INTERNAL` is the catch-all for failures with no
     engine-reported category (e.g. a failure before the engine started)."""
 
     SOURCE_AUTH_FAILED = "SOURCE_AUTH_FAILED"
@@ -113,6 +113,20 @@ class PublicRunError(StrictModel):
     message: NonEmptyStr = Field(
         description="Fixed, customer-safe description of the failure category.",
     )
+
+    @model_validator(mode="after")
+    def _message_matches_code(self) -> "PublicRunError":
+        """`message` is exactly the `PUBLIC_ERROR_MESSAGES` text for `code`.
+        Enforced on the model so the public surface can never echo a raw
+        exception string or the engine's internal-only detail under a known
+        category."""
+        if self.message != PUBLIC_ERROR_MESSAGES[self.code]:
+            raise ValueError(
+                "message must be the canonical customer-safe text for "
+                f"{self.code.value} (see PUBLIC_ERROR_MESSAGES)"
+            )
+        return self
+
 
 class PipelineRunStatusData(StrictModel):
     """`data` payload of GET /pipelines/{pipeline_id}/runs/{invocation_id}.

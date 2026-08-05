@@ -91,6 +91,15 @@ jobs:
         # registry; stale prose here misleads every creator agent that reads it.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_advisory.py check
+      - name: Check the prose census is complete and current
+        # Every prose site under analitiq.contracts — each field description
+        # and docstring of every pydantic model and every Enum, membership by
+        # category (private helper enums ride along; plain classes and enum
+        # member docstrings publish nothing and are out of scope) — must carry
+        # a hash-pinned census entry; this prints the same diff
+        # tests/unit/test_advisory_prose.py asserts on, grouped for reading.
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: python3 scripts/render_prose_census.py check
       - name: Check validator-behavior claims against the in-repo contract
         # Prose in both plugins states what the validator checks and does not
         # check; each such sentence is pinned by an executable probe (issue

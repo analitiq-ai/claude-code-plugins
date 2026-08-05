@@ -399,7 +399,7 @@ class ConnectionConditionPredicate(StrictModel):
     field: str = Field(
         ...,
         min_length=1,
-        description="Connection input key or saved connection field path the predicate tests.",
+        description="Declared connection input name the predicate tests.",
     )
     eq: ConditionScalar | None = Field(
         default=None, description="Scalar value the field must equal."
@@ -509,8 +509,8 @@ class PostAuthOperationRequest(StrictModel):
 class PostAuthOutput(StrictModel):
     """Durable post-auth output produced after authentication. Spec: §Post-Auth Outputs.
 
-    The post-auth output field set is closed except for `x-*` extension
-    metadata: `mode`, `storage`, `type`, `format`, `ui`, `options_request`,
+    The post-auth output field set is closed:
+    `mode`, `storage`, `type`, `format`, `ui`, `options_request`,
     `options_path`, `discovery_request`, `value_path`, `label_path`. `source`,
     `phase`, `required`, and `secret` are explicitly NOT valid post-auth
     output fields — `source`/`phase` are inherent to the enclosing
@@ -1663,7 +1663,7 @@ class SqlCapabilities(StrictModel):
     "Refuse, don't guess": the engine reads these facts instead of probing the
     live database, and refuses at handshake time when a needed fact was not
     declared (analitiq-engine#390, PR analitiq-engine#400). Optional as a block,
-    but when present all five shape facts are required — a partial declaration
+    but when present every shape fact is required — a partial declaration
     is a config error. `limits` (issue #89) is the one additive member: it and
     each cap inside it may be omitted, meaning "no declared cap".
     """
@@ -2088,7 +2088,7 @@ class DatabaseConnector(ConnectorBase):
             "Declared SQL write-path capabilities (engine ADR §5). SQL-specific "
             "— not present on other connector kinds. Optional; when omitted the "
             "engine refuses any needed-but-undeclared fact at handshake time. "
-            "When present, all five shape facts are required; `limits` "
+            "When present, every shape fact is required; `limits` "
             "(issue #89) is the one additive member and may be omitted."
         ),
     )
