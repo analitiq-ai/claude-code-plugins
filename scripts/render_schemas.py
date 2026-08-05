@@ -459,7 +459,7 @@ def _json_schema_node_description() -> str:
         f"{names(JSON_SCHEMA_SUBSCHEMA_KEYS)} (maps); "
         f"{names(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS)} (lists); "
         f"{names(JSON_SCHEMA_SINGLE_SCHEMA_KEYS)} (single). "
-        "Issue #424 — canonical `arrow_type` "
+        "A canonical `arrow_type` "
         "must carry parameters when the type requires them; `native_type` and "
         "`arrow_type` are paired."
     )
@@ -1066,7 +1066,7 @@ def get_resource(name: str) -> Resource:
 # Not a registry Resource: the document is versionless and mutable (no
 # {X.Y.Z}/latest/index triple — it rides the publish workflow's `**/*.json`
 # glob). Its ACCEPTED SET is generated from the engine-published, vendored
-# grammar manifest (`analitiq.contracts.arrow_grammar`, issue #81); only the
+# grammar manifest (`analitiq.contracts.arrow_grammar`); only the
 # prose below — titles, descriptions, display grouping — is authored here.
 # `check` (and the dedicated `canonical-types --check`) fails when the
 # committed file differs from the rendered output, exactly like a registered
@@ -1296,7 +1296,7 @@ def _canonical_types_description() -> str:
         "(`Dictionary`, `RunEndEncoded`), and `Interval` are not part of this "
         "canonical vocabulary: the platform does not execute them end-to-end. "
         "They return, if ever, by shipping in the engine first and re-consuming "
-        "the grammar manifest (issue #81's re-add policy) — never by editing "
+        "the grammar manifest (the re-add policy above) — never by editing "
         "this document."
     )
 

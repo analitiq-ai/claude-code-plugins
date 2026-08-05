@@ -68,8 +68,8 @@ Database connectors author no endpoints and skip the fan-out entirely.
 <!-- PROBE: write-body-path-typo-unresolved, connector-function-name-unchecked -->
 Prose in BOTH plugins states what the validator checks and does not check
 ("a `success_when` typo validates clean", "function names are never checked").
-Every such sentence is pinned by `scripts/render_validator_claims.py` (issue
-#133), which carries an executable **probe** per claim — a document run through
+Every such sentence is pinned by `scripts/render_validator_claims.py`, which
+carries an executable **probe** per claim — a document run through
 the in-repo validator with an asserted outcome:
 
 ```bash

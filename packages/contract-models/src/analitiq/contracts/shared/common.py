@@ -222,7 +222,7 @@ class RetryErrorHandlingBase(StrictModel):
     def _default_retry_delay(self) -> "RetryErrorHandlingBase":
         # Fill the effective default here, never by mutating the input dict in a
         # `mode="before"` validator: that marks the key as provided, corrupting
-        # the one signal consumers use to tell author-set from defaulted (#938).
+        # the one signal consumers use to tell author-set from defaulted.
         # `retry_delay_seconds is None` means the author omitted it (or sent
         # null); after assigning, discard it from the field-set — pydantic's
         # `__setattr__` records the assignment, and the injected default must

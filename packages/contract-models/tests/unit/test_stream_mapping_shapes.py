@@ -1,4 +1,4 @@
-"""Guards for the mapping/destination shapes reshaped in the #108 release.
+"""Guards for the mapping/destination shapes the stream contract reshaped.
 
 Each change exists to make a specific wrong document *unrepresentable* rather
 than merely wrong, so that is what gets pinned: not "the field has a new type",
@@ -220,7 +220,8 @@ class TestAssignmentValueKind:
         assert isinstance(value, ConstantAssignmentValue)
 
     def test_missing_kind_rejected(self):
-        # The pre-#108 shape. It used to be the ONLY shape, so this reject is
+        # The undiscriminated shape this replaced. It used to be the ONLY
+        # shape, so this reject is
         # what proves the discriminator is actually required rather than
         # defaulted from whichever payload key happens to be present.
         with pytest.raises(ValidationError, match="kind"):
@@ -302,7 +303,7 @@ class TestAssignmentValueKind:
         validator = Draft202012Validator(schema)
         for payload in (
             {},
-            {"expression": {"op": "get", "path": ["id"]}},  # the pre-#108 shape
+            {"expression": {"op": "get", "path": ["id"]}},  # undiscriminated
             {"kind": "constant", "expression": {"op": "get", "path": ["id"]}},
             {"kind": "template", "expression": {"op": "get", "path": ["id"]}},
             {
@@ -454,8 +455,8 @@ class TestStreamDestinationSchemaMirror:
     the `operations.write` side (see
     tests/schemas/test_render_schemas.py::test_write_mode_conflict_keys_mirror_covers_every_mode).
 
-    #108 also CHANGED branch 4's meaning: "non-upsert" used to mean `insert`
-    and now also covers `truncate_insert`. Live surface, not legacy.
+    Branch 4's meaning also CHANGED: "non-upsert" used to mean `insert` and now
+    also covers `truncate_insert`. Live surface, not legacy.
 
     One case per branch, each asserted against BOTH validators, plus a
     symmetric accept set so an over-tightened branch cannot pass as a
@@ -475,7 +476,8 @@ class TestStreamDestinationSchemaMirror:
         ("db upsert requires conflict_keys",
          {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "upsert"}}),
         # 4: scope=connection + non-upsert ⇒ conflict_keys forbidden.
-        #    `truncate_insert` is the member #108 added to this branch.
+        #    `truncate_insert` is the member this branch gained when the db
+        #    write-mode set grew.
         ("truncate_insert forbids conflict_keys",
          {"endpoint_ref": _DB_ENDPOINT_REF,
           "write": {"mode": "truncate_insert", "conflict_keys": ["id"]}}),

@@ -706,15 +706,15 @@ class StreamDestination(StrictModel):
 # ---------------------------------------------------------------------------
 
 
-# Why a token array rather than the dotted string this replaced (#108).
+# Why a token array rather than the dotted string this replaced.
 #
 # A dotted string is not a path — it is a path plus an unstated splitting
 # convention, and the contract never stated one. Two questions it left open:
-# where the split happens (every consumer had to decide, and #108 records what
-# went wrong when they decided differently), and how a field name containing a
-# literal dot is spelled (unanswerable). Tokens answer both by construction:
-# there is nothing left to split, and `["a.b"]` is a field named `a.b` while
-# `["a", "b"]` is nested.
+# where the split happens (every consumer had to decide for itself, so two
+# consumers could read one document as two different paths), and how a field
+# name containing a literal dot is spelled (unanswerable). Tokens answer both
+# by construction: there is nothing left to split, and `["a.b"]` is a field
+# named `a.b` while `["a", "b"]` is nested.
 #
 # Kept as a comment, not in the docstring: the docstring renders verbatim into
 # the published `$defs.GetExpression.description`, where the rationale is noise
@@ -742,7 +742,7 @@ class GetExpression(StrictModel):
 
 class FnExpression(StrictModel):
     """`{"op": "fn", "name": "<conversion fn>"}` — one conversion stage of a
-    `pipe` (#887).
+    `pipe`.
 
     Mirrors the engine's `fn` AST node. `name` is closed over the conversion
     functions the engine-published conversion matrix declares for `explicit`
@@ -791,7 +791,7 @@ def _pipe_args_positional_grammar(schema: dict[str, Any]) -> None:
 
 class PipeExpression(StrictModel):
     """`{"op": "pipe", "args": [<get>, <fn>, ...]}` — a source read piped
-    through one or more declared conversion functions (#887).
+    through one or more declared conversion functions.
 
     Mirrors the engine's `pipe` AST node: `args[0]` is the seed expression —
     a `get` in the stream grammar (constants use `value.constant`, never an
@@ -988,9 +988,9 @@ class ConstantAssignmentValue(StrictModel):
 # and a `_validate_one_of` (retired ADV-STRM-008).
 #
 # This is the BREAKING half of the release: `kind` is required, so every
-# pre-#108 document — which had no such key — is now rejected. What the two
-# shapes agree on is the illegal *combination*; the new one additionally
-# demands the discriminator.
+# document written against the two-nullable-fields shape — which had no such
+# key — is now rejected. What the two shapes agree on is the illegal
+# *combination*; the new one additionally demands the discriminator.
 #
 # The old model DECLARED both fields, so an instance could hold both and a
 # validator had to say no. Here each variant declares only its own payload key,
@@ -1019,7 +1019,7 @@ AssignmentValue = Annotated[
 # root, so its `path` is a single segment. Nesting beneath that root is declared
 # by `arrow_type: "Object"` plus `properties` (or `List` plus `items`), and a
 # dotted target path would be a second, contradictory spelling of the same
-# thing (#108). Constraining it here makes that document unparseable rather
+# thing. Constraining it here makes that document unparseable rather
 # than leaving each consumer to reject it later.
 #
 # Two constraints. "At least one non-whitespace character" is the parity one —
@@ -1153,7 +1153,7 @@ class StreamValidationErrorHandling(RetryErrorHandlingBase):
     # Inherits the full error-handling contract — fields, bounds, defaulting, the
     # cross-field rule, and the JSON-Schema conditional rules — from
     # `RetryErrorHandlingBase`, shared with the pipeline block so the two cannot
-    # drift (#938). The stream block adds no field descriptions, so it re-declares
+    # drift. The stream block adds no field descriptions, so it re-declares
     # nothing; this subclass exists to name the stream schema `$def`.
 
 

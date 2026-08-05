@@ -1,4 +1,4 @@
-"""`$ref` in an embedded response/input schema (issue #123, ADV-ENDP-026).
+"""`$ref` in an embedded response/input schema (ADV-ENDP-026).
 
 Two halves, tested together because each only makes sense given the other:
 

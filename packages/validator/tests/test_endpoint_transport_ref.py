@@ -1,5 +1,5 @@
 """`endpoint-transport-ref` — an endpoint's `request.transport_ref` must name a
-transport the sibling connector.json declares (issue #124, repo half).
+transport the sibling connector.json declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
 connector-INTERNAL ref site, but an endpoint is a separate document: no
@@ -226,9 +226,9 @@ class TestOriginContainmentGapIsRecorded:
             "and the description must both change — or the contract has started "
             "promising a guarantee it does not provide."
         )
-        assert "454" in description, (
-            f"{model_name}.transport_ref no longer names the issue tracking the "
-            "unenforced half; the gap would become undiscoverable."
+        assert "per-operation transport selection" in description, (
+            f"{model_name}.transport_ref no longer names what closing the "
+            "unenforced half would take; the gap would become undiscoverable."
         )
 
     def test_a_second_origin_is_accepted_because_nothing_checks_origins(self):

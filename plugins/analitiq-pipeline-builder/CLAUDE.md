@@ -80,7 +80,7 @@ Rules when editing this plugin's prose:
 ## Validator-behavior claims — the repo-wide gate
 
 <!-- PROBE: pipeline-draft-runnability-unchecked -->
-A second gate, `scripts/render_validator_claims.py` (repo root, issue #133),
+A second gate, `scripts/render_validator_claims.py` (repo root),
 scans THIS plugin's prose too: a sentence stating what the validator checks or
 does not check ("runnability is not checked for a draft") must be pinned by a
 `<!-- PROBE: <id> -->` fence placed directly above it, naming an executable

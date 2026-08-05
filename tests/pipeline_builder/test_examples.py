@@ -97,7 +97,9 @@ def test_example_declares_matching_schema_url(entity, path):
 
 
 def test_full_refresh_example_demonstrates_the_shapes_it_is_named_for():
-    """The #108 example must keep demonstrating #108's shapes.
+    """The full-refresh example must keep the write-mode and mapping shapes its
+    name promises: a `truncate_insert` destination, both assignment-value kinds,
+    a multi-segment `get.path`, and a pipe/fn conversion chain.
 
     Validity and illustrativeness are different properties: this file stays a
     perfectly valid stream after swapping `truncate_insert` for `insert`,

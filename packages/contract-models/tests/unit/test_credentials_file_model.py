@@ -1,4 +1,4 @@
-"""Public `credentials` sidecar contract tests (#951).
+"""Public `credentials` sidecar contract tests.
 
 `CredentialsFile` is the source of the public `credentials` JSON Schema: the
 flat `{name: value}` shape of a connection's local `credentials.json`. The
@@ -38,8 +38,8 @@ def test_credentials_accepts_empty_map():
 
 def test_credentials_accepts_typed_values():
     """Values may be any JSON type: a connector may declare a non-string secret,
-    the write path stores it verbatim, and the engine string-coerces on read
-    (#951 review). The contract must not reject such a valid file."""
+    the write path stores it verbatim, and the engine string-coerces on read.
+    The contract must not reject such a valid file."""
     sample = {"pin": 1234, "enabled": True, "ratio": 0.5}
     assert CredentialsFile.model_validate(sample).model_dump() == sample
 

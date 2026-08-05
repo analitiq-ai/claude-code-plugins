@@ -118,9 +118,9 @@ The agent has four modes; one invocation runs exactly one mode.
    (arrays, STRUCTs, JSON), declare the authored shape — `Object` + sibling
    `properties` or `List` + sibling `items` when introspected, `Json` when
    opaque (MongoDB `BSON.Document`, uninspected `jsonb`); never a scalar like
-   `Utf8`, and never an angle-bracket form (`Struct<…>`, `List<…>` — the
-   contract rejects them, issue #81). Add a `notes[]` entry when you fall back
-   to `Json`.
+   `Utf8`, and never an angle-bracket form (`Struct<…>`, `List<…>` — outside
+   the canonical vocabulary, so the contract rejects them). Add a `notes[]`
+   entry when you fall back to `Json`.
 7. **Author connection-scoped type-map gap rules** per
    `skills/endpoint-spec/spec-type-map-gaps.md`:
    - For every read gap from step 6, a read rule whose rendered canonical

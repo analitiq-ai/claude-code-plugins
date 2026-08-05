@@ -141,8 +141,8 @@ the driver happens to hand the value over as text on the wire.
 markers `Object` / `List` need a sibling `properties` / `items` sub-schema
 that a string→string rule cannot carry, and the typed angle-bracket forms
 (`List<…>`, `Struct<…>`, `Map<…>`) are not contract grammar at all — the
-vocabulary is trimmed to the executable set (issue #81), so a rule that
-renders one now fails validation at author time instead of freezing a
+vocabulary is trimmed to the families the engine actually executes, so a
+rule that renders one fails validation at author time instead of freezing a
 canonical that would die at schema construction.
 
 <!-- PROBE: read-map-native-semantics-unchecked -->
@@ -192,15 +192,15 @@ The shape markers `Object` and `List` split by direction:
   Author these as `exact` rules over the bare markers — do **not** widen
   them to regexes over angle-bracket forms (`^(?:Struct<.+>|Object)$`,
   `^(?:Large)?List(?:<.+>)?$`). Those spellings are outside the canonical
-  vocabulary entirely (issue #81) — no endpoint or read rule can produce
-  them — so such branches are dead pattern surface that misleads the
-  next author.
+  vocabulary entirely — no endpoint or read rule can produce them — so such
+  branches are dead pattern surface that misleads the next author.
 
-**No `Map` canonical exists.** The vocabulary has no `Map` family
-(issue #81 trimmed it): a `Map<…>` spelling fails validation as a read
-render or an exact write canonical, and as a write regex matcher it can
-never match a canonical that syncs. Never author `Map` rules; map-shaped
-natives resolve to `Json` like every other structured container.
+**No `Map` canonical exists.** The engine-published grammar the vocabulary
+is generated from declares no `Map` family: a `Map<…>` spelling fails
+validation as a read render or an exact write canonical, and as a write
+regex matcher it can never match a canonical that syncs. Never author `Map`
+rules; map-shaped natives resolve to `Json` like every other structured
+container.
 
 ## Non-obvious natives (derive, don't guess)
 
@@ -340,9 +340,9 @@ parens for parameterized scalars (`Decimal128(p, s)`,
 
 There are no angle-bracket nested forms: the vocabulary is generated from
 the engine-published grammar manifest and carries exactly the families the
-engine executes end-to-end (issue #81). Nested data goes through the
-authored-shape path only — `Object` / `List` with a sub-schema on the
-owning document, opaque `Json`.
+engine executes end-to-end. Nested data goes through the authored-shape path
+only — `Object` / `List` with a sub-schema on the owning document, opaque
+`Json`.
 
 The full vocabulary is `schemas/canonical-types.json`, published at
 [`https://schemas.analitiq.ai/canonical-types.json`](https://schemas.analitiq.ai/canonical-types.json)

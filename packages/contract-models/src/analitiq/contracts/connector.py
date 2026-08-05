@@ -1234,8 +1234,8 @@ class TransportDefaults(AdvisoryValidated, StrictModel):
 # file/s3/stdout connectors carry no post-auth workflow, so their
 # `connection_contract` must declare neither `post_auth_outputs` nor
 # `required_for_activation` (spec-normative; previously unenforced). The schema
-# fragment pins both to empty; `_reject_post_auth_contract` is the runtime mirror
-# (#977 T2, Q2 = schema + validator).
+# fragment pins both to empty for schema-only consumers;
+# `_reject_post_auth_contract` is the runtime half.
 _FILE_LIKE_CONNECTION_CONTRACT_RULES: dict[str, Any] = {
     "allOf": [
         {
@@ -1266,15 +1266,15 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
 
 
 # --- Declared capabilities: SQL write path, write unit, capability block v2
-# (engine ADR §5; issues #87, #89) ---
+# (engine ADR §5) ---
 #
 # `sql_capabilities` — SQL-shape capabilities are DECLARED, not guessed. The
-# engine's SQL write path ("refuse, don't guess" — analitiq-engine#390, settled
-# in the engine ADR `docs/sql-write-path-v2.md` §5) reads these facts from the
-# connector definition and refuses any needed-but-undeclared fact at
-# config/handshake time, instead of probing the live database. A declared block
-# is COMPLETE — every top-level shape fact is required — because a partial
-# declaration is a config error, not a request for implicit defaults.
+# engine's SQL write path ("refuse, don't guess", settled in the engine ADR
+# `docs/sql-write-path-v2.md` §5) reads these facts from the connector
+# definition and refuses any needed-but-undeclared fact at config/handshake
+# time, instead of probing the live database. A declared block is COMPLETE —
+# every top-level shape fact is required — because a partial declaration is a
+# config error, not a request for implicit defaults.
 # (`stage.dedicated_schema` is the one conditional field: required iff
 # `stage.schema == "dedicated"`.)
 #
@@ -1285,24 +1285,24 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
 #
 # Both blocks are OPTIONAL at the schema level; omission is legal.
 #
-# Capability block v2 (issue #89; engine analitiq-engine#401/#407) adds three
-# ADDITIVE declarations: `error_map` and `concurrency` (connector-level) and
-# `sql_capabilities.limits`. Additive means no refusal ever hinges on them
-# being present — absence (of a block, a family, or a single cap) is legal and
-# means "no declared mapping / no declared cap"; current engine behavior
-# applies. That contrasts with the shape facts above (a missing `merge_form`
-# blocks an upsert) and with `write_unit`'s at-least-one-bound rule: here an
-# EMPTY block (`{}`) is legal and equivalent to omission. Declared content is
-# still validated fail-loud: an off-vocabulary category, a malformed
-# identifier, or an unknown field is a config error. Connectors declare DRIVER
-# FACTS only; the engine alone derives verdicts (ack status, failure category,
-# error code) — these models must never grow verdict-shaped fields.
+# Capability block v2 adds three ADDITIVE declarations: `error_map` and
+# `concurrency` (connector-level) and `sql_capabilities.limits`. Additive
+# means no refusal ever hinges on them being present — absence (of a block, a
+# family, or a single cap) is legal and means "no declared mapping / no
+# declared cap"; current engine behavior applies. That contrasts with the
+# shape facts above (a missing `merge_form` blocks an upsert) and with
+# `write_unit`'s at-least-one-bound rule: here an EMPTY block (`{}`) is legal
+# and equivalent to omission. Declared content is still validated fail-loud:
+# an off-vocabulary category, a malformed identifier, or an unknown field is a
+# config error. Connectors declare DRIVER FACTS only; the engine alone derives
+# verdicts (ack status, failure category, error code) — these models must never
+# grow verdict-shaped fields.
 
 
-# Closed failure-category vocabulary (capability block v2), settled in issue
-# #89 and mirrored by the engine's typed parser (`cdk/declarations.py`). The
-# schema rendered from this Literal is the published contract; a vocabulary
-# change is a coordinated engine + contract revision, never a local edit.
+# Closed failure-category vocabulary (capability block v2), mirrored by the
+# engine's typed parser (`cdk/declarations.py`). The schema rendered from this
+# Literal is the published contract; a vocabulary change is a coordinated
+# engine + contract revision, never a local edit.
 ErrorCategory = Literal[
     "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected"
 ]
@@ -1365,9 +1365,9 @@ _HttpStatusFamily = Annotated[
 
 # A declared cap: positive integer, strictly typed. `strict=True` rejects the
 # bool/str/float coercions lax mode would accept, mirroring the engine parser's
-# explicit `isinstance(value, bool)` guard (bool is an int subclass in Python)
-# — the issue #89 grammar says "integer >= 1 (booleans rejected)" for every
-# cap field, unlike the contract's lax int fields (e.g. `write_unit.rows`).
+# explicit `isinstance(value, bool)` guard (bool is an int subclass in Python).
+# Every cap field is an integer >= 1 with booleans rejected, unlike the
+# contract's lax int fields (e.g. `write_unit.rows`).
 # Known one-way edge: JSON Schema's `type: integer` admits a zero-fraction
 # float (`8.0`) the strict model rejects — inexpressible to close in JSON
 # Schema, and the safe direction (the authoritative validator is stricter).
@@ -1375,14 +1375,14 @@ _DeclaredCap = Annotated[int, Field(strict=True, ge=1)]
 
 
 class ErrorMap(StrictModel):
-    """Driver-fact error classification map (capability block v2, issue #89).
+    """Driver-fact error classification map (capability block v2).
 
     Maps driver-reported identifiers onto the engine's closed failure-category
     vocabulary, one map per identifier family. A subset of families (including
     none — an empty block declares nothing) is legal, and so is an empty family
     map. Additive: absence never blocks anything. Connectors declare driver
     facts only; the engine alone derives verdicts (ack status, failure
-    category, error code) from them (analitiq-engine#401).
+    category, error code) from them.
     """
 
     sqlstate: _SqlstateFamily | None = Field(
@@ -1417,7 +1417,7 @@ class ErrorMap(StrictModel):
 
 
 class Concurrency(StrictModel):
-    """Connector-level concurrency declaration (capability block v2, issue #89).
+    """Connector-level concurrency declaration (capability block v2).
 
     Additive: absence of the block or of `max_connections` — including an
     empty block — means "no declared cap" and current engine behavior applies.
@@ -1434,7 +1434,7 @@ class Concurrency(StrictModel):
 
 
 class SqlLimits(StrictModel):
-    """Declared SQL driver caps (capability block v2, issue #89).
+    """Declared SQL driver caps (capability block v2).
 
     The one additive member of `sql_capabilities`: unlike the five required
     shape facts, absence of the block or of any single cap — including an
@@ -1552,8 +1552,8 @@ class SqlStageCapabilities(StrictModel):
         return self
 
 
-# Bulk-load vocabulary (analitiq-engine#391/#406), mirrored from the engine's
-# typed parser (`cdk/sql/capabilities.py`: `SQL_TRANSPORT_TYPES`,
+# Bulk-load vocabulary, mirrored from the engine's typed parser
+# (`cdk/sql/capabilities.py`: `SQL_TRANSPORT_TYPES`,
 # `DIALECT_IMPLEMENTED_BULK_MECHANISMS`, `BULK_MECHANISMS_BY_TRANSPORT`). A
 # bulk mechanism is a fact about a SQL transport, not the connector as a whole
 # — `copy_from` needs the driver's wire connection, `adbc_ingest` an ADBC
@@ -1590,7 +1590,7 @@ def _enum_branch_only(schema: dict[str, Any]) -> None:
 
 
 class SqlBulkLoad(StrictModel):
-    """Per-transport bulk-load declaration (analitiq-engine#391/#406).
+    """Per-transport bulk-load declaration.
 
     Maps a SQL transport family (`sqlalchemy` / `adbc`) to the bulk mechanism
     its connections land with. An absent family lands via executemany — the
@@ -1662,10 +1662,10 @@ class SqlCapabilities(StrictModel):
 
     "Refuse, don't guess": the engine reads these facts instead of probing the
     live database, and refuses at handshake time when a needed fact was not
-    declared (analitiq-engine#390, PR analitiq-engine#400). Optional as a block,
-    but when present every shape fact is required — a partial declaration
-    is a config error. `limits` (issue #89) is the one additive member: it and
-    each cap inside it may be omitted, meaning "no declared cap".
+    declared. Optional as a block, but when present every shape fact is
+    required — a partial declaration is a config error. `limits` (capability
+    block v2) is the one additive member: it and each cap inside it may be
+    omitted, meaning "no declared cap".
     """
 
     catalog: Literal["none", "read", "full"] = Field(
@@ -1698,7 +1698,7 @@ class SqlCapabilities(StrictModel):
     bulk_load: SqlBulkLoad = Field(
         ...,
         description=(
-            "Per-transport bulk-ingest declaration (analitiq-engine#406): "
+            "Per-transport bulk-ingest declaration: "
             "maps a SQL transport family (`sqlalchemy` / `adbc`) to the bulk "
             "mechanism its connections land with. An absent family lands via "
             "executemany; an empty object declares no bulk mechanism "
@@ -1715,7 +1715,7 @@ class SqlCapabilities(StrictModel):
     limits: SqlLimits | None = Field(
         default=None,
         description=(
-            "Declared SQL driver caps (capability block v2, issue #89). The "
+            "Declared SQL driver caps (capability block v2). The "
             "one additive member of this block: unlike the five required "
             "shape facts, absence (of the block or any single cap) is legal "
             "and means \"no declared cap\"."
@@ -1724,13 +1724,13 @@ class SqlCapabilities(StrictModel):
 
 
 class WriteUnit(StrictModel):
-    """Preferred write-batch coalescing unit for a destination (issue #87).
+    """Preferred write-batch coalescing unit for a destination.
 
     Connector-level, not a SQL-only fact: any destination whose write cost is
     per-write-operation may declare the batch size it wants the engine's
     coalescer to target. At least one of `rows` / `bytes` must be given;
     absence of the whole block means "no coalescing preference". Consumed by
-    the engine batch coalescer (analitiq-engine#384).
+    the engine's batch coalescer.
     """
 
     model_config = ConfigDict(
@@ -1768,7 +1768,7 @@ class WriteUnit(StrictModel):
         if self.rows is None and self.bytes is None:
             raise ValueError(
                 "write_unit requires at least one of `rows` or `bytes` "
-                "(issue #87 — an empty write_unit expresses no preference; "
+                "(an empty write_unit expresses no preference; "
                 "omit the block entirely instead)"
             )
         return self
@@ -1884,8 +1884,8 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
     write_unit: WriteUnit | None = Field(
         default=None,
         description=(
-            "Preferred write-batch coalescing unit for this destination "
-            "(issue #87). Connector-level because it is not a SQL-only fact: "
+            "Preferred write-batch coalescing unit for this destination. "
+            "Connector-level because it is not a SQL-only fact: "
             "any destination whose write cost is per-write-operation may "
             "declare the batch size the engine's coalescer should target. "
             "Absent means no coalescing preference."
@@ -1894,8 +1894,8 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
     error_map: ErrorMap | None = Field(
         default=None,
         description=(
-            "Driver-fact error classification map (capability block v2, "
-            "issue #89): per-family identifier → failure-category facts "
+            "Driver-fact error classification map (capability block v2): "
+            "per-family identifier → failure-category facts "
             "(sqlstate, exception, vendor_code, http). Connector-level "
             "because families span kinds (http for API connectors, sqlstate/"
             "vendor_code for databases). Additive — absence never blocks "
@@ -1905,8 +1905,8 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
     concurrency: Concurrency | None = Field(
         default=None,
         description=(
-            "Connector-level concurrency declaration (capability block v2, "
-            "issue #89). Additive — absence means no declared cap."
+            "Connector-level concurrency declaration (capability block v2). "
+            "Additive — absence means no declared cap."
         ),
     )
 
@@ -2089,7 +2089,8 @@ class DatabaseConnector(ConnectorBase):
             "— not present on other connector kinds. Optional; when omitted the "
             "engine refuses any needed-but-undeclared fact at handshake time. "
             "When present, every shape fact is required; `limits` "
-            "(issue #89) is the one additive member and may be omitted."
+            "(capability block v2) is the one additive member and may be "
+            "omitted."
         ),
     )
 

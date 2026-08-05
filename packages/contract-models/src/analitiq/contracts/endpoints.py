@@ -83,16 +83,16 @@ METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
 # Canonical Apache Arrow type vocabulary. `ARROW_TYPE_PATTERN` is GENERATED
 # from the engine-published, vendored grammar manifest — see
-# `analitiq.contracts.arrow_grammar` (issue #81: the executable family set is a
-# capability surface the engine owns; the contract consumes it, never restates
-# it). It is imported above and re-exported here because this module is the
+# `analitiq.contracts.arrow_grammar` (the executable family set is a capability
+# surface the engine owns; the contract consumes it, never restates it). It is
+# imported above and re-exported here because this module is the
 # historical import point for the pattern (stream.py, type_map.py, the schema
 # renderer, and external consumers all import it from here).
 #
 # The pattern accepts exactly the engine-executable canonical spellings:
-# scalars, parameterized scalars carrying their parameters (issue #424: bare
-# `Timestamp` / `Decimal128` are unbuildable by PyArrow and must fail at author
-# time, not at sync time), and the bare authored-shape JSON container markers:
+# scalars, parameterized scalars carrying their parameters (bare `Timestamp` /
+# `Decimal128` are unbuildable by PyArrow and must fail at author time, not at
+# sync time), and the bare authored-shape JSON container markers:
 #   Object — JSON object with declared shape; requires sibling `properties`.
 #   List   — JSON array with declared element shape; requires sibling `items`.
 #   Json   — opaque JSON object or array; no inner declaration permitted.
@@ -152,9 +152,9 @@ def _has_known_scope(token: str) -> bool:
 # The tuple is derived from the Literal so those two cannot drift.
 #
 # `truncate_insert` is the full-refresh mode: empty the destination, then insert
-# the run's records. Adding it here is what #108 asks of this contract; its
-# delivery semantics (at-least-once by design) and its execution belong to the
-# SQL write path, and restating either here would be a copy that rots.
+# the run's records. Naming it in this vocabulary is all this contract owes it;
+# its delivery semantics (at-least-once by design) and its execution belong to
+# the SQL write path, and restating either here would be a copy that rots.
 WriteMode = Literal["insert", "upsert", "truncate_insert"]
 WRITE_MODES: tuple[str, ...] = get_args(WriteMode)
 READ_METHODS: tuple[str, ...] = ("GET", "POST")
@@ -446,8 +446,8 @@ class PageSize(_EndpointModel):
     # statically-known non-positive page size that validates here. Closing that
     # means bounding the literal expression wherever a positive number is
     # required (`max`, `OffsetCursor.increment_by`, `PageCursor.increment_by`),
-    # which is a wider change than #108 — tracked separately. Do not describe
-    # this field as "the literal branch is bounded"; it is not.
+    # which is wider than this field's own bound and is not attempted here. Do not
+    # describe this field as "the literal branch is bounded"; it is not.
     default: Annotated[int, Field(gt=0), Strict()] | Expression | None = Field(  # type: ignore[valid-type]
         default=None,
         description=(
@@ -475,7 +475,7 @@ class OffsetCursor(_EndpointModel):
             "families cannot be told apart from the document, so any default "
             "silently breaks one of them. A positive-integer literal is a fixed "
             "step (`1` for page-index-style offsets). A value expression lets the "
-            "engine advance by a per-page value (analitiq-engine #346/#347): "
+            "engine advance by a per-page value: "
             "`{ref: response.record_count}` when `offset` counts records returned "
             "(resolved against that page's response); when it counts the requested "
             "window, step by the *effective* request limit — the page size "
@@ -954,8 +954,9 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
             "site selects a transport per operation. So declaring a second "
             "transport does NOT today make a second origin reachable — a "
             "next-page link that leaves the connection origin is refused. "
-            "Stated here as the contract's intent, not as a guarantee; "
-            "implementing it is analitiq-engine#454 / #124."
+            "Stated here as the contract's intent, not as a guarantee: "
+            "closing it takes per-operation transport selection plus a "
+            "write-path origin guard in the engine."
         ),
     )
     path: str = Field(
@@ -1130,7 +1131,7 @@ def _validate_arrow_type_in_json_schema(
 ) -> None:
     """Walk a JSON Schema document and enforce arrow_type contract rules.
 
-    Issue #424 / spec §Native and Arrow Types:
+    Spec §Native and Arrow Types:
       (1) any subschema carrying `arrow_type` must match the canonical Arrow
           type vocabulary — bare parameterized forms like 'Timestamp' or
           'Decimal128' are rejected at author time.
@@ -1694,7 +1695,7 @@ class Batching(_EndpointModel):
 
 
 class Idempotency(_EndpointModel):
-    """Idempotency-key placement declaration for a write mode (#890).
+    """Idempotency-key placement declaration for a write mode.
 
     The author declares only *where* the provider's idempotency key goes on
     the write request. The key *value* is engine-owned (the content-derived
@@ -1867,8 +1868,9 @@ class ReadOperation(_EndpointModel):
         # and it is skipped. It needs the record-shape walk instead, the same one
         # replication `cursor_field` gets: both name a field the engine reads off
         # a record to advance from, and an undeclared one truncates or repeats
-        # pages exactly as #123 describes. Until this it was guarded by nothing
-        # but `RECORD_FIELD_PATH_PATTERN` — a shape check, not an existence one.
+        # pages silently while the run still reports success. Until this it was
+        # guarded by nothing but `RECORD_FIELD_PATH_PATTERN` — a shape check,
+        # not an existence one.
         if isinstance(self.pagination, KeysetPagination):
             _validate_record_field_path(
                 self.pagination.keyset.order_by_field,
@@ -1987,8 +1989,8 @@ class WriteOperation(_EndpointModel):
 
     model_config = ConfigDict(
         json_schema_extra={
-            # Published-schema mirror of the `_wiring` idempotency×batching rule
-            # (#890): the key value is per-record, so a multi-record request
+            # Published-schema mirror of the `_wiring` idempotency×batching
+            # rule: the key value is per-record, so a multi-record request
             # cannot carry one. `anyOf` over null-or-absent — not
             # `not: {required: [...]}` — so an explicit null (either field's
             # nullable default) still authors, matching the model's is-None check.
@@ -2072,8 +2074,9 @@ class WriteOperation(_EndpointModel):
         # resolves to nothing on every response, so `empty` holds unconditionally
         # and every write reports success, including the ones whose rejected rows
         # the provider listed in `body.errors`. Partial data loss, green run —
-        # strictly worse than the paging truncation #123 was filed for. The
-        # request slots are swept for the same reason the read side is.
+        # strictly worse than the silent paging truncation the read side's
+        # declared-path sweep prevents. The request slots are swept for the
+        # same reason the read side is.
         write_sites: list[_ExpressionSite] = [
             _ExpressionSite(
                 where=f"operations.write.request.{slot}",
@@ -2702,8 +2705,9 @@ def _collect_singleton_values(value: Any, key: str) -> list[str]:
     a binding" test in `_validate_param_wiring`, pass the `record.<dotted>`
     shape check, pass the `input.schema` membership check, and then put the
     literal dict itself on the wire as the path segment. A wrong URL with no
-    error anywhere — the shape #125 was filed to eliminate, re-entering through
-    the door this PR opened.
+    error anywhere — the silently mis-bound path segment the write
+    `path_params` rules exist to eliminate, re-entering through the door the
+    `from_input` binding opened.
     """
     found: list[str] = []
     if isinstance(value, dict):
@@ -2789,7 +2793,7 @@ def _validate_param_wiring(
     _validate_expression_shapes(request.query, "request.query")
     _validate_expression_shapes(getattr(request, "body", None), "request.body")
 
-    # `path_params` is a from_input site on WRITE operations only (#125): a REST
+    # `path_params` is a from_input site on WRITE operations only: a REST
     # write addresses one record by its own key (`PATCH /contacts/{id}`), and the
     # id lives in the record, not in a declared param. On a read there is no
     # record in scope at request time, so the original ban stands unchanged —
@@ -2859,9 +2863,10 @@ def _validate_param_wiring(
                 # and `"record..id"` passed here, then passed the input.schema
                 # membership check too (an empty segment is vacuously "not
                 # provably absent"), and bound a URL segment to no field at
-                # all — #125's own failure mode, re-entering through the door
-                # this rule opened. Same regex the contract already uses for
-                # every other dotted record path.
+                # all — the same silently wrong URL this binding exists to
+                # prevent, re-entering through the door this rule opened. Same
+                # regex the contract already uses for every other dotted
+                # record path.
                 raise ValueError(
                     f"request.path_params[{placeholder!r}] from_input value "
                     f"{from_input!r} must be `record.<dotted>` "
@@ -2894,10 +2899,10 @@ def _validate_param_wiring(
             # pagination/replication — both read-side, neither reachable from a
             # write. So a write path param with no `default` provably cannot
             # resolve, and the placeholder it fills can never be substituted.
-            # That is issue #125's headline document: contract-valid, and dead
-            # at the engine handshake. It is refused here, naming the binding
-            # that replaces it. Reads keep the old latitude: a read path param
-            # can be supplied by a stream filter.
+            # That is the headline broken write document: contract-valid, and
+            # dead at the engine handshake. It is refused here, naming the
+            # binding that replaces it. Reads keep the old latitude: a read
+            # path param can be supplied by a stream filter.
             if allow_from_input and param.default is None:
                 raise ValueError(
                     f"request.path_params[{placeholder!r}] binds to param {name!r}, "
@@ -3054,7 +3059,7 @@ def _validate_response_body_paths(
     request: Any = None,
     params: dict[str, "Param"] | None = None,
 ) -> None:
-    """ADV-ENDP-023 (#123): every `response.body[.<path>]` a read operation reads
+    """ADV-ENDP-023: every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
 
     `response.records` was already anchored to the declared schema; pagination
@@ -3114,8 +3119,9 @@ def _validate_response_body_paths(
     # The REQUEST slots too. A request is built before the response exists, so a
     # `response.*` ref there is refused outright — and it was accepted:
     # `request.query = {"c": {"ref": "response.body.nope"}}` interpolated
-    # nothing, the provider answered 200, and the run went green. #123's failure
-    # at the site where the value actually goes onto the wire.
+    # nothing, the provider answered 200, and the run went green. The same
+    # unresolved-path failure this rule catches elsewhere, at the site where
+    # the value actually goes onto the wire.
     for slot in _REQUEST_EXPRESSION_SLOTS:
         value = getattr(request, slot, None)
         if value is not None:
@@ -3200,10 +3206,10 @@ def _validate_param_binding_uniqueness(
 #
 # ONE algorithm answers "does this dotted path address something the document
 # declares?" for every site that asks: `response.records`, replication
-# `cursor_field`, and (since #123) every `response.body` path pagination and
-# `response.metadata` read. Before this there were two half-answers — a
-# `properties`-only walk for records/cursor_field and nothing at all for
-# pagination — which is why a typo in a pagination ref could ship.
+# `cursor_field`, and (since ADV-ENDP-023) every `response.body` path
+# pagination and `response.metadata` read. Before this there were two
+# half-answers — a `properties`-only walk for records/cursor_field and nothing
+# at all for pagination — which is why a typo in a pagination ref could ship.
 #
 # The rule, in one sentence: a segment resolves when the current node declares
 # it under `properties`, counting the declarations `allOf` branches and an
@@ -4174,8 +4180,9 @@ def _sweep_expression_sites(
                 # `records`) really are engine-owned and unknowable here, but
                 # lumping `metadata` in with them let `response.metadata.nope`
                 # through — which resolves to nothing on every page, so paging
-                # stops after page one and the run reports success. That is #123
-                # verbatim, one segment to the right of where it was fixed.
+                # stops after page one and the run reports success. That is the
+                # ADV-ENDP-023 failure verbatim, one segment to the right of
+                # where it was fixed.
                 key = token.split(".", 2)[2].split(".")[0]
                 if key not in metadata_keys:
                     raise ValueError(
@@ -4283,8 +4290,8 @@ def _reject_unknown_response_scope(
     `response.bodyy.next_cursor` was not "a reserved scope this rule leaves
     alone", it was a typo that resolved to nothing at run time. Paging stopped
     after page one and the sync reported success — the identical silent
-    truncation #123 was filed for, reachable by misspelling `body` instead of
-    the field after it.
+    truncation ADV-ENDP-023 exists to catch, reachable by misspelling `body`
+    instead of the field after it.
 
     `_has_known_scope` cannot catch it: it inspects only the LEADING token, and
     `response` is a real scope. The sub-scope needs its own check.
@@ -4582,7 +4589,8 @@ def _validate_record_field_path(
     `pagination.keyset.order_by_field` is the other one: the seek order is
     defined over it, so a path the record shape does not declare means pages
     advance from a value the engine cannot read — silently truncating or
-    repeating, which is the #123 failure with a different cause.
+    repeating, which is the same wrong-data-on-a-green-run failure
+    ADV-ENDP-023 catches on the response-body side, with a different cause.
 
     Unknowable shapes are reported, not skipped: this is `response.schema`,
     which the contract holds to the strict standard (see

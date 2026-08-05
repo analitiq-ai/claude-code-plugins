@@ -1,4 +1,4 @@
-"""The validator and contract-models ship as one release unit (#951 point 4).
+"""The validator and contract-models ship as one release unit.
 
 `analitiq-validator` renders from the same authored model layer as
 `analitiq-contract-models` and validates through it, so a version skew between
@@ -45,7 +45,7 @@ def test_validator_pins_contract_models_exactly():
     m = re.fullmatch(r"==(?P<v>[^\s,;]+)", spec)
     assert m, (
         "validator must pin analitiq-contract-models with an exact '==' so the "
-        f"two packages ship in sync (#951); got specifier {spec!r}"
+        f"two packages ship in sync; got specifier {spec!r}"
     )
     assert m.group("v") == _project_version(CONTRACT_MODELS_PYPROJECT), (
         f"validator pins analitiq-contract-models=={m.group('v')} but "
@@ -60,5 +60,5 @@ def test_validator_version_matches_contract_models_version():
     assert validator_v == contract_models_v, (
         f"analitiq-validator is {validator_v!r} but analitiq-contract-models is "
         f"{contract_models_v!r} — the two ship as one release unit and their own "
-        "versions must stay equal (#951 point 4); bump both together."
+        "versions must stay equal; bump both together."
     )

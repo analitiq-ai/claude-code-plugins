@@ -216,9 +216,10 @@ One `EndpointFacts` object per data resource: the researcher's
 orchestrator injects the connector-level `pagination` (echoed from
 `ProviderFacts.pagination`), and `endpoint-creator` consumes it. This
 is the category that `ProviderFacts` deliberately does **not** carry: the
-field-level truths about one resource's response — including the datetime
-zone-awareness that was previously guessed (issue #12). Every field fact is
-grounded on the resource's own documentation / a real sample; an
+field-level truths about one resource's response — including whether each
+datetime field is zone-aware, which decides `Timestamp(MICROSECOND, UTC)`
+versus the naive `Timestamp(MICROSECOND)`. Every field fact is grounded on
+the resource's own documentation / a real sample; an
 `endpoint-creator` dispatched without `EndpointFacts` refuses (it has no web
 access and may not guess field types).
 

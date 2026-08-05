@@ -2,7 +2,7 @@
 
 The set of canonical Arrow type families the platform executes end-to-end is a
 **capability surface**: only the engine can make a statement about it true, so
-the engine owns it (issue #81). analitiq-core publishes the vocabulary as a
+the engine owns it. analitiq-core publishes the vocabulary as a
 generated, versioned artifact alongside its conversion matrix:
 
     https://schemas.analitiq.ai/arrow-type-grammar/latest.json          (pointer)
@@ -20,7 +20,7 @@ from it everything the contract used to restate by hand:
 - the dummy substitutions templated type-map canonicals are checked with.
 
 Both artifacts self-declare their version in a top-level `version` key
-(engine#413; grammar v1.1.0 and matrix v2.0.0 on). The pin below still states
+(grammar v1.1.0 and matrix v2.0.0 on). The pin below still states
 the version — it is what builds the URL to fetch, so it cannot be derived from
 the thing it fetches — but the guards now assert the object's OWN version
 against it rather than trusting the path it asked for.
@@ -106,7 +106,7 @@ MATRIX_CELL_MODE_KEY = "mode"
 #: every diagonal cell (family to itself) declares the identity mode. Guards
 #: assert exactly that and nothing about any off-diagonal mode value.
 MATRIX_IDENTITY_MODE = "identity"
-#: Key each artifact stamps its own version under (engine#413). Both artifacts
+#: Key each artifact stamps its own version under. Both artifacts
 #: self-declare from grammar v1.1.0 / matrix v2.0.0 on, which is what lets a
 #: consumer assert the version it got rather than trusting the URL it asked for.
 ARTIFACT_VERSION_KEY = "version"

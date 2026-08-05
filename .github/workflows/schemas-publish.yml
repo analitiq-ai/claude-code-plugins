@@ -3,9 +3,9 @@ name: Publish schemas to schemas.analitiq.ai
 # Upload the rendered schemas/ tree to the serving bucket behind
 # schemas.<DOMAIN>. The bucket and CDN live in the infra repo's Terraform
 # (terraform/schemas.tf — "this Terraform owns only the SERVING
-# infrastructure"); the publisher IAM role is specified by infrastructure#1018
-# (not yet applied). This workflow is the external uploader that Terraform
-# hands the objects to.
+# infrastructure"). The publisher IAM role this workflow assumes is specified
+# on the infra side but not yet applied. This workflow is the external uploader
+# that Terraform hands the objects to.
 #
 # Auth is OIDC only — this repo is public and stores no static credentials
 # (CLAUDE.md → Credentials). The `schemas` GitHub Environment supplies:
@@ -19,7 +19,7 @@ name: Publish schemas to schemas.analitiq.ai
 #
 # Publish semantics — the Cache-Control convention matches what the infra
 # repo's terraform/schemas.tf documents; the no-delete policy is this
-# workflow's own (stated on infrastructure#1018):
+# workflow's own, stated here:
 #   * additive — no deletes, ever. Retiring an object is an infra-side call.
 #   * pinned versions (X.Y.Z.json) are immutable: uploaded once, never
 #     overwritten. First write wins; a re-run byte-compares and skips them,
@@ -37,8 +37,8 @@ name: Publish schemas to schemas.analitiq.ai
 # The committed tree is rendered for DOMAIN=analitiq.ai (render_schemas.py
 # refuses any other), so this workflow publishes the PROD host's content.
 # Publishing to a dev bucket needs the per-environment `$id` host rewrite the
-# retired infra uploader performed — out of scope until infrastructure#1018
-# settles it.
+# retired infra uploader performed — out of scope here until the infra side
+# settles how a dev bucket gets its own host.
 #
 # After a failed run, nothing retriggers automatically until the next push
 # touching schemas/ — re-publish by hand via workflow_dispatch. Partial

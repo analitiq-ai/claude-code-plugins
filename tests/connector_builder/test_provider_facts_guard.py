@@ -4,9 +4,9 @@
 `connector-provider-researcher.md` restates several of its database-branch
 field names as grounding instructions ("report ... `sqlalchemy_driver` ...").
 Nothing else ties their field names together, so a partial rename would leave
-the researcher grounding fields the fragment no longer names — #70's
-`async_sqlalchemy_driver` → `sqlalchemy_driver` rename happened to land
-consistently, but only by care, not by any check (issue #72 item 4).
+the researcher grounding fields the fragment no longer names — the
+`async_sqlalchemy_driver` → `sqlalchemy_driver` rename happened to land in both
+files consistently, but only by care, not by any check.
 
 Convention this guard enforces: inside the researcher's `- For databases:`
 hard-rule bullets, a backticked snake_case token (`` `like_this` ``) or dotted
@@ -118,9 +118,10 @@ def test_extraction_finds_the_grounding_bullets() -> None:
     )
     tokens = {t for b in bullets for t in _FIELD_TOKEN.findall(b)}
     assert tokens, "no backticked field tokens extracted from the bullets"
-    # Canaries: the very field #70 renamed, and a dotted nested path (proves
-    # dotted extraction works). If either renames again, all three sites
-    # (fragment, prose, these literals) move together as a recorded decision.
+    # Canaries: the field renamed from `async_sqlalchemy_driver`, and a dotted
+    # nested path (proves dotted extraction works). If either renames again,
+    # all three sites (fragment, prose, these literals) move together as a
+    # recorded decision.
     assert "sqlalchemy_driver" in tokens
     assert "tls.supported_modes" in tokens
 

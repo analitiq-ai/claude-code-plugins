@@ -669,7 +669,8 @@ def render_arrow_types() -> str:
     hand-kept tables; this splits the published pattern instead, so the
     vocabulary cannot drift. The pattern itself is generated from the
     engine-published, vendored grammar manifest
-    (`analitiq.contracts.arrow_grammar`) — see issue #81.
+    (`analitiq.contracts.arrow_grammar`), so it carries exactly the type
+    families the engine executes end-to-end.
     """
     from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 
@@ -682,7 +683,7 @@ def render_arrow_types() -> str:
         raise RuntimeError(
             "ARROW_TYPE_PATTERN grew angle-bracket alternatives; restore the "
             "container section this renderer dropped when the vocabulary was "
-            "trimmed to the executable set (issue #81)"
+            "trimmed to the families the engine executes"
         )
 
     out = [

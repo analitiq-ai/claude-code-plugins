@@ -4,9 +4,9 @@
 Plugin prose states what the validator checks and — more dangerously — what it
 does *not* check ("a `success_when` typo validates clean", "function names are
 never checked", "only the leading scope token is validated"). Each such sentence
-is a copy of a contract fact, and until issue #133 nothing pinned any of them:
-a contract-models change could falsify prose across several files while CI
-stayed green.
+is a copy of a contract fact, and before this registry existed nothing pinned
+any of them: a contract-models change could falsify prose across several files
+while CI stayed green.
 
 This module is the fix, in three parts:
 
@@ -37,8 +37,8 @@ Stated limits (deliberate, in the repo tradition of measured gates):
 
 * The scan is lexical. A validator claim phrased without any trigger phrase is
   not caught; the trigger list errs toward the negative/limit claims that
-  actually rotted (issue #133's table) plus the positive-limit phrasings that
-  burned us ("accepts nothing else", "only the leading token").
+  actually rotted plus the positive-limit phrasings that burned us
+  ("accepts nothing else", "only the leading token").
 * A PROBE fence pins the *fact* (the probe) and the *association* (the fence);
   the wording of a fenced sentence is still hand-maintained. The dense clusters
   are generated for exactly that reason — prefer a generated block when a whole
@@ -1168,8 +1168,8 @@ WAIVERS: tuple[Waiver, ...] = (
     ),
     # The BigQuery "primary keys are NOT ENFORCED" waiver was dropped here: the
     # sentence lived in the rc13 `_record_batch_commit_via_adbc` section that
-    # the rc17 write-path rewrite deleted (issue #95). A waiver matching nothing
-    # is exactly what `check`'s stale-waiver arm exists to catch.
+    # the rc17 write-path rewrite deleted. A waiver matching nothing is exactly
+    # what `check`'s stale-waiver arm exists to catch.
     Waiver(
         "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-sql-write-path.md",
         "Nothing catches this: the engine verifies",

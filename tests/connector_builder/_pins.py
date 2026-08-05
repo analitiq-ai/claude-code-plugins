@@ -1,7 +1,7 @@
 """The single place the suite states which contract it exercises.
 
-Introduced on main (#45/#46) to stop the pin being restated across the drift
-modules. The monorepo move changes *what* it asserts, not the principle:
+It exists so the pin is stated once instead of restated in every drift module.
+The monorepo move changes *what* it asserts, not the principle:
 
   * Before, the contract arrived as a published wheel, so "am I running the
     right contract?" meant comparing `importlib.metadata` against a pinned

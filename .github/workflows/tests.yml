@@ -102,8 +102,8 @@ jobs:
         run: python3 scripts/render_prose_census.py check
       - name: Check validator-behavior claims against the in-repo contract
         # Prose in both plugins states what the validator checks and does not
-        # check; each such sentence is pinned by an executable probe (issue
-        # #133). tests/connector_builder/test_validator_claims.py computes the
+        # check; each such sentence is pinned by an executable probe.
+        # tests/connector_builder/test_validator_claims.py computes the
         # same predicate, so on a failure pytest goes red first and this step
         # is what prints the diff / the flagged sentences.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
@@ -129,7 +129,7 @@ jobs:
 
   engine-grammar-pin-guard:
     # The canonical Arrow type vocabulary derives from a VENDORED copy of the
-    # engine-published arrow-type-grammar manifest (issue #81). pytest pins
+    # engine-published arrow-type-grammar manifest. pytest pins
     # the vendored bytes to the sha256 stated in arrow_grammar.py offline;
     # this job is the network half: the published immutable object at the
     # pinned version must be byte-identical to the vendored copy, each artifact
@@ -157,19 +157,21 @@ jobs:
     # released on a different train. This is the only gate that exercises that
     # wheel: install it into an isolated venv (never the job env — a wheel
     # shadows the namespace source) and check it accepts the canonical
-    # dialect+driver values the connector-builder prose teaches (issue #71's
-    # failure mode). Strict on push — the marketplace's plugin sources are
-    # unpinned relative paths, so users install main HEAD and a contradiction
-    # on main is live exposure; a release window (pin != shipped) therefore
-    # shows as a red main until the pin catch-up lands, by design — and on
-    # release-please branches, where merging stamps a plugin version onto the
-    # contradiction. Ordinary PRs inside a window only warn (annotated on the
-    # checks UI), so a contract-widening PR is not red with no way to unblock
-    # itself. The script owns the full semantics; stdlib-only, so no
-    # dependency install step. Live-settings caveat: nothing REQUIRES this
-    # check before merge unless a ruleset on main says so, and runs on
-    # bot-opened Release PRs start action_required until a human approves
-    # them — same settings-page class as the pypi/schemas environments.
+    # dialect+driver values the connector-builder prose teaches. The failure
+    # mode it catches: prose teaching a driver the pinned wheel rejects, which
+    # no in-repo test can see. Strict on push — the marketplace's plugin
+    # sources are unpinned relative paths, so users install main HEAD and a
+    # contradiction on main is live exposure; a release window (pin !=
+    # shipped) therefore shows as a red main until the pin catch-up lands, by
+    # design — and on release-please branches, where merging stamps a plugin
+    # version onto the contradiction. Ordinary PRs inside a window only warn
+    # (annotated on the checks UI), so a contract-widening PR is not red with
+    # no way to unblock itself. The script owns the full semantics;
+    # stdlib-only, so no dependency install step.
+    # Live-settings caveat: nothing REQUIRES this check before merge unless a
+    # ruleset on main says so, and runs on bot-opened Release PRs start
+    # action_required until a human approves them — same settings-page class
+    # as the pypi/schemas environments.
     name: pinned validator accepts canonical drivers
     runs-on: ubuntu-latest
     steps:

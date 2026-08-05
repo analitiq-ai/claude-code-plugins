@@ -77,8 +77,8 @@ def test_rule_ids_are_unique():
 #: not catch this — a retired id is free by definition.
 RETIRED_RULE_IDS = {
     # ADV-STRM-008 ("exactly one of expression or constant"), retired in
-    # 1.0.0rc19 (#108): `AssignmentValue` became a `kind`-discriminated union,
-    # so the union states the rule and no validator enforces it.
+    # 1.0.0rc19: `AssignmentValue` became a `kind`-discriminated union, so the
+    # union states the rule and no validator enforces it.
     "ADV-STRM-008",
 }
 

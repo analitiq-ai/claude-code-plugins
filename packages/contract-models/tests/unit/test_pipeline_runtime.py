@@ -14,7 +14,7 @@ from analitiq.contracts.pipelines.config import Batching
 
 class TestBatchingHasNoConcurrencyKnob:
     """`max_concurrent_batches` was declared here and on `stream.Execution`, and
-    acted on by nothing (#108: "declared in two models, consumed by nothing").
+    acted on by nothing — declared in two models, consumed by nothing.
     Note the precise claim — the pipeline-level key was parsed downstream, it
     just never bounded anything, which is dead config rather than ignored
     config. A knob that looks load-bearing and is inert is worse than an absent

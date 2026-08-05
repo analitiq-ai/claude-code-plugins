@@ -24,7 +24,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="_RequestBase", field="transport_ref",
-        prose_hash="b35c466c3e3d",
+        prose_hash="f9d9c2b54c62",
         waiver=(
             "the NAME half is cross-document — enforced by analitiq-validator's "
             "endpoint-transport-ref check, which a single-document model cannot "
@@ -71,7 +71,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="OffsetCursor", field="increment_by",
-        prose_hash="faf4ca370494",
+        prose_hash="0be61986cb94",
         structural="required, with no default (the leading ... sentinel)",
         waiver=(
             "which step value is correct (records-returned vs requested-window "
@@ -123,7 +123,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="Idempotency",
-        prose_hash="b0adc4f0fe7c",
+        prose_hash="5340bea58a7c",
         structural=(
             "the closed model declares no value slot at all — the Literal on "
             "`location` and the plain string `name` are placement facts, and "

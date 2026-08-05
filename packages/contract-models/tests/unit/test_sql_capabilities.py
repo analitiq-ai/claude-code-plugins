@@ -1,7 +1,7 @@
 """Pin the SQL write-path capability models and the connector-level write unit.
 
-Issue #87: the engine's SQL write path is "refuse, don't guess"
-(analitiq-engine#390, ADR `docs/sql-write-path-v2.md` §5) — it reads SQL-shape
+The engine's SQL write path refuses rather than guesses when a SQL shape is
+undeclared (ADR `docs/sql-write-path-v2.md` §5) — it reads SQL-shape
 capabilities from the connector definition instead of probing the live database.
 `DatabaseConnector` gains an optional `sql_capabilities` block and `ConnectorBase`
 gains an optional `write_unit`; the contract models are `extra="forbid"`, so a
@@ -13,10 +13,10 @@ Two facts have to hold and stay held, so both are pinned here:
    five top-level facts required — and the two cross-field rules
    (`stage.dedicated_schema` present iff `stage.schema == "dedicated"`;
    `write_unit` carries at least one of `rows`/`bytes`) are enforced. Omission
-   of either block is legal (backwards compatible). `bulk_load` (issue #92,
-   analitiq-engine#406) is a per-transport mapping — required as an object,
-   `{}` legal, per-family mechanism enums, explicit null refused — mirroring
-   the engine parser's acceptance/refusal exactly.
+   of either block is legal (backwards compatible). `bulk_load` is a
+   per-transport mapping — required as an object, `{}` legal, per-family
+   mechanism enums, explicit null refused — mirroring the engine parser's
+   acceptance/refusal exactly.
 
 2. **JSON-Schema parity.** The two cross-field rules are mirrored into the
    published JSON Schema via `json_schema_extra` (the same technique as
@@ -67,8 +67,7 @@ POSTGRES_EXAMPLE = (
 # A minimal, fully-declared stage/capabilities/write-unit trio reused as the
 # accepted baseline that the negative cases mutate. `bulk_load` declares both
 # transport families — the dual-transport case (postgres: ADBC default +
-# SQLAlchemy) that motivated the per-transport mapping (issue #92,
-# analitiq-engine#406).
+# SQLAlchemy) that motivated the per-transport mapping.
 VALID_STAGE = {"scope": "temp", "schema": "target", "transactional_ddl": True}
 VALID_BULK_LOAD = {"sqlalchemy": "copy_from", "adbc": "adbc_ingest"}
 VALID_SQL_CAPS = {
@@ -297,8 +296,8 @@ def test_sql_capabilities_rejects_partial_block(missing):
         ("session_targeting", "per_session"),
         ("merge_form", "upsert"),
         # The rc16 connector-wide scalar (a valid mechanism name, wrong shape):
-        # since analitiq-engine#406 a bulk mechanism is declared per transport
-        # family, so the scalar is refused, not grandfathered.
+        # a bulk mechanism is now declared per transport family, so the scalar
+        # is refused, not grandfathered.
         ("bulk_load", "copy_from"),
     ],
 )
@@ -329,7 +328,7 @@ EXPECTED_SQL_CAP_ENUMS = {
     "merge_form": {"merge", "insert_on_conflict", "insert_on_duplicate_key", "none"},
 }
 
-# Same pin for the per-transport bulk mechanisms (analitiq-engine#406:
+# Same pin for the per-transport bulk mechanisms (the engine's
 # `BULK_MECHANISMS_BY_TRANSPORT`): each family's accept set exactly — the
 # dialect-implemented mechanisms on either family, the ADBC backend's native
 # `adbc_ingest` only under `adbc`, and no `"none"` member anywhere (an absent
@@ -376,7 +375,7 @@ def test_bulk_load_family_enum_membership_is_pinned(family, expected):
 
 
 # ---------------------------------------------------------------------------
-# SqlBulkLoad (issue #92, analitiq-engine#391/#406)
+# SqlBulkLoad — the per-transport bulk-mechanism mapping
 # ---------------------------------------------------------------------------
 # Acceptance/refusal mirrors the engine parser
 # (`cdk/sql/capabilities.py::SqlCapabilities._parse_bulk_load`) exactly, in
@@ -543,7 +542,8 @@ def test_database_connector_carries_both_blocks(db_example):
 
 
 def test_both_blocks_are_optional(db_example):
-    # Omission is legal — every connector authored before #87 stays valid.
+    # Omission is legal — every connector authored before these two blocks
+    # existed stays valid.
     # Strip explicitly rather than relying on the shared example not to carry
     # them: it is a plugin authoring archetype, so it declares whatever the
     # current authoring guidance teaches, and this assertion is about the

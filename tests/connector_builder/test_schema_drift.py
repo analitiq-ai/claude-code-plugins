@@ -128,10 +128,9 @@ EXPECTED_SQL_BULK_MECHANISMS = {
     "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
-# WriteOperation.idempotency `in` targets (api-endpoint ≥ 9.1.0,
-# infrastructure#890) — restated in io-contracts.md EndpointFacts,
-# endpoint-creator.md, connector-provider-researcher.md, and
-# connector-spec-api/SKILL.md.
+# WriteOperation.idempotency `in` targets (api-endpoint ≥ 9.1.0) — restated in
+# io-contracts.md EndpointFacts, endpoint-creator.md,
+# connector-provider-researcher.md, and connector-spec-api/SKILL.md.
 EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
 # `Operations.write` keys — the destination write-mode vocabulary, shared with
 # database destinations. `endpoint-creator.md` restates the whole set as decision
@@ -191,7 +190,7 @@ EXPECTED_RESOLUTION_SCOPES = {
 }
 # Where the slug pattern — the `connector_id` / `endpoint_id` charset, owned by
 # `analitiq.contracts.shared.common.SLUG_PATTERN` — may appear hand-typed in the
-# plugin's prose, and how many times (issue #58). No other site restates the
+# plugin's prose, and how many times. No other site restates the
 # regex: the agent-consumed sites reference one of these, and the rest (README,
 # the orchestrator's hard rules, definition-of-done) say "the slug pattern"
 # without spelling it:
@@ -662,9 +661,9 @@ def test_sql_limit_caps_match_schema(connector_schema: dict) -> None:
 
 # --- the write-path pins, read from the PROSE side --------------------------
 # Every other pin in this file is one-sided: contract -> a constant here. That
-# leaves a hole exactly the shape of issue #95 — update the contract AND the
-# constant, forget the spec table, and the suite stays green while the document
-# an agent actually reads has gone stale. `test_slug_pattern_restatements_*`
+# leaves a hole: update the contract AND the constant, forget the spec table,
+# and the suite stays green while the document an agent actually reads has gone
+# stale. `test_slug_pattern_restatements_*`
 # already closes that loop for the slug charset by reading prose; these do the
 # same for the write-path vocabularies.
 
@@ -705,7 +704,7 @@ def _labels_of_table_containing(label: str) -> set[str] | None:
     it the fact NAMES are pinned contract-side only — so making `limits`
     required would fail one test, the fixer would add it to the expected set,
     and the two prose files still claiming "all five shape facts" would stay
-    green. That is issue #95's two-step, in miniature.
+    green. That is the contract-moves-prose-doesn't two-step, in miniature.
     """
     tables = [
         labels
@@ -1082,9 +1081,10 @@ def test_write_coverage_probe_gaps_are_documented() -> None:
         "Boolean": lambda p: p == "Boolean",
         "Json": lambda p: p == "Json",
         # The bare shape markers reach the write map verbatim from API-sourced
-        # endpoint documents (issue #75) — the probe set must keep exercising
-        # them or the spec's container-coverage rule loses its only automated
-        # signal.
+        # endpoint documents, where a write map lacking rules for them
+        # hard-errors the stream at configuration — the probe set must keep
+        # exercising them or the spec's container-coverage rule loses its only
+        # automated signal.
         "Object": lambda p: p == "Object",
         "List": lambda p: p == "List",
         "Decimal128": lambda p: p.startswith("Decimal128"),
@@ -1151,7 +1151,8 @@ def test_slug_pattern_restatements_match_contract() -> None:
 
     Catches the contract's pattern moving out from under a prose copy, and a
     loose paraphrase being reintroduced — `[a-z0-9_-]+` accepts a leading `_` /
-    `-` the contract rejects, which is how 5 of the pre-#58 copies were wrong.
+    `-` the contract rejects, which is how 5 of the hand-typed copies were
+    wrong before these sites were consolidated and pinned.
     """
     wrong = [
         (rel, lineno, literal)
@@ -1193,7 +1194,8 @@ def test_slug_literal_detector_recall() -> None:
 
     A later "simplification" (say, to `re.escape(SLUG_PATTERN)`) would keep both
     gates green on the exact-pattern sites while silently dropping paraphrase
-    coverage — the exact blind spot the 5 pre-#58 loose copies lived in.
+    coverage — the exact blind spot the 5 loose paraphrase copies that
+    predated this pin lived in.
     """
     assert _SLUG_LITERAL_RE.fullmatch(SLUG_PATTERN), (
         "_SLUG_LITERAL_RE no longer fully matches SLUG_PATTERN itself — the "

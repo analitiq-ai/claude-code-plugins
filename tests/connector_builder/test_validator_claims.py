@@ -1,4 +1,4 @@
-"""Drift guard for validator-behavior claims in plugin prose (issue #133).
+"""Drift guard for validator-behavior claims in plugin prose.
 
 Plugin prose states what the validator checks and does not check. Each such
 sentence is a copy of a contract fact; `scripts/render_validator_claims.py`
@@ -71,8 +71,8 @@ def test_generated_blocks_in_sync() -> None:
     docs = _REGISTRY.generated_docs()
     assert docs, (
         "no connector-plugin document carries a generated claim block — the "
-        "marker glob no longer finds them (the issue #65 vacuous-scope failure "
-        "mode); the blocks exist, so the scan is broken, not the prose."
+        "marker glob no longer finds them, so this gate runs over an empty "
+        "scope; the blocks exist, so the scan is broken, not the prose."
     )
     for path in docs:
         current = path.read_text(encoding="utf-8")
@@ -108,8 +108,8 @@ def test_scan_is_not_vacuous() -> None:
 
     Both plugins carry dozens of probe fences; zero found means the fence
     grammar or the doc glob broke, and the scan would pass forever over
-    nothing — the same failure mode issue #65 documented for the advisory
-    citation gate.
+    nothing — the same vacuous-scope failure the advisory citation gate's
+    found-citations assert exists to catch.
     """
     fenced = _REGISTRY.fence_probe_ids()
     assert len(fenced) >= 10, (

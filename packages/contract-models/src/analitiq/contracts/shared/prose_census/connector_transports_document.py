@@ -96,11 +96,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ConnectorBase", field="write_unit", waiver=DESCRIPTIVE,
-        prose_hash="d57272898923",
+        prose_hash="037b6892bfbe",
     ),
     ProseObligation(
         model="WriteUnit", rule_ids=("ADV-CTOR-014",),
-        prose_hash="16f3225af4bd",
+        prose_hash="78ad4437c5c6",
     ),
     ProseObligation(
         model="SqlStageCapabilities", rule_ids=("ADV-CTOR-013",),
@@ -117,7 +117,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlBulkLoad", rule_ids=("ADV-CTOR-015",),
-        prose_hash="dcb695405a0c",
+        prose_hash="4eff5e074de9",
         structural=(
             "per-family Literal types keep adbc_ingest out of the "
             "`sqlalchemy` family; the _undeclared_families_stay_absent "
@@ -126,7 +126,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ErrorMap", waiver=ENGINE_CONDUCT,
-        prose_hash="7ed27b68258e",
+        prose_hash="41424bbf0957",
     ),
     # === connector: remaining transport, capability + document sites =========
     ProseObligation(model="AdbcTransport", prose_hash="f6a5cb5e119c", descriptive=True),
@@ -152,7 +152,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="ApiConnector", field="kind", prose_hash="4d3ab3ae7c10", descriptive=True),
     ProseObligation(
         model="Concurrency",
-        prose_hash="99c6caf1a385",
+        prose_hash="9504135daaee",
         structural=(
             "`max_connections` is typed `_DeclaredCap`, the strict "
             "lower-bounded integer annotation"
@@ -167,7 +167,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(model="ConnectorBase", field="auth", prose_hash="0e36e023b46c", descriptive=True),
-    ProseObligation(model="ConnectorBase", field="concurrency", prose_hash="d6c181bad27b", descriptive=True),
+    ProseObligation(model="ConnectorBase", field="concurrency", prose_hash="0cf8fc5f36c7", descriptive=True),
     ProseObligation(model="ConnectorBase", field="connection_contract", prose_hash="350ca0dfeb9b", descriptive=True),
     ProseObligation(
         model="ConnectorBase", field="default_transport", rule_ids=("ADV-CTOR-001",),
@@ -188,7 +188,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ConnectorBase", field="error_map", waiver=ENGINE_CONDUCT,
-        prose_hash="584443c7c4f8",
+        prose_hash="6231fde3c663",
     ),
     ProseObligation(model="ConnectorBase", field="resource_discovery", prose_hash="847ff0961beb", descriptive=True),
     ProseObligation(
@@ -243,7 +243,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="DatabaseConnector", field="kind", prose_hash="4d3ab3ae7c10", descriptive=True),
     ProseObligation(
         model="DatabaseConnector", field="sql_capabilities",
-        prose_hash="68602251ca37",
+        prose_hash="c55089ec432b",
         structural=(
             "the other kinds' closed models reject `sql_capabilities` as an "
             "unknown key; the required shape facts are `SqlCapabilities`'s "
@@ -465,7 +465,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities",
-        prose_hash="b76b800bdb08",
+        prose_hash="7dace9198066",
         structural=(
             "the required shape facts are non-optional fields on the closed "
             "model; `limits` defaults"
@@ -474,7 +474,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities", field="bulk_load",
-        prose_hash="61e133fe8729",
+        prose_hash="0dc7daa93dcf",
         structural=(
             "a required (non-optional) `SqlBulkLoad` field whose members are "
             "individually defaulted"
@@ -487,7 +487,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities", field="limits",
-        prose_hash="60b37101106f",
+        prose_hash="79aea3f91ce7",
         structural="a defaulted (optional) field on the otherwise-required `SqlCapabilities` shape",
     ),
     ProseObligation(
@@ -503,7 +503,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="SqlCapabilities", field="stage", prose_hash="31cbee74695d", descriptive=True),
     ProseObligation(
         model="SqlLimits",
-        prose_hash="7ac3e959fa9d",
+        prose_hash="f2796041a978",
         structural=(
             "the caps are typed `_DeclaredCap`, the strict lower-bounded "
             "integer annotation"

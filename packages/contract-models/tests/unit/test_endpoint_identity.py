@@ -1,4 +1,4 @@
-"""Unit tests for deterministic database endpoint-id derivation (#918).
+"""Unit tests for deterministic database endpoint-id derivation.
 
 Pins the exact algorithm from the endpoint-identity contract model
 (``analitiq.contracts.endpoint_identity`` — ``derive_db_endpoint_id`` /
