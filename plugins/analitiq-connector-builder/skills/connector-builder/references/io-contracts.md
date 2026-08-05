@@ -324,6 +324,7 @@ access and may not guess field types).
 
 ## DriftVerdict
 
+<!-- BEGIN GENERATED: drift-verdict-envelope -->
 <!-- illustrative -->
 ```json
 {
@@ -348,11 +349,10 @@ access and may not guess field types).
               "input-enum-narrowed", "storage-changed",
               "non-optional-input-added", "auth-shape-changed",
               "discovery-shape-changed", "sql-capabilities-changed",
-              "optional-input-added",
-              "optional-output-added", "optional-endpoint-added",
-              "type-map-rule-added", "type-map-rule-removed",
-              "type-map-rule-reordered", "type-map-canonical-changed",
-              "bug-fix", "doc-fix", "tuning"
+              "type-map-rule-removed", "type-map-canonical-changed",
+              "optional-input-added", "optional-output-added",
+              "optional-endpoint-added", "type-map-rule-added", "bug-fix",
+              "doc-fix", "tuning", "type-map-rule-reordered"
             ]
           },
           "note": { "type": "string" }
@@ -362,6 +362,7 @@ access and may not guess field types).
   }
 }
 ```
+<!-- END GENERATED: drift-verdict-envelope -->
 
 ## CreatorOutput
 

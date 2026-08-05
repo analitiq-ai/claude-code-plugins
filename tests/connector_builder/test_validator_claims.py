@@ -144,6 +144,39 @@ def test_every_renderer_is_embedded_and_renders() -> None:
         assert body.endswith("\n") and body.strip(), f"{block_id}: bad render"
 
 
+# Where each release-policy projection must live. `unembedded` in the script's
+# check only proves a block is embedded SOMEWHERE; each of these has exactly one
+# reader (the classifier reads its own file at run time, authoring skills load
+# the two references), so a block that migrates out of its file starves that
+# reader while every other gate stays green.
+RELEASE_POLICY_PLACEMENTS = {
+    "bump-table":
+        "plugins/analitiq-connector-builder/agents/connector-drift-classifier.md",
+    "release-table":
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/metadata-and-versioning.md",
+    "drift-verdict-envelope":
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md",
+}
+
+
+def test_release_policy_blocks_sit_where_their_readers_read() -> None:
+    """Each projection of the release table is embedded in its reader's file.
+
+    Also pins the projection set both ways: a renderer added to
+    `connector_release_table.py` without a placement decision here fails, so a
+    fourth copy of the vocabulary cannot appear without naming its reader.
+    """
+    assert set(RELEASE_POLICY_PLACEMENTS) == set(
+        _REGISTRY._release_table().RENDERERS
+    ), "release-policy projections changed — decide each one's reader here"
+    for block_id, rel_path in RELEASE_POLICY_PLACEMENTS.items():
+        text = (REPO_ROOT / rel_path).read_text(encoding="utf-8")
+        assert f"<!-- BEGIN GENERATED: {block_id} -->" in text, (
+            f"{rel_path} no longer embeds generated block {block_id!r} — its "
+            "reader now sees a hand copy or nothing"
+        )
+
+
 # Keyed by the VERBATIM pattern string in CLAIM_TRIGGERS — a reworded alternate
 # raises KeyError here, forcing this table to move with the trigger list. Each
 # specimen must be matched by its own alternate and by NO other, so a broken

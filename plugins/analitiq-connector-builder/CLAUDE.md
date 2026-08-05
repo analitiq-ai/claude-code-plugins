@@ -94,6 +94,11 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 - Do NOT restate validator rules in `references/definition-of-done.md`: if an
   item is mechanically checkable, it belongs in the validator, not on that
   list.
+- The same script renders one non-claim block family: the release-policy
+  projections (the release table, the drift classifier's bump table, the
+  `DriftVerdict` envelope), owned as data by
+  `scripts/connector_release_table.py`. Change the bump policy there, then
+  re-run `write` — never in the prose.
 - `tests/connector_builder/test_validator_claims.py` runs the same predicate
   in pytest.
 

@@ -22,7 +22,11 @@ This module is the fix, in three parts:
    this registry — `claim:<id>` blocks from the `Claim` records, the dense
    clusters (the response-scope table, the validator blind-spot list) by the
    dedicated `render_*` functions whose probe couplings sit beside them — so
-   neither can drift from the measurement behind it.
+   neither can drift from the measurement behind it. One block family is not
+   a validator claim at all: the connector release-policy projections,
+   rendered from `connector_release_table.py`'s data (`_release_table`) —
+   registered here because this script owns every generated block in the
+   connector plugin's tree.
 3. **The scan** — a trigger-phrase gate over every markdown file in BOTH
    plugins. A sentence that asserts validator behavior (matches
    `CLAIM_TRIGGERS`) must be pinned: inside a generated region, within reach
@@ -921,15 +925,47 @@ def _render_claim(claim_id: str) -> str:
     return CLAIMS_BY_ID[claim_id].text + "\n"
 
 
+@functools.lru_cache(maxsize=None)
+def _release_table():
+    """The connector release-table module, imported by path (cached).
+
+    It owns the bump-policy vocabulary (the release table, the classifier's
+    bump table, the `DriftVerdict` envelope) as data. Its renderers register
+    here because this script owns every generated block in the connector
+    plugin's tree — `render_text` fails loud on an id it does not know, so a
+    separate renderer could not coexist. Unlike every other block in this
+    registry, these stand on that data, not on probes: the policy is the
+    plugin's own, not validator behavior.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "_connector_release_table",
+        Path(__file__).resolve().parent / "connector_release_table.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 RENDERERS: dict[str, Callable[[], str]] = {
     "scope-guarantees": render_scope_guarantees,
     "validator-blind-spots": render_validator_blind_spots,
     **{f"claim:{c.id}": (lambda cid=c.id: _render_claim(cid)) for c in CLAIMS},
+    **_release_table().RENDERERS,
 }
+# A colliding id would let one registry silently shadow the other's renderer.
+assert len(RENDERERS) == 2 + len(CLAIMS) + len(_release_table().RENDERERS), (
+    "block-id collision between the claims registry and connector_release_table"
+)
 
 
 def block_probe_ids(block_id: str) -> set[str]:
     """The probe ids one block stands on."""
+    if block_id in _release_table().RENDERERS:
+        # Release-policy blocks stand on the data module, not on probes: the
+        # bump policy is the plugin's own, not a validator behavior to measure.
+        return set()
     if block_id == "scope-guarantees":
         return scope_table_probe_ids() | set(_SCOPE_GUARANTEES_EXTRA_PROBES)
     if block_id == "validator-blind-spots":
