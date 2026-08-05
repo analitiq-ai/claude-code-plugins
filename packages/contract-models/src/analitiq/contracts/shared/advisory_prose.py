@@ -1,5 +1,5 @@
-"""The prose-obligation census — every normative statement in the contract's
-own prose, bound to what enforces it.
+"""The prose-obligation census — every statement in the contract's own prose
+that carries the modal markers below, bound to what enforces it.
 
 :mod:`advisory_rules` is the census of relational rules; this module is its
 missing other half. The registry's tests verify the integrity of rules that
@@ -170,17 +170,26 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="TransportDefaults", field="transport_type",
-        waiver=ENGINE_OWNED_DEFAULTING,
+        structural=(
+            "ConnectorBase._inherit_transport_type stamps it onto every "
+            "transports entry that declares none, before discriminated-union "
+            "dispatch"
+        ),
     ),
     ProseObligation(
-        model="TransportDefaults", waiver=ENGINE_OWNED_DEFAULTING,
+        model="TransportDefaults",
+        structural=(
+            "the transport_type half of the merge is stamped in-model by "
+            "ConnectorBase._inherit_transport_type"
+        ),
+        waiver=(
+            "the deep-merge of the remaining defaults (headers, timeouts, "
+            "options) is engine-owned at configure time"
+        ),
     ),
     ProseObligation(
         model="LiteralStringExpression",
-        structural=(
-            "literal is typed Annotated[str, StringConstraints(min_length=1)] "
-            "— required and non-empty"
-        ),
+        structural="literal is typed as a required, non-empty-constrained string",
     ),
     # === connector: auth =====================================================
     ProseObligation(
@@ -225,11 +234,18 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ConnectorBase", field="documentation_url",
-        structural=r"Field(max_length=2048, pattern='^https?://')",
+        structural="a Field length cap and an http(s)-prefix pattern",
     ),
     ProseObligation(
         model="ConnectorBase", field="transport_defaults",
-        waiver=ENGINE_OWNED_DEFAULTING,
+        structural=(
+            "the transport_type half of the merge is stamped in-model by "
+            "ConnectorBase._inherit_transport_type"
+        ),
+        waiver=(
+            "the deep-merge of the remaining defaults (headers, timeouts, "
+            "options) is engine-owned at configure time"
+        ),
     ),
     ProseObligation(
         model="ConnectorBase", field="write_unit", waiver=DESCRIPTIVE,
@@ -244,8 +260,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="SqlStageCapabilities", field="dedicated_schema",
         rule_ids=("ADV-CTOR-013",),
         structural=(
-            "the non-blank shape is Field(min_length=1, "
-            "pattern=NO_EDGE_WHITESPACE_PATTERN)"
+            "the non-blank shape is a Field length floor plus "
+            "NO_EDGE_WHITESPACE_PATTERN"
         ),
     ),
     ProseObligation(
@@ -348,7 +364,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="LinkPagination", field="limit", rule_ids=("ADV-ENDP-010",),
+        model="LinkPagination", field="limit",
+        rule_ids=("ADV-ENDP-009", "ADV-ENDP-010"),
     ),
     ProseObligation(
         model="OffsetCursor", field="increment_by",
@@ -391,7 +408,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         rule_ids=("ADV-ENDP-014", "ADV-ENDP-019"),
     ),
     ProseObligation(
-        model="Batching", field="max_records", structural="Field(ge=2)",
+        model="Batching", field="max_records",
+        structural="a Field ge lower bound",
     ),
     ProseObligation(
         model="Idempotency",
@@ -449,13 +467,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="StreamSource", field="database_pagination",
+        rule_ids=("ADV-STRM-014",),
         waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(
         model="PipeExpression", rule_ids=("ADV-STRM-005",),
         structural=(
-            "args carries min_length=2 and the prefixItems rewrite publishes "
-            "the same positional grammar"
+            "args carries a Field length floor and the prefixItems rewrite "
+            "publishes the same positional grammar"
         ),
     ),
     ProseObligation(
@@ -488,7 +507,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="Schedule", field="interval_minutes",
-        rule_ids=("ADV-PIPE-002",), structural="Field(ge=1)",
+        rule_ids=("ADV-PIPE-002",), structural="a Field ge lower bound",
     ),
     ProseObligation(
         model="Schedule", field="cron_expression",

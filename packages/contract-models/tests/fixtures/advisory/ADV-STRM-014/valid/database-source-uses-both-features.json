@@ -9,5 +9,6 @@
     "method": "incremental",
     "cursor_field": "updated_at",
     "tie_breaker_fields": ["id"]
-  }
+  },
+  "database_pagination": {"type": "keyset", "order_by_field": "id", "page_size": 500}
 }

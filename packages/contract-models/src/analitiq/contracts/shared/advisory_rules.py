@@ -11,11 +11,11 @@ relational rule is a data edit here — never new imperative code.
 IDs are ``ADV-<AREA>-NNN``, stable and never reused. ``targets`` name model
 classes by string; a rule on a base class covers its subclasses (MRO match).
 
-:mod:`advisory_prose` is this census's other half: it binds every normative
-sentence in the contract's own prose — field descriptions and model docstrings
-— to the rule, structural mechanism, or registered waiver carrying it, so an
-obligation stated in prose and enforced nowhere fails the build instead of
-shipping silently.
+:mod:`advisory_prose` is this census's other half: every field description and
+model docstring carrying that module's modal markers must resolve there to the
+rule, structural mechanism, or registered waiver carrying it, so an obligation
+stated in prose and enforced nowhere fails the build instead of shipping
+silently.
 """
 from __future__ import annotations
 
@@ -297,6 +297,21 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="A write request.path_params from_param binding must name a param declaring a default; a write param has no other source, so a sourceless one can never resolve.",
         targets=("WriteOperation",), enforcer="_wiring",
     ),
+    AdvisoryRule(
+        id="ADV-ENDP-029", kind="custom", resource="api-endpoint",
+        prose="Write-response metadata keys must match the metadata-key pattern and must not collide with a reserved response-scope name.",
+        targets=("WriteResponse",), enforcer="_metadata_keys",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-030", kind="custom", resource="api-endpoint",
+        prose="A write-response expression must not reference response.record_count, a read-only response scope.",
+        targets=("WriteResponse",), enforcer="_reject_record_count",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-031", kind="custom", resource="api-endpoint",
+        prose="database_object.catalog and database_object.schema must be omitted when not applicable; explicit null is invalid.",
+        targets=("DatabaseObject",), enforcer="_reject_explicit_null_namespaces",
+    ),
     # --- stream -------------------------------------------------------------
     AdvisoryRule(
         id="ADV-STRM-003", kind="custom", resource="stream",
@@ -356,7 +371,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     ),
     AdvisoryRule(
         id="ADV-STRM-014", kind="custom", resource="stream",
-        prose="selected_columns and replication.tie_breaker_fields are database-source features: a connector-scope (API) source must not declare them.",
+        prose="selected_columns, replication.tie_breaker_fields and database_pagination are database-source features: a connector-scope (API) source must not declare them.",
         targets=("StreamSource",), enforcer="_validate_database_only_read_features",
     ),
     # --- connector (ConnectionContractInput + connector document) -----------
@@ -364,6 +379,11 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-CONN-003", kind="custom", resource="connector",
         prose="secret must be true if and only if storage is 'secrets'.",
         targets=("ConnectionContractInput",), enforcer="_consistency",
+    ),
+    AdvisoryRule(
+        id="ADV-CONN-004", kind="custom", resource="connection",
+        prose="parameters, selections and discovered keys must not be secret-shaped; a secret lives in secret storage and is referenced via secret_refs.",
+        targets=("ConnectionStoredMaps",), enforcer="_validate_no_secret_keys",
     ),
     AdvisoryRule(
         id="ADV-CTOR-002", kind="custom", resource="connector",
@@ -471,6 +491,16 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-TMAP-007", kind="custom", resource="type-map",
         prose="A ${...} placeholder in a canonical render must be well-formed: no empty ${} and no unclosed ${.",
         targets=("TypeMapReadRegexRule",), enforcer="_check",
+    ),
+    AdvisoryRule(
+        id="ADV-TMAP-008", kind="custom", resource="type-map",
+        prose="A write exact rule's canonical must satisfy the cross-parameter Arrow bounds (Decimal scale <= precision), and its native DDL render's ${...} placeholders must be well-formed.",
+        targets=("TypeMapWriteExactRule",), enforcer="_check",
+    ),
+    AdvisoryRule(
+        id="ADV-TMAP-009", kind="custom", resource="type-map",
+        prose="A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed.",
+        targets=("TypeMapWriteRegexRule",), enforcer="_check",
     ),
     # --- pipeline -----------------------------------------------------------
     AdvisoryRule(

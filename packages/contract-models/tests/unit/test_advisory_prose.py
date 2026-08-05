@@ -18,8 +18,12 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import re
 import sys
+from enum import Enum
+from typing import get_args
 
+import pytest
 from pydantic import BaseModel
 
 import analitiq.contracts
@@ -27,7 +31,14 @@ from analitiq.contracts.shared.advisory import all_rules
 from analitiq.contracts.shared.advisory_prose import (
     NORMATIVE_PATTERN,
     PROSE_OBLIGATIONS,
+    ProseObligation,
 )
+
+
+def _reraise(_name):
+    # walk_packages swallows a subpackage that fails to import unless onerror
+    # propagates — and a silently skipped subtree is a silently skipped census.
+    raise
 
 
 def _contract_classes() -> list[type[BaseModel]]:
@@ -37,7 +48,7 @@ def _contract_classes() -> list[type[BaseModel]]:
     new contract module is scanned the moment it exists.
     """
     for info in pkgutil.walk_packages(
-        analitiq.contracts.__path__, prefix="analitiq.contracts."
+        analitiq.contracts.__path__, prefix="analitiq.contracts.", onerror=_reraise
     ):
         importlib.import_module(info.name)
     seen: dict[int, type[BaseModel]] = {}
@@ -180,4 +191,97 @@ def test_census_rule_ids_resolve():
         unknown = sorted(set(entry.rule_ids) - known)
         assert not unknown, (
             f"{entry.site}: rule ids not in the advisory registry: {unknown}"
+        )
+
+
+# --- The census's own texts must not rot ------------------------------------
+
+
+#: Identifier-shaped tokens inside structural/waiver texts: helper and
+#: validator names, snake_case fields/functions/vocabulary values, ALL_CAPS
+#: constants, CamelCase class names.
+_IDENTIFIER_TOKENS = re.compile(
+    r"\b_[a-z][a-z0-9_]*\b"
+    r"|\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b"
+    r"|\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b"
+    r"|\b(?:[A-Z][a-z0-9]+){2,}\b"
+)
+
+#: Identifier-shaped tokens that deliberately name nothing in the contract.
+_FOREIGN_TOKENS = {
+    # the legacy key the Expression union rejects — its absence is the point
+    "response_path",
+}
+
+
+def _literal_strings(annotation) -> set[str]:
+    """Every string member of any Literal reachable inside an annotation."""
+    out: set[str] = set()
+    for arg in get_args(annotation):
+        if isinstance(arg, str):
+            out.add(arg)
+        elif arg is not None:
+            out |= _literal_strings(arg)
+    return out
+
+
+def test_census_texts_reference_live_names():
+    """Structural/waiver texts name validators, constants and classes; a
+    rename must fail here instead of leaving the census pointing at nothing.
+    (The texts deliberately never restate constraint VALUES — those live in
+    the model, the single source — so names are the only thing that can rot.)
+    """
+    universe: set[str] = set(_FOREIGN_TOKENS)
+    for module_name, module in list(sys.modules.items()):
+        if not module_name.startswith("analitiq.contracts"):
+            continue
+        universe.update(dir(module))
+        for name in dir(module):
+            obj = getattr(module, name, None)
+            if isinstance(obj, type) and issubclass(obj, Enum):
+                universe.update(
+                    m.value for m in obj if isinstance(m.value, str)
+                )
+    for cls in _contract_classes():
+        universe.update(dir(cls))
+        universe.update(cls.model_fields)
+        for info in cls.model_fields.values():
+            if info.alias:
+                universe.add(info.alias)
+            universe |= _literal_strings(info.annotation)
+    for entry in PROSE_OBLIGATIONS:
+        for text in (entry.structural, entry.waiver):
+            if not text:
+                continue
+            unknown = sorted(
+                {t for t in _IDENTIFIER_TOKENS.findall(text) if t not in universe}
+            )
+            assert not unknown, (
+                f"{entry.site}: census text names identifiers that do not "
+                f"resolve in analitiq.contracts: {unknown}"
+            )
+
+
+def test_prose_obligation_refuses_unbound_and_blank_dispositions():
+    """__post_init__ is what makes 'catalogued' mean 'bound' — the site tests
+    check only key membership, so an unbound entry would satisfy them."""
+    with pytest.raises(ValueError, match="declares nothing"):
+        ProseObligation(model="X", field="y")
+    with pytest.raises(ValueError, match="empty structural"):
+        ProseObligation(model="X", field="y", structural="   ")
+    with pytest.raises(ValueError, match="empty waiver"):
+        ProseObligation(model="X", waiver=" ")
+
+
+def test_normative_pattern_tolerates_wrapped_modal_phrases():
+    """Docstrings wrap; a two-word modal split across a newline must still
+    match, or the first wrapped obligation silently escapes the census."""
+    for phrase in (
+        "defaults\n    to",
+        "may\n  not",
+        "is\n  required\n  to",
+        "MUST NOT",
+    ):
+        assert NORMATIVE_PATTERN.search(f"lead {phrase} trail"), (
+            f"modal phrase not detected when wrapped: {phrase!r}"
         )

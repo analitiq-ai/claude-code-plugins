@@ -18,7 +18,7 @@ connection, and database-endpoint rules are excluded — they belong to other
 tools, and database endpoints are generated at runtime by the connector's
 `resource_discovery`, never authored here.
 
-**55 rules** across 4 resources.
+**60 rules** across 4 resources.
 
 ## connector
 | ID | Rule | Enforced on |
@@ -73,6 +73,9 @@ tools, and database endpoints are generated at runtime by the connector's
 | ADV-ENDP-026 | Every $ref in an embedded response/input schema must be an in-document reference that resolves to a schema in the same document. | `ResponseExtraction`, `WriteInput` |
 | ADV-ENDP-027 | A request.path_params binding must not apply a wire-encoding function (url_encode/base64_encode): the engine percent-encodes each substituted path segment. | `ReadOperation`, `WriteOperation` |
 | ADV-ENDP-028 | A write request.path_params from_param binding must name a param declaring a default; a write param has no other source, so a sourceless one can never resolve. | `WriteOperation` |
+| ADV-ENDP-029 | Write-response metadata keys must match the metadata-key pattern and must not collide with a reserved response-scope name. | `WriteResponse` |
+| ADV-ENDP-030 | A write-response expression must not reference response.record_count, a read-only response scope. | `WriteResponse` |
+| ADV-ENDP-031 | database_object.catalog and database_object.schema must be omitted when not applicable; explicit null is invalid. | `DatabaseObject` |
 
 ## type-map
 | ID | Rule | Enforced on |
@@ -84,6 +87,8 @@ tools, and database endpoints are generated at runtime by the connector's
 | ADV-TMAP-005 | A regex read rule's native must compile as an ECMA-262 regex; Python-only (?P…) syntax and otherwise-invalid patterns are rejected. | `TypeMapReadRegexRule` |
 | ADV-TMAP-006 | A regex read rule's canonical must be a valid (optionally ${name}-templated) Arrow type matched full-string, so a trailing newline is rejected. | `TypeMapReadRegexRule` |
 | ADV-TMAP-007 | A ${...} placeholder in a canonical render must be well-formed: no empty ${} and no unclosed ${. | `TypeMapReadRegexRule` |
+| ADV-TMAP-008 | A write exact rule's canonical must satisfy the cross-parameter Arrow bounds (Decimal scale <= precision), and its native DDL render's ${...} placeholders must be well-formed. | `TypeMapWriteExactRule` |
+| ADV-TMAP-009 | A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed. | `TypeMapWriteRegexRule` |
 
 ## shared
 | ID | Rule | Enforced on |
