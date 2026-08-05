@@ -399,7 +399,7 @@ class ConnectionConditionPredicate(StrictModel):
     field: str = Field(
         ...,
         min_length=1,
-        description="Connection input key or saved connection field path the predicate tests.",
+        description="Declared connection input name the predicate tests.",
     )
     eq: ConditionScalar | None = Field(
         default=None, description="Scalar value the field must equal."
@@ -509,8 +509,8 @@ class PostAuthOperationRequest(StrictModel):
 class PostAuthOutput(StrictModel):
     """Durable post-auth output produced after authentication. Spec: §Post-Auth Outputs.
 
-    The post-auth output field set is closed except for `x-*` extension
-    metadata: `mode`, `storage`, `type`, `format`, `ui`, `options_request`,
+    The post-auth output field set is closed:
+    `mode`, `storage`, `type`, `format`, `ui`, `options_request`,
     `options_path`, `discovery_request`, `value_path`, `label_path`. `source`,
     `phase`, `required`, and `secret` are explicitly NOT valid post-auth
     output fields — `source`/`phase` are inherent to the enclosing

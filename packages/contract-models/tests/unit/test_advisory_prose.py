@@ -1,18 +1,23 @@
-"""Prose-completeness lint — the advisory census's missing other half.
+"""Prose-census lint — the advisory census's missing other half.
 
 `test_advisory_registry.py` verifies the integrity of rules that EXIST; every
 one of its checks starts from a registered rule, so an obligation stated in
 prose and never registered is invisible to it — the hole the unenforced
 pagination `response.body.*` rule shipped through. This suite closes that hole
-from the prose side: every field description and model docstring in
-``analitiq.contracts`` that states an obligation (``NORMATIVE_PATTERN``) must
-resolve to a :class:`ProseObligation` entry binding it to an ``ADV-*`` rule, a
-structural mechanism, or an explicit waiver.
+from the prose side: EVERY prose site in ``analitiq.contracts`` — each field
+description and each class docstring, not just sites matching a modal
+vocabulary — must carry a :class:`ProseObligation` entry binding it to an
+``ADV-*`` rule, a structural mechanism, an explicit waiver, or a
+``descriptive=True`` marking, and pinning its exact wording by content hash.
 
-The lint is bidirectional so the census cannot rot in either direction: a
-normative site with no entry fails (the unenforced-obligation direction), and
-an entry whose prose site disappeared or lost its normative language also
-fails (the stale direction).
+The lint is bidirectional so the census cannot rot in either direction: an
+uncatalogued site fails (the unenforced-obligation direction), and so do a
+stale entry, a broken hash pin (prose re-worded since its disposition was
+affirmed), and a tripwire hit (``descriptive=True`` on modal prose). All four
+groups come from one computation —
+:func:`analitiq.contracts.shared.introspect.census_report`, the same diff
+``scripts/render_prose_census.py`` prints — so the lint and the maintenance
+tool can never disagree.
 """
 from __future__ import annotations
 
@@ -22,85 +27,16 @@ from enum import Enum
 from typing import get_args
 
 import pytest
-from pydantic import BaseModel
 
-from _contract_walk import contract_classes as _contract_classes
 from analitiq.contracts.shared.advisory import all_rules
 from analitiq.contracts.shared.advisory_prose import (
     NORMATIVE_PATTERN,
-    PROSE_OBLIGATIONS,
     ProseObligation,
 )
+from analitiq.contracts.shared.introspect import census_report, contract_classes
+from analitiq.contracts.shared.prose_census import PROSE_OBLIGATIONS
 
-
-def _is_contract_model(obj: object) -> bool:
-    return (
-        isinstance(obj, type)
-        and issubclass(obj, BaseModel)
-        and obj is not BaseModel
-        and obj.__module__.startswith("analitiq.contracts")
-    )
-
-
-def _field_owner(cls: type[BaseModel], field_name: str, info) -> type[BaseModel]:
-    """The most-basal ancestor declaring this field with the same description.
-
-    Inherited fields would otherwise surface one site per subclass (seven
-    connector kinds × four fields); sites are keyed to the class that owns the
-    prose, and a census entry naming a subclass fails as an unknown site.
-    """
-    owner = cls
-    for base in cls.__mro__[1:]:
-        if not _is_contract_model(base):
-            continue
-        base_info = base.model_fields.get(field_name)
-        if base_info is not None and base_info.description == info.description:
-            owner = base
-    return owner
-
-
-def _modal_words(text: str) -> list[str]:
-    return sorted({m.group(0).lower() for m in NORMATIVE_PATTERN.finditer(text)})
-
-
-def _normative_sites() -> dict[tuple[str, str | None], list[str]]:
-    """(model, field) -> matched modal words; field=None is the class docstring."""
-    sites: dict[tuple[str, str | None], list[str]] = {}
-    owners: dict[tuple[str, str | None], type[BaseModel]] = {}
-    for cls in _contract_classes():
-        doc = cls.__dict__.get("__doc__")
-        if doc and NORMATIVE_PATTERN.search(doc):
-            _claim(sites, owners, (cls.__name__, None), cls, _modal_words(doc))
-        for field_name, info in cls.model_fields.items():
-            if not info.description or not NORMATIVE_PATTERN.search(info.description):
-                continue
-            owner = _field_owner(cls, field_name, info)
-            _claim(
-                sites,
-                owners,
-                (owner.__name__, field_name),
-                owner,
-                _modal_words(info.description),
-            )
-    return sites
-
-
-def _claim(sites, owners, key, cls, words) -> None:
-    """Register a site, refusing a same-named but distinct class: the census
-    binds by class NAME (the advisory registry's own convention), so two
-    different normative classes sharing a name would silently share one entry."""
-    prior = owners.get(key)
-    assert prior is None or prior is cls, (
-        f"two distinct classes both named {key[0]!r} carry normative prose "
-        f"({prior.__module__} and {cls.__module__}); rename one — the census "
-        "binds sites by class name"
-    )
-    owners[key] = cls
-    sites[key] = words
-
-
-SITES = _normative_sites()
-CENSUS = {(o.model, o.field): o for o in PROSE_OBLIGATIONS}
+REPORT = census_report()
 
 
 def test_census_has_no_duplicate_sites():
@@ -109,45 +45,78 @@ def test_census_has_no_duplicate_sites():
     assert not dupes, f"duplicate census entries: {dupes}"
 
 
-def test_every_normative_site_is_catalogued():
-    """The unenforced-obligation direction: prose stating a rule bound to nothing.
+def test_every_prose_site_is_catalogued():
+    """The unenforced-obligation direction: prose bound to nothing.
 
-    Fix by binding the new prose in ``advisory_prose.PROSE_OBLIGATIONS`` — to
-    the ``ADV-*`` rule enforcing it, to the structural mechanism carrying it,
-    or to a waiver saying why it is not mechanisable. Rewording the prose to
-    drop the modal language is the other honest exit.
+    Fix by cataloguing each site in its ``prose_census`` area module — bind it
+    to the ``ADV-*`` rule enforcing it, to the structural mechanism carrying
+    it, to a waiver saying why it is not mechanisable, or mark it
+    ``descriptive=True`` when it states no obligation at all.
+    ``scripts/render_prose_census.py write`` prints ready-to-paste skeletons
+    with the computed hash; judge the real disposition before committing one.
     """
-    missing = {
-        k: SITES[k]
-        for k in sorted(SITES, key=lambda k: (k[0], k[1] or ""))
-        if k not in CENSUS
-    }
     lines = [
-        f"  {model}.{field or '(docstring)'}: modal words {words}"
-        for (model, field), words in missing.items()
+        f"  {site.label} [{site.module}]: hash {site.fingerprint}"
+        for site in REPORT.missing
     ]
-    assert not missing, (
-        "normative prose with no census entry — bind each site in "
-        "analitiq.contracts.shared.advisory_prose.PROSE_OBLIGATIONS "
-        "(sites are keyed to the class that DEFINES the prose, not a subclass):\n"
+    assert not REPORT.missing, (
+        "prose sites with no census entry — catalogue each in "
+        "analitiq.contracts.shared.prose_census (sites are keyed to the class "
+        "that DEFINES the prose, not a subclass; "
+        "scripts/render_prose_census.py write prints skeletons):\n"
         + "\n".join(lines)
     )
 
 
 def test_no_stale_census_entries():
-    """The rot direction: an entry whose prose no longer states an obligation.
+    """The rot direction: an entry whose prose site no longer exists.
 
-    Fires when the site's class or field was removed/renamed, when the prose
-    was reworded below the modal threshold, or when an entry names an
-    inheriting subclass instead of the class that defines the prose. Remove or
-    re-key the entry — a census carrying dead entries stops being reviewable.
+    Fires when the site's class or field was removed or renamed, or when an
+    entry names an inheriting subclass instead of the class that defines the
+    prose. Remove or re-key the entry — a census carrying dead entries stops
+    being reviewable. ``scripts/render_prose_census.py check`` prints the same
+    list.
     """
-    stale = sorted(
-        (k for k in CENSUS if k not in SITES), key=lambda k: (k[0], k[1] or "")
+    lines = [
+        f"  {model}.{field or '(docstring)'}" for model, field in REPORT.stale
+    ]
+    assert not REPORT.stale, (
+        "census entries with no matching prose site:\n" + "\n".join(lines)
     )
-    lines = [f"  {model}.{field or '(docstring)'}" for model, field in stale]
-    assert not stale, (
-        "census entries with no matching normative prose site:\n" + "\n".join(lines)
+
+
+def test_census_hashes_match_live_prose():
+    """The ratchet: re-worded prose must be re-affirmed, not silently kept.
+
+    A changed description or docstring may state a new obligation the old
+    disposition does not carry. Re-read the prose, adjust the entry's
+    disposition if needed, then restamp the hash with
+    ``scripts/render_prose_census.py write``.
+    """
+    lines = [
+        f"  {m.site.label} [{m.site.module}]: census has {m.recorded}, "
+        f"live prose hashes to {m.site.fingerprint}"
+        for m in REPORT.hash_mismatches
+    ]
+    assert not REPORT.hash_mismatches, (
+        "census entries whose prose changed since their disposition was "
+        "affirmed — re-affirm each, then run "
+        "scripts/render_prose_census.py write to restamp:\n" + "\n".join(lines)
+    )
+
+
+def test_descriptive_entries_carry_no_modal_language():
+    """The tripwire: ``descriptive=True`` may not sit on modal prose.
+
+    Prose matching ``NORMATIVE_PATTERN`` that genuinely states no obligation
+    takes ``waiver=DESCRIPTIVE`` instead — marking modal text harmless must
+    cost an explicit waiver, never a one-word flag.
+    """
+    lines = [f"  {site.label} [{site.module}]" for site in REPORT.tripwires]
+    assert not REPORT.tripwires, (
+        "descriptive=True entries whose live prose carries a modal marker — "
+        "use waiver=DESCRIPTIVE (or a real disposition) for these:\n"
+        + "\n".join(lines)
     )
 
 
@@ -213,7 +182,7 @@ def test_census_texts_reference_live_names():
                 universe.update(
                     m.value for m in obj if isinstance(m.value, str)
                 )
-    for cls in _contract_classes():
+    for cls in contract_classes():
         universe.update(dir(cls))
         universe.update(cls.model_fields)
         for info in cls.model_fields.values():
@@ -233,20 +202,47 @@ def test_census_texts_reference_live_names():
             )
 
 
+_HASH = "0" * 12  # format-valid placeholder for the refusal probes
+
+
 def test_prose_obligation_refuses_unbound_and_blank_dispositions():
     """__post_init__ is what makes 'catalogued' mean 'bound' — the site tests
     check only key membership, so an unbound entry would satisfy them."""
     with pytest.raises(ValueError, match="declares nothing"):
-        ProseObligation(model="X", field="y")
+        ProseObligation(model="X", field="y", prose_hash=_HASH)
     with pytest.raises(ValueError, match="empty structural"):
-        ProseObligation(model="X", field="y", structural="   ")
+        ProseObligation(model="X", field="y", prose_hash=_HASH, structural="   ")
     with pytest.raises(ValueError, match="empty waiver"):
-        ProseObligation(model="X", waiver=" ")
+        ProseObligation(model="X", prose_hash=_HASH, waiver=" ")
+
+
+def test_prose_obligation_refuses_a_malformed_hash():
+    """The ratchet only works when every entry carries a real fingerprint —
+    a blank, truncated, or uppercase hash would pin nothing."""
+    for bad in ("", "0" * 11, "0" * 13, "ABCDEF012345", "not-a-hash!!"):
+        with pytest.raises(ValueError, match="prose_hash"):
+            ProseObligation(model="X", field="y", prose_hash=bad, waiver="w")
+
+
+def test_prose_obligation_refuses_descriptive_combined_with_a_disposition():
+    """descriptive=True asserts there is nothing to enforce; pairing it with
+    a rule, mechanism, or waiver would make the entry self-contradictory."""
+    for kwargs in (
+        {"rule_ids": ("ADV-ENDP-009",)},
+        {"structural": "s"},
+        {"waiver": "w"},
+    ):
+        with pytest.raises(ValueError, match="descriptive"):
+            ProseObligation(
+                model="X", field="y", prose_hash=_HASH, descriptive=True, **kwargs
+            )
+    # descriptive=True alone is a complete disposition
+    ProseObligation(model="X", field="y", prose_hash=_HASH, descriptive=True)
 
 
 def test_normative_pattern_tolerates_wrapped_modal_phrases():
     """Docstrings wrap; a two-word modal split across a newline must still
-    match, or the first wrapped obligation silently escapes the census."""
+    match, or the first wrapped modal phrase silently escapes the tripwire."""
     for phrase in (
         "defaults\n    to",
         "may\n  not",

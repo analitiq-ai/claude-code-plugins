@@ -114,6 +114,20 @@ class PublicRunError(StrictModel):
         description="Fixed, customer-safe description of the failure category.",
     )
 
+    @model_validator(mode="after")
+    def _message_matches_code(self) -> "PublicRunError":
+        """`message` is exactly the `PUBLIC_ERROR_MESSAGES` text for `code`.
+        Enforced on the model so the public surface can never echo a raw
+        exception string or the engine's internal-only detail under a known
+        category."""
+        if self.message != PUBLIC_ERROR_MESSAGES[self.code]:
+            raise ValueError(
+                "message must be the canonical customer-safe text for "
+                f"{self.code.value} (see PUBLIC_ERROR_MESSAGES)"
+            )
+        return self
+
+
 class PipelineRunStatusData(StrictModel):
     """`data` payload of GET /pipelines/{pipeline_id}/runs/{invocation_id}.
 

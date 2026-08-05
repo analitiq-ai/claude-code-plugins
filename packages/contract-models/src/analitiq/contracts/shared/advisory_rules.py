@@ -12,10 +12,10 @@ IDs are ``ADV-<AREA>-NNN``, stable and never reused. ``targets`` name model
 classes by string; a rule on a base class covers its subclasses (MRO match).
 
 :mod:`advisory_prose` is this census's other half: every field description and
-model docstring carrying that module's modal markers must resolve there to the
-rule, structural mechanism, or registered waiver carrying it, so an obligation
-stated in prose and enforced nowhere fails the build instead of shipping
-silently.
+model docstring must resolve in :mod:`prose_census` to the rule, structural
+mechanism, registered waiver, or descriptive marking carrying it — each entry
+hash-pinned to its exact wording — so an obligation stated in prose and
+enforced nowhere fails the build instead of shipping silently.
 """
 from __future__ import annotations
 
@@ -525,6 +525,11 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-DSYNC-001", kind="custom", resource="data-sync-run-status",
         prose="error is present only for failed/partial runs, and a failed run always carries error.",
         targets=("PipelineRunStatusData",), enforcer="_error_matches_status",
+    ),
+    AdvisoryRule(
+        id="ADV-DSYNC-002", kind="custom", resource="data-sync-run-status",
+        prose="message is the fixed customer-safe text PUBLIC_ERROR_MESSAGES maps to code.",
+        targets=("PublicRunError",), enforcer="_message_matches_code",
     ),
     # --- shared -------------------------------------------------------------
     AdvisoryRule(
