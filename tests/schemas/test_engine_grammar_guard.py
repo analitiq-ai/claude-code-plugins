@@ -488,3 +488,20 @@ def test_ci_job_is_wired():
         if "--offline" in line and not line.lstrip().startswith("#")
     ]
     assert not invocations, f"--offline must never run in CI: {invocations}"
+
+
+def test_fetch_refuses_a_url_outside_the_pinned_base(guard):
+    """The refusal is what the urlopen suppression rests on — pin it.
+
+    Every other test stubs `_fetch` wholesale, so without this the branch that
+    justifies the audit suppression could be deleted and nothing would notice.
+    The lookalike host covers the sharp edge: a bare startswith(BASE_URL)
+    would admit a host that merely begins with the pinned one.
+    """
+    for url in (
+        "https://evil.example/arrow-type-grammar/v1.1.0/grammar.json",
+        "https://schemas.analitiq.ai.evil.example/arrow-type-grammar/latest.json",
+        "http://schemas.analitiq.ai/arrow-type-grammar/latest.json",
+    ):
+        with pytest.raises(guard.GuardError, match="refusing non-"):
+            guard._fetch(url)
