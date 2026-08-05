@@ -1,19 +1,40 @@
-"""Every fenced json/jsonc snippet in this plugin's skill prose must validate.
+"""Every fenced json/jsonc snippet in this plugin's skill prose must uphold
+the disposition its annotation declares.
 
 `test_examples.py` pins the bundled `examples/*.example.json`, but creator
 agents copy shapes from the fenced ``jsonc`` blocks inline in `skills/**/*.md`
 too — and those are fragments (a `mapping` block, a `schedule` object, one
 assignment), so no complete-document gate ever sees them. This suite closes
-that hole by **splicing** each fragment into a bundled example already pinned
-valid by the sibling suite, then validating the spliced document through the
-same adapter (`diagnostics_for`). Because the host is known-valid, a
-post-splice failure indicts the fragment: the prose is teaching a shape the
-contract rejects.
+that hole, and it is the extraction gate the annotation convention promised:
+every inline fence carries an HTML comment directly above it declaring its
+verification contract (this plugin's `CLAUDE.md` § "Fenced JSON examples",
+whose normative home is the connector plugin's `CLAUDE.md` § "Fenced JSON
+examples — the annotation convention"). The gate classifies each block FROM
+that marker — there is no hand-maintained registry to drift from the prose:
 
-Every discovered block must be classified in ``REGISTRY`` — as a splice or as
-an explicit skip with a reason — and every registry entry must still name a
-real block. Both directions fail loudly, so the gate can never go vacuous and
-new prose snippets cannot ship unclassified.
+* ``<!-- validate: <entity> -->`` — the fragment's top-level keys are merged
+  into a bundled host example already pinned valid by the sibling suite, and
+  the merged document must validate.
+* ``<!-- validate: <entity>#/<json-pointer> -->`` — the fragment replaces the
+  host's value at that pointer. A fragment may show its enclosing key for
+  context; the pointer names the deepest shown node and the gate unwraps it.
+* ``<!-- invalid: <ADV id> -->`` — deliberately wrong; the spliced document
+  must FAIL validation (a "don't do this" example that rots into valid is the
+  most misleading rot there is).
+* ``<!-- illustrative -->`` — outside the published contract's validation
+  surface; exempt from splicing, but must still parse as JSON(C).
+
+Because the host is known-valid, a post-splice failure indicts the fragment:
+the prose is teaching a shape the contract rejects. A discovered block with no
+parseable marker fails loudly — markers travel with their blocks, so inserting,
+reordering, or swapping blocks can never silently re-point a disposition.
+
+Placeholder rule (see `_graft`): a fragment value that is an EMPTY OBJECT
+means *elided here* and resolves to the host's value. Deliberate asymmetry:
+``[]`` is NOT a placeholder — an empty array is content the fragment states
+(e.g. an emptied ``conflict_keys`` must be graded, not papered over). Every
+placeholder position is pinned in ``EXPECTED_PLACEHOLDERS`` so emptying a real
+fragment cannot silently degrade a splice to grading the host against itself.
 
 Skips cleanly when the published packages are absent, like the other suites.
 """
@@ -22,6 +43,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import NamedTuple
 
@@ -35,71 +57,232 @@ import validate as V  # noqa: E402
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
 
+import test_examples  # noqa: E402  (sibling suite; pytest puts this dir on sys.path)
+
 
 # ---------------------------------------------------------------------------
 # Discovery: every ```json / ```jsonc fence under skills/**/*.md
 # ---------------------------------------------------------------------------
 
-_OPEN_FENCE = re.compile(r"^```(\S*)")
-_CLOSE_FENCE = re.compile(r"^```\s*$")
-_COLLECTED_LANGS = ("json", "jsonc")
+# A fence opener: a run of >=3 backticks or tildes, then the info string.
+# Matched against the line AFTER lstrip, so indented fences (idiomatic inside
+# list steps) are seen. Mirrors `_code_fence_spans` in
+# scripts/render_validator_claims.py, plus length-aware pairing and info-string
+# capture, which this gate needs and that scanner does not.
+_FENCE_OPEN = re.compile(r"^(`{3,}|~{3,})\s*(.*?)\s*$")
+
+# The corroboration backstop: any line that LOOKS like a json/jsonc fence
+# opener. Every match must be accounted for — as a discovered opener or as
+# content inside some tracked fence — or discovery has an escape hatch.
+_JSONISH = re.compile(r"^\s*(`{3,}|~{3,})\s*jsonc?\b")
 
 
-def _discover_blocks(root: Path) -> dict[tuple[str, int], str]:
-    """Map (path relative to root, zero-based json[c]-block index) -> body.
+class Fence(NamedTuple):
+    open_at: int   # line index of the opening fence
+    close_at: int  # line index of the closing fence
+    char: str      # "`" or "~"
+    length: int    # opener run length (closer must be >= this)
+    info: str      # info string after the opener run, stripped
 
-    EVERY triple-backtick line toggles fence state — including bare ``` and
-    other-language fences — so no fence's contents can ever be mistaken for
-    top-level markdown (a ```jsonc line quoted inside a bare fence is content,
-    not an opener). Only fences whose opening line is exactly ```json or
-    ```jsonc are collected, and the index counts those alone.
+
+class Block(NamedTuple):
+    marker: str    # raw line directly above the opening fence ("" at file top)
+    body: str      # fence contents
+
+
+def _fence_spans(lines: list[str], where: str) -> list[Fence]:
+    """Pair fences line-wise, tolerating indentation, ``` and ~~~ alike.
+
+    Pairing is CommonMark-shaped: a fence opens on a run of >=3 backticks or
+    tildes (its info string is whatever follows the run), and closes only on a
+    line whose stripped form is a run of the SAME character, at least as LONG
+    as the opener, with nothing after it. Everything between is content — so a
+    ```jsonc line quoted inside a bash fence is body text, never an opener or
+    a closer, and a 4-backtick fence cannot be closed early by a 3-backtick
+    line (which would swallow the block that follows). An unterminated fence
+    would silently discard its body — and with it a block this gate exists to
+    check — so it fails loud instead.
     """
-    blocks: dict[tuple[str, int], str] = {}
+    fences: list[Fence] = []
+    open_at: int | None = None
+    char, length, info = "", 0, ""
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if open_at is None:
+            m = _FENCE_OPEN.match(stripped)
+            if m:
+                run = m.group(1)
+                open_at, char, length, info = i, run[0], len(run), m.group(2)
+            continue
+        run_len = len(stripped) - len(stripped.lstrip(char))
+        if run_len >= length and not stripped[run_len:]:
+            fences.append(Fence(open_at, i, char, length, info))
+            open_at = None
+    assert open_at is None, (
+        f"{where}: unterminated fence opened at line {open_at + 1}")
+    return fences
+
+
+def _discover_blocks(root: Path) -> tuple[dict[tuple[str, int], Block], list[str]]:
+    """-> ({(path relative to root, json[c]-block index): Block}, unaccounted).
+
+    A block is a BACKTICK fence whose info string is exactly ``json`` or
+    ``jsonc``; the index counts those alone, per file. Every other fence is
+    tracked but opaque, so its body can never be mistaken for top-level
+    markdown. ``unaccounted`` lists every `_JSONISH` line that is neither a
+    discovered opener nor content inside a tracked fence — tilde and
+    info-string variants (``~~~jsonc``, ```` ```json title="x" ````) land
+    here, converting each would-be escape hatch into a loud failure.
+    """
+    blocks: dict[tuple[str, int], Block] = {}
+    unaccounted: list[str] = []
     for md in sorted(root.rglob("*.md")):
         rel = md.relative_to(root).as_posix()
+        lines = md.read_text().splitlines()
+        accounted: set[int] = set()
         index = 0
-        lang: str | None = None
-        body: list[str] = []
-        for line in md.read_text().splitlines():
-            if lang is None:
-                m = _OPEN_FENCE.match(line)
-                if m:
-                    # Exact-form openers collect; any other ```… line still
-                    # opens an (uncollected) fence so its body stays opaque.
-                    exact = line.rstrip() == f"```{m.group(1)}"
-                    lang = m.group(1) if exact else ""
-                    body = []
-                continue
-            if _CLOSE_FENCE.match(line):
-                if lang in _COLLECTED_LANGS:
-                    blocks[(rel, index)] = "\n".join(body)
-                    index += 1
-                lang = None
-                continue
-            body.append(line)
-        # An unterminated fence would silently discard its body — and with it
-        # a block this gate exists to check. Fail loud instead.
-        assert lang is None, f"{rel}: unterminated ``` fence at end of file"
-    return blocks
+        for fence in _fence_spans(lines, rel):
+            accounted.update(range(fence.open_at + 1, fence.close_at))
+            if fence.char == "`" and fence.info in ("json", "jsonc"):
+                marker = lines[fence.open_at - 1] if fence.open_at else ""
+                body = "\n".join(lines[fence.open_at + 1:fence.close_at])
+                blocks[(rel, index)] = Block(marker, body)
+                accounted.add(fence.open_at)
+                index += 1
+        unaccounted.extend(
+            f"{rel}:{i + 1}: {line.strip()}"
+            for i, line in enumerate(lines)
+            if _JSONISH.match(line) and i not in accounted)
+    return blocks, unaccounted
 
 
-DISCOVERED = _discover_blocks(SKILLS)
+DISCOVERED, UNACCOUNTED = _discover_blocks(SKILLS)
 
 
 def test_discovery_scanner(tmp_path):
-    """Guard the scanner: collection is exact-form, other fences are opaque."""
+    """Guard the scanner: exact-form collection, indentation-tolerant, opaque
+    elsewhere, length-aware pairing, loud on an unterminated fence."""
     (tmp_path / "probe.md").write_text(
-        "```jsonc\n{}\n```\n"           # collected: index 0
-        "```bash\necho hi\n```\n"       # other language: opaque
-        "```\n```jsonc\nquoted\n```\n"  # bare fence quoting an opener: opaque
-        "```json\n[1]\n```\n"           # collected: index 1
+        "```jsonc\n{}\n```\n"                # collected: index 0
+        "```bash\necho hi\n```\n"            # other language: opaque
+        "1. step\n\n   ```jsonc\n   {1}\n   ```\n"  # indented: collected, idx 1
+        "```bash\ncat <<EOF\n```jsonc\nquoted\nEOF\n```\n"
+        # ^ bash fence quoting a ```jsonc line: content, no bogus block —
+        #   the quoted line has an info string, so it cannot close the fence
+        "````\n```json\nquoted too\n````\n"  # 4-backtick fence: ```json is content
+        "```json\n[1]\n```\n"                # collected: index 2
     )
-    assert _discover_blocks(tmp_path) == {
-        ("probe.md", 0): "{}", ("probe.md", 1): "[1]"}
+    blocks, unaccounted = _discover_blocks(tmp_path)
+    assert blocks == {
+        ("probe.md", 0): Block("", "{}"),
+        ("probe.md", 1): Block("", "   {1}"),
+        ("probe.md", 2): Block("````", "[1]"),
+    }
+    assert unaccounted == []  # both quoted openers sit inside tracked fences
 
     (tmp_path / "probe.md").write_text("```jsonc\n{}\n")  # never closed
     with pytest.raises(AssertionError, match="unterminated"):
         _discover_blocks(tmp_path)
+
+
+def test_discovery_backstop_flags_jsonish_lookalikes(tmp_path):
+    """A fence that smells like json but evades exact-form discovery must not
+    fail open: the backstop names it."""
+    (tmp_path / "probe.md").write_text(
+        '```json title="x"\n{}\n```\n'  # info-string variant: not collected
+        "~~~jsonc\n{}\n~~~\n"           # tilde variant: not collected
+    )
+    blocks, unaccounted = _discover_blocks(tmp_path)
+    assert blocks == {}
+    assert [u.split(": ", 1)[1] for u in unaccounted] == [
+        '```json title="x"', "~~~jsonc"]
+
+
+def test_real_tree_has_no_unaccounted_jsonish_lines():
+    assert not UNACCOUNTED, (
+        f"lines that look like json/jsonc fence openers but were not "
+        f"discovered: {UNACCOUNTED}. Use an exact ```json / ```jsonc fence "
+        "(no info-string extras, no tildes) so the gate collects it, or quote "
+        "it inside another fence if it is illustration of markdown itself.")
+
+
+# ---------------------------------------------------------------------------
+# Markers: the annotation convention, parsed
+# ---------------------------------------------------------------------------
+
+_MARKER = re.compile(
+    r"^\s*<!--\s*(?:"
+    r"(?P<illustrative>illustrative)"
+    r"|validate:\s*(?P<entity>[a-z_]+)(?:#(?P<pointer>/\S+))?"
+    r"|invalid:\s*(?P<adv>ADV-[A-Z]+-\d+)"
+    r")\s*-->\s*$")
+
+_CONVENTION = (
+    "the annotation convention (this plugin's CLAUDE.md § 'Fenced JSON "
+    "examples', normative home: the connector plugin's CLAUDE.md § 'Fenced "
+    "JSON examples — the annotation convention')")
+
+
+class Marker(NamedTuple):
+    kind: str            # "validate" | "invalid" | "illustrative"
+    entity: str | None   # validate: adapter entity the spliced doc grades as
+    pointer: str | None  # validate: JSON pointer ("/a/b"); None = top-level merge
+    adv: str | None      # invalid: the ADV rule the block deliberately breaks
+
+    @property
+    def target(self) -> str:
+        """The marker's own spelling of what it grades — stable across
+        reindexing, so pins key on it rather than on a block index."""
+        return f"{self.entity}#{self.pointer}" if self.pointer else str(self.entity)
+
+
+def _parse_marker(raw: str) -> Marker | None:
+    m = _MARKER.match(raw)
+    if not m:
+        return None
+    if m.group("illustrative"):
+        return Marker("illustrative", None, None, None)
+    if m.group("adv"):
+        return Marker("invalid", None, None, m.group("adv"))
+    return Marker("validate", m.group("entity"), m.group("pointer"), None)
+
+
+MARKERS: dict[tuple[str, int], Marker | None] = {
+    key: _parse_marker(block.marker) for key, block in DISCOVERED.items()}
+
+
+def test_every_block_is_annotated():
+    """The anti-vacuity property: a block's disposition is declared beside it.
+
+    The marker travels with its block, so inserting, reordering, or swapping
+    same-count blocks cannot silently re-point a disposition — the new block
+    simply has no (or the wrong) marker and fails here.
+    """
+    unannotated = [
+        f"{key[0]} block {key[1]} (line above the fence: "
+        f"{DISCOVERED[key].marker.strip()!r})"
+        for key in sorted(DISCOVERED) if MARKERS[key] is None]
+    assert not unannotated, (
+        f"fenced json/jsonc blocks whose preceding line is not a "
+        f"well-formed annotation: {unannotated}. Put one of "
+        "'<!-- validate: <entity> -->', '<!-- validate: <entity>#/<pointer> -->', "
+        "'<!-- invalid: <ADV id> -->', '<!-- illustrative -->' directly above "
+        f"the fence, per {_CONVENTION} — and move EXPECTED_DISPOSITIONS in "
+        "this file to match.")
+
+
+# Coverage is a conscious number: adding a block (or changing a disposition)
+# must move this constant in the same change, so the validated surface never
+# shrinks silently.
+EXPECTED_DISPOSITIONS = {"validate": 10, "invalid": 0, "illustrative": 7}
+
+
+def test_disposition_counts_are_conscious():
+    found = Counter(m.kind for m in MARKERS.values() if m is not None)
+    assert {k: found.get(k, 0) for k in EXPECTED_DISPOSITIONS} == EXPECTED_DISPOSITIONS, (
+        f"disposition counts changed: {dict(found)} != {EXPECTED_DISPOSITIONS}. "
+        "If intentional, update EXPECTED_DISPOSITIONS; fewer 'validate'/'invalid' "
+        "entries means prose snippets lost validation coverage.")
 
 
 # ---------------------------------------------------------------------------
@@ -133,10 +316,11 @@ def _strip_jsonc(text: str) -> str:
                 i += 1
             continue  # keep the newline itself
         if c == "/" and i + 1 < n and text[i + 1] == "*":
-            i += 2
-            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
-                i += 1
-            i += 2
+            end = text.find("*/", i + 2)
+            # Silently swallowing the rest would truncate the fragment and
+            # grade a different document than the prose shows.
+            assert end != -1, f"unterminated /* block comment at offset {i}"
+            i = end + 2
             continue
         out.append(c)
         i += 1
@@ -144,15 +328,24 @@ def _strip_jsonc(text: str) -> str:
 
 
 def test_comment_stripper_respects_string_literals():
-    """Guard the scanner: comment markers inside strings must survive."""
+    """Guard the scanner: comment markers inside strings must survive —
+    including after an escaped quote, where a state slip would end the string
+    early and eat the `//` as a comment."""
     src = (
         '{\n'
         '  "url": "https://x/*not-a-comment*/y",  // trailing comment\n'
-        '  "note": "a//b", /* block */ "n": 1\n'
+        '  "note": "a//b", /* block */ "n": 1,\n'
+        '  "esc": "x\\"//y"\n'
         '}\n'
     )
     assert json.loads(_strip_jsonc(src)) == {
-        "url": "https://x/*not-a-comment*/y", "note": "a//b", "n": 1}
+        "url": "https://x/*not-a-comment*/y", "note": "a//b", "n": 1,
+        "esc": 'x"//y'}
+
+
+def test_comment_stripper_rejects_unterminated_block_comment():
+    with pytest.raises(AssertionError, match="unterminated /\\* block comment"):
+        _strip_jsonc('{"a": 1 /* oops')
 
 
 # ---------------------------------------------------------------------------
@@ -168,13 +361,15 @@ def _graft(fragment, host):
     The placeholder rule: a fragment value that is an EMPTY object after
     comment stripping — e.g. ``"endpoint_ref": { /* see spec-endpoint-refs.md
     */ }`` — means *elided here*, and never overwrites the host's value; the
-    host's real value is kept. Everything else the fragment states is taken
-    verbatim: a non-empty fragment container contributes exactly the keys and
-    items it spells out (recursing only so nested placeholders still resolve),
-    never a blend with host keys. Blending would manufacture hybrid documents
-    no prose ever showed — e.g. a host assignment's ``expression`` body
-    surviving inside a fragment's ``constant`` assignment value, which the
-    closed contract models reject — and would grade the blend, not the prose.
+    host's real value is kept. (An empty ARRAY is not a placeholder: ``[]`` is
+    content the fragment states, and is graded as such.) Everything else the
+    fragment states is taken verbatim: a non-empty fragment container
+    contributes exactly the keys and items it spells out (recursing only so
+    nested placeholders still resolve), never a blend with host keys. Blending
+    would manufacture hybrid documents no prose ever showed — e.g. a host
+    assignment's ``expression`` body surviving inside a fragment's
+    ``constant`` assignment value, which the closed contract models reject —
+    and would grade the blend, not the prose.
     """
     if isinstance(fragment, dict):
         if not fragment:
@@ -190,24 +385,46 @@ def _graft(fragment, host):
     return fragment
 
 
-def _splice(host_doc: dict, fragment, target: str | None) -> dict:
+def test_graft_replaces_without_blending():
+    """A non-empty fragment container contributes exactly its own keys."""
+    host = {"kind": "expression", "expression": {"op": "get", "path": ["id"]}}
+    fragment = {"kind": "constant", "constant": {"value": "x"}}
+    assert _graft(fragment, host) == fragment  # no "expression" survivor
+
+
+def test_graft_placeholder_resolves_to_host_value():
+    """`{}` keeps the host's value — the whole value, nested content included."""
+    host = {"ref": {"scope": "connection", "ids": {"connection_id": "c1"}},
+            "untouched": 1}
+    assert _graft({"ref": {}, "n": 2}, host) == {
+        "ref": {"scope": "connection", "ids": {"connection_id": "c1"}}, "n": 2}
+
+
+def test_graft_never_leaks_the_absent_sentinel():
+    """A placeholder with no host counterpart stays `{}` — the sentinel is
+    internal and must never reach the spliced document."""
+    grafted = _graft({"a": {}, "b": [{}], "c": [1, 2]}, {"unrelated": 1})
+    assert grafted == {"a": {}, "b": [{}], "c": [1, 2]}
+    json.dumps(grafted)  # would explode on a leaked _ABSENT
+
+
+def _splice(host_doc: dict, fragment, segments: list[str] | None) -> dict:
     """Return the host document with the fragment spliced in.
 
-    ``target is None``: the fragment is an object whose top-level keys are
+    ``segments is None``: the fragment is an object whose top-level keys are
     merged into the host document (host keys the fragment omits survive —
-    ``$schema``, ids, the untouched sections). A dotted ``target`` path
-    (numeric segments index into arrays): the fragment replaces the value at
-    that path. Either way ``_graft`` resolves placeholders against the host
-    value being replaced.
+    ``$schema``, ids, the untouched sections). Otherwise ``segments`` is the
+    marker pointer's path (numeric segments index into arrays) and the
+    fragment replaces the value there. Either way ``_graft`` resolves
+    placeholders against the host value being replaced.
     """
     doc = json.loads(json.dumps(host_doc))  # deep copy
-    if target is None:
-        assert isinstance(fragment, dict), "top-level merge needs an object fragment"
+    if segments is None:
         for key, value in fragment.items():
             doc[key] = _graft(value, doc.get(key, _ABSENT))
         return doc
     parent = doc
-    *steps, last = target.split(".")
+    *steps, last = segments
     for seg in steps:
         parent = parent[int(seg)] if isinstance(parent, list) else parent[seg]
     if isinstance(parent, list):
@@ -218,155 +435,212 @@ def _splice(host_doc: dict, fragment, target: str | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# The registry: every fenced json/jsonc block, classified
+# What the marker cannot express: the host document per entity, and the
+# pinned placeholder positions
 # ---------------------------------------------------------------------------
 
-class Splice(NamedTuple):
-    entity: str          # adapter entity the spliced document validates as
-    host: str            # example filename under the entity's spec skill
-    target: str | None   # None = top-level merge; dotted path = replace there
+# Which spec skill's examples/ directory hosts each entity's documents —
+# derived from the sibling suite's mapping, never restated.
+ENTITY_SKILL = {entity: skill for skill, entity in test_examples.SKILL_ENTITY.items()}
 
-
-class Skip(NamedTuple):
-    reason: str          # why this block is not a contract-document fragment
-
-
-# Which spec skill's examples/ directory hosts each entity's documents
-# (the inverse of test_examples.py's SKILL_ENTITY, for the entities used here).
-ENTITY_SKILL = {
-    "pipeline": "pipeline-spec",
-    "stream": "stream-spec",
-    "connection": "connection-spec",
+# The one bundled example each entity's fragments splice into. Chosen so the
+# host tolerates the prose's shapes: the postgresql connection example lines
+# up with the envelope fragment's connector_id and input names, and the
+# incremental-upsert stream's database destination accepts the upsert +
+# conflict_keys write the destination prose shows.
+HOST_EXAMPLE = {
+    "pipeline": "manual-api-to-db.example.json",
+    "stream": "db-incremental-upsert.example.json",
+    "connection": "db.example.json",
 }
 
-REGISTRY: dict[tuple[str, int], Splice | Skip] = {
-    # -- connection-spec ----------------------------------------------------
-    # A postgresql envelope fragment (parameters + secret_refs); the host is
-    # the postgresql connection example, so connector_id and input names line up.
-    ("connection-spec/spec-envelope.md", 0):
-        Splice("connection", "db.example.json", None),
-    ("connection-spec/spec-envelope.md", 1): Skip(
-        "a .secrets/credentials.json template (env-var-keyed sidecar the user "
-        "fills in), not a document authored against a published contract"),
-
-    # -- pipeline-spec ------------------------------------------------------
-    ("pipeline-spec/spec-streams-and-status.md", 0):
-        Splice("pipeline", "manual-api-to-db.example.json", None),
-    # The three schedule variants each replace the host's schedule wholesale,
-    # so ADV-PIPE-002's per-type field admission is graded on exactly the
-    # fields the prose shows.
-    ("pipeline-spec/spec-schedule.md", 0):
-        Splice("pipeline", "manual-api-to-db.example.json", "schedule"),
-    ("pipeline-spec/spec-schedule.md", 1):
-        Splice("pipeline", "manual-api-to-db.example.json", "schedule"),
-    ("pipeline-spec/spec-schedule.md", 2):
-        Splice("pipeline", "manual-api-to-db.example.json", "schedule"),
-
-    # -- stream-spec --------------------------------------------------------
-    # The destinations sketch carries an endpoint_ref placeholder and an
-    # upsert + conflict_keys ["id"] write; the incremental-upsert example is
-    # the host whose database destination tolerates exactly that write shape.
-    ("stream-spec/spec-destinations.md", 0):
-        Splice("stream", "db-incremental-upsert.example.json", None),
-    ("stream-spec/spec-destinations.md", 1): Skip(
-        "a bare conflict-keys array fragment (a single write.conflict_keys "
-        "value, byte-equal to the host destination's own); the full write "
-        "shape is graded via this file's block 0"),
-    ("stream-spec/spec-mapping.md", 0):
-        Splice("stream", "db-incremental-upsert.example.json", None),
-    ("stream-spec/spec-validation-rules.md", 0):
-        Splice("stream", "db-incremental-upsert.example.json",
-               "mapping.assignments.0"),
-    ("stream-spec/spec-source.md", 0):
-        Splice("stream", "db-incremental-upsert.example.json", None),
-
-    # -- pipeline-builder/references ---------------------------------------
-    # Agent-to-agent I/O envelopes, defined by this plugin's own prose — not
-    # documents authored against a published contract, so there is nothing
-    # for the validator to grade them as.
-    ("pipeline-builder/references/io-contracts.md", 0): Skip(
-        "PipelineFacts — the researcher agent's output envelope, a "
-        "plugin-internal shape, not a published-contract document"),
-    ("pipeline-builder/references/io-contracts.md", 1): Skip(
-        "MintedIdentities — orchestrator-local id bundle, a plugin-internal "
-        "shape, not a published-contract document"),
-    ("pipeline-builder/references/io-contracts.md", 2): Skip(
-        "CreatorOutput — creator agents' output envelope, a plugin-internal "
-        "shape, not a published-contract document"),
-    ("pipeline-builder/references/io-contracts.md", 3): Skip(
-        "CreatorOutput (unsupported-case variant) — plugin-internal shape, "
-        "not a published-contract document"),
-    ("pipeline-builder/references/io-contracts.md", 4): Skip(
-        "Diagnostics — scripts/validate.py's own output envelope, a "
-        "plugin-internal shape, not a published-contract document"),
-    ("pipeline-builder/references/io-contracts.md", 5): Skip(
-        "DriftVerdict — the drift classifier's output envelope, a "
-        "plugin-internal shape, not a published-contract document"),
+# Every `{}` placeholder position across the spliced fragments, keyed by
+# (file, marker target) — marker targets, unlike block indexes, do not shift
+# when a block is added above another. Same-file blocks sharing a target pool
+# their positions. Pinning the exact set means emptying a real fragment value
+# (a whole `write`, a `schedule`) cannot silently degrade that splice into
+# grading the host against itself: the new `{}` position shows up here.
+EXPECTED_PLACEHOLDERS = {
+    ("stream-spec/spec-destinations.md", "stream#/destinations"):
+        {"destinations.0.endpoint_ref"},
+    ("stream-spec/spec-source.md", "stream#/source"):
+        {"source.endpoint_ref"},
 }
 
-# Coverage is a conscious number: adding a snippet (or reclassifying a skip)
-# must move this constant in the same change, so the splice surface never
-# shrinks silently.
-EXPECTED_SPLICE_COUNT = 9
+
+def _placeholder_paths(fragment, prefix: str = "") -> set[str]:
+    """Dotted host-coordinate paths of every `{}` in the fragment."""
+    found: set[str] = set()
+    if isinstance(fragment, dict):
+        if not fragment:
+            return {prefix or "<top level>"}
+        for k, v in fragment.items():
+            found |= _placeholder_paths(v, f"{prefix}.{k}" if prefix else k)
+    elif isinstance(fragment, list):
+        for i, v in enumerate(fragment):
+            found |= _placeholder_paths(v, f"{prefix}.{i}" if prefix else str(i))
+    return found
 
 
-# ---------------------------------------------------------------------------
-# Bidirectional pinning — the anti-vacuity property
-# ---------------------------------------------------------------------------
-
-def test_every_discovered_block_is_classified():
-    unclassified = sorted(set(DISCOVERED) - set(REGISTRY))
-    stale = sorted(set(REGISTRY) - set(DISCOVERED))
-    assert not unclassified, (
-        f"fenced json/jsonc blocks with no REGISTRY entry: {unclassified}. "
-        "Classify each in REGISTRY — as a Splice into a bundled example, or "
-        "as a Skip with a reason it is not a contract-document fragment.")
-    assert not stale, (
-        f"REGISTRY entries whose block no longer exists: {stale}. "
-        "Remove the stale entries (indexes shift when a block is added or "
-        "removed above another in the same file).")
-
-
-def test_splice_count_is_a_conscious_number():
-    found = sum(isinstance(e, Splice) for e in REGISTRY.values())
-    assert found == EXPECTED_SPLICE_COUNT, (
-        f"splice-entry count changed: {found} != {EXPECTED_SPLICE_COUNT}. "
-        "If intentional, update EXPECTED_SPLICE_COUNT; a shrink means a "
-        "snippet lost validation coverage.")
-
-
-# ---------------------------------------------------------------------------
-# Validation: splice each fragment into its pinned-valid host and grade it
-# ---------------------------------------------------------------------------
-
-SPLICES = [
-    pytest.param(key, entry, id=f"{key[0]}#{key[1]}")
-    for key, entry in sorted(REGISTRY.items())
-    if isinstance(entry, Splice)
-]
-
-
-@pytest.mark.parametrize("key,entry", SPLICES)
-def test_spliced_snippet_validates(key, entry, tmp_path):
-    body = DISCOVERED[key]
+def _resolve_fragment(marker: Marker, body: str, label: str):
+    """-> (fragment, pointer segments or None), unwrapped and sanity-checked."""
     fragment = json.loads(_strip_jsonc(body))
+    segments = None
+    if marker.pointer:
+        segments = [seg.replace("~1", "/").replace("~0", "~")
+                    for seg in marker.pointer.lstrip("/").split("/")]
+        # The convention lets a fragment show its enclosing key for context;
+        # the pointer names the deepest shown node, so unwrap before splicing.
+        if isinstance(fragment, dict) and list(fragment) == [segments[-1]]:
+            fragment = fragment[segments[-1]]
+    assert fragment != {}, (
+        f"{label}: the fragment is a single empty object, which the "
+        "placeholder rule resolves to the host's own value — the splice would "
+        "grade the host against itself and prove nothing. Show at least one "
+        "real key, or mark the block illustrative.")
+    if segments is None:
+        assert isinstance(fragment, dict), (
+            f"{label}: a pointer-less marker merges top-level keys, so the "
+            "fragment must be an object; use the validate: <entity>#/<pointer> "
+            "form for a non-object fragment.")
+    return fragment, segments
 
-    host_path = SKILLS / ENTITY_SKILL[entry.entity] / "examples" / entry.host
-    assert host_path.is_file(), (
-        f"registry names a missing host example: {host_path}")
-    host_doc = json.loads(host_path.read_text())
 
-    spliced = _splice(host_doc, fragment, entry.target)
+def _grading_entity(marker: Marker, label: str) -> str:
+    """The adapter entity a block grades as.
+
+    A ``validate:`` marker states it. An ``invalid:`` marker states only the
+    ADV id; the advisory registry's ``resource`` field supplies the entity —
+    which also makes a dangling ADV id fail the build, the same property a
+    citation carries (plugin-prose rung 1). ``invalid:`` blocks target a
+    sub-shape by showing its enclosing key (the wrapped-context form), which
+    the top-level merge places for them.
+    """
+    if marker.kind == "invalid":
+        from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
+        rules = {rule.id: rule for rule in ADVISORY_RULES}
+        assert marker.adv in rules, (
+            f"{label}: '<!-- invalid: {marker.adv} -->' names no rule in the "
+            "advisory registry — a dangling ADV id pins nothing.")
+        entity = rules[marker.adv].resource
+    else:
+        entity = marker.entity
+    assert entity in HOST_EXAMPLE, (
+        f"{label}: grades as entity {entity!r}, which has no host in "
+        "HOST_EXAMPLE; add the bundled example its fragments splice into.")
+    return entity
+
+
+def _spliced_document(marker: Marker, body: str, label: str) -> tuple[str, dict]:
+    entity = _grading_entity(marker, label)
+    fragment, segments = _resolve_fragment(marker, body, label)
+    host_path = SKILLS / ENTITY_SKILL[entity] / "examples" / HOST_EXAMPLE[entity]
+    assert host_path.is_file(), f"{label}: missing host example {host_path}"
+    return entity, _splice(json.loads(host_path.read_text()), fragment, segments)
+
+
+def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
+                                 tmp_path: Path) -> None:
+    """Grade one validate/invalid block: splice, validate, judge per marker."""
+    entity, spliced = _spliced_document(marker, body, label)
     doc_path = tmp_path / "spliced.json"
     doc_path.write_text(json.dumps(spliced, indent=2))
+    diagnostics = V.diagnostics_for(entity, doc_path)
+    where = "<top level>" if marker.pointer is None else marker.pointer
+    if marker.kind == "validate":
+        assert diagnostics["passed"], (
+            f"{label}, spliced into {HOST_EXAMPLE[entity]} at {where}, "
+            f"does not validate as {entity}: "
+            + "; ".join(f"{f['path']}: {f['message']}"
+                        for f in diagnostics["findings"])
+            + " — the host validates on its own (test_examples.py), so either "
+              "the prose teaches an invalid shape or the marker's "
+              "entity/pointer is wrong.")
+    else:
+        # The diagnostics envelope carries Pydantic messages, not rule ids, so
+        # the ADV id in the marker is declared intent that review checks; the
+        # gate can only assert the failure itself.
+        assert not diagnostics["passed"], (
+            f"{label} is marked '<!-- invalid: {marker.adv} -->' but the "
+            f"spliced document VALIDATES as {entity} — a deliberately "
+            "wrong example that rots into valid is the most misleading rot "
+            "there is. Fix the block so it still breaks the rule, or "
+            "re-annotate it.")
 
-    diagnostics = V.diagnostics_for(entry.entity, doc_path)
-    assert diagnostics["passed"], (
-        f"snippet {key[0]} block {key[1]}, spliced into {entry.host} at "
-        f"{entry.target or '<top level>'}, does not validate as "
-        f"{entry.entity}: "
-        + "; ".join(f"{f['path']}: {f['message']}" for f in diagnostics["findings"])
-        + " — the host validates on its own (test_examples.py), so either the "
-          "prose teaches an invalid shape or the registry's splice choice is "
-          "wrong."
-    )
+
+# ---------------------------------------------------------------------------
+# The gate over the real tree
+# ---------------------------------------------------------------------------
+
+GRADED = [
+    pytest.param(key, MARKERS[key], id=f"{key[0]}#{key[1]}")
+    for key in sorted(DISCOVERED)
+    if MARKERS[key] is not None and MARKERS[key].kind in ("validate", "invalid")
+]
+
+PARSE_ONLY = [pytest.param(key, id=f"{key[0]}#{key[1]}") for key in sorted(DISCOVERED)]
+
+
+@pytest.mark.parametrize("key", PARSE_ONLY)
+def test_every_block_parses_as_json(key):
+    """Free coverage for every disposition, illustrative included: a fence
+    tagged json/jsonc claims to hold JSON(C). If an author wants unparseable
+    pseudo-JSON, the fence must carry a different (or no) language tag —
+    which also removes it from this gate's discovery."""
+    try:
+        json.loads(_strip_jsonc(DISCOVERED[key].body))
+    except (AssertionError, ValueError) as exc:
+        pytest.fail(
+            f"{key[0]} block {key[1]} is fenced as json/jsonc but does not "
+            f"parse after comment stripping: {exc}. Fix the snippet, or "
+            "re-tag the fence if pseudo-JSON is intended.")
+
+
+@pytest.mark.parametrize("key,marker", GRADED)
+def test_block_upholds_its_marker(key, marker, tmp_path):
+    _assert_block_upholds_marker(
+        marker, DISCOVERED[key].body, f"{key[0]} block {key[1]}", tmp_path)
+
+
+def test_placeholder_accounting_is_pinned():
+    collected: dict[tuple[str, str], set[str]] = {}
+    for key in sorted(DISCOVERED):
+        marker = MARKERS[key]
+        if marker is None or marker.kind != "validate":
+            continue
+        fragment, segments = _resolve_fragment(
+            marker, DISCOVERED[key].body, f"{key[0]} block {key[1]}")
+        paths = _placeholder_paths(fragment, ".".join(segments or []))
+        if paths:
+            collected.setdefault((key[0], marker.target), set()).update(paths)
+    assert collected == EXPECTED_PLACEHOLDERS, (
+        f"`{{}}` placeholder positions changed: {collected} != "
+        f"{EXPECTED_PLACEHOLDERS}. A new position means a fragment value was "
+        "emptied — that part of the prose is no longer graded (the host's own "
+        "value fills it in). Update EXPECTED_PLACEHOLDERS only for a "
+        "deliberate elision.")
+
+
+# ---------------------------------------------------------------------------
+# The `invalid:` disposition, exercised synthetically — no prose block uses it
+# yet (EXPECTED_DISPOSITIONS pins that), so the machinery is proven here.
+# ---------------------------------------------------------------------------
+
+def test_invalid_disposition_requires_the_failure(tmp_path):
+    marker = _parse_marker("<!-- invalid: ADV-PIPE-002 -->")
+    assert marker == Marker("invalid", None, None, "ADV-PIPE-002")
+    # The registry's `resource` supplies the entity (pipeline); the wrapped
+    # `schedule` key places the fragment. Manual-type schedules admit no
+    # interval_minutes, so this block upholds its marker by failing...
+    _assert_block_upholds_marker(
+        marker, '{"schedule": {"type": "manual", "interval_minutes": 5}}',
+        "synthetic", tmp_path)
+    # ...a block marked invalid that VALIDATES is itself the defect...
+    with pytest.raises(AssertionError, match="rots into valid"):
+        _assert_block_upholds_marker(
+            marker, '{"schedule": {"type": "manual"}}', "synthetic", tmp_path)
+    # ...and an ADV id the registry does not know pins nothing, loudly.
+    with pytest.raises(AssertionError, match="dangling ADV id"):
+        _assert_block_upholds_marker(
+            _parse_marker("<!-- invalid: ADV-PIPE-999 -->"),
+            '{"schedule": {"type": "manual"}}', "synthetic", tmp_path)
