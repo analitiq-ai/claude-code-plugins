@@ -21,7 +21,9 @@ is why this file exists: it is the half of the fix that keeps the class closed.
 
 ## What it scans, and why the scope is not a list of directories
 
-Every file git tracks, minus `schemas/` and minus `_EXCLUDED_PATHS`.
+Every file git tracks, minus `schemas/` and minus `_EXCLUDED_PATHS` — plus the
+one hand-authored, mutable file under `schemas/` that the tree's rationale below
+does not cover (`_SCANNED_DESPITE_TREE`).
 
 An earlier draft named the trees to walk — `packages/`, `plugins/`, `scripts/`,
 … — and that shape is the wrong default in a way worth recording, because it
@@ -69,10 +71,13 @@ hole, not a costless narrowing: single-digit issues exist in this tracker and
 `issue #7` and `analitiq-engine#7` at any digit count, so what actually escapes
 is the bare single-digit `(#7)`.
 
-**A bare `#N` followed by `-` and a word** — `#12-era`, `(#12-section)`. That
-shape is how a markdown anchor into a numbered heading is written, and no ticket
-in this repo has ever been cited that way, so the ambiguity resolves toward the
-anchor. A hyphen *range* (`#150-#152`) is not affected: both ends are caught.
+**Markdown anchors into numbered headings** — `#12-era`, `(#12-section)`,
+`README.md#12`, `spec.yaml#3`. No ticket in this repo has ever been cited that
+way, so the ambiguity resolves toward the anchor. A hyphen *range* (`#150-#152`)
+is unaffected: both ends are caught.
+
+**A bare `#N` of six or more digits** — that is an all-digit hex colour, and it
+is far past any number this tracker will reach.
 
 **A keyword with no `#`** — `settled in issue 89`, `tracked as GH-123` — is not
 matched. Both read as unnatural enough that they are unlikely to be reached for,
@@ -89,7 +94,17 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Generated, and its published pins are immutable — see the module docstring.
+# Pinned literally alongside `_EXCLUDED_PATHS`: this is the other half of the
+# scope predicate, and shortening it (`"sc"` still covers `schemas/`) drops
+# `scripts/` from the scan while the gate stays green.
 _UNSCANNED_TREE = "schemas/"
+
+# The one file under that tree the rationale does not cover: hand-authored, no
+# version triple, served as a mutable pointer. Neither "generated" nor
+# "immutable pin" applies to it, so it is scanned like any other authored file.
+# Its sibling `data-sync-run-response/1.0.0.json` is hand-authored too but IS a
+# pinned triple, so it stays out with the rest of the tree.
+_SCANNED_DESPITE_TREE = ("schemas/data-sync-api/openapi.json",)
 
 # Repo-relative posix paths the sweep does not reach. Every entry names a
 # surface where a ticket number is either GitHub-native, immutable, or not ours
@@ -102,13 +117,21 @@ _EXCLUDED_PATHS = (
     # sent to, not a pointer standing in for reasoning, and GitHub renders and
     # auto-links them. Removing them would delete the instruction.
     "CONTRIBUTING.md",
-    # Release-please writes both of these, and every entry is a link into the
+    # Release-please writes both of these, and every entry links into the
     # tracker: the changelog IS the GitHub-native surface, and hand-editing it
-    # desyncs the release train from its own history.
+    # desyncs the release train from its own history. Exempt by PROVENANCE, not
+    # by content — an entry only carries `#N` when the squash subject did, and a
+    # merge-commit release (which the package release procedure requires) yields
+    # entries with a commit link and no number at all.
     "plugins/analitiq-connector-builder/CHANGELOG.md",
     "plugins/analitiq-pipeline-builder/CHANGELOG.md",
     # Vendored from the engine and sha256-pinned by
-    # `analitiq.contracts.arrow_grammar`. Editing a byte of it fails that pin.
+    # `analitiq.contracts.arrow_grammar`. It carries no ticket reference today
+    # and this exemption is doing no work — it is forward-looking cover, because
+    # the file cannot be edited to remove one: any byte change fails that pin,
+    # so a ref arriving from upstream would deadlock the gate against a file
+    # this repo may not touch. That is why it is exempt by provenance rather
+    # than by content, and why the liveness check below cannot grade it.
     "packages/contract-models/src/analitiq/contracts/arrow_type_grammar.json",
     # This file quotes every shape it rejects, in the patterns and in the
     # synthetic acceptance fixtures below. Scanning itself is guaranteed
@@ -142,6 +165,17 @@ _CROSS_REPO_TICKET = re.compile(
     r"\b[A-Za-z](?:[A-Za-z0-9._/-]*[A-Za-z0-9])?#\d+\b(?!-[^#])"
 )
 
+# A slug ending in a document extension is a link with a fragment, never a repo:
+# `README.md#12`, `spec.yaml#3`. The hyphenated form (`README.md#12-layout`) is
+# already excluded by the trailing lookahead above; this covers the purely
+# numeric heading the lookahead cannot see. Applied as a filter rather than a
+# lookbehind because Python's `re` requires lookbehinds to be fixed-width, and
+# these extensions are not.
+_DOC_ANCHOR = re.compile(
+    r"\.(?:md|markdown|html?|ya?ml|json|toml|txt|py|rst)#\d+$",
+    re.IGNORECASE,
+)
+
 # A bare `#108`. Two-digit floor per the module docstring. The lookbehind keeps
 # it from re-matching the tail of a cross-repo ref (including a markdown anchor
 # like `README.md#12-layout`), from firing on `##123`, and from firing on a
@@ -149,7 +183,11 @@ _CROSS_REPO_TICKET = re.compile(
 # `pre-#125` and the far end of a `#150-#152` range are both caught; the
 # trailing lookahead is what separates a range from an anchor, and `\b` stops
 # the backtracking that would otherwise slip under it.
-_BARE_TICKET = re.compile(r"(?<![\w#/.])#\d{2,}\b(?!-[^#])")
+#
+# The 2-5 digit window has a ceiling as well as a floor: `#123456` is an
+# all-digit hex colour, and six digits is well past any issue number this
+# tracker will reach. (`#1a2b3c` never matched — it is not all digits.)
+_BARE_TICKET = re.compile(r"(?<![\w#/.])#\d{2,5}\b(?!-[^#])")
 
 # `https://github.com/analitiq-ai/analitiq-engine/issues/406`. Host-anchored, so
 # it does not fire on an ordinary path that happens to end in a number.
@@ -195,10 +233,16 @@ def _tracked_files() -> list[str]:
             check=True,
         )
     except (OSError, subprocess.CalledProcessError) as exc:
+        # git's own reason lives in stderr, and `capture_output` swallowed it.
+        # Without re-emitting it, "not a git repository" and the `safe.directory`
+        # dubious-ownership refusal — the realistic CI-container failure — are
+        # indistinguishable, and the second one is nothing to do with checkouts.
+        detail = (getattr(exc, "stderr", "") or "").strip()
         raise RuntimeError(
             f"could not enumerate tracked files under {REPO_ROOT} — this gate "
             "derives its scope from git, so it cannot run against a tree git "
-            "does not know. Run the suite from a checkout."
+            "does not know."
+            + (f" git said: {detail}" if detail else "")
         ) from exc
     return [line for line in result.stdout.split("\0") if line]
 
@@ -208,8 +252,33 @@ def _scanned_files() -> list[str]:
     return sorted(
         relpath
         for relpath in _tracked_files()
-        if not relpath.startswith(_UNSCANNED_TREE) and not _is_excluded(relpath)
+        if (
+            not relpath.startswith(_UNSCANNED_TREE)
+            or relpath in _SCANNED_DESPITE_TREE
+        )
+        and not _is_excluded(relpath)
     )
+
+
+def _read(relpath: str) -> str:
+    """One scanned file's text, or a failure that says what went wrong.
+
+    Every tracked non-`schemas/` path is read as UTF-8. That holds for all of
+    them today, and nothing keeps it holding: the first tracked binary — an icon,
+    a screenshot in plugin docs — would otherwise kill the gate with a bare
+    `UnicodeDecodeError` naming neither the file nor this check. Skipping the
+    unreadable would be worse, since fail-open is the failure mode this whole
+    module exists to avoid, so name the file and re-raise.
+    """
+    try:
+        return (REPO_ROOT / relpath).read_text(encoding="utf-8", errors="strict")
+    except (UnicodeDecodeError, OSError) as exc:
+        raise RuntimeError(
+            f"{relpath} is tracked but could not be read as UTF-8 text. This "
+            "gate reads every tracked file outside `schemas/`, so a binary or "
+            "missing path has to be exempted deliberately — add it to "
+            "_EXCLUDED_PATHS with its reason rather than leaving it unscanned."
+        ) from exc
 
 
 def _matches_in_line(line: str) -> list[str]:
@@ -224,6 +293,7 @@ def _matches_in_line(line: str) -> list[str]:
         (match.start(), match.end(), match.group(0))
         for pattern in _PATTERNS
         for match in pattern.finditer(line)
+        if not _DOC_ANCHOR.search(match.group(0))
     )
     return [
         matched
@@ -251,9 +321,7 @@ def _references() -> list[tuple[str, int, str]]:
     return [
         (relpath, lineno, matched)
         for relpath in _scanned_files()
-        for lineno, matched in scan_text(
-            (REPO_ROOT / relpath).read_text(encoding="utf-8", errors="strict")
-        )
+        for lineno, matched in scan_text(_read(relpath))
     ]
 
 
@@ -288,7 +356,8 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     expected = {
         relpath
         for relpath in _tracked_files()
-        if not relpath.startswith(_UNSCANNED_TREE) and relpath not in _EXCLUDED_PATHS
+        if (not relpath.startswith("schemas/") or relpath in _SCANNED_DESPITE_TREE)
+        and relpath not in _EXCLUDED_PATHS
     }
     missing = sorted(expected - set(_scanned_files()))
     assert not missing, (
@@ -312,7 +381,22 @@ def test_the_guard_excludes_only_the_paths_it_records() -> None:
     silently. Pinning the literal tuple makes every addition land in a diff, and
     an exemption a reviewer has to read is the whole point — a file nobody may
     lint is where the refs come back.
+
+    `_UNSCANNED_TREE` is pinned here for the same reason and it is not
+    decorative: it is the OTHER half of the scope predicate, and shortening it
+    is a one-character way to shrink the scan while the gate stays green.
+    `"sc"` still covers `schemas/` — and silently drops every file in
+    `scripts/`.
     """
+    assert _UNSCANNED_TREE == "schemas/", (
+        "_UNSCANNED_TREE is a scope control, not a convenience prefix: any value "
+        "that still covers `schemas/` keeps the gate green while dropping "
+        "whatever else shares the prefix."
+    )
+    assert _SCANNED_DESPITE_TREE == ("schemas/data-sync-api/openapi.json",), (
+        "_SCANNED_DESPITE_TREE re-admits hand-authored files from the generated "
+        "tree; each addition needs the reason stated inline."
+    )
     assert _EXCLUDED_PATHS == (
         "CONTRIBUTING.md",
         "plugins/analitiq-connector-builder/CHANGELOG.md",
@@ -343,12 +427,21 @@ def test_exclusion_matching_is_exact() -> None:
 def test_exclusions_are_all_live() -> None:
     """An exemption must still be doing work, not just naming a file that exists.
 
-    Existence alone is too weak for `CONTRIBUTING.md`: its stated reason is that
-    the file *cites real issues as worked precedent*. If those citations were
-    ever rewritten out, a whole-file exemption would persist over a file nobody
-    watches — which is exactly the state this guard was written to end. So for
-    the excluded files that are exempt because of what they contain, assert they
-    still contain it.
+    Grade each by the reason recorded for it, because the reasons differ in kind
+    and the wrong remedy is worse than no check:
+
+    - `CONTRIBUTING.md` is exempt for its CONTENT — it cites real issues as
+      worked precedent. If those citations were ever rewritten out, a whole-file
+      exemption would persist over a file nobody watches, which is the state
+      this guard exists to end. So assert it still cites something.
+    - The changelogs and the vendored manifest are exempt by PROVENANCE: a bot
+      writes the first, an upstream repo the second, and this repo may hand-edit
+      neither. Asserting they *contain* a ref would fail on a perfectly ordinary
+      release — release-please only carries `#N` when the squash subject did,
+      and the merge-commit release the package procedure requires yields entries
+      with a commit link and no number. Worse, the remedy that assertion implies
+      (drop the exemption) would put the gate back in front of a file nobody is
+      allowed to fix. Existence is the whole check for those.
     """
     stale = [
         excluded for excluded in _EXCLUDED_PATHS if not (REPO_ROOT / excluded).exists()
@@ -357,19 +450,10 @@ def test_exclusions_are_all_live() -> None:
         f"_EXCLUDED_PATHS entries {stale} name nothing in the tree — drop them "
         "so the exclusion list keeps meaning what it says."
     )
-    citation_exemptions = (
-        "CONTRIBUTING.md",
-        "plugins/analitiq-connector-builder/CHANGELOG.md",
-        "plugins/analitiq-pipeline-builder/CHANGELOG.md",
-    )
-    inert = [
-        excluded
-        for excluded in citation_exemptions
-        if not scan_text((REPO_ROOT / excluded).read_text(encoding="utf-8"))
-    ]
-    assert not inert, (
-        f"{inert} are exempt because they cite tickets, but no longer cite any. "
-        "Drop the exemption so the file rejoins the gate."
+    assert scan_text(_read("CONTRIBUTING.md")), (
+        "CONTRIBUTING.md is exempt because it cites real issues as worked "
+        "precedent, and it no longer cites any. Drop the exemption so the file "
+        "rejoins the gate."
     )
 
 
@@ -431,6 +515,9 @@ def test_bare_form_is_flagged() -> None:
         "ADV-STRM-008 retired in 1.0.0rc19 (" + "#108).": "#108",
         # A hyphen prefix is a ref, not an anchor: the lookbehind must allow it.
         "the pre-" + "#125 spelling stayed valid": "#125",
+        # Five digits is inside the window. The ceiling exists to skip six-digit
+        # hex colours, so it must not creep down onto real issue numbers.
+        "closes " + "#12345 upstream": "#12345",
     }
     for line, expected in cases.items():
         assert scan_text(line) == [(1, expected)], f"bare arm missed: {line!r}"
@@ -511,5 +598,12 @@ def test_ordinary_prose_is_not_flagged() -> None:
         "see [the layout](../README.md#12-layout) for the tree",
         "##" + "123 — a doubled marker, not a ref",
         "jump to [the section](" + "#12-section) below",
+        # A purely numeric heading anchor: no hyphen for the lookahead to catch,
+        # so the doc-extension filter is the only thing standing between this
+        # and a red build on an ordinary cross-reference.
+        "see [the layout](../README.md" + "#12) for the tree",
+        "the fragment spec.yaml" + "#3 names the third document",
+        # An all-digit hex colour. Six digits is past the ceiling.
+        "  --accent: " + "#123456;",
     ):
         assert scan_text(line) == [], f"false positive on: {line!r}"
