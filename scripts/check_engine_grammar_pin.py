@@ -18,13 +18,17 @@ ties the vendored file to the engine's published truth:
      Byte-equality is what lets step 1 assert the published grammar's
      self-declared version by asserting the vendored copy's.
   3. The published conversion-matrix at ITS pinned version hashes to its pin,
-     self-declares that same version, and its family keys equal the grammar's
-     family set exactly, row and column — the two engine artifacts must
-     describe one capability set. The matrix grid is read from the
-     `conversions` key of the v2 envelope; the pre-v2 bare-grid shape is not
-     accepted as a fallback. Note the shape/parity half runs only when the
-     sha256 matches: a hash mismatch is already a definite divergence, so the
-     checks that would describe those unaccounted-for bytes are skipped.
+     self-declares that same version, and its grid is certified three ways:
+     KEY PARITY (family keys equal the grammar's family set exactly, row and
+     column), CELL SHAPE (every cell is an object whose `mode` is a non-empty
+     string), and DIAGONAL IDENTITY (every family-to-itself cell declares the
+     identity mode). That list is exhaustive — the off-diagonal per-cell
+     semantics (which conversions exist, in what mode) stay engine-owned and
+     are NOT certified here. The matrix grid is read from the `conversions`
+     key of the v2 envelope; the pre-v2 bare-grid shape is not accepted as a
+     fallback. Note the shape/parity half runs only when the sha256 matches: a
+     hash mismatch is already a definite divergence, so the checks that would
+     describe those unaccounted-for bytes are skipped.
   4. The published `latest.json` pointers are consulted: a newer engine
      version than the pin is a NOTICE, not a failure — contract ⊆ engine
      still holds; adopting the new version is a deliberate pin bump
@@ -278,6 +282,51 @@ def check_published(failures: list[str]) -> list[str]:
                 f"{matrix_url} `{arrow_grammar.MATRIX_CONVERSIONS_KEY}` is not "
                 "a dict-of-dicts grid"
             )
+        # The cells are READ, not just key-counted — the parity checks below
+        # inspect keys only, so without this a grid whose every cell is `[]`
+        # or null would pass the whole block and print the guard's strongest
+        # green. Certified: each cell is an object whose mode is a non-empty
+        # string. NOT certified: any off-diagonal mode value — the mode
+        # vocabulary is engine-owned and deliberately not restated in this
+        # repo (see MATRIX_IDENTITY_MODE in arrow_grammar.py).
+        malformed = sorted(
+            f"{row}->{col}"
+            for row, cols in grid.items()
+            for col, cell in cols.items()
+            if not (
+                isinstance(cell, dict)
+                and isinstance(cell.get(arrow_grammar.MATRIX_CELL_MODE_KEY), str)
+                and cell[arrow_grammar.MATRIX_CELL_MODE_KEY]
+            )
+        )
+        if malformed:
+            # GuardError, not a divergence: the sha256 already matched, so
+            # these are the exact bytes the pin was minted against — malformed
+            # cells mean the pin itself was minted against a malformed
+            # artifact, a state neither re-vendoring (the exit-1 remediation)
+            # nor a retry fixes.
+            raise GuardError(
+                f"{matrix_url} cells are not objects with a non-empty string "
+                f"`{arrow_grammar.MATRIX_CELL_MODE_KEY}`: "
+                f"{malformed[:5]}{' …' if len(malformed) > 5 else ''}"
+            )
+        # The one universal per-cell invariant: the engine generates every
+        # diagonal (family-to-itself) cell with the identity mode,
+        # unconditionally, and pins that with its own tests — so a well-formed
+        # published matrix contradicting it is a definite divergence.
+        off_identity = sorted(
+            row
+            for row, cols in grid.items()
+            if row in cols
+            and cols[row][arrow_grammar.MATRIX_CELL_MODE_KEY]
+            != arrow_grammar.MATRIX_IDENTITY_MODE
+        )
+        if off_identity:
+            failures.append(
+                "conversion-matrix diagonal cells do not declare the identity "
+                f"mode {arrow_grammar.MATRIX_IDENTITY_MODE!r}: {off_identity} "
+                "— the engine generates the diagonal identity unconditionally"
+            )
         # Existential floor. Every parity check below is an `all()` or a set
         # equality, both vacuously TRUE on empty input — an empty grid against
         # an empty family set would pass the whole block and print the guard's
@@ -413,7 +462,10 @@ def main(argv: list[str] | None = None) -> int:
     scope = (
         "offline hash + declared version"
         if args.offline
-        else "published objects + hashes + declared versions + family parity"
+        else (
+            "published objects + hashes + declared versions + family parity "
+            "+ cell shape + diagonal identity"
+        )
     )
     print(
         f"engine-grammar pin OK ({scope}): "

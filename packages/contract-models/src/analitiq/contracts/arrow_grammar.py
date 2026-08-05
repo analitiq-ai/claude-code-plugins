@@ -98,6 +98,14 @@ CONVERSION_MATRIX_FILENAME = "conversion_matrix.json"
 GRAMMAR_FAMILIES_KEY = "families"
 #: Key holding the family x family grid inside the conversion matrix.
 MATRIX_CONVERSIONS_KEY = "conversions"
+#: Key each grid cell carries its conversion mode under.
+MATRIX_CELL_MODE_KEY = "mode"
+#: The mode vocabulary is ENGINE-OWNED and deliberately not restated in this
+#: repo; this one value is named because it carries the single universal
+#: invariant the engine generates unconditionally and pins with its own tests:
+#: every diagonal cell (family to itself) declares the identity mode. Guards
+#: assert exactly that and nothing about any off-diagonal mode value.
+MATRIX_IDENTITY_MODE = "identity"
 #: Key each artifact stamps its own version under (engine#413). Both artifacts
 #: self-declare from grammar v1.1.0 / matrix v2.0.0 on, which is what lets a
 #: consumer assert the version it got rather than trusting the URL it asked for.

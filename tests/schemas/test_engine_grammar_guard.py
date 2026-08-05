@@ -42,6 +42,29 @@ def _grammar_bytes(guard):
     return guard.arrow_grammar._GRAMMAR_PATH.read_bytes()
 
 
+def _grid(guard, families):
+    """A realistic conversions grid: every cell is the published three-key
+    object shape (`fn`, `mode`, `runtime_checked`). Diagonal cells carry the
+    identity mode; off-diagonal modes are SYNTHETIC strings, because the guard
+    asserts only non-empty-string there — the real mode vocabulary is
+    engine-owned and never restated in this repo.
+    """
+    ag = guard.arrow_grammar
+    return {
+        row: {
+            col: {
+                "fn": f"{row}_to_{col}",
+                ag.MATRIX_CELL_MODE_KEY: (
+                    ag.MATRIX_IDENTITY_MODE if row == col else "synthetic-mode"
+                ),
+                "runtime_checked": False,
+            }
+            for col in families
+        }
+        for row in families
+    }
+
+
 def _matrix_bytes(guard, *, families=None, version=None):
     """A conversion-matrix object in the v2 envelope: its own `version` beside
     a full grid. Healthy by default (grid over exactly the grammar families,
@@ -56,9 +79,7 @@ def _matrix_bytes(guard, *, families=None, version=None):
             ag.ARTIFACT_VERSION_KEY: (
                 ag.CONVERSION_MATRIX_VERSION if version is None else version
             ),
-            ag.MATRIX_CONVERSIONS_KEY: {
-                row: {col: [] for col in families} for row in families
-            },
+            ag.MATRIX_CONVERSIONS_KEY: _grid(guard, families),
         }
     ).encode()
 
@@ -161,7 +182,7 @@ def test_matrix_column_divergence_fails(guard, monkeypatch, capsys):
     """
     ag = guard.arrow_grammar
     families = list(ag.FAMILY_NAMES)
-    grid = {row: {col: [] for col in families} for row in families}
+    grid = _grid(guard, families)
     grid[families[0]].pop(families[-1])
     _stub_fetch(
         guard,
@@ -180,6 +201,104 @@ def test_matrix_column_divergence_fails(guard, monkeypatch, capsys):
     # The exact reported list: the offending family alone, no envelope key.
     assert f"column keys != grammar families: ['{families[0]}']" in err
     assert f"'{ag.ARTIFACT_VERSION_KEY}'" not in err
+
+
+def test_grid_of_empty_cells_is_a_guard_error_not_the_strongest_green(
+    guard, monkeypatch, capsys
+):
+    """Cells must be READ, not key-counted. Every parity check inspects keys
+    only, so a grid whose every cell is `[]` — no `fn`, no `mode`, nothing —
+    used to pass the full network check with exit 0, the guard's strongest
+    green. And the sha256 pin MATCHES these bytes, meaning the pin itself was
+    minted against a malformed artifact: a state neither re-vendoring nor a
+    retry fixes, so it must classify as "guard could not run" (exit 2), never
+    as the exit-1 verdict whose remediation is re-vendoring.
+    """
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: {
+                    row: {col: [] for col in families} for row in families
+                },
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert f"`{ag.MATRIX_CELL_MODE_KEY}`" in err
+
+
+@pytest.mark.parametrize(
+    "bad_cell",
+    [
+        None,
+        [],
+        {"fn": "utf8_to_utf8", "runtime_checked": False},  # mode absent
+        {"fn": "utf8_to_utf8", "mode": "", "runtime_checked": False},
+        {"fn": "utf8_to_utf8", "mode": 3, "runtime_checked": False},
+    ],
+)
+def test_one_malformed_cell_is_a_guard_error(guard, monkeypatch, capsys, bad_cell):
+    """Every way a single cell can fail the shape contract (not an object /
+    mode absent / empty / non-string) is exit 2 — see the empty-cells test for
+    why malformed-under-a-matching-sha is "cannot run", not a divergence."""
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    grid = _grid(guard, families)
+    grid[families[0]][families[1]] = bad_cell
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: grid,
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    # The offending coordinate is named — a reader must not have to re-derive
+    # which of ~hundreds of cells failed.
+    assert f"{families[0]}->{families[1]}" in err
+
+
+def test_non_identity_diagonal_cell_is_a_divergence(guard, monkeypatch, capsys):
+    """Well-formed cells, but one DIAGONAL cell declares a non-identity mode.
+    The engine generates the diagonal identity unconditionally and pins it
+    with its own tests, so a published matrix contradicting that is a definite
+    divergence (exit 1) naming the family — not an un-runnable guard."""
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    grid = _grid(guard, families)
+    grid[families[0]][families[0]][ag.MATRIX_CELL_MODE_KEY] = "synthetic-mode"
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: grid,
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    assert ag.MATRIX_IDENTITY_MODE in err
+    assert families[0] in err
 
 
 def test_matrix_self_declared_version_mismatch_fails(guard, monkeypatch, capsys):
@@ -228,7 +347,7 @@ def test_matrix_without_conversions_key_is_a_guard_error(guard, monkeypatch, cap
         matrix_bytes=json.dumps(
             {
                 ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
-                "grid": {row: {col: [] for col in families} for row in families},
+                "grid": _grid(guard, families),
             }
         ).encode(),
         grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
@@ -331,11 +450,7 @@ def test_matrix_without_self_declared_version_is_a_guard_error(
         guard,
         monkeypatch,
         matrix_bytes=json.dumps(
-            {
-                ag.MATRIX_CONVERSIONS_KEY: {
-                    row: {col: [] for col in families} for row in families
-                }
-            }
+            {ag.MATRIX_CONVERSIONS_KEY: _grid(guard, families)}
         ).encode(),
         grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
         matrix_latest=ag.CONVERSION_MATRIX_VERSION,
@@ -360,9 +475,7 @@ def test_pre_v2_bare_grid_is_a_guard_error_not_a_silent_fallback(
     _stub_fetch(
         guard,
         monkeypatch,
-        matrix_bytes=json.dumps(
-            {row: {col: [] for col in families} for row in families}
-        ).encode(),
+        matrix_bytes=json.dumps(_grid(guard, families)).encode(),
         grammar_latest=guard.arrow_grammar.ENGINE_GRAMMAR_VERSION,
         matrix_latest=guard.arrow_grammar.CONVERSION_MATRIX_VERSION,
     )
