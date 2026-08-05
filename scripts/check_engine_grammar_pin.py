@@ -31,7 +31,9 @@ ties the vendored file to the engine's published truth:
      definite divergence (the checks that would describe those unaccounted-for
      bytes are skipped), and a mislabeled object is rejected outright — one
      failure, one cause; no grid verdict is minted about a document already
-     disclaimed. Step 4 runs either way.
+     disclaimed. The hash-mismatch and mislabel branches still fall through
+     to step 4; a grid GuardError (missing `conversions` key, a non-grid
+     shape, malformed cells) exits before it.
   4. The published `latest.json` pointers are consulted: a newer engine
      version than the pin is a NOTICE, not a failure — contract ⊆ engine
      still holds; adopting the new version is a deliberate pin bump
@@ -42,13 +44,16 @@ ties the vendored file to the engine's published truth:
      mutable pointer is lagging a published object — a stale latest.json
      (the pointers rely on a 5-minute TTL, not invalidation) or a
      half-completed publish. Remediation: re-check after the TTL and repair
-     the pointer if it persists — never re-vendor.
+     the pointer if it persists — re-vendoring does not fix the pointer.
 
 Exit codes: 0 ok (including the newer-version notice), 1 divergence, 2
 GuardError. Every infrastructure failure — missing vendored file, fetch
-failure, malformed JSON, anything unclassified — is a GuardError: a guard that
-cannot run must never read as green, and must never mint the exit-1 verdict
-("the contract diverged; re-vendor") for a fault that is not a divergence.
+failure, malformed JSON, anything unclassified — is a GuardError, and so is a
+sha-matched artifact whose content the guard cannot certify (malformed grid
+cells): the pin was minted against a malformed object, which neither a retry
+nor a re-vendor fixes. A guard that cannot run must never read as green, and
+must never mint the exit-1 verdict ("the contract diverged; re-vendor") for a
+fault that is not a divergence.
 Exit 2 still PRINTS any divergence already found: dropping them would report a
 real divergent republish as an infrastructure flake, which a CI reader retries
 forever. `--offline` runs only step 1 (local dev convenience; CI always runs
@@ -223,11 +228,12 @@ def check_offline() -> list[str]:
 
 
 def _check_matrix_grid(matrix: dict, matrix_url: str, failures: list[str]) -> None:
-    """The conversion-matrix grid certification, in full: key parity with the
-    grammar family set (row and column), cell shape (every cell an object
-    whose mode is a non-empty string), and diagonal identity. Runs only for a
-    sha-matched object whose self-declared version equals the pin — the
-    caller rejects a mislabeled object before any grid verdict.
+    """The conversion-matrix grid certification, in full and in the order the
+    module docstring states it: key parity with the grammar family set (row
+    and column), cell shape (every cell an object whose mode is a non-empty
+    string), and diagonal identity. Runs only for a sha-matched object whose
+    self-declared version equals the pin — the caller rejects a mislabeled
+    object before any grid verdict.
     """
     # From v2.0.0 the grid sits under `conversions`, beside the artifact's
     # own `version`; v1.0.0 was the bare grid. Read the key, and treat its
@@ -241,55 +247,15 @@ def _check_matrix_grid(matrix: dict, matrix_url: str, failures: list[str]) -> No
             "object — the conversion matrix carries its grid there from "
             "v2.0.0 on"
         )
-    if not all(isinstance(cols, dict) for cols in grid.values()):
+    bad_rows = sorted(
+        row for row, cols in grid.items() if not isinstance(cols, dict)
+    )
+    if bad_rows:
         raise GuardError(
             f"{matrix_url} `{arrow_grammar.MATRIX_CONVERSIONS_KEY}` is not "
-            "a dict-of-dicts grid"
-        )
-    # The cells are READ, not just key-counted — the parity checks below
-    # inspect keys only, so without this a grid whose every cell is `[]`
-    # or null would pass the whole block and print the guard's strongest
-    # green. Certified: each cell is an object whose mode is a non-empty
-    # string. NOT certified: any off-diagonal mode value — the mode
-    # vocabulary is engine-owned and deliberately not restated in this
-    # repo (see MATRIX_IDENTITY_MODE in arrow_grammar.py).
-    malformed = sorted(
-        f"{row}->{col}"
-        for row, cols in grid.items()
-        for col, cell in cols.items()
-        if not (
-            isinstance(cell, dict)
-            and isinstance(cell.get(arrow_grammar.MATRIX_CELL_MODE_KEY), str)
-            and cell[arrow_grammar.MATRIX_CELL_MODE_KEY]
-        )
-    )
-    if malformed:
-        # GuardError, not a divergence: the sha256 already matched, so
-        # these are the exact bytes the pin was minted against — malformed
-        # cells mean the pin itself was minted against a malformed
-        # artifact, a state neither re-vendoring (the exit-1 remediation)
-        # nor a retry fixes.
-        raise GuardError(
-            f"{matrix_url} cells are not objects with a non-empty string "
-            f"`{arrow_grammar.MATRIX_CELL_MODE_KEY}`: "
-            f"{malformed[:5]}{' …' if len(malformed) > 5 else ''}"
-        )
-    # The one universal per-cell invariant: the engine generates every
-    # diagonal (family-to-itself) cell with the identity mode,
-    # unconditionally, and pins that with its own tests — so a well-formed
-    # published matrix contradicting it is a definite divergence.
-    off_identity = sorted(
-        row
-        for row, cols in grid.items()
-        if row in cols
-        and cols[row][arrow_grammar.MATRIX_CELL_MODE_KEY]
-        != arrow_grammar.MATRIX_IDENTITY_MODE
-    )
-    if off_identity:
-        failures.append(
-            "conversion-matrix diagonal cells do not declare the identity "
-            f"mode {arrow_grammar.MATRIX_IDENTITY_MODE!r}: {off_identity} "
-            "— the engine generates the diagonal identity unconditionally"
+            f"a dict-of-dicts grid — {len(bad_rows)} row(s) hold a "
+            f"non-object value: "
+            f"{bad_rows[:5]}{' …' if len(bad_rows) > 5 else ''}"
         )
     # Existential floor. Every parity check below is an `all()` or a set
     # equality, both vacuously TRUE on empty input — an empty grid against
@@ -327,6 +293,61 @@ def _check_matrix_grid(matrix: dict, matrix_url: str, failures: list[str]) -> No
                 "conversion-matrix rows with column keys != grammar "
                 f"families: {sorted(bad_cols)}"
             )
+    # The cells are READ, not just key-counted — the parity checks above
+    # inspect keys only, so without this a grid whose every cell is `[]`
+    # or null would pass the whole block and print the guard's strongest
+    # green. Certified: each cell is an object whose mode is a non-empty
+    # string. NOT certified: any off-diagonal mode value — the mode
+    # vocabulary is engine-owned and deliberately not restated in this
+    # repo (see MATRIX_IDENTITY_MODE in arrow_grammar.py).
+    malformed = sorted(
+        f"{row}->{col}"
+        for row, cols in grid.items()
+        for col, cell in cols.items()
+        if not (
+            isinstance(cell, dict)
+            and isinstance(cell.get(arrow_grammar.MATRIX_CELL_MODE_KEY), str)
+            and cell[arrow_grammar.MATRIX_CELL_MODE_KEY]
+        )
+    )
+    if malformed:
+        # GuardError, not a divergence: the sha256 already matched, so
+        # these are the exact bytes the pin was minted against — malformed
+        # cells mean the pin itself was minted against a malformed
+        # artifact, a state neither re-vendoring (the exit-1 remediation)
+        # nor a retry fixes. Raised AFTER the parity checks, which only
+        # append: a publish that is both family-divergent and malformed
+        # reports both findings — the exit-2 printing contract prints the
+        # appended parity divergence beside this raise.
+        raise GuardError(
+            f"{matrix_url}: {len(malformed)} cell(s) are not objects with "
+            f"a non-empty string `{arrow_grammar.MATRIX_CELL_MODE_KEY}`: "
+            f"{malformed[:5]}{' …' if len(malformed) > 5 else ''}"
+        )
+    # The one universal per-cell invariant: the engine generates every
+    # diagonal (family-to-itself) cell with the identity mode,
+    # unconditionally, and pins that with its own tests — so a well-formed
+    # published matrix contradicting it is a definite divergence. `row in
+    # cols` narrows to cells that exist: a MISSING diagonal cell is a
+    # column-parity divergence the parity checks above already report —
+    # this check is about the mode value, not presence. It also stays
+    # below the cell-shape raise: it reads each diagonal cell's mode, so
+    # it needs the shape guaranteed.
+    off_identity = sorted(
+        row
+        for row, cols in grid.items()
+        if row in cols
+        and cols[row][arrow_grammar.MATRIX_CELL_MODE_KEY]
+        != arrow_grammar.MATRIX_IDENTITY_MODE
+    )
+    if off_identity:
+        failures.append(
+            "conversion-matrix diagonal cells do not declare the identity "
+            f"mode {arrow_grammar.MATRIX_IDENTITY_MODE!r}: {off_identity} "
+            "— the engine generates the diagonal identity unconditionally, "
+            "or the engine renamed the identity mode, in which case "
+            "MATRIX_IDENTITY_MODE moves with the pin bump"
+        )
 
 
 def check_published(failures: list[str]) -> list[str]:
@@ -385,9 +406,13 @@ def check_published(failures: list[str]) -> list[str]:
             # Mirror the reasoning check_offline states for its own early
             # return: one failure, one cause — a grid verdict about a
             # document already disclaimed would be a second, possibly
-            # nonsense finding the reader must de-causate. Step 4 below
-            # still runs: the latest.json pointers are separate objects this
-            # rejection says nothing about.
+            # nonsense finding the reader must de-causate. The deliberate
+            # exit-code consequence: a mislabeled matrix whose grid is also
+            # malformed exits 1 on the mislabel alone where it previously
+            # exited 2 — sound, because the mislabel's remediation fixes
+            # the inconsistent pin pair. Step 4 below still runs: the
+            # latest.json pointers are separate objects this rejection says
+            # nothing about.
             failures.extend(mislabel)
         else:
             _check_matrix_grid(matrix, matrix_url, failures)
@@ -425,8 +450,8 @@ def check_published(failures: list[str]) -> list[str]:
                 "it. The mutable pointer lags a published pinned object: a "
                 "stale latest.json (the pointers rely on a 5-minute TTL, not "
                 "invalidation) or a half-completed publish. Re-check after "
-                "the TTL and repair the pointer if it persists — never "
-                "re-vendor"
+                "the TTL and repair the pointer if it persists — "
+                "re-vendoring does not fix the pointer"
             )
     return notices
 

@@ -131,7 +131,11 @@ def test_healthy_publication_passes(guard, monkeypatch, capsys):
         matrix_latest=guard.arrow_grammar.CONVERSION_MATRIX_VERSION,
     )
     assert guard.main([]) == 0
-    assert "::notice::" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "::notice::" not in out
+    # The full-run banner names everything the network half certified — it is
+    # the only signal a CI reader gets about which checks actually executed.
+    assert "family parity + cell shape + diagonal identity" in out
 
 
 def test_newer_engine_publication_is_a_notice_not_a_failure(guard, monkeypatch, capsys):
@@ -159,7 +163,7 @@ def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
     rely on a 5-minute TTL, not invalidation) or a half-completed publish.
     Still exit 1: a red state a human must look at, with a remediation of
     re-checking after the TTL and repairing the pointer if it persists —
-    never re-vendoring."""
+    scoped to the pointer, since re-vendoring cannot fix it."""
     _stub_fetch(
         guard,
         monkeypatch,
@@ -173,9 +177,11 @@ def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
     assert "lags" in err
     assert "stale latest.json" in err
     # The truthful remediation: wait out the TTL, repair the pointer, and
-    # explicitly NOT the exit-1 default of re-vendoring.
+    # explicitly NOT the exit-1 default of re-vendoring — scoped to the
+    # pointer, so it cannot read as a global ban when printed beside a
+    # genuine divergence whose remediation IS re-vendoring.
     assert "Re-check after the TTL" in err
-    assert "never re-vendor" in err
+    assert "re-vendoring does not fix the pointer" in err
     # The disproven diagnosis must be gone.
     assert "has not published" not in err
 
@@ -258,6 +264,7 @@ def test_grid_of_empty_cells_is_a_guard_error_not_the_strongest_green(
     assert f"`{ag.MATRIX_CELL_MODE_KEY}`" in err
 
 
+@pytest.mark.parametrize("position", ["off-diagonal", "diagonal"])
 @pytest.mark.parametrize(
     "bad_cell",
     [
@@ -268,14 +275,23 @@ def test_grid_of_empty_cells_is_a_guard_error_not_the_strongest_green(
         {"fn": "utf8_to_utf8", "mode": 3, "runtime_checked": False},
     ],
 )
-def test_one_malformed_cell_is_a_guard_error(guard, monkeypatch, capsys, bad_cell):
+def test_one_malformed_cell_is_a_guard_error(
+    guard, monkeypatch, capsys, bad_cell, position
+):
     """Every way a single cell can fail the shape contract (not an object /
     mode absent / empty / non-string) is exit 2 — see the empty-cells test for
-    why malformed-under-a-matching-sha is "cannot run", not a divergence."""
+    why malformed-under-a-matching-sha is "cannot run", not a divergence.
+
+    The DIAGONAL position matters separately: the diagonal-identity check
+    reads each diagonal cell's mode unguarded, so the cell-shape raise must
+    fire first — a malformed diagonal cell reaching that read would crash
+    into the unexpected-exception path instead of naming the coordinate."""
     ag = guard.arrow_grammar
     families = list(ag.FAMILY_NAMES)
     grid = _grid(guard, families)
-    grid[families[0]][families[1]] = bad_cell
+    row = families[0]
+    col = families[0] if position == "diagonal" else families[1]
+    grid[row][col] = bad_cell
     _stub_fetch(
         guard,
         monkeypatch,
@@ -293,7 +309,68 @@ def test_one_malformed_cell_is_a_guard_error(guard, monkeypatch, capsys, bad_cel
     assert "could not run" in err
     # The offending coordinate is named — a reader must not have to re-derive
     # which of ~hundreds of cells failed.
+    assert f"{row}->{col}" in err
+
+
+def test_malformed_and_family_divergent_grid_reports_both(guard, monkeypatch, capsys):
+    """A publish that is BOTH family-divergent (a definite divergence) and
+    malformed in a cell (a GuardError) must report both findings: the parity
+    checks run before the cell-shape raise and only append, so the exit-2
+    printing contract prints the parity divergence beside the malformed-cell
+    complaint. Before the ordering fix the raise came first and the reachable
+    parity divergence was never reached — asymmetric with the documented
+    a-guard-error-still-reports rule."""
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)[:-1] + ["Struct"]
+    grid = _grid(guard, families)
+    grid[families[0]][families[1]] = []
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: grid,
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    # Both findings, side by side: the parity divergence...
+    assert "family keys != grammar families" in err
+    # ...and the malformed cell, with its coordinate.
     assert f"{families[0]}->{families[1]}" in err
+
+
+def test_missing_diagonal_cell_is_a_column_parity_divergence(
+    guard, monkeypatch, capsys
+):
+    """Well-formed grid except one row lacks its own diagonal cell. That is a
+    COLUMN-parity divergence (exit 1) naming the family — the diagonal-identity
+    check must skip the absent cell (the `row in cols` narrowing) rather than
+    crash into the unexpected-exception exit-2 path."""
+    ag = guard.arrow_grammar
+    families = list(ag.FAMILY_NAMES)
+    grid = _grid(guard, families)
+    grid[families[0]].pop(families[0])
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        matrix_bytes=json.dumps(
+            {
+                ag.ARTIFACT_VERSION_KEY: ag.CONVERSION_MATRIX_VERSION,
+                ag.MATRIX_CONVERSIONS_KEY: grid,
+            }
+        ).encode(),
+        grammar_latest=ag.ENGINE_GRAMMAR_VERSION,
+        matrix_latest=ag.CONVERSION_MATRIX_VERSION,
+    )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    assert f"column keys != grammar families: ['{families[0]}']" in err
 
 
 def test_non_identity_diagonal_cell_is_a_divergence(guard, monkeypatch, capsys):
@@ -564,7 +641,11 @@ def test_matrix_conversions_is_not_a_grid_is_a_guard_error(guard, monkeypatch, c
         matrix_latest=ag.CONVERSION_MATRIX_VERSION,
     )
     assert guard.main([]) == 2
-    assert "not a dict-of-dicts grid" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "not a dict-of-dicts grid" in err
+    # The offending row is named — same actionability bar as the
+    # malformed-cell message beside it.
+    assert "['Utf8']" in err
 
 
 def test_malformed_latest_version_is_a_guard_error(guard, monkeypatch, capsys):
