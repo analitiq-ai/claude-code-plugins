@@ -710,8 +710,9 @@ class StreamDestination(StrictModel):
 #
 # A dotted string is not a path — it is a path plus an unstated splitting
 # convention, and the contract never stated one. Two questions it left open:
-# where the split happens (every consumer had to decide for itself, so two
-# consumers could read one document as two different paths), and how a field
+# where the split happens (every consumer had to decide for itself, and they
+# decided differently — one document read as two different paths, which is what
+# forced the breaking change below), and how a field
 # name containing a literal dot is spelled (unanswerable). Tokens answer both
 # by construction: there is nothing left to split, and `["a.b"]` is a field
 # named `a.b` while `["a", "b"]` is nested.

@@ -334,8 +334,8 @@ def test_cross_params_checks_literals_only():
 
 def test_timestamp_offset_uses_the_manifest_pattern_verbatim():
     """The fixed-offset grammar is manifest-owned; the derived pattern must
-    embed it unchanged — no hand-tightened hour range, which would accept or
-    reject offsets the engine does not."""
+    embed it unchanged — no hand-edited hour range, which would accept or reject
+    offsets the engine does not."""
     # StopIteration here is the failure signal working, not a case to guard.
     tz_param = next(  # skipcq: PTC-W0063
         p

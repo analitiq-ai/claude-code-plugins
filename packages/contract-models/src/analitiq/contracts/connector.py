@@ -1375,7 +1375,7 @@ _DeclaredCap = Annotated[int, Field(strict=True, ge=1)]
 
 
 class ErrorMap(StrictModel):
-    """Driver-fact error classification map (capability block v2).
+    """Driver-fact error classification map.
 
     Maps driver-reported identifiers onto the engine's closed failure-category
     vocabulary, one map per identifier family. A subset of families (including
@@ -1417,7 +1417,7 @@ class ErrorMap(StrictModel):
 
 
 class Concurrency(StrictModel):
-    """Connector-level concurrency declaration (capability block v2).
+    """Connector-level concurrency declaration.
 
     Additive: absence of the block or of `max_connections` — including an
     empty block — means "no declared cap" and current engine behavior applies.
@@ -1434,7 +1434,7 @@ class Concurrency(StrictModel):
 
 
 class SqlLimits(StrictModel):
-    """Declared SQL driver caps (capability block v2).
+    """Declared SQL driver caps.
 
     The one additive member of `sql_capabilities`: unlike the five required
     shape facts, absence of the block or of any single cap — including an
@@ -1715,7 +1715,7 @@ class SqlCapabilities(StrictModel):
     limits: SqlLimits | None = Field(
         default=None,
         description=(
-            "Declared SQL driver caps (capability block v2). The "
+            "Declared SQL driver caps. The "
             "one additive member of this block: unlike the five required "
             "shape facts, absence (of the block or any single cap) is legal "
             "and means \"no declared cap\"."
@@ -1894,7 +1894,7 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
     error_map: ErrorMap | None = Field(
         default=None,
         description=(
-            "Driver-fact error classification map (capability block v2): "
+            "Driver-fact error classification map: "
             "per-family identifier → failure-category facts "
             "(sqlstate, exception, vendor_code, http). Connector-level "
             "because families span kinds (http for API connectors, sqlstate/"
@@ -1905,7 +1905,7 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
     concurrency: Concurrency | None = Field(
         default=None,
         description=(
-            "Connector-level concurrency declaration (capability block v2). "
+            "Connector-level concurrency declaration. "
             "Additive — absence means no declared cap."
         ),
     )
@@ -2088,9 +2088,8 @@ class DatabaseConnector(ConnectorBase):
             "Declared SQL write-path capabilities (engine ADR §5). SQL-specific "
             "— not present on other connector kinds. Optional; when omitted the "
             "engine refuses any needed-but-undeclared fact at handshake time. "
-            "When present, every shape fact is required; `limits` "
-            "(capability block v2) is the one additive member and may be "
-            "omitted."
+            "When present, every shape fact is required; `limits` is the "
+            "one additive member and may be omitted."
         ),
     )
 

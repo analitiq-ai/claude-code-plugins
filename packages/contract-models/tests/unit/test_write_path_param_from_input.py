@@ -6,9 +6,8 @@ expressions, write params resolve through the connection/secrets/runtime scopes,
 and *no scope reaches the record*. The shipped `sevdesk` connector declares this
 shape in 21 of its 22 write endpoints; each one bound `{id}` to a param with no
 `default`, so the placeholder could never be substituted. Once the engine began
-honouring `path_params` instead of sending the path with the placeholder
-unsubstituted, those 21 endpoints went from silently wrong to loudly blocked,
-with no fix available inside the engine or the connector.
+honouring `path_params`, those 21 endpoints went from silently wrong to loudly
+blocked, with no fix available inside the engine or the connector.
 
 The contract now permits `{"from_input": "record.<dotted>"}` in
 `request.path_params`, **on write operations only**, binding directly with no

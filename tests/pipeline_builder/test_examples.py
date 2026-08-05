@@ -104,8 +104,8 @@ def test_full_refresh_example_demonstrates_the_shapes_it_is_named_for():
     Validity and illustrativeness are different properties: this file stays a
     perfectly valid stream after swapping `truncate_insert` for `insert`,
     flattening the nested token path, or turning the constant into an
-    expression. It is the repo's only worked example of all three, and worked
-    examples are what creator agents copy from, so each shape is asserted.
+    expression. It is the repo's only worked example of these shapes, and worked
+    examples are what creator agents copy from, so each one is asserted.
     """
     path = ROOT / "skills/stream-spec/examples/db-full-refresh-truncate-insert.example.json"
     doc = json.loads(path.read_text())

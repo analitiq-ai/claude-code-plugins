@@ -156,7 +156,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -230,7 +230,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "api",
@@ -591,7 +591,7 @@
     },
     "Concurrency": {
       "additionalProperties": false,
-      "description": "Connector-level concurrency declaration (capability block v2).\n\nAdditive: absence of the block or of `max_connections` \u2014 including an\nempty block \u2014 means \"no declared cap\" and current engine behavior applies.\nA declared cap is validated strictly (positive integer, booleans rejected).",
+      "description": "Connector-level concurrency declaration.\n\nAdditive: absence of the block or of `max_connections` \u2014 including an\nempty block \u2014 means \"no declared cap\" and current engine behavior applies.\nA declared cap is validated strictly (positive integer, booleans rejected).",
       "properties": {
         "max_connections": {
           "anyOf": [
@@ -1293,7 +1293,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -1367,7 +1367,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "database",
@@ -1397,7 +1397,7 @@
             }
           ],
           "default": null,
-          "description": "Declared SQL write-path capabilities (engine ADR \u00a75). SQL-specific \u2014 not present on other connector kinds. Optional; when omitted the engine refuses any needed-but-undeclared fact at handshake time. When present, every shape fact is required; `limits` (capability block v2) is the one additive member and may be omitted."
+          "description": "Declared SQL write-path capabilities (engine ADR \u00a75). SQL-specific \u2014 not present on other connector kinds. Optional; when omitted the engine refuses any needed-but-undeclared fact at handshake time. When present, every shape fact is required; `limits` is the one additive member and may be omitted."
         },
         "tags": {
           "anyOf": [
@@ -1617,7 +1617,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -1691,7 +1691,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "document",
@@ -1846,7 +1846,7 @@
     },
     "ErrorMap": {
       "additionalProperties": false,
-      "description": "Driver-fact error classification map (capability block v2).\n\nMaps driver-reported identifiers onto the engine's closed failure-category\nvocabulary, one map per identifier family. A subset of families (including\nnone \u2014 an empty block declares nothing) is legal, and so is an empty family\nmap. Additive: absence never blocks anything. Connectors declare driver\nfacts only; the engine alone derives verdicts (ack status, failure\ncategory, error code) from them.",
+      "description": "Driver-fact error classification map.\n\nMaps driver-reported identifiers onto the engine's closed failure-category\nvocabulary, one map per identifier family. A subset of families (including\nnone \u2014 an empty block declares nothing) is legal, and so is an empty family\nmap. Additive: absence never blocks anything. Connectors declare driver\nfacts only; the engine alone derives verdicts (ack status, failure\ncategory, error code) from them.",
       "properties": {
         "exception": {
           "anyOf": [
@@ -2008,7 +2008,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -2082,7 +2082,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "file",
@@ -2560,7 +2560,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -2634,7 +2634,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "nosql",
@@ -3368,7 +3368,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -3442,7 +3442,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "s3",
@@ -3760,7 +3760,7 @@
             }
           ],
           "default": null,
-          "description": "Declared SQL driver caps (capability block v2). The one additive member of this block: unlike the five required shape facts, absence (of the block or any single cap) is legal and means \"no declared cap\"."
+          "description": "Declared SQL driver caps. The one additive member of this block: unlike the five required shape facts, absence (of the block or any single cap) is legal and means \"no declared cap\"."
         },
         "merge_form": {
           "description": "The upsert grammar the destination supports: SQL-standard `merge` (`MERGE`), Postgres-style `insert_on_conflict` (`INSERT \u2026 ON CONFLICT`), MySQL-style `insert_on_duplicate_key` (`INSERT \u2026 ON DUPLICATE KEY`), or `none` (no native upsert).",
@@ -3799,7 +3799,7 @@
     },
     "SqlLimits": {
       "additionalProperties": false,
-      "description": "Declared SQL driver caps (capability block v2).\n\nThe one additive member of `sql_capabilities`: unlike the five required\nshape facts, absence of the block or of any single cap \u2014 including an\nempty block \u2014 is legal and means \"no declared cap\", and absence never\nblocks a write. Declared values are validated strictly (positive\nintegers, booleans rejected) and are enforced by the engine.",
+      "description": "Declared SQL driver caps.\n\nThe one additive member of `sql_capabilities`: unlike the five required\nshape facts, absence of the block or of any single cap \u2014 including an\nempty block \u2014 is legal and means \"no declared cap\", and absence never\nblocks a write. Declared values are validated strictly (positive\nintegers, booleans rejected) and are enforced by the engine.",
       "properties": {
         "max_bind_params": {
           "anyOf": [
@@ -3971,7 +3971,7 @@
             }
           ],
           "default": null,
-          "description": "Connector-level concurrency declaration (capability block v2). Additive \u2014 absence means no declared cap."
+          "description": "Connector-level concurrency declaration. Additive \u2014 absence means no declared cap."
         },
         "connection_contract": {
           "$ref": "#/$defs/ConnectionContract",
@@ -4045,7 +4045,7 @@
             }
           ],
           "default": null,
-          "description": "Driver-fact error classification map (capability block v2): per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
+          "description": "Driver-fact error classification map: per-family identifier \u2192 failure-category facts (sqlstate, exception, vendor_code, http). Connector-level because families span kinds (http for API connectors, sqlstate/vendor_code for databases). Additive \u2014 absence never blocks anything; the engine alone derives verdicts from these facts."
         },
         "kind": {
           "const": "stdout",
