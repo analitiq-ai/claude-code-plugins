@@ -1,10 +1,14 @@
 """The prose census datum — every piece of prose on the contract's own surface
-(the field descriptions and docstring of every contract model, and the
-docstring of every contract enum, in ``analitiq.contracts`` — both docstring
-kinds render into the published JSON Schema; non-model, non-enum classes such
-as the exception types publish no prose and are out of scope) carries a
+(the field descriptions and docstring of every pydantic model, and the
+docstring of every ``Enum``, defined under ``analitiq.contracts``) carries a
 :class:`ProseObligation` entry binding it to what enforces it, and a content
-hash pinning its exact wording.
+hash pinning its exact wording. Membership is by category, mechanical and
+judgment-free: for public enums pydantic publishes the class docstring into
+the schema ``description``, and private helper enums ride along under the
+same category rather than requiring a per-class publishability judgment that
+would rot. Exception classes and other plain classes publish nothing and are
+out of scope, as are enum MEMBER docstrings — pydantic does not publish
+those; the lint suite keeps modal obligations out of them.
 
 :mod:`advisory_rules` is the census of relational rules; this module is its
 missing other half. The registry's tests verify the integrity of rules that

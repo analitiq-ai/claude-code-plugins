@@ -33,7 +33,15 @@ def _aggregate() -> tuple[ProseObligation, ...]:
     entries: list[ProseObligation] = []
     for info in sorted(pkgutil.iter_modules(__path__), key=lambda i: i.name):
         module = importlib.import_module(f"{__name__}.{info.name}")
-        entries.extend(module.PROSE_OBLIGATIONS)
+        obligations = getattr(module, "PROSE_OBLIGATIONS", None)
+        if obligations is None:
+            raise AttributeError(
+                f"census area module {module.__name__!r} exports no "
+                "PROSE_OBLIGATIONS — every module in this package is "
+                "aggregated automatically and must export a "
+                "PROSE_OBLIGATIONS tuple of ProseObligation entries"
+            )
+        entries.extend(obligations)
     return tuple(entries)
 
 

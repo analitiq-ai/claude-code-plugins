@@ -6,9 +6,14 @@ scanned the moment it exists, and a subpackage that fails to import fails the
 census instead of being skipped. Both census directions — prose→registry
 (``test_advisory_prose``) and enforcer→registry (``test_advisory_registry``) —
 walk the tree through it, so neither can develop a blind spot the other lacks.
-The prose scan covers models AND enums: pydantic publishes an ``Enum`` class
-docstring into the JSON Schema ``description`` exactly like a model docstring,
-so :func:`contract_enums` feeds the same scan.
+The prose scan covers ALL pydantic models and ALL ``Enum`` classes defined
+under ``analitiq.contracts`` — membership by category, mechanical and
+judgment-free. For public enums pydantic publishes the class docstring into
+the JSON Schema ``description`` exactly like a model docstring; private helper
+enums ride along under the same category rather than requiring a per-class
+publishability judgment that would rot. Exception classes and other plain
+classes publish nothing and are out of scope, as are enum MEMBER docstrings —
+pydantic does not publish those (a lint keeps modal obligations out of them).
 
 :func:`census_report` computes the full live-prose vs census diff in ONE
 place, consumed by both ``tests/unit/test_advisory_prose.py`` and
@@ -170,9 +175,11 @@ def _scan() -> dict[SiteKey, ProseSite]:
     """All live prose sites, keyed by :class:`SiteKey`.
 
     Covers every contract model (docstring + described fields) and every
-    contract enum's own docstring — pydantic publishes both docstring kinds
-    into the JSON Schema, so both must be catalogued. Enums contribute
-    docstring sites only; they declare no fields.
+    contract enum's own docstring — membership by category, whether or not a
+    private helper's docstring reaches a published schema. Enums contribute
+    class-docstring sites only: they declare no fields, and member docstrings
+    are not published by pydantic (a lint keeps modal obligations out of
+    them).
 
     The census binds sites by class name (the advisory registry's own
     convention), so two distinct prose-carrying classes sharing a bare name

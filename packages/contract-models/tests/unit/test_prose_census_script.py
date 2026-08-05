@@ -104,6 +104,32 @@ def test_restamp_reports_a_block_it_cannot_rewrite(tmp_path, monkeypatch, capsys
     assert "->" not in out  # the per-entry success line
 
 
+def test_write_reports_a_tripwire_only_state(tmp_path, monkeypatch, capsys):
+    """A tripwire is manual work `write` cannot do itself; a tripwire-only
+    report must surface the findings and exit non-zero — never print nothing
+    and exit 0 while ``report.clean`` is False."""
+    module = _load_script()
+    area = _tmp_census(tmp_path, monkeypatch, module)
+    before = area.read_bytes()
+
+    site = ProseSite(
+        key=SiteKey(model="A", field="x"),
+        module="synthetic",
+        text="authors must do a thing",
+    )
+    report = CensusReport(
+        missing=(), stale=(), hash_mismatches=(), tripwires=(site,)
+    )
+    assert module.write(report) == 1
+    assert area.read_bytes() == before  # tripwires are never auto-edited
+
+    out = capsys.readouterr().out
+    assert "tripwire" in out
+    assert "waiver=DESCRIPTIVE" in out
+    assert "A.x" in out
+    assert "nothing to do" not in out
+
+
 def test_restamp_returns_none_for_an_unknown_entry(tmp_path, monkeypatch):
     module = _load_script()
     _tmp_census(tmp_path, monkeypatch, module)

@@ -4,11 +4,15 @@
 one of its checks starts from a registered rule, so an obligation stated in
 prose and never registered is invisible to it — the hole the unenforced
 pagination `response.body.*` rule shipped through. This suite closes that hole
-from the prose side: EVERY prose site in ``analitiq.contracts`` — each model
-field description, each model docstring, and each enum docstring (pydantic
-publishes both docstring kinds into the JSON Schema; non-model, non-enum
-classes such as the exception types publish no prose and are out of scope),
-not just sites matching a modal
+from the prose side: EVERY prose site in ``analitiq.contracts`` — each field
+description and docstring of every pydantic model, and the docstring of every
+``Enum``, membership by category, mechanical and judgment-free (for public
+enums pydantic publishes the class docstring into the schema description;
+private helper enums ride along under the same category rather than requiring
+a per-class publishability judgment that would rot; exception classes and
+other plain classes publish nothing and are out of scope, as are enum MEMBER
+docstrings, which pydantic does not publish — a guard below keeps modal
+obligations out of them), not just sites matching a modal
 vocabulary — must carry a :class:`ProseObligation` entry binding it to an
 ``ADV-*`` rule, a structural mechanism, an explicit waiver, or a
 ``descriptive=True`` marking, and pinning its exact wording by content hash.
@@ -24,10 +28,13 @@ tool can never disagree.
 """
 from __future__ import annotations
 
+import ast
+import inspect
 import os
 import re
 import subprocess
 import sys
+import textwrap
 from enum import Enum
 from pathlib import Path
 from typing import get_args
@@ -44,6 +51,7 @@ from analitiq.contracts.shared.introspect import (
     SiteKey,
     census_report,
     contract_classes,
+    contract_enums,
     prose_fingerprint,
 )
 from analitiq.contracts.shared.prose_census import PROSE_OBLIGATIONS
@@ -210,6 +218,75 @@ def test_census_texts_reference_live_names():
                 f"{entry.site}: census text names identifiers that do not "
                 f"resolve in analitiq.contracts: {unknown}"
             )
+
+
+# --- Enum MEMBER docstrings stay out of the census's blind spot --------------
+#
+# The census covers every Enum's CLASS docstring; member docstrings are out of
+# scope because pydantic does not publish them into the schema. That exclusion
+# is safe only while no member docstring states an obligation — these guards
+# make the escape hatch loud instead of silent.
+
+
+def _enum_member_own_docstrings(enum_cls: type[Enum]) -> dict[str, str]:
+    """``member name -> docstring`` for members carrying their OWN docstring.
+
+    On this Python a string literal following a member assignment is NOT
+    attached to the member at runtime — ``member.__doc__`` falls back to the
+    class docstring and ``member.__dict__`` carries no ``__doc__`` — so the
+    trailing literals are recovered from the class-body AST. An explicitly
+    assigned ``member.__doc__`` (visible in ``member.__dict__``) is also
+    collected, in case a future runtime or a hand assignment attaches one.
+    """
+    docs: dict[str, str] = {}
+    tree = ast.parse(textwrap.dedent(inspect.getsource(enum_cls)))
+    body = tree.body[0].body
+    for prev, node in zip(body, body[1:]):
+        if (
+            isinstance(prev, ast.Assign)
+            and isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            for target in prev.targets:
+                if isinstance(target, ast.Name):
+                    docs[target.id] = node.value.value
+    for member in enum_cls:
+        own = member.__dict__.get("__doc__")
+        if isinstance(own, str) and own != enum_cls.__doc__:
+            docs[member.name] = own
+    return docs
+
+
+def test_member_docstring_detection_sees_the_existing_ones():
+    """Self-test: the detector must actually see the member docstrings that
+    exist today (they are source-only trailing literals, invisible at
+    runtime), or the modal guard below guards nothing."""
+    from analitiq.contracts.pipelines.data_sync import PublicRunStatus
+
+    docs = _enum_member_own_docstrings(PublicRunStatus)
+    assert set(docs) == {member.name for member in PublicRunStatus}
+    assert all(docs.values())
+
+
+def test_enum_member_docstrings_carry_no_modal_language():
+    """Member docstrings are excluded from the census (pydantic publishes
+    only the class docstring), so an obligation stated on a member would be
+    censused by nothing. Keep members descriptive: move a modal sentence to
+    the class docstring (a censused site) or bind it to a rule / structural
+    mechanism there."""
+    offenders = [
+        f"  {enum_cls.__name__}.{name}: {doc!r}"
+        for enum_cls in sorted(contract_enums(), key=lambda c: c.__name__)
+        for name, doc in sorted(_enum_member_own_docstrings(enum_cls).items())
+        if NORMATIVE_PATTERN.search(doc)
+    ]
+    assert not offenders, (
+        "enum MEMBER docstrings carrying a modal marker — the census does not "
+        "cover member docstrings (pydantic never publishes them), so state the "
+        "obligation in the enum's CLASS docstring (a censused site) or bind "
+        "it, and keep the member line descriptive:\n" + "\n".join(offenders)
+    )
 
 
 _HASH = "0" * 12  # format-valid placeholder for the refusal probes

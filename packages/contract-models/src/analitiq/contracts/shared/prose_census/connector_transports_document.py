@@ -243,12 +243,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="DatabaseConnector", field="kind", prose_hash="4d3ab3ae7c10", descriptive=True),
     ProseObligation(
         model="DatabaseConnector", field="sql_capabilities",
-        prose_hash="65e82367c2b4",
+        prose_hash="68602251ca37",
         structural=(
-            "declared on `DatabaseConnector` alone — every other kind's "
-            "closed model rejects it as an unknown key; the required shape "
-            "facts are `SqlCapabilities`'s own non-optional fields, with "
-            "`limits` the sole defaulted member"
+            "the other kinds' closed models reject `sql_capabilities` as an "
+            "unknown key; the required shape facts are `SqlCapabilities`'s "
+            "own non-optional fields, with `limits` defaulted"
         ),
         waiver=ENGINE_CONDUCT,
     ),
@@ -344,8 +343,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="FileConnector", field="transports",
         prose_hash="bb67bdd294f7",
         structural=(
-            "a Field length floor and cap pin exactly one entry, value-typed "
-            "`FileTransport`"
+            "carried by the `Field` length bounds on the entry list, "
+            "value-typed `FileTransport`"
         ),
     ),
     ProseObligation(model="FileTransport", prose_hash="4f24c2f5126d", descriptive=True),
@@ -404,8 +403,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="S3Connector", field="transports",
         prose_hash="624ebea61176",
         structural=(
-            "a Field length floor and cap pin exactly one entry, value-typed "
-            "`S3Transport`"
+            "carried by the `Field` length bounds on the entry list, "
+            "value-typed `S3Transport`"
         ),
     ),
     ProseObligation(model="S3CredentialsBlock", prose_hash="042ae089f80b", descriptive=True),
@@ -466,10 +465,10 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities",
-        prose_hash="223ee609863a",
+        prose_hash="b76b800bdb08",
         structural=(
             "the required shape facts are non-optional fields on the closed "
-            "model; `limits` alone defaults"
+            "model; `limits` defaults"
         ),
         waiver=ENGINE_CONDUCT,
     ),
@@ -489,7 +488,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="SqlCapabilities", field="limits",
         prose_hash="60b37101106f",
-        structural="the sole defaulted (optional) field on `SqlCapabilities`",
+        structural="a defaulted (optional) field on the otherwise-required `SqlCapabilities` shape",
     ),
     ProseObligation(
         model="SqlCapabilities", field="merge_form",
@@ -506,7 +505,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="SqlLimits",
         prose_hash="7ac3e959fa9d",
         structural=(
-            "both caps are typed `_DeclaredCap`, the strict lower-bounded "
+            "the caps are typed `_DeclaredCap`, the strict lower-bounded "
             "integer annotation"
         ),
         waiver=ENGINE_CONDUCT,
@@ -549,8 +548,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="StdoutConnector", field="transports",
         prose_hash="7a6970c1705e",
         structural=(
-            "a Field length floor and cap pin exactly one entry, value-typed "
-            "`StdoutTransport`"
+            "carried by the `Field` length bounds on the entry list, "
+            "value-typed `StdoutTransport`"
         ),
     ),
     ProseObligation(model="StdoutTransport", prose_hash="3e76035541f9", descriptive=True),

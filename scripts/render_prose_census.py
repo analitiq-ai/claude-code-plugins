@@ -2,8 +2,13 @@
 """Check or restamp the prose census against the live contract prose.
 
 The census (`analitiq.contracts.shared.prose_census`) catalogues EVERY prose
-site in the contract models and enums — each field description, each model
-docstring, and each enum docstring — binding it to a disposition and pinning
+site in the contract tree — each field description and docstring of every
+pydantic model, and the docstring of every Enum, under `analitiq.contracts`
+(membership by category, mechanical and judgment-free: public enum docstrings
+are published into schema descriptions, and private helper enums ride along
+rather than requiring a per-class publishability judgment; plain classes and
+enum member docstrings publish nothing and are out of scope) — binding each
+site to a disposition and pinning
 its exact wording with a content hash
 (`analitiq.contracts.shared.introspect.prose_fingerprint`). The diff this
 script prints is computed once, in `introspect.census_report`, the same
@@ -18,8 +23,9 @@ Usage:
                                     # uncatalogued sites. Exits non-zero when
                                     # manual work remains after its edits
                                     # (an entry it could not restamp, a stale
-                                    # entry, an uncatalogued site); exits 0
-                                    # only when the census is fully current.
+                                    # entry, an uncatalogued site, a tripwire
+                                    # hit); exits 0 only when the census is
+                                    # fully current.
 
 `write` never invents dispositions: it rewrites only the `prose_hash` of
 entries whose prose was re-worded (re-affirm each disposition when committing
@@ -221,12 +227,20 @@ def write(report) -> int:
             print(f"\n  # {module}")
             for site in group:
                 print(_skeleton(site))
+    _print_group(
+        "tripwire — descriptive=True on modal prose; `write` cannot fix "
+        "these: change each disposition to waiver=DESCRIPTIVE, or bind the "
+        "obligation to a rule / structural mechanism",
+        report.tripwires,
+        lambda s: s.module,
+        lambda s: s.label,
+    )
     if report.clean:
         print("prose census is complete and current — nothing to do")
         return 0
     # Restamps are the only edit `write` makes itself; everything else above
     # is manual work still to do, so the exit code must say so.
-    return 1 if (unrestamped or report.stale or report.missing) else 0
+    return 1 if (unrestamped or report.stale or report.missing or report.tripwires) else 0
 
 
 def main(argv: list[str]) -> int:

@@ -16,8 +16,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="7f5b3165f886",
         structural=(
             "every value is typed SecretRefValue, whose "
-            "SECRET_REF_VALUE_PATTERN enumerates exactly the cloud-free "
-            "schemes the description lists"
+            "SECRET_REF_VALUE_PATTERN enumerates the cloud-free schemes the "
+            "description lists"
         ),
     ),
     ProseObligation(model="ConnectionAuthored", prose_hash="9876daaf7229", descriptive=True),

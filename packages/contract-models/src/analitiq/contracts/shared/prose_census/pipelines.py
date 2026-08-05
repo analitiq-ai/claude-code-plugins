@@ -36,24 +36,24 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="PipelineRunRequest",
         prose_hash="ce650bdf7ce2",
         structural=(
-            "StrictModel whose only field is terminate_existing_sync — an "
-            "unknown key is rejected, an empty body validates"
+            "a StrictModel declaring terminate_existing_sync — an unknown "
+            "key is rejected, an empty body validates"
         ),
     ),
     ProseObligation(
         model="PipelineRunAcceptedResponse",
         prose_hash="2c6b13f315a0",
         structural=(
-            "the closed PipelineRunAcceptedData shape declares exactly "
-            "invocation_id and pipeline_id — no job_id field exists"
+            "the closed PipelineRunAcceptedData shape declares invocation_id "
+            "and pipeline_id — no job_id field exists"
         ),
     ),
     ProseObligation(
         model="PipelineRunAcceptedResponse", field="data",
         prose_hash="1d96376806d2",
         structural=(
-            "`data` is required; PipelineRunAcceptedData declares exactly the "
-            "two tracking identifiers"
+            "`data` is required; the tracking identifiers are "
+            "PipelineRunAcceptedData's own required fields"
         ),
     ),
     ProseObligation(

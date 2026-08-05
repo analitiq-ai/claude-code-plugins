@@ -269,6 +269,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "the `InputPhase` `Enum`'s own closed membership — it declares no "
             "post-auth member, so `inputs` cannot claim a post-auth `phase`"
         ),
+        waiver=(
+            "whether a value is genuinely produced only after authentication "
+            "is authoring judgment about the provider; the closed membership "
+            "rejects a literal post-auth `phase`, not a value misfiled in "
+            "`inputs` instead of `post_auth_outputs`"
+        ),
     ),
     ProseObligation(
         model="InputSource",
@@ -276,6 +282,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural=(
             "the `InputSource` `Enum`'s own closed membership — it declares no "
             "post-auth member, so `inputs` cannot claim a post-auth `source`"
+        ),
+        waiver=(
+            "whether a value is genuinely produced only after authentication "
+            "is authoring judgment about the provider; the closed membership "
+            "rejects a literal post-auth `source`, not a value misfiled in "
+            "`inputs` instead of `post_auth_outputs`"
         ),
     ),
     ProseObligation(model="PostAuthOutputMode", prose_hash="52af6dd1ce37", descriptive=True),

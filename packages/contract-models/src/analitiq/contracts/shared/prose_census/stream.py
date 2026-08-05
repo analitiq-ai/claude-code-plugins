@@ -273,7 +273,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="StreamAuthored", field="pipeline_id",
         prose_hash="559e139f235c",
-        structural="`NonEmptyStr` carries the only static constraint",
+        structural="`NonEmptyStr` carries the static constraint",
         waiver=ENGINE_CONDUCT,
     ),
     ProseObligation(model="StreamAuthored", field="schema_url", prose_hash="a23f8399df2b", descriptive=True),
@@ -365,7 +365,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="_EndpointRefBase", field="connection_id",
         prose_hash="059be2a13a93",
-        structural="`NonEmptyStr` carries the only static constraint",
+        structural="`NonEmptyStr` carries the static constraint",
         waiver=ENGINE_CONDUCT,
     ),
     ProseObligation(model="_ReplicationBase", prose_hash="848a0697f02d", descriptive=True),

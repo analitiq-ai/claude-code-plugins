@@ -1663,7 +1663,7 @@ class SqlCapabilities(StrictModel):
     "Refuse, don't guess": the engine reads these facts instead of probing the
     live database, and refuses at handshake time when a needed fact was not
     declared (analitiq-engine#390, PR analitiq-engine#400). Optional as a block,
-    but when present all five shape facts are required — a partial declaration
+    but when present every shape fact is required — a partial declaration
     is a config error. `limits` (issue #89) is the one additive member: it and
     each cap inside it may be omitted, meaning "no declared cap".
     """
@@ -2088,7 +2088,7 @@ class DatabaseConnector(ConnectorBase):
             "Declared SQL write-path capabilities (engine ADR §5). SQL-specific "
             "— not present on other connector kinds. Optional; when omitted the "
             "engine refuses any needed-but-undeclared fact at handshake time. "
-            "When present, all five shape facts are required; `limits` "
+            "When present, every shape fact is required; `limits` "
             "(issue #89) is the one additive member and may be omitted."
         ),
     )

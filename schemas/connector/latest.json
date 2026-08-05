@@ -1397,7 +1397,7 @@
             }
           ],
           "default": null,
-          "description": "Declared SQL write-path capabilities (engine ADR \u00a75). SQL-specific \u2014 not present on other connector kinds. Optional; when omitted the engine refuses any needed-but-undeclared fact at handshake time. When present, all five shape facts are required; `limits` (issue #89) is the one additive member and may be omitted."
+          "description": "Declared SQL write-path capabilities (engine ADR \u00a75). SQL-specific \u2014 not present on other connector kinds. Optional; when omitted the engine refuses any needed-but-undeclared fact at handshake time. When present, every shape fact is required; `limits` (issue #89) is the one additive member and may be omitted."
         },
         "tags": {
           "anyOf": [
@@ -3734,7 +3734,7 @@
     },
     "SqlCapabilities": {
       "additionalProperties": false,
-      "description": "SQL write-path capabilities declared by a database connector (ADR \u00a75).\n\n\"Refuse, don't guess\": the engine reads these facts instead of probing the\nlive database, and refuses at handshake time when a needed fact was not\ndeclared (analitiq-engine#390, PR analitiq-engine#400). Optional as a block,\nbut when present all five shape facts are required \u2014 a partial declaration\nis a config error. `limits` (issue #89) is the one additive member: it and\neach cap inside it may be omitted, meaning \"no declared cap\".",
+      "description": "SQL write-path capabilities declared by a database connector (ADR \u00a75).\n\n\"Refuse, don't guess\": the engine reads these facts instead of probing the\nlive database, and refuses at handshake time when a needed fact was not\ndeclared (analitiq-engine#390, PR analitiq-engine#400). Optional as a block,\nbut when present every shape fact is required \u2014 a partial declaration\nis a config error. `limits` (issue #89) is the one additive member: it and\neach cap inside it may be omitted, meaning \"no declared cap\".",
       "properties": {
         "bulk_load": {
           "$ref": "#/$defs/SqlBulkLoad",
