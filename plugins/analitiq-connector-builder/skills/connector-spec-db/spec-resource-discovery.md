@@ -14,8 +14,8 @@ Systems differ in how many namespace levels sit above a table:
 | Schema-less | database → table | MySQL / MariaDB, where the "schema" *is* the database |
 
 This shape is **not** something the connector declares — there is no catalog
-trigger to configure, and the discovery contract exposes exactly two actions
-(`list_resources`, `describe_resource`). What the shape affects is the
+trigger to configure, and the discovery contract exposes exactly these
+actions: `list_resources` and `describe_resource`. What the shape affects is the
 `strategy` you pick and what the generated endpoints carry: on a three-level
 system the objects' `catalog` must come back populated, and on a schema-less
 system don't invent a second level to look uniform.

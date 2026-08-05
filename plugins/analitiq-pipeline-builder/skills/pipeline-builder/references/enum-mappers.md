@@ -45,10 +45,12 @@ For `incremental`, the user must name the `cursor_field`. If they
 can't, halt and ask for the column/parameter name they want to use as
 the watermark.
 
-`replication.method` must be in the source endpoint's declared support
-set. For API endpoints, the connector document lists
-`operations.read.replication.supported_methods`. For database endpoints
-both methods are always supported.
+For an API endpoint, `replication.method` must be in the source endpoint's
+declared support set — the connector document lists
+`operations.read.replication.supported_methods`. A database endpoint carries
+no `replication` block, so no endpoint-declared support set constrains it;
+the stream-side rule above still does, and `incremental` still requires a
+`cursor_field`.
 
 ## WriteModeMapper
 

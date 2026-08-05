@@ -61,7 +61,7 @@ installable Python package.
 - Transport types, chosen per the `spec-driver-selection.md` decision
   order: `adbc` (closed `driver` enum; `dsn` and/or `db_kwargs`,
   ADV-CTOR-004) and `sqlalchemy` (a `dialect+driver`, sync or async;
-  generic `tls` block). Both take the same `dsn.kind: "url_template"`
+  generic `tls` block). Each takes the same `dsn.kind: "url_template"`
   shape — `spec-dsn-bindings.md`.
 - `auth.type: "db"` — credentials live in `connection_contract.inputs`;
   `auth.test` is the connection test operation.

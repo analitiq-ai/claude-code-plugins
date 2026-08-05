@@ -7,8 +7,8 @@ The exact shape — property names, required keys, and the closed enums — is
 owned by the published api-endpoint contract, not by this page. Author
 against it and let the validator check you:
 
-- `#/$defs/Replication` — the block itself (`supported_methods` +
-  `cursor_mappings`, both required).
+- `#/$defs/Replication` — the block itself (`supported_methods` and
+  `cursor_mappings`, each required).
 - `#/$defs/SingleCursorMapping` — a cursor filtered by one provider param.
 - `#/$defs/WindowCursorMapping` — a cursor filtered by a start/end param pair.
 
@@ -121,7 +121,8 @@ run, not baked into the endpoint. Don't encode a fudge factor into the mapping.
 `incremental`, or both. List `incremental` only when a cursor mapping
 actually backs it; an endpoint with no cursorable field is `full_refresh`
 only and should omit `replication` (see below). There is no separate
-"default method" key — the block is just these two fields.
+"default method" key — the block carries `supported_methods` and
+`cursor_mappings` and nothing else.
 
 ## When to omit
 

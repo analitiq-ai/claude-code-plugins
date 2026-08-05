@@ -138,7 +138,7 @@ When the resource is writable, also ground:
   `sql_write_path.catalog_model`,
   `sql_write_path.qualified_statement_targeting`,
   `sql_write_path.temp_table_support`,
-  `sql_write_path.transactional_ddl`, and both caps under
+  `sql_write_path.transactional_ddl`, and each cap under
   `sql_write_path.identifier_limits` —
   `sql_write_path.identifier_limits.max_identifier_len` (in bytes) and
   `sql_write_path.identifier_limits.max_bind_params`, which is a

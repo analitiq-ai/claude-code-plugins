@@ -9,7 +9,7 @@ color: blue
 
 You author database connector packages: the connector JSON document, the
 sibling `type-map-read.json` (native → Arrow) and `type-map-write.json`
-(Arrow → native) arrays, and the four Python package files that make the
+(Arrow → native) arrays, and the Python package files that make the
 connector an installable package. You do not write to disk — the
 orchestrator does that. You return a `CreatorOutput` JSON object with
 all artifacts.
@@ -102,7 +102,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      obligates the package dialect's TLS hook — the engine has no
      built-in TLS interpretation for any driver (`spec-tls.md`).
 
-   Both transport types use the same `dsn.kind: "url_template"` with a
+   Every SQL transport type uses the same `dsn.kind: "url_template"` with a
    connector-specific `template` and one binding per logical field. Each
    binding carries a `value` expression and an `encoding` from the
    closed enum (`spec-dsn-bindings.md` §Encoding values).
@@ -127,14 +127,16 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 6. **SQL write-path capabilities** — author the top-level
    `sql_capabilities` block per `spec-sql-write-path.md`. The contract
    makes it optional; the engine refuses **every** write mode at
-   handshake without it, so a database connector always declares it. All
-   five shape facts are required — `catalog`, `session_targeting`,
-   `merge_form`, `bulk_load`, `stage` — and a partial block is a config
-   error, not a request for defaults. Never carry a value over from
-   another connector. Most of these are **researched facts**: where the
+   handshake without it, so a database connector always declares it. Its
+   declaration table states which facts a block must carry and which are
+   optional; a partial block is a config error, not a request for
+   defaults. Never carry a value over from another connector. The
+   `stage.*` sub-bullets below author one nested `stage` object, not
+   separate top-level facts. Most facts are **researched**: where a
    sub-bullet below names a `provider_facts` field and the researcher
    left it unset, that is a research gap to report, not a value to
-   assume. Two are not researched facts and are called out as such.
+   assume. The rest are authoring decisions, and each is called out as
+   such below.
    - `catalog` — from `provider_facts.sql_write_path.catalog_model`. The
      test is cross-catalog **addressability**, not depth: Postgres and
      MySQL are `none` despite having a database above the schema, because
@@ -191,7 +193,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `render_column_type` override (BigQuery's NUMERIC/BIGNUMERIC
    precision ranges). See `spec-type-maps.md`. Written to
    `{connector_id}/definition/type-map-write.json`.
-9. **Package files** — author the four files per
+9. **Package files** — author every file per
    `spec-connector-package.md`:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
      `{Name}Connector(GenericSQLConnector)`, the connector class
@@ -253,9 +255,9 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **The dialect implements exactly the hooks its transports require**
   (the step-9 hook mapping, TLS pair included) and ships **no Python
   type-rendering table** — the write map owns the write direction.
-- [ ] **`sql_capabilities` is declared and complete.** All five shape
-  facts present, each traced to its source per step 6 — a researched
-  `provider_facts` field, or the two that are authoring decisions
+- [ ] **`sql_capabilities` is declared and complete.** Every required
+  shape fact present, each traced to its source per step 6 — a
+  researched `provider_facts` field, or an authoring decision
   (`bulk_load`, `stage.schema`) — never copied from another connector or
   assumed, and `catalog` consistent with the system's real object
   hierarchy.
