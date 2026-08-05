@@ -891,7 +891,7 @@ def test_dangling_markdown_link_is_flagged(plugin: str) -> None:
     # reads the heading off the file rather than using the fixture's short
     # citation form.
     own = Path(citing).name
-    full = next(h for h in _headings((_plugin_root(plugin) / citing).read_text()))
+    full = _headings((_plugin_root(plugin) / citing).read_text(encoding="utf-8"))[0]
     assert heading  # the fixture's own citation form, exercised by the `§` tests
     assert not _link_dangles(own, _slug(full), citing, plugin)
     assert _link_dangles(own, "section-that-was-renamed", citing, plugin)
@@ -1023,9 +1023,10 @@ def test_a_quoted_anchor_is_held_to_the_whole_heading() -> None:
         cited, ["Fenced JSON examples — the annotation convention"], exact=True
     )
     # And the flag comes from the prose, not from the caller.
-    quoted, unquoted = _anchor_sites('§ "Shape" and §Shape of it')
-    assert (quoted.quoted, quoted.text) == (True, "Shape")
-    assert (unquoted.quoted, unquoted.text) == (False, "Shape of it")
+    sites = _anchor_sites('§ "Shape" and §Shape of it')
+    assert len(sites) == 2
+    assert (sites[0].quoted, sites[0].text) == (True, "Shape")
+    assert (sites[1].quoted, sites[1].text) == (False, "Shape of it")
 
 
 def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
