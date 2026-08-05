@@ -18,6 +18,10 @@ name: tests
 #   pipeline_builder/  - the same problem solved the other way: contract-owned
 #     facts are GENERATED into the prose, and the suite fails when a generated
 #     block is stale relative to the pin.
+#   plugin_prose/      - the one suite that belongs to no single plugin: it
+#     sweeps every plugin root under plugins/ and proves each citation the prose
+#     makes - the file, and the section a `§` names - still resolves. Plugin
+#     roots are discovered, so a new plugin is covered the day it lands.
 
 on:
   pull_request:
