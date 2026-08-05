@@ -28,7 +28,8 @@ entries in the three per-plugin registries below, this suite is red.
      backticked pattern never sees a closing backtick after `.md`.
    - Markdown links, `](spec-x.md)` — resolved relative to the citing file,
      since that is what a link means, and allowed to leave the plugin (the
-     READMEs link the repo root's).
+     READMEs link the repo root's). A link's `#fragment` is checked as a
+     section, below.
 
    What is **not** checked: a non-`.md` path in any form but the first. A
    backticked `connector.py` or `definition/connector.json` names an artifact
@@ -36,11 +37,15 @@ entries in the three per-plugin registries below, this suite is red.
    apart needs a rule this guard does not have. Agent-run scripts are covered
    because agents invoke them through `${CLAUDE_PLUGIN_ROOT}`.
 
-2. **The section exists.** A `path.md §Heading` citation makes a second claim
-   the file check never opens: that the heading is still there. A heading
-   rename leaves the citation half-dangling — the file opens, the section the
-   agent was sent to read is gone. `§` with no file in front of it cites a
-   section of the citing document itself, and is resolved against it.
+2. **The section exists.** A `path.md §Heading` citation, and a link's
+   `#fragment`, make a second claim the file check never opens: that the
+   heading is still there. A heading rename leaves the citation
+   half-dangling — the file opens, the section the agent was sent to read is
+   gone. `§` with no file in front of it cites a section of the citing
+   document itself, and is resolved against it. The two forms differ in how
+   exactly they name the heading: prose abbreviates and runs on, so `§` is
+   matched by opening words; a fragment is generated from the whole heading,
+   so it is matched by slug.
 
 Pure text-vs-filesystem: no contract packages involved, so no `_pins` skip
 guard — this always runs.
@@ -49,7 +54,9 @@ guard — this always runs.
 from __future__ import annotations
 
 import re
+from functools import cache
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
@@ -85,29 +92,48 @@ _BARE_REF = re.compile(r"`((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.md)`")
 # `${CLAUDE_PLUGIN_ROOT}/…` reference is not re-matched. The directory-segment
 # charset mirrors `_BARE_REF`'s — no `.`, so a `./`- or `../`-prefixed
 # relative path is out of scope here; it arrives as a markdown link instead.
+# The second lookbehind hands a link target to the link pass alone: without it
+# `](skills/x/y.md)` matches here too, and one broken link fails two tests.
 _BARE_PATH_REF = re.compile(
-    r"(?<![\w`./-])((?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
+    r"(?<![\w`./-])(?<!\]\()((?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
 )
 
 _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 
-# A markdown link target: `](spec-columns.md)`, `](../endpoint-spec/x.md)`,
-# `](x.md#a-heading)`. Kept apart from the patterns above because it resolves
-# differently — relative to the citing file, and it may point outside the
-# plugin, which the READMEs do.
-_LINK_REF = re.compile(r"\]\(([^)\s#]+\.md)(?:#[^)]*)?\)")
+# A markdown link target and its optional fragment: `](spec-columns.md)`,
+# `](../endpoint-spec/x.md)`, `](x.md#uniqueness)`. Kept apart from the
+# patterns above because it resolves differently — relative to the citing file,
+# and it may point outside the plugin, which the READMEs do. The fragment is
+# captured, not discarded: it is the same claim a `§` citation makes, and
+# leaving it unread would close the section-citation hole in one form while
+# leaving it open in the other.
+_LINK_REF = re.compile(r"\]\(([^)\s#]+\.md)(#[^)\s]*)?\)")
+
+# What GitHub keeps when it slugs a heading into a fragment: case folded,
+# spaces to hyphens, everything else that is not a word character or hyphen
+# dropped. Enough to resolve `#derived-endpoint_id` against
+# ``## Derived `endpoint_id` ``.
+_SLUG_DROP = re.compile(r"[^\w\- ]")
 
 # The file a `§` binds to: the last `.md` path before it, separated by nothing
 # but glue — a closing backtick, whitespace (the citation often wraps a line),
-# an opening paren or quote. More than that and the `§` is prose-separated from
-# the path, which is how a bare `§Closed vocabularies` — a section of the
-# citing document itself — is told apart from `` `SKILL.md` §Closed
-# vocabularies``.
-_ANCHOR_BINDING = re.compile(r"([A-Za-z0-9_./-]+\.md)[`\"'\s(]{0,8}$")
+# an opening paren or quote, a comma or a dash. More than that and the `§` is
+# prose-separated from the path, which is how a bare `§Closed vocabularies` — a
+# section of the citing document itself — is told apart from `` `SKILL.md`
+# §Closed vocabularies``. A sentence-final `.` stays out of the glue: it ends
+# the clause that named the file, so what follows is a fresh, document-local
+# citation. Missing a comma or a dash here does not merely lose the binding —
+# it silently re-points the anchor at the citing document and reports a section
+# of the wrong file as missing.
+_ANCHOR_BINDING = re.compile(r"([A-Za-z0-9_./-]+\.md)[`\"'\s(,—–-]{0,8}$")
+
+# How far past a `§` an anchor may reach. One bound, used by both the quoted
+# and the unquoted form — two would cut the two forms at different lengths.
+_ANCHOR_WINDOW = 200
 
 # The anchor text after `§`. Quoted form first: a heading whose own punctuation
 # the stop set below would cut short is quoted for exactly that reason.
-_QUOTED_ANCHOR = re.compile(r'\s*["“]([^"”]{1,200})["”]')
+_QUOTED_ANCHOR = re.compile(r'\s*["“]([^"”]{1,%d})["”]' % _ANCHOR_WINDOW)
 
 # Where an unquoted anchor ends: a closing bracket, a clause break, an
 # em-dash, a table-cell divider, a sentence-final period, or a blank line.
@@ -141,73 +167,115 @@ _EXTERNAL_REFS: dict[str, set[str]] = {
     "analitiq-pipeline-builder": set(),
 }
 
-# Per plugin, per citation form: the floor below which the extractor is not
-# reading that plugin's prose any more. A pattern that stops matching passes
-# vacuously, so each form is floored separately — a floor on the total would
-# let one dead pattern hide behind another's growth. `anchor` counts anchors
-# that were actually compared against a target's headings, not `§` characters
-# found, so an anchor pass that finds citations and then quietly resolves none
-# of them trips it too. Floors sit at roughly half of today's counts: prose
-# churn must not move them, a broken extractor must. The counts themselves are
-# not restated here — the failure message reports found-vs-floor.
+# Every citation form this suite extracts. A form absent from the floors below
+# would be unfloored and free to die silently, so `_REPO_FLOORS` must name them
+# all — `test_every_plugin_is_covered` checks that.
+_FORMS = ("plugin_root", "backticked", "bare_path", "link", "anchor")
+
+# The floor below which an extractor is no longer reading prose at all. A
+# pattern that stops matching passes vacuously, so each form is floored
+# separately — a floor on the total would let one dead pattern hide behind
+# another's growth. `anchor` counts anchors actually compared against a
+# target's headings, not `§` characters found, so an anchor pass that finds
+# citations and then quietly grades none of them trips it too.
+#
+# Repo-wide first, because that is where a form has enough sites for a floor to
+# mean "the extractor works" rather than "this one sentence still exists".
+# Floors sit near half of today's counts: prose churn must not move them, a
+# broken extractor must. The counts are not restated here — the failure message
+# reports found-vs-floor.
+_REPO_FLOORS: dict[str, int] = {
+    "plugin_root": 12,
+    "backticked": 120,
+    "bare_path": 6,
+    "link": 3,
+    "anchor": 20,
+}
+
+# Per plugin on top, so a form dying in one plugin cannot hide behind the
+# other's volume. A form is listed only where that plugin writes it often
+# enough for a floor to mean "the extractor works" rather than "this one
+# sentence still exists" — the connector plugin has a single markdown link and
+# the pipeline plugin a single unbackticked bare path, and flooring either
+# would turn a reworded sentence into a "your extractor is broken" failure.
+# Those two forms stay guarded repo-wide.
 _FLOORS: dict[str, dict[str, int]] = {
     "analitiq-connector-builder": {
         "plugin_root": 10,
         "backticked": 70,
         "bare_path": 5,
-        "link": 1,
         "anchor": 15,
     },
     "analitiq-pipeline-builder": {
         "plugin_root": 2,
         "backticked": 50,
-        "bare_path": 2,
         "link": 3,
         "anchor": 4,
     },
 }
 
-# Real citations the extractors must keep finding, one per form that carries a
-# routing decision. Floors prove a form still matches *something*; these prove
-# the wiring an agent depends on is still written down — a creator routed to
-# its spec skill, a classifier routed to the release table. A rename here is a
-# review moment, not a silent pass.
-_SENTINEL_CITATIONS: dict[str, dict[str, str]] = {
+# What a plugin must state about itself for this suite to grade it: real
+# citations the extractors have to keep finding, and one real file to write the
+# acceptance tests against. One registry rather than two lists filled at the
+# same moment — a new plugin is registered in one place or not at all.
+#
+# `sentinels` names one citation per form that carries a routing decision.
+# Floors prove a form still matches *something*; sentinels prove the wiring an
+# agent depends on is still written down — a creator routed to its spec skill,
+# a classifier routed to the release table. A rename here is a review moment,
+# not a silent pass.
+#
+# `fixture` is a real file plus the opening words of a heading it carries (the
+# citation form the prose uses — `## Release version (`version`)` is cited as
+# `§Release version`), so the acceptance tests dangle one citation against a
+# document that genuinely exists.
+_PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
     "analitiq-connector-builder": {
-        # The orchestrator's required reading, and the drift classifier's
-        # frontmatter routing bump decisions through the release table.
-        "plugin_root": "skills/connector-spec-db/spec-connector-package.md",
-        "bare_path": "connector-builder/references/metadata-and-versioning.md",
-        "backticked": "spec-sql-write-path.md",
+        "sentinels": {
+            "plugin_root": "skills/connector-spec-db/spec-connector-package.md",
+            "bare_path": "connector-builder/references/metadata-and-versioning.md",
+            "backticked": "spec-sql-write-path.md",
+        },
+        "fixture": (
+            "skills/connector-builder/references/metadata-and-versioning.md",
+            "Release version",
+        ),
     },
     "analitiq-pipeline-builder": {
-        # The researcher's frontmatter routing citation, and the endpoint
-        # creator's derived-id rule.
-        "plugin_root": "scripts/validate.py",
-        "bare_path": "pipeline-builder/references/io-contracts.md",
-        "backticked": "spec-database-object.md",
+        "sentinels": {
+            "plugin_root": "scripts/validate.py",
+            "bare_path": "pipeline-builder/references/io-contracts.md",
+            "backticked": "spec-database-object.md",
+        },
+        "fixture": (
+            "skills/pipeline-builder/references/identity-and-versioning.md",
+            "Metadata fields",
+        ),
     },
 }
+
+
+def _sentinels(plugin: str) -> dict[str, str]:
+    return _PLUGIN_FIXTURES[plugin]["sentinels"]  # type: ignore[return-value]
+
+
+def _fixture(plugin: str) -> tuple[str, str]:
+    return _PLUGIN_FIXTURES[plugin]["fixture"]  # type: ignore[return-value]
 
 
 def _plugin_root(plugin: str) -> Path:
     return PLUGINS_DIR / plugin
 
 
-def _plugin_paths(plugin: str) -> list[str]:
+@cache
+def _plugin_paths(plugin: str) -> tuple[str, ...]:
     """Every file and directory in the plugin, as plugin-root-relative posix
     paths. Every file, not only `.md`: agent frontmatter cites the helper
     scripts it runs by the same `${CLAUDE_PLUGIN_ROOT}/…` form, and a citation
     of a deleted script starves an agent exactly as a citation of a deleted
     spec does."""
     root = _plugin_root(plugin)
-    return [p.relative_to(root).as_posix() for p in sorted(root.rglob("*"))]
-
-
-def _repo_plugin_paths() -> list[str]:
-    """Every path under `plugins/`, repo-relative — the universe a fully
-    qualified `plugins/<other-plugin>/…` citation resolves against."""
-    return [p.relative_to(REPO_ROOT).as_posix() for p in sorted(PLUGINS_DIR.rglob("*"))]
+    return tuple(p.relative_to(root).as_posix() for p in sorted(root.rglob("*")))
 
 
 def _clean(target: str) -> str:
@@ -218,58 +286,56 @@ def _clean(target: str) -> str:
     return cleaned[:-1] if cleaned.endswith(".") else cleaned
 
 
-def _resolves(target: str, paths: list[str]) -> bool:
-    """Does `target` name something that exists?
+def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Path]:
+    """Everything a citation could name. The one resolution rule in this file —
+    both passes read it, so they cannot come to different answers about whether
+    a citation resolves.
 
     The prose writes citations at whatever depth reads well from where it sits
     — `spec-tls.md`, `connector-spec-db/spec-type-maps.md`,
     `skills/connector-builder/references/io-contracts.md` and directory
     citations like `skills/connector-spec-db/examples/` all appear, and every
     one is unambiguous to a reader. So resolve the way a reader does: a
-    citation resolves if it is a path suffix of something in the plugin. That
-    deliberately does not check the citation was written from the right
-    directory — only that the thing it names exists, which is the failure that
-    silently starves an agent of its rules.
+    citation names anything it is a path suffix of. That deliberately does not
+    check the citation was written from the right directory — only that the
+    thing it names exists, which is the failure that silently starves an agent
+    of its rules.
 
-    A citation that spells out `plugins/<name>/…` is the exception: it is fully
-    qualified, may name a sibling plugin, and is matched exactly against the
-    repo's `plugins/` tree.
+    Two refinements on top:
+
+    - A citation that spells out `plugins/<name>/…` is fully qualified, may
+      name a sibling plugin, and is matched exactly against the repo tree.
+    - Given the citing document, the nearest ancestor directory holding the
+      path wins alone: `SKILL.md` cited from
+      `skills/pipeline-builder/references/pipeline.md` is that skill's own
+      `SKILL.md`, not another skill's. Without that, a basename four or five
+      files answer to returns all of them — which the anchor pass wants (an
+      anchor checked against every candidate is imprecise about *which* file it
+      read; an anchor checked against none is unchecked).
     """
-    cleaned = _clean(target)
-    if cleaned.startswith("plugins/"):
-        return cleaned in _repo_plugin_paths()
-    return any(path == cleaned or path.endswith("/" + cleaned) for path in paths)
-
-
-def _resolve_files(target: str, citing: str, plugin: str) -> list[Path]:
-    """Every file a citation could name — what the anchor pass opens.
-
-    Nearest ancestor first, and alone when it hits: `SKILL.md` cited from
-    `skills/pipeline-builder/references/pipeline.md` is that skill's own
-    `SKILL.md`, not another skill's. With no ancestor hit this falls back to
-    the suffix rule `_resolves` uses, which is how a spec cited from `agents/`
-    reaches `skills/<spec-skill>/` — and that rule can match several files
-    (there are four or five `SKILL.md` per plugin), so it returns all of them
-    rather than giving up. An anchor checked against every candidate is
-    imprecise about *which* file it read; an anchor checked against none is
-    unchecked, which is the failure mode worth avoiding.
-    """
-    root = _plugin_root(plugin)
     cleaned = _clean(target)
     if cleaned.startswith("plugins/"):
         candidate = REPO_ROOT / cleaned
-        return [candidate] if candidate.is_file() else []
-    for ancestor in (root / citing).parents:
-        if not ancestor.is_relative_to(root):
-            break
-        candidate = ancestor / cleaned
-        if candidate.is_file():
-            return [candidate]
+        return [candidate] if candidate.exists() else []
+    root = _plugin_root(plugin)
+    if citing is not None:
+        for ancestor in (root / citing).parents:
+            if not ancestor.is_relative_to(root):
+                break
+            candidate = ancestor / cleaned
+            if candidate.exists():
+                return [candidate]
     return [
         root / path
         for path in _plugin_paths(plugin)
-        if path.endswith("/" + cleaned) and (root / path).is_file()
+        if path == cleaned or path.endswith("/" + cleaned)
     ]
+
+
+def _resolve_files(target: str, citing: str, plugin: str) -> list[Path]:
+    """The files a citation could name — the anchor pass's view of
+    `_candidates`, since a section can only be read out of a file."""
+    return [path for path in _candidates(target, plugin, citing) if path.is_file()]
 
 
 def _scan_text(text: str) -> list[tuple[int, str]]:
@@ -286,35 +352,55 @@ def _scan_text(text: str) -> list[tuple[int, str]]:
         for match in pattern.finditer(line)
     ]
     from_anchors = [
-        (lineno, target)
-        for lineno, target, _anchor in _anchor_sites(text)
-        if target is not None
+        (site.lineno, site.target) for site in _anchor_sites(text) if site.target
     ]
     return list(dict.fromkeys(from_paths + from_anchors))
 
 
-def _anchor_sites(text: str) -> list[tuple[int, str | None, str]]:
-    """Every (lineno, target-or-None, anchor) `§` citation in one document.
+class Anchor(NamedTuple):
+    """One `§` citation: where it sits, the file it binds to (`None` for a
+    citation of the document it is written in), the heading it names, and
+    whether the author quoted that heading."""
+
+    lineno: int
+    target: str | None
+    text: str
+    quoted: bool
+
+
+def _anchor_sites(text: str) -> list[Anchor]:
+    """Every `§` citation in one document.
 
     Scanned over the whole text, not line by line: a citation that wraps —
     ``§Dialect\\n  hooks)`` — is one citation, and a per-line scan would read
     half of it.
     """
-    sites: list[tuple[int, str | None, str]] = []
+    sites: list[Anchor] = []
     for marker in re.finditer("§", text):
-        lineno = text.count("\n", 0, marker.start()) + 1
-        binding = _ANCHOR_BINDING.search(text[: marker.start()])
-        target = binding.group(1) if binding else None
-        sites.append((lineno, target, _anchor_text(text[marker.end() :])))
+        rest = text[marker.end() :]
+        sites.append(
+            Anchor(
+                lineno=text.count("\n", 0, marker.start()) + 1,
+                target=(
+                    binding.group(1)
+                    if (binding := _ANCHOR_BINDING.search(text[: marker.start()]))
+                    else None
+                ),
+                text=_anchor_text(rest),
+                quoted=_QUOTED_ANCHOR.match(rest) is not None,
+            )
+        )
     return sites
 
 
 def _anchor_text(rest: str) -> str:
-    """The heading an anchor names, cut out of the prose that follows it."""
+    """The heading an anchor names, cut out of the prose that follows it.
+    Quoting is a stronger claim than citing — it says *this is the heading,
+    verbatim* — and `Anchor.quoted` carries that through to the comparison."""
     quoted = _QUOTED_ANCHOR.match(rest)
     if quoted:
         return quoted.group(1)
-    window = rest[:200]
+    window = rest[:_ANCHOR_WINDOW]
     stop = _ANCHOR_STOP.search(window)
     # A trailing backtick belongs to the citation's own markup, not the
     # heading: `` `SKILL.md §Pipeline` `` closes after the anchor.
@@ -339,18 +425,18 @@ def _tokens(text: str) -> tuple[str, ...]:
     return tuple(_TOKEN.findall(text.lower()))
 
 
-def _anchor_resolves(anchor: str, headings: list[str]) -> bool:
+def _anchor_resolves(anchor: str, headings: list[str], exact: bool = False) -> bool:
     """Does the cited section exist in the target file?
 
-    Compared as word sequences, because prose abbreviates a heading in one
-    direction and runs on past it in the other: `§Encoding values` cites
-    `## Encoding values (closed enum)`, and `§Import rules owns the list` cites
-    `### Import rules`. So a citation matches a heading if either is a word
-    prefix of the other — except that a **single-word** heading only matches
-    word-for-word. Without that exception a file carrying `## Output` would
-    swallow every anchor beginning with "Output", including one whose real
-    section was renamed away, which is precisely the failure this pass exists
-    to catch.
+    Compared as word sequences, because a citation both abbreviates the heading
+    and runs on past it — often in the same sentence, which is why neither a
+    prefix test nor an equality test alone works for prose.
+
+    `exact` is for a **quoted** anchor, where the author claimed the heading
+    verbatim: then only word-for-word equality passes. That is what catches a
+    rename in the middle of a long heading, which the opening-words rule
+    cannot — two shared opening words is all an unquoted citation ever
+    promises.
     """
     cited = _tokens(anchor)
     if not cited:
@@ -359,13 +445,28 @@ def _anchor_resolves(anchor: str, headings: list[str]) -> bool:
         actual = _tokens(heading)
         if not actual:
             continue
-        if actual == cited:
+        if exact:
+            if actual == cited:
+                return True
+            continue
+        # The citation abbreviates the heading — `§Encoding values` for
+        # `## Encoding values (closed enum)`, `§1` for `## 1. First-class ADBC
+        # drivers`. Safe at any length: naming fewer words than the heading has
+        # cannot name a heading that is gone.
+        if actual[: len(cited)] == cited:
             return True
-        # The citation abbreviates the heading, or the heading is the opening
-        # of a longer run of prose. Only the first is safe for a one-word
-        # heading, and `actual == cited` above has already covered that case.
-        shorter, longer = sorted((cited, actual), key=len)
-        if len(actual) >= 2 and longer[: len(shorter)] == shorter:
+        # Or the citation names the heading's opening words and then runs on
+        # into prose the stop set could not cut — `§Cross-field rules for the
+        # exact tuple` for `## Cross-field rules the contract enforces`. Two
+        # shared words is the floor: one is a coincidence a one-word heading
+        # like `## Output` would hand to every anchor beginning with "Output",
+        # including one whose section was renamed away.
+        shared = 0
+        for cited_word, actual_word in zip(cited, actual):
+            if cited_word != actual_word:
+                break
+            shared += 1
+        if shared >= 2:
             return True
     return False
 
@@ -380,48 +481,70 @@ def _references(plugin: str) -> list[tuple[str, int, str]]:
     ]
 
 
-def _link_references(plugin: str) -> list[tuple[str, int, str]]:
-    """Every (relpath, lineno, target) markdown-link citation in the plugin."""
+def _link_references(plugin: str) -> list[tuple[str, int, str, str]]:
+    """Every (relpath, lineno, target, fragment) markdown-link citation. The
+    fragment is `""` when the link names no section."""
     root = _plugin_root(plugin)
     return [
-        (path.relative_to(root).as_posix(), lineno, match.group(1))
-        for path in sorted(root.rglob("*.md"))
-        for lineno, line in enumerate(
-            path.read_text(encoding="utf-8").splitlines(), 1
+        (
+            path.relative_to(root).as_posix(),
+            lineno,
+            match.group(1),
+            (match.group(2) or "").lstrip("#"),
         )
+        for path in sorted(root.rglob("*.md"))
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         for match in _LINK_REF.finditer(line)
     ]
 
 
-def _anchor_references(plugin: str) -> list[tuple[str, int, str | None, str]]:
-    """Every (relpath, lineno, target-or-None, anchor) `§` citation."""
+def _anchor_references(plugin: str) -> list[tuple[str, Anchor]]:
+    """Every (relpath, anchor) `§` citation in the plugin."""
     root = _plugin_root(plugin)
     return [
-        (path.relative_to(root).as_posix(), lineno, target, anchor)
+        (path.relative_to(root).as_posix(), site)
         for path in sorted(root.rglob("*.md"))
-        for lineno, target, anchor in _anchor_sites(path.read_text(encoding="utf-8"))
+        for site in _anchor_sites(path.read_text(encoding="utf-8"))
     ]
 
 
-def _is_dangling(target: str, plugin: str, paths: list[str]) -> bool:
+def _is_dangling(target: str, plugin: str) -> bool:
     """The one exemption-and-resolution predicate: a citation dangles unless it
-    is allow-listed as deliberately external or names a file that exists. Both
-    the real-tree sweep and the synthetic acceptance tests go through this, so
-    the acceptance tests exercise the exemption logic that ships."""
-    return _clean(target) not in _EXTERNAL_REFS[plugin] and not _resolves(
-        target, paths
+    is allow-listed as deliberately external or names something that exists.
+    Both the real-tree sweep and the synthetic acceptance tests go through this,
+    so the acceptance tests exercise the exemption logic that ships."""
+    return _clean(target) not in _EXTERNAL_REFS[plugin] and not _candidates(
+        target, plugin
     )
 
 
-def _link_dangles(target: str, citing: str, plugin: str) -> bool:
-    """A link resolves relative to the file it is written in — that is what a
-    markdown link means — and may leave the plugin, which is how a plugin
-    README links the repo root's."""
-    return not (_plugin_root(plugin) / citing).parent.joinpath(target).is_file()
+def _slug(heading: str) -> str:
+    """A heading as the fragment that links to it — case folded, punctuation
+    dropped, spaces hyphenated."""
+    return _SLUG_DROP.sub("", heading.lower()).strip().replace(" ", "-")
+
+
+def _link_dangles(target: str, fragment: str, citing: str, plugin: str) -> bool:
+    """Does a markdown link point at something that is not there?
+
+    The file resolves relative to the document the link is written in — that is
+    what a link means — and may leave the plugin, which is how a plugin README
+    links the repo root's. A fragment is the same claim a `§` citation makes,
+    so it is held to the same standard: the heading it slugs to must exist in
+    the file the link opens.
+    """
+    path = (_plugin_root(plugin) / citing).parent / target
+    if not path.is_file():
+        return True
+    if not fragment:
+        return False
+    return fragment.lower() not in {
+        _slug(heading) for heading in _headings(path.read_text(encoding="utf-8"))
+    }
 
 
 def _anchor_checks(
-    plugin: str, sites: list[tuple[str, int, str | None, str]]
+    plugin: str, sites: list[tuple[str, Anchor]]
 ) -> tuple[list[tuple[str, int, str, str]], int]:
     """Every `§` citation whose section is in none of the files it could name,
     and how many citations were compared at all.
@@ -432,36 +555,42 @@ def _anchor_checks(
     stays a statement about anchors this pass actually graded.
     """
     dangling, checked = [], 0
-    for rel, lineno, target, anchor in sites:
-        if target is not None and _clean(target) in _EXTERNAL_REFS[plugin]:
+    for rel, site in sites:
+        if site.target is not None and _clean(site.target) in _EXTERNAL_REFS[plugin]:
             continue
         # No path in front of the `§`: the citation names a section of the
         # document it sits in.
-        candidates = (
-            _resolve_files(target, rel, plugin)
-            if target
-            else [_plugin_root(plugin) / rel]
-        )
-        candidates = [path for path in candidates if path.is_file()]
+        candidates = [
+            path
+            for path in (
+                _resolve_files(site.target, rel, plugin)
+                if site.target
+                else [_plugin_root(plugin) / rel]
+            )
+            if path.is_file()
+        ]
         if not candidates:
             continue
         checked += 1
         if not any(
-            _anchor_resolves(anchor, _headings(path.read_text(encoding="utf-8")))
+            _anchor_resolves(
+                site.text,
+                _headings(path.read_text(encoding="utf-8")),
+                exact=site.quoted,
+            )
             for path in candidates
         ):
-            dangling.append((rel, lineno, target or rel, anchor))
+            dangling.append((rel, site.lineno, site.target or rel, site.text))
     return dangling, checked
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_doc_references_resolve(plugin: str) -> None:
     """A dangling citation means an agent silently reads nothing."""
-    paths = _plugin_paths(plugin)
     dangling = [
         (rel, lineno, target)
         for rel, lineno, target in _references(plugin)
-        if _is_dangling(target, plugin, paths)
+        if _is_dangling(target, plugin)
     ]
     assert not dangling, (
         "agent prose points at files that do not exist:\n"
@@ -477,21 +606,24 @@ def test_doc_references_resolve(plugin: str) -> None:
 
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_markdown_links_resolve(plugin: str) -> None:
-    """A link is a citation a reader clicks; a broken one teaches nothing."""
+    """A link is a citation a reader clicks — file and, when it names one,
+    section. A link's `#fragment` is the same claim `§Heading` makes, and is
+    held to the same standard."""
     dangling = [
-        (rel, lineno, target)
-        for rel, lineno, target in _link_references(plugin)
-        if _link_dangles(target, rel, plugin)
+        (rel, lineno, target, fragment)
+        for rel, lineno, target, fragment in _link_references(plugin)
+        if _link_dangles(target, fragment, rel, plugin)
     ]
     assert not dangling, (
-        "markdown links point at files that do not exist:\n"
+        "markdown links point at something that does not exist:\n"
         + "\n".join(
             f"  plugins/{plugin}/{rel}:{lineno} -> {target}"
-            for rel, lineno, target in dangling
+            + (f"#{fragment}" if fragment else "")
+            for rel, lineno, target, fragment in dangling
         )
         + "\nLink targets are resolved relative to the file they are written "
         "in — check the number of `../` segments before assuming the target "
-        "moved."
+        "moved. A `#fragment` must slug to a heading the target still carries."
     )
 
 
@@ -530,32 +662,39 @@ def test_external_ref_allowlist_is_not_stale(plugin: str) -> None:
 
 def test_every_plugin_is_covered() -> None:
     """The guard's own reachability. Discovering the roots is what makes a new
-    plugin loud; these three registries are what make it *guarded*, and a
-    plugin missing from any of them raises `KeyError` rather than being
-    scanned leniently. Assert them together so the omission is one readable
-    failure instead of eight."""
+    plugin loud; the per-plugin registries are what make it *guarded*, and a
+    plugin missing from any of them raises `KeyError` rather than being scanned
+    leniently. Iterated from one mapping, so a registry added later is covered
+    by writing it down once."""
+    registries = {
+        "_FLOORS": set(_FLOORS),
+        "_EXTERNAL_REFS": set(_EXTERNAL_REFS),
+        "_PLUGIN_FIXTURES": set(_PLUGIN_FIXTURES),
+    }
     names = set(_plugin_names())
-    missing = {
-        "_FLOORS": sorted(names - set(_FLOORS)),
-        "_EXTERNAL_REFS": sorted(names - set(_EXTERNAL_REFS)),
-        "_SENTINEL_CITATIONS": sorted(names - set(_SENTINEL_CITATIONS)),
-        "_REAL_CITATION": sorted(names - set(_REAL_CITATION)),
-    }
-    stale = {
-        "_FLOORS": sorted(set(_FLOORS) - names),
-        "_EXTERNAL_REFS": sorted(set(_EXTERNAL_REFS) - names),
-        "_SENTINEL_CITATIONS": sorted(set(_SENTINEL_CITATIONS) - names),
-        "_REAL_CITATION": sorted(set(_REAL_CITATION) - names),
-    }
+    missing = {name: sorted(names - keys) for name, keys in registries.items()}
+    stale = {name: sorted(keys - names) for name, keys in registries.items()}
     assert not any(missing.values()), (
         f"plugins missing from the per-plugin registries: "
         f"{ {k: v for k, v in missing.items() if v} } — give the new plugin "
-        "its own floors, external-citation allow-list, sentinel citations, and "
+        "its own floors, external-citation allow-list, sentinel citations and "
         "acceptance-test fixture."
     )
     assert not any(stale.values()), (
         f"registry entries naming plugins that no longer exist: "
         f"{ {k: v for k, v in stale.items() if v} } — drop them."
+    )
+    unfloored = sorted(set(_FORMS) - set(_REPO_FLOORS))
+    assert not unfloored, (
+        f"citation forms with no repo-wide floor: {unfloored} — an unfloored "
+        "form is free to stop matching without failing anything."
+    )
+    unknown = sorted(
+        {form for floors in _FLOORS.values() for form in floors} - set(_FORMS)
+    )
+    assert not unknown, (
+        f"per-plugin floors name forms the extractor does not produce: "
+        f"{unknown} — a floor on a form nobody counts never fails."
     )
 
 
@@ -583,18 +722,17 @@ def _form_counts(plugin: str) -> dict[str, int]:
     return per_line | {"anchor": checked}
 
 
-@pytest.mark.parametrize("plugin", _plugin_names())
-def test_citation_detector_finds_every_form(plugin: str) -> None:
-    """Guard the guard: an extractor that matched nothing would pass
-    vacuously."""
-    counts = _form_counts(plugin)
-    below = {
+def _below_floor(counts: dict[str, int], floors: dict[str, int]) -> dict[str, tuple[int, int]]:
+    return {
         form: (counts[form], floor)
-        for form, floor in _FLOORS[plugin].items()
+        for form, floor in floors.items()
         if counts[form] < floor
     }
-    assert not below, (
-        f"citation forms below their floor in plugins/{plugin}: "
+
+
+def _floor_failure(scope: str, below: dict[str, tuple[int, int]]) -> str:
+    return (
+        f"citation forms below their floor in {scope}: "
         + ", ".join(
             f"{form} found {found}, floor {floor}"
             for form, (found, floor) in sorted(below.items())
@@ -603,6 +741,26 @@ def test_citation_detector_finds_every_form(plugin: str) -> None:
         "and the floor together) or the extractor is broken and this check "
         "was about to pass vacuously."
     )
+
+
+def test_every_citation_form_is_read_somewhere() -> None:
+    """Guard the guard, repo-wide: every form must still be matching across
+    the plugins taken together. This is the floor that can name every form,
+    including the ones a single plugin writes too rarely to floor."""
+    totals = {form: 0 for form in _FORMS}
+    for plugin in _plugin_names():
+        for form, count in _form_counts(plugin).items():
+            totals[form] += count
+    below = _below_floor(totals, _REPO_FLOORS)
+    assert not below, _floor_failure("plugins/", below)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_citation_detector_reads_this_plugin(plugin: str) -> None:
+    """And per plugin, so a form dying in one plugin cannot hide behind the
+    other's volume."""
+    below = _below_floor(_form_counts(plugin), _FLOORS[plugin])
+    assert not below, _floor_failure(f"plugins/{plugin}", below)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -614,7 +772,7 @@ def test_sentinel_citations_are_still_found(plugin: str) -> None:
     found = {target for _rel, _lineno, target in _references(plugin)}
     missing = {
         form: target
-        for form, target in _SENTINEL_CITATIONS[plugin].items()
+        for form, target in _sentinels(plugin).items()
         if target not in found
     }
     assert not missing, (
@@ -639,30 +797,11 @@ tools: Read
 Body prose citing skills/nowhere/references/also-gone.md without backticks.
 """
 
-# Per plugin: a real file, and the opening words of a heading it carries (the
-# citation form the prose actually uses — `## Release version (`version`)` is
-# cited as `§Release version`), so a synthetic document can dangle one citation
-# while the other holds.
-_REAL_CITATION = {
-    "analitiq-connector-builder": (
-        "skills/connector-builder/references/metadata-and-versioning.md",
-        "Release version",
-    ),
-    "analitiq-pipeline-builder": (
-        "skills/pipeline-builder/references/identity-and-versioning.md",
-        "Metadata fields",
-    ),
-}
-
-
 def _dangling_in(text: str, plugin: str) -> list[str]:
     """The scan-and-resolve pipeline of `test_doc_references_resolve`, on one
     document's text."""
-    paths = _plugin_paths(plugin)
     return [
-        target
-        for _lineno, target in _scan_text(text)
-        if _is_dangling(target, plugin, paths)
+        target for _lineno, target in _scan_text(text) if _is_dangling(target, plugin)
     ]
 
 
@@ -671,7 +810,7 @@ def test_dangling_frontmatter_citation_is_flagged(plugin: str) -> None:
     """Acceptance: a frontmatter citation of a nonexistent path fails the
     guard. The motivating case — frontmatter is where the dangling citation
     this guard exists for was hiding."""
-    existing, _heading = _REAL_CITATION[plugin]
+    existing, _heading = _fixture(plugin)
     doc = _SYNTHETIC_AGENT.replace("skills/nowhere/references/also-gone.md", existing)
     assert _dangling_in(doc, plugin) == ["skills/nowhere/references/gone.md"]
 
@@ -680,7 +819,7 @@ def test_dangling_frontmatter_citation_is_flagged(plugin: str) -> None:
 def test_dangling_body_citation_is_flagged(plugin: str) -> None:
     """Acceptance: an unbackticked body citation of a nonexistent path fails
     the guard — body lines are swept exactly like frontmatter lines."""
-    existing, _heading = _REAL_CITATION[plugin]
+    existing, _heading = _fixture(plugin)
     doc = _SYNTHETIC_AGENT.replace("skills/nowhere/references/gone.md", existing)
     assert _dangling_in(doc, plugin) == ["skills/nowhere/references/also-gone.md"]
 
@@ -727,7 +866,7 @@ def test_fully_qualified_citations_resolve_across_plugins(plugin: str) -> None:
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_resolving_citations_pass(plugin: str) -> None:
     """The twin: the same document citing specs that exist is clean."""
-    existing, _heading = _REAL_CITATION[plugin]
+    existing, _heading = _fixture(plugin)
     twin = _SYNTHETIC_AGENT.replace(
         "skills/nowhere/references/gone.md", existing
     ).replace("skills/nowhere/references/also-gone.md", existing)
@@ -743,9 +882,19 @@ def test_dangling_markdown_link_is_flagged(plugin: str) -> None:
     so a `../` hop that lands nowhere fails while the same hop that lands on a
     real file passes. Written from a real document, since a relative path is
     only resolvable from a directory that exists."""
-    citing, _heading = _REAL_CITATION[plugin]  # skills/<skill>/references/x.md
-    assert _link_dangles("../nowhere/spec-z.md", citing, plugin)
-    assert not _link_dangles("../../../CLAUDE.md", citing, plugin)
+    citing, heading = _fixture(plugin)  # skills/<skill>/references/x.md
+    assert _link_dangles("../nowhere/spec-z.md", "", citing, plugin)
+    assert not _link_dangles("../../../CLAUDE.md", "", citing, plugin)
+    # The fragment is held to the same standard as a `§` citation: the file
+    # opens either way, the section is what the link claims. A fragment names
+    # the whole heading, slugged — unlike `§`, which may abbreviate — so this
+    # reads the heading off the file rather than using the fixture's short
+    # citation form.
+    own = Path(citing).name
+    full = next(h for h in _headings((_plugin_root(plugin) / citing).read_text()))
+    assert heading  # the fixture's own citation form, exercised by the `§` tests
+    assert not _link_dangles(own, _slug(full), citing, plugin)
+    assert _link_dangles(own, "section-that-was-renamed", citing, plugin)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -754,10 +903,10 @@ def test_dangling_anchor_in_a_resolving_file_is_flagged(plugin: str) -> None:
     does not exist in it. The twin below pins that the same citation with the
     real heading passes, so this is the anchor doing the work, not the file
     check failing for its own reasons."""
-    existing, _heading = _REAL_CITATION[plugin]
+    existing, _heading = _fixture(plugin)
     citing = "agents/synthetic-classifier.md"
     doc = f"Author per `{existing}` §Heading that was renamed away.\n"
-    sites = [(citing, lineno, t, a) for lineno, t, a in _anchor_sites(doc)]
+    sites = [(citing, site) for site in _anchor_sites(doc)]
     dangling, checked = _anchor_checks(plugin, sites)
     assert dangling == [(citing, 1, existing, "Heading that was renamed away")]
     assert checked == 1
@@ -768,11 +917,11 @@ def test_dangling_anchor_in_a_resolving_file_is_flagged(plugin: str) -> None:
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_resolving_anchor_passes(plugin: str) -> None:
     """The twin: the same citation naming a heading that exists is clean."""
-    existing, heading = _REAL_CITATION[plugin]
+    existing, heading = _fixture(plugin)
     citing = "agents/synthetic-classifier.md"
     doc = f"Author per `{existing}` §{heading}, then stop.\n"
-    sites = [(citing, lineno, t, a) for lineno, t, a in _anchor_sites(doc)]
-    assert sites == [(citing, 1, existing, heading)]
+    sites = [(citing, site) for site in _anchor_sites(doc)]
+    assert sites == [(citing, Anchor(1, existing, heading, quoted=False))]
     assert _anchor_checks(plugin, sites) == ([], 1)
 
 
@@ -785,7 +934,7 @@ def test_ambiguous_citation_is_still_checked(plugin: str) -> None:
     citing = "agents/synthetic-classifier.md"
     assert len(_resolve_files("SKILL.md", citing, plugin)) > 1
     doc = "Author per `SKILL.md §Heading no skill carries`.\n"
-    sites = [(citing, lineno, t, a) for lineno, t, a in _anchor_sites(doc)]
+    sites = [(citing, site) for site in _anchor_sites(doc)]
     dangling, checked = _anchor_checks(plugin, sites)
     assert checked == 1
     assert [site[3] for site in dangling] == ["Heading no skill carries"]
@@ -796,12 +945,12 @@ def test_bare_anchor_binds_to_the_citing_document(plugin: str) -> None:
     """A `§` with no path in front of it cites a section of the document it
     sits in — the form `§Closed vocabularies` uses. Resolved against the citing
     file, a nonexistent section still fails."""
-    rel, _heading = _REAL_CITATION[plugin]
+    rel, _heading = _fixture(plugin)
     own_heading = _headings((_plugin_root(plugin) / rel).read_text(encoding="utf-8"))[-1]
-    good = [(rel, 1, t, a) for _l, t, a in _anchor_sites(f"See §{own_heading}.\n")]
-    assert good and good[0][2] is None
+    good = [(rel, site) for site in _anchor_sites(f"See §{own_heading}.\n")]
+    assert good and good[0][1].target is None
     assert _anchor_checks(plugin, good) == ([], 1)
-    bad = [(rel, 1, t, a) for _l, t, a in _anchor_sites("See §Nowhere at all.\n")]
+    bad = [(rel, site) for site in _anchor_sites("See §Nowhere at all.\n")]
     assert [site[3] for site in _anchor_checks(plugin, bad)[0]] == ["Nowhere at all"]
 
 
@@ -809,7 +958,9 @@ def test_wrapped_anchor_is_read_whole() -> None:
     """An anchor that wraps a line is one citation, not a truncated one — the
     per-line scan the file pass uses would read `Dialect` and miss `hooks`."""
     text = "see `spec-connector-package.md` §Dialect\n  hooks). The engine\n"
-    assert _anchor_sites(text) == [(1, "spec-connector-package.md", "Dialect\n  hooks")]
+    assert _anchor_sites(text) == [
+        Anchor(1, "spec-connector-package.md", "Dialect\n  hooks", quoted=False)
+    ]
     assert _anchor_resolves("Dialect\n  hooks", ["Dialect hooks"])
 
 
@@ -832,15 +983,62 @@ def test_a_heading_inside_a_fence_is_not_a_section() -> None:
 
 
 def test_a_one_word_heading_does_not_swallow_a_renamed_section() -> None:
-    """The bidirectional prefix rule stops at one-word headings. A file
-    carrying `## Output` must not answer for `§Output contract`, whose section
-    was renamed — one-word headings are everywhere (`Rules`, `Shape`,
-    `Modes`), and each would otherwise absorb every anchor starting with its
-    word."""
+    """A file carrying `## Output` must not answer for `§Output contract`,
+    whose section was renamed — one-word headings are everywhere (`Rules`,
+    `Shape`, `Modes`), and each would otherwise absorb every anchor starting
+    with its word."""
     assert not _anchor_resolves("Output contract", ["Output", "Inputs to collect"])
     assert _anchor_resolves("Output", ["Output", "Inputs to collect"])
     # Two words is enough to be a citation rather than a coincidence.
     assert _anchor_resolves("Import rules owns the list", ["Import rules"])
+
+
+def test_a_citation_may_abbreviate_and_run_on_at_once() -> None:
+    """The two things prose does to a heading happen in one sentence: name its
+    opening words (not all of them) and keep going into the sentence. A rule
+    that allowed only one at a time failed `§Cross-field rules for the exact
+    tuple` against `## Cross-field rules the contract enforces` — a citation
+    that is exactly right."""
+    assert _anchor_resolves(
+        "Cross-field rules for the exact tuple",
+        ["Cross-field rules the contract enforces"],
+    )
+    # What still fails is the rename: a word changed *inside* the opening.
+    assert not _anchor_resolves(
+        "Cross-field rules for the exact tuple",
+        ["Cross-document rules the contract enforces"],
+    )
+
+
+def test_a_quoted_anchor_is_held_to_the_whole_heading() -> None:
+    """Quoting claims the heading verbatim, so it is graded verbatim. That is
+    what catches a rename in the *middle* of a long heading — two shared
+    opening words is all an unquoted citation ever promises, so the run-on rule
+    would let `Fenced JSON snippets …` answer for `Fenced JSON examples …`."""
+    cited = "Fenced JSON examples — the annotation convention"
+    renamed = ["Fenced JSON snippets — the annotation convention"]
+    assert _anchor_resolves(cited, renamed)  # unquoted: two opening words match
+    assert not _anchor_resolves(cited, renamed, exact=True)
+    assert _anchor_resolves(
+        cited, ["Fenced JSON examples — the annotation convention"], exact=True
+    )
+    # And the flag comes from the prose, not from the caller.
+    quoted, unquoted = _anchor_sites('§ "Shape" and §Shape of it')
+    assert (quoted.quoted, quoted.text) == (True, "Shape")
+    assert (unquoted.quoted, unquoted.text) == (False, "Shape of it")
+
+
+def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
+    """Glue between the path and the `§` is punctuation prose uses freely. A
+    binding that broke on a comma would not merely lose the check — it would
+    resolve the anchor against the citing document and report a section of the
+    wrong file as missing."""
+    for glue in ("` ", "`, ", "` — ", "`\n  "):
+        text = f"see `SKILL.md{glue}§Cross-field rules for the tuple."
+        assert _anchor_sites(text)[0][1] == "SKILL.md", glue
+    # A sentence-final period is not glue: the clause naming the file ended, so
+    # what follows is a citation of the document being read.
+    assert _anchor_sites("see `SKILL.md`. §Closed vocabularies.")[0][1] is None
 
 
 def test_anchored_forms_are_not_double_counted() -> None:
@@ -858,3 +1056,6 @@ def test_anchored_forms_are_not_double_counted() -> None:
     assert len(targets) == 2
     anchored = [target for _lineno, target in _scan_text("See `spec-tls.md` §Shape.")]
     assert anchored == ["spec-tls.md"]
+    # A link target belongs to the link pass alone: matched here too, one
+    # broken link would fail two tests and read as two breaks.
+    assert _scan_text("See [envelope](skills/gone/spec-envelope.md).") == []

@@ -56,7 +56,8 @@ packages/contract-models/         # → analitiq-contract-models on PyPI — the
 packages/validator/               # → analitiq-validator on PyPI
 schemas/                          # rendered public JSON Schemas → schemas.analitiq.ai
 scripts/render_schemas.py         # renders schemas/ from packages/contract-models
-tests/<plugin>/                   # one suite per plugin (package suites live beside their package)
+tests/<plugin>/                   # a suite per plugin, plus plugin_prose/ and schemas/, which span them
+                                  # (package suites live beside their package)
 ```
 
 ## Development
