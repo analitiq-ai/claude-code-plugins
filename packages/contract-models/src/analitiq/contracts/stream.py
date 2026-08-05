@@ -412,9 +412,10 @@ class StreamSource(StrictModel):
     database_pagination: DatabasePagination | None = Field(
         default=None,
         description=(
-            "Database source read-page configuration. Defaults to offset "
-            "pagination with page size from pipeline.runtime.batching.batch_size "
-            "when omitted for database sources."
+            "Database source read-page configuration; database sources only. "
+            "Defaults to offset pagination with page size from "
+            "pipeline.runtime.batching.batch_size when omitted for database "
+            "sources."
         ),
     )
     primary_keys: list[str] | None = Field(
@@ -446,6 +447,45 @@ class StreamSource(StrictModel):
                     f"{self.endpoint_ref.scope} source "
                     f"(allowed: {sorted(allowed)})"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_database_only_read_features(self) -> "StreamSource":
+        # `selected_columns`, `replication.tie_breaker_fields` and
+        # `database_pagination` describe how a database read is shaped; an API
+        # (connector-scope) read has none of them to configure, and the
+        # structural types cannot see the source scope — only the binding
+        # (endpoint_ref) knows it, like `_validate_filter_operator_scope`
+        # above (ADV-STRM-012). This check is ADV-STRM-014. `is not None`
+        # rather than truthiness: declaring an empty list is still declaring
+        # the feature. StreamSource publishes no scope-conditioned `if`/`then`
+        # mirror (ADV-STRM-012 has none either; only StreamDestination
+        # carries them) — adding one is a restriction, hence a major stream
+        # schema bump, and belongs in its own change.
+        if self.endpoint_ref.scope == SCOPE_CONNECTION:
+            return self
+        declared = [
+            name
+            for name, value in (
+                ("selected_columns", self.selected_columns),
+                (
+                    "replication.tie_breaker_fields",
+                    self.replication.tie_breaker_fields if self.replication else None,
+                ),
+                ("database_pagination", self.database_pagination),
+            )
+            if value is not None
+        ]
+        if declared:
+            label = (
+                "a database-source feature"
+                if len(declared) == 1
+                else "database-source features"
+            )
+            raise ValueError(
+                f"a {self.endpoint_ref.scope} source must not declare "
+                f"{' or '.join(declared)} — {label}"
+            )
         return self
 
 

@@ -1,0 +1,8 @@
+{
+  "endpoint_ref": {
+    "scope": "connector",
+    "connection_id": "00000000-0000-4000-8000-000000000001_v1",
+    "endpoint_id": "transfers"
+  },
+  "database_pagination": {"type": "offset", "page_size": 500}
+}

@@ -13,6 +13,8 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from _contract_walk import contract_classes
+
 from analitiq.contracts import connection, connector, endpoints, stream, type_map
 from analitiq.contracts.pipelines import config as pipeline_config
 from analitiq.contracts.pipelines import data_sync
@@ -115,6 +117,107 @@ def test_custom_rules_name_a_real_enforcer():
         assert not missing, (
             f"{rule.id}: enforcer {rule.enforcer!r} missing on {missing}"
         )
+
+
+#: @model_validator methods that are deliberately NOT registry rules. Keyed by
+#: (defining class, method name); the value says why. Anything else that
+#: raises on invalid input is a relational rule and belongs in the registry.
+EXEMPT_MODEL_VALIDATORS = {
+    ("ConnectorBase", "_inherit_transport_type"): (
+        "normalizer: stamps the transport_type discriminator onto transports "
+        "entries before union dispatch; its raises only re-shape "
+        "container-type errors the structural tier reports anyway"
+    ),
+    ("RetryErrorHandlingBase", "_default_retry_delay"): (
+        "pure normalizer: injects the effective retry delay, never rejects"
+    ),
+    ("AdvisoryValidated", "_run_advisory_rules"): "the registry runner itself",
+    ("_EndpointModel", "_reject_reserved_fields"): (
+        "message-quality duplicate: the closed model (extra='forbid') already "
+        "rejects the reserved keys; this validator only names the spec section"
+    ),
+}
+
+
+def test_every_model_validator_is_registered_or_exempt():
+    """The enforcer→registry direction of the census.
+
+    The registry's other tests all start from a registered rule, so a bespoke
+    @model_validator nobody registered was invisible — an enforced rule the
+    census claimed not to exist. Every model validator on a contract model must
+    be some rule's enforcer (target-aware: the defining class must sit in a
+    target's MRO, so a same-named validator on an unrelated class does not
+    satisfy it) or carry an explicit exemption above. The universe is the
+    walked namespace package, not this module's hand-kept list, so a new
+    contract module — and every same-named class, not just the last one a
+    name-keyed index retains — is swept the moment it exists.
+    """
+    walked = contract_classes()
+    by_name: dict[str, list[type[BaseModel]]] = {}
+    for cls in walked:
+        by_name.setdefault(cls.__name__, []).append(cls)
+    validators = set()
+    for cls in walked:
+        for name, dec in cls.__pydantic_decorators__.model_validators.items():
+            owner = dec.func.__qualname__.rsplit(".", 2)[-2]
+            validators.add((owner, name))
+    unaccounted = []
+    for owner, name in sorted(validators):
+        if (owner, name) in EXEMPT_MODEL_VALIDATORS:
+            continue
+        registered = any(
+            rule.enforcer == name
+            and any(
+                owner in (a.__name__ for a in cls.__mro__)
+                for t in rule.targets
+                for cls in by_name.get(t, ())
+            )
+            for rule in all_rules()
+        )
+        if not registered:
+            unaccounted.append(f"{owner}.{name}")
+    assert not unaccounted, (
+        "model validators that are no rule's enforcer and not exempt — "
+        "register each in advisory_rules.py or add an explicit exemption "
+        f"with its reason: {unaccounted}"
+    )
+
+
+def test_exemptions_name_live_validators():
+    """The rot direction of the exemption table: an exemption whose validator
+    is gone stays green forever, and silently exempts the next validator to
+    reuse the (class, method) name."""
+    walked = {
+        (dec.func.__qualname__.rsplit(".", 2)[-2], name)
+        for cls in contract_classes()
+        for name, dec in cls.__pydantic_decorators__.model_validators.items()
+    }
+    stale = sorted(
+        f"{owner}.{name}"
+        for owner, name in EXEMPT_MODEL_VALIDATORS
+        if (owner, name) not in walked
+    )
+    assert not stale, f"exemptions naming no live model validator: {stale}"
+
+
+def test_rule_targets_are_unambiguous_class_names():
+    """Rules bind targets (and fixture models) by bare class name; two
+    contract classes sharing a bound name would make every name-based
+    resolution in this suite silently pick one of them. Unbound name
+    collisions are tolerated — this pins only the names the registry uses."""
+    by_name: dict[str, set[type[BaseModel]]] = {}
+    for cls in contract_classes():
+        by_name.setdefault(cls.__name__, set()).add(cls)
+    bound = {t for r in all_rules() for t in r.targets}
+    bound |= {r.fixture_model for r in all_rules() if r.fixture_model}
+    ambiguous = {
+        name: sorted(c.__module__ for c in by_name[name])
+        for name in sorted(bound)
+        if len(by_name.get(name, set())) > 1
+    }
+    assert not ambiguous, (
+        f"registry-bound class names resolved by more than one class: {ambiguous}"
+    )
 
 
 # --- Shared fixture corpus --------------------------------------------------

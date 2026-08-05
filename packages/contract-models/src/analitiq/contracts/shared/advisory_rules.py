@@ -10,6 +10,12 @@ relational rule is a data edit here — never new imperative code.
 
 IDs are ``ADV-<AREA>-NNN``, stable and never reused. ``targets`` name model
 classes by string; a rule on a base class covers its subclasses (MRO match).
+
+:mod:`advisory_prose` is this census's other half: every field description and
+model docstring carrying that module's modal markers must resolve there to the
+rule, structural mechanism, or registered waiver carrying it, so an obligation
+stated in prose and enforced nowhere fails the build instead of shipping
+silently.
 """
 from __future__ import annotations
 
@@ -291,6 +297,21 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="A write request.path_params from_param binding must name a param declaring a default; a write param has no other source, so a sourceless one can never resolve.",
         targets=("WriteOperation",), enforcer="_wiring",
     ),
+    AdvisoryRule(
+        id="ADV-ENDP-029", kind="custom", resource="api-endpoint",
+        prose="Write-response metadata keys must match the metadata-key pattern and must not collide with a reserved response-scope name.",
+        targets=("WriteResponse",), enforcer="_metadata_keys",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-030", kind="custom", resource="api-endpoint",
+        prose="A write-response expression must not reference response.record_count, a read-only response scope.",
+        targets=("WriteResponse",), enforcer="_reject_record_count",
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-031", kind="custom", resource="api-endpoint",
+        prose="database_object.catalog and database_object.schema must be omitted when not applicable; explicit null is invalid.",
+        targets=("DatabaseObject",), enforcer="_reject_explicit_null_namespaces",
+    ),
     # --- stream -------------------------------------------------------------
     AdvisoryRule(
         id="ADV-STRM-003", kind="custom", resource="stream",
@@ -348,12 +369,24 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
         targets=("StreamDestination",), enforcer="_validate_db_write_mode",
     ),
+    AdvisoryRule(
+        id="ADV-STRM-014", kind="custom", resource="stream",
+        prose="selected_columns, replication.tie_breaker_fields and database_pagination are database-source features: a connector-scope (API) source must not declare them.",
+        targets=("StreamSource",), enforcer="_validate_database_only_read_features",
+    ),
     # --- connector (ConnectionContractInput + connector document) -----------
     AdvisoryRule(
         id="ADV-CONN-003", kind="custom", resource="connector",
         prose="secret must be true if and only if storage is 'secrets'.",
         targets=("ConnectionContractInput",), enforcer="_consistency",
     ),
+    # --- connection stored maps ---------------------------------------------
+    AdvisoryRule(
+        id="ADV-CONN-004", kind="custom", resource="connection",
+        prose="parameters, selections and discovered keys must not be secret-shaped; a secret lives in secret storage and is referenced via secret_refs.",
+        targets=("ConnectionStoredMaps",), enforcer="_validate_no_secret_keys",
+    ),
+    # --- connector document (post-auth, discovery, DSN, capabilities) -------
     AdvisoryRule(
         id="ADV-CTOR-002", kind="custom", resource="connector",
         prose="A user_selection post-auth output requires options_request and forbids discovery_request; an auto_discovery output requires discovery_request and forbids options_request/options_path/label_path; storage is constrained by mode.",
@@ -410,6 +443,21 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="A connection condition predicate must declare field and exactly one operator key (eq/in/not_in/present/regex).",
         targets=("ConnectionConditionPredicate",), enforcer="_exactly_one_operator",
     ),
+    AdvisoryRule(
+        id="ADV-CTOR-013", kind="custom", resource="connector",
+        prose="dedicated_schema is required when the stage schema is 'dedicated' and must be omitted or null otherwise.",
+        targets=("SqlStageCapabilities",), enforcer="_dedicated_schema_matches_scope",
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-014", kind="custom", resource="connector",
+        prose="A write_unit must declare at least one of rows / bytes.",
+        targets=("WriteUnit",), enforcer="_at_least_one_bound",
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-015", kind="custom", resource="connector",
+        prose="An explicit null bulk-load mechanism is refused: absence of the family key is the only 'none'.",
+        targets=("SqlBulkLoad",), enforcer="_null_is_not_a_mechanism",
+    ),
     # --- type-map -----------------------------------------------------------
     AdvisoryRule(
         id="ADV-TMAP-001", kind="custom", resource="type-map",
@@ -445,6 +493,16 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-TMAP-007", kind="custom", resource="type-map",
         prose="A ${...} placeholder in a canonical render must be well-formed: no empty ${} and no unclosed ${.",
         targets=("TypeMapReadRegexRule",), enforcer="_check",
+    ),
+    AdvisoryRule(
+        id="ADV-TMAP-008", kind="custom", resource="type-map",
+        prose="A write exact rule's canonical must satisfy the cross-parameter Arrow bounds (Decimal scale <= precision), and its native DDL render's ${...} placeholders must be well-formed.",
+        targets=("TypeMapWriteExactRule",), enforcer="_check",
+    ),
+    AdvisoryRule(
+        id="ADV-TMAP-009", kind="custom", resource="type-map",
+        prose="A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed.",
+        targets=("TypeMapWriteRegexRule",), enforcer="_check",
     ),
     # --- pipeline -----------------------------------------------------------
     AdvisoryRule(

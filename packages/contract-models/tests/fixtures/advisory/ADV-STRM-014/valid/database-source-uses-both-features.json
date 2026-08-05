@@ -1,0 +1,14 @@
+{
+  "endpoint_ref": {
+    "scope": "connection",
+    "connection_id": "00000000-0000-4000-8000-000000000001_v1",
+    "database_object": {"schema": "public", "name": "orders"}
+  },
+  "selected_columns": ["id", "updated_at", "amount"],
+  "replication": {
+    "method": "incremental",
+    "cursor_field": "updated_at",
+    "tie_breaker_fields": ["id"]
+  },
+  "database_pagination": {"type": "keyset", "order_by_field": "id", "page_size": 500}
+}
