@@ -1,20 +1,24 @@
-"""Every fenced json/jsonc snippet in this plugin's skill prose must uphold
+"""Every fenced json/jsonc snippet in this plugin's prose must uphold
 the disposition its annotation declares.
 
 `test_examples.py` pins the bundled `examples/*.example.json`, but creator
-agents copy shapes from the fenced ``jsonc`` blocks inline in `skills/**/*.md`
-too — and those are fragments (a `mapping` block, a `schedule` object, one
-assignment), so no complete-document gate ever sees them. This suite closes
-that hole, and it is the extraction gate the annotation convention promised:
-every inline fence carries an HTML comment directly above it declaring its
-verification contract (this plugin's `CLAUDE.md` § "Fenced JSON examples",
-whose normative home is the connector plugin's `CLAUDE.md` § "Fenced JSON
-examples — the annotation convention"). The gate classifies each block FROM
-that marker — there is no hand-maintained registry to drift from the prose:
+agents copy shapes from the fenced ``jsonc`` blocks inline in the plugin's
+`**/*.md` — skills and agent definitions alike — and those are fragments (a
+`mapping` block, a `schedule` object, one assignment), so no complete-document
+gate ever sees them. This suite closes that hole over the WHOLE plugin tree,
+and it is the extraction gate the annotation convention promised: every inline
+fence carries an HTML comment directly above it declaring its verification
+contract (this plugin's `CLAUDE.md` § "Fenced JSON examples", whose normative
+home is the connector plugin's `CLAUDE.md` § "Fenced JSON examples — the
+annotation convention"). The gate classifies each block FROM that marker —
+there is no hand-maintained registry to drift from the prose:
 
-* ``<!-- validate: <entity> -->`` — the fragment's top-level keys are merged
-  into a bundled host example already pinned valid by the sibling suite, and
-  the merged document must validate.
+* ``<!-- validate: <entity> -->`` — graded twice: the bare fragment must
+  validate standalone as a complete ``<entity>`` document (a fragment decayed
+  to a single key must not ride a host's completeness), and its top-level
+  keys merged into a bundled host example already pinned valid by the sibling
+  suite must validate too (catching interplay with the host fields the
+  fragment omits).
 * ``<!-- validate: <entity>#/<json-pointer> -->`` — the fragment replaces the
   host's value at that pointer. A fragment may show its enclosing key for
   context; the pointer names the deepest shown node and the gate unwraps it.
@@ -61,7 +65,7 @@ import test_examples  # noqa: E402  (sibling suite; pytest puts this dir on sys.
 
 
 # ---------------------------------------------------------------------------
-# Discovery: every ```json / ```jsonc fence under skills/**/*.md
+# Discovery: every ```json / ```jsonc fence under the plugin's **/*.md
 # ---------------------------------------------------------------------------
 
 # A fence opener: a run of >=3 backticks or tildes, then the info string.
@@ -74,7 +78,9 @@ _FENCE_OPEN = re.compile(r"^(`{3,}|~{3,})\s*(.*?)\s*$")
 # The corroboration backstop: any line that LOOKS like a json/jsonc fence
 # opener. Every match must be accounted for — as a discovered opener or as
 # content inside some tracked fence — or discovery has an escape hatch.
-_JSONISH = re.compile(r"^\s*(`{3,}|~{3,})\s*jsonc?\b")
+# IGNORECASE is backstop-only: discovery's exact-form match stays lowercase,
+# so a case variant (```JSON) is loudly flagged, never silently adopted.
+_JSONISH = re.compile(r"^\s*(`{3,}|~{3,})\s*jsonc?\b", re.IGNORECASE)
 
 
 class Fence(NamedTuple):
@@ -130,9 +136,10 @@ def _discover_blocks(root: Path) -> tuple[dict[tuple[str, int], Block], list[str
     ``jsonc``; the index counts those alone, per file. Every other fence is
     tracked but opaque, so its body can never be mistaken for top-level
     markdown. ``unaccounted`` lists every `_JSONISH` line that is neither a
-    discovered opener nor content inside a tracked fence — tilde and
-    info-string variants (``~~~jsonc``, ```` ```json title="x" ````) land
-    here, converting each would-be escape hatch into a loud failure.
+    discovered opener nor content inside a tracked fence — tilde, case, and
+    info-string variants (``~~~jsonc``, ```` ```JSON ````, ```` ```json
+    title="x" ````) land here, converting each would-be escape hatch into a
+    loud failure.
     """
     blocks: dict[tuple[str, int], Block] = {}
     unaccounted: list[str] = []
@@ -156,7 +163,7 @@ def _discover_blocks(root: Path) -> tuple[dict[tuple[str, int], Block], list[str
     return blocks, unaccounted
 
 
-DISCOVERED, UNACCOUNTED = _discover_blocks(SKILLS)
+DISCOVERED, UNACCOUNTED = _discover_blocks(ROOT)
 
 
 def test_discovery_scanner(tmp_path):
@@ -191,11 +198,12 @@ def test_discovery_backstop_flags_jsonish_lookalikes(tmp_path):
     (tmp_path / "probe.md").write_text(
         '```json title="x"\n{}\n```\n'  # info-string variant: not collected
         "~~~jsonc\n{}\n~~~\n"           # tilde variant: not collected
+        "```JSON\n{}\n```\n"            # case variant: not collected
     )
     blocks, unaccounted = _discover_blocks(tmp_path)
     assert blocks == {}
     assert [u.split(": ", 1)[1] for u in unaccounted] == [
-        '```json title="x"', "~~~jsonc"]
+        '```json title="x"', "~~~jsonc", "```JSON"]
 
 
 def test_real_tree_has_no_unaccounted_jsonish_lines():
@@ -274,7 +282,7 @@ def test_every_block_is_annotated():
 # Coverage is a conscious number: adding a block (or changing a disposition)
 # must move this constant in the same change, so the validated surface never
 # shrinks silently.
-EXPECTED_DISPOSITIONS = {"validate": 10, "invalid": 0, "illustrative": 7}
+EXPECTED_DISPOSITIONS = {"validate": 10, "invalid": 0, "illustrative": 18}
 
 
 def test_disposition_counts_are_conscious():
@@ -461,9 +469,9 @@ HOST_EXAMPLE = {
 # (a whole `write`, a `schedule`) cannot silently degrade that splice into
 # grading the host against itself: the new `{}` position shows up here.
 EXPECTED_PLACEHOLDERS = {
-    ("stream-spec/spec-destinations.md", "stream#/destinations"):
+    ("skills/stream-spec/spec-destinations.md", "stream#/destinations"):
         {"destinations.0.endpoint_ref"},
-    ("stream-spec/spec-source.md", "stream#/source"):
+    ("skills/stream-spec/spec-source.md", "stream#/source"):
         {"source.endpoint_ref"},
 }
 
@@ -522,27 +530,40 @@ def _grading_entity(marker: Marker, label: str) -> str:
         assert marker.adv in rules, (
             f"{label}: '<!-- invalid: {marker.adv} -->' names no rule in the "
             "advisory registry — a dangling ADV id pins nothing.")
-        entity = rules[marker.adv].resource
+        # Boundary translation: the registry spells resources hyphenated
+        # (database-endpoint), the validator adapter spells entities with
+        # underscores (database_endpoint). Without it, a hyphenated resource
+        # would surface as a misdirecting KeyError deeper in the splice.
+        entity = rules[marker.adv].resource.replace("-", "_")
     else:
         entity = marker.entity
+    assert entity in ENTITY_SKILL, (
+        f"{label}: grades as entity {entity!r}, which no spec skill's "
+        "examples are authored as; add the skill -> entity pair to "
+        "test_examples.SKILL_ENTITY (with a validated examples/ tree) before "
+        "a prose block can grade as it.")
     assert entity in HOST_EXAMPLE, (
         f"{label}: grades as entity {entity!r}, which has no host in "
-        "HOST_EXAMPLE; add the bundled example its fragments splice into.")
+        f"HOST_EXAMPLE; add a HOST_EXAMPLE[{entity!r}] entry naming the "
+        f"bundled {ENTITY_SKILL[entity]}/examples/ document its fragments "
+        "splice into.")
     return entity
 
 
-def _spliced_document(marker: Marker, body: str, label: str) -> tuple[str, dict]:
+def _spliced_document(marker: Marker, body: str, label: str):
+    """-> (entity, fragment, segments, spliced document)."""
     entity = _grading_entity(marker, label)
     fragment, segments = _resolve_fragment(marker, body, label)
     host_path = SKILLS / ENTITY_SKILL[entity] / "examples" / HOST_EXAMPLE[entity]
     assert host_path.is_file(), f"{label}: missing host example {host_path}"
-    return entity, _splice(json.loads(host_path.read_text()), fragment, segments)
+    spliced = _splice(json.loads(host_path.read_text()), fragment, segments)
+    return entity, fragment, segments, spliced
 
 
 def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
                                  tmp_path: Path) -> None:
     """Grade one validate/invalid block: splice, validate, judge per marker."""
-    entity, spliced = _spliced_document(marker, body, label)
+    entity, fragment, segments, spliced = _spliced_document(marker, body, label)
     doc_path = tmp_path / "spliced.json"
     doc_path.write_text(json.dumps(spliced, indent=2))
     diagnostics = V.diagnostics_for(entity, doc_path)
@@ -556,6 +577,22 @@ def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
             + " — the host validates on its own (test_examples.py), so either "
               "the prose teaches an invalid shape or the marker's "
               "entity/pointer is wrong.")
+        if segments is None:
+            # The merge lets host keys the fragment omits survive, so a
+            # fragment silently decayed to one key would ride the host's
+            # completeness and stay green. The pointer-less form claims
+            # document shape, not a patch: the bare fragment must also
+            # validate standalone, through the same adapter.
+            alone_path = tmp_path / "standalone.json"
+            alone_path.write_text(json.dumps(fragment, indent=2))
+            alone = V.diagnostics_for(entity, alone_path)
+            assert alone["passed"], (
+                f"{label} does not validate as {entity} standalone: "
+                + "; ".join(f"{f['path']}: {f['message']}"
+                            for f in alone["findings"])
+                + " — a pointer-less 'validate:' block must be a complete "
+                  "document on its own; use validate: <entity>#/<pointer> "
+                  "for a partial fragment.")
     else:
         # The diagnostics envelope carries Pydantic messages, not rule ids, so
         # the ADV id in the marker is declared intent that review checks; the
@@ -602,6 +639,15 @@ def test_block_upholds_its_marker(key, marker, tmp_path):
         marker, DISCOVERED[key].body, f"{key[0]} block {key[1]}", tmp_path)
 
 
+def test_pointerless_fragment_must_validate_standalone(tmp_path):
+    """A pointer-less fragment decayed to a single key merges green (the host
+    supplies everything else) — the standalone grade is what catches it."""
+    marker = _parse_marker("<!-- validate: connection -->")
+    with pytest.raises(AssertionError, match="standalone"):
+        _assert_block_upholds_marker(
+            marker, '{"display_name": "decayed"}', "synthetic", tmp_path)
+
+
 def test_placeholder_accounting_is_pinned():
     collected: dict[tuple[str, str], set[str]] = {}
     for key in sorted(DISCOVERED):
@@ -644,3 +690,22 @@ def test_invalid_disposition_requires_the_failure(tmp_path):
         _assert_block_upholds_marker(
             _parse_marker("<!-- invalid: ADV-PIPE-999 -->"),
             '{"schedule": {"type": "manual"}}', "synthetic", tmp_path)
+
+
+def test_invalid_disposition_translates_hyphenated_registry_resources():
+    """The registry spells resources hyphenated; the validator adapter spells
+    entities with underscores. `_grading_entity` must translate at that
+    boundary — the failure for an unhosted entity is then the actionable
+    membership assertion naming the underscore spelling, never a misdirecting
+    KeyError on the hyphenated one."""
+    from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
+    rule = next(
+        (r for r in ADVISORY_RULES
+         if "-" in r.resource and r.resource.replace("-", "_") not in HOST_EXAMPLE),
+        None)
+    if rule is None:  # every hyphenated resource gained a host: real blocks cover it
+        pytest.skip("no hyphenated-resource rule without a host in the registry")
+    marker = _parse_marker(f"<!-- invalid: {rule.id} -->")
+    with pytest.raises(AssertionError,
+                       match=re.escape(repr(rule.resource.replace("-", "_")))):
+        _grading_entity(marker, "synthetic")
