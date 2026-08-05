@@ -113,8 +113,11 @@ review-enforced here until a matching gate lands):
   key for context (`"replication": { … }`, wrapped or not) — the pointer
   names the deepest shown node, and a gate unwraps the key before
   validating.
-- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail with exactly
-  that diagnostic.
+- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail validation
+  (that half is what a gate asserts — a "don't do this" example that rots
+  into valid is the most misleading rot there is). That the failure is the
+  named rule's diagnostic stays review-enforced: the validator reports
+  model messages, not rule ids.
 - `<!-- illustrative -->` — outside the published contract's validation
   surface (plugin-internal I/O envelopes, shape sketches); an explicit,
   reviewable exemption.
