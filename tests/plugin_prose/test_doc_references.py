@@ -77,6 +77,7 @@ guard — this always runs.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from collections import Counter
 from functools import cache
 from pathlib import Path
@@ -463,13 +464,23 @@ def _scan_text(text: str) -> list[tuple[int, str]]:
 
 class Anchor(NamedTuple):
     """One `§` citation: where it sits, the file it binds to (`None` for a
-    citation of the document it is written in), the heading it names, and
-    whether the author quoted that heading."""
+    citation of the document it is written in), the heading it names, whether
+    the author quoted that heading, and where in the document the bound path
+    was written.
+
+    `path_span` is what the census reads. Re-deriving it from
+    `_ANCHOR_BINDING` per line does not work and is not a near miss: the
+    pattern ends in `$`, which means *immediately before a `§`* when the pass
+    searches `text[:marker.start()]` and *end of line* when anything else runs
+    it per line. Those are unrelated positions, so the only honest source of
+    what the anchor pass read is the pass.
+    """
 
     lineno: int
     target: str | None
     text: str
     quoted: bool
+    path_span: tuple[int, int] | None = None
 
 
 def _anchor_sites(text: str) -> list[Anchor]:
@@ -482,17 +493,14 @@ def _anchor_sites(text: str) -> list[Anchor]:
     sites: list[Anchor] = []
     for marker in re.finditer("§", text):
         rest = text[marker.end() :]
-        lineno = text.count("\n", 0, marker.start()) + 1
+        binding = _ANCHOR_BINDING.search(text[: marker.start()])
         sites.append(
             Anchor(
-                lineno=lineno,
-                target=(
-                    binding.group(1)
-                    if (binding := _ANCHOR_BINDING.search(text[: marker.start()]))
-                    else None
-                ),
+                lineno=text.count("\n", 0, marker.start()) + 1,
+                target=binding.group(1) if binding else None,
                 text=_anchor_text(rest),
                 quoted=_QUOTED_ANCHOR.match(rest) is not None,
+                path_span=binding.span(1) if binding else None,
             )
         )
     return sites
@@ -988,16 +996,18 @@ def _files_reached_by(plugin: str, form: str) -> set[Path]:
 _MD_MENTION = re.compile(r"[A-Za-z0-9_.\-/*]*\.md\b")
 
 
-def _mention_disposition(line: str, start: int, end: int) -> str | None:
+def _mention_disposition(rel: str, line: str, start: int, end: int) -> str | None:
     """Why a `.md` written in prose is not a citation any extractor should
     read. One name per reason, and the census below fails on a mention that
     fits none of them — that is what makes a citation form nobody spelled
     impossible to add silently."""
     mention = line[start:end]
     before, after = line[:start], line[end:]
-    if _HEADING.match(line) and mention in line.split("—")[0]:
+    if _HEADING.match(line) and mention == Path(rel).name:
         # `# CLAUDE.md — analitiq-connector-builder`: the document naming
-        # itself, not pointing anywhere.
+        # itself, not pointing anywhere. Tied to the document's own filename,
+        # because "a `.md` in a heading" would disposition away a real citation
+        # written in one — and a heading is a normal place to cite from.
         return "document title"
     if before.rstrip().endswith(("──", "─")):
         # A tree diagram's leaf. The directory listing is illustrative; the
@@ -1017,35 +1027,72 @@ def _mention_disposition(line: str, start: int, end: int) -> str | None:
     return None
 
 
-def _mention_spans(line: str) -> list[tuple[int, int]]:
-    """Where every extractor reads on one line, so a mention can be asked
-    whether anybody read it."""
-    spans = [
-        match.span(1)
-        for pattern in (*_PATH_PATTERNS, _LINK_REF)
-        for match in pattern.finditer(line)
-    ]
-    return spans + [
-        match.span(1) for match in _ANCHOR_BINDING.finditer(line)
-    ]
+def _mention_spans(text: str) -> list[tuple[int, int]]:
+    """Where every extractor reads in one document, as offsets into the whole
+    text. Document-level, not per-line, because that is what the anchor pass
+    is: it scans the whole text and binds across a line break, and the span it
+    bound is carried on the `Anchor` rather than guessed at afterwards."""
+    spans = []
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        for pattern in (*_PATH_PATTERNS, _LINK_REF):
+            for match in pattern.finditer(line):
+                start, end = match.span(1)
+                spans.append((offset + start, offset + end))
+        offset += len(line)
+    return spans + [site.path_span for site in _anchor_sites(text) if site.path_span]
 
 
-def _uncovered_mentions(plugin: str) -> list[tuple[str, int, str, str]]:
-    """Every `.md` in the plugin's prose that no extractor reads and no
-    disposition explains."""
+class Mention(NamedTuple):
+    """One `.md` written in prose that no extractor read, and the reason it is
+    not a citation — `None` when there is none, which is the failure."""
+
+    rel: str
+    lineno: int
+    mention: str
+    line: str
+    disposition: str | None
+
+
+def _unread_mentions(plugin: str) -> list[Mention]:
+    """Every `.md` in the plugin's prose that no extractor reads, each with its
+    disposition. The census asserts on the ones that have none; the
+    disposition-liveness test reads the rest, so a disposition is only 'used'
+    if the census actually needed it."""
     root = _plugin_root(plugin)
-    uncovered = []
+    unread = []
     for path in _prose_files(plugin):
         rel = path.relative_to(root).as_posix()
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            spans = _mention_spans(line)
-            for match in _MD_MENTION.finditer(line):
-                start, end = match.span()
-                if any(start < span_end and span_start < end for span_start, span_end in spans):
-                    continue
-                if _mention_disposition(line, start, end) is None:
-                    uncovered.append((rel, lineno, match.group(0), line.strip()))
-    return uncovered
+        text = path.read_text(encoding="utf-8")
+        spans = _mention_spans(text)
+        lines = text.splitlines()
+        starts, offset = [], 0
+        for line in text.splitlines(keepends=True):
+            starts.append(offset)
+            offset += len(line)
+        for match in _MD_MENTION.finditer(text):
+            start, end = match.span()
+            if any(start < span_end and span_start < end for span_start, span_end in spans):
+                continue
+            index = bisect_right(starts, start) - 1
+            line, line_start = lines[index], starts[index]
+            unread.append(
+                Mention(
+                    rel=rel,
+                    lineno=index + 1,
+                    mention=match.group(0),
+                    line=line.strip(),
+                    disposition=_mention_disposition(
+                        rel, line, start - line_start, end - line_start
+                    ),
+                )
+            )
+    return unread
+
+
+def _uncovered_mentions(plugin: str) -> list[Mention]:
+    """The census's finding: read by nobody, explained by nothing."""
+    return [m for m in _unread_mentions(plugin) if m.disposition is None]
 
 
 def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
@@ -1198,8 +1245,8 @@ def test_every_md_written_in_prose_is_read_or_dispositioned(plugin: str) -> None
     assert not uncovered, (
         "`.md` written in prose that no extractor reads:\n"
         + "\n".join(
-            f"  plugins/{plugin}/{rel}:{lineno} -> {mention}\n      {line}"
-            for rel, lineno, mention, line in uncovered
+            f"  plugins/{plugin}/{m.rel}:{m.lineno} -> {m.mention}\n      {m.line}"
+            for m in uncovered
         )
         + "\nEither it is a citation — teach the extractor its form, and pin "
         "the form with a sentinel — or it is not, and `_mention_disposition` "
@@ -1207,30 +1254,67 @@ def test_every_md_written_in_prose_is_read_or_dispositioned(plugin: str) -> None
     )
 
 
+def test_the_census_reads_coverage_from_the_passes_themselves() -> None:
+    """Coverage is what an extractor actually read, not what a pattern would
+    match if run somewhere else. Both directions of getting that wrong are
+    live: a citation ending a line looks covered by the anchor binding (whose
+    `$` means *before a `§`*, not *end of line*), and a `§` citation written at
+    full depth inside the backticks looks uncovered though both passes grade
+    it."""
+    # Nothing reads this, and nothing may claim to. It ends the line, which is
+    # where a per-line `_ANCHOR_BINDING` would wrongly answer for it.
+    line_final = "The rule lives in /skills/nowhere/gone.md"
+    assert _scan_text(line_final) == []
+    assert not any(
+        start < end2 and start2 < end
+        for start, end in [(18, len(line_final))]
+        for start2, end2 in _mention_spans(line_final)
+    )
+    # This one *is* read — by the anchor pass, whose binding is the only thing
+    # that sees a path with the anchor inside the backticks.
+    anchored = "Follow `skills/endpoint-spec/spec-columns.md §Timestamp` when mapping."
+    assert [target for _lineno, target in _scan_text(anchored)] == [
+        "skills/endpoint-spec/spec-columns.md"
+    ]
+    covered = _mention_spans(anchored)
+    mention = _MD_MENTION.search(anchored)
+    assert any(
+        mention.start() < end and start < mention.end() for start, end in covered
+    ), "the anchor pass read this path; the census must say so"
+
+
 def test_every_mention_disposition_is_load_bearing() -> None:
     """A disposition nobody's prose fits is dead config that can only mask a
     real citation later. Each is exercised on the shape it was written for,
     and the real tree is what proves they are all still needed."""
     cases = {
-        "document title": ("# CLAUDE.md — analitiq-connector-builder", 2, 11),
-        "tree diagram": ("└── README.md", 4, 13),
-        "link text": ("[spec-envelope.md](skills/connection-spec/spec-envelope.md)", 1, 17),
-        "glob": ("- every `spec-*.md` under it.", 9, 18),
-        "bare filename": ("the rule in io-contracts.md, never a slug", 12, 27),
+        "document title": ("CLAUDE.md", "# CLAUDE.md — analitiq-connector-builder", 2, 11),
+        "tree diagram": ("README.md", "└── README.md", 4, 13),
+        "link text": (
+            "README.md",
+            "[spec-envelope.md](skills/connection-spec/spec-envelope.md)",
+            1,
+            17,
+        ),
+        "glob": ("agents/x.md", "- every `spec-*.md` under it.", 9, 18),
+        "bare filename": ("agents/x.md", "the rule in io-contracts.md, never a slug", 12, 27),
     }
-    for expected, (line, start, end) in cases.items():
+    for expected, (rel, line, start, end) in cases.items():
         assert line[start:end].endswith(".md"), (expected, line[start:end])
-        assert _mention_disposition(line, start, end) == expected
-    # A real citation is not dispositioned away by any of them.
+        assert _mention_disposition(rel, line, start, end) == expected
+    # A real citation is not dispositioned away by any of them — including one
+    # written in a heading, which is a normal place to cite from.
     line = "see skills/nowhere/gone.md for details"
-    assert _mention_disposition(line, 4, 26) is None
-    # And every disposition still answers for something in the tree.
+    assert _mention_disposition("agents/x.md", line, 4, 26) is None
+    heading = "## Pipeline (full contract: skills/nowhere/gone.md)"
+    assert _mention_disposition("SKILL.md", heading, 27, 49) is None
+    # And every disposition still answers for a mention the census *needed* it
+    # for. Counting mentions an extractor already read would let a disposition
+    # look alive on prose the census never asks about.
     used = {
-        _mention_disposition(line, *match.span())
+        mention.disposition
         for plugin in _plugin_names()
-        for path in _prose_files(plugin)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        for match in _MD_MENTION.finditer(line)
+        for mention in _unread_mentions(plugin)
     }
     unused = sorted(set(cases) - used)
     assert not unused, (
@@ -1531,7 +1615,9 @@ def test_resolving_anchor_passes(plugin: str) -> None:
     citing = "agents/synthetic-classifier.md"
     doc = f"Author per `{existing}` §{heading}, then stop.\n"
     sites = [(citing, site) for site in _anchor_sites(doc)]
-    assert sites == [(citing, Anchor(1, existing, heading, quoted=False))]
+    assert [(rel, s.lineno, s.target, s.text, s.quoted) for rel, s in sites] == [
+        (citing, 1, existing, heading, False)
+    ]
     assert _anchor_checks(plugin, sites) == ([], 1)
 
 
@@ -1649,9 +1735,15 @@ def test_wrapped_anchor_is_read_whole() -> None:
     """An anchor that wraps a line is one citation, not a truncated one — the
     per-line scan the file pass uses would read `Dialect` and miss `hooks`."""
     text = "see `spec-connector-package.md` §Dialect\n  hooks). The engine\n"
-    assert _anchor_sites(text) == [
-        Anchor(1, "spec-connector-package.md", "Dialect\n  hooks", quoted=False)
-    ]
+    site = _anchor_sites(text)[0]
+    assert (site.lineno, site.target, site.text, site.quoted) == (
+        1,
+        "spec-connector-package.md",
+        "Dialect\n  hooks",
+        False,
+    )
+    # The span is where the path was written, which is what the census reads.
+    assert text[slice(*site.path_span)] == "spec-connector-package.md"
     assert _anchor_resolves("Dialect\n  hooks", ["Dialect hooks"])
 
 
