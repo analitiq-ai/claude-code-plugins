@@ -57,7 +57,7 @@ readability when the pattern would otherwise look ambiguous.
 ## Uppercase rule (read maps)
 
 Read-side normalization — trim, collapse internal whitespace runs, uppercase —
-is applied differently to the two rule kinds, and that difference is the whole
+is applied differently to each rule kind, and that difference is the whole
 rule:
 
 - **`exact` rules are normalized symmetrically.** The rule's `native` is

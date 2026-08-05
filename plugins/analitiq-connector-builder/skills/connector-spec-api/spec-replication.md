@@ -121,7 +121,8 @@ run, not baked into the endpoint. Don't encode a fudge factor into the mapping.
 `incremental`, or both. List `incremental` only when a cursor mapping
 actually backs it; an endpoint with no cursorable field is `full_refresh`
 only and should omit `replication` (see below). There is no separate
-"default method" key — the block carries no key beyond those above.
+"default method" key — the block carries `supported_methods` and
+`cursor_mappings` and nothing else.
 
 ## When to omit
 

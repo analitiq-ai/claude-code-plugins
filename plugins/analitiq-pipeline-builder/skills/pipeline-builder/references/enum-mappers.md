@@ -47,8 +47,9 @@ the watermark.
 
 `replication.method` must be in the source endpoint's declared support
 set. For API endpoints, the connector document lists
-`operations.read.replication.supported_methods`. For database endpoints
-every method is always supported.
+`operations.read.replication.supported_methods`. A database endpoint carries
+no `replication` block, so it declares no support set and nothing constrains
+the choice.
 
 ## WriteModeMapper
 

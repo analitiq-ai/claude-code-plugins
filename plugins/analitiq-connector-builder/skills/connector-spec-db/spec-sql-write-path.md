@@ -30,9 +30,9 @@ write-capable connector** — omit it and every write mode is refused at
 handshake. A database connector is write-capable by definition (read and
 write are both first-class), so declare it.
 
-A declared block is **complete**: every shape fact below that is not marked
-optional is required. A partial declaration is a config error, not a request
-for defaults.
+A declared block is **complete**: every fact in the declaration table below
+that is not marked optional is required. A partial declaration is a config
+error, not a request for defaults.
 
 | Fact | Values | How to choose |
 |---|---|---|
@@ -77,8 +77,8 @@ mechanism.
 ## The dialect renderers
 
 The write-path hooks are plain methods on `cdk.sql.dialects.SqlDialect`,
-overridden in the connector package's own dialect subclass. The two
-renderers return **statement text** — they execute nothing and never see
+overridden in the connector package's own dialect subclass. The renderers
+return **statement text** — they execute nothing and never see
 records. `bulk_land` is the one exception, and the only hook here that
 performs I/O: it receives a live connection and the batch itself, because
 a bulk mechanism *is* the act of landing data.
