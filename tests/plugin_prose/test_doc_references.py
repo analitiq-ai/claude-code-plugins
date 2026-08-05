@@ -274,7 +274,14 @@ _FLOORS: dict[str, dict[str, int]] = {
 # `fixture` is a real file plus the opening words of a heading it carries (the
 # citation form the prose uses — `## Release version (`version`)` is cited as
 # `§Release version`), so the acceptance tests dangle one citation against a
-# document that genuinely exists.
+# document that genuinely exists. It must also carry one three-word,
+# punctuation-free heading, which the quoted-anchor test renames past.
+#
+# `unsentinelled` waives a form this plugin writes but cannot pin — with the
+# reason, which is itself checked: a waived form cited anywhere but the
+# plugin's README fails, since that citation routes an agent and belongs in
+# `sentinels` instead. The key is required, `{}` when nothing is waived, so a
+# plugin cannot arrive with the question unanswered.
 _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
     "analitiq-connector-builder": {
         "sentinels": {
@@ -574,20 +581,26 @@ def _references(plugin: str) -> list[tuple[str, int, str]]:
     ]
 
 
+def _links_in(text: str) -> list[tuple[int, str, str]]:
+    """Every (lineno, target, fragment) markdown link in one document's text.
+    The fragment is `""` when the link names no section — a text-level helper,
+    like `_scan_text`, so a synthetic document can drive the extraction end to
+    end. No link in either plugin carries a fragment today, so this is the only
+    place the capture is exercised at all."""
+    return [
+        (lineno, match.group(1), (match.group(2) or "").lstrip("#"))
+        for lineno, line in enumerate(text.splitlines(), 1)
+        for match in _LINK_REF.finditer(line)
+    ]
+
+
 def _link_references(plugin: str) -> list[tuple[str, int, str, str]]:
-    """Every (relpath, lineno, target, fragment) markdown-link citation. The
-    fragment is `""` when the link names no section."""
+    """Every (relpath, lineno, target, fragment) markdown-link citation."""
     root = _plugin_root(plugin)
     return [
-        (
-            path.relative_to(root).as_posix(),
-            lineno,
-            match.group(1),
-            (match.group(2) or "").lstrip("#"),
-        )
+        (path.relative_to(root).as_posix(), lineno, target, fragment)
         for path in _prose_files(plugin)
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
-        for match in _LINK_REF.finditer(line)
+        for lineno, target, fragment in _links_in(path.read_text(encoding="utf-8"))
     ]
 
 
@@ -775,6 +788,16 @@ def test_every_plugin_is_covered() -> None:
         "_EXTERNAL_REFS": set(_EXTERNAL_REFS),
         "_PLUGIN_FIXTURES": set(_PLUGIN_FIXTURES),
     }
+    incomplete = {
+        plugin: sorted({"sentinels", "fixture", "unsentinelled"} - set(entry))
+        for plugin, entry in _PLUGIN_FIXTURES.items()
+        if {"sentinels", "fixture", "unsentinelled"} - set(entry)
+    }
+    assert not incomplete, (
+        f"_PLUGIN_FIXTURES entries missing required keys: {incomplete} — every "
+        "plugin answers all three, `unsentinelled` with `{}` when it waives "
+        "nothing, so the question is never left open."
+    )
     names = set(_plugin_names())
     missing = {name: sorted(names - keys) for name, keys in registries.items()}
     stale = {name: sorted(keys - names) for name, keys in registries.items()}
@@ -826,6 +849,25 @@ def test_every_plugin_is_covered() -> None:
         f"forms both waived and pinned: {waived_but_pinned} — a waiver that "
         "names a form the plugin does pin is stale; drop it."
     )
+    # A waiver says the form routes nobody. That claim is checkable: a citation
+    # of the form outside the plugin's reader-facing README routes an agent,
+    # and the waiver has stopped being true. Without this the reason is prose
+    # nobody grades — the failure the census pattern in `.claude/CLAUDE.md`
+    # exists to prevent.
+    falsified = {
+        plugin: {
+            form: sorted({rel for rel, _target in _form_sites(plugin, form)} - {"README.md"})
+            for form in _unsentinelled(plugin)
+            if {rel for rel, _target in _form_sites(plugin, form)} - {"README.md"}
+        }
+        for plugin in _plugin_names()
+    }
+    falsified = {plugin: forms for plugin, forms in falsified.items() if forms}
+    assert not falsified, (
+        f"waivers contradicted by the prose: {falsified} — the waiver says the "
+        "form routes nobody, but it is cited outside the README. Pin one of "
+        "those citations as a sentinel and drop the waiver."
+    )
 
 
 def _form_counts(plugin: str) -> dict[str, int]:
@@ -874,6 +916,21 @@ def _files_reached_by(plugin: str, form: str) -> set[Path]:
         for target in _form_targets(plugin, form)
         for path in _candidates(target, plugin)
     }
+
+
+def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
+    """Every (citing relpath, target) one extractor finds — the form's own
+    view, with the document each citation is written in, which is what tells a
+    reader-facing README link from one that routes an agent."""
+    if form == "link":
+        return [(rel, target) for rel, _lineno, target, _frag in _link_references(plugin)]
+    root = _plugin_root(plugin)
+    return [
+        (path.relative_to(root).as_posix(), match.group(1))
+        for path in _prose_files(plugin)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        for match in _FORM_PATTERNS[form].finditer(line)
+    ]
 
 
 def _form_targets(plugin: str, form: str) -> set[str]:
@@ -926,6 +983,33 @@ def test_citation_detector_reads_this_plugin(plugin: str) -> None:
     other's volume."""
     below = _below_floor(_form_counts(plugin), _FLOORS[plugin])
     assert not below, _floor_failure(f"plugins/{plugin}", below)
+
+
+def test_a_starved_form_trips_its_floor() -> None:
+    """The floors are this file's anti-vacuity device, and their comparison is
+    only ever run on a tree that must not trip it — so the failing direction
+    needs its own test, or `_below_floor` could return nothing at all and
+    every floor in both registries would go decorative."""
+    assert _below_floor({"backticked": 3}, {"backticked": 4}) == {"backticked": (3, 4)}
+    assert _below_floor({"backticked": 4}, {"backticked": 4}) == {}  # equal is not below
+    assert _below_floor({"backticked": 0}, {}) == {}  # an unfloored form is not below
+    message = _floor_failure("plugins/x", {"backticked": (3, 4)})
+    assert "backticked found 3, floor 4" in message
+    assert "vacuously" in message
+
+
+def test_a_link_fragment_is_read_out_of_the_prose() -> None:
+    """The join from prose to `_link_dangles`' fragment check. No link in
+    either plugin carries a fragment today, so nothing on the real tree
+    exercises the capture — and a fragment silently lost reads as "the section
+    is fine", while a `#` silently kept reads as a broken link that is not."""
+    assert _links_in("See [t](spec-envelope.md#type-fidelity).") == [
+        (1, "spec-envelope.md", "type-fidelity")
+    ]
+    assert _links_in("See [t](spec-envelope.md).") == [(1, "spec-envelope.md", "")]
+    assert _links_in("Line one\n\nSee [t](../x/y.md#a-b).") == [
+        (3, "../x/y.md", "a-b")
+    ]
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -1444,12 +1528,19 @@ def test_a_quoted_anchor_is_graded_exactly_by_the_pass(plugin: str) -> None:
     citing, _heading = _fixture(plugin)
     # A heading long enough to rename *past* its opening words — the only
     # rename an unquoted citation cannot see.
-    long_enough = [
+    candidates = [
         h
         for h in _headings((_plugin_root(plugin) / citing).read_text(encoding="utf-8"))
         if re.fullmatch(r"[\w ]+", h) and len(h.split()) >= 3
-    ][0]
-    words = long_enough.split()
+    ]
+    if not candidates:
+        pytest.fail(
+            f"the fixture file for {plugin} — {citing}, named in "
+            "_PLUGIN_FIXTURES — no longer carries a three-word heading free of "
+            "punctuation, which this test needs to rename past a citation's "
+            "opening words. Point the fixture at a file that does."
+        )
+    words = candidates[0].split()
     renamed = " ".join([*words[:2], "renamed", *words[3:]])
     doc = f'Author per `{citing}` § "{renamed}".\n'
     sites = [(citing, site) for site in _anchor_sites(doc)]
