@@ -35,6 +35,8 @@ scripts/
 tests/
   connector_builder/              # suite per plugin; package suites live in packages/*/tests
   pipeline_builder/
+  plugin_prose/                   # sweeps every plugin root; belongs to no one plugin
+  schemas/                        # the rendered registry, ditto
 conftest.py                       # puts packages/*/src on sys.path - see "The contract"
 requirements-dev.txt              # runtime deps of the packages + pytest
 ```

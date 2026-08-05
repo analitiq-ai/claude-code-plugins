@@ -1,8 +1,9 @@
 name: tests
 
 # One suite for the whole monorepo. `pytest.ini` sets `testpaths = tests packages`,
-# so a bare `pytest` runs every plugin's suite (tests/<plugin>/) AND each
-# package's own suite (packages/<pkg>/tests/).
+# so a bare `pytest` runs everything under tests/ - a suite per plugin
+# (tests/<plugin>/) plus the two that span them - AND each package's own suite
+# (packages/<pkg>/tests/).
 #
 # What the suites gate:
 #   connector_builder/ - three parts, all reading the in-repo contract source so
@@ -18,10 +19,12 @@ name: tests
 #   pipeline_builder/  - the same problem solved the other way: contract-owned
 #     facts are GENERATED into the prose, and the suite fails when a generated
 #     block is stale relative to the pin.
-#   plugin_prose/      - the one suite that belongs to no single plugin: it
-#     sweeps every plugin root under plugins/ and proves each citation the prose
-#     makes - the file, and the section a `§` names - still resolves. Plugin
-#     roots are discovered, so a new plugin is covered the day it lands.
+#   plugin_prose/      - not a per-plugin suite: it sweeps every plugin root
+#     under plugins/ and proves each citation the prose makes - the file, and
+#     the section a `§` names - still resolves. Plugin roots are discovered, so
+#     a new plugin turns the suite red until it is registered there.
+#   schemas/           - also not per-plugin: the rendered registry under
+#     schemas/ and the vendored engine grammar.
 
 on:
   pull_request:
