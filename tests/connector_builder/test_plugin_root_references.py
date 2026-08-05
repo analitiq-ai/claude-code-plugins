@@ -10,7 +10,7 @@ longer exists, with no check), narrowed to the part this repo actually owns. It
 cannot pin the CDK's hook surface — that lives in the engine — but it can
 guarantee that a spec this plugin points at is a spec that exists.
 
-Two reference forms, both checked:
+Three reference forms, all checked:
 
 - `${CLAUDE_PLUGIN_ROOT}/skills/…/spec-x.md` — the absolute form the agent
   frontmatter uses for required reading.
@@ -19,6 +19,10 @@ Two reference forms, both checked:
   form by an order of magnitude, and it is the form the round-1 review found a
   stale reference in, so leaving it unchecked would miss the very case that
   motivated this file.
+- Unbackticked paths in the YAML frontmatter (`description:` citations the
+  orchestrator reads to route work). Frontmatter prose does not use backticks,
+  so the bare backticked sweep is blind there — which is exactly where a
+  dangling citation to a since-deleted spec hid.
 
 Pure text-vs-filesystem: no contract packages involved, so no `_pins` skip
 guard — this always runs.
@@ -43,6 +47,19 @@ _PLUGIN_ROOT_REF = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)")
 # JSON filename (`connector.json`) names an artifact the connector author
 # writes, not a document in this plugin.
 _BARE_REF = re.compile(r"`((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.md)`")
+
+# An unbackticked `.md` path — applied ONLY inside the YAML frontmatter
+# region (between the leading `---` fences), where descriptions cite specs
+# without backticks. At least one directory segment is required: a bare
+# filename with no slash is indistinguishable from an ordinary prose word,
+# so requiring the segment avoids false positives at the cost of not seeing
+# slash-less frontmatter citations (none exist; the non-vacuity test below
+# keeps the form observed). The lookbehind rejects starts preceded by a
+# backtick (that is `_BARE_REF`'s form) or by a path character, so the tail
+# of a `${CLAUDE_PLUGIN_ROOT}/…` reference is not re-matched.
+_FRONTMATTER_PATH_REF = re.compile(
+    r"(?<![\w`./-])((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
+)
 
 # References that deliberately name something outside this plugin, each a
 # recorded decision. A new entry here should be rare and deserves a reason.
@@ -90,16 +107,48 @@ def _resolves(target: str, paths: list[str]) -> bool:
     return any(path == cleaned or path.endswith("/" + cleaned) for path in paths)
 
 
+def _frontmatter_end(lines: list[str]) -> int:
+    """1-based line number of the closing `---` fence, or 0 when the document
+    does not open with a frontmatter block."""
+    if not lines or lines[0].strip() != "---":
+        return 0
+    for idx in range(1, len(lines)):
+        if lines[idx].strip() == "---":
+            return idx + 1
+    return 0
+
+
+def _frontmatter_refs(text: str) -> list[tuple[int, str]]:
+    """(lineno, target) bare-path references in the frontmatter region only."""
+    lines = text.splitlines()
+    return [
+        (lineno, match.group(1))
+        # strictly between the fences: the fences themselves carry no prose
+        for lineno in range(2, _frontmatter_end(lines))
+        for match in _FRONTMATTER_PATH_REF.finditer(lines[lineno - 1])
+    ]
+
+
+def _scan_text(text: str) -> list[tuple[int, str]]:
+    """Every (lineno, target) doc reference in one document's text.
+
+    The two backtick-anchored forms are matched on every line; the
+    unbackticked bare-path form only inside the frontmatter region.
+    """
+    return [
+        (lineno, match.group(1))
+        for lineno, line in enumerate(text.splitlines(), 1)
+        for pattern in (_PLUGIN_ROOT_REF, _BARE_REF)
+        for match in pattern.finditer(line)
+    ] + _frontmatter_refs(text)
+
+
 def _references() -> list[tuple[str, int, str]]:
     """Every (relpath, lineno, target) doc reference in the plugin."""
     return [
-        (path.relative_to(PLUGIN_ROOT).as_posix(), lineno, match.group(1))
+        (path.relative_to(PLUGIN_ROOT).as_posix(), lineno, target)
         for path in sorted(PLUGIN_ROOT.rglob("*.md"))
-        for lineno, line in enumerate(
-            path.read_text(encoding="utf-8").splitlines(), 1
-        )
-        for pattern in (_PLUGIN_ROOT_REF, _BARE_REF)
-        for match in pattern.finditer(line)
+        for lineno, target in _scan_text(path.read_text(encoding="utf-8"))
     ]
 
 
@@ -152,3 +201,62 @@ def test_reference_detector_finds_both_forms() -> None:
     # The wiring this PR extended: creators are routed to their spec skill.
     assert any(t.startswith("skills/connector-spec-db/") for t in targets)
     assert "spec-sql-write-path.md" in targets
+
+
+def test_frontmatter_scan_is_not_vacuous() -> None:
+    """Guard the guard: zero frontmatter citations would let the bare-path
+    form rot into a silent exemption instead of a red build."""
+    found = [
+        target
+        for path in sorted(PLUGIN_ROOT.rglob("*.md"))
+        for _lineno, target in _frontmatter_refs(path.read_text(encoding="utf-8"))
+    ]
+    assert found, (
+        "no unbackticked frontmatter citations found anywhere in the plugin — "
+        "the frontmatter convention changed, so the bare-path check is vacuous."
+    )
+
+
+# A synthetic agent document shaped like the real ones: an unbackticked
+# citation in the frontmatter description, and — deliberately — the same
+# unbackticked form in the body, which the bare-path pattern must NOT reach
+# (body references are required to be backticked or ${CLAUDE_PLUGIN_ROOT}-
+# absolute; matching bare body paths would flood the guard with prose noise).
+_SYNTHETIC_AGENT = """\
+---
+name: synthetic-classifier
+description: Classify per the release table in skills/nowhere/references/gone.md §Table.
+tools: Read
+---
+
+# synthetic-classifier
+
+Body prose mentioning skills/nowhere/references/also-gone.md without backticks.
+"""
+
+
+def _dangling_in(text: str) -> list[str]:
+    """The scan-and-resolve pipeline of `test_doc_references_resolve`, on one
+    document's text."""
+    paths = _plugin_paths()
+    return [
+        target
+        for _lineno, target in _scan_text(text)
+        if target not in _EXTERNAL_REFS and not _resolves(target, paths)
+    ]
+
+
+def test_dangling_frontmatter_reference_is_flagged() -> None:
+    """Acceptance: a frontmatter citation of a nonexistent path fails the
+    guard — and the identical bare form in the body stays invisible."""
+    assert _dangling_in(_SYNTHETIC_AGENT) == ["skills/nowhere/references/gone.md"]
+
+
+def test_resolving_frontmatter_reference_passes() -> None:
+    """The twin: the same document citing a spec that exists is clean."""
+    existing = "connector-builder/references/metadata-and-versioning.md"
+    twin = _SYNTHETIC_AGENT.replace("skills/nowhere/references/gone.md", existing)
+    # The citation is seen (not skipped) …
+    assert existing in [target for _lineno, target in _scan_text(twin)]
+    # … and resolves, so nothing dangles.
+    assert _dangling_in(twin) == []
