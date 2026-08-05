@@ -61,11 +61,15 @@ entries in the three per-plugin registries below, this suite is red.
    document itself, and is resolved against it. The two forms differ in how
    exactly they name the heading: prose abbreviates and runs on, so `§` is
    matched by opening words; a fragment is generated from the whole heading,
-   so it is matched by slug. Fences are not an exemption: eight real citations
-   sit inside fenced examples today (a mission spec quoting the paths its
-   researcher must read), so a `§` in a fence is graded like any other. What a
-   fence *does* suppress is a `#` line being read as a heading — that is a
-   markdown comment in someone's code sample, not a section anyone can cite.
+   so it is matched by slug. Fences are not an exemption. Real *path*
+   citations do sit inside fenced examples — a mission spec quoting the paths
+   its researcher must read, an agent's command line naming the script it
+   runs — so the file pass reads fenced lines. No `§` is fenced today; grading
+   fenced ones too is the symmetric decision rather than an observed need, and
+   the alternative was worse: an exemption that graded nothing while silently
+   dropping the file half of a fenced `` `SKILL.md §Heading` ``. What a fence
+   *does* suppress is a `#` line being read as a heading — that is a markdown
+   comment in someone's code sample, not a section anyone can cite.
    The cost of grading every `§` is that one which is not a plugin-section
    citation at all — an RFC clause, say — has to be written another way; the
    failure message says so.
@@ -995,6 +999,23 @@ def _files_reached_by(plugin: str, form: str) -> set[Path]:
 # downstream of extraction, so none of them can see a form no regex spells.
 _MD_MENTION = re.compile(r"[A-Za-z0-9_.\-/*]*\.md\b")
 
+# A URL scheme immediately before the mention, no whitespace between: the
+# mention is part of somebody else's address. Keyed on `//`, not on the colon
+# — prose writes `contract: skills/x/y.md`, and a bare colon before a citation
+# must not read as a scheme.
+_SCHEME_BEFORE = re.compile(r"\w+://\S*$")
+
+# A disposition the tree does not need yet, and why it is written anyway. The
+# liveness check honours these instead of demanding a citation exist first —
+# the alternative is adding prose to satisfy a guard, which is backwards.
+_PREEMPTIVE_DISPOSITIONS = {
+    "external url": (
+        "the link pass drops scheme targets by design, and the engine ADR "
+        "already allow-listed for the file pass is the obvious first one "
+        "somebody links — the census must not fail on it the day they do"
+    ),
+}
+
 
 def _mention_disposition(rel: str, line: str, start: int, end: int) -> str | None:
     """Why a `.md` written in prose is not a citation any extractor should
@@ -1003,6 +1024,12 @@ def _mention_disposition(rel: str, line: str, start: int, end: int) -> str | Non
     impossible to add silently."""
     mention = line[start:end]
     before, after = line[:start], line[end:]
+    if mention.startswith("//") or _SCHEME_BEFORE.search(before):
+        # `https://…/docs/sql-write-path-v2.md`: a file in another repo, which
+        # this one cannot open. `_LINK_REF` drops scheme targets for that
+        # reason, so without this the census would fail on the very link the
+        # link pass deliberately declines to grade.
+        return "external url"
     if _HEADING.match(line) and mention == Path(rel).name:
         # `# CLAUDE.md — analitiq-connector-builder`: the document naming
         # itself, not pointing anywhere. Tied to the document's own filename,
@@ -1090,9 +1117,16 @@ def _unread_mentions(plugin: str) -> list[UnreadMention]:
     return unread
 
 
+def _uncovered(mentions: list[UnreadMention]) -> list[UnreadMention]:
+    """The census's finding: read by nobody, explained by nothing. Split from
+    the sweep so it can be driven in its failing direction — it is the step
+    that turns an unread mention into a build failure, and it only ever runs
+    on a tree that must not trip it."""
+    return [m for m in mentions if m.disposition is None]
+
+
 def _uncovered_mentions(plugin: str) -> list[UnreadMention]:
-    """The census's finding: read by nobody, explained by nothing."""
-    return [m for m in _unread_mentions(plugin) if m.disposition is None]
+    return _uncovered(_unread_mentions(plugin))
 
 
 def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
@@ -1180,6 +1214,13 @@ def test_the_registry_checks_fail_when_they_should() -> None:
     assert _unpinned_forms(every_form, {}) == []
     assert _stale_waivers({"link": "x"}, {"link": "why"}) == ["link"]
     assert _stale_waivers({"link": "x"}, {}) == []
+    # The census's own filter — the step that turns an unread mention into a
+    # build failure, and the newest predicate here to only ever run on a tree
+    # that must not trip it.
+    unexplained = UnreadMention("a.md", 1, "x/y.md", "see x/y.md", None)
+    explained = unexplained._replace(disposition="glob")
+    assert _uncovered([unexplained, explained]) == [unexplained]
+    assert _uncovered([explained]) == []
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -1220,6 +1261,20 @@ def test_every_anchor_in_the_tree_is_graded(plugin: str) -> None:
     unresolvable file, a target it declines to open — shows up here as a
     number smaller than the `§` count, which is the silent-skip failure round
     one was filed for, measured directly rather than inferred."""
+    # Both sides must not come from the same place: if `_form_counts` counted
+    # `§` characters instead of asking the pass, this equality would be `x ==
+    # x` and the anchor floor would be satisfiable by citations nobody graded.
+    # Rebinding the pass proves the count follows it.
+    global _anchor_checks  # noqa: PLW0603 — restored in `finally`
+    real = _anchor_checks
+    try:
+        _anchor_checks = lambda *_args, **_kwargs: ([], 0)  # noqa: E731
+        assert _form_counts(plugin)["anchor"] == 0, (
+            "the `anchor` count does not come from the anchor pass, so the "
+            "floor it feeds is a count of `§` characters"
+        )
+    finally:
+        _anchor_checks = real
     graded = _form_counts(plugin)["anchor"]
     written = len(_anchor_references(plugin))
     assert graded == written, (
@@ -1298,6 +1353,13 @@ def test_every_mention_disposition_is_load_bearing() -> None:
         ),
         "glob": ("agents/x.md", "- every `spec-*.md` under it.", 9, 18),
         "bare filename": ("agents/x.md", "the rule in io-contracts.md, never a slug", 12, 27),
+        # `_MD_MENTION` starts after the `//`, so the span is the URL's tail.
+        "external url": (
+            "CLAUDE.md",
+            "See [the ADR](https://github.com/analitiq-ai/x/blob/main/docs/adr.md).",
+            20,
+            68,
+        ),
     }
     for expected, (rel, line, start, end) in cases.items():
         assert line[start:end].endswith(".md"), (expected, line[start:end])
@@ -1307,7 +1369,16 @@ def test_every_mention_disposition_is_load_bearing() -> None:
     line = "see skills/nowhere/gone.md for details"
     assert _mention_disposition("agents/x.md", line, 4, 26) is None
     heading = "## Pipeline (full contract: skills/nowhere/gone.md)"
-    assert _mention_disposition("SKILL.md", heading, 27, 49) is None
+    found = _MD_MENTION.search(heading)
+    assert found.group(0) == "skills/nowhere/gone.md"
+    assert _mention_disposition("SKILL.md", heading, *found.span()) is None
+    # A prose colon before a citation is not a URL scheme — including with no
+    # space after it, which is what tells `https://` from `contract:`.
+    prose = "per contract: skills/nowhere/gone.md"
+    assert _mention_disposition("agents/x.md", prose, *_MD_MENTION.search(prose).span()) is None
+    assert _SCHEME_BEFORE.search("See [the ADR](https://host/docs/")
+    assert not _SCHEME_BEFORE.search("per contract:")
+    assert not _SCHEME_BEFORE.search("see ADV-CTOR-004:")
     # And every disposition still answers for a mention the census *needed* it
     # for. Counting mentions an extractor already read would let a disposition
     # look alive on prose the census never asks about.
@@ -1316,10 +1387,19 @@ def test_every_mention_disposition_is_load_bearing() -> None:
         for plugin in _plugin_names()
         for mention in _unread_mentions(plugin)
     }
-    unused = sorted(set(cases) - used)
+    unused = sorted(set(cases) - used - set(_PREEMPTIVE_DISPOSITIONS))
     assert not unused, (
         f"dispositions no prose needs any more: {unused} — drop them, so the "
-        "list keeps meaning what it says."
+        "list keeps meaning what it says, or record why one is written ahead "
+        "of the prose in _PREEMPTIVE_DISPOSITIONS."
+    )
+    # A pre-emptive entry is a claim that nothing needs it *yet*. Once prose
+    # does, it stops being pre-emptive and the reason is stale config.
+    arrived = sorted(set(_PREEMPTIVE_DISPOSITIONS) & used)
+    assert not arrived, (
+        f"dispositions recorded as pre-emptive that real prose now needs: "
+        f"{arrived} — drop the _PREEMPTIVE_DISPOSITIONS entry; the tree proves "
+        "the disposition itself."
     )
 
 
@@ -1941,11 +2021,27 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
 
 
 def test_a_citation_inside_a_fence_is_still_a_citation() -> None:
-    """A fence is where this repo's mission specs quote the paths a researcher
-    must read — eight real citations sit inside one today — so a fenced `§` is
-    graded like any other, file half and section half both. What a fence
-    suppresses is the opposite direction: a `#` line inside it is a comment in
-    someone's code sample, not a section anyone can cite."""
+    """Fenced examples carry real *path* citations — a mission spec quoting
+    the paths its researcher must read, an agent's command line naming the
+    script it runs — so the file pass reads fenced lines, and a fenced `§` is
+    graded on the same footing rather than exempted. What a fence suppresses
+    is the opposite direction: a `#` line inside it is a comment in someone's
+    code sample, not a section anyone can cite. The count of fenced citations
+    is not restated here — the sweep below asserts there is more than one, and
+    the rest is the failure message's business."""
+    fenced_paths = [
+        (plugin, path.relative_to(_plugin_root(plugin)).as_posix(), lineno)
+        for plugin in _plugin_names()
+        for path in _prose_files(plugin)
+        for text in [path.read_text(encoding="utf-8")]
+        for lineno, line in enumerate(text.splitlines(), 1)
+        if lineno in _fenced_lines(text)
+        and any(pattern.search(line) for pattern in _PATH_PATTERNS)
+    ]
+    assert len(fenced_paths) > 1, (
+        "no prose cites a path inside a fence any more, so grading fenced "
+        f"lines pins nothing: {fenced_paths}"
+    )
     doc = "# Real\n\n```markdown\nsee `spec-tls.md` §Shape of it\n```\n"
     assert [(site.target, site.text) for site in _anchor_sites(doc)] == [
         ("spec-tls.md", "Shape of it")
