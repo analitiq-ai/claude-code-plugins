@@ -995,8 +995,10 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
 
 
 # ---------------------------------------------------------------------------
-# Review findings — each of these shipped as an ACCEPTED document until the
-# review probed it. Every test here is a regression pin for one.
+# Documents that validated clean until someone probed them by hand — each
+# shipped as ACCEPTED, and each is a distinct way the declared-path rules were
+# satisfiable without being satisfied. Every test here is a regression pin for
+# one of them.
 # ---------------------------------------------------------------------------
 
 

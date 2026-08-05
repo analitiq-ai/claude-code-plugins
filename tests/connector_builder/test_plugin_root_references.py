@@ -5,8 +5,8 @@ deleted file leaves the reference dangling — and an agent that cannot read its
 spec does not fail loudly, it authors without the rules. Nothing else in the
 suite notices: these are strings in markdown.
 
-This is the same failure shape as prose describing a thing that no longer
-exists with no check catching it, narrowed to the part this repo owns. It
+It is one instance of a recurring shape — prose describing something that no
+longer exists, with nothing checking — narrowed to the part this repo owns. It
 cannot pin the CDK's hook surface — that lives in the engine — but it can
 guarantee that a spec this plugin points at is a spec that exists.
 
