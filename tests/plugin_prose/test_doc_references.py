@@ -158,8 +158,13 @@ _SLUG_DROP = re.compile(r"[^\w\- ]")
 # Dashes are the typographic ones only — an ASCII `-` is how a list item
 # starts, and `- §Rules` under `- \`SKILL.md\`` is a new item, not a
 # continuation of the last one.
+# Emphasis markers are glue too — a citation is written `**`spec-x.md`**`
+# — and a wrapped line inside a blockquote carries its `>` before the text
+# resumes. Both already sit around `.md` citations in the tree, so leaving
+# them out means re-wrapping a paragraph re-points its anchor at the citing
+# document and fails the build naming a file the citation never mentioned.
 _ANCHOR_BINDING = re.compile(
-    r"([A-Za-z0-9_./-]+\.md)(?:[`\"'(,—–]|[ \t]|\n(?![ \t]*\n)){0,8}$"
+    r"([A-Za-z0-9_./-]+\.md)(?:[`\"'(,—–*_]|[ \t]|\n[ \t]*>?(?![ \t]*\n)){0,8}$"
 )
 
 # How far past a `§` an anchor may reach. One bound, used by both the quoted
@@ -777,6 +782,60 @@ def test_external_ref_allowlist_is_not_stale(plugin: str) -> None:
     )
 
 
+# The registry checks, as predicates rather than expressions inlined in the
+# assertion. Every one of them only ever runs against a tree that must not trip
+# it, so each would be satisfied by a constant — the vacuity `_below_floor` had
+# until it got a failing-direction test, in eight more places. Extracted, they
+# are testable, and `test_the_registry_checks_fail_when_they_should` drives
+# each one until it fires.
+_REQUIRED_FIXTURE_KEYS = ("sentinels", "fixture", "unsentinelled")
+
+
+def _incomplete_fixtures(fixtures: dict[str, dict]) -> dict[str, list[str]]:
+    """Fixture entries that leave a required question unanswered."""
+    return {
+        plugin: sorted(set(_REQUIRED_FIXTURE_KEYS) - set(entry))
+        for plugin, entry in fixtures.items()
+        if set(_REQUIRED_FIXTURE_KEYS) - set(entry)
+    }
+
+
+def _unfloored_forms(forms: tuple[str, ...], repo_floors: dict[str, int]) -> list[str]:
+    """Forms no repo-wide floor names — free to stop matching silently."""
+    return sorted(set(forms) - set(repo_floors))
+
+
+def _unknown_floor_forms(
+    floors: dict[str, dict[str, int]], forms: tuple[str, ...]
+) -> list[str]:
+    """Floors on forms nobody counts, which can therefore never fail."""
+    return sorted({form for plugin in floors.values() for form in plugin} - set(forms))
+
+
+def _unpinned_forms(sentinels: dict[str, str], waived: dict[str, str]) -> list[str]:
+    """Forms a plugin neither pins with a sentinel nor waives with a reason."""
+    return sorted(set(_FORM_PATTERNS) - set(sentinels) - set(waived))
+
+
+def _stale_waivers(sentinels: dict[str, str], waived: dict[str, str]) -> list[str]:
+    """Waivers naming a form the plugin does pin after all."""
+    return sorted(set(waived) & set(sentinels))
+
+
+def _falsified_waivers(plugin: str) -> dict[str, list[str]]:
+    """Waivers the prose contradicts: the waiver says the form routes nobody,
+    and the form is cited outside the plugin's reader-facing README."""
+    return {
+        form: outside
+        for form in _unsentinelled(plugin)
+        if (
+            outside := sorted(
+                {rel for rel, _target in _form_sites(plugin, form)} - {"README.md"}
+            )
+        )
+    }
+
+
 def test_every_plugin_is_covered() -> None:
     """The guard's own reachability. Discovering the roots is what makes a new
     plugin loud; the per-plugin registries are what make it *guarded*, and a
@@ -788,11 +847,7 @@ def test_every_plugin_is_covered() -> None:
         "_EXTERNAL_REFS": set(_EXTERNAL_REFS),
         "_PLUGIN_FIXTURES": set(_PLUGIN_FIXTURES),
     }
-    incomplete = {
-        plugin: sorted({"sentinels", "fixture", "unsentinelled"} - set(entry))
-        for plugin, entry in _PLUGIN_FIXTURES.items()
-        if {"sentinels", "fixture", "unsentinelled"} - set(entry)
-    }
+    incomplete = _incomplete_fixtures(_PLUGIN_FIXTURES)
     assert not incomplete, (
         f"_PLUGIN_FIXTURES entries missing required keys: {incomplete} — every "
         "plugin answers all three, `unsentinelled` with `{}` when it waives "
@@ -811,14 +866,12 @@ def test_every_plugin_is_covered() -> None:
         f"registry entries naming plugins that no longer exist: "
         f"{ {k: v for k, v in stale.items() if v} } — drop them."
     )
-    unfloored = sorted(set(_FORMS) - set(_REPO_FLOORS))
+    unfloored = _unfloored_forms(_FORMS, _REPO_FLOORS)
     assert not unfloored, (
         f"citation forms with no repo-wide floor: {unfloored} — an unfloored "
         "form is free to stop matching without failing anything."
     )
-    unknown = sorted(
-        {form for floors in _FLOORS.values() for form in floors} - set(_FORMS)
-    )
+    unknown = _unknown_floor_forms(_FLOORS, _FORMS)
     assert not unknown, (
         f"per-plugin floors name forms the extractor does not produce: "
         f"{unknown} — a floor on a form nobody counts never fails."
@@ -827,11 +880,9 @@ def test_every_plugin_is_covered() -> None:
     # count alone, which an over-matching pattern satisfies while losing the
     # citation that mattered.
     unpinned = {
-        plugin: sorted(
-            set(_FORM_PATTERNS) - set(_sentinels(plugin)) - set(_unsentinelled(plugin))
-        )
+        plugin: forms
         for plugin in _plugin_names()
-        if set(_FORM_PATTERNS) - set(_sentinels(plugin)) - set(_unsentinelled(plugin))
+        if (forms := _unpinned_forms(_sentinels(plugin), _unsentinelled(plugin)))
     }
     assert not unpinned, (
         f"citation forms neither pinned nor waived: {unpinned} — name one real "
@@ -841,9 +892,9 @@ def test_every_plugin_is_covered() -> None:
         "pattern of its own; its floor counts what the pass graded.)"
     )
     waived_but_pinned = {
-        plugin: sorted(set(_unsentinelled(plugin)) & set(_sentinels(plugin)))
+        plugin: forms
         for plugin in _plugin_names()
-        if set(_unsentinelled(plugin)) & set(_sentinels(plugin))
+        if (forms := _stale_waivers(_sentinels(plugin), _unsentinelled(plugin)))
     }
     assert not waived_but_pinned, (
         f"forms both waived and pinned: {waived_but_pinned} — a waiver that "
@@ -855,14 +906,10 @@ def test_every_plugin_is_covered() -> None:
     # nobody grades — the failure the census pattern in `.claude/CLAUDE.md`
     # exists to prevent.
     falsified = {
-        plugin: {
-            form: sorted({rel for rel, _target in _form_sites(plugin, form)} - {"README.md"})
-            for form in _unsentinelled(plugin)
-            if {rel for rel, _target in _form_sites(plugin, form)} - {"README.md"}
-        }
+        plugin: forms
         for plugin in _plugin_names()
+        if (forms := _falsified_waivers(plugin))
     }
-    falsified = {plugin: forms for plugin, forms in falsified.items() if forms}
     assert not falsified, (
         f"waivers contradicted by the prose: {falsified} — the waiver says the "
         "form routes nobody, but it is cited outside the README. Pin one of "
@@ -983,6 +1030,68 @@ def test_citation_detector_reads_this_plugin(plugin: str) -> None:
     other's volume."""
     below = _below_floor(_form_counts(plugin), _FLOORS[plugin])
     assert not below, _floor_failure(f"plugins/{plugin}", below)
+
+
+def test_the_registry_checks_fail_when_they_should() -> None:
+    """Every guard-the-guard predicate, driven until it fires. Each of these
+    only ever runs against a tree that must not trip it, so without this each
+    could be replaced by a constant and the suite would stay green — the
+    registries would keep their shape and stop meaning anything."""
+    assert _incomplete_fixtures({"p": {"sentinels": {}, "fixture": ()}}) == {
+        "p": ["unsentinelled"]
+    }
+    assert _incomplete_fixtures({"p": dict.fromkeys(_REQUIRED_FIXTURE_KEYS)}) == {}
+    assert _unfloored_forms(("a", "b"), {"a": 1}) == ["b"]
+    assert _unfloored_forms(("a",), {"a": 1}) == []
+    assert _unknown_floor_forms({"p": {"ghost": 1}}, ("a",)) == ["ghost"]
+    assert _unknown_floor_forms({"p": {"a": 1}}, ("a",)) == []
+    every_form = dict.fromkeys(_FORM_PATTERNS, "x")
+    assert _unpinned_forms({}, {}) == sorted(_FORM_PATTERNS)
+    assert _unpinned_forms(every_form, {}) == []
+    assert _stale_waivers({"link": "x"}, {"link": "why"}) == ["link"]
+    assert _stale_waivers({"link": "x"}, {}) == []
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_the_waiver_check_reads_real_prose(plugin: str) -> None:
+    """`_falsified_waivers` grades a waiver against `_form_sites`, so both have
+    to be non-empty on the real tree — a `_form_sites` that returned nothing
+    would make every waiver unfalsifiable while the suite stayed green."""
+    assert _form_sites(plugin, "backticked"), "the form's own view is empty"
+    assert {rel for rel, _target in _form_sites(plugin, "link")} - {"README.md"} or (
+        "link" in _unsentinelled(plugin)
+    ), "a plugin routing agents by link must pin one, not waive the form"
+    # Waiving a form this plugin does cite outside its README is caught.
+    cited_outside = next(
+        form
+        for form in _FORM_PATTERNS
+        if {rel for rel, _target in _form_sites(plugin, form)} - {"README.md"}
+    )
+    fixtures = _PLUGIN_FIXTURES[plugin]
+    original = fixtures["unsentinelled"]
+    try:
+        fixtures["unsentinelled"] = {cited_outside: "claims to route nobody"}
+        assert cited_outside in _falsified_waivers(plugin)
+    finally:
+        fixtures["unsentinelled"] = original
+    assert _falsified_waivers(plugin) == {}
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_every_anchor_in_the_tree_is_graded(plugin: str) -> None:
+    """The `anchor` floor counts anchors compared against real headings, and
+    on this tree that is every `§` there is. Stated as equality because the
+    gap is the interesting quantity: any citation the pass skips — an
+    unresolvable file, a target it declines to open — shows up here as a
+    number smaller than the `§` count, which is the silent-skip failure round
+    one was filed for, measured directly rather than inferred."""
+    graded = _form_counts(plugin)["anchor"]
+    written = len(_anchor_references(plugin))
+    assert graded == written, (
+        f"{written - graded} of {written} `§` citations in plugins/{plugin} "
+        "were never graded — the anchor pass skipped them. A skipped citation "
+        "is checked by nobody while the floor still counts as met."
+    )
 
 
 def test_a_starved_form_trips_its_floor() -> None:
@@ -1560,9 +1669,9 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
     binding that broke on a comma would not merely lose the check — it would
     resolve the anchor against the citing document and report a section of the
     wrong file as missing."""
-    for glue in ("` ", "`, ", "` — ", "`\n  "):
+    for glue in ("` ", "`, ", "` — ", "`\n  ", "`** ", "`\n> ", "`**\n> "):
         text = f"see `SKILL.md{glue}§Cross-field rules for the tuple."
-        assert _anchor_sites(text)[0][1] == "SKILL.md", glue
+        assert _anchor_sites(text)[0].target == "SKILL.md", glue
     # A sentence-final period is not glue: the clause naming the file ended, so
     # what follows is a citation of the document being read.
     assert _anchor_sites("see `SKILL.md`. §Closed vocabularies.")[0].target is None
