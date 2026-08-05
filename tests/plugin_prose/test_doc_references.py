@@ -50,7 +50,9 @@ entries in the three per-plugin registries below, this suite is red.
    document itself, and is resolved against it. The two forms differ in how
    exactly they name the heading: prose abbreviates and runs on, so `§` is
    matched by opening words; a fragment is generated from the whole heading,
-   so it is matched by slug.
+   so it is matched by slug. A `§` inside a fenced block is an example of the
+   citation form — this repo's prose documents its own conventions that way —
+   and is not graded, exactly as a `#` line in a fence is not a heading.
 
 Pure text-vs-filesystem: no contract packages involved, so no `_pins` skip
 guard — this always runs.
