@@ -291,7 +291,7 @@ def test_enum_member_docstrings_carry_no_modal_language():
     the class docstring (a censused site), bind it to a rule / structural
     mechanism there, or — for a genuinely descriptive line the frozen pattern
     misreads — register a ``MEMBER_DOCSTRING_WAIVERS`` entry."""
-    waived = {(cls, member) for cls, member, _ in MEMBER_DOCSTRING_WAIVERS}
+    waived = {(cls, member) for cls, member, _, _ in MEMBER_DOCSTRING_WAIVERS}
     offenders = [
         f"  {enum_cls.__name__}.{name}: {doc!r}"
         for enum_cls in sorted(contract_enums(), key=lambda c: c.__name__)
@@ -310,15 +310,16 @@ def test_enum_member_docstrings_carry_no_modal_language():
 
 def test_member_docstring_waivers_are_live_and_needed():
     """The rot direction for the member-docstring registry: every waiver must
-    name a member whose own docstring still trips the modal pattern, with a
-    non-blank reason — a waiver outliving its docstring (or the modal word in
-    it) is dead data and must be removed."""
+    name a member whose own docstring still trips the modal pattern AND still
+    reads as the wording the waiver blessed (its pinned hash), with a
+    non-blank reason. A waiver outliving its docstring, its modal word, or
+    its exact wording is dead data — remove or re-affirm it."""
     member_docs = {
         (enum_cls.__name__, name): doc
         for enum_cls in contract_enums()
         for name, doc in _enum_member_own_docstrings(enum_cls).items()
     }
-    for cls, member, reason in MEMBER_DOCSTRING_WAIVERS:
+    for cls, member, pinned_hash, reason in MEMBER_DOCSTRING_WAIVERS:
         assert reason.strip(), f"{cls}.{member}: blank waiver reason"
         doc = member_docs.get((cls, member))
         assert doc is not None, (
@@ -327,6 +328,12 @@ def test_member_docstring_waivers_are_live_and_needed():
         assert NORMATIVE_PATTERN.search(doc), (
             f"{cls}.{member}: waived docstring no longer carries a modal "
             "marker — remove the waiver"
+        )
+        assert pinned_hash == prose_fingerprint(doc), (
+            f"{cls}.{member}: waived docstring was reworded since the waiver "
+            f"was granted (pinned {pinned_hash}, live "
+            f"{prose_fingerprint(doc)}) — re-judge the new wording and "
+            "re-affirm or remove the waiver"
         )
 
 

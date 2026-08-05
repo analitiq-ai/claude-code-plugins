@@ -135,10 +135,13 @@ DESCRIPTIVE = (
 #: class docstring), so the member-docstring guard refuses modal language on
 #: them outright. A member line that is genuinely descriptive despite a
 #: modal-shaped word is waived HERE — data, reviewable, beside the census —
-#: as ``(enum class name, member name, reason)``. Empty is the steady state:
-#: prefer rewording the member line over waiving it, and the guard fails a
-#: waiver whose member no longer exists or no longer needs it.
-MEMBER_DOCSTRING_WAIVERS: tuple[tuple[str, str, str], ...] = ()
+#: as ``(enum class name, member name, prose_hash, reason)``. The hash pins
+#: the waived wording exactly like an entry's ``prose_hash``: rewording the
+#: member line voids the waiver, so a harmless "only" cannot be edited into a
+#: real obligation under an old blessing. Empty is the steady state: prefer
+#: rewording the member line over waiving it, and the guard fails a waiver
+#: whose member, modal marker, or pinned wording no longer holds.
+MEMBER_DOCSTRING_WAIVERS: tuple[tuple[str, str, str, str], ...] = ()
 
 
 # --- Census datum ------------------------------------------------------------
