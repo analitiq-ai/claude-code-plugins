@@ -1062,11 +1062,16 @@ def test_the_waiver_check_reads_real_prose(plugin: str) -> None:
         "link" in _unsentinelled(plugin)
     ), "a plugin routing agents by link must pin one, not waive the form"
     # Waiving a form this plugin does cite outside its README is caught.
-    cited_outside = next(
+    outside_the_readme = [
         form
         for form in _FORM_PATTERNS
         if {rel for rel, _target in _form_sites(plugin, form)} - {"README.md"}
+    ]
+    assert outside_the_readme, (
+        f"plugins/{plugin} cites nothing outside its README, so no waiver here "
+        "can be contradicted — the check below would pass vacuously."
     )
+    cited_outside = outside_the_readme[0]
     fixtures = _PLUGIN_FIXTURES[plugin]
     original = fixtures["unsentinelled"]
     try:
