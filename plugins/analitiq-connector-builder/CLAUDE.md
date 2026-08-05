@@ -102,8 +102,9 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 Prefer pointing prose at a validated file under a skill's `examples/` tree
 (gated by `tests/*/test_examples*.py`) over an inline fence. An inline
 `json` / `jsonc` fence that stays carries an HTML comment directly above it
-declaring how it is verified (applies to BOTH plugins; review-enforced until
-an extraction gate lands):
+declaring how it is verified (applies to BOTH plugins; machine-enforced for
+the pipeline plugin by `tests/pipeline_builder/test_prose_snippets.py`,
+review-enforced here until a matching gate lands):
 
 - `<!-- validate: <resource> -->` — a full document; must validate against
   that resource's contract.
@@ -112,8 +113,11 @@ an extraction gate lands):
   key for context (`"replication": { … }`, wrapped or not) — the pointer
   names the deepest shown node, and a gate unwraps the key before
   validating.
-- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail with exactly
-  that diagnostic.
+- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail validation
+  (that half is what a gate asserts — a "don't do this" example that rots
+  into valid is the most misleading rot there is). That the failure is the
+  named rule's diagnostic stays review-enforced: the validator reports
+  model messages, not rule ids.
 - `<!-- illustrative -->` — outside the published contract's validation
   surface (plugin-internal I/O envelopes, shape sketches); an explicit,
   reviewable exemption.

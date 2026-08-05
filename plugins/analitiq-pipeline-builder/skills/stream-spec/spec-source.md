@@ -19,7 +19,7 @@
 respectively. The sketch below illustrates a filled-in source; it is not a
 statement of what the contract requires.
 
-<!-- illustrative -->
+<!-- validate: stream#/source -->
 ```jsonc
 {
   "source": {
