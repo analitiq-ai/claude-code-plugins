@@ -239,6 +239,34 @@ def test_bump_table_keeps_every_slug_greppable() -> None:
         "a token split across lines stops being greppable")
 
 
+def test_every_fill_in_the_release_module_forbids_token_splitting() -> None:
+    """Every `textwrap.fill` call site carries `**_NO_TOKEN_SPLIT`.
+
+    The behavioral asserts above cannot see a site whose current data wraps
+    identically with or without the hardening (today's rollup line does), so
+    the policy is pinned structurally: a fill added or unhardened goes red
+    here even while its rendered output is still innocent.
+    """
+    import ast
+
+    source = (REPO_ROOT / "scripts" / "connector_release_table.py").read_text(
+        encoding="utf-8")
+    fills = [
+        node for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute) and node.func.attr == "fill"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "textwrap"
+    ]
+    assert len(fills) >= 3, "the module's fill sites moved — update this guard"
+    for call in fills:
+        assert any(
+            kw.arg is None and isinstance(kw.value, ast.Name)
+            and kw.value.id == "_NO_TOKEN_SPLIT"
+            for kw in call.keywords
+        ), f"textwrap.fill at line {call.lineno} lacks **_NO_TOKEN_SPLIT"
+
+
 def test_release_policy_blocks_carry_no_validator_claims() -> None:
     """A release-policy block's render must never state validator behavior.
 
