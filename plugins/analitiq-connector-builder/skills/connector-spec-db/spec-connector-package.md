@@ -203,8 +203,8 @@ __all__ = ["{Name}Connector", "{Name}Dialect"]
 
 The plugin's schema validator checks JSON documents only. Package files
 are enforced by registry CI: `pip wheel --no-deps .` must build, the
-wheel must contain `analitiq_connector_{id}/connector.py` plus the two
-entry points, and the CDK **conformance kit** must pass — it audits the
+wheel must contain `analitiq_connector_{id}/connector.py` plus every
+entry point, and the CDK **conformance kit** must pass — it audits the
 dialect's override surface and checks the `sql_capabilities` declaration
 against the hooks the package actually implements
 (`spec-sql-write-path.md`).

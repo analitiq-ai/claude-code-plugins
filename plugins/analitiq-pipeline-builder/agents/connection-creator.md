@@ -90,9 +90,9 @@ The orchestrator passes:
 
 ## Hard rules
 
-- The connection document has **no `values` envelope**. Route into the four maps
-  (`parameters` / `selections` / `discovered` / `secret_refs`); the closed schema
-  rejects any other top-level key.
+- The connection document has **no `values` envelope**. Route into the storage
+  maps (`parameters` / `selections` / `discovered` / `secret_refs`); the closed
+  schema rejects any other top-level key.
 - Never embed a real secret. For every `storage: "secrets"` entry, author only an
   `env:` (or user-specified) pointer in `secret_refs` and emit the matching
   `.secrets/credentials.json` entry.

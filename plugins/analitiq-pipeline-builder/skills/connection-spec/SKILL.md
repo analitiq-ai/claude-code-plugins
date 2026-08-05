@@ -11,7 +11,7 @@ document: one user's configured **instance** of a connector.
 
 ## Required reading (load on demand)
 
-- `spec-envelope.md` — the four author-time maps
+- `spec-envelope.md` — the author-time maps
   (`parameters`/`selections`/`discovered`/`secret_refs`), the storage-driven
   routing rule, and the `env:` secret-pointer + `.secrets/` template workflow.
 - The closest `examples/*.example.json` for the connector's `auth.type` (shape
