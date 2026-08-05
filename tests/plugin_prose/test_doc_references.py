@@ -54,6 +54,7 @@ guard — this always runs.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from functools import cache
 from pathlib import Path
 from typing import NamedTuple
@@ -167,10 +168,18 @@ _EXTERNAL_REFS: dict[str, set[str]] = {
     "analitiq-pipeline-builder": set(),
 }
 
-# Every citation form this suite extracts. A form absent from the floors below
-# would be unfloored and free to die silently, so `_REPO_FLOORS` must name them
-# all — `test_every_plugin_is_covered` checks that.
-_FORMS = ("plugin_root", "backticked", "bare_path", "link", "anchor")
+# Every citation form this suite extracts, and the extractor that finds it.
+# `anchor` has no single pattern — it is counted by what the anchor pass
+# actually graded — so it is named in `_FORMS` and absent here. A form missing
+# from the floors below would be unfloored and free to die silently, so
+# `_REPO_FLOORS` must name them all; `test_every_plugin_is_covered` checks that.
+_FORM_PATTERNS = {
+    "plugin_root": _PLUGIN_ROOT_REF,
+    "backticked": _BARE_REF,
+    "bare_path": _BARE_PATH_REF,
+    "link": _LINK_REF,
+}
+_FORMS = (*_FORM_PATTERNS, "anchor")
 
 # The floor below which an extractor is no longer reading prose at all. A
 # pattern that stops matching passes vacuously, so each form is floored
@@ -556,8 +565,10 @@ def _anchor_checks(
     """
     dangling, checked = [], 0
     for rel, site in sites:
-        if site.target is not None and _clean(site.target) in _EXTERNAL_REFS[plugin]:
-            continue
+        # An allow-listed external target needs no exemption here: it names no
+        # file in this plugin, so it resolves to nothing and falls out below
+        # with every other unreadable target.
+        #
         # No path in front of the `§`: the citation names a section of the
         # document it sits in.
         candidates = [
@@ -708,18 +719,41 @@ def _form_counts(plugin: str) -> dict[str, int]:
         for path in sorted(_plugin_root(plugin).rglob("*.md"))
     ]
     per_line = {
-        name: sum(
-            len(pattern.findall(line)) for text in texts for line in text.splitlines()
+        form: sum(
+            len(_FORM_PATTERNS[form].findall(line))
+            for text in texts
+            for line in text.splitlines()
         )
-        for name, pattern in (
-            ("plugin_root", _PLUGIN_ROOT_REF),
-            ("backticked", _BARE_REF),
-            ("bare_path", _BARE_PATH_REF),
-            ("link", _LINK_REF),
-        )
+        for form in _FORM_PATTERNS
     }
     _dangling, checked = _anchor_checks(plugin, _anchor_references(plugin))
     return per_line | {"anchor": checked}
+
+
+def _unreached_sentinels(plugin: str, sentinels: dict[str, str]) -> dict[str, str]:
+    """Which sentinels the extractor named by their form no longer reaches,
+    compared by resolved file rather than by the string as written."""
+    return {
+        form: sentinel
+        for form, sentinel in sentinels.items()
+        if not set(_candidates(sentinel, plugin))
+        & {
+            path
+            for target in _form_targets(plugin, form)
+            for path in _candidates(target, plugin)
+        }
+    }
+
+
+def _form_targets(plugin: str, form: str) -> set[str]:
+    """Every citation one extractor finds in a plugin — the form's own view,
+    not the union `_references` returns."""
+    return {
+        match.group(1)
+        for path in sorted(_plugin_root(plugin).rglob("*.md"))
+        for line in path.read_text(encoding="utf-8").splitlines()
+        for match in _FORM_PATTERNS[form].finditer(line)
+    }
 
 
 def _below_floor(counts: dict[str, int], floors: dict[str, int]) -> dict[str, tuple[int, int]]:
@@ -768,18 +802,27 @@ def test_sentinel_citations_are_still_found(plugin: str) -> None:
     """Floors prove a form still matches something; these prove the extractor
     still reaches the specific routing citations agents depend on. A count
     cannot do that — an over-matching pattern raises the count while losing
-    the citation that mattered."""
-    found = {target for _rel, _lineno, target in _references(plugin)}
-    missing = {
-        form: target
-        for form, target in _sentinels(plugin).items()
-        if target not in found
-    }
+    the citation that mattered.
+
+    Matched by the *file* each sentinel resolves to, and only through the form
+    the sentinel is filed under. Depth is prose's business: rewriting
+    `connector-builder/references/x.md` as `references/x.md` routes to the same
+    document and must not fail. Losing the citation, or writing it in another
+    form while this one dies, must.
+    """
+    missing = _unreached_sentinels(plugin, _sentinels(plugin))
     assert not missing, (
-        f"sentinel citations no longer found in plugins/{plugin}: {missing} — "
-        "if the prose deliberately moved the citation, repoint the sentinel; "
-        "if not, the routing an agent depends on just disappeared."
+        f"sentinel citations no longer reached in plugins/{plugin}: {missing} "
+        "— if the prose deliberately moved the citation, repoint the sentinel; "
+        "if not, the routing an agent depends on just disappeared. Note the "
+        "form: a citation rewritten in another form fails here too, because "
+        "this is what keeps each extractor pinned to real prose."
     )
+    # The form is load-bearing, not decorative: the same file filed under a
+    # form that does not cite it must fail. Without this, one extractor could
+    # die while another's citations kept every sentinel green.
+    misfiled = {"link": _sentinels(plugin)["backticked"]}
+    assert _unreached_sentinels(plugin, misfiled) == misfiled
 
 
 # A synthetic agent document shaped like the real ones: an unbackticked
@@ -832,10 +875,11 @@ def test_dangling_plugin_root_citation_is_flagged(plugin: str) -> None:
     assert _dangling_in(
         'Run python3 "${CLAUDE_PLUGIN_ROOT}/scripts/gone.py" now.\n', plugin
     ) == ["scripts/gone.py"]
-    assert _dangling_in(
-        'Run python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validate.py" now.\n',
-        "analitiq-pipeline-builder",
-    ) == []
+    # The twin, in this plugin: its own sentinel path resolves — and does so
+    # with the sentence-final period `_clean` has to strip, which is how the
+    # prose ends such a line.
+    real = _sentinels(plugin)["plugin_root"]
+    assert _dangling_in(f"Read ${{CLAUDE_PLUGIN_ROOT}}/{real}.\n", plugin) == []
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -932,12 +976,64 @@ def test_ambiguous_citation_is_still_checked(plugin: str) -> None:
     pass passes it (suffix match), so a skip here would leave nobody checking
     the section at all."""
     citing = "agents/synthetic-classifier.md"
-    assert len(_resolve_files("SKILL.md", citing, plugin)) > 1
+    candidates = _resolve_files("SKILL.md", citing, plugin)
+    assert len(candidates) > 1
     doc = "Author per `SKILL.md §Heading no skill carries`.\n"
     sites = [(citing, site) for site in _anchor_sites(doc)]
     dangling, checked = _anchor_checks(plugin, sites)
     assert checked == 1
     assert [site[3] for site in dangling] == ["Heading no skill carries"]
+    # The other half of the ambiguity policy: a heading carried by *one* of the
+    # candidates resolves. Requiring all of them would fail every ambiguous
+    # citation in the tree — a guard that cries wolf gets switched off.
+    solo = [
+        heading
+        for heading, seen in Counter(
+            heading
+            for path in candidates
+            for heading in _headings(path.read_text(encoding="utf-8"))
+            if re.fullmatch(r"[\w ]+", heading)
+        ).items()
+        if seen == 1
+    ][0]
+    solo_doc = f"Author per `SKILL.md §{solo}`.\n"
+    solo_sites = [(citing, site) for site in _anchor_sites(solo_doc)]
+    assert _anchor_checks(plugin, solo_sites) == ([], 1)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_an_unreadable_target_is_not_counted_as_checked(plugin: str) -> None:
+    """`checked` is what the floor is a statement about, so it must count
+    anchors this pass actually graded. A citation whose file does not exist is
+    the file pass's finding and is graded by nobody — counting it would let a
+    dead `_anchor_resolves` clear the floor on citations it never read."""
+    citing = "agents/synthetic-classifier.md"
+    doc = "Author per `skills/nowhere/gone.md §Some heading`.\n"
+    sites = [(citing, site) for site in _anchor_sites(doc)]
+    assert _anchor_checks(plugin, sites) == ([], 0)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_citation_must_name_a_whole_path_segment(plugin: str) -> None:
+    """Suffix resolution matches path *segments*, not characters. Without the
+    `/`, `versioning.md` would resolve against `metadata-and-versioning.md` —
+    a dangling citation passing silently, the one failure this file exists to
+    catch."""
+    assert _dangling_in("See `versioning.md` for rules.\n", plugin) == [
+        "versioning.md"
+    ]
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_resolution_stops_at_the_plugin_boundary(plugin: str) -> None:
+    """The ancestor walk stops at the plugin root. Walking past it resolves a
+    citation against repo files an installed plugin does not ship — the agent
+    reading it has only the plugin directory."""
+    assert (REPO_ROOT / "CONTRIBUTING.md").is_file()
+    assert _resolve_files("CONTRIBUTING.md", "agents/x.md", plugin) == []
+    assert _dangling_in("See `CONTRIBUTING.md` for the rules.\n", plugin) == [
+        "CONTRIBUTING.md"
+    ]
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -967,19 +1063,82 @@ def test_wrapped_anchor_is_read_whole() -> None:
 def test_quoted_anchor_keeps_its_own_punctuation() -> None:
     """Quoting is how a heading whose own punctuation the stop set would cut
     survives — the form `§ "Fenced JSON examples — the annotation convention"`
-    uses. Unquoted, the em-dash would end the anchor early."""
-    quoted = _anchor_text(' "Rules, exceptions — and limits" follow.\n')
-    assert quoted == "Rules, exceptions — and limits"
-    assert _anchor_text(" Rules, exceptions — and limits follow.\n") == "Rules"
+    uses. Unquoted, each of those marks ends the anchor early."""
+    quoted = ' "Rules, exceptions — and limits" follow.\n'
+    assert _anchor_text(quoted) == "Rules, exceptions — and limits"
+    assert _anchor_text(" Rules — and limits follow.\n") == "Rules"
+    assert _anchor_text(" Rules, exceptions follow.\n") == "Rules"
+    # Curly quotes are a form prose editors produce; the anchor survives them.
+    assert _anchor_text(" “Rules, exceptions — and limits” follow.\n") == (
+        "Rules, exceptions — and limits"
+    )
+
+
+def test_the_anchor_stop_set_cuts_where_the_heading_ends() -> None:
+    """Each stop is a place prose resumes after naming a section. A missing one
+    swallows the rest of the sentence into the heading, and the citation then
+    matches only by its opening words — quietly weaker than it reads."""
+    assert _anchor_text("Shape) and then some") == "Shape"
+    assert _anchor_text("Shape — and then some") == "Shape"
+    assert _anchor_text("Shape, and then some") == "Shape"
+    assert _anchor_text("Shape] and then some") == "Shape"
+    assert _anchor_text("Shape} and then some") == "Shape"
+    assert _anchor_text("Shape | next cell") == "Shape"
+    assert _anchor_text("Shape\n\nA new paragraph.") == "Shape"
+    assert _anchor_text("Shape. Then a sentence.") == "Shape"
+    # A period inside the heading is not a sentence end: `1.0` survives.
+    assert _anchor_text("Release version 1.0 and up") == "Release version 1.0 and up"
+
+
+def test_tokens_keep_hyphens_and_underscores_whole() -> None:
+    """`cross-field` and `endpoint_id` are one word each. Splitting them turns
+    a one-word heading into two, which is exactly the length the swallow rule
+    keys on — `## Cross-field` would start answering for any anchor beginning
+    with "cross"."""
+    assert _tokens("Derived `endpoint_id`") == ("derived", "endpoint_id")
+    assert _tokens("Cross-field rules") == ("cross-field", "rules")
+    assert not _anchor_resolves("Cross-field rules that moved", ["Cross-field"])
+    assert not _anchor_resolves("endpoint_id derivation", ["endpoint_id"])
+    # Case is not part of the claim: prose cites a heading as it reads.
+    assert _anchor_resolves("METADATA fields", ["Metadata Fields"])
+    # An anchor with no words at all names nothing.
+    assert not _anchor_resolves("", ["Anything"])
 
 
 def test_a_heading_inside_a_fence_is_not_a_section() -> None:
     """`# Encoding values` in a shell or python example is a comment. Treating
     it as a heading would resolve citations of a section that does not
-    exist."""
+    exist — in a backtick fence, a tilde fence, or an indented code block."""
     doc = "# Real\n\n```python\n# Encoding values\n```\n"
     assert _headings(doc) == ["Real"]
     assert not _anchor_resolves("Encoding values", _headings(doc))
+    assert _headings("# Real\n\n~~~\n# Encoding values\n~~~\n") == ["Real"]
+    assert _headings("# Real\n\n    # Encoding values\n") == ["Real"]
+    # And a deep heading is still a section: specs cite `###` and below.
+    assert _headings("#### Dialect hooks\n") == ["Dialect hooks"]
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_citation_ending_a_sentence_still_resolves(plugin: str) -> None:
+    """The path charset has to contain `.`, so a citation that ends a sentence
+    captures the full stop. Left on, every such citation reads as dangling —
+    and prose ends sentences with citations constantly."""
+    existing, _heading = _fixture(plugin)
+    assert _dangling_in(f"Author per {existing}.\n", plugin) == []
+    assert _clean("skills/x/y.md.") == "skills/x/y.md"
+    assert _clean("skills/x/examples/") == "skills/x/examples"
+    # Only a *trailing* dot, never one inside the name.
+    assert _clean("skills/x/spec.v2.md") == "skills/x/spec.v2.md"
+
+
+def test_the_bare_path_form_needs_a_directory_and_a_clean_ending() -> None:
+    """Without the directory requirement this pattern reads ordinary prose as
+    citations; without the trailing guard it reads `.mdx` and friends as `.md`.
+    Both would fill the guard with findings nobody can act on, which is how a
+    guard gets muted."""
+    assert _scan_text("The author writes their own notes.md by hand.") == []
+    assert _scan_text("see skills/foo/bar.mdx here") == []
+    assert _scan_text("see skills/foo/bar.md here") == [(1, "skills/foo/bar.md")]
 
 
 def test_a_one_word_heading_does_not_swallow_a_renamed_section() -> None:
@@ -1043,10 +1202,12 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
 
 
 def test_anchored_forms_are_not_double_counted() -> None:
-    """A line carrying a backticked citation and a ${CLAUDE_PLUGIN_ROOT}
-    citation yields exactly one match per target: the bare-path pattern's
-    lookbehind must not re-match the path tail inside either anchored form,
-    and a `§` citation must not be reported once per extractor that sees it."""
+    """One citation, one finding. Three ways that can break: the bare-path
+    pattern re-matching the tail of an anchored form, a `§` citation reported
+    once per extractor that sees it, and a link target claimed by both the link
+    pass and the bare-path pattern. The dedup below covers the first two even
+    if a pattern over-matches; the link case it cannot, because the two passes
+    report separately — that one is the lookbehind's job."""
     line = (
         "Read ${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/spec-tls.md "
         "and `references/io-contracts.md`."
