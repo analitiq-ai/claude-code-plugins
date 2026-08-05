@@ -32,8 +32,8 @@ class PublicRunStatus(str, Enum):
 
     A deliberate reduction of the internal run lifecycle so the public contract
     stays stable and infra-agnostic: the execution states we run on can change
-    without reshaping what an external consumer sees. The last four members are
-    terminal."""
+    without reshaping what an external consumer sees. Terminal members are
+    those the engine never transitions a run out of."""
 
     QUEUED = "queued"
     """Accepted; waiting to run (Batch submitted/pending/runnable/starting)."""

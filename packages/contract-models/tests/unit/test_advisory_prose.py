@@ -43,6 +43,7 @@ import pytest
 
 from analitiq.contracts.shared.advisory import all_rules
 from analitiq.contracts.shared.advisory_prose import (
+    MEMBER_DOCSTRING_WAIVERS,
     NORMATIVE_PATTERN,
     ProseObligation,
 )
@@ -242,15 +243,24 @@ def _enum_member_own_docstrings(enum_cls: type[Enum]) -> dict[str, str]:
     tree = ast.parse(textwrap.dedent(inspect.getsource(enum_cls)))
     body = tree.body[0].body
     for prev, node in zip(body, body[1:]):
-        if (
-            isinstance(prev, ast.Assign)
-            and isinstance(node, ast.Expr)
+        if not (
+            isinstance(node, ast.Expr)
             and isinstance(node.value, ast.Constant)
             and isinstance(node.value.value, str)
         ):
-            for target in prev.targets:
-                if isinstance(target, ast.Name):
-                    docs[target.id] = node.value.value
+            continue
+        # An annotated assignment (`A: str = "a"`) is still an enum member;
+        # matching only ast.Assign would let its docstring escape the guard.
+        targets = (
+            prev.targets
+            if isinstance(prev, ast.Assign)
+            else [prev.target]
+            if isinstance(prev, ast.AnnAssign) and prev.value is not None
+            else []
+        )
+        for target in targets:
+            if isinstance(target, ast.Name):
+                docs[target.id] = node.value.value
     for member in enum_cls:
         own = member.__dict__.get("__doc__")
         if isinstance(own, str) and own != enum_cls.__doc__:
@@ -265,7 +275,12 @@ def test_member_docstring_detection_sees_the_existing_ones():
     from analitiq.contracts.pipelines.data_sync import PublicRunStatus
 
     docs = _enum_member_own_docstrings(PublicRunStatus)
-    assert set(docs) == {member.name for member in PublicRunStatus}
+    # A superset check, not equality: members are free to omit docstrings —
+    # this test only proves the detector sees source-only trailing literals.
+    assert set(docs) >= {"QUEUED", "CANCELLED"}, (
+        "the member-docstring detector no longer sees PublicRunStatus's "
+        "source-only trailing literals; the modal guard is blind"
+    )
     assert all(docs.values())
 
 
@@ -273,20 +288,46 @@ def test_enum_member_docstrings_carry_no_modal_language():
     """Member docstrings are excluded from the census (pydantic publishes
     only the class docstring), so an obligation stated on a member would be
     censused by nothing. Keep members descriptive: move a modal sentence to
-    the class docstring (a censused site) or bind it to a rule / structural
-    mechanism there."""
+    the class docstring (a censused site), bind it to a rule / structural
+    mechanism there, or — for a genuinely descriptive line the frozen pattern
+    misreads — register a ``MEMBER_DOCSTRING_WAIVERS`` entry."""
+    waived = {(cls, member) for cls, member, _ in MEMBER_DOCSTRING_WAIVERS}
     offenders = [
         f"  {enum_cls.__name__}.{name}: {doc!r}"
         for enum_cls in sorted(contract_enums(), key=lambda c: c.__name__)
         for name, doc in sorted(_enum_member_own_docstrings(enum_cls).items())
-        if NORMATIVE_PATTERN.search(doc)
+        if NORMATIVE_PATTERN.search(doc) and (enum_cls.__name__, name) not in waived
     ]
     assert not offenders, (
         "enum MEMBER docstrings carrying a modal marker — the census does not "
         "cover member docstrings (pydantic never publishes them), so state the "
         "obligation in the enum's CLASS docstring (a censused site) or bind "
-        "it, and keep the member line descriptive:\n" + "\n".join(offenders)
+        "it, and keep the member line descriptive; a line that is descriptive "
+        "despite the modal-shaped word takes a MEMBER_DOCSTRING_WAIVERS entry "
+        "in advisory_prose.py:\n" + "\n".join(offenders)
     )
+
+
+def test_member_docstring_waivers_are_live_and_needed():
+    """The rot direction for the member-docstring registry: every waiver must
+    name a member whose own docstring still trips the modal pattern, with a
+    non-blank reason — a waiver outliving its docstring (or the modal word in
+    it) is dead data and must be removed."""
+    member_docs = {
+        (enum_cls.__name__, name): doc
+        for enum_cls in contract_enums()
+        for name, doc in _enum_member_own_docstrings(enum_cls).items()
+    }
+    for cls, member, reason in MEMBER_DOCSTRING_WAIVERS:
+        assert reason.strip(), f"{cls}.{member}: blank waiver reason"
+        doc = member_docs.get((cls, member))
+        assert doc is not None, (
+            f"{cls}.{member}: waived member docstring no longer exists"
+        )
+        assert NORMATIVE_PATTERN.search(doc), (
+            f"{cls}.{member}: waived docstring no longer carries a modal "
+            "marker — remove the waiver"
+        )
 
 
 _HASH = "0" * 12  # format-valid placeholder for the refusal probes

@@ -142,7 +142,7 @@
       "type": "object"
     },
     "PublicRunStatus": {
-      "description": "Coarse, stable run status for external API-key consumers.\n\nA deliberate reduction of the internal run lifecycle so the public contract\nstays stable and infra-agnostic: the execution states we run on can change\nwithout reshaping what an external consumer sees. The last four members are\nterminal.",
+      "description": "Coarse, stable run status for external API-key consumers.\n\nA deliberate reduction of the internal run lifecycle so the public contract\nstays stable and infra-agnostic: the execution states we run on can change\nwithout reshaping what an external consumer sees. Terminal members are\nthose the engine never transitions a run out of.",
       "enum": [
         "queued",
         "running",
