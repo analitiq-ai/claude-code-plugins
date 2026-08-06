@@ -643,6 +643,7 @@ def validate_template_bounds(
     params: list[dict[str, Any]] = spec["params"]
     if len(args) > len(params):
         return
+    by_name = {param["name"]: param for param in params}
     placeholders: dict[str, str] = {}
     literals: dict[str, str] = {}
     for param, arg in zip(params, args):
@@ -718,8 +719,10 @@ def validate_template_bounds(
             ref = param.get(bound)
             if not isinstance(ref, str) or ref not in placeholders or not own.isdigit():
                 continue
-            ref_param = next(p for p in params if p["name"] == ref)
-            rendered = _produced(ref_param, admissible_only=True)
+            # A ref naming no sibling is already fatal: the templated position
+            # this bound points at resolves through `resolved_int_bounds`,
+            # which refuses a dangling name self-describingly.
+            rendered = _produced(by_name[ref], admissible_only=True)
             if rendered is None:
                 continue
             refused = [

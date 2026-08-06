@@ -218,7 +218,8 @@ def test_cross_ref_bound_resolves_to_the_literal_sibling_present():
     ceiling; a caller holding one concrete canonical knows the literal sibling,
     and that is the bound the position actually admits."""
     params = arrow_grammar.FAMILIES["Decimal128"]["params"]
-    scale = next(p for p in params if p["name"] == "scale")
+    # StopIteration here is the failure signal working, not a case to guard.
+    scale = next(p for p in params if p["name"] == "scale")  # skipcq: PTC-W0063
 
     assert arrow_grammar.resolved_int_bounds(scale, params) == (0, 38)
     assert arrow_grammar.resolved_int_bounds(scale, params, {"precision": "5"}) == (0, 5)
@@ -279,8 +280,9 @@ def test_template_bounds_reach_a_family_without_a_cross_bound():
         arrow_grammar.validate_template_bounds(
             "FixedSizeBinary(${n})", lambda name, probes: frozenset(probes))
 
+    # StopIteration here is the failure signal working, not a case to guard.
     fine = frozenset(
-        next(p for p in arrow_grammar.FAMILIES["Time64"]["params"]
+        next(p for p in arrow_grammar.FAMILIES["Time64"]["params"]  # skipcq: PTC-W0063
              if p["kind"] == "unit")["allowed"]
     )
     arrow_grammar.validate_template_bounds(

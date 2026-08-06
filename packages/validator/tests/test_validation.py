@@ -683,14 +683,16 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     p = tmp_path / "type-map-write.json"
     findings = validator.validate_document([{"match": "exact", "canonical": "Utf8", "native": "TEXT"}],
                                            doc_path=p)
-    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")
+    # StopIteration here is the failure signal working, not a case to guard.
+    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")  # skipcq: PTC-W0063
     assert "'Object'" in gap["message"] and "'List'" in gap["message"]
 
     covered = [{"match": "exact", "canonical": "Utf8", "native": "TEXT"},
                {"match": "exact", "canonical": "Object", "native": "JSONB"},
                {"match": "exact", "canonical": "List", "native": "JSONB"}]
     findings = validator.validate_document(covered, doc_path=p)
-    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")
+    # StopIteration here is the failure signal working, not a case to guard.
+    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")  # skipcq: PTC-W0063
     assert "'Object'" not in gap["message"] and "'List'" not in gap["message"]
 
 

@@ -31,7 +31,8 @@ def _units(family: str) -> str:
     """
     from analitiq.contracts.arrow_grammar import FAMILIES
 
-    param = next(
+    # StopIteration here is the failure signal working, not a case to guard.
+    param = next(  # skipcq: PTC-W0063
         p for p in FAMILIES[family]["params"] if p["kind"] == "unit"
     )
     return "|".join(param["allowed"])
