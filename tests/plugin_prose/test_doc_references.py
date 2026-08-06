@@ -1247,11 +1247,7 @@ def _form_counts(plugin: str) -> dict[str, int]:
     is the number compared against a target's headings, not the number of `§`
     characters, so a pass that finds anchors and grades none of them is not
     counted as working."""
-    texts = [
-        path.read_text(encoding="utf-8")
-        for path in _prose_files(plugin)
-    ]
-    assert texts  # a plugin with no prose is not a plugin
+    assert _prose_files(plugin)  # a plugin with no prose is not a plugin
     # Counted from the sweeps that grade, never by re-running the patterns: a
     # floor that re-scans the tree cannot notice the sweep going blind, which
     # is the one failure a floor exists to make loud.
