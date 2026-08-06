@@ -151,10 +151,11 @@ def _has_known_scope(token: str) -> bool:
 
 # The UNIVERSE of destination write modes — every mode a destination may be
 # asked to perform. It keys an API endpoint's `operations.write` map below, and
-# it bounds `stream._DB_WRITE_MODES`, which is the (currently equal) subset the
-# SQL write path implements. Read that as a bound, not an alias: the two are
-# separate facts and `stream.py` says why it does not derive one from the other.
-# The tuple is derived from the Literal so those two cannot drift.
+# `stream.py` dispositions each member for the SQL write path: which of them a
+# database destination may select, and what it must then declare. Read that as a
+# disposition, not an alias — the two are separate facts and `stream.py` says
+# why. Adding a member here fails that table's import-time guard until it is
+# dispositioned. The tuple is derived from the Literal so those two cannot drift.
 #
 # `truncate_insert` is the full-refresh mode: empty the destination, then insert
 # the run's records. Adding it here is what #108 asks of this contract; its

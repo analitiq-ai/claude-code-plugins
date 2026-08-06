@@ -35,7 +35,8 @@ Pick the mode from the user's intent:
 - `write_mode` (optional, default per destination capability) — for a database
   destination, a member of the write-mode vocabulary in §Closed vocabularies
   (`upsert` additionally requires `conflict_keys`); for an API destination, one of
-  the endpoint's `operations.write` keys, which no contract enum can enumerate.
+  the endpoint's `operations.write` keys — drawn from the same vocabulary, but
+  which of them that endpoint declares only its own document says.
 - `schedule_type` (optional) — a member of the schedule vocabulary in
   §Closed vocabularies. Omit it and the contract's own default applies.
 - `previous_release_path` (optional) — path to the prior released directory
@@ -66,7 +67,7 @@ carries the phrasing tables — and halt rather than inventing a member:
 | `stream.source.replication.method` | `full_refresh`, `incremental` | discriminated union `analitiq.contracts.stream.Replication` |
 | `stream.source.database_pagination.type` | `offset`, `keyset` | discriminated union `analitiq.contracts.stream.DatabasePagination` |
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
-| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
+| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | discriminated union `analitiq.contracts.stream.DatabaseWrite` (an API destination's mode is bounded by the endpoint write-key universe instead) |
 <!-- END GENERATED: enum-vocabulary -->
 
 ## Required reading

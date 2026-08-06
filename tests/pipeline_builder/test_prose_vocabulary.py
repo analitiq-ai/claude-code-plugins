@@ -151,10 +151,10 @@ ALLOWED_RESTATEMENTS = {
          "per-member semantics (which types take a `value`)"),
     ("agents/stream-creator.md", "write.mode"):
         (2, {"insert", "upsert", "truncate_insert"},
-         "§`Process` and §`Hard rules` both state the conflict_keys rule "
-         "(ADV-STRM-011), which is what distinguishes the modes — `upsert` "
-         "requires the key, every other database mode forbids it — so each "
-         "statement has to name them all"),
+         "§`Process` and §`Hard rules` both state what distinguishes the "
+         "modes — the upsert write variant declares a conflict key set and no "
+         "other database write shape has the field — so each statement has to "
+         "name them all"),
 }
 
 # Restatements inside fenced code blocks using bare, unticked members. The
