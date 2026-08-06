@@ -711,7 +711,7 @@
               ]
             }
           ],
-          "description": "Per-page offset step. Required, with no default: the two offset families cannot be told apart from the document, so any default silently breaks one of them. A bare positive integer is a fixed step (`1` for page-index-style offsets). A value expression lets the engine advance by a per-page value (analitiq-engine #346/#347): `{ref: response.record_count}` when `offset` counts records returned (resolved against that page's response); when it counts the requested window, step by the *effective* request limit \u2014 the page size actually sent \u2014 which is `{ref: runtime.batch_size}` only where no smaller `limit.max` clamps it; with a cap, use the clamped value so the step matches the window requested (a raw batch size would overshoot and skip rows). Spec: \u00a7Value Expressions.",
+          "description": "Per-page offset step. Required, with no default: the two offset families cannot be told apart from the document, so any default silently breaks one of them. A bare positive integer is a fixed step (`1` for page-index-style offsets). A value expression lets the engine advance by a per-page value: `{ref: response.record_count}` when `offset` counts records returned (resolved against that page's response); when it counts the requested window, step by the *effective* request limit \u2014 the page size actually sent \u2014 which is `{ref: runtime.batch_size}` only where no smaller `limit.max` clamps it; with a cap, use the clamped value so the step matches the window requested (a raw batch size would overshoot and skip rows). Spec: \u00a7Value Expressions.",
           "title": "Increment By"
         },
         "initial": {
