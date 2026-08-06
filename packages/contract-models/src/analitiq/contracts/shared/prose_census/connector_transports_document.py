@@ -31,20 +31,22 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="HttpTransport", field="base_url",
         prose_hash="04961e5771bc",
         structural=(
-            "the literal and object arms of UrlValueExpression carry the "
-            "non-empty constraint: the bare-string arm is Annotated[str, "
-            "StringConstraints(min_length=1)] and TemplateExpression, "
-            "RefExpression and LiteralStringExpression each constrain their "
-            "own payload the same way"
+            "the bare-string arm and the three typed object arms of "
+            "UrlValueExpression carry the non-empty constraint: the bare "
+            "string is Annotated[str, StringConstraints(min_length=1)] and "
+            "TemplateExpression, RefExpression and LiteralStringExpression "
+            "each constrain their own payload the same way"
         ),
         waiver=(
-            "two remainders. The DerivedValue arm's `input` is typed Any, so a "
-            "function-form base_url resolving to an empty string is accepted "
-            "here and refused only at resolution time. And the permission to "
-            "omit the field — that this entry exists only to extend "
-            "`transport_defaults` — is authoring intent no document states, so "
-            "an entry omitting it for any other reason is accepted here and "
-            "fails at engine transport build"
+            "the remainders. No DerivedValue arm constrains what its input "
+            "resolves to, so a function-form base_url resolving to an empty "
+            "string is accepted here and refused only at resolution time by "
+            "resolve_transport_base_url; nothing anywhere constrains the value "
+            "to be URL-SHAPED; and the permission to omit the field — that "
+            "this entry exists only to extend `transport_defaults` — is "
+            "authoring intent no document states, so an entry omitting it for "
+            "any other reason is accepted here and fails at engine transport "
+            "build"
         ),
     ),
     ProseObligation(

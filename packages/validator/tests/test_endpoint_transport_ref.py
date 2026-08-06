@@ -32,18 +32,28 @@ def _origin(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}"
 
 
-def _assert_cdn_is_a_second_origin(connector: dict) -> None:
-    """The added transport must be on a DIFFERENT origin than the default one.
+def _declare_second_origin(connector: dict) -> None:
+    """Add a transport `cdn` on an origin the default transport is not on.
 
-    Comparing the two NAMES would not establish that: a corpus whose default
-    transport moved to this host would state one origin under two names, and
-    the record would pass while recording nothing.
+    Comparing the two transport NAMES would not establish a second origin: a
+    corpus whose default moved to this host would state one origin under two
+    names, and the record would pass while recording nothing. So the default's
+    own `base_url` is read — and it must be a literal one, since a value
+    expression resolves at connection time and puts the origin out of reach of
+    a static comparison.
     """
     default = connector["transports"][connector["default_transport"]]
-    assert _origin(default["base_url"]) != SECOND_ORIGIN, (
-        f"the corpus default transport is already on {SECOND_ORIGIN} — the "
-        "second transport states no second origin, so this records nothing"
+    base_url = default.get("base_url")
+    assert isinstance(base_url, str) and _origin(base_url) not in ("://", SECOND_ORIGIN), (
+        f"the corpus default transport must declare a literal base_url on an "
+        f"origin other than {SECOND_ORIGIN}; it declares {base_url!r}, so the "
+        "second transport below states no second origin and records nothing"
     )
+    connector["transports"]["cdn"] = {
+        "transport_type": "http",
+        "base_url": SECOND_ORIGIN + "/v1",
+        "timeout_seconds": 30,
+    }
 
 
 @pytest.fixture
@@ -232,27 +242,39 @@ class TestOriginContainmentGapIsRecorded:
     This is that record, pinned through the connector-anchored walk, which is
     where an origin check would have to live for the same reason the NAME half
     does — origins are declared on the connector and consumed by the endpoint.
-    Two documents are recorded because the gap closes in two independent
-    directions and each direction reddens a different one:
+    Three documents are recorded because a closure need not refuse all three,
+    and each is accepted for its own reason:
 
-    * A URL bounded by no declared origin at all — a next-page link read out of
-      the response body. Any origin rule whatsoever refuses it.
-    * A request selected onto a declared transport the engine never opens.
-      Requiring every URL to land on the origin of the single session
-      `default_transport` opens refuses it; the other closure — the engine
-      honouring `transport_ref` per operation — makes it correct instead, and
-      then the record is retired rather than reddened.
+    * A next-page link read out of the response body: the document bounds that
+      URL by no origin. A rule requiring every produced URL to land on a
+      declared origin refuses it — unless it is written to skip what is
+      statically unknowable, in which case it is skipped and this record must
+      be re-graded by hand rather than reddened.
+    * A read request selected onto a declared transport the engine never opens.
+      A rule pinned to the single session `default_transport` opens refuses it;
+      the closure the description states as its intent — an origin rule over
+      ANY declared transport, plus per-operation selection — makes the document
+      correct instead, and then the record is retired rather than reddened.
+    * The same selection on the write path, which the engine guards separately
+      from the read path and, today, not at all.
+
+    Each asserts on EVERY error the walk emits, not on `endpoint-transport-ref`
+    alone: the NAME half already owns that id, so an origin rule arriving under
+    an id of its own — the likelier shape, since each check registers one —
+    would pass a scoped assertion unnoticed.
 
     That the field description still declares the half unenforced is a reader's
     check, not this module's: deciding it means reading what a description
     means, which `.claude/rules/validator-claims.md` keeps out of tests and
     `.claude/rules/contract-prose.md` states as an authoring obligation. The
     description lives on `_RequestBase.transport_ref`, which every
-    endpoint-operation request model — read and write alike — inherits. The
-    connector document's own `PostAuthOperationRequest.transport_ref` is a
-    separate site with its own description and census entry. Each entry pins
-    its wording and records the unenforced half as its waiver, so softening one
-    is a hash mismatch a reviewer must re-affirm.
+    endpoint-operation request model — read and write alike — inherits, and its
+    census entry records the ORIGIN half as its waiver, so softening the
+    disclaimer is a hash mismatch a reviewer must re-affirm. The connector
+    document declares its own `transport_ref` sites — the auth operation
+    template, the post-auth operation request, resource discovery — whose
+    descriptions state no origin half at all and whose waivers record
+    engine-owned defaulting instead.
     """
 
     def test_a_second_origin_is_accepted_because_nothing_checks_origins(
@@ -263,18 +285,25 @@ class TestOriginContainmentGapIsRecorded:
         # DECLARES dispatch through it rather than through `default_transport`.
         # The NAME half is satisfied — `cdn` is declared — so the document
         # states an origin nothing can currently reach, and it validates clean:
-        # the engine opens one session from `default_transport` and no call
-        # site reads an operation's `transport_ref`.
-        connector_base["transports"]["cdn"] = {
-            "transport_type": "http",
-            "base_url": SECOND_ORIGIN + "/v1",
-            "timeout_seconds": 30,
-        }
-        _assert_cdn_is_a_second_origin(connector_base)
+        # the engine opens one session from `default_transport` and no
+        # production call site selects a transport per operation. The ref is
+        # read here only to grade the name.
+        _declare_second_origin(connector_base)
         findings = _run(
             tmp_path, connector_base, {"widgets.json": _read_endpoint("cdn")}, validator
         )
-        assert not _ref_errors(findings), findings
+        assert not _errors(findings), findings
+
+    def test_a_second_origin_on_the_write_path_is_accepted_too(
+        self, tmp_path, connector_base, validator
+    ):
+        # The write path is guarded separately from the read path, so recording
+        # only the read one would leave half the gap unrecorded.
+        _declare_second_origin(connector_base)
+        findings = _run(
+            tmp_path, connector_base, {"widgets.json": _write_endpoint("cdn")}, validator
+        )
+        assert not _errors(findings), findings
 
     def test_a_response_driven_next_url_is_accepted_because_nothing_checks_origins(
         self, tmp_path, connector_base, validator
@@ -304,7 +333,7 @@ class TestOriginContainmentGapIsRecorded:
             },
         }
         findings = _run(tmp_path, connector_base, {"widgets.json": endpoint}, validator)
-        assert not _ref_errors(findings), findings
+        assert not _errors(findings), findings
 
 
 class TestStandaloneEndpointValidation:

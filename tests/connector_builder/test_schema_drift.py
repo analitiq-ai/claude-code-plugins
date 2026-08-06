@@ -1101,9 +1101,11 @@ EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
 EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
-# `spec-replication.md` and `spec-resource-discovery.md` each carry a sentence
-# closing its set — "and nothing else" in one, "exposes exactly these" in the
-# other. Whether such a sentence still closes the set is a reader's call
+# Each spec `_CLOSURE_FIX` names carries a sentence closing its set — "and
+# nothing else" in `spec-replication.md`, "exposes exactly these" in
+# `spec-resource-discovery.md`, "exactly the keys named below and no others" in
+# `spec-type-maps.md`. Whether such a sentence still closes the set is a
+# reader's call
 # (`.claude/rules/no-cardinality-restatements.md` §Closure claims): locating it
 # takes an English anchor, which stops matching when the sentence is reworded,
 # and grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
