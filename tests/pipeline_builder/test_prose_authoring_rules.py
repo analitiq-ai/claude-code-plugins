@@ -80,11 +80,6 @@ def _prose_paragraphs(text: str) -> list[str]:
     return blocks
 
 
-def _bullets(text: str) -> list[str]:
-    """Split a markdown list into one entry per top-level `- ` bullet."""
-    return re.split(r"(?m)^(?=- )", text)
-
-
 # ---------------------------------------------------------------------------
 # WriteModeMapper — the only route from a user's phrasing to `write.mode`
 # ---------------------------------------------------------------------------
@@ -186,44 +181,26 @@ def test_stream_creator_teaches_the_assignment_value_discriminator():
     )
 
 
-def test_stream_creator_teaches_token_array_get_paths():
-    """The `get` path is an array of segments, and the prose must say so.
+def test_the_token_array_path_rule_is_still_a_contract_fact():
+    """`get` paths are arrays of segments, so the prose rule is worth teaching.
 
-    The other breaking half of rc19. A dotted string was the rc18 shape and is
-    the intuitive one, so the rule has to be stated explicitly — an agent
-    reverting to `"address.city"` produces documents the contract rejects.
-    Guarded by the contract's own annotation: if `path` ever goes back to a
-    scalar, this test fails and the prose rule is what should be deleted.
+    Only the contract half is asserted here. Whether `stream-creator.md` still
+    teaches it is a judgment about what a document says, and the two ways this
+    test used to make that judgment both failed in both directions:
 
-    The two assertions below have different reach, which is worth stating
-    because the weaker one reads like the stronger. "Not a dotted string" is
-    document-wide, so either of the rule's two statements (Process step 6, Hard
-    rules) satisfies it. The worked example is bullet-scoped and in practice
-    only the Hard-rules copy satisfies it — step 6 writes `path` unticked and
-    is not split into its own bullet. That is the harmless direction: stricter
-    than described, not laxer.
+    - `"dotted string" in text` pins ENGLISH. Rewriting the rule more clearly
+      ("a path is a list of segments, never `a.b`") reddens the build on prose
+      that improved, and the remedy is to reword it back. It also cannot read
+      polarity — a document saying a dotted string is FINE satisfies it.
+    - The bullet-scoped worked-example regex pinned markdown formatting on top
+      of that: which lines are bullets, and where the backticks fall.
+
+    Both are the class `plugin-prose.md` now covers, and a reader applying it
+    catches the rewording a substring match cannot. What survives here is the
+    part a mechanism can decide: if `path` ever goes back to a scalar this
+    fails, and the prose rule is then what should be deleted.
     """
     assert typing.get_origin(GetExpression.model_fields["path"].annotation) is list, (
         "GetExpression.path is no longer a list — the token-array rule in "
         "stream-creator.md is now wrong and should be removed with this test."
-    )
-    text = STREAM_CREATOR.read_text()
-    assert "dotted string" in text, (
-        "stream-creator.md no longer rules out the dotted-string `path` an agent "
-        "would otherwise default to."
-    )
-    # The worked example must sit in a bullet that is ABOUT `get`/`path`. A
-    # document-wide search silently passes forever: `write.conflict_keys` is
-    # illustrated as `["org_id", "external_id"]` under Hard rules, which
-    # satisfies the array regex while saying nothing about source paths.
-    multi_segment = re.compile(r"`\[\s*\"[^\"]+\"\s*,\s*\"[^\"]+\"\s*\]`")
-    assert any(
-        multi_segment.search(bullet)
-        for bullet in _bullets(text)
-        if "`path`" in bullet or "path:" in bullet
-        if "get" in bullet
-    ), (
-        "no `get`/`path` rule in stream-creator.md carries a multi-segment "
-        'token-array example (e.g. `["address", "city"]`) — the rule reads as '
-        "a bare assertion an agent has to take on faith."
     )

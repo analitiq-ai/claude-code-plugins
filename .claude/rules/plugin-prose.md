@@ -112,6 +112,32 @@ review surface and potential rot.
 - Failure-message fix-hints are part of the guard: a hint naming a file or
   section that no longer carries the fact is a defect. Repoint hints in the
   same commit that moves a fact.
+- **A guard reads marked text or a token, never a sentence.** Backticked
+  identifiers, fenced blocks, a named heading, a generated-block marker, a
+  contract-owned name — all decidable by a mechanism. An English phrase is not:
+  pinning one reddens the build when the prose is *improved*, and the remedy the
+  failure demands is to reword it back. It cannot read polarity either — a
+  document saying a dotted string is fine satisfies `"dotted string" in text`
+  exactly as well as one forbidding it.
+
+## Does the document still TEACH it? That is yours, not CI's
+
+No guard answers this, and three tried and were removed. When you touch a plugin
+document, check by reading:
+
+- **A rule the contract still needs stated.** `stream-creator.md` must rule out
+  the dotted-string `get` path, because the array-of-segments shape is the one
+  an agent will not guess. `test_prose_authoring_rules.py` asserts the contract
+  half — `path` is still a list — and stops there.
+- **A worked example beside a rule an agent must apply.** A rule with no example
+  reads as an assertion to take on faith, and agents author accordingly.
+- **A claim some guard reasons FROM.** `enum-mappers.md` reasons from a database
+  endpoint carrying no `replication` block. Reword that away and
+  `test_prose_absence_claims.py` sits green protecting a claim nobody makes; it
+  can only check the token `replication` is still somewhere in the document.
+
+The pattern: where a test pins a contract fact and the prose is what teaches it,
+the test guards the fact and **you** guard the teaching.
 
 ## Quick test
 
