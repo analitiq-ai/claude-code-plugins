@@ -1,7 +1,5 @@
 ---
-paths:
-  - "packages/contract-models/**/*.py"
-  - "packages/validator/**/*.py"
+paths: packages/contract-models/**/*.py
 ---
 
 # Rule: prose on the contract's own surface

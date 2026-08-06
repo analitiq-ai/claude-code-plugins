@@ -534,7 +534,12 @@ def _properties_at(schema: dict, def_name: str) -> set[str] | None:
     return set(node["properties"])
 
 
-def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str:
+def _set_diff_msg(
+    label: str,
+    found: set[str] | None,
+    expected: set[str],
+    fix: str = _WRITE_PATH_FIX,
+) -> str:
     """Diff message for a NAME set (required list or property keys).
 
     Separate from `_diff_msg` because these are not enums: reporting "enum not
@@ -543,14 +548,20 @@ def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str
     generic ("not found at that $def") so the same helper can serve both a
     `required` list and a `properties` key set without lying about which it
     read.
+
+    `fix` names the documents whose prose goes false with this set. It defaults
+    to the write-path group because most callers here read a write-path
+    vocabulary; a caller reading a set some other document closes over passes
+    its own, so the failure sends the reader to the document that must change
+    rather than to the majority's.
     """
     if found is None:
         return (
             f"{label}: not found at that $def — the contract was "
-            f"restructured. {_WRITE_PATH_FIX}"
+            f"restructured. {fix}"
         )
     return (
-        f"{label} drift — {_WRITE_PATH_FIX} "
+        f"{label} drift — {fix} "
         f"schema-only={sorted(found - expected)} "
         f"plugin-only={sorted(expected - found)}"
     )
@@ -1068,10 +1079,13 @@ def test_write_path_table_parser_reads_the_real_tables() -> None:
 # --- closure claims, pinned to the shapes they close over -------------------
 # Prose that says "and nothing else" / "exactly these" is a claim about a
 # CLOSED member set. It is strictly more falsifiable than a count — a count goes
-# stale, a closure claim goes actively wrong — so each one below is read back
-# from the document and compared to the contract. Without these the sentence is
-# unowned: `Replication`, `ResourceDiscoveryTriggers` and the type-map rule keys
-# appear in no other guard in this suite.
+# stale, a closure claim goes actively wrong. The member set each one closes
+# over is compared to the contract below, and the failure names the document
+# whose sentence goes false with it; whether that sentence still closes the set
+# is a reader's call (`.claude/rules/no-cardinality-restatements.md` §Closure
+# claims). Without the comparisons the sets are unowned: `Replication`,
+# `ResourceDiscoveryTriggers` and the type-map rule keys appear in no other
+# guard in this suite.
 
 REPLICATION_SPEC = PLUGIN_ROOT / "skills" / "connector-spec-api" / "spec-replication.md"
 DISCOVERY_SPEC = (
@@ -1088,14 +1102,17 @@ EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
 # `spec-replication.md` and `spec-resource-discovery.md` each carry a sentence
-# closing its set — "the block carries X and Y, nothing else". Whether that
-# sentence still closes the set is a reader's call
+# closing its set — "and nothing else" in one, "exposes exactly these" in the
+# other. Whether such a sentence still closes the set is a reader's call
 # (`.claude/rules/no-cardinality-restatements.md` §Closure claims): locating it
 # takes an English anchor, which stops matching when the sentence is reworded,
 # and grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
 # keeps out of tests. What a mechanism decides is the contract's own member
-# sets, asserted below — so a member landing or leaving fails here and names
-# the spec to reword.
+# sets, asserted below, each failing with the document that must be re-read.
+_CLOSURE_FIX = (
+    "re-read the closure sentence in {spec} — it enumerates this set as "
+    "exhaustive, and an authoring agent reads it that way."
+)
 
 
 def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
@@ -1107,13 +1124,14 @@ def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
     same half-measure that left a new optional `SqlCapabilities` member
     invisible.
     """
+    fix = _CLOSURE_FIX.format(spec=REPLICATION_SPEC.relative_to(REPO_ROOT))
     props = _properties_at(api_endpoint_schema, "Replication")
     assert props == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
-        "Replication properties", props, EXPECTED_REPLICATION_KEYS
+        "Replication properties", props, EXPECTED_REPLICATION_KEYS, fix
     )
     required = _required_at(api_endpoint_schema, "Replication")
     assert required == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
-        "Replication required", required, EXPECTED_REPLICATION_KEYS
+        "Replication required", required, EXPECTED_REPLICATION_KEYS, fix
     )
 
 
@@ -1121,7 +1139,10 @@ def test_discovery_actions_match_schema(connector_schema: dict) -> None:
     """The contract side of the `spec-resource-discovery.md` closure claim."""
     props = _properties_at(connector_schema, "ResourceDiscoveryTriggers")
     assert props == EXPECTED_DISCOVERY_ACTIONS, _set_diff_msg(
-        "ResourceDiscoveryTriggers properties", props, EXPECTED_DISCOVERY_ACTIONS
+        "ResourceDiscoveryTriggers properties",
+        props,
+        EXPECTED_DISCOVERY_ACTIONS,
+        _CLOSURE_FIX.format(spec=DISCOVERY_SPEC.relative_to(REPO_ROOT)),
     )
 
 

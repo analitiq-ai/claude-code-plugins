@@ -195,8 +195,9 @@ def test_malformed_connector_transports_yields_no_fabricated_finding(
 
 
 class TestOriginContainmentGapIsRecorded:
-    """`CONTRIBUTING.md` clause 3: a PR that deliberately leaves a surface wide
-    records it, in the same PR, as a test or a follow-up issue.
+    """`CONTRIBUTING.md` → "A fix that narrows a rule records what it
+    deliberately left wide": the record ships with the narrowing, as a test or
+    a follow-up issue.
 
     `transport_ref`'s containment rule has two halves. The NAME half is enforced
     here. The ORIGIN half — every URL a request produces landing on a declared
@@ -205,55 +206,46 @@ class TestOriginContainmentGapIsRecorded:
     `default_transport`, pins the read path to that single origin and has no
     write-path origin guard at all.
 
-    This is that record. It pins the BEHAVIOUR, so the day origin containment
-    lands this test goes red and points at the prose that must change with it.
+    This is that record. It pins the BEHAVIOUR through the connector-anchored
+    walk, which is where an origin check would have to live for the same reason
+    the NAME half does — origins are declared on the connector and consumed by
+    the endpoint. So the day origin containment lands, this test goes red and
+    points at the prose that must change with it.
 
     That the field description still declares the half unenforced is a reader's
     check, not this module's: deciding it means reading what a description
     means, which `.claude/rules/validator-claims.md` keeps out of tests and
     `.claude/rules/contract-prose.md` states as an authoring obligation. The
-    description lives on `_RequestBase.transport_ref`, which these three
-    inherit; its census entry pins the wording and records the unenforced half
-    as its waiver, so softening it is a hash mismatch a reviewer must re-affirm.
+    description lives on `_RequestBase.transport_ref`, which every request
+    model — read and write alike — inherits; its census entry pins the wording
+    and records the unenforced half as its waiver, so softening it is a hash
+    mismatch a reviewer must re-affirm.
     """
 
-    def test_a_second_origin_is_accepted_because_nothing_checks_origins(self):
-        # Records the CURRENT behaviour, not the desired one: a next-page link on
-        # a second declared transport's origin validates clean. When origin
-        # containment is implemented this assertion is what fails first.
-        from analitiq.contracts.endpoints import parse_endpoint
-
-        doc = {
-            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
-            "endpoint_id": "files",
-            "operations": {
-                "read": {
-                    "request": {"method": "GET", "path": "/v1/files",
-                                "transport_ref": "api"},
-                    "params": {},
-                    "pagination": {
-                        "type": "link",
-                        "link": {"next_url": {"ref": "response.body.next"}},
-                        "stop_when": {"missing": {"ref": "response.body.next"}},
-                    },
-                    "response": {
-                        "records": {"ref": "response.body.data"},
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "next": {"type": "string"},
-                                "data": {
-                                    "type": "array",
-                                    "items": {"type": "object",
-                                              "properties": {"id": {"type": "string"}}},
-                                },
-                            },
-                        },
-                    },
-                }
-            },
+    def test_a_second_origin_is_accepted_because_nothing_checks_origins(
+        self, tmp_path, connector_base, validator
+    ):
+        # Records the CURRENT behaviour, not the desired one. The connector
+        # declares a second transport on a different origin, and the endpoint
+        # dispatches through it rather than through `default_transport`. The
+        # NAME half is satisfied — `cdn` is declared — so the document states a
+        # second reachable origin and validates clean, though the engine opens
+        # one session from `default_transport` and no call site selects a
+        # transport per operation. Per-operation selection plus an origin guard
+        # is what closes the gap, and this assertion is what fails when it does.
+        connector_base["transports"]["cdn"] = {
+            "transport_type": "http",
+            "base_url": "https://cdn.example.com/v1",
+            "timeout_seconds": 30,
         }
-        parse_endpoint(doc)  # must not raise: no origin rule exists to violate
+        assert connector_base["default_transport"] != "cdn", (
+            "the corpus connector must default to a DIFFERENT transport, or "
+            "this test states no second origin at all"
+        )
+        findings = _run(
+            tmp_path, connector_base, {"widgets.json": _read_endpoint("cdn")}, validator
+        )
+        assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
 class TestStandaloneEndpointValidation:

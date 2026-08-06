@@ -58,15 +58,18 @@ A closure claim is the recommended fix's finished form: "the block carries
 membership rule (an exhaustive list) instead of its size, and it stays true as
 long as the list does.
 
-Three of them are load-bearing in this repo — `spec-replication.md`,
-`spec-resource-discovery.md`, and the rule-shape sentence in
-`spec-type-maps.md`. Each is what tells an authoring agent the set is closed,
-so an agent reading a claim that has lost its closure will author extra keys
-the validator then rejects.
+A closure claim is load-bearing wherever an authoring agent reads the
+enumeration as exhaustive, which is most places one appears — plugin prose
+closes sets with "and nothing else", "exposes exactly these", "owns exactly this
+much". An agent reading a claim that has lost its closure authors extra keys,
+and the contract models reject unknown keys, so the document fails at the
+validator instead of teaching the shape.
 
-**What a guard covers.** The contract's own member sets are pinned in
-`tests/connector_builder/test_schema_drift.py`, so a member landing or leaving
-fails the build and the failure names the spec to reword.
+**What a guard covers.** Only the contract half, and only where a test reads
+that set back: `tests/connector_builder/test_schema_drift.py` pins
+`Replication`, `ResourceDiscoveryTriggers` and the type-map rule keys, and a
+member landing or leaving fails with the document whose sentence goes false.
+A closure claim over a set no test reads has no mechanical half at all.
 
 **What you cover.** Whether the sentence still closes the set. Deleting "and
 nothing else" leaves a sentence that is weaker, still true, and no longer
@@ -82,8 +85,9 @@ it closes:
 2. Does the list still name exactly the contract's members? The test tells you
    when the contract moved; it never tells you the sentence went stale on its
    own.
-3. If the closure is gone deliberately — the set opened — the guarding test for
-   that set goes in the same change, or it now guards a claim nobody makes.
+3. If the closure is gone deliberately — the set opened — say so in the same
+   change. Any test pinning that set stays: it pins the members, not the
+   sentence.
 
 ## Counting words to watch
 

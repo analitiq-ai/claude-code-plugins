@@ -201,7 +201,7 @@ def test_census_texts_reference_live_names():
             )
 
 
-# --- Enum MEMBER docstrings stay out of the census's blind spot --------------
+# --- Enum MEMBER docstrings: the census's blind spot, guarded by a reader ----
 #
 # The census covers every Enum's CLASS docstring; member docstrings are out of
 # scope because pydantic does not publish them into the schema. That exclusion
@@ -267,9 +267,9 @@ def test_census_stays_importable_without_pydantic():
 
 # --- The detectors must be provably able to fire ------------------------------
 #
-# The real census is asserted CLEAN above, so on a healthy tree none of the
-# four report groups ever goes non-empty there — these synthetic diffs are the
-# proof each detector still fires at all.
+# The real census is asserted CLEAN above, so on a healthy tree no report group
+# ever goes non-empty there — these synthetic diffs are the proof each detector
+# still fires at all.
 
 
 def _synthetic_site(model: str, field: str | None, text: str) -> ProseSite:

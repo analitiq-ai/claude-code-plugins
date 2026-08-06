@@ -5,8 +5,8 @@ normal string literal would mangle into an invalid escape sequence.)
 
 The engine reads all three as driver facts declared on the connector itself.
 The contract models are `extra="forbid"`, so a connector cannot declare any of
-them until they ship here. All three are ADDITIVE — unlike the five required
-shape facts of `sql_capabilities` (and unlike `write_unit`'s at-least-one-bound
+them until they ship here. All three are ADDITIVE — unlike the required shape
+facts of `sql_capabilities` (and unlike `write_unit`'s at-least-one-bound
 rule), absence of a block, a family, or a single cap is legal and means "no
 declared mapping / no declared cap"; an EMPTY block (`{}`) is legal and
 equivalent to omission.
@@ -351,14 +351,14 @@ def test_sql_capabilities_accepts_limits_member():
 
 
 def test_sql_capabilities_limits_is_optional():
-    # A five-fact block that omits `limits` stays valid — `limits` is the one
-    # additive member of an otherwise all-required block.
+    # A block carrying every required fact but omitting `limits` stays valid —
+    # `limits` is the one additive member of an otherwise all-required block.
     caps = SqlCapabilities.model_validate(copy.deepcopy(VALID_SQL_CAPS))
     assert caps.limits is None
 
 
 def test_sql_capabilities_shape_facts_stay_required_alongside_limits():
-    # Declaring `limits` does not relax the five-required-facts rule.
+    # Declaring `limits` does not relax the required-facts rule.
     payload = {"limits": dict(VALID_LIMITS), **copy.deepcopy(VALID_SQL_CAPS)}
     del payload["merge_form"]
     with pytest.raises(ValidationError):

@@ -71,8 +71,15 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     # === connector: connection contract + discovery ==========================
     ProseObligation(
-        model="ConnectionContract", descriptive=True,
+        model="ConnectionContract",
         prose_hash="57d2c52ff1d9",
+        waiver=(
+            "the semver discipline it states — patch = no shape change, minor "
+            "= additive, major = breaking — grades one revision of this "
+            "document against another, and a single document carries only its "
+            "own version, so a breaking `inputs` change under a patch bump is "
+            "accepted here"
+        ),
     ),
     ProseObligation(
         model="ConnectionContract", field="required_for_activation",

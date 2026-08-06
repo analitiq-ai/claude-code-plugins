@@ -232,8 +232,8 @@ def test_release_policy_data_guards_fire(monkeypatch) -> None:
     On green data none of these branches executes, and each guards a failure
     that survives the write-and-commit path: the sync test compares the docs
     against a fresh render of the same broken data, so corrupted output
-    round-trips green forever. Positive controls, same idiom as
-    `test_scanner_positive_control`.
+    round-trips green forever. Positive controls: monkeypatch the data into the
+    state each branch exists to catch, then assert it raises.
     """
     rt = _REGISTRY._release_table()
     original = rt.CATEGORIES

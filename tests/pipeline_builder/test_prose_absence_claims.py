@@ -94,7 +94,8 @@ def test_the_subject_of_the_claim_is_still_in_the_prose() -> None:
     The token is what a mechanism can decide. If `enum-mappers.md` stops naming
     `replication` altogether, the guard above is protecting a claim the document
     no longer makes and should go with it. Whether a rewritten sentence still
-    *teaches* the absence is a judgment, and it belongs to `plugin-prose.md`.
+    *teaches* the absence is a judgment, and it belongs to
+    `.claude/rules/plugin-prose.md`.
     """
     assert "`replication`" in ENUM_MAPPERS.read_text(encoding="utf-8"), (
         f"{ENUM_MAPPERS.relative_to(REPO_ROOT)} no longer names `replication`, "

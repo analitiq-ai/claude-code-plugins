@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
     ENGINE_CONDUCT,
+    ENGINE_OWNED_DEFAULTING,
     ProseObligation,
 )
 
@@ -28,8 +29,19 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="HttpTransport", field="base_url", descriptive=True,
+        model="HttpTransport", field="base_url",
         prose_hash="04961e5771bc",
+        structural=(
+            "every arm of UrlValueExpression carries the non-empty constraint: "
+            "the bare-string arm is Annotated[str, StringConstraints("
+            "min_length=1)] and the object forms constrain their own payload"
+        ),
+        waiver=(
+            "the permission to omit it — that this entry exists only to extend "
+            "`transport_defaults` — is authoring intent no document states, so "
+            "an entry omitting it for any other reason is accepted here and "
+            "fails at engine transport build"
+        ),
     ),
     ProseObligation(
         model="TransportDefaults", field="transport_type",
@@ -67,8 +79,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural="the `ConnectorKind` `Enum`'s own closed membership",
     ),
     ProseObligation(
-        model="ConnectorBase", descriptive=True,
+        model="ConnectorBase",
         prose_hash="a77be2f3abf3",
+        structural="Field(pattern=SLUG_PATTERN) on connector_id",
+        waiver=(
+            "that the id equals the connector's REGISTRY REPO NAME is a "
+            "cross-repo fact: this document does not carry the registry, so "
+            "the shape is checkable here and the correspondence is not"
+        ),
     ),
     ProseObligation(
         model="ConnectorBase", field="connector_id",
@@ -94,8 +112,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ConnectorBase", field="write_unit", descriptive=True,
+        model="ConnectorBase", field="write_unit",
         prose_hash="037b6892bfbe",
+        waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(
         model="WriteUnit", rule_ids=("ADV-CTOR-014",),
