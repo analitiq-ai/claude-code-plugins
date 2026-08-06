@@ -21,7 +21,7 @@ from pathlib import Path
 # which also holds the pin at or behind packages/validator/pyproject.toml.
 # requirements-dev.txt deliberately does NOT carry it — installing the wheel
 # would shadow the in-repo source.
-VALIDATOR_PIN = "analitiq-validator==1.0.0rc20"
+VALIDATOR_PIN = "analitiq-validator==1.0.0rc21"
 
 _REEXEC_SENTINEL = "ANALITIQ_PIPELINE_VALIDATOR_BOOTSTRAPPED"
 
