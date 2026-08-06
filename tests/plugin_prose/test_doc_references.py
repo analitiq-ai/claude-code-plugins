@@ -1058,7 +1058,7 @@ def test_external_ref_allowlist_is_not_stale(plugin: str) -> None:
     genuine dangling citation introduced later under the same filename.
     """
     cited = {_clean(target) for _rel, _lineno, target in _references(plugin)}
-    unused = sorted(_EXTERNAL_REFS[plugin] - cited)
+    unused = _stale_external_refs(_EXTERNAL_REFS[plugin], cited)
     assert not unused, (
         f"_EXTERNAL_REFS[{plugin!r}] entries {unused} are no longer referenced "
         "by any prose — drop them so the allow-list keeps meaning what it says."
@@ -1081,6 +1081,15 @@ def _incomplete_fixtures(fixtures: dict[str, dict]) -> dict[str, list[str]]:
         for plugin, entry in fixtures.items()
         if set(_REQUIRED_FIXTURE_KEYS) - set(entry)
     }
+
+
+def _stale_external_refs(allowed: set[str], cited: set[str]) -> list[str]:
+    """Allow-list entries no prose cites any more. The last registry check left
+    inlined in its assertion, and so the last one a constant would satisfy —
+    which matters here because the harm the test names is that a dead entry
+    masks a genuine dangling citation arriving later under the same
+    filename."""
+    return sorted(allowed - cited)
 
 
 def _unfloored_forms(forms: tuple[str, ...], repo_floors: dict[str, int]) -> list[str]:
@@ -1489,6 +1498,8 @@ def test_the_registry_checks_fail_when_they_should() -> None:
     assert _unpinned_forms(every_form, {}) == []
     assert _stale_waivers({"link": "x"}, {"link": "why"}) == ["link"]
     assert _stale_waivers({"link": "x"}, {}) == []
+    assert _stale_external_refs({"gone.md", "here.md"}, {"here.md"}) == ["gone.md"]
+    assert _stale_external_refs({"here.md"}, {"here.md"}) == []
     # The census's own filter — the step that turns an unread mention into a
     # build failure, and the newest predicate here to only ever run on a tree
     # that must not trip it.
@@ -1562,6 +1573,44 @@ def test_every_anchor_in_the_tree_is_graded(
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
+def test_an_allow_list_entry_exempts_only_its_own_plugin(plugin: str) -> None:
+    """`_EXTERNAL_REFS` is keyed per plugin because each entry is a decision
+    about *that* plugin's prose. Merging the keys into one set stayed green:
+    the staleness test indexes per plugin, and every other check reads the
+    plugin's own entry, so nothing noticed the connector plugin's transport
+    stubs quietly exempting citations in the pipeline plugin."""
+    others = set().union(
+        *(entries for name, entries in _EXTERNAL_REFS.items() if name != plugin)
+    )
+    foreign = sorted(others - _EXTERNAL_REFS[plugin])
+    assert foreign, (
+        "no other plugin allow-lists anything this one does not, so a merged "
+        "allow-list would be indistinguishable here and this check is vacuous"
+    )
+    for target in foreign:
+        assert _is_dangling(target, plugin, "agents/x.md"), target
+
+
+def test_a_directory_is_never_a_section_target(probe_plugin: str) -> None:
+    """A section can only be read out of a file, which is `_resolve_files`'
+    whole job. Deleting its `is_file` filter stayed green: prose does cite
+    directories (`skills/connector-spec-db/examples/`), but `_ANCHOR_BINDING`
+    only binds a `.md` path, so the anchor pass never meets one on the real
+    tree — the filter guards the case where a directory *is* named `.md`, and
+    then it is what stops `_anchor_checks` reading a directory as text."""
+    root = _plugin_root(probe_plugin)
+    (root / "notes.md").mkdir()
+    (root / "SKILL.md").write_text("# Probe\n", encoding="utf-8")
+    _plugin_paths.cache_clear()
+    assert _candidates("notes.md", probe_plugin), "the file pass resolves it"
+    assert _resolve_files("notes.md", "SKILL.md", probe_plugin) == []
+    # So the anchor pass declines it rather than raising on the read.
+    sites = [("SKILL.md", site) for site in _anchor_sites("See `notes.md` §Foo.")]
+    assert [site.target for _rel, site in sites] == ["notes.md"]
+    assert _anchor_checks(probe_plugin, sites) == ([], 0)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
 def test_every_md_written_in_prose_is_read_or_dispositioned(plugin: str) -> None:
     """The census, and the only check here that can see a citation form nobody
     spelled. Everything else in this file sits downstream of extraction: a
@@ -1573,6 +1622,16 @@ def test_every_md_written_in_prose_is_read_or_dispositioned(plugin: str) -> None
     So: having a `.md` in prose is the trigger, and every one is either inside
     some extractor's match or carries a named reason it is not a citation. A
     new citation form arrives as a failure here, not as silence."""
+    # The composition, first: `_uncovered` is driven in its failing direction
+    # and `_unread_mentions` is kept non-empty by the disposition-liveness
+    # test, but nothing pinned that `_uncovered_mentions` is the two of them
+    # joined — narrowing it to mentions carrying a `/` stayed green, and the
+    # assertion below reads the same either way, because a census that
+    # measured nothing also reports nothing.
+    unexplained = UnreadMention("a.md", 1, "y.md", "see y.md", None)
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setattr(sys.modules[__name__], "_unread_mentions", lambda _p: [unexplained])
+        assert _uncovered_mentions(plugin) == [unexplained]
     uncovered = _uncovered_mentions(plugin)
     assert not uncovered, (
         "`.md` written in prose that no extractor reads:\n"
@@ -1648,6 +1707,17 @@ def test_every_mention_disposition_is_load_bearing() -> None:
     # written in a heading, which is a normal place to cite from.
     line = "see skills/nowhere/gone.md for details"
     assert _mention_disposition("agents/x.md", line, 4, 26) is None
+    # Each branch reads the *mention*, not the line it sits on. Broadening the
+    # glob branch to the line stayed green because every negative here was
+    # written without a `*` — and prose emphasises constantly, so that would
+    # disposition away real citations by the paragraph.
+    emphasised = "See **the rule** in skills/nowhere/gone.md today"
+    assert (
+        _mention_disposition(
+            "agents/x.md", emphasised, *_MD_MENTION.search(emphasised).span()
+        )
+        is None
+    )
     heading = "## Pipeline (full contract: skills/nowhere/gone.md)"
     found = _MD_MENTION.search(heading)
     assert found.group(0) == "skills/nowhere/gone.md"
@@ -1772,17 +1842,36 @@ def test_the_link_pass_refuses_what_the_file_pass_refuses(probe_plugin: str) -> 
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
-def test_the_floors_count_what_the_sweep_found(plugin: str) -> None:
+def test_the_floors_count_what_the_sweep_found(
+    plugin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A floor that re-runs the patterns cannot notice the sweep going blind —
-    it would keep counting citations nothing grades. Every scanned form's count
-    comes from the same tagged sweep the file pass reads, so narrowing the
-    sweep drops the count with it."""
+    it would keep counting citations nothing grades. Every form's count comes
+    from the sweep that grades it, so narrowing the sweep drops the count.
+
+    Proven by rebinding each sweep, not by recomputing it and comparing.
+    Recomputing was `x == x`: the assertion re-ran the very expression
+    `_form_counts` uses, so restoring the rescan `_form_counts`' own comment
+    forbids left the suite green — and the two quantities are numerically
+    identical on this tree, so no floor could separate them either. The file
+    already solved this twice, for the anchor count and for sentinels; the
+    scanned forms were where the technique had not been applied.
+    """
     counts = _form_counts(plugin)
-    tagged = Counter(form for _rel, _lineno, form, _t in _tagged_references(plugin))
-    for form in _SCAN_FORMS:
-        assert counts[form] == tagged[form] > 0, form
-    assert counts["link"] == len(_link_references(plugin))
-    assert counts["asset"] == len(_asset_citations(plugin))
+    for form in _FORMS:
+        assert counts[form] > 0, form
+    module = sys.modules[__name__]
+    for stub, forms in (
+        ("_tagged_references", _SCAN_FORMS),
+        ("_link_references", ("link",)),
+        ("_asset_citations", ("asset",)),
+        ("_anchor_checks", ("anchor",)),
+    ):
+        with monkeypatch.context() as patched:
+            empty = ([], 0) if stub == "_anchor_checks" else []
+            patched.setattr(module, stub, lambda *_a, **_k: empty)
+            starved = _form_counts(plugin)
+        assert [starved[form] for form in forms] == [0] * len(forms), stub
     # And the sweep really is the plugin's whole prose, not one document of it.
     assert len({rel for rel, _l, _f, _t in _tagged_references(plugin)}) > 5
 
@@ -2089,8 +2178,42 @@ def test_a_cited_example_file_is_guarded(plugin: str) -> None:
         line = shape.replace("{plugin}", plugin)
         found = [match.group(1) for match in _BARE_ASSET_REF.finditer(line)]
         assert found == [want.replace("{plugin}", plugin) for want in expected], shape
-    # Each resolves from the document it is written in — the same predicate
-    # the file pass runs, so this is the sweep, not a second opinion.
+    # The shapes above pin the pattern. What they cannot pin is that
+    # `_asset_citations` hands it undelimited prose: re-adding a backtick
+    # requirement *inside the sweep* left the pattern untouched and the whole
+    # suite green, while losing four citations — a frontmatter `description:`
+    # routing an agent to the script it runs, and the fenced command a plugin's
+    # own contributor guidance tells you to run twice. Those four are the entire
+    # evidence base for the unbackticked form, and the floor has headroom to
+    # spare, so only the sweep itself can hold this — see the test below, which
+    # drives it on the probe tree, the shapes having to be prose in a file
+    # before the sweep can read them.
+
+
+def test_the_asset_sweep_reads_undelimited_prose(probe_plugin: str) -> None:
+    """The delimiter is not the rule — `_addresses_this_plugin` is. Requiring
+    a code span looked like a rule and was really a delimiter, and it left the
+    script a plugin's own contributor guidance tells you to run read by
+    nobody."""
+    root = _plugin_root(probe_plugin)
+    (root / "SKILL.md").write_text(
+        "---\n"
+        "description: Runs scripts/validate.py before authoring.\n"
+        "---\n\n"
+        "# Probe\n\n"
+        "```bash\npython3 scripts/validate.py --check\n```\n\n"
+        "And inline as `scripts/validate.py` too.\n",
+        encoding="utf-8",
+    )
+    found = [target for _rel, _lineno, target in _asset_citations(probe_plugin)]
+    assert found == ["scripts/validate.py"] * 3, found
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_asset_citations_resolve(plugin: str) -> None:
+    """Each resolves from the document it is written in — the same predicate
+    the file pass runs, so this is the sweep, not a second opinion."""
+    citations = _asset_citations(plugin)
     unresolved = [
         (rel, lineno, target)
         for rel, lineno, target in citations
@@ -2237,6 +2360,14 @@ def test_a_link_out_of_the_plugin_is_a_readme_privilege(plugin: str) -> None:
         f"{hops}README.md"
     ).is_file(), "the link resolves — it is the plugin boundary that rejects it"
     assert _link_dangles(f"{hops}README.md", "", deep, plugin)
+    # The privilege belongs to the plugin-root README, not to any file named
+    # README.md. Relaxing the test to `endswith` stayed green, and a skill
+    # growing its own README would then get permission to link at repo files
+    # an installed plugin cache does not carry.
+    assert (_plugin_root(plugin) / "skills" / "../../../README.md").is_file(), (
+        "again the target resolves; the boundary is what must reject it"
+    )
+    assert _link_dangles("../../../README.md", "", "skills/README.md", plugin)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -2630,6 +2761,16 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
     # that named the file is over. Same for a list that moves to a new item.
     assert _anchor_sites("see `SKILL.md`\n\n§Closed vocabularies.")[0].target is None
     assert _anchor_sites("- `SKILL.md`\n- §Closed vocabularies.")[0].target is None
+    # Nor is a run of prose, however innocuous.
+    assert _anchor_sites("see `SKILL.md` and then also read §Foo")[0].target is None
+    # And the *length* bound is load-bearing, not just the character class.
+    # Every other negative here is structural — a period, a blank line, a new
+    # list item, a word — so each is refused by the class whatever the window
+    # is, and widening the window changed nothing. Glue characters alone, past
+    # the bound, are what measure it: a `§` this far from the path is no
+    # longer bound to it.
+    assert _anchor_sites("see `SKILL.md`" + " " * 3 + "§Foo")[0].target == "SKILL.md"
+    assert _anchor_sites("see `SKILL.md`" + " " * 12 + "§Foo")[0].target is None
 
 
 def test_a_citation_inside_a_fence_is_still_a_citation() -> None:
