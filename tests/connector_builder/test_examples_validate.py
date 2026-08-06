@@ -78,6 +78,19 @@ def _errors(findings: list[dict]) -> list[dict]:
 _PROSE_FIELD_RE = re.compile(r"`(native|canonical):\s*(\"(?:[^\"\\]|\\.)*\")`")
 
 
+def _decode(raw: str) -> str | None:
+    """The field's text as JSON reads it, or None when JSON cannot read it.
+
+    A field shown in prose has to paste into a map verbatim, so text that is
+    not a JSON string literal (a lone `\\d` the author did not double) is a
+    prose defect the caller reports — not an exception out of the extractor.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
 def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
     """Templated type-map rules authored inline in connector skill prose.
 
@@ -87,11 +100,14 @@ def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
     capture feeding a bounded parameter position looks perfectly ordinary. A
     pair with no placeholder is left to review; when one wants covering, give
     it a direction and extend the classifier rather than guessing here.
+
+    A field whose text JSON cannot read comes back with a None value, and the
+    direction is None with it: the caller reports both as failures.
     """
     found: list[tuple[Path, int, str, dict]] = []
     for path in sorted(SKILLS_ROOT.rglob("*.md")):
         fields = [
-            (lineno, key, json.loads(raw))
+            (lineno, key, _decode(raw))
             for lineno, line in enumerate(
                 path.read_text(encoding="utf-8").splitlines(), 1
             )
@@ -101,6 +117,9 @@ def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
             if key_a == key_b or line_b - line_a > 1:
                 continue
             rule = {"match": "regex", key_a: val_a, key_b: val_b}
+            if val_a is None or val_b is None:
+                found.append((path, line_a, "unquotable", rule))
+                continue
             templated = [k for k in ("native", "canonical") if "${" in rule[k]]
             if len(templated) != 1:
                 continue
@@ -119,14 +138,21 @@ def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
     """
     rules = _prose_type_map_rules()
     by_direction = {direction for _, _, direction, _ in rules}
-    assert by_direction == {"read", "write"}, (
+    assert by_direction >= {"read", "write"}, (
         f"the prose extractor found {sorted(by_direction)} rules under "
         f"{SKILLS_ROOT} — a spec teaching both directions should yield both; "
         "the inline `native:`/`canonical:` shape it keys on has probably moved"
     )
 
-    failures: list[str] = []
+    failures: list[str] = [
+        f"{path.relative_to(REPO_ROOT)}:{lineno} shows a field JSON cannot "
+        f"read, so it does not paste into a map: {rule}"
+        for path, lineno, direction, rule in rules
+        if direction == "unquotable"
+    ]
     for path, lineno, direction, rule in rules:
+        if direction == "unquotable":
+            continue
         map_path = tmp_path / f"type-map-{direction}.json"
         map_path.write_text(json.dumps([rule]), encoding="utf-8")
         findings = validate_document(
