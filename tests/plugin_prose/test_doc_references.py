@@ -12,9 +12,10 @@ entries in the three per-plugin registries below, this suite is red.
 
 1. **The file exists.** Six citation forms carry it:
 
-   - `${CLAUDE_PLUGIN_ROOT}/skills/…/spec-x.md` — the absolute form the agent
-     frontmatter uses for required reading. It also names scripts an agent
-     runs, so the path universe is every file in the plugin, not only `.md`.
+   - `${CLAUDE_PLUGIN_ROOT}/skills/…/spec-x.md` — the absolute form, written
+     in a document's body: an agent's `## Required reading` list, or a fenced
+     command line. It also names scripts an agent runs, so the path universe
+     is every file in the plugin, not only `.md`.
    - `` `spec-x.md` `` / `` `references/io-contracts.md` `` — the bare
      backticked form used for cross-references between sibling specs. This is
      the dominant form, by a wide margin.
@@ -160,8 +161,10 @@ _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 # so excluding it would drop every `` `scripts/endpoint_id.py` `` in the tree —
 # and it refuses a start preceded by a path character, which is what keeps the
 # tail of a `${CLAUDE_PLUGIN_ROOT}/scripts/x.py` reference from being read a
-# second time as a bare citation, and keeps every interior position of a URL
-# out. The directory-segment charset carries `.`, so `.claude-plugin/
+# second time as a bare citation, and keeps a URL's path segments out, each
+# being preceded by a `/`. Only its path segments: a URL that puts a segment
+# after a `?`, `=` or `&` reopens the pattern, which no URL the prose writes
+# does. The directory-segment charset carries `.`, so `.claude-plugin/
 # plugin.json` is reachable and a `./`- or `../`-prefixed hop needs no separate
 # alternative.
 _BARE_ASSET_REF = re.compile(
@@ -277,11 +280,19 @@ _EXTERNAL_REFS: dict[str, set[str]] = {
     },
 }
 
-# Every citation form this suite extracts, and the extractor that finds it.
-# `anchor` has no single pattern — it is counted by what the anchor pass
-# actually graded — so it is named in `_FORMS` and absent here. A form missing
-# from the floors below would be unfloored and free to die silently, so
-# `_REPO_FLOORS` must name them all; `test_every_plugin_is_covered` checks that.
+# Every citation form this suite extracts *by a pattern of its own*, and the
+# pattern. `anchor` has no single pattern — it is counted by what the anchor
+# pass actually graded — so it is named in `_FORMS` and absent here. A form
+# missing from the floors below would be unfloored and free to die silently,
+# so `_REPO_FLOORS` must name every member of `_FORMS`;
+# `test_every_plugin_is_covered` checks that.
+#
+# `_scan_sites` emits one tag beyond these: `anchor_path`, the path half of a
+# citation that puts the anchor inside the backticks (`` `SKILL.md §Pipeline` ``),
+# which no pattern here sees. It is deliberately not a form — it has no
+# extractor of its own and no floor — and is pinned instead by
+# `test_dangling_anchor_path_half_is_flagged` plus the `anchor` floor, which
+# counts the citations that pass grades.
 _FORM_PATTERNS = {
     "plugin_root": _PLUGIN_ROOT_REF,
     "backticked": _BARE_REF,
@@ -318,12 +329,12 @@ _REPO_FLOORS: dict[str, int] = {
 }
 
 # Per plugin on top, so a form dying in one plugin cannot hide behind the
-# other's volume. A form is listed only where that plugin writes it often
-# enough for a floor to mean "the extractor works" rather than "this one
-# sentence still exists" — the connector plugin has a single markdown link and
-# the pipeline plugin a single unbackticked bare path, and flooring either
-# would turn a reworded sentence into a "your extractor is broken" failure.
-# Those two forms stay guarded repo-wide.
+# other's volume — subject to the same "enough sites to mean something" test as
+# above, which is why a form is listed only where that plugin writes it often.
+# The connector plugin has a single markdown link and the pipeline plugin a
+# single unbackticked bare path; flooring either would turn a reworded sentence
+# into a "your extractor is broken" failure, so those two stay guarded
+# repo-wide only.
 _FLOORS: dict[str, dict[str, int]] = {
     "analitiq-connector-builder": {
         "plugin_root": 10,
@@ -361,12 +372,17 @@ _DOCUMENT_FLOORS: dict[str, int] = {
 # Floors prove a form still matches *something*; sentinels prove the wiring an
 # agent depends on is still written down — a creator routed to its spec skill,
 # a classifier routed to the release table. A rename here is a review moment,
-# not a silent pass. Written at full plugin-relative depth even where the prose
-# cites the file more shortly: the check compares the *file* each side resolves
-# to. Where the prose writes a path at some depth, the sentinel is written at
-# another, so a comparison that rotted back into string equality would fail;
-# the `backticked` sentinels are bare basenames because that is the only way
-# that form is ever written.
+# not a silent pass. Each is written at whatever depth reads clearly, because
+# the check compares the *file* each side resolves to and not the string as
+# written: a citation rewritten at another depth routes to the same document
+# and must not fail. What pins that the comparison has not rotted back into
+# string equality is the `bare_path` sentinel, deliberately spelled at a depth
+# no prose uses and asserted to be so.
+# (An earlier note here said the `backticked` sentinels were bare basenames
+# "because that is the only way that form is ever written". They are bare
+# because that is how those two citations read. The form carries a directory
+# constantly — roughly a third of its sites — and the module docstring offers
+# one of those as its example.)
 #
 # `fixture` is a real file plus the opening words of a heading it carries (the
 # citation form the prose uses — `## Release version (`version`)` is cited as
@@ -405,7 +421,12 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             # The one link in either plugin that routes an agent rather than a
             # reader: a stream spec sending its author to the column spec.
             "link": "skills/endpoint-spec/spec-columns.md",
-            # The script six documents tell an agent to run for derived ids.
+            # The script this plugin's prose tells an agent to run whenever it
+            # needs a derived endpoint id — cited from several specs, an agent
+            # and a reference. No count here: this form is read by three
+            # different extractors depending on how each site spells it, so any
+            # number written down is a number under one reading, and the file's
+            # own rule is that counts live in failure messages, not in prose.
             "asset": "scripts/endpoint_id.py",
         },
         "fixture": (
@@ -483,10 +504,10 @@ def _ships(relative: str) -> bool:
 @cache
 def _plugin_paths(plugin: str) -> tuple[str, ...]:
     """Every file and directory the plugin ships, as plugin-root-relative posix
-    paths. Every file, not only `.md`: agent frontmatter cites the helper
-    scripts it runs by the same `${CLAUDE_PLUGIN_ROOT}/…` form, and a citation
-    of a deleted script starves an agent exactly as a citation of a deleted
-    spec does."""
+    paths. Every file, not only `.md`: agent prose cites the helper scripts it
+    runs by the same `${CLAUDE_PLUGIN_ROOT}/…` form, and a citation of a
+    deleted script starves an agent exactly as a citation of a deleted spec
+    does."""
     return _paths_under(_plugin_root(plugin))
 
 
@@ -516,11 +537,13 @@ def _relative_target(citing: str, target: str, plugin: str) -> Path | None:
     """Where a citation points when it is resolved the way a reader resolves
     one: from the directory of the document it is written in.
 
-    `None` for a path an installed plugin never carries, so that refusal is
-    stated once for every pass that resolves relatively. Stating it per pass is
-    not a hypothetical failure — the refusal was added to `_candidates` alone,
-    and the link pass went on resolving what the other two had stopped
-    resolving.
+    `None` for a path an installed plugin never carries, so the refusal
+    reaches every pass that hops through a citing document rather than being
+    restated at each. It is not stated only here — `_candidates` also refuses
+    at the top, which is what covers its nearest-ancestor walk — but it is
+    stated in one place per resolution *route*, and that is the invariant that
+    had failed: the refusal was added to `_candidates` alone, and the link
+    pass went on resolving what the other two had stopped resolving.
     """
     if not _ships(target):
         return None
@@ -546,7 +569,7 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
 
     The prose writes citations at whatever depth reads well from where it sits
     — `spec-tls.md`, `connector-spec-db/spec-type-maps.md`,
-    `skills/connector-builder/references/io-contracts.md` and directory
+    `skills/pipeline-builder/references/io-contracts.md` and directory
     citations like `skills/connector-spec-db/examples/` all appear, and every
     one is unambiguous to a reader. So resolve the way a reader does: a
     citation names anything it is a path suffix of. That deliberately does not
@@ -1321,6 +1344,12 @@ def _mention_disposition(rel: str, line: str, start: int, end: int) -> str | Non
         # this one cannot open. `_LINK_REF` drops scheme targets for that
         # reason, so without this the census would fail on the very link the
         # link pass deliberately declines to grade.
+        #
+        # Two branches because two URL shapes. `/` is in `_MD_MENTION`'s
+        # charset, so for an ordinary URL the mention begins *at* the `//` and
+        # carries the whole host and path — the first branch. Put a segment
+        # after a `?` or `=` and the mention begins after it instead, naming
+        # only the tail, and then the scheme is behind it — the second.
         return "external url"
     if _HEADING.match(line) and mention == Path(rel).name:
         # `# CLAUDE.md — analitiq-connector-builder`: the document naming
@@ -1692,7 +1721,10 @@ def test_every_mention_disposition_is_load_bearing() -> None:
         ),
         "glob": ("agents/x.md", "- every `spec-*.md` under it.", 9, 18),
         "bare filename": ("agents/x.md", "the rule in io-contracts.md, never a slug", 12, 27),
-        # `_MD_MENTION` starts after the `//`, so the span is the URL's tail.
+        # `/` is in `_MD_MENTION`'s charset, so the mention begins *at* the
+        # `//` and carries host and path together — which is what the first
+        # branch keys on. The span is read off the pattern below rather than
+        # counted out here.
         "external url": (
             "CLAUDE.md",
             "See [the ADR](https://github.com/analitiq-ai/x/blob/main/docs/adr.md).",
@@ -1729,6 +1761,17 @@ def test_every_mention_disposition_is_load_bearing() -> None:
     assert _SCHEME_BEFORE.search("See [the ADR](https://host/docs/")
     assert not _SCHEME_BEFORE.search("per contract:")
     assert not _SCHEME_BEFORE.search("see ADV-CTOR-004:")
+    # And the shape that reaches `_SCHEME_BEFORE` through
+    # `_mention_disposition` rather than through the `//` branch: a query
+    # string puts a character outside `_MD_MENTION`'s charset in front of the
+    # segment, so the mention names only the tail and the scheme is behind it.
+    query = "See https://host/x?path=docs/adr.md now"
+    tail = _MD_MENTION.search(query)
+    assert tail.group(0) == "docs/adr.md"
+    assert _mention_disposition("a.md", query, *tail.span()) == "external url"
+    # Both spans in the case table are read off the pattern, not counted out.
+    for rel, line, start, end in cases.values():
+        assert line[start:end] == _MD_MENTION.search(line[start:]).group(0), line
     # And every disposition still answers for a mention the census *needed* it
     # for. Counting mentions an extractor already read would let a disposition
     # look alive on prose the census never asks about.
