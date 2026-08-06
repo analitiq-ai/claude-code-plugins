@@ -431,38 +431,112 @@ _CROSS_BOUNDS: tuple[tuple[str, Callable[[int, int], bool], str], ...] = (
     ("max", int.__ge__, "<="),
 )
 
-#: Families carrying a cross-parameter bound — a param whose `min`/`max` names
-#: a sibling instead of a number. Derived, so a manifest that grows or drops
-#: one moves this set with it; today the decimal families are what it selects.
-CROSS_PARAM_FAMILY_NAMES: tuple[str, ...] = tuple(
-    name for name in FAMILY_NAMES
-    if any(
-        isinstance(param.get(key), str)
-        for param in FAMILIES[name].get("params") or ()
-        for key in ("min", "max")
-    )
-)
-
 #: A canonical argument that is a bare `${name}` placeholder and nothing else.
 _PLACEHOLDER_ARG_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
+#: Any `${name}` occurrence, wherever it sits inside an argument.
+_PLACEHOLDER_ANYWHERE_RE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}")
+
 #: Probe alphabet for an int parameter position: every value the int-range
-#: grammar can express (its builder tops out at two digits), one witness per
-#: longer digit-length so a wider quantifier is caught whatever its width, and
-#: the leading-zero forms the grammar forbids. A capture is interrogated by
-#: asking which of these it matches, so the alphabet decides what "this capture
-#: can render an inadmissible value" is able to see.
+#: grammar can express (its builder tops out at two digits), witnesses at
+#: several longer digit-lengths, and the leading-zero forms the grammar
+#: forbids. A capture is interrogated by asking which of these it matches, so
+#: the alphabet decides what "this capture can render an inadmissible value" is
+#: able to see.
 _INT_PROBE_VALUES: tuple[str, ...] = tuple(
     [str(v) for v in range(100)]
     + [digit * length for length in range(3, 7) for digit in ("1", "9")]
     + ["00", "01", "007"]
 )
 
+#: Witnesses no unit position admits — one per letter case an over-wide capture
+#: is written in, since a `[A-Z]+` and a `[a-z]+` capture each need a witness
+#: they match to be seen as reaching past the vocabulary.
+_NON_UNIT_PROBE_VALUES: tuple[str, ...] = ("NOTAUNIT", "notaunit")
+
+#: Probe alphabet for a unit parameter position: every unit any family allows,
+#: so a capture reaching a sibling family's unit is seen, plus the non-unit
+#: witnesses above.
+_UNIT_PROBE_VALUES: tuple[str, ...] = tuple(
+    sorted(
+        {
+            unit
+            for spec in FAMILIES.values()
+            for param in spec.get("params") or ()
+            if param["kind"] == "unit"
+            for unit in param["allowed"]
+        }
+        | set(_NON_UNIT_PROBE_VALUES)
+    )
+)
+
 
 def param_probe_values(param: dict[str, Any]) -> tuple[str, ...]:
-    """The probe alphabet for one parameter position, or empty when the kind
-    carries no cross-parameter relation worth interrogating a capture over."""
-    return _INT_PROBE_VALUES if param["kind"] == "int" else ()
+    """The probe alphabet for one parameter position.
+
+    Empty for a kind whose admissible values are not a vocabulary this can
+    enumerate — a timezone, where the manifest states an open pattern rather
+    than a member list, so no finite alphabet interrogates a capture usefully.
+    """
+    return {
+        "int": _INT_PROBE_VALUES,
+        "unit": _UNIT_PROBE_VALUES,
+    }.get(param["kind"], ())
+
+
+def _admissible_values(
+    param: dict[str, Any],
+    params: list[dict[str, Any]],
+    literals: dict[str, str] | None = None,
+) -> tuple[str, ...] | None:
+    """Everything one position admits, or None when that set is not finite.
+
+    None is what separates the two conclusions the probe alphabet supports. A
+    probe the capture matches and the position refuses always proves the rule
+    wrong. The converse — "matches no probe, so it renders nothing admissible"
+    — holds only where the alphabet contains the WHOLE admissible set, which an
+    unbounded int position (`FixedSizeBinary` byte_width) does not have.
+    """
+    kind = param["kind"]
+    if kind == "unit":
+        return tuple(param["allowed"])
+    if kind != "int":
+        return None
+    lo, hi = resolved_int_bounds(param, params, literals)
+    return None if hi is None else tuple(str(v) for v in range(lo, hi + 1))
+
+
+def _uncovered_admissible_values() -> list[str]:
+    """Admissible values of a finite position the probe alphabet misses.
+
+    Non-empty means the completeness `_admissible_values` relies on no longer
+    holds, so "matches no probe" would stop implying "renders nothing
+    admissible" and `validate_template_bounds` could refuse a sound rule.
+    """
+    uncovered: list[str] = []
+    for name in FAMILY_NAMES:
+        params: list[dict[str, Any]] = FAMILIES[name].get("params") or []
+        for param in params:
+            probes = set(param_probe_values(param))
+            if not probes:
+                continue
+            admissible = _admissible_values(param, params)
+            uncovered += [
+                f"{name}.{param['name']}={v}"
+                for v in admissible or ()
+                if v not in probes
+            ]
+    return uncovered
+
+
+_probe_gaps = _uncovered_admissible_values()
+if _probe_gaps:
+    raise RuntimeError(
+        f"the probe alphabet no longer covers every value a finite parameter "
+        f"position admits: {_probe_gaps[:8]}. The vendored grammar widened a "
+        "position beyond the alphabet — widen the probe values to match before "
+        "the bound check can be trusted."
+    )
 
 
 def _parse_args(value: str) -> tuple[dict[str, Any], list[str]] | None:
@@ -515,39 +589,55 @@ def _describe_bounds(lo: int, hi: int | None) -> str:
     return f"{lo}-{hi}" if hi is not None else f"{lo} or above"
 
 
+def _describe_position(
+    param: dict[str, Any],
+    params: list[dict[str, Any]],
+    literals: dict[str, str],
+) -> str:
+    """What one position admits, phrased for a diagnostic."""
+    if param["kind"] == "int":
+        return _describe_bounds(*resolved_int_bounds(param, params, literals))
+    return " or ".join(_admissible_values(param, params, literals) or ())
+
+
 def validate_template_bounds(
     value: str,
     capture_language: Callable[[str, tuple[str, ...]], frozenset[str] | None],
 ) -> None:
     """Reject a templated canonical whose captures can render a non-canonical.
 
-    `validate_cross_params` needs two literals. A templated canonical has at
-    most one, so the second value has to come from the thing that produces it:
-    the native matcher's named capture. `capture_language(name, probes)` answers
-    which of `probes` that capture can match (None when it cannot be read), and
-    two things follow from the answer:
+    A templated position carries no value of its own, so what it renders comes
+    from the thing that produces it: the native matcher's named capture.
+    `capture_language(name, probes)` answers which of `probes` that capture can
+    match (None when it cannot be read), and three things follow:
 
     - a **templated** position must not be able to render a value its own
-      position does not admit — where "admit" resolves a cross-parameter bound
-      against the literal sibling actually present, so `Decimal128(5, ${s})`
-      admits 0-5 and a `(?<s>\\d+)` capture is refused;
+      position does not admit — a `(?<n>\\d+)` feeding `FixedSizeBinary(${n})`
+      can render a byte width of 0, and where a cross-parameter bound applies
+      "admit" resolves it against the literal sibling actually present, so
+      `Decimal128(5, ${s})` admits 0-5;
+    - a templated position whose capture matches NOTHING the position admits
+      renders only inadmissible values, wherever the admissible set is finite
+      enough for the probe alphabet to hold all of it (`_admissible_values`);
     - a **literal** position whose bound names a TEMPLATED sibling must hold
       against every value that sibling can render — `Decimal128(${p}, 38)` is
       satisfiable only at `p == 38`, so a capture reaching any smaller
       precision is refused.
 
-    Deliberately left wide: when BOTH sides of the bound are placeholders the
-    position bounds are all this can use, so `Decimal128(${p}, ${s})` with each
-    capture inside its own family range passes even though `(1, 38)` is a
-    reachable pair. Deciding that needs the joint language of two captures over
-    one native string, which this does not compute.
+    Deliberately left wide:
 
-    Scope is the families carrying a cross-parameter bound; every other family
-    is fully decided by the per-position pattern. Raises ValueError on
-    violation.
+    - where a cross-parameter bound carries a placeholder on each side, every
+      capture is judged against its own position, so `Decimal128(${p}, ${s})`
+      passes even though `(1, 38)` is a reachable pair. Deciding it needs the
+      joint language of the captures over one native string, which this does
+      not compute;
+    - a position whose kind has no probe alphabet (a timezone, stated as an
+      open pattern) is not interrogated at all.
+
+    Raises ValueError on violation.
     """
     parsed = _parse_args(value)
-    if parsed is None or value.partition("(")[0].strip() not in CROSS_PARAM_FAMILY_NAMES:
+    if parsed is None:
         return
     spec, args = parsed
     params: list[dict[str, Any]] = spec["params"]
@@ -559,14 +649,32 @@ def validate_template_bounds(
         match = _PLACEHOLDER_ARG_RE.fullmatch(arg)
         if match:
             placeholders[param["name"]] = match.group(1)
+        elif _PLACEHOLDER_ANYWHERE_RE.search(arg):
+            # Neither a value to compare nor a capture to interrogate: what a
+            # concatenation renders is the product of its parts, which no
+            # single capture's language answers. Refused rather than filed
+            # under literals, where the digit guard would wave it through.
+            raise ValueError(
+                f"{value!r}: the {param['name']} position is {arg!r}; a "
+                "parameter position carrying a ${name} placeholder must be "
+                "that placeholder alone, so what it renders can be decided "
+                "from the capture feeding it"
+            )
         else:
             literals[param["name"]] = arg
 
     def _produced(param: dict[str, Any], admissible_only: bool) -> list[str] | None:
         """What the capture bound to `param` can render, in probe-alphabet order
         (so a diagnostic leads with the plainest witness), optionally narrowed
-        to the values that position admits on its own."""
+        to the values that position admits on its own.
+
+        None when nothing can be concluded — an unreadable capture, or a
+        position whose kind carries no probe alphabet to interrogate it with
+        (an empty answer there would read as "matches nothing", which is the
+        opposite of what an empty alphabet means)."""
         probes = param_probe_values(param)
+        if not probes:
+            return None
         rendered = capture_language(placeholders[param["name"]], probes)
         if rendered is None:
             return None
@@ -578,19 +686,31 @@ def validate_template_bounds(
 
     for param in params:
         name = param["name"]
+        if name not in placeholders and name not in literals:
+            continue  # an optional trailing position the canonical omits
         if name in placeholders:
             rendered = _produced(param, admissible_only=False)
             if rendered is None:
                 continue
             allowed = re.compile(_param_literal_pattern(param, params, literals))
             refused = [v for v in rendered if not allowed.fullmatch(v)]
+            admits = _describe_position(param, params, literals)
             if refused:
-                lo, hi = resolved_int_bounds(param, params, literals)
                 raise ValueError(
                     f"{value!r}: the ${{{placeholders[name]}}} capture can match "
                     f"{refused[:4]}, which the {name} position does not admit "
-                    f"({_describe_bounds(lo, hi)}); narrow the native's "
+                    f"({admits}); narrow the native's "
                     f"(?<{placeholders[name]}>…) capture to that range"
+                )
+            if not rendered and _admissible_values(param, params, literals):
+                # The alphabet holds every value a finite position admits, so
+                # an empty language means the capture can only ever render one
+                # the position refuses — whatever width it is. This is what
+                # carries a capture matching only widths past the last witness.
+                raise ValueError(
+                    f"{value!r}: the ${{{placeholders[name]}}} capture matches no "
+                    f"value the {name} position admits ({admits}); every native "
+                    f"it matches would render a canonical the contract refuses"
                 )
             continue
         own = literals[name]

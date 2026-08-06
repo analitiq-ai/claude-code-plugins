@@ -299,7 +299,10 @@ _SPECIMENS = {
     r"(?:does|do)\s+not\s+(?:check|validate|resolve|read\s+filter)":
         "the local validator does **not** resolve column names",
     r"\bnot\s+checked\b": "TLS coherence: not checked here.",
-    r"\bno\s+(?:check\b|backstop|validator\s+(?:checks|will))": "there is no backstop here",
+    # The qualifier slot is the point: the bare form let "no engine-side check"
+    # through, so the specimen carries a qualifier.
+    r"\bno\s+(?:[\w-]+\s+)?(?:checks?\b|backstop|validator\s+(?:checks|will))":
+        "there is no engine-side check here",
     r"\bunchecked\b": "that path is unchecked",
     r"spelling[-\s](?:checked|only)": "headers are spelling-checked",
     r"\bleading\s+token\b": "only the leading token counts",

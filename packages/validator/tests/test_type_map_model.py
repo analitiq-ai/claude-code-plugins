@@ -22,6 +22,21 @@ _P128 = r"[1-9]|[12]\d|3[0-8]"   # precision 1-38
 _S128 = r"\d|[12]\d|3[0-8]"      # scale 0-38
 
 
+def _units(family: str) -> str:
+    """Capture fragment admitting exactly the units `family` allows.
+
+    Read from the grammar rather than typed out: a unit capture reaching a
+    sibling family's unit is refused the same way an over-wide decimal capture
+    is, so these fixtures have to move with the vocabulary.
+    """
+    from analitiq.contracts.arrow_grammar import FAMILIES
+
+    param = next(
+        p for p in FAMILIES[family]["params"] if p["kind"] == "unit"
+    )
+    return "|".join(param["allowed"])
+
+
 @pytest.mark.parametrize("raw,expected", [
     ("varchar", "VARCHAR"),
     ("VARCHAR", "VARCHAR"),
@@ -88,7 +103,7 @@ def test_templated_canonical_covers_all_temporal_enums():
     # The parameter-aware dummies must accept every temporal enum family, not
     # just microsecond-based ones (Time32 is SECOND/MILLISECOND).
     for base in ("Time32", "Time64", "Timestamp", "Duration"):
-        _accepts(READ, [{"match": "regex", "native": r"X\((?<u>\w+)\)",
+        _accepts(READ, [{"match": "regex", "native": rf"X\((?<u>{_units(base)})\)",
                          "canonical": f"{base}(${{u}})"}])
 
 
@@ -141,7 +156,8 @@ def test_regex_must_compile():
 
 def test_placeholder_needs_matching_capture():
     _rejects(READ, [{"match": "regex", "native": "NUMERIC", "canonical": "Timestamp(${unit})"}])
-    _accepts(READ, [{"match": "regex", "native": r"TS\((?<unit>\w+)\)",
+    _accepts(READ, [{"match": "regex",
+                     "native": rf"TS\((?<unit>{_units('Timestamp')})\)",
                      "canonical": "Timestamp(${unit})"}])
 
 
@@ -277,6 +293,30 @@ def test_both_positions_templated_is_left_wide_on_purpose():
                      "canonical": "Decimal128(${p}, ${s})"}])
 
 
+def test_a_capture_wider_than_the_alphabet_is_still_refused():
+    """"Matches no probe" is a proof, not a gap.
+
+    The probe alphabet holds every value an in-scope position admits, so a
+    capture matching none of it renders nothing admissible however wide it is —
+    a `\\d{7,}` precision can only ever produce `Decimal128(1234567, 0)`.
+    """
+    _rejects(READ, [{"match": "regex", "native": r"N\((?<p>\d{7,})\)",
+                     "canonical": "Decimal128(${p}, 0)"}])
+    # Non-digit spellings land in the same place, for the same reason.
+    _rejects(READ, [{"match": "regex", "native": r"N\((?<p>0x[0-9A-F]+)\)",
+                     "canonical": "Decimal128(${p}, 0)"}])
+
+
+def test_a_placeholder_parameter_position_must_carry_nothing_else():
+    """A concatenated or literal-prefixed position renders the product of its
+    parts, which no single capture's language answers — so it is refused rather
+    than filed under literals, where the digit guard would wave it through."""
+    _rejects(READ, [{"match": "regex", "native": r"N\((?<a>\d)(?<b>\d)\)",
+                     "canonical": "Decimal128(${a}${b}, 0)"}])
+    _rejects(READ, [{"match": "regex", "native": r"N\((?<p>\d)\)",
+                     "canonical": "Decimal128(1${p}, 0)"}])
+
+
 def test_unreadable_capture_proves_nothing():
     """A capture the check cannot read must not be reported as refusable."""
     # A backreference to a group declared OUTSIDE the capture does not compile
@@ -287,14 +327,30 @@ def test_unreadable_capture_proves_nothing():
                      "canonical": "Decimal128(${p}, 0)"}])
 
 
-def test_non_cross_bound_families_are_not_capture_checked():
-    """Scope: only the families carrying a cross-parameter bound.
+def test_families_without_a_cross_bound_are_capture_checked_too():
+    """A cross-parameter bound is not what makes a position worth reading.
 
-    Every other family is fully decided by its per-position pattern, so a unit
-    capture is left alone whatever it can match.
+    Every position states what it admits; a capture that can reach past it
+    renders a non-canonical whether or not a sibling is involved. `Time64`
+    admits neither of `Time32`'s units, `FixedSizeBinary` admits no width of 0,
+    and a word-class capture reaches values no unit position admits at all.
     """
-    _accepts(READ, [{"match": "regex", "native": r"TS\((?<u>[A-Z]+)\)",
+    _rejects(READ, [{"match": "regex", "native": r"TS\((?<u>[A-Z]+)\)",
                      "canonical": "Timestamp(${u})"}])
+    _rejects(READ, [{"match": "regex",
+                     "native": rf"T\((?<u>{_units('Timestamp')})\)",
+                     "canonical": "Time64(${u})"}])
+    _rejects(READ, [{"match": "regex", "native": r"BINARY\((?<n>\d+)\)",
+                     "canonical": "FixedSizeBinary(${n})"}])
+    _accepts(READ, [{"match": "regex", "native": r"BINARY\((?<n>[1-9]\d*)\)",
+                     "canonical": "FixedSizeBinary(${n})"}])
+
+
+def test_a_position_with_no_probe_alphabet_stands():
+    """A timezone's admissible set is an open pattern the check cannot
+    enumerate, so a capture feeding one is not interrogated."""
+    _accepts(READ, [{"match": "regex", "native": r"TS\((?<z>[A-Z/a-z_]+)\)",
+                     "canonical": "Timestamp(SECOND, ${z})"}])
 
 
 @pytest.mark.parametrize("native,name,expected", [

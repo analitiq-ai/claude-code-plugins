@@ -1164,7 +1164,10 @@ CLAIM_TRIGGERS: tuple[str, ...] = (
     r"(?:never|nothing)\s+(?:checks?|checked|validates?|rejects?|proves?|enforces?|catch(?:es)?)",
     r"(?:does|do)\s+not\s+(?:check|validate|resolve|read\s+filter)",
     r"\bnot\s+checked\b",
-    r"\bno\s+(?:check\b|backstop|validator\s+(?:checks|will))",
+    # One qualifier is allowed between: "no engine-side check", "no second
+    # backstop" — the phrasing that reads as ordinary English and slipped the
+    # bare form.
+    r"\bno\s+(?:[\w-]+\s+)?(?:checks?\b|backstop|validator\s+(?:checks|will))",
     r"\bunchecked\b",
     r"spelling[-\s](?:checked|only)",
     r"\bleading\s+token\b",

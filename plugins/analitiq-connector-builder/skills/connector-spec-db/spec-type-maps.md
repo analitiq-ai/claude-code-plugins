@@ -99,8 +99,9 @@ only (ADV-TMAP-003): an unbacked write-side `${name}` surfaces first at
 DDL render — verify that half yourself.
 
 - Read map: placeholders in `canonical`, captures in `native` —
-  `native: "^NUMERIC\\((?<precision>[0-9]+),\\s*(?<scale>[0-9]+)\\)$"`,
-  `canonical: "Decimal128(${precision}, ${scale})"`.
+  `native: "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$"`,
+  `canonical: "Decimal128(${precision}, ${scale})"`. Each capture is bounded to
+  what its parameter position admits — ADV-TMAP-010 refuses the rule otherwise.
 - Write map: placeholders in `native`, captures in `canonical` —
   `canonical: "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$"`,
   `native: "NUMERIC(${p}, ${s})"`.
@@ -286,8 +287,8 @@ database-package concept (DDL rendering).
     leave it uncovered (visible hard-error, per the no-wildcard rule
     above); the bare/unparameterized native takes the fixed default.
     Bound the **scale** capture to its tier the way the precision capture
-    already is — an unbounded `\d+` renders decimals the contract refuses
-    (ADV-TMAP-010), and no engine-side check stands behind it.
+    already is — ADV-TMAP-010 refuses an unbounded `\d+` there, and its prose
+    states what bounding each capture separately still leaves reachable.
   - **Timestamp/time:** the native carries a fractional-second *digit
     count*, but Arrow's unit is a symbolic enum — so ladder the digit
     count to the smallest unit that holds it exactly: `(0)`→`SECOND`,

@@ -325,8 +325,8 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
             )
         # Last, because it presumes every `${name}` resolves to a real capture:
         # what the rule RENDERS must be a canonical whatever the native matches,
-        # which for a cross-parameter bound (Decimal scale <= precision) can
-        # only be decided by reading the captures the render draws from.
+        # and a templated position carries no value of its own — so the only
+        # thing that decides it is the capture the render draws from.
         validate_template_bounds(
             self.canonical,
             lambda name, probes: _capture_language(self.native, name, probes),

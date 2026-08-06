@@ -241,20 +241,68 @@ def test_unsatisfiable_resolved_bound_admits_nothing():
     assert not any(pattern.fullmatch(str(v)) for v in range(0, 40))
 
 
-def test_cross_param_families_are_derived_not_listed():
-    """Scope of the templated bound check comes from the manifest."""
-    assert set(arrow_grammar.CROSS_PARAM_FAMILY_NAMES) == {
-        name for name, spec in arrow_grammar.FAMILIES.items()
-        if any(isinstance(p.get(k), str)
-               for p in spec.get("params") or () for k in ("min", "max"))
+def test_every_parameterized_family_is_reached_by_the_bound_check():
+    """Scope comes from the manifest, not from a listed set of families.
+
+    Anything the grammar parameterizes is interrogated where its position has a
+    probe alphabet; nothing selects a subset of families by name.
+    """
+    reached = {
+        name
+        for name, spec in arrow_grammar.FAMILIES.items()
+        if any(
+            arrow_grammar.param_probe_values(param)
+            for param in spec.get("params") or ()
+        )
     }
-    assert arrow_grammar.CROSS_PARAM_FAMILY_NAMES  # non-vacuous
+    parameterized = {
+        name for name, spec in arrow_grammar.FAMILIES.items() if spec.get("params")
+    }
+    assert parameterized  # non-vacuous
+    assert reached == parameterized
 
 
-def test_template_bounds_ignore_a_family_without_a_cross_bound():
-    """A capture that can match anything is left alone outside the scope."""
+def test_template_bounds_reach_a_family_without_a_cross_bound():
+    """Scope is every position with a probe alphabet, not only the bounded ones.
+
+    A cross-parameter bound decides what a position admits; it is not what makes
+    the position worth interrogating. `Time64` admits neither `SECOND` nor
+    `MILLISECOND`, and a capture reaching them renders a non-canonical exactly
+    the way an over-wide decimal capture does.
+    """
+    with pytest.raises(ValueError, match="does not admit"):
+        arrow_grammar.validate_template_bounds(
+            "Time64(${u})", lambda name, probes: frozenset(probes))
+    with pytest.raises(ValueError, match="does not admit"):
+        arrow_grammar.validate_template_bounds(
+            "FixedSizeBinary(${n})", lambda name, probes: frozenset(probes))
+
+    fine = frozenset(
+        next(p for p in arrow_grammar.FAMILIES["Time64"]["params"]
+             if p["kind"] == "unit")["allowed"]
+    )
     arrow_grammar.validate_template_bounds(
-        "Timestamp(${u})", lambda name, probes: frozenset(probes))
+        "Time64(${u})", lambda name, probes: fine)
+
+
+def test_a_position_with_no_probe_alphabet_is_not_interrogated():
+    """A timezone's admissible set is an open pattern, so the capture stands."""
+    arrow_grammar.validate_template_bounds(
+        "Timestamp(SECOND, ${tz})", lambda name, probes: frozenset(probes))
+
+
+def test_an_unbounded_position_never_refuses_on_an_empty_language():
+    """The empty-language conclusion needs the whole admissible set in hand.
+
+    `FixedSizeBinary` byte_width has no ceiling, so a capture matching no probe
+    may still render something admissible — a width past the last witness. Only
+    the finite positions get that verdict.
+    """
+    arrow_grammar.validate_template_bounds(
+        "FixedSizeBinary(${n})", lambda name, probes: frozenset())
+    with pytest.raises(ValueError, match="matches no value"):
+        arrow_grammar.validate_template_bounds(
+            "Time64(${u})", lambda name, probes: frozenset())
 
 
 def test_template_bounds_skip_an_unreadable_capture():
@@ -266,15 +314,78 @@ def test_template_bounds_skip_an_unreadable_capture():
             "Decimal128(5, ${s})", lambda name, probes: frozenset(probes))
 
 
-def test_int_probe_alphabet_reaches_past_the_grammar_ceiling():
-    """The alphabet has to contain a witness for every quantifier width, or a
-    capture wider than the position would be reported as safe."""
+def test_a_capture_matching_no_probe_renders_nothing_admissible():
+    """An empty language is a decision, not an absence of one.
+
+    The alphabet holds every value an in-scope position admits, so a capture
+    matching none of it can only ever render a value the position refuses —
+    whatever width that capture is. Reporting it safe is how a `\\d{7,}`
+    capture used to pass.
+    """
+    with pytest.raises(ValueError, match="matches no value"):
+        arrow_grammar.validate_template_bounds(
+            "Decimal128(${p}, 0)", lambda name, probes: frozenset())
+
+
+def test_a_placeholder_position_must_carry_nothing_else():
+    """A concatenation has no single capture whose language answers for it."""
+    for canonical in ("Decimal128(${a}${b}, 0)", "Decimal128(1${p}, 0)"):
+        with pytest.raises(ValueError, match="must be that placeholder alone"):
+            arrow_grammar.validate_template_bounds(
+                canonical, lambda name, probes: frozenset(probes))
+
+
+def test_int_probe_alphabet_covers_every_admissible_value():
+    """The load-bearing property: completeness over the ADMISSIBLE side.
+
+    Reach past the ceiling is a convenience (it makes a diagnostic name a
+    plausible witness); what the check stands on is that no value an in-scope
+    position admits is missing from the alphabet. That is what makes "this
+    capture matches no probe" mean "it renders nothing admissible" rather than
+    "the alphabet was too narrow to see it".
+    """
     probes = arrow_grammar.param_probe_values(
         {"kind": "int", "min": 0, "max": 38, "name": "scale"})
-    widths = {len(p) for p in probes}
-    assert widths >= {1, 2, 3, 4, 5, 6}
+    assert set(probes) >= {str(v) for v in range(0, 77)}  # every decimal ceiling
     assert "00" in probes  # leading-zero spellings the grammar forbids
-    assert arrow_grammar.param_probe_values({"kind": "unit", "name": "u"}) == ()
+
+    units = arrow_grammar.param_probe_values({"kind": "unit", "name": "u"})
+    assert set(units) >= {
+        unit
+        for spec in arrow_grammar.FAMILIES.values()
+        for param in spec.get("params") or ()
+        if param["kind"] == "unit"
+        for unit in param["allowed"]
+    }
+    # …and a witness no unit position admits, or an over-wide capture (`[A-Z]+`)
+    # would look identical to one bounded to the family's own units.
+    assert set(units) > set(arrow_grammar._NON_UNIT_PROBE_VALUES)
+
+    # A timezone states an open pattern, not a member list; no finite alphabet
+    # interrogates a capture over it.
+    assert arrow_grammar.param_probe_values({"kind": "timezone", "name": "tz"}) == ()
+
+
+@pytest.mark.parametrize("widen", [
+    # A bounded int position pushed past the alphabet…
+    lambda param: {**param, "max": 500}
+    if param["kind"] == "int" and isinstance(param.get("max"), int) else param,
+    # …and a unit vocabulary the alphabet was built before.
+    lambda param: {**param, "allowed": [*param["allowed"], "FORTNIGHT"]}
+    if param["kind"] == "unit" else param,
+])
+def test_probe_alphabet_completeness_is_checked_against_the_manifest(monkeypatch, widen):
+    """A manifest widening a position past the alphabet must be caught at
+    import, not silently turn the bound check into a rubber stamp."""
+    assert arrow_grammar._uncovered_admissible_values() == []
+
+    widened = {
+        name: {**spec, "params": [widen(p) for p in spec["params"]]}
+        if spec.get("params") else spec
+        for name, spec in arrow_grammar.FAMILIES.items()
+    }
+    monkeypatch.setattr(arrow_grammar, "FAMILIES", widened)
+    assert arrow_grammar._uncovered_admissible_values()
 
 
 def test_unsupported_manifest_shapes_fail_loudly():
