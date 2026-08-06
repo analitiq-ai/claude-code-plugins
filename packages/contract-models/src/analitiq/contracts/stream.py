@@ -26,6 +26,7 @@ from analitiq.contracts.shared.common import (
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
+    BatchSize,
     NonEmptyStr,
     RetryErrorHandlingBase,
     StrictModel,
@@ -38,7 +39,6 @@ from analitiq.contracts.shared.common import (
 )
 from analitiq.contracts.shared.types import (
     UUID_PATTERN,
-    StrictInt,
     StrictNonNegativeInt,
     StrictPositiveInt,
 )
@@ -530,7 +530,7 @@ class Write(StrictModel):
 class Execution(StrictModel):
     """Per-stream destination execution override for pipeline runtime batching defaults."""
 
-    batch_size: Annotated[StrictInt, Field(ge=1, le=100_000)] | None = Field(
+    batch_size: BatchSize | None = Field(
         default=None,
         description="Override pipeline.runtime.batching.batch_size for this binding.",
     )

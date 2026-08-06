@@ -20,7 +20,7 @@ above is allowed. (Endpoint request slots additionally admit the binding
 forms `from_param` / `from_input`; the exactly-one-key rule there is
 ADV-ENDP-022 — see `connector-spec-api/spec-request-binding.md`.)
 
-<!-- PROBE: pagination-limit-literal-rejected -->
+<!-- PROBE: pagination-limit-literal-rejected, pagination-offset-step-literal-rejected, pagination-offset-step-bare-accepted, pagination-page-step-literal-rejected -->
 A slot may admit a narrower set. A numeric pagination slot (`limit.default`,
 `offset.increment_by`, `page.increment_by`) takes a bare positive integer or a
 shape the engine resolves per request — `literal` is refused there, because a

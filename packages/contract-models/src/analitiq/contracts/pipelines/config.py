@@ -31,6 +31,7 @@ from analitiq.contracts.shared.common import (
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
+    BatchSize,
     NonEmptyStr,
     RetryAttempts,
     RetryDelaySeconds,
@@ -209,9 +210,7 @@ class Logging(StrictModel):
 class Batching(StrictModel):
     """Pipeline-wide record batching defaults."""
 
-    batch_size: Annotated[StrictInt, Field(ge=1, le=100_000)] = Field(
-        default=100, description="Records per batch"
-    )
+    batch_size: BatchSize = Field(default=100, description="Records per batch")
 
 
 class ErrorHandling(RetryErrorHandlingBase):

@@ -272,6 +272,13 @@ _RETRY_ERROR_HANDLING_CONDITIONAL_RULES: dict[str, Any] = {
 RetryAttempts = Annotated[StrictInt, Field(ge=0, le=5)]
 RetryDelaySeconds = StrictNonNegativeInt
 
+# Records per batch, named once for the same reason. The stream-level field is
+# an OVERRIDE of the pipeline-level one, so the two have to admit the same set
+# of values or a document that is valid at the stream level describes a batch
+# size the pipeline default could never have taken. Spelling the bounds at each
+# site made that agreement a thing a human remembers.
+BatchSize = Annotated[StrictInt, Field(ge=1, le=100_000)]
+
 
 class RetryErrorHandlingBase(StrictModel):
     """Shared error-handling contract for the pipeline and stream blocks.
