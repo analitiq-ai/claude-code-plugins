@@ -202,6 +202,23 @@ on the ticket shapes; nothing fails on the pull-request phrasings, because no
 pattern separates them from a CI job whose runtime subject really is the pull
 request under check. That half is on the author.
 
+**A test may read marked text or a token. It may never judge a sentence.** If a
+check needs to decide what prose *means*, it does not belong in a test — state
+it as a rule in `.claude/rules/` and let a reader apply it. That covers regexes
+over English, curated phrase or vocabulary lists, and "the document must still
+say X" substring assertions. What a test may read instead is anything whose
+verdict comes from outside the prose: backticked identifiers, fenced blocks, a
+named heading, a generated-block marker, a name the contract owns, a path
+resolved against git or the filesystem. The authority is then the contract, git,
+a parser or a hash — never the test's own reading.
+
+Three reasons, all observed here rather than predicted. A phrase pin reddens the
+build when prose is *improved*, and the failure it prints asks the author to
+reword it back. It cannot read polarity: a document saying a shape is fine
+satisfies a substring check exactly as well as one forbidding it. And it rots
+faster than the prose it polices, because every rewording is a false positive
+while every reworded *falsehood* still passes.
+
 `.claude/rules/` holds the how-to-behave checklists this policy implies, tracked
 so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
 state and stays ignored). Read the one that matches what you are editing:

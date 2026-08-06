@@ -112,13 +112,12 @@ review surface and potential rot.
 - Failure-message fix-hints are part of the guard: a hint naming a file or
   section that no longer carries the fact is a defect. Repoint hints in the
   same commit that moves a fact.
-- **A guard reads marked text or a token, never a sentence.** Backticked
-  identifiers, fenced blocks, a named heading, a generated-block marker, a
-  contract-owned name — all decidable by a mechanism. An English phrase is not:
-  pinning one reddens the build when the prose is *improved*, and the remedy the
-  failure demands is to reword it back. It cannot read polarity either — a
-  document saying a dotted string is fine satisfies `"dotted string" in text`
-  exactly as well as one forbidding it.
+- **A guard reads marked text or a token, never a sentence.** The rule and its
+  reasons are in the root `CLAUDE.md` → "Authoring rules"; what it means here is
+  that a guard over plugin prose extracts backticked identifiers, fenced blocks,
+  a named heading or a generated-block marker, and hands the verdict to the
+  contract. If the check you want needs to read the English, it is a review
+  item, not a test — the section below names the ones this repo has.
 
 ## Does the document still TEACH it? That is yours, not CI's
 
