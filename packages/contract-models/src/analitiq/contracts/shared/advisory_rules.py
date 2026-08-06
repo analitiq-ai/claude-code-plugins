@@ -354,25 +354,32 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         prose="An assignment target's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither.",
         targets=("AssignmentTarget",), enforcer="_validate_container_shape",
     ),
-    AdvisoryRule(
-        id="ADV-STRM-011", kind="custom", resource="stream",
-        prose="conflict_keys is required for a connection-scope upsert destination and forbidden for a connector-scope or non-upsert destination.",
-        targets=("StreamDestination",), enforcer="_validate_write_conflict_keys",
-    ),
+    # ADV-STRM-011 ("conflict_keys required for a connection-scope upsert,
+    # forbidden otherwise") retired: the destination became an
+    # `endpoint_ref.scope`-tagged union whose database branch is itself
+    # `mode`-discriminated, so only `DatabaseConflictKeyedWrite` declares the
+    # field at all and it is required there. No validator enforces the rule
+    # because no shape can break it. Ids are stable identifiers in archived
+    # findings: do NOT reuse 011.
     AdvisoryRule(
         id="ADV-STRM-012", kind="custom", resource="stream",
         prose="A filter operator must belong to the source scope's vocabulary: the database operator set for a connection source, the API operator set for a connector source.",
         targets=("StreamSource",), enforcer="_validate_filter_operator_scope",
     ),
-    AdvisoryRule(
-        id="ADV-STRM-013", kind="custom", resource="stream",
-        prose="A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key.",
-        targets=("StreamDestination",), enforcer="_validate_db_write_mode",
-    ),
+    # ADV-STRM-013 ("a database destination's write.mode belongs to the closed
+    # database vocabulary; an API destination's mode is endpoint-declared")
+    # retired alongside 011: the database branch of the destination union types
+    # `mode` as a Literal over that vocabulary, and only the API branch leaves
+    # it open. Do NOT reuse 013.
     AdvisoryRule(
         id="ADV-STRM-014", kind="custom", resource="stream",
         prose="selected_columns, replication.tie_breaker_fields and database_pagination are database-source features: a connector-scope (API) source must not declare them.",
         targets=("StreamSource",), enforcer="_validate_database_only_read_features",
+    ),
+    AdvisoryRule(
+        id="ADV-STRM-015", kind="custom", resource="stream",
+        prose="A validation rule's field must resolve against the mapping's assignment targets: its first token names a declared target.path and each later token names a field declared under that target's properties.",
+        targets=("StreamMapping",), enforcer="_validate_rule_fields_resolve",
     ),
     # --- connector (ConnectionContractInput + connector document) -----------
     AdvisoryRule(

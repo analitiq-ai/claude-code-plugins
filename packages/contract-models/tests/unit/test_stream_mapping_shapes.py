@@ -1,4 +1,4 @@
-"""Guards for the mapping/destination shapes reshaped in the #108 release.
+"""Guards for the stream mapping and destination shapes.
 
 Each change exists to make a specific wrong document *unrepresentable* rather
 than merely wrong, so that is what gets pinned: not "the field has a new type",
@@ -6,15 +6,18 @@ but "the shape it replaced no longer validates". Every class below pairs the
 accept with the reject it was introduced for.
 
 Covered here: the token-array `get` path, the single-segment assignment target,
-the `kind`-discriminated assignment value, the database write-mode set, and the
-retirement of `Execution.max_concurrent_batches`. `WriteMode` itself and
-`PageSize.default` are pinned in test_endpoint_model.py, next to the models that
-own them; `Batching.max_concurrent_batches` in test_pipeline_runtime.py.
+the `kind`-discriminated assignment value, the database write-mode set and the
+disposition table it derives from, the scope-discriminated destination and its
+write shapes, the token-array validation-rule `field` and its resolution
+against the mapping's targets, and the retirement of
+`Execution.max_concurrent_batches`. `WriteMode` itself and `PageSize.default`
+are pinned in test_endpoint_model.py, next to the models that own them;
+`Batching.max_concurrent_batches` in test_pipeline_runtime.py.
 
 Several tests assert against the RENDERED JSON Schema, not just the model. That
-is deliberate — the discriminator and the shared constraints are contract
-commitments to external validators, and the model alone cannot show they
-survived rendering.
+is deliberate — the discriminators, the variant branches and the shared
+constraints are contract commitments to external validators, and the model
+alone cannot show they survived rendering.
 """
 from __future__ import annotations
 
@@ -23,6 +26,7 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -30,19 +34,30 @@ from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.shared.common import NonEmptyStr
 from analitiq.contracts.stream import (
+    ApiStreamDestination,
+    ApiWrite,
     AssignmentTarget,
     AssignmentValue,
     ConstantAssignmentValue,
+    DatabaseConflictKeyedWrite,
+    DatabaseKeylessWrite,
+    DatabaseStreamDestination,
+    DatabaseWrite,
     Execution,
     ExpressionAssignmentValue,
     GetExpression,
     PipeExpression,
     StreamDestination,
+    StreamInput,
     StreamMapping,
     _DB_WRITE_MODES,
 )
 
 _ASSIGNMENT_VALUE = TypeAdapter(AssignmentValue)
+# `StreamDestination` is a tagged union, not a model class, so both the runtime
+# and the published-schema graders go through one adapter.
+_DESTINATION = TypeAdapter(StreamDestination)
+_DESTINATION_SCHEMA = Draft202012Validator(_DESTINATION.json_schema())
 
 _DB_ENDPOINT_REF = {
     "scope": "connection",
@@ -325,14 +340,13 @@ class TestAssignmentValueKind:
 
 
 class TestDatabaseWriteModes:
-    """The SQL destination's mode set.
+    """The SQL destination's mode set, and the disposition table it derives from.
 
-    Its subset relationship to `endpoints.WriteMode` is enforced by a `raise
+    The table's agreement with `endpoints.WriteMode` is enforced by a `raise
     AssertionError` at import in `stream.py`. Asserting the same condition
     *inline* here would prove nothing — this module imports `stream`, so a
     violation is a collection error and the test never runs. It is pinned in a
-    subprocess instead
-    (`test_import_guard_rejects_a_mode_outside_the_universe` below).
+    subprocess instead (`test_import_guard_*` below).
     """
 
     def test_exact_members(self):
@@ -341,19 +355,51 @@ class TestDatabaseWriteModes:
         # be restated deliberately.
         assert _DB_WRITE_MODES == {"insert", "upsert", "truncate_insert"}
 
-    def test_import_guard_rejects_a_mode_outside_the_universe(self):
-        # Import `stream` fresh in a subprocess with `WriteMode` narrowed, so
-        # the guard runs against a violating vocabulary. In-process there is no
+    def test_the_vocabulary_is_derived_from_the_variants(self):
+        # `_DB_WRITE_MODES` is what the plugin doc generator renders into prose.
+        # If it were a hand-kept second list, prose could name a mode no
+        # destination accepts (or miss one it does), so pin that it is exactly
+        # the union of the two database write variants' declared modes.
+        declared = set()
+        for variant in get_args(get_args(DatabaseWrite)[0]):
+            declared |= set(get_args(variant.model_fields["mode"].annotation))
+        assert declared == _DB_WRITE_MODES
+
+    @pytest.mark.parametrize(
+        "label, mutation, expected",
+        [
+            (
+                "a new universe member nobody dispositioned",
+                'endpoints.WRITE_MODES = (*endpoints.WRITE_MODES, "merge")',
+                "undispositioned",
+            ),
+            (
+                "a disposition for a mode outside the universe",
+                'endpoints.WRITE_MODES = ("insert", "upsert")',
+                "unknown",
+            ),
+        ],
+        ids=["undispositioned-mode", "unknown-mode"],
+    )
+    def test_import_guard_forces_a_disposition(self, label, mutation, expected):
+        # Import `stream` fresh in a subprocess with `WRITE_MODES` mutated, so
+        # the guard runs against a diverged vocabulary. In-process there is no
         # way to reach it: `stream` is already imported by the time any test
         # body runs.
+        #
+        # Both directions matter, and they are different failures. A mode added
+        # to the universe with no disposition is the one the issue asks for:
+        # nobody decided whether the SQL write path implements it, and the build
+        # must stop until someone does. A disposition for a mode the universe
+        # dropped is the stale-copy direction.
         source = textwrap.dedent(
-            """
+            f"""
             import analitiq.contracts.endpoints as endpoints
-            endpoints.WRITE_MODES = ("insert",)
+            {mutation}
             try:
                 import analitiq.contracts.stream  # noqa: F401
             except AssertionError as exc:
-                assert "subset" in str(exc), exc
+                assert "{expected}" in str(exc), exc
                 print("GUARD_FIRED")
             """
         )
@@ -381,55 +427,144 @@ class TestDatabaseWriteModes:
             },
         )
         assert "GUARD_FIRED" in result.stdout, (
-            "the import-time subset guard in stream.py did not fire for a "
-            f"database mode outside WriteMode.\nstdout={result.stdout!r}\n"
-            f"stderr={result.stderr!r}"
+            "the import-time disposition guard in stream.py did not fire for "
+            f"{label}.\nstdout={result.stdout!r}\nstderr={result.stderr!r}"
         )
 
     def test_database_destination_accepts_truncate_insert(self):
-        dest = StreamDestination.model_validate(
+        dest = _DESTINATION.validate_python(
             {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "truncate_insert"}}
         )
         assert dest.write.mode == "truncate_insert"
 
-    def test_truncate_insert_forbids_conflict_keys(self):
-        # `conflict_keys` is an upsert concept; a full-refresh load has nothing
-        # to match on, so declaring one is a defect rather than a no-op.
-        #
-        # Match on the mode in the message, not just the leading sentence:
-        # `_validate_write_conflict_keys` runs BEFORE `_validate_db_write_mode`
-        # and short-circuits, so "only valid for a database upsert" is what any
-        # non-upsert mode produces — including a mode that is not in the
-        # vocabulary at all. The generic prefix passed for `mode: "banana"`.
-        #
-        # The mode-specific match still does not prove membership: the message
-        # interpolates the mode from the INPUT document, so it matches whenever
-        # the document says `truncate_insert`, valid or not — hence the
-        # explicit membership assertion below.
-        assert "truncate_insert" in _DB_WRITE_MODES
-        with pytest.raises(
-            ValidationError, match=r"write\.mode='truncate_insert' must not declare it"
-        ):
-            StreamDestination.model_validate(
-                {
-                    "endpoint_ref": _DB_ENDPOINT_REF,
-                    "write": {"mode": "truncate_insert", "conflict_keys": ["id"]},
-                }
-            )
-
     def test_unknown_database_mode_still_rejected(self):
-        with pytest.raises(ValidationError, match="not a valid database write mode"):
-            StreamDestination.model_validate(
+        with pytest.raises(ValidationError):
+            _DESTINATION.validate_python(
                 {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "overwrite"}}
             )
 
     def test_api_destination_mode_stays_endpoint_owned(self):
-        # Widening the vocabulary must not accidentally close the API side,
+        # Closing the database side must not accidentally close the API side,
         # whose mode is whatever key the selected endpoint declares.
-        dest = StreamDestination.model_validate(
+        dest = _DESTINATION.validate_python(
             {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}
         )
         assert dest.write.mode == "create_transfer"
+
+    def test_api_destination_mode_rejects_whitespace(self):
+        # `NonEmptyStr`, not `min_length=1`: an endpoint declares no operation
+        # named "   ", so a mode that is only whitespace names nothing.
+        with pytest.raises(ValidationError):
+            _DESTINATION.validate_python(
+                {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "   "}}
+            )
+
+
+class TestWriteShapesAreScopeDiscriminated:
+    """The illegal write/conflict_keys combinations must be UNREPRESENTABLE.
+
+    Rejecting them was the previous design: two `@model_validator`s plus four
+    hand-written `allOf` branches that had to be kept in lockstep with them by
+    hand. What replaces them is shape — a destination union tagged by
+    `endpoint_ref.scope`, whose database branch is itself `mode`-discriminated
+    — so the first thing pinned here is the ABSENCE of the field, not a
+    rejection message.
+
+    Every document is graded against the published JSON Schema as well as the
+    model: the two variants are what an external validator sees, and the model
+    alone cannot show they survived rendering.
+    """
+
+    def test_api_write_declares_no_conflict_keys_field(self):
+        # Not "optional and forbidden" — absent. A model that still declared the
+        # field and rejected it on the way in would pass every rejection test
+        # below while being exactly the design this replaced.
+        assert "conflict_keys" not in ApiWrite.model_fields
+
+    def test_keyless_database_write_declares_no_conflict_keys_field(self):
+        assert "conflict_keys" not in DatabaseKeylessWrite.model_fields
+
+    def test_conflict_keyed_database_write_requires_its_key_set(self):
+        assert DatabaseConflictKeyedWrite.model_fields["conflict_keys"].is_required()
+
+    def test_destination_variants_carry_no_conditional_rules(self):
+        # The four `allOf` branches were the hand-written mirror of the two
+        # deleted validators. A reader (and an external validator) should now
+        # find the rule in the variant shapes alone; a surviving branch would
+        # mean the refactor left the old mirror in place.
+        for variant in (DatabaseStreamDestination, ApiStreamDestination):
+            schema = variant.model_json_schema()
+            assert "allOf" not in schema, (
+                f"{variant.__name__} still carries conditional `allOf` branches; "
+                "the scope/mode split is supposed to have replaced them"
+            )
+
+    def test_published_destination_is_a_two_branch_oneof(self):
+        items = StreamInput.model_json_schema()["properties"]["destinations"]["items"]
+        assert {branch["$ref"] for branch in items["oneOf"]} == {
+            "#/$defs/DatabaseStreamDestination",
+            "#/$defs/ApiStreamDestination",
+        }
+
+    # (label, document) — every one must be rejected by model and schema alike.
+    REJECTED = [
+        ("db mode outside the vocabulary",
+         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "overwrite"}}),
+        ("api conflict_keys are endpoint-owned",
+         {"endpoint_ref": _API_ENDPOINT_REF,
+          "write": {"mode": "create", "conflict_keys": ["id"]}}),
+        ("db upsert without its conflict key set",
+         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "upsert"}}),
+        ("db upsert with an empty conflict key set",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "upsert", "conflict_keys": []}}),
+        ("insert with a conflict key set",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "insert", "conflict_keys": ["id"]}}),
+        ("truncate_insert with a conflict key set",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "truncate_insert", "conflict_keys": ["id"]}}),
+        ("api mode that is only whitespace",
+         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "   "}}),
+        ("a scope no branch declares",
+         {"endpoint_ref": {**_API_ENDPOINT_REF, "scope": "workspace"},
+          "write": {"mode": "create"}}),
+    ]
+
+    @pytest.mark.parametrize("label, doc", REJECTED, ids=[r[0] for r in REJECTED])
+    def test_model_and_published_schema_both_reject(self, label, doc):
+        assert not _DESTINATION_SCHEMA.is_valid(doc), (
+            f"published schema accepts a destination the model rejects ({label}); "
+            "one of the two branches is laxer than its model"
+        )
+        with pytest.raises(ValidationError):
+            _DESTINATION.validate_python(doc)
+
+    ACCEPTED = [
+        ("db insert", {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "insert"}}),
+        ("db upsert with keys",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "upsert", "conflict_keys": ["id"]}}),
+        ("db composite upsert key",
+         {"endpoint_ref": _DB_ENDPOINT_REF,
+          "write": {"mode": "upsert", "conflict_keys": ["org_id", "external_id"]}}),
+        ("db truncate_insert", {"endpoint_ref": _DB_ENDPOINT_REF,
+                                "write": {"mode": "truncate_insert"}}),
+        ("api endpoint-owned mode",
+         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}),
+        ("db insert with an execution override",
+         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "insert"},
+          "execution": {"batch_size": 1000}}),
+    ]
+
+    @pytest.mark.parametrize("label, doc", ACCEPTED, ids=[r[0] for r in ACCEPTED])
+    def test_model_and_published_schema_both_accept(self, label, doc):
+        # The other direction: a split that rejects too much is equally broken,
+        # and an over-tightened branch would otherwise look like a passing test.
+        assert _DESTINATION_SCHEMA.is_valid(doc), (
+            f"published schema rejects a valid destination ({label})"
+        )
+        _DESTINATION.validate_python(doc)
 
 
 class TestExecutionHasNoConcurrencyKnob:
@@ -444,69 +579,163 @@ class TestExecutionHasNoConcurrencyKnob:
             Execution.model_validate({"batch_size": 1000, "max_concurrent_batches": 3})
 
 
-class TestStreamDestinationSchemaMirror:
-    """`_STREAM_DESTINATION_SCHEMA_RULES` must reject what the validators reject.
+def _mapping(target: dict, rules: list[dict], extra_assignments: list[dict] = ()) -> dict:
+    """A one-assignment mapping carrying `rules`, plus any extra assignments."""
+    return {
+        "assignments": [
+            {
+                "target": target,
+                "value": {
+                    "kind": "expression",
+                    "expression": {"op": "get", "path": [target["path"]]},
+                },
+                "validate": {"rules": rules},
+            },
+            *extra_assignments,
+        ]
+    }
 
-    The four `allOf` branches in `stream.py` are a hand-written mirror of
-    `_validate_write_conflict_keys` and `_validate_db_write_mode`. A mirror's
-    characteristic failure is going laxer than what it mirrors, which no
-    model-only test can see — the same failure this release hit and fixed on
-    the `operations.write` side (see
-    tests/schemas/test_render_schemas.py::test_write_mode_conflict_keys_mirror_covers_every_mode).
 
-    #108 also CHANGED branch 4's meaning: "non-upsert" used to mean `insert`
-    and now also covers `truncate_insert`. Live surface, not legacy.
+_SCALAR_TARGET = {"path": "email", "arrow_type": "Utf8"}
+_OBJECT_TARGET = {
+    "path": "address",
+    "arrow_type": "Object",
+    "properties": {
+        "city": {"arrow_type": "Utf8"},
+        "geo": {
+            "arrow_type": "Object",
+            "properties": {"lat": {"arrow_type": "Float64"}},
+        },
+    },
+}
+_LIST_TARGET = {
+    "path": "lines",
+    "arrow_type": "List",
+    "items": {
+        "arrow_type": "Object",
+        "properties": {"sku": {"arrow_type": "Utf8"}},
+    },
+}
 
-    One case per branch, each asserted against BOTH validators, plus a
-    symmetric accept set so an over-tightened branch cannot pass as a
-    correct one.
+
+class TestValidationRuleField:
+    """`field` is a token array that must resolve against a declared target.
+
+    Two gaps closed at once, and they fail differently: the SHAPE (a dotted
+    string is no longer parseable, so the two conventions in this file cannot
+    contradict each other) and the REFERENCE (a rule naming nothing used to
+    validate nothing, silently — the failure mode a test must pin because
+    nothing else can see it).
     """
 
-    # (branch, document) — every one must be rejected by model and schema alike.
-    REJECTED = [
-        # 1: scope=connection ⇒ mode ∈ _DB_WRITE_MODES
-        ("db mode vocabulary",
-         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "overwrite"}}),
-        # 2: scope=connector ⇒ conflict_keys forbidden (endpoint-owned)
-        ("api conflict_keys forbidden",
-         {"endpoint_ref": _API_ENDPOINT_REF,
-          "write": {"mode": "create", "conflict_keys": ["id"]}}),
-        # 3: scope=connection + upsert ⇒ conflict_keys required, non-empty
-        ("db upsert requires conflict_keys",
-         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "upsert"}}),
-        # 4: scope=connection + non-upsert ⇒ conflict_keys forbidden.
-        #    `truncate_insert` is the member #108 added to this branch.
-        ("truncate_insert forbids conflict_keys",
-         {"endpoint_ref": _DB_ENDPOINT_REF,
-          "write": {"mode": "truncate_insert", "conflict_keys": ["id"]}}),
-    ]
-
-    @pytest.mark.parametrize("label, doc", REJECTED, ids=[r[0] for r in REJECTED])
-    def test_model_and_published_schema_both_reject(self, label, doc):
-        validator = Draft202012Validator(StreamDestination.model_json_schema())
-        assert not validator.is_valid(doc), (
-            f"published schema accepts a destination the model rejects ({label}); "
-            "the corresponding allOf branch in _STREAM_DESTINATION_SCHEMA_RULES "
-            "is missing or neutered"
+    def test_single_token_accepted(self):
+        mapping = StreamMapping.model_validate(
+            _mapping(_SCALAR_TARGET, [{"type": "required", "field": ["email"]}])
         )
+        assert mapping.assignments[0].validation.rules[0].field == ["email"]
+
+    def test_dotted_string_rejected(self):
+        # The old spelling. `AssignmentTarget.path` refuses a dotted path, so a
+        # dotted `field` would be a second, contradictory nesting convention in
+        # the same document.
         with pytest.raises(ValidationError):
-            StreamDestination.model_validate(doc)
+            StreamMapping.model_validate(
+                _mapping(_OBJECT_TARGET, [{"type": "required", "field": "address.city"}])
+            )
 
-    @pytest.mark.parametrize("label, doc", [
-        ("db insert", {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "insert"}}),
-        ("db upsert with keys",
-         {"endpoint_ref": _DB_ENDPOINT_REF,
-          "write": {"mode": "upsert", "conflict_keys": ["id"]}}),
-        ("db truncate_insert",
-         {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "truncate_insert"}}),
-        ("api endpoint-owned mode",
-         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}),
-    ], ids=lambda v: v if isinstance(v, str) else "")
-    def test_model_and_published_schema_both_accept(self, label, doc):
-        # The other direction: a mirror that rejects too much is equally broken,
-        # and an over-tightened branch would otherwise look like a passing test.
-        validator = Draft202012Validator(StreamDestination.model_json_schema())
-        assert validator.is_valid(doc), (
-            f"published schema rejects a valid destination ({label})"
+    def test_dotted_token_rejected(self):
+        # Same reasoning one level down: the tokens carry the target path's
+        # pattern, not the looser source-segment rule, so `["address.city"]` is
+        # not a way to smuggle the dotted spelling back in.
+        with pytest.raises(ValidationError):
+            StreamMapping.model_validate(
+                _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address.city"]}])
+            )
+
+    def test_empty_array_rejected(self):
+        with pytest.raises(ValidationError):
+            StreamMapping.model_validate(
+                _mapping(_SCALAR_TARGET, [{"type": "required", "field": []}])
+            )
+
+    def test_whitespace_token_rejected(self):
+        with pytest.raises(ValidationError):
+            StreamMapping.model_validate(
+                _mapping(_SCALAR_TARGET, [{"type": "required", "field": ["  "]}])
+            )
+
+    def test_nested_object_field_resolves(self):
+        mapping = StreamMapping.model_validate(
+            _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address", "city"]}])
         )
-        StreamDestination.model_validate(doc)
+        assert mapping.assignments[0].validation.rules[0].field == ["address", "city"]
+
+    def test_deeply_nested_object_field_resolves(self):
+        StreamMapping.model_validate(
+            _mapping(
+                _OBJECT_TARGET,
+                [{"type": "required", "field": ["address", "geo", "lat"]}],
+            )
+        )
+
+    def test_list_element_field_resolves(self):
+        # A `List` declares its element in `items`, so the element is stepped
+        # through transparently rather than named by a token of its own.
+        StreamMapping.model_validate(
+            _mapping(_LIST_TARGET, [{"type": "required", "field": ["lines", "sku"]}])
+        )
+
+    def test_rule_may_address_another_assignments_target(self):
+        # Rules are authored per assignment but grade the record the whole
+        # mapping builds, so the scope is the mapping, not the enclosing
+        # assignment.
+        StreamMapping.model_validate(
+            _mapping(
+                _SCALAR_TARGET,
+                [{"type": "required", "field": ["address", "city"]}],
+                extra_assignments=[
+                    {
+                        "target": _OBJECT_TARGET,
+                        "value": {
+                            "kind": "expression",
+                            "expression": {"op": "get", "path": ["address"]},
+                        },
+                    }
+                ],
+            )
+        )
+
+    def test_undeclared_target_rejected(self):
+        # THE silent wrong answer: a typo named no mapped output, so the rule
+        # graded nothing and the document looked validated.
+        with pytest.raises(ValidationError, match="names no assignment target"):
+            StreamMapping.model_validate(
+                _mapping(_SCALAR_TARGET, [{"type": "required", "field": ["emial"]}])
+            )
+
+    def test_undeclared_nested_field_rejected(self):
+        with pytest.raises(ValidationError, match="declares no field"):
+            StreamMapping.model_validate(
+                _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address", "zip"]}])
+            )
+
+    def test_descending_into_a_scalar_target_rejected(self):
+        # A scalar target declares no `properties`, so there is nothing beneath
+        # it to address — the rule is naming a field that cannot exist.
+        with pytest.raises(ValidationError, match="declares no field"):
+            StreamMapping.model_validate(
+                _mapping(_SCALAR_TARGET, [{"type": "required", "field": ["email", "domain"]}])
+            )
+
+    def test_published_schema_agrees_on_the_shape(self):
+        # The referential rule is a model validator (it needs sibling
+        # assignments, which JSON Schema cannot reach), but the SHAPE is a
+        # contract commitment to external validators.
+        validator = Draft202012Validator(StreamMapping.model_json_schema())
+        assert validator.is_valid(
+            _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address", "city"]}])
+        )
+        for bad in ("address.city", ["address.city"], [], ["  "]):
+            assert not validator.is_valid(
+                _mapping(_OBJECT_TARGET, [{"type": "required", "field": bad}])
+            ), f"published schema accepts field={bad!r}, which the model rejects"

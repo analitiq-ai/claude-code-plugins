@@ -12,8 +12,8 @@ block (`analitiq.contracts.stream.Validation`, whose members are
   "value": {"kind": "expression", "expression": {"op": "get", "path": ["email"]}},
   "validate": {
     "rules": [
-      {"type": "required", "field": "email"},
-      {"type": "pattern", "field": "email", "value": "^[^@]+@[^@]+$", "message": "Invalid email format."}
+      {"type": "required", "field": ["email"]},
+      {"type": "pattern", "field": ["email"], "value": "^[^@]+@[^@]+$", "message": "Invalid email format."}
     ],
     "error_handling": {
       "strategy": "dlq",
@@ -31,9 +31,9 @@ carry a rule from one family into the other, and never expect this block to
 validate connection inputs.
 
 Validation runs on assignment **output**: the rules see the value the assignment
-produced, after any `pipe`/`fn` conversion, and before the destination write. A
-rule that names a source field name rather than the mapped output path is
-therefore checking nothing.
+produced, after any `pipe`/`fn` conversion, and before the destination write. So
+a rule addresses the mapped output path, never the source field name it was read
+from — where the two differ, naming the source is the mistake to watch for.
 
 ## `rules[]`
 
@@ -43,7 +43,7 @@ therefore checking nothing.
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
 | `type` | **yes** | 'required' \| 'not_null' \| 'min_length' \| 'max_length' \| 'pattern' \| 'range' \| 'in_list' | — | — |
-| `field` | **yes** | string | — | `minLength=1` |
+| `field` | **yes** | array of string | — | `minItems=1`, `item pattern=^[^.]*[^.\s][^.]*$` |
 | `value` | no | any | `None` | — |
 | `message` | no | string \| null | `None` | — |
 
@@ -64,9 +64,10 @@ neither it nor the table states is what each member *means*:
 
 ### `rules[].field`
 
-Must match an `assignments[].target.path` in the same mapping — a `field` that
-resolves to no mapped output is a silent typo. Endpoint/field resolution happens
-server-side at save time.
+`ADV-STRM-015` settles how a `field` resolves: token array, first token a target
+declared anywhere in the same mapping, later tokens the nesting under it. Reach
+into an `Object` target with a further token (`["address", "city"]`), never a
+dotted string — the destination declares nesting with `arrow_type` + `properties`.
 
 ## `error_handling`
 

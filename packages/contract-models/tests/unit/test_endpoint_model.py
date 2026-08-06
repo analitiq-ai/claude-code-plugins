@@ -2491,10 +2491,11 @@ class TestWriteModeVocabulary:
     it should fail here and be re-stated deliberately rather than land as a
     silent widening.
 
-    `stream._DB_WRITE_MODES` is declared independently rather than derived from
-    this tuple — the two are different facts, and stream.py states why — but it
-    is BOUNDED by it: an import-time guard there refuses a database mode outside
-    this vocabulary.
+    `stream._DB_WRITE_MODES` is a different fact — which of these modes the SQL
+    write path implements — and stream.py states why the two are not aliased.
+    It is derived from a table that dispositions every member of this tuple, so
+    adding one here fails that table's import-time guard until someone decides
+    whether a database destination may select it.
     """
 
     def test_exact_members(self):

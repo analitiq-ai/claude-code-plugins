@@ -287,10 +287,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "count, uniqueness and trim constraints"
         ),
     ),
-    ProseObligation(model="StreamDestination", prose_hash="feac97f76b71", descriptive=True),
-    ProseObligation(model="StreamDestination", field="endpoint_ref", prose_hash="693d86d9a948", descriptive=True),
-    ProseObligation(model="StreamDestination", field="execution", prose_hash="ca92ad7c8970", descriptive=True),
-    ProseObligation(model="StreamDestination", field="write", prose_hash="b937c2092d5d", descriptive=True),
+    ProseObligation(model="DatabaseStreamDestination", prose_hash="07b2c0e27c4d", descriptive=True),
+    ProseObligation(model="DatabaseStreamDestination", field="endpoint_ref", prose_hash="693d86d9a948", descriptive=True),
+    ProseObligation(model="DatabaseStreamDestination", field="write", prose_hash="b937c2092d5d", descriptive=True),
+    ProseObligation(model="ApiStreamDestination", prose_hash="8073ad298700", descriptive=True),
+    ProseObligation(model="ApiStreamDestination", field="endpoint_ref", prose_hash="693d86d9a948", descriptive=True),
+    ProseObligation(model="ApiStreamDestination", field="write", prose_hash="b937c2092d5d", descriptive=True),
     ProseObligation(
         model="StreamInput",
         prose_hash="1834827e70c4",
@@ -331,26 +333,61 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(model="ValidationRule", prose_hash="abaa76935a9d", descriptive=True),
-    ProseObligation(model="ValidationRule", field="field", prose_hash="f38ba6bdad04", descriptive=True),
-    ProseObligation(model="ValidationRule", field="message", prose_hash="15b46cce1ca8", descriptive=True),
-    ProseObligation(model="Write", prose_hash="8f075808aa70", descriptive=True),
     ProseObligation(
-        model="Write", field="conflict_keys", rule_ids=("ADV-STRM-011",),
-        prose_hash="bda036fb8a1f",
+        model="ValidationRule", field="field", prose_hash="51e3c57eab3a",
+        rule_ids=("ADV-STRM-015",),
         structural=(
-            "`Field` length floors on the list and its items keep a "
-            "declared key set non-empty"
+            "a `Field` item pattern (`SINGLE_SEGMENT_PATH_PATTERN`) and a list "
+            "length floor carry the token-array shape; the rule carries the "
+            "resolution against the mapping's targets"
+        ),
+    ),
+    ProseObligation(model="ValidationRule", field="message", prose_hash="15b46cce1ca8", descriptive=True),
+    ProseObligation(
+        model="DatabaseKeylessWrite", prose_hash="b10ba6d08d8a",
+        structural=(
+            "the variant declares no `conflict_keys` field and is closed "
+            "(extra='forbid'), so the absence the docstring states is the shape"
         ),
     ),
     ProseObligation(
-        model="Write", field="mode", rule_ids=("ADV-STRM-013",),
-        prose_hash="a482446e1df1",
+        model="DatabaseKeylessWrite", field="mode", prose_hash="91877a23c37d",
+        structural="a `Literal` over the keyless database write modes",
+    ),
+    ProseObligation(
+        model="DatabaseConflictKeyedWrite", prose_hash="8cabbdd5c0ea",
+        descriptive=True,
+    ),
+    ProseObligation(
+        model="DatabaseConflictKeyedWrite", field="mode", prose_hash="27a3fe0f15f6",
+        structural="a `Literal` over the conflict-keyed database write modes",
+    ),
+    ProseObligation(
+        model="DatabaseConflictKeyedWrite", field="conflict_keys",
+        prose_hash="65fc9fa027df",
+        structural=(
+            "a required list of `NonEmptyStr` with a `Field` length floor: one "
+            "key set of field names, non-empty, and not a list of key sets"
+        ),
+    ),
+    ProseObligation(
+        model="ApiWrite", prose_hash="9fa299150c55",
+        structural=(
+            "the variant declares no `conflict_keys` field and is closed "
+            "(extra='forbid'), so the absence the docstring states is the shape"
+        ),
+    ),
+    ProseObligation(
+        model="ApiWrite", field="mode", prose_hash="9fce2604737e",
+        structural="`NonEmptyStr` carries the static constraint",
         waiver=(
             "cross-document: an API destination's mode names the selected "
             "endpoint's write-operation key, which lives on the endpoint "
             "document this one cannot see"
         ),
     ),
+    ProseObligation(model="_StreamDestinationBase", prose_hash="79a9457b1ac7", descriptive=True),
+    ProseObligation(model="_StreamDestinationBase", field="execution", prose_hash="ca92ad7c8970", descriptive=True),
     ProseObligation(model="_DatabasePaginationBase", prose_hash="f1a6f478c511", descriptive=True),
     ProseObligation(
         model="_DatabasePaginationBase", field="page_size",

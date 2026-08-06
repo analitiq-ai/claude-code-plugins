@@ -4,7 +4,9 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal, get_args
 from pydantic import (
     ConfigDict,
+    Discriminator,
     Field,
+    Tag,
     TypeAdapter,
     field_validator,
     model_validator,
@@ -497,36 +499,6 @@ class StreamSource(StrictModel):
 # ---------------------------------------------------------------------------
 
 
-class Write(StrictModel):
-    """Stream-selected write behavior for one destination."""
-
-    mode: str = Field(
-        ...,
-        min_length=1,
-        description=(
-            "Write mode. API destination (endpoint_ref.scope='connector'): the "
-            "selected endpoint's operations.write key. Database destination "
-            "(scope='connection'): a member of the closed database write-mode "
-            "vocabulary, enumerated by the StreamDestination conditional rule "
-            "that selects on that scope."
-        ),
-    )
-    conflict_keys: list[Annotated[str, Field(min_length=1)]] | None = Field(
-        default=None,
-        min_length=1,
-        description=(
-            "Database upsert conflict target — a single composite key set "
-            "(non-empty list of destination field names). Required for a "
-            "database (`scope=connection`) upsert; forbidden for an API "
-            "(`scope=connector`) destination, whose conflict key is "
-            "endpoint-owned (`operations.write.upsert.conflict_keys`). Presence "
-            "is enforced by `StreamDestination`, which knows the destination "
-            "scope. Multiple alternative key sets are out of scope until a "
-            "connector needs them."
-        ),
-    )
-
-
 class Execution(StrictModel):
     """Per-stream destination execution override for pipeline runtime batching defaults."""
 
@@ -536,170 +508,222 @@ class Execution(StrictModel):
     )
 
 
-# The write modes a database (connection-scope) destination may be asked to
-# perform — the subset of `endpoints.WriteMode` the SQL write path implements.
-# An API (connector-scope) destination's mode is the selected endpoint's
-# `operations.write` key, resolved at runtime, so it is not constrained here.
-# Enforced in pydantic by `_validate_db_write_mode` and mirrored into the
-# published schema by the first `allOf` branch below.
+# How the SQL write path dispositions every member of the write-mode UNIVERSE
+# (`endpoints.WriteMode`, which also keys an API endpoint's `operations.write`).
+# The two are separate facts and must not be aliased: a mode only an HTTP
+# provider can perform belongs in the universe without thereby becoming a legal
+# SQL destination mode. So this table is the decision, and every vocabulary
+# below is derived from it — a mode is never hand-listed twice.
 #
-# Deliberately NOT `frozenset(WRITE_MODES)`, though the two are equal today.
-# They are separate facts: `WriteMode` is the universe of modes a destination
-# may be asked for, and it also keys an API endpoint's `operations.write`, so a
-# mode that only an HTTP provider can perform (a provider-specific verb, say)
-# belongs there and must NOT thereby become a legal SQL destination mode.
-# Aliasing them would make adding one to either side widen both.
+# Each member says what a database destination declaring it must supply:
+#   API_ONLY       the SQL write path does not implement it; database
+#                  destinations cannot select it at all
+#   KEYLESS        the write matches no existing row, so it declares no key
+#   CONFLICT_KEYED the write matches existing rows on a stream-declared key set,
+#                  which it must therefore declare
 #
-# The subset assertion below catches the one direction that IS always wrong: a
-# database mode outside the universe. Same idiom as the `FilterOperator` guard
-# above — a divergence fails at import, not silently at runtime.
-_DB_WRITE_MODES: frozenset[str] = frozenset({"insert", "upsert", "truncate_insert"})
+# Adding a member to `endpoints.WriteMode` fails the equality guard below until
+# it is dispositioned here — the decision is forced, never defaulted. Same idiom
+# as the `FilterOperator` guard above: a divergence fails at import, not
+# silently at runtime.
+_API_ONLY = "api_only"
+_KEYLESS = "keyless"
+_CONFLICT_KEYED = "conflict_keyed"
+_DISPOSITIONS = frozenset({_API_ONLY, _KEYLESS, _CONFLICT_KEYED})
 
-if not _DB_WRITE_MODES <= set(WRITE_MODES):
-    raise AssertionError(
-        "_DB_WRITE_MODES must be a subset of endpoints.WriteMode; unknown: "
-        f"{sorted(_DB_WRITE_MODES - set(WRITE_MODES))}"
-    )
-
-# Declarative mirror of `_validate_write_conflict_keys` and
-# `_validate_db_write_mode`. The selecting field is a nested discriminator
-# (`endpoint_ref.scope`) and `write.mode` is an open string on a connector
-# destination, so this is stock if/then rather than a discriminated union:
-#   scope=connection           ⇒ write.mode ∈ _DB_WRITE_MODES
-#   scope=connector            ⇒ write.conflict_keys forbidden (null/absent)
-#   scope=connection, upsert   ⇒ write.conflict_keys required, non-empty array
-#   scope=connection, ¬upsert  ⇒ write.conflict_keys forbidden (null/absent)
-_STREAM_DESTINATION_SCHEMA_RULES: dict[str, Any] = {
-    "allOf": [
-        {
-            "if": {
-                "required": ["endpoint_ref"],
-                "properties": {
-                    "endpoint_ref": {
-                        "required": ["scope"],
-                        "properties": {"scope": {"const": "connection"}},
-                    }
-                },
-            },
-            "then": {
-                "properties": {
-                    "write": {"properties": {"mode": {"enum": sorted(_DB_WRITE_MODES)}}}
-                }
-            },
-        },
-        {
-            "if": {
-                "required": ["endpoint_ref"],
-                "properties": {
-                    "endpoint_ref": {
-                        "required": ["scope"],
-                        "properties": {"scope": {"const": "connector"}},
-                    }
-                },
-            },
-            "then": {"properties": {"write": {"properties": {"conflict_keys": {"type": "null"}}}}},
-        },
-        {
-            "if": {
-                "required": ["endpoint_ref", "write"],
-                "properties": {
-                    "endpoint_ref": {
-                        "required": ["scope"],
-                        "properties": {"scope": {"const": "connection"}},
-                    },
-                    "write": {"required": ["mode"], "properties": {"mode": {"const": "upsert"}}},
-                },
-            },
-            "then": {
-                "properties": {
-                    "write": {
-                        "required": ["conflict_keys"],
-                        "properties": {"conflict_keys": {"type": "array", "minItems": 1}},
-                    }
-                }
-            },
-        },
-        {
-            "if": {
-                "required": ["endpoint_ref"],
-                "properties": {
-                    "endpoint_ref": {
-                        "required": ["scope"],
-                        "properties": {"scope": {"const": "connection"}},
-                    },
-                    "write": {"properties": {"mode": {"not": {"const": "upsert"}}}},
-                },
-            },
-            "then": {"properties": {"write": {"properties": {"conflict_keys": {"type": "null"}}}}},
-        },
-    ],
+_SQL_WRITE_PATH_DISPOSITIONS: dict[str, str] = {
+    "insert": _KEYLESS,
+    "upsert": _CONFLICT_KEYED,
+    "truncate_insert": _KEYLESS,
 }
 
-
-class StreamDestination(StrictModel):
-    """Destination endpoint binding and stream-owned destination options."""
-
-    model_config = ConfigDict(
-        extra="forbid", json_schema_extra=_STREAM_DESTINATION_SCHEMA_RULES
+if not set(_SQL_WRITE_PATH_DISPOSITIONS.values()) <= _DISPOSITIONS:
+    raise AssertionError(
+        "unknown write-mode disposition(s): "
+        f"{sorted(set(_SQL_WRITE_PATH_DISPOSITIONS.values()) - _DISPOSITIONS)}; "
+        f"expected one of {sorted(_DISPOSITIONS)}"
     )
 
-    endpoint_ref: EndpointRef = Field(..., description="Structured endpoint reference.")
-    write: Write = Field(
-        ..., description="Stream-selected write behavior for this destination."
+if set(_SQL_WRITE_PATH_DISPOSITIONS) != set(WRITE_MODES):
+    raise AssertionError(
+        "_SQL_WRITE_PATH_DISPOSITIONS must disposition exactly "
+        "endpoints.WriteMode; undispositioned: "
+        f"{sorted(set(WRITE_MODES) - set(_SQL_WRITE_PATH_DISPOSITIONS))}, unknown: "
+        f"{sorted(set(_SQL_WRITE_PATH_DISPOSITIONS) - set(WRITE_MODES))}"
     )
+
+
+def _modes_dispositioned(disposition: str) -> tuple[str, ...]:
+    """The write modes carrying one disposition, in universe order."""
+    modes = tuple(
+        mode
+        for mode in WRITE_MODES
+        if _SQL_WRITE_PATH_DISPOSITIONS[mode] == disposition
+    )
+    if not modes:
+        # An empty tuple would make `Literal[modes]` a TypeError at import with
+        # no hint of the cause, and a database write variant with no mode is not
+        # a shape anything can author.
+        raise AssertionError(
+            f"no write mode is dispositioned {disposition!r}; the database write "
+            "variant it types would have an empty mode vocabulary"
+        )
+    return modes
+
+
+_KEYLESS_DB_WRITE_MODES = _modes_dispositioned(_KEYLESS)
+_CONFLICT_KEYED_DB_WRITE_MODES = _modes_dispositioned(_CONFLICT_KEYED)
+
+#: Every mode a database (connection-scope) destination may select: the
+#: universe minus what the SQL write path does not implement. Read by the
+#: pipeline plugin's doc generator to render the vocabulary into its prose.
+#: Derived from the same table as the variants, and pinned equal to what they
+#: declare — a mistyped disposition would drop a mode from both variants while
+#: leaving it here.
+_DB_WRITE_MODES: frozenset[str] = frozenset(
+    mode
+    for mode, disposition in _SQL_WRITE_PATH_DISPOSITIONS.items()
+    if disposition != _API_ONLY
+)
+
+
+class DatabaseKeylessWrite(StrictModel):
+    """A database write that matches no existing row, so it declares no key.
+
+    No `conflict_keys` field exists on this shape: a load that overwrites or
+    appends wholesale has nothing to match on, so the key is absent from the
+    type rather than rejected on the way in.
+    """
+
+    mode: Literal[_KEYLESS_DB_WRITE_MODES] = Field(  # type: ignore[valid-type]
+        ...,
+        description=(
+            "Database write mode for a load that matches no existing row."
+        ),
+    )
+
+
+class DatabaseConflictKeyedWrite(StrictModel):
+    """A database write that matches existing rows on a stream-declared key set."""
+
+    mode: Literal[_CONFLICT_KEYED_DB_WRITE_MODES] = Field(  # type: ignore[valid-type]
+        ...,
+        description=(
+            "Database write mode for a load that matches existing rows on the "
+            "declared conflict key set."
+        ),
+    )
+    conflict_keys: list[NonEmptyStr] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Conflict target — a single composite key set of destination field "
+            "names. Multiple alternative key sets are out of scope until a "
+            "connector needs them."
+        ),
+    )
+
+
+# `mode`-discriminated union: the conflict-keyed variant declares its key set
+# and the keyless variant has no field to declare one in. What used to be a
+# cross-field rule ("conflict_keys iff upsert") is now the shape itself, in the
+# model and in the published `oneOf` alike.
+DatabaseWrite = Annotated[
+    DatabaseKeylessWrite | DatabaseConflictKeyedWrite,
+    Field(discriminator="mode"),
+]
+
+
+class ApiWrite(StrictModel):
+    """Stream-selected write behavior for an API (connector-scope) destination.
+
+    Carries no `conflict_keys`: an API upsert's conflict target is
+    endpoint-owned (`operations.write.upsert.conflict_keys`), so there is no
+    stream-authored key to declare.
+    """
+
+    mode: NonEmptyStr = Field(
+        ...,
+        description=(
+            "Write mode — the selected endpoint's `operations.write` key. "
+            "Endpoint-declared, so no contract enum can enumerate it."
+        ),
+    )
+
+
+class _StreamDestinationBase(StrictModel):
+    """Fields shared by the destination variants; `endpoint_ref.scope` selects
+    the variant."""
+
     execution: Execution | None = Field(
         default=None,
         description="Stream-level destination execution override.",
     )
 
-    @model_validator(mode="after")
-    def _validate_write_conflict_keys(self) -> "StreamDestination":
-        # Who owns the upsert conflict key differs by destination type, and the
-        # type is the endpoint scope: `connector` is an API endpoint (the key is
-        # provider-defined and declared on the endpoint —
-        # `operations.write.upsert.conflict_keys`), `connection` is a database
-        # endpoint (the key is the stream-selected `primary_keys` subset). So an
-        # API destination must NOT carry stream-authored conflict_keys, and a
-        # database upsert MUST. Spec: §Write Selection.
-        if self.endpoint_ref.scope == "connector":
-            if self.write.conflict_keys is not None:
-                raise ValueError(
-                    "destinations[].write.conflict_keys must not be set for an API "
-                    "destination (endpoint_ref.scope='connector'); the upsert conflict "
-                    "key is endpoint-owned (operations.write.upsert.conflict_keys)"
-                )
-        elif self.write.mode == "upsert":
-            if not self.write.conflict_keys:
-                raise ValueError(
-                    "destinations[].write.conflict_keys is required for a database upsert "
-                    "(endpoint_ref.scope='connection', write.mode='upsert')"
-                )
-        elif self.write.conflict_keys is not None:
-            # conflict_keys are an upsert concept; a non-upsert database mode
-            # must not carry them.
-            raise ValueError(
-                "destinations[].write.conflict_keys is only valid for a database upsert "
-                f"(endpoint_ref.scope='connection', write.mode='upsert'); write.mode="
-                f"{self.write.mode!r} must not declare it"
-            )
-        return self
 
-    @model_validator(mode="after")
-    def _validate_db_write_mode(self) -> "StreamDestination":
-        # A database destination's write-mode vocabulary is closed to
-        # `_DB_WRITE_MODES`. An API destination's mode is the selected
-        # endpoint's `operations.write` key (endpoint-owned, resolved at
-        # runtime), so it is not constrained here. Spec: §Write Selection.
-        if (
-            self.endpoint_ref.scope == SCOPE_CONNECTION
-            and self.write.mode not in _DB_WRITE_MODES
-        ):
-            raise ValueError(
-                f"destinations[].write.mode {self.write.mode!r} is not a valid "
-                f"database write mode (allowed: {sorted(_DB_WRITE_MODES)}); an API "
-                "destination's mode is the selected endpoint's operations.write key"
-            )
-        return self
+class DatabaseStreamDestination(_StreamDestinationBase):
+    """A destination bound to a connection-scope (database) endpoint."""
+
+    endpoint_ref: ConnectionEndpointRef = Field(
+        ..., description="Structured endpoint reference."
+    )
+    write: DatabaseWrite = Field(
+        ..., description="Stream-selected write behavior for this destination."
+    )
+
+
+class ApiStreamDestination(_StreamDestinationBase):
+    """A destination bound to a connector-scope (API) endpoint."""
+
+    endpoint_ref: ConnectorEndpointRef = Field(
+        ..., description="Structured endpoint reference."
+    )
+    write: ApiWrite = Field(
+        ..., description="Stream-selected write behavior for this destination."
+    )
+
+
+def _destination_scope(value: Any) -> str | None:
+    """Tag a destination by its endpoint ref's scope — the discriminator.
+
+    The selecting field is nested (`endpoint_ref.scope`), which a plain field
+    discriminator cannot reach, so the tag is read by this callable instead. A
+    ref that declares no scope returns None and fails at the union with
+    `union_tag_not_found`, exactly as a missing top-level discriminator would.
+    """
+    ref = (
+        value.get("endpoint_ref")
+        if isinstance(value, dict)
+        else getattr(value, "endpoint_ref", None)
+    )
+    if isinstance(ref, dict):
+        return ref.get("scope")
+    return getattr(ref, "scope", None)
+
+
+# Destination binding as a `endpoint_ref.scope`-tagged union. Which write shapes
+# are legal is a function of the destination's scope — an API destination's mode
+# is endpoint-declared and its conflict target endpoint-owned, a database
+# destination's mode is the closed SQL vocabulary and its conflict key
+# stream-declared — so the scope selects the whole destination shape rather than
+# being cross-checked against it afterwards. The published JSON Schema renders a
+# `oneOf` over the two closed variants; because each variant's `endpoint_ref`
+# pins `scope` to a `const`, exactly one branch can ever match, so an external
+# validator rejects precisely what this model does.
+StreamDestination = Annotated[
+    Annotated[DatabaseStreamDestination, Tag(SCOPE_CONNECTION)]
+    | Annotated[ApiStreamDestination, Tag(SCOPE_CONNECTOR)],
+    Discriminator(_destination_scope),
+]
+
+_STREAM_DESTINATION_ADAPTER = TypeAdapter(StreamDestination)
+
+
+def validate_stream_destination(
+    data: Any,
+) -> DatabaseStreamDestination | ApiStreamDestination:
+    """Validate a raw destination dict into its concrete scope variant."""
+    return _STREAM_DESTINATION_ADAPTER.validate_python(data)
 
 
 # ---------------------------------------------------------------------------
@@ -1121,8 +1145,21 @@ class ValidationRule(StrictModel):
     type: Literal[
         "required", "not_null", "min_length", "max_length", "pattern", "range", "in_list"
     ] = Field(...)
-    field: str = Field(
-        ..., min_length=1, description="Mapped output field path validated by this rule."
+    field: list[Annotated[str, Field(pattern=SINGLE_SEGMENT_PATH_PATTERN)]] = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Mapped output field addressed by this rule, as an ordered token "
+            "array — one entry per path segment, outermost first, spelled like "
+            "a source `get` path. The first token names an "
+            "`assignments[].target.path` declared in the same mapping; each "
+            "later token names a field declared under that target's "
+            "`properties` (descending through `items` for a `List`), so a rule "
+            "can address a field nested inside an `Object` target. A token "
+            "containing `.` is rejected: nesting is a further token, never a "
+            "dotted string."
+        ),
+        examples=[["email"], ["address", "city"]],
     )
     value: Any = Field(
         default=None,
@@ -1185,6 +1222,22 @@ class Assignment(StrictModel):
     )
 
 
+def _declared_child(
+    node: AssignmentTarget | ArrowFieldSpec, token: str
+) -> ArrowFieldSpec | None:
+    """The field `token` names under `node`, or None when `node` declares none.
+
+    A `List` node declares its element shape in `items` rather than naming it,
+    so the element is stepped through transparently: a rule on a list of
+    objects addresses the object's fields. `enforce_container_shape` keeps
+    `properties` and `items` mutually exclusive, so the walk is unambiguous;
+    the loop is bounded by the (finite) declared nesting depth.
+    """
+    while node.properties is None and node.items is not None:
+        node = node.items
+    return (node.properties or {}).get(token)
+
+
 class StreamMapping(AdvisoryValidated, StrictModel):
     """Source-to-destination assignment rules. Optional — omit for default mapping."""
 
@@ -1192,6 +1245,45 @@ class StreamMapping(AdvisoryValidated, StrictModel):
         default_factory=list,
         description="Ordered list of field assignments. Order is significant.",
     )
+
+    @model_validator(mode="after")
+    def _validate_rule_fields_resolve(self) -> "StreamMapping":
+        # A validation rule grades the MAPPED OUTPUT, so its `field` addresses a
+        # target this mapping declares — and only this model has both the
+        # assignments and their validation blocks in scope. Unchecked, a typo
+        # named nothing and the rule silently graded no value at all, which
+        # reads exactly like a passing rule. Any target in the mapping is
+        # addressable, not just the enclosing assignment's: rules are authored
+        # per assignment but grade the record the assignments build together.
+        declared = {a.target.path: a.target for a in self.assignments}
+        for i, assignment in enumerate(self.assignments):
+            if assignment.validation is None:
+                continue
+            for j, rule in enumerate(assignment.validation.rules):
+                where = f"assignments[{i}].validate.rules[{j}].field"
+                head, *rest = rule.field
+                node: AssignmentTarget | ArrowFieldSpec | None = declared.get(head)
+                if node is None:
+                    raise ValueError(
+                        f"{where} {rule.field!r} names no assignment target: "
+                        f"{head!r} is not a declared assignments[].target.path "
+                        f"(declared: {sorted(declared)})"
+                    )
+                walked = [head]
+                for token in rest:
+                    child = _declared_child(node, token)
+                    if child is None:
+                        # Report the prefix as tokens, not joined by a dot: this
+                        # contract spells nesting one token at a time, and an
+                        # error message is a place authors copy from.
+                        raise ValueError(
+                            f"{where} {rule.field!r} does not resolve: "
+                            f"{walked!r} declares no field {token!r} under its "
+                            "`properties`"
+                        )
+                    node = child
+                    walked.append(token)
+        return self
 
 
 # ---------------------------------------------------------------------------
