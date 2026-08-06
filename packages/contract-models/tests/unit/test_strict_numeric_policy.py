@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -319,20 +320,107 @@ def _emit_class(items: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _numeric_fields(node: Any, defs: dict[str, Any], depth: int = 0) -> bool:
-    """True when a property's schema admits ``integer``/``number``."""
+#: Keywords under which a schema declares the shape of a COLLECTION's members,
+#: paired with how to build a one-member collection of that shape. A number
+#: reached through one of these is not the property itself, so the bad spelling
+#: goes into a member and the member goes into the container.
+_COLLECTION_KEYWORDS: dict[str, Callable[[Any], Any]] = {
+    "items": lambda member: [member],
+    "prefixItems": lambda member: [member],
+    "additionalProperties": lambda member: {"a": member},
+    "patternProperties": lambda member: {"a": member},
+}
+
+
+def _member_schemas(node: dict[str, Any], keyword: str) -> list[Any]:
+    """The member schemas ``node`` declares under ``keyword``.
+
+    `patternProperties` maps regexes to schemas and `prefixItems` is a list;
+    the rest carry a single schema. A `True`/`False` member schema constrains
+    nothing and carries no number, so it is dropped.
+    """
+    declared = node.get(keyword)
+    if isinstance(declared, dict) and keyword == "patternProperties":
+        candidates = list(declared.values())
+    elif isinstance(declared, list):
+        candidates = declared
+    else:
+        candidates = [declared]
+    return [c for c in candidates if isinstance(c, dict)]
+
+
+def _numeric_fields(
+    node: Any, defs: dict[str, Any], depth: int = 0
+) -> tuple[str, Callable[[Any], Any] | None] | None:
+    """How a property's schema admits ``integer``/``number``, if it does.
+
+    Returns ``("scalar", None)`` when the property IS the number, so a bad
+    spelling goes straight into it; ``("nested", wrap)`` when the number lives
+    inside a collection the property declares (``list[int]``,
+    ``dict[str, int]``), where ``wrap`` builds a one-member collection around a
+    member value; ``None`` when there is no number here.
+
+    Both are swept. A collection member is reached by probing the member and
+    wrapping it — a guard that quietly ignored a shape it could not substitute
+    into would be the exact failure this file exists to prevent.
+
+    The walk stops at an object with ``properties``: that is another model's
+    shape, and models are swept in their own right from :func:`contract_classes`,
+    so descending would report every nested model's numbers a second time.
+    """
     if depth > _MAX_DEPTH:
-        return False
+        return None
     node = _resolve(node, defs)
     if not isinstance(node, dict):
-        return False
+        return None
     if node.get("type") in ("integer", "number"):
-        return True
-    return any(
-        _numeric_fields(branch, defs, depth + 1)
-        for keyword in ("anyOf", "oneOf", "allOf")
-        for branch in node.get(keyword, [])
-    )
+        return ("scalar", None)
+    if _is_objectish(node) and node.get("properties"):
+        return None
+    nested: tuple[str, Callable[[Any], Any] | None] | None = None
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        for branch in node.get(keyword, []):
+            found = _numeric_fields(branch, defs, depth + 1)
+            if found is None:
+                continue
+            if found[0] == "scalar":
+                return found
+            nested = nested or found
+    for keyword, wrap in _COLLECTION_KEYWORDS.items():
+        for member in _member_schemas(node, keyword):
+            if _numeric_fields(member, defs, depth + 1) is not None:
+                return ("nested", wrap)
+    return nested
+
+
+def _numeric_leaf(node: Any, defs: dict[str, Any], depth: int = 0) -> Any:
+    """The sub-schema that IS the number, so a numeric value can be synthesised.
+
+    :func:`synthesise` takes the first satisfiable branch of a union, which for
+    a permissive member type (``str | int | float | bool``) is the string — the
+    one spelling that would make the probe vacuous. This picks the numeric
+    branch instead, so the bad spellings are derived from a number.
+    """
+    if depth > _MAX_DEPTH:
+        raise Unsynthesisable("nesting too deep")
+    node = _resolve(node, defs)
+    if not isinstance(node, dict):
+        raise Unsynthesisable(f"not a schema object: {node!r}")
+    if node.get("type") in ("integer", "number"):
+        return node
+    for keyword in ("anyOf", "oneOf", "allOf"):
+        for branch in node.get(keyword, []):
+            try:
+                return _numeric_leaf(branch, defs, depth + 1)
+            except Unsynthesisable:
+                continue
+    for keyword in _COLLECTION_KEYWORDS:
+        for member in _member_schemas(node, keyword):
+            try:
+                return _numeric_leaf(member, defs, depth + 1)
+            except Unsynthesisable:
+                continue
+    raise Unsynthesisable("no numeric branch")
 
 
 class Probe:
@@ -344,11 +432,18 @@ class Probe:
         self.defs = self.schema.get("$defs", {})
         self.properties = self.schema.get("properties") or {}
         self.validator = Draft202012Validator({**self.schema, "$defs": self.defs})
-        self.fields = [
-            name
+        reach = {
+            name: found
             for name, node in self.properties.items()
-            if _numeric_fields(node, self.defs)
-        ]
+            if (found := _numeric_fields(node, self.defs)) is not None
+        }
+        self.fields = list(reach)
+        # How to put a probe value into each field: a scalar goes in directly,
+        # a collection member is wrapped first. Both are swept; nothing is
+        # dropped for being a shape the substitution has to think about.
+        self.wrap: dict[str, Callable[[Any], Any]] = {
+            name: (wrap or (lambda member: member)) for name, (_how, wrap) in reach.items()
+        }
         self._candidates: list[dict[str, Any]] | None = None
 
     @property
@@ -377,13 +472,28 @@ class Probe:
             return False
         return True
 
+    def good(self, field: str) -> Any:
+        """A legal NUMERIC value for ``field``, at the depth the number lives."""
+        return synthesise(_numeric_leaf(self.properties[field], self.defs), self.defs)
+
     def reach(self, field: str) -> dict[str, Any] | None:
-        """A document both halves accept, carrying a legal value in ``field``."""
-        good = synthesise(self.properties[field], self.defs)
+        """A document both halves accept, carrying a legal value in ``field``.
+
+        A candidate is also tried stripped to its required properties. Some
+        models declare their operators as mutually exclusive alternatives
+        (`ConnectionConditionPredicate` permits exactly one of `eq`/`in`/…), so
+        the synthesised document already spends the single slot on a sibling
+        and adding the field under test makes the document illegal for a reason
+        that has nothing to do with the number in it.
+        """
+        good = self.wrap[field](self.good(field))
+        required = set(self.schema.get("required", ()))
         for candidate in self.documents():
-            document = {**candidate, field: good}
-            if self.accepts(document) and self.validator.is_valid(document):
-                return candidate
+            minimal = {k: v for k, v in candidate.items() if k in required}
+            for base in (candidate, minimal):
+                document = {**base, field: good}
+                if self.accepts(document) and self.validator.is_valid(document):
+                    return base
         return None
 
 
@@ -400,11 +510,12 @@ def _probes() -> list[Probe]:
     ]
 
 
-def _sweep() -> tuple[list[str], list[str], set[str]]:
-    """``(violations, unreached, reached_labels)`` over the whole contract tree."""
+def _sweep() -> tuple[list[str], list[str], set[str], list[str]]:
+    """``(violations, unreached, reached_labels, float_gap)`` over the tree."""
     violations: list[str] = []
     unreached: list[str] = []
     reached: set[str] = set()
+    float_gap: list[str] = []
     for probe in _probes():
         try:
             probe.documents()
@@ -422,22 +533,37 @@ def _sweep() -> tuple[list[str], list[str], set[str]]:
                 unreached.append(f"{site}: no document both halves accept")
                 continue
             reached.add(site)
-            good = synthesise(probe.properties[field], probe.defs)
+            good = probe.good(field)
+            wrap = probe.wrap[field]
             for spelling, bad in bad_spellings(good).items():
-                document = {**base, field: bad}
+                document = {**base, field: wrap(bad)}
                 if probe.accepts(document) and not probe.validator.is_valid(document):
                     violations.append(
                         f"{site}: model accepts {spelling} {bad!r}, schema rejects it "
                         f"(document {json.dumps(document)})"
                     )
-    return violations, unreached, reached
+            # The reverse direction, measured rather than listed: an integer
+            # field whose schema accepts the float spelling of its own legal
+            # value while `Strict()` refuses it.
+            if isinstance(good, int) and not isinstance(good, bool):
+                document = {**base, field: wrap(float(good))}
+                model_ok = probe.accepts(document)
+                schema_ok = probe.validator.is_valid(document)
+                if schema_ok and not model_ok:
+                    float_gap.append(site)
+                elif model_ok and not schema_ok:
+                    violations.append(
+                        f"{site}: model accepts float-spelled {float(good)!r}, "
+                        f"schema rejects it (document {json.dumps(document)})"
+                    )
+    return violations, unreached, reached, float_gap
 
 
 SWEEP = _sweep()
 
 
 def test_no_model_accepts_a_number_spelling_its_own_schema_rejects():
-    violations, _unreached, _reached = SWEEP
+    violations, _unreached, _reached, _gap = SWEEP
     assert not violations, (
         "the model is looser than its published schema at "
         f"{len(violations)} site(s). Annotate the field with a strict alias from "
@@ -452,7 +578,7 @@ def test_every_numeric_field_was_reached():
     # for is reported here rather than silently dropped — an unreached field is
     # an unchecked field, and the whole point of deriving the field set is that
     # it cannot go quiet.
-    _violations, unreached, _reached = SWEEP
+    _violations, unreached, _reached, _gap = SWEEP
     assert not unreached, (
         "the strict-numeric sweep could not reach these fields, so nothing "
         "checked them. Teach `synthesise`/`enum_choices` to build a document "
@@ -461,7 +587,7 @@ def test_every_numeric_field_was_reached():
 
 
 def test_the_sweep_reaches_fields_whose_model_has_required_siblings():
-    _violations, _unreached, reached = SWEEP
+    _violations, _unreached, reached, _gap = SWEEP
     missing = SITES_NEEDING_A_COMPLETE_DOCUMENT - reached
     assert not missing, (
         "the synthesiser stopped building documents complete enough to reach "
@@ -474,7 +600,7 @@ def test_the_sweep_finds_a_real_field_set():
     # A sweep over an empty field set passes vacuously. Pin that it is walking a
     # substantial part of the tree, so an import or introspection change that
     # empties it fails instead of going green.
-    _violations, _unreached, reached = SWEEP
+    _violations, _unreached, reached, _gap = SWEEP
     assert len(reached) >= MINIMUM_FIELDS_SWEPT, sorted(reached)
 
 

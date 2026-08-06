@@ -71,7 +71,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="OffsetCursor", field="increment_by",
-        prose_hash="8e66f40fff73",
+        prose_hash="63c56c5e53b4",
         structural="required, with no default (the leading ... sentinel)",
         waiver=(
             "which step value is correct (records-returned vs requested-window "

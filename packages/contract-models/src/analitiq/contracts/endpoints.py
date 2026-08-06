@@ -316,8 +316,10 @@ Expression = Annotated[
 ]
 
 
-# The expression forms admissible where the slot also accepts a bounded number
-# (`limit.default`, `limit.max`, `offset.increment_by`, `page.increment_by`).
+# The expression forms admissible on a slot that ALSO accepts a bounded number.
+# Which slots those are is not listed here — a field is one by carrying this
+# alias, and a slot that takes only the bare scalar (a provider fact such as
+# `PageSize.max`) carries `StrictPositiveInt` alone and admits no expression.
 #
 # `LiteralExpression` is excluded, and that exclusion is the whole point. Its
 # payload is `Any` and its documented purpose is to opt OUT of expression
@@ -329,7 +331,7 @@ Expression = Annotated[
 # and costs nothing an author needs: a statically-known page size IS the bare
 # integer spelling.
 #
-# The other three forms resolve at request time, so no bound can be checked
+# Every form that remains resolves at request time, so no bound can be checked
 # here and none is applied.
 NumericExpression = Annotated[
     Union[
@@ -488,7 +490,7 @@ class OffsetCursor(_EndpointModel):
             "families cannot be told apart from the document, so any default "
             "silently breaks one of them. A bare positive integer is a fixed "
             "step (`1` for page-index-style offsets). A value expression lets the "
-            "engine advance by a per-page value (analitiq-engine #346/#347): "
+            "engine advance by a per-page value: "
             "`{ref: response.record_count}` when `offset` counts records returned "
             "(resolved against that page's response); when it counts the requested "
             "window, step by the *effective* request limit — the page size "
@@ -772,9 +774,11 @@ if _union_tags(Expression) != frozenset(_EXPRESSION_KEYS):
     raise AssertionError(
         f"Expression Union members {sorted(_union_tags(Expression))!r} do not match "
         f"_EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r}")
-# `NumericExpression` is `Expression` minus exactly the unboundable form —
-# derived from the same tag list, so a new expression form joins the numeric
-# slots automatically and only the deliberate exclusion stays excluded.
+# `NumericExpression` is `Expression` minus exactly the unboundable form,
+# checked against the same tag list so the two cannot drift apart silently.
+# This is an equality, not a widening: adding an expression form FAILS this
+# import until `NumericExpression` is updated to carry it or the exclusion is
+# widened deliberately. Nothing joins the numeric slots by omission.
 if _union_tags(NumericExpression) != frozenset(_EXPRESSION_KEYS) - {
     _UNBOUNDABLE_EXPRESSION_KEY
 }:

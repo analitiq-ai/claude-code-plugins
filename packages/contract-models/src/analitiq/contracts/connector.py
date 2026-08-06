@@ -1362,17 +1362,6 @@ _HttpStatusFamily = Annotated[
     Field(json_schema_extra=_closed_true_end_keys),
 ]
 
-# A declared cap: positive integer, strictly typed. `strict=True` rejects the
-# bool/str/float coercions lax mode would accept, mirroring the engine parser's
-# explicit `isinstance(value, bool)` guard (bool is an int subclass in Python)
-# — the issue #89 grammar says "integer >= 1 (booleans rejected)" for every
-# cap field, unlike the contract's lax int fields (e.g. `write_unit.rows`).
-# Known one-way edge: JSON Schema's `type: integer` admits a zero-fraction
-# float (`8.0`) the strict model rejects — inexpressible to close in JSON
-# Schema, and the safe direction (the authoritative validator is stricter).
-_DeclaredCap = Annotated[int, Field(strict=True, ge=1)]
-
-
 class ErrorMap(StrictModel):
     """Driver-fact error classification map (capability block v2, issue #89).
 
@@ -1423,7 +1412,7 @@ class Concurrency(StrictModel):
     A declared cap is validated strictly (positive integer, booleans rejected).
     """
 
-    max_connections: _DeclaredCap | None = Field(
+    max_connections: StrictPositiveInt | None = Field(
         default=None,
         description=(
             "Maximum concurrent connections the engine may open to the target "
@@ -1442,7 +1431,7 @@ class SqlLimits(StrictModel):
     integers, booleans rejected) and are enforced by the engine.
     """
 
-    max_bind_params: _DeclaredCap | None = Field(
+    max_bind_params: StrictPositiveInt | None = Field(
         default=None,
         description=(
             "Maximum bind parameters per statement the driver accepts "
@@ -1450,7 +1439,7 @@ class SqlLimits(StrictModel):
             "declared cap."
         ),
     )
-    max_identifier_len: _DeclaredCap | None = Field(
+    max_identifier_len: StrictPositiveInt | None = Field(
         default=None,
         description=(
             "Maximum SQL identifier length in bytes (integer ≥ 1), e.g. 63 "
