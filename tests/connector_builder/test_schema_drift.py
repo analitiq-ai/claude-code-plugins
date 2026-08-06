@@ -1088,16 +1088,14 @@ EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
 # `spec-replication.md` and `spec-resource-discovery.md` each carry a sentence
-# closing its set — "the block carries X and Y, nothing else". Both used to be
-# graded here by locating the sentence with a hand-typed English anchor and
-# asserting a hand-typed closure phrase inside it. Neither half survived its
-# own terms: the anchor un-graded the case the moment anyone reworded the
-# sentence (the failure text asked for the old wording back), and the closure
-# phrase is a verdict about what the English means, which
-# `.claude/rules/validator-claims.md` bans. `.claude/rules/no-cardinality-restatements.md`
-# carries the obligation for a reader. What a mechanism can decide — the
-# contract's own member sets — is asserted below, so a member landing or
-# leaving still fails here and points at the sentence to reword.
+# closing its set — "the block carries X and Y, nothing else". Whether that
+# sentence still closes the set is a reader's call
+# (`.claude/rules/no-cardinality-restatements.md` §Closure claims): locating it
+# takes an English anchor, which stops matching when the sentence is reworded,
+# and grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
+# keeps out of tests. What a mechanism decides is the contract's own member
+# sets, asserted below — so a member landing or leaving fails here and names
+# the spec to reword.
 
 
 def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
@@ -1244,10 +1242,8 @@ def test_type_map_rule_keys_match_schema_and_prose() -> None:
             f"{rule.__name__} keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
         )
     # Whether the sentence above the table still CLOSES the set is a reader's
-    # call, per `.claude/rules/no-cardinality-restatements.md` — matching
-    # "no others" was a verdict about English, blind to a rewording that means
-    # the same thing and equally blind to one that means the opposite. The
-    # table it defers to is structural, so that half stays here.
+    # call, per `.claude/rules/no-cardinality-restatements.md`. The table it
+    # defers to is structural, so that half is decidable and stays here.
     cells = _table_cells_containing("match", TYPE_MAPS_SPEC)
     assert cells is not None, (
         f"no single table in {TYPE_MAPS_SPEC.relative_to(REPO_ROOT)} has a "

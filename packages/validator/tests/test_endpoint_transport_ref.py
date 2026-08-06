@@ -208,15 +208,13 @@ class TestOriginContainmentGapIsRecorded:
     This is that record. It pins the BEHAVIOUR, so the day origin containment
     lands this test goes red and points at the prose that must change with it.
 
-    That the field description still declares the half unenforced is not
-    asserted here. Matching it was two hand-typed English phrases deciding what
-    a description means — the shape `.claude/rules/validator-claims.md` bans,
-    and polarity-blind besides: a description promising origin containment
-    carries "per-operation transport selection" exactly as well as one
-    disclaiming it. `.claude/rules/contract-prose.md` carries the obligation.
-    The description is `_RequestBase.transport_ref`, which these three inherit;
-    its census entry pins the wording and records the unenforced half as its
-    waiver, so softening it is a hash mismatch a reviewer must re-affirm.
+    That the field description still declares the half unenforced is a reader's
+    check, not this module's: deciding it means reading what a description
+    means, which `.claude/rules/validator-claims.md` keeps out of tests and
+    `.claude/rules/contract-prose.md` states as an authoring obligation. The
+    description lives on `_RequestBase.transport_ref`, which these three
+    inherit; its census entry pins the wording and records the unenforced half
+    as its waiver, so softening it is a hash mismatch a reviewer must re-affirm.
     """
 
     def test_a_second_origin_is_accepted_because_nothing_checks_origins(self):

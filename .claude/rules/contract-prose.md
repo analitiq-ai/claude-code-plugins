@@ -80,10 +80,10 @@ a request produces landing on that transport's origin — is enforced nowhere,
 and the description says so rather than implying a guarantee.
 
 Softening such a disclaimer is a wording change, so the hash pin fires and a
-reviewer has to re-affirm the entry. Nothing reads the sentence for you:
-`test_endpoint_transport_ref.py` pins the unenforced *behaviour*, which is what
-tells you the day the gap closes, and its docstring says why matching the
-description's phrasing was removed.
+reviewer has to re-affirm the entry. Read the sentence then — the pin says the
+words moved, not that the promise is still honest.
+`test_endpoint_transport_ref.py` pins the unenforced *behaviour*, so it is what
+tells you the day the gap closes and the disclaimer must go.
 
 ## Never restate a value
 

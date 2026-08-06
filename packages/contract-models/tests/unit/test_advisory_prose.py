@@ -205,15 +205,10 @@ def test_census_texts_reference_live_names():
 #
 # The census covers every Enum's CLASS docstring; member docstrings are out of
 # scope because pydantic does not publish them into the schema. That exclusion
-# is safe only while no member docstring states an obligation, which is a
-# judgment about what a sentence says — so it is an authoring obligation in
-# `.claude/rules/contract-prose.md`, read by a person, not a guard here.
-#
-# What stood here instead: a modal-word regex over every member docstring, an
-# AST detector built to feed it, and a waiver registry with pinned hashes for
-# the lines it would misread. The registry was empty, which is the tell — a
-# guard nobody had yet needed to override, carrying the machinery for the day
-# they would. `.claude/rules/validator-claims.md` argues the general case.
+# is safe only while no member docstring states an obligation — a judgment
+# about what a sentence says, so it is an authoring obligation in
+# `.claude/rules/contract-prose.md`, read by a person, and there is no guard
+# here for it. `.claude/rules/validator-claims.md` argues the general case.
 
 
 _HASH = "0" * 12  # format-valid placeholder for the refusal probes

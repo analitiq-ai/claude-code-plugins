@@ -30,22 +30,26 @@ property — validator behaviour, destructive routes, "the doc still teaches it"
 tone, completeness. If the check needs to know what the English means, it is a
 rule here and a review item, not code.
 
-The shape is not always a tuple of regexes. These were the same thing wearing
-other clothes, and all four are gone:
+The shape is not always a tuple of regexes. A single `in` test is the same
+thing, and so is one phrase used to locate the sentence a second assertion then
+grades. These are all banned, and each names an obligation a reader carries
+instead:
 
-| what it matched | what it decided | where the obligation lives now |
+| matching this | to decide this | is `.claude/rules/…` |
 |---|---|---|
-| a ticket-shaped token in every tracked file | this reference will not resolve | `resolvable-referents.md` |
-| `"enforced by nothing today"` in a field description | the contract still declares this half unenforced | `contract-prose.md` |
+| a ticket-shaped token | this reference will not resolve | `resolvable-referents.md` |
+| a disclaimer's phrasing in a field description | the contract still declares this half unenforced | `contract-prose.md` |
 | `"nothing else"`, `"no others"` beside an enumeration | this sentence still closes the set | `no-cardinality-restatements.md` |
-| `must` / `every` / `only` / `defaults to` over contract prose | this sentence states an obligation | `contract-prose.md` |
+| `must` / `every` / `only` / `defaults to` | this sentence states an obligation | `contract-prose.md` |
 
-The last one had already conceded the argument in its own docstring: the census
-it belonged to catches new obligations by hashing every prose site, so the
-pattern's only remaining job was choosing which of two spellings an author had
-to type for "harmless". It carried a waiver registry for the lines it misread.
-The registry was empty — machinery kept ready for overrides nobody had needed
-yet, which is the cheapest version of the same defect.
+An English phrase used only as an **anchor** — find this sentence, then check
+its backticked members against the contract — is not exempt. It decides which
+sentence gets graded, so rewording the sentence silently grades nothing, and
+the check reports success.
+
+A waiver registry beside such a check is the diagnosis, not the remedy. An
+empty one is worse than a full one: it is the machinery kept ready for
+overrides nobody has needed yet.
 
 ## Why, from what this repo measured
 
