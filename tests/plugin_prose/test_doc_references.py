@@ -94,8 +94,11 @@ guard — this always runs.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import re
 import sys
+import textwrap
 from bisect import bisect_right
 from collections import Counter
 from collections.abc import Iterator
@@ -289,12 +292,15 @@ _EXTERNAL_REFS: dict[str, set[str]] = {
         # write path. The citing prose attributes it to the engine.
         "docs/sql-write-path-v2.md",
     },
-    "analitiq-pipeline-builder": {
-        # A repo-root script, cited from this plugin's contributor guidance
-        # because it is what renders the validator-behaviour claims. It lives
-        # in the repo, not in the installed plugin.
-        "scripts/render_validator_claims.py",
-    },
+    # Empty, and correctly so: this plugin's one out-of-plugin citation is a
+    # repo-root script, and `_addresses_the_repo` now resolves those against
+    # the repo tree instead of waiving them. A waiver only records that a
+    # target is outside; resolution also fails when it is renamed, which is
+    # the failure that matters. The entry that used to sit here was the
+    # asymmetry that exposed the hole — the same script cited from the
+    # connector plugin was dropped silently, because that plugin owns no
+    # `scripts/` directory for the discriminator to recognise.
+    "analitiq-pipeline-builder": set(),
 }
 
 # Every citation form this suite extracts *by a pattern of its own*, and the
@@ -340,8 +346,8 @@ _REPO_FLOORS: dict[str, int] = {
     "plugin_root": 12,
     "backticked": 120,
     "bare_path": 6,
-    "link": 3,
-    "asset": 15,
+    "link": 4,
+    "asset": 24,
     "anchor": 20,
 }
 
@@ -357,14 +363,14 @@ _FLOORS: dict[str, dict[str, int]] = {
         "plugin_root": 10,
         "backticked": 70,
         "bare_path": 5,
-        "asset": 7,
+        "asset": 13,
         "anchor": 15,
     },
     "analitiq-pipeline-builder": {
         "plugin_root": 2,
         "backticked": 50,
         "link": 3,
-        "asset": 7,
+        "asset": 10,
         "anchor": 4,
     },
 }
@@ -567,6 +573,43 @@ def _clean(target: str) -> str:
     return cleaned[:-1] if cleaned.endswith(".") else cleaned
 
 
+@cache
+def _repo_dirs() -> frozenset[str]:
+    """Directory names at the repo root, less the build artifacts. The
+    vocabulary that tells a citation of a repo file from one of anything
+    else — read off disk for the same reason plugin roots are."""
+    return frozenset(
+        path.name
+        for path in REPO_ROOT.iterdir()
+        if path.is_dir() and _ships(path.name)
+    )
+
+
+def _addresses_the_repo(target: str) -> bool:
+    """Is this a citation of a file in *this repository* rather than in the
+    plugin? `scripts/render_advisory.py`,
+    `tests/connector_builder/test_schema_drift.py`,
+    `schemas/canonical-types.json`: contributor guidance and a few agent
+    documents route to these.
+
+    They were graded by nobody. The asset discriminator drops a path whose
+    leading segment is not a plugin directory, so the file pass never saw
+    them, and the connector plugin — which has no `scripts/` of its own —
+    lost eight citations that way while the pipeline plugin kept the same
+    script only because it happens to own a directory of that name. Renaming
+    one rotted an agent's routing with a green build.
+
+    Deliberately keyed on the leading segment alone, never on whether the file
+    is there: `_candidates` decides existence. A predicate that also required
+    the file to exist would answer "not a repo citation" for exactly the
+    renamed path this exists to catch, and it would dangle silently again.
+    """
+    cleaned = _clean(target)
+    if cleaned.startswith(("./", "../", "/")):
+        return False
+    return cleaned.split("/")[0] in _repo_dirs()
+
+
 def _relative_target(citing: str, target: str, plugin: str) -> Path | None:
     """Where a citation points when it is resolved the way a reader resolves
     one: from the directory of the document it is written in.
@@ -653,11 +696,22 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
             candidate = ancestor / cleaned
             if candidate.exists():
                 return [candidate]
-    return [
+    inside = [
         root / path
         for path in _plugin_paths(plugin)
         if path == cleaned or path.endswith("/" + cleaned)
     ]
+    if inside:
+        return inside
+    # Last, and only when the plugin holds nothing by that name: a citation of
+    # a file in this repository. Contributor guidance routes to these, and the
+    # ordering matters — the pipeline plugin owns a `scripts/` directory, so
+    # `scripts/validate.py` must stay its own file and only
+    # `scripts/render_advisory.py`, which it has no copy of, reaches here.
+    if _addresses_the_repo(cleaned):
+        candidate = REPO_ROOT / cleaned
+        return [candidate] if candidate.exists() else []
+    return []
 
 
 def _resolve_files(target: str, citing: str, plugin: str) -> list[Path]:
@@ -866,9 +920,10 @@ def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
     The discriminator is the plugin's own directory vocabulary: a citation
     whose leading segment names a directory this plugin has is addressing this
     plugin. Measured over every non-`.md` path the extractor matches in both
-    plugins, that separates them with one exception
-    [claim:one-asset-citation-is-external] — a repo-root script cited from
-    plugin prose, which is what `_EXTERNAL_REFS` is for. Delimiters play
+    plugins, that separates them with one class of exception: a repo file
+    cited from contributor guidance, which `_addresses_the_repo` admits and
+    `_candidates` then resolves against the repo tree, so every kept asset
+    citation resolves [claim:every-asset-citation-resolves]. Delimiters play
     no part: a path is as much a citation in a fenced command line as in a
     code span, and treating the backticks as the rule left a real citation
     unread.
@@ -881,7 +936,7 @@ def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
         for match in _BARE_ASSET_REF.finditer(line)
         for target in [match.group(1)]
-        if _addresses_this_plugin(target, plugin)
+        if _addresses_this_plugin(target, plugin) or _addresses_the_repo(target)
     ]
 
 
@@ -1445,7 +1500,17 @@ def _mention_disposition(
         # `connections/` and `definition/` are real directory names, and a
         # plugin that grows one would otherwise start resolving templates.
         return "authored artifact path"
-    if plugin is not None and not _addresses_this_plugin(mention, plugin):
+    if (
+        plugin is not None
+        # `.md` only ever reaches here as a citation nobody read, and
+        # `_addresses_this_plugin` answers `False` for every `.md` by design —
+        # the markdown passes own that half. Without this guard the branch
+        # below would disposition away every unread markdown citation, which
+        # is the census failing open on the exact form it was built for.
+        and not mention.endswith(".md")
+        and not _addresses_this_plugin(mention, plugin)
+        and not _addresses_the_repo(mention)
+    ):
         # `definition/connector.json`, `connection/latest.json`,
         # `America/New_York`: the discriminator says this addresses something
         # other than a file of this plugin. That was a bare boolean the asset
@@ -1654,6 +1719,14 @@ def test_the_waiver_check_reads_real_prose(
     to be non-empty on the real tree — a `_form_sites` that returned nothing
     would make every waiver unfalsifiable while the suite stayed green."""
     assert _form_sites(plugin, "backticked"), "the form's own view is empty"
+    # The asset branch reads the filtered sweep, not a fresh scan of the
+    # pattern. Only that `_files_reached_by` *calls* `_form_sites` was pinned,
+    # so putting a raw `_BARE_ASSET_REF` re-scan back inside this branch stayed
+    # green — reopening verbatim the regression its docstring says was fixed,
+    # since the raw view is several times wider than what the guard grades.
+    assert set(_form_sites(plugin, "asset")) == {
+        (rel, target) for rel, _lineno, target in _asset_citations(plugin)
+    }
     assert {rel for rel, _target in _form_sites(plugin, "link")} - {"README.md"} or (
         "link" in _unsentinelled(plugin)
     ), "a plugin routing agents by link must pin one, not waive the form"
@@ -1709,23 +1782,31 @@ def test_every_anchor_in_the_tree_is_graded(
     )
 
 
-@pytest.mark.parametrize("plugin", _plugin_names())
-def test_an_allow_list_entry_exempts_only_its_own_plugin(plugin: str) -> None:
+def test_an_allow_list_entry_exempts_only_its_own_plugin() -> None:
     """`_EXTERNAL_REFS` is keyed per plugin because each entry is a decision
     about *that* plugin's prose. Merging the keys into one set stayed green:
     the staleness test indexes per plugin, and every other check reads the
     plugin's own entry, so nothing noticed the connector plugin's transport
-    stubs quietly exempting citations in the pipeline plugin."""
-    others = set().union(
-        *(entries for name, entries in _EXTERNAL_REFS.items() if name != plugin)
+    stubs quietly exempting citations in the pipeline plugin.
+
+    Written over the pairs rather than per plugin, because a plugin whose own
+    allow-list is empty has no foreign set to compare and would make a
+    parametrized version assert nothing at all — which is now the pipeline
+    plugin's state, its one entry having been replaced by real resolution.
+    """
+    foreign = sorted(
+        (plugin, target)
+        for plugin in _plugin_names()
+        for name, entries in _EXTERNAL_REFS.items()
+        if name != plugin
+        for target in entries - _EXTERNAL_REFS[plugin]
     )
-    foreign = sorted(others - _EXTERNAL_REFS[plugin])
     assert foreign, (
-        "no other plugin allow-lists anything this one does not, so a merged "
+        "no plugin allow-lists anything another does not, so a merged "
         "allow-list would be indistinguishable here and this check is vacuous"
     )
-    for target in foreign:
-        assert _is_dangling(target, plugin, "agents/x.md"), target
+    for plugin, target in foreign:
+        assert _is_dangling(target, plugin, "agents/x.md"), (plugin, target)
 
 
 def test_a_directory_is_never_a_section_target(probe_plugin: str) -> None:
@@ -1765,10 +1846,26 @@ def test_every_md_written_in_prose_is_read_or_dispositioned(plugin: str) -> None
     # joined — narrowing it to mentions carrying a `/` stayed green, and the
     # assertion below reads the same either way, because a census that
     # measured nothing also reports nothing.
-    unexplained = UnreadMention("a.md", 1, "y.md", "see y.md", None)
+    # Driven across every dimension an `UnreadMention` carries, because a
+    # narrowing is only caught on a dimension the drive varies. One synthetic
+    # value pinned `mention` and `lineno`; a narrowing keyed on `rel` —
+    # "exempt the plugin's own CLAUDE.md, that is contributor guidance not
+    # agent prose" — survived, and CLAUDE.md is where most of the repo-file
+    # citations live. Asserting the plain identity does not help: on a clean
+    # tree both sides are empty and any filter over nothing is nothing.
+    unexplained = [
+        UnreadMention("CLAUDE.md", 1, "y.md", "see y.md", None),
+        UnreadMention("agents/x.md", 9, "a/b.json", "see a/b.json", None),
+        UnreadMention("skills/s/SKILL.md", 40, "z.md", "see z.md", None),
+    ]
+    explained = UnreadMention("CLAUDE.md", 2, "g.md", "see g.md", "glob")
     with pytest.MonkeyPatch.context() as patched:
-        patched.setattr(sys.modules[__name__], "_unread_mentions", lambda _p: [unexplained])
-        assert _uncovered_mentions(plugin) == [unexplained]
+        patched.setattr(
+            sys.modules[__name__],
+            "_unread_mentions",
+            lambda _p: [*unexplained, explained],
+        )
+        assert _uncovered_mentions(plugin) == unexplained
     # And the trigger is floored per half, because this is the one device here
     # that fails open: it reports what it examined, so an extractor examining
     # less goes quiet rather than red. Dropping the asset half of `_mentions_in`
@@ -1960,28 +2057,48 @@ _TREE_CLAIMS: dict[str, tuple[str, "Callable[[], bool]"]] = {
             for p in _plugin_names()
         ),
     ),
-    "one-asset-citation-is-external": (
-        "exactly one kept asset citation resolves to nothing — the repo-root "
-        "script `_EXTERNAL_REFS` covers",
-        lambda: sum(
-            1
+    "every-asset-citation-resolves": (
+        "every kept asset citation resolves, plugin file or repo file alike — "
+        "the repo-root scripts contributor guidance routes to used to be the "
+        "exception, and were dropped before anything could grade them",
+        lambda: not [
+            target
             for p in _plugin_names()
             for rel, _lineno, target in _asset_citations(p)
             if not _candidates(target, p, rel)
-        )
-        == 1,
+        ],
     ),
     "indented-fences-exist": (
         "fenced blocks nested in a list item are indented, in real prose",
         lambda: _indented_fence_lines() > 20,
     ),
     "floors-sit-near-half": (
-        "every floor sits between a third and two thirds of today's count, so "
-        "prose churn cannot move it and a broken extractor must",
+        "every floor — per plugin, repo-wide, documents and census alike — "
+        "sits between a third and two thirds of today's count, so prose churn "
+        "cannot move it and a broken extractor must. The floor *values* are "
+        "otherwise unguarded config: zeroing them survived everything, and "
+        "the document floor exists only to stop a set equality passing on two "
+        "empty sets, which zeroing restores exactly",
         lambda: all(
-            0.3 <= floor / _form_counts(p)[form] <= 0.7
-            for p in _plugin_names()
-            for form, floor in _FLOORS[p].items()
+            0.3 <= floor / count <= 0.7
+            for floor, count in [
+                *(
+                    (floor, _form_counts(p)[form])
+                    for p in _plugin_names()
+                    for form, floor in _FLOORS[p].items()
+                ),
+                *(
+                    (
+                        floor,
+                        sum(_form_counts(p)[form] for p in _plugin_names()),
+                    )
+                    for form, floor in _REPO_FLOORS.items()
+                ),
+                *(
+                    (floor, len(_prose_files(p)))
+                    for p, floor in _DOCUMENT_FLOORS.items()
+                ),
+            ]
         ),
     ),
     "plugin-root-is-never-frontmatter": (
@@ -2001,17 +2118,34 @@ _TREE_CLAIMS: dict[str, tuple[str, "Callable[[], bool]"]] = {
         >= 8,
     ),
     "the-asset-filter-rejects-in-bulk": (
-        "the asset discriminator rejects far more paths than it keeps, which is "
-        "why each rejection needs a named reason",
-        lambda: all(
-            len([m for m in _unread_mentions(p) if m.disposition == "not a directory this plugin has"])
-            > 10
+        "the asset discriminator rejects paths in bulk, which is why each "
+        "rejection needs a named reason rather than a bare boolean",
+        lambda: sum(
+            1
             for p in _plugin_names()
-        ),
+            for mention in _unread_mentions(p)
+            if mention.disposition == "not a directory this plugin has"
+        )
+        > 30,
     ),
 }
 
 _CLAIM_MARKER = re.compile(r"\[claim:([a-z0-9-]+)\]")
+
+
+def _disposition_names() -> set[str]:
+    """Every reason `_mention_disposition` can return, read off its own
+    `return` statements rather than restated in a table beside it. The table
+    of shapes is what exercises each; this is what says the table is
+    complete."""
+    source = textwrap.dedent(inspect.getsource(_mention_disposition))
+    return {
+        node.value.value
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Return)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    }
 
 
 def test_the_prose_claims_still_hold() -> None:
@@ -2130,6 +2264,26 @@ def test_every_mention_disposition_is_load_bearing() -> None:
         )
         is None
     )
+    # Near-miss negatives: the trigger character present, but not where the
+    # branch keys on it. Four generic negatives were shared by every branch, so
+    # each broadening — box-drawing anywhere on the line rather than abutting
+    # the mention, `//` anywhere in the mention rather than opening it, "at
+    # most one `/`" rather than none — survived. A branch widened past its
+    # keyed position swallows real citations, which is this census failing
+    # open. Each is passed `plugin`, since that is how the sweep calls it.
+    for line in (
+        "└── nested, then see skills/nowhere/gone.md for the rule",
+        "see skills//nowhere/gone.md now",
+        "see skills/gone.md now",
+        # And the one my own repo-file branch would have swallowed: every
+        # unread `.md` reaching it, `_addresses_this_plugin` answering `False`
+        # for markdown by design.
+        "the contract in skills/nowhere/gone.md governs",
+    ):
+        found = _MD_MENTION.search(line)
+        assert (
+            _mention_disposition("agents/x.md", line, *found.span(), plugin) is None
+        ), line
     heading = "## Pipeline (full contract: skills/nowhere/gone.md)"
     found = _MD_MENTION.search(heading)
     assert found.group(0) == "skills/nowhere/gone.md"
@@ -2193,7 +2347,17 @@ def test_every_mention_disposition_is_load_bearing() -> None:
     # naming a reason `_mention_disposition` can never return is config that
     # exempts nothing, sitting in the one registry whose whole point is that
     # an exemption is declared and reviewable.
-    unreachable = _unreachable_preemptive(_PREEMPTIVE_DISPOSITIONS, set(cases))
+    # The reachable set is read off the function's own `return`s, not off this
+    # table. Hand-maintained, the table was the authority for what is
+    # reachable while being blind to a branch added without a case — adding one
+    # that returns a name absent here survived, which is a dead disposition in
+    # the registry whose whole point is that every exemption is live.
+    assert _disposition_names() == set(cases), (
+        f"`_mention_disposition` returns {sorted(_disposition_names())} but "
+        f"this table exercises {sorted(cases)} — they have to agree, in both "
+        "directions, or a branch exists that nothing pins."
+    )
+    unreachable = _unreachable_preemptive(_PREEMPTIVE_DISPOSITIONS, _disposition_names())
     # Driven, not merely evaluated: on today's registry the check has nothing
     # to find, so without this it would pass as a constant.
     assert _unreachable_preemptive({"typo url": "why"}, set(cases)) == ["typo url"]
@@ -2212,12 +2376,24 @@ def probe_plugin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[st
 
     `plugins/` is copied verbatim into every user's plugin cache, so a probe
     artifact does not belong there even transiently — and writing one meant a
-    hard interrupt left it behind. Naming the tree something no real plugin is
-    called keeps the `@cache` on `_plugin_paths` and `_plugin_dirs` keyed apart
-    from the real entries; the caches are cleared regardless, since this root
-    stops existing when the test ends.
+    hard interrupt left it behind.
+
+    The name is unique per test, not a shared constant. `_plugin_paths` and
+    `_plugin_dirs` are `@cache`d on the plugin *name* while `tmp_path` differs
+    per test, so a constant name meant the second probe test could read the
+    first one's tree. Today's probe trees are shape-compatible and nothing
+    bites, but the dangerous direction is silent: a stale-narrow `_plugin_dirs`
+    makes `_addresses_this_plugin` answer `False`, so a negative assertion
+    passes for the wrong reason.
+
+    Unique key *and* cache clears, which is belt and braces on purpose: either
+    alone is sufficient today, so removing just one survives mutation. That is
+    a statement about this pair, not an argument for dropping one — the
+    failure they prevent is silent in the direction that matters, and
+    `test_the_probe_tree_is_never_read_through_a_stale_cache` is what pins the
+    property itself rather than either mechanism.
     """
-    plugin = "analitiq-probe-builder"
+    plugin = f"analitiq-probe-{abs(hash(tmp_path)) % 10**8:08d}"
     root = tmp_path / "plugins" / plugin
     (root / "scripts").mkdir(parents=True)
     (root / "scripts" / "validate.py").write_text("", encoding="utf-8")
@@ -2348,6 +2524,28 @@ def test_the_sweep_reads_every_authored_document(plugin: str) -> None:
     # hand-rolled at the call site is the vacuity this file is about.
     below = _below_floor({"documents": len(swept)}, {"documents": _DOCUMENT_FLOORS[plugin]})
     assert not below, _floor_failure(f"plugins/{plugin} prose", below)
+
+
+def test_the_probe_tree_is_never_read_through_a_stale_cache(probe_plugin: str) -> None:
+    """`_plugin_paths` and `_plugin_dirs` are `@cache`d on the plugin name
+    while each probe test gets its own `tmp_path`, so the property that
+    matters is that this test reads *this* test's tree. Pinned directly rather
+    than through either mechanism that provides it, since the two are
+    individually redundant and a mutation of one alone proves nothing.
+
+    The dangerous direction is silent: a stale-narrow `_plugin_dirs` makes
+    `_addresses_this_plugin` answer `False`, so a negative assertion in a
+    probe test would pass for entirely the wrong reason.
+    """
+    root = _plugin_root(probe_plugin)
+    (root / "a-directory-no-other-probe-makes").mkdir()
+    _plugin_paths.cache_clear()
+    _plugin_dirs.cache_clear()
+    assert "a-directory-no-other-probe-makes" in _plugin_dirs(probe_plugin)
+    assert _addresses_this_plugin("a-directory-no-other-probe-makes/x.json", probe_plugin)
+    # And the tree is this test's, not one left over from another probe.
+    assert "scripts/validate.py" in _plugin_paths(probe_plugin)
+    assert not [path for path in _plugin_paths(probe_plugin) if "SKILL.md" in path]
 
 
 def test_the_prose_sweep_reads_only_what_ships(probe_plugin: str) -> None:
@@ -2684,6 +2882,21 @@ def test_only_this_plugins_files_are_read_as_asset_citations(plugin: str) -> Non
         "skills/x/spec-y.md",  # a `.md`, read by the other passes
     ):
         assert not _addresses_this_plugin(elsewhere, plugin), elsewhere
+    # It is the *leading* segment, which the docstring calls the whole rule and
+    # nothing pinned: every negative above lacks a plugin directory name in any
+    # position, so they cannot tell "leading" from "anywhere". Here `examples`
+    # is a directory this plugin has — just not the first segment.
+    assert "examples" in _plugin_dirs(plugin)
+    assert not _addresses_this_plugin("docs/examples/foo.json", plugin)
+    # And `_addresses_the_repo` keys on the leading segment *alone*, never on
+    # whether the file is there. Adding an existence test to it survived every
+    # other check: it would answer "not a repo citation" for exactly the
+    # renamed path it exists to catch, and the census would then explain the
+    # citation away as "not a directory this plugin has" rather than the build
+    # failing on a script an agent is told to run.
+    assert _addresses_the_repo("scripts/gone_forever.py")
+    assert not _candidates("scripts/gone_forever.py", plugin)
+    assert not _addresses_the_repo("America/New_York")
     # A fully qualified citation names a plugin file however it is spelled.
     assert _addresses_this_plugin(f"plugins/{plugin}/scripts/x.py", plugin)
     # A dot-leading directory is a directory, not a relative hop.
@@ -3089,6 +3302,14 @@ def test_a_citation_ending_a_sentence_still_resolves(plugin: str) -> None:
     and prose ends sentences with citations constantly."""
     existing, _heading = _fixture(plugin)
     assert _dangling_in(f"Author per {existing}.\n", plugin) == []
+    # The allow-list is consulted through `_clean` too. Comparing the raw
+    # target survived: an allow-listed citation that ends a sentence keeps its
+    # full stop, stops matching the entry, and fails the build on prose that
+    # is correct.
+    allow_listed = sorted(_EXTERNAL_REFS["analitiq-connector-builder"])[0]
+    assert not _is_dangling(
+        f"{allow_listed}.", "analitiq-connector-builder", "agents/x.md"
+    )
     assert _clean("skills/x/y.md.") == "skills/x/y.md"
     assert _clean("skills/x/examples/") == "skills/x/examples"
     # Only a *trailing* dot, never one inside the name.
@@ -3160,6 +3381,15 @@ def test_a_quoted_anchor_is_held_to_the_whole_heading() -> None:
     long_heading = "Fenced JSON examples — the annotation convention"
     assert len(long_heading) < _ANCHOR_WINDOW
     assert _anchor_sites(f'§ "{long_heading}"')[0].quoted
+    # And the window reaches a stated length, written as a literal rather than
+    # derived from `_ANCHOR_WINDOW`. Deriving it compares the constant to
+    # itself: shrinking the window to 60 keeps `WINDOW - 1` quoted and
+    # `WINDOW + 1` unquoted, so the assertion holds at any value while quoted
+    # citations past the new bound are silently declassified to the looser
+    # opening-words rule.
+    assert _anchor_sites('§ "' + "x" * 150 + '"')[0].quoted, (
+        "the anchor window must reach past any heading prose might quote"
+    )
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -3221,8 +3451,11 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
     # is, and widening the window changed nothing. Glue characters alone, past
     # the bound, are what measure it: a `§` this far from the path is no
     # longer bound to it.
-    assert _anchor_sites("see `SKILL.md`" + " " * 3 + "§Foo")[0].target == "SKILL.md"
-    assert _anchor_sites("see `SKILL.md`" + " " * 12 + "§Foo")[0].target is None
+    # Both sides of the exact bound, not a bracket around it: `{0,8}` counting
+    # the closing backtick means seven spaces bind and eight do not, and a
+    # bracket of 3-vs-12 left the number free to drift either way.
+    assert _anchor_sites("see `SKILL.md`" + " " * 7 + "§Foo")[0].target == "SKILL.md"
+    assert _anchor_sites("see `SKILL.md`" + " " * 8 + "§Foo")[0].target is None
 
 
 def test_a_citation_inside_a_fence_is_still_a_citation() -> None:
