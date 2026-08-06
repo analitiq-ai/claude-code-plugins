@@ -84,8 +84,9 @@ A second registry, `scripts/render_validator_claims.py` (repo root), covers
 THIS plugin's prose too: a sentence stating what the validator checks or does
 not check ("runnability is not checked for a draft") must be pinned by a
 `<!-- PROBE: <id> -->` fence placed directly above it, naming an executable
-probe in that script. Nothing detects an unpinned sentence — see
-`.claude/rules/validator-claims.md` — so writing one is the moment to pin it.
+probe in that script. Recognising that a sentence makes a claim is the
+author's job — see `.claude/rules/validator-claims.md` — so writing one is the
+moment to pin it.
 Full rules: the connector plugin's `CLAUDE.md`, "Validator-behavior claims".
 Two things specific to this plugin:
 

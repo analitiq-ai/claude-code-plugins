@@ -194,36 +194,36 @@ keyword-prefixed one, not the cross-repo `org/repo` form, not a tracker URL, and
 not "the pull request you are in", "this commit", or a review round.
 
 The exception is a surface that IS a tracker surface: commit message bodies, PR
-descriptions and issue threads, plus the tracked files whose subject is the
+descriptions and issue threads, plus four tracked files whose subject is the
 tracker itself — `CONTRIBUTING.md`, which teaches the consolidation rule by
-walking real issues, the two release-please changelogs, and the PR template.
-Those are exempt in `_EXCLUDED_PATHS` in `tests/hygiene/test_ticket_references.py`,
-each with its reason inline, and `CONTRIBUTING.md`'s exemption is graded: it
-fails if the file ever stops citing.
+walking real issues; the two release-please changelogs, whose entries link into
+the tracker and which are machine-written anyway; and
+`.github/pull_request_template.md`, where "this PR" is the runtime subject
+rather than a referent that expires. `.claude/rules/resolvable-referents.md`
+names the forbidden shapes in the course of forbidding them, which is the same
+exception one level up.
 
 The file outlives the change that wrote it, and the reader has the file, not the
 change. So state what is true, never when it became true — "creators are routed
-to their spec skill", not "the wiring this change extended". CI fails the build
-on the ticket shapes; nothing fails on the pull-request phrasings, because no
-pattern separates them from a CI job whose runtime subject really is the pull
-request under check. That half is on the author.
+to their spec skill", not "the wiring this change extended".
+`.claude/rules/resolvable-referents.md` is the checklist for both halves.
 
 **A check may match text to LOCATE something. It may never match text to DECIDE
 something.** Locating is lexical — a backticked identifier, a fenced block, a
-named heading, a generated-block marker, a name the contract owns, a path handed
-to git. Deciding is semantic: does this sentence assert that the validator
-checks X, does this paragraph still teach the rule. If the verdict needs to know
+named heading, a generated-block marker, a name the contract owns, a probe id
+resolved against its registry. Deciding is semantic: does this sentence assert
+that the validator checks X, does this paragraph still teach the rule. If the verdict needs to know
 what the English means, it belongs in `.claude/rules/`, applied by a reader, not
 in a test. `.claude/rules/validator-claims.md` owns this rule and the worked
 cases; the short version is that hand-curated English regexes and phrase lists
 are banned outright, whatever property they claim to measure.
 
-Three reasons, all observed here rather than predicted. A phrase pin reddens the
-build when prose is *improved*, and the failure it prints asks the author to
-reword it back. It cannot read polarity: a document saying a shape is fine
-satisfies a substring check exactly as well as one forbidding it. And it rots
-faster than the prose it polices, because every rewording is a false positive
-while every reworded *falsehood* still passes.
+Two reasons observed here rather than predicted, and one that follows from
+them. A phrase pin reddens the build when prose is *improved*, and the failure
+it prints asks the author to reword it back. It cannot read polarity: a document
+saying a shape is fine satisfies a substring check exactly as well as one
+forbidding it. Between them those make its coverage undecidable — the rule file
+carries that argument and the waiver-registry one in full.
 
 `.claude/rules/` holds the how-to-behave checklists this policy implies, tracked
 so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
@@ -235,9 +235,9 @@ state and stays ignored). Read the one that matches what you are editing:
 - `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships
   verbatim to users and is executed by agents.
 - `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
-  count, "the rule above". `tests/hygiene/test_ticket_references.py` gates the
-  shapes a regex can match; that rule covers the half it cannot read, and the
-  PR template asks you to attest you applied it.
+  count, "the rule above". The PR template asks you to attest you applied it.
+- `validator-claims.md` — before writing a sentence about what a tool checks or
+  refuses, and before writing any check that reads prose.
 
 ## Conventions
 

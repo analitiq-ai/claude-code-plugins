@@ -24,8 +24,8 @@ CLAIM_TRIGGERS = (
 )
 ```
 
-Sixteen of those decided, in CI, whether a sentence in plugin prose asserted
-validator behaviour. They are gone. Do not write more, in any file, for any
+A list of exactly that shape decided, in CI, whether a sentence in plugin prose
+asserted validator behaviour. It is gone. Do not write more, in any file, for any
 property — validator behaviour, destructive routes, "the doc still teaches it",
 tone, completeness. If the check needs to know what the English means, it is a
 rule here and a review item, not code.
@@ -38,10 +38,10 @@ rule here and a review item, not code.
 - **It cannot read polarity.** `"dotted string" in text` passes on a document
   saying a dotted string is fine exactly as it passes on one forbidding it. A
   trigger for "is not checked" cannot tell a claim from a denial of one.
-- **Its coverage is undecidable, so its holes are invisible.** The same claim
-  phrased without a listed trigger is unpinned and unreported, and no test can
-  tell you which sentences were missed. A green build means "no phrase matched",
-  which reads as "no unpinned claim exists".
+- **Its coverage is undecidable.** The same claim phrased without a listed
+  trigger does not match, and the set of phrasings that would is not
+  enumerable. A green result means "no phrase matched", which reads as "no
+  unpinned claim exists".
 - **It grows a waiver registry.** Every false positive needs an exemption with a
   reason, and the exemption list is the admission that a reader was already
   deciding. Guards whose verdicts a human keeps overriding are review items
@@ -67,7 +67,7 @@ sentence in plugin prose stating what the validator **does or does not** check:
 
 When you touch plugin prose, read the sentences you changed and ask: does this
 one assert something about what a tool checks, refuses, or lets through? If yes,
-it needs one of the four above, and nothing will tell you if you skip it.
+it needs one of the four above.
 
 ## Quick test
 

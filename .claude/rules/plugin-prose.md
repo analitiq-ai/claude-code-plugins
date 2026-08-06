@@ -6,12 +6,11 @@ paths: plugins/**/*.md
 
 Applies when editing any `.md` under `plugins/` — agent definitions, skills,
 references, READMEs. These are distribution artifacts: agents execute them
-verbatim, so a wrong sentence ships wrong authoring behavior to every user, and
-CI green says nothing unless a gate reads the file. The *why* is the root
-`CLAUDE.md` → "Single source of truth (drift policy)"; the general checklist is
-`no-drift-surfaces.md`. The failure class this rule prevents: prose restating
-validator behavior, falsified by a `VALIDATOR_PIN` bump with CI still green,
-because nothing read the sentence.
+verbatim, so a wrong sentence ships wrong authoring behavior to every user. The
+*why* is the root `CLAUDE.md` → "Single source of truth (drift policy)"; the
+general checklist is `no-drift-surfaces.md`. The failure class this rule
+prevents: prose restating validator behavior, falsified by a `VALIDATOR_PIN`
+bump.
 
 ## Classify every sentence: craft or fact
 
@@ -119,10 +118,9 @@ review surface and potential rot.
   contract. If the check you want needs to read the English, it is a review
   item, not a test — the section below names the ones this repo has.
 
-## Does the document still TEACH it? That is yours, not CI's
+## Does the document still TEACH it?
 
-No guard answers this, and three tried and were removed. When you touch a plugin
-document, check by reading:
+Read for it. When you touch a plugin document, check each of these:
 
 - **A rule the contract still needs stated.** `stream-creator.md` must rule out
   the dotted-string `get` path, because the array-of-segments shape is the one

@@ -68,13 +68,14 @@ Database connectors author no endpoints and skip the fan-out entirely.
 <!-- PROBE: write-body-path-typo-unresolved, connector-function-name-unchecked -->
 Prose in BOTH plugins states what the validator checks and does not check
 ("a `success_when` typo validates clean", "function names are never checked").
-Every such sentence is pinned by `scripts/render_validator_claims.py`, which
+Such a sentence must be pinned to `scripts/render_validator_claims.py`, which
 carries an executable **probe** per claim — a document run through
-the in-repo validator with an asserted outcome:
+the in-repo validator with an asserted outcome. Pin it when you write it;
+the rules below say how.
 
 ```bash
 python3 scripts/render_validator_claims.py write   # regenerate marked blocks
-python3 scripts/render_validator_claims.py check   # CI: probes + blocks + scan
+python3 scripts/render_validator_claims.py check   # CI: probes + blocks + fences
 ```
 
 Rules when editing prose in this plugin (and validator claims in the sibling):
@@ -84,11 +85,10 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 - A sentence asserting validator behavior outside a generated block must have
   a `PROBE:` fence comment naming the probe(s) that prove it placed directly
   above it, or cite the `ADV-*` rule that enforces it in the same sentence.
-  **Nothing detects an unpinned one** — that took a list of hand-curated
-  English regexes, and `.claude/rules/validator-claims.md` says why no such
-  list belongs in a check. Recognising that a sentence makes a claim is yours;
-  what still fails the build is a fence naming a probe that does not exist, and
-  a probe nothing references.
+  Recognising that a sentence makes a claim is the author's job, and
+  `.claude/rules/validator-claims.md` says why: deciding it from the wording
+  took a list of hand-curated English regexes, which is banned. Pin the claim
+  when you write it.
 - A probe that stops matching the contract means the contract moved: update
   the prose AND the probe together, then re-run `write`.
 - Do NOT restate validator rules in `references/definition-of-done.md`: if an

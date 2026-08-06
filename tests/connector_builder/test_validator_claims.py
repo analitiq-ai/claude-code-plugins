@@ -90,7 +90,7 @@ def test_no_fence_names_a_probe_that_does_not_exist() -> None:
 
     This is what remains of the old claim scan, and it is the half a mechanism
     can decide: an id either resolves in the registry or it does not. Whether a
-    SENTENCE asserts validator behaviour was decided by sixteen hand-curated
+    SENTENCE asserts validator behaviour was decided by a list of hand-curated
     English regexes; `.claude/rules/validator-claims.md` owns that now, and
     says why no such list belongs in a test.
     """
@@ -98,18 +98,69 @@ def test_no_fence_names_a_probe_that_does_not_exist() -> None:
     assert not dangling, f"fences name unknown probes: {dangling}"
 
 
-def test_scan_is_not_vacuous() -> None:
-    """The gate must actually see the fences the prose carries.
+def test_a_fence_naming_no_probe_is_reported(monkeypatch, tmp_path: Path) -> None:
+    """The positive control for the assertion above, which cannot supply one.
+
+    On a green tree every fence resolves, so `assert not dangling` passes on an
+    empty list and would pass just as well on a function that always returns
+    one. `dangling_fence_ids() -> []`, the membership test inverted to
+    `if False`, the traversal sliced to one document, `read_text()` stubbed to
+    `""` — none of those is visible in a repo where nothing is dangling, and
+    dropping the report from `check` mode is invisible for the same reason.
+
+    So the control drives the real function over a document that IS broken, and
+    asserts the exact message, because the message is the whole product: an
+    author whose build just went red needs the file and the id.
+    """
+    # TWO documents, with every dangling fence in the second. One would leave a
+    # traversal sliced to its first element passing: the glob is sorted, so
+    # `agents/` precedes `skills/` and a `[:1]` never reaches the broken file.
+    root = tmp_path / "plugins" / "synthetic"
+    (root / "agents").mkdir(parents=True)
+    (root / "skills").mkdir(parents=True)
+    (root / "agents" / "creator.md").write_text(
+        "# Clean\n"
+        "\n"
+        "<!-- PROBE: write-body-path-typo-unresolved -->\n"
+        "A fence whose probe is registered.\n",
+        encoding="utf-8",
+    )
+    (root / "skills" / "spec.md").write_text(
+        "# Synthetic\n"
+        "\n"
+        "<!-- PROBE: no-such-probe -->\n"
+        "A claim pinned to a probe that was deleted under it.\n"
+        "\n"
+        "<!-- PROBE: write-body-path-typo-unresolved, also-gone -->\n"
+        "A two-id fence where only the second id is dangling.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(_REGISTRY, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(_REGISTRY, "PLUGINS_ROOT", tmp_path / "plugins")
+
+    rel = "plugins/synthetic/skills/spec.md"
+    assert _REGISTRY.dangling_fence_ids() == [
+        f"{rel}: fence names unknown probe 'no-such-probe'",
+        f"{rel}: fence names unknown probe 'also-gone'",
+    ]
+    # And `check` mode must carry it out to the author, not merely compute it.
+    assert any("dangling probe fences" in problem
+               for problem in _REGISTRY._check_problems(stale_docs=[]))
+
+
+def test_the_fence_traversal_is_not_vacuous() -> None:
+    """The bookkeeping must actually see the fences the prose carries.
 
     Both plugins carry dozens of probe fences; zero found means the fence
-    grammar or the doc glob broke, and the scan would pass forever over
-    nothing — the same vacuous-scope failure the advisory citation gate's
-    found-citations assert exists to catch.
+    grammar or the doc glob broke, and `dangling_fence_ids` and
+    `test_every_probe_is_referenced` would both pass forever over nothing — the
+    same vacuous-scope failure the advisory citation gate's found-citations
+    assert exists to catch.
     """
     fenced = _REGISTRY.fence_probe_ids()
     assert len(fenced) >= 10, (
-        f"only {len(fenced)} probe ids found in prose fences — the scan no "
-        "longer sees the plugins' fences"
+        f"only {len(fenced)} probe ids found in prose fences — the traversal "
+        "no longer reaches the plugins' fences"
     )
 
 

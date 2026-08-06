@@ -1,7 +1,7 @@
 <!--
 Ticket numbers, PR links and issue references belong HERE — the tracker is the
 medium in this box, not a dangling pointer out of a file. Keep them out of code
-and prose; `tests/hygiene/test_ticket_references.py` enforces that half.
+and prose.
 -->
 
 ## What changed, and why
@@ -16,18 +16,18 @@ and prose; `tests/hygiene/test_ticket_references.py` enforces that half.
 
 ## Checks
 
-Tick what you did. These are attestations, not gates — CI cannot verify them,
-which is exactly why they are worth stating.
+Tick what you did. These are attestations: you are stating that you applied
+the rule, not that a tool agreed.
 
 - [ ] **Referents resolve.** Applied `.claude/rules/resolvable-referents.md` to
       every comment, docstring and description this change touched: each pointer
       opened and confirmed, each count re-counted, no history asserted that the
       repo does not record, and no "this PR" / "this commit" left in a file that
-      will outlive it. CI catches ticket numbers and marked citations of paths
-      git does not have; everything else in that rule is caught here or nowhere.
+      will outlive it — and no ticket number, tracker URL or citation of a
+      path a fresh clone does not contain.
 - [ ] **No new drift surface.** Applied `.claude/rules/no-drift-surfaces.md` —
       nothing restates a value another source owns, or the copy is pinned by a
-      test that reads this file at this site.
+      test that reads the restating file at that site.
 - [ ] **No cardinalities in prose.** Applied
       `.claude/rules/no-cardinality-restatements.md` to any sentence describing
       a declared shape.

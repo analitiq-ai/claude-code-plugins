@@ -17,8 +17,8 @@ written.
 Never state **how many** members a declared shape has. State what makes
 something a member.
 
-Counts are the restatement class every existing guard is blind to, which is why
-this is absolute rather than a judgment call:
+Counts are the restatement class the mechanisms this repo uses cannot see,
+which is why this is absolute rather than a judgment call:
 
 - A **wording ratchet** (the prose-census hash pin) fingerprints the sentence.
   Adding a sixth required field changes no word, so the hash still matches while
@@ -29,9 +29,8 @@ this is absolute rather than a judgment call:
 - A **census-text lint** scans identifier-shaped tokens. Number words are not
   identifiers.
 
-So a count is correct the day it is written, and nothing anywhere notices when
-it stops being. Adding a member falsifies the sentence *without changing a word
-of it*.
+So a count is correct the day it is written, and adding a member falsifies it
+*without changing a word of it*.
 
 ## Rewrite recipes
 
