@@ -25,6 +25,8 @@ from pydantic import (
     model_validator,
 )
 
+from analitiq.contracts.shared.types import StrictInt, StrictNonNegativeInt
+
 # --- Schema URL base --------------------------------------------------------
 #
 # `DOMAIN` is the canonical environment variable the deploy stamps into every
@@ -263,6 +265,22 @@ _RETRY_ERROR_HANDLING_CONDITIONAL_RULES: dict[str, Any] = {
 }
 
 
+# The retry contract's field types, named once. The pipeline block re-declares
+# a field to attach a public description; without a shared annotation that
+# re-declaration is a second hand-maintained copy of the bounds, which is
+# exactly the drift this base class exists to prevent.
+RetryAttempts = Annotated[StrictInt, Field(ge=0, le=5)]
+RetryDelaySeconds = StrictNonNegativeInt
+
+# Records per batch, named once for the same reason. The stream-level field is
+# an OVERRIDE of the pipeline-level one, so the override has to admit the same
+# set of values as the field it overrides — otherwise a document valid at the
+# stream level describes a batch size the pipeline default could never have
+# taken. Spelling the bounds at each site made that agreement a thing a human
+# remembers.
+BatchSize = Annotated[StrictInt, Field(ge=1, le=100_000)]
+
+
 class RetryErrorHandlingBase(StrictModel):
     """Shared error-handling contract for the pipeline and stream blocks.
 
@@ -280,8 +298,8 @@ class RetryErrorHandlingBase(StrictModel):
     )
 
     strategy: Literal["fail", "dlq", "skip"] = Field(default="dlq")
-    max_retries: int = Field(default=3, ge=0, le=5)
-    retry_delay_seconds: int | None = Field(default=None, ge=0)
+    max_retries: RetryAttempts = Field(default=3)
+    retry_delay_seconds: RetryDelaySeconds | None = Field(default=None)
 
     @model_validator(mode="after")
     def _validate_retry_fields(self) -> "RetryErrorHandlingBase":

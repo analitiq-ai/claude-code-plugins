@@ -45,6 +45,7 @@ from analitiq.contracts.shared.common import (
     validate_display_name,
     validate_tags,
 )
+from analitiq.contracts.shared.types import StrictPositiveInt
 
 CONNECTOR_SCHEMA_URL = schema_url_for("connector")
 # Host-tolerant matcher for the `$schema` field: a connector authored against
@@ -851,7 +852,7 @@ class TransportRateLimit(StrictModel):
     """Rate limit declaration for a transport. Spec: §Transport Contracts."""
 
 
-    max_requests: int = Field(..., ge=1, description="Maximum requests allowed per window")
+    max_requests: StrictPositiveInt = Field(..., description="Maximum requests allowed per window")
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
@@ -878,9 +879,8 @@ class HttpTransport(AdvisoryValidated, StrictModel):
         default=None,
         description="Header names to delete from inherited defaults (case-insensitive)",
     )
-    timeout_seconds: int | None = Field(
+    timeout_seconds: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Request timeout in seconds",
     )
     rate_limit: "TransportRateLimit | None" = Field(
@@ -1217,9 +1217,8 @@ class TransportDefaults(AdvisoryValidated, StrictModel):
         default=None,
         description="Header names to delete from any inherited defaults",
     )
-    timeout_seconds: int | None = Field(
+    timeout_seconds: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Default request timeout in seconds",
     )
     rate_limit: "TransportRateLimit | None" = Field(
@@ -1363,17 +1362,6 @@ _HttpStatusFamily = Annotated[
     Field(json_schema_extra=_closed_true_end_keys),
 ]
 
-# A declared cap: positive integer, strictly typed. `strict=True` rejects the
-# bool/str/float coercions lax mode would accept, mirroring the engine parser's
-# explicit `isinstance(value, bool)` guard (bool is an int subclass in Python)
-# — the issue #89 grammar says "integer >= 1 (booleans rejected)" for every
-# cap field, unlike the contract's lax int fields (e.g. `write_unit.rows`).
-# Known one-way edge: JSON Schema's `type: integer` admits a zero-fraction
-# float (`8.0`) the strict model rejects — inexpressible to close in JSON
-# Schema, and the safe direction (the authoritative validator is stricter).
-_DeclaredCap = Annotated[int, Field(strict=True, ge=1)]
-
-
 class ErrorMap(StrictModel):
     """Driver-fact error classification map (capability block v2, issue #89).
 
@@ -1424,7 +1412,7 @@ class Concurrency(StrictModel):
     A declared cap is validated strictly (positive integer, booleans rejected).
     """
 
-    max_connections: _DeclaredCap | None = Field(
+    max_connections: StrictPositiveInt | None = Field(
         default=None,
         description=(
             "Maximum concurrent connections the engine may open to the target "
@@ -1443,7 +1431,7 @@ class SqlLimits(StrictModel):
     integers, booleans rejected) and are enforced by the engine.
     """
 
-    max_bind_params: _DeclaredCap | None = Field(
+    max_bind_params: StrictPositiveInt | None = Field(
         default=None,
         description=(
             "Maximum bind parameters per statement the driver accepts "
@@ -1451,7 +1439,7 @@ class SqlLimits(StrictModel):
             "declared cap."
         ),
     )
-    max_identifier_len: _DeclaredCap | None = Field(
+    max_identifier_len: StrictPositiveInt | None = Field(
         default=None,
         description=(
             "Maximum SQL identifier length in bytes (integer ≥ 1), e.g. 63 "
@@ -1752,14 +1740,12 @@ class WriteUnit(StrictModel):
         },
     )
 
-    rows: int | None = Field(
+    rows: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Preferred number of rows per write operation (≥ 1).",
     )
-    bytes: int | None = Field(
+    bytes: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Preferred payload size in bytes per write operation (≥ 1).",
     )
 

@@ -26,6 +26,7 @@ from analitiq.contracts.shared.common import (
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
+    BatchSize,
     NonEmptyStr,
     RetryErrorHandlingBase,
     StrictModel,
@@ -36,7 +37,11 @@ from analitiq.contracts.shared.common import (
     validate_display_name,
     validate_tags,
 )
-from analitiq.contracts.shared.types import UUID_PATTERN
+from analitiq.contracts.shared.types import (
+    UUID_PATTERN,
+    StrictNonNegativeInt,
+    StrictPositiveInt,
+)
 
 
 STREAM_SCHEMA_URL = schema_url_for("stream")
@@ -288,9 +293,8 @@ class Filter(StrictModel):
 class _ReplicationBase(StrictModel):
     """Fields shared by both replication variants; `method` selects the variant."""
 
-    safety_window_seconds: int | None = Field(
+    safety_window_seconds: StrictNonNegativeInt | None = Field(
         default=None,
-        ge=0,
         description="Non-negative late-arrival overlap window.",
     )
     tie_breaker_fields: list[str] | None = Field(
@@ -341,9 +345,8 @@ Replication = Annotated[
 class _DatabasePaginationBase(StrictModel):
     """Fields shared by both database-pagination variants; `type` selects the variant."""
 
-    page_size: int | None = Field(
+    page_size: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Positive integer read page size; pipeline batch-size default applies when omitted.",
     )
 
@@ -527,10 +530,8 @@ class Write(StrictModel):
 class Execution(StrictModel):
     """Per-stream destination execution override for pipeline runtime batching defaults."""
 
-    batch_size: int | None = Field(
+    batch_size: BatchSize | None = Field(
         default=None,
-        ge=1,
-        le=100_000,
         description="Override pipeline.runtime.batching.batch_size for this binding.",
     )
 

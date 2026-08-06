@@ -502,10 +502,51 @@ def _p_pagination_limit_bare_zero() -> list[dict]:
     return _validate(doc)
 
 
-def _p_pagination_limit_literal_zero() -> list[dict]:
+def _p_pagination_limit_literal() -> list[dict]:
     doc = _read_endpoint()
-    doc["operations"]["read"]["pagination"]["limit"]["default"] = {"literal": 0}
+    doc["operations"]["read"]["pagination"]["limit"]["default"] = {"literal": 50}
     return _validate(doc)
+
+
+def _p_pagination_page_step_literal() -> list[dict]:
+    doc = _read_endpoint()
+    doc["operations"]["read"]["pagination"]["page"]["increment_by"] = {"literal": 1}
+    return _validate(doc)
+
+
+def _offset_paginated_endpoint(increment_by: Any) -> dict:
+    """The example endpoint, re-cut onto the offset family.
+
+    The shipped example paginates by page, so the offset slot has to be staged
+    to be probed at all — and the prose names it among the slots that refuse a
+    literal, so a slot no probe reaches is a claim nobody measures. The `page`
+    param is renamed rather than added: pagination may only drive a declared
+    param, and an undeclared one would raise an unrelated finding that a probe
+    asserting an outcome must not be carrying.
+    """
+    doc = _read_endpoint()
+    read = doc["operations"]["read"]
+    read["params"]["offset"] = read["params"].pop("page")
+    read["request"]["query"]["offset"] = {"from_param": "offset"}
+    del read["request"]["query"]["page"]
+    pagination = read["pagination"]
+    pagination["type"] = "offset"
+    del pagination["page"]
+    pagination["offset"] = {
+        "param": "offset", "initial": 0, "increment_by": increment_by,
+    }
+    return doc
+
+
+def _p_pagination_offset_step_literal() -> list[dict]:
+    return _validate(_offset_paginated_endpoint({"literal": 50}))
+
+
+def _p_pagination_offset_step_bare() -> list[dict]:
+    # The same document with the spelling the prose recommends. Without it the
+    # rejection above could come from the staging rather than from the literal
+    # form, and the probe would keep passing after the exclusion was dropped.
+    return _validate(_offset_paginated_endpoint(50))
 
 
 # --- connection / pipeline / stream probes ---------------------------------
@@ -637,8 +678,14 @@ PROBES: tuple[Probe, ...] = (
           forbid_re=r"FixedSizeBinary|Time32|Decimal256",
           require_re=r"no rule rendering"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
-          message_re=r"greater than 0"),
-    Probe("pagination-limit-literal-zero-accepted", "clean", _p_pagination_limit_literal_zero),
+          message_re=r"greater than or equal to 1"),
+    Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,
+          message_re=r"(?i)tag 'literal'"),
+    Probe("pagination-page-step-literal-rejected", "error", _p_pagination_page_step_literal,
+          message_re=r"(?i)tag 'literal'"),
+    Probe("pagination-offset-step-literal-rejected", "error", _p_pagination_offset_step_literal,
+          message_re=r"(?i)tag 'literal'"),
+    Probe("pagination-offset-step-bare-accepted", "clean", _p_pagination_offset_step_bare),
     # connection / pipeline / stream
     Probe("connection-sidecar-name-unconstrained", "clean", _p_connection_sidecar_name,
           forbid_re=r"(?i)sidecar"),

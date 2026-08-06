@@ -4,7 +4,7 @@ Shared invariant both creator agents must follow. The shapes and scopes below
 are owned by the contract models (`analitiq.contracts.value_expression`); this
 page is the authoring guide to them.
 
-## Four expression kinds
+## Expression kinds
 
 A value expression is one of:
 
@@ -15,10 +15,17 @@ A value expression is one of:
 | `literal` | `{"literal": <any>}` | A constant value (string, number, boolean, object, array). |
 | `function` | `{"function": "<name>", "input": {...}}` | Call a registered function with named inputs. |
 
-Anywhere the schema accepts a value expression, exactly one of the four
-shapes is allowed. (Endpoint request slots additionally admit the binding
+Anywhere the schema accepts a value expression, exactly one of the shapes
+above is allowed. (Endpoint request slots additionally admit the binding
 forms `from_param` / `from_input`; the exactly-one-key rule there is
 ADV-ENDP-022 — see `connector-spec-api/spec-request-binding.md`.)
+
+<!-- PROBE: pagination-limit-literal-rejected, pagination-offset-step-literal-rejected, pagination-offset-step-bare-accepted, pagination-page-step-literal-rejected -->
+A slot may admit a narrower set. A numeric pagination slot (`limit.default`,
+`offset.increment_by`, `page.increment_by`) takes a bare positive integer or a
+shape the engine resolves per request — `literal` is refused there, because a
+statically-known page size or step IS the bare integer and only that spelling
+carries the bound. See `connector-spec-api/spec-pagination.md`.
 
 ## Logical scopes
 
