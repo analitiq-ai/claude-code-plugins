@@ -23,7 +23,9 @@ JS = "https://json-schema.org/draft/2020-12/schema"
 # below so this constant cannot silently drift from it.
 DECLARED_TRANSPORT = "api"
 
-# The origin the origin-containment record adds a second transport on.
+# The second transport the origin-containment record declares, and the origin
+# it puts it on.
+SECOND_TRANSPORT = "cdn"
 SECOND_ORIGIN = "https://cdn.example.test"
 
 
@@ -33,23 +35,32 @@ def _origin(url: str) -> str:
 
 
 def _declare_second_origin(connector: dict) -> None:
-    """Add a transport `cdn` on an origin the default transport is not on.
+    """Add `SECOND_TRANSPORT` on an origin the default transport is not on.
 
     Comparing the two transport NAMES would not establish a second origin: a
     corpus whose default moved to this host would state one origin under two
     names, and the record would pass while recording nothing. So the default's
-    own `base_url` is read — and it must be a literal one, since a value
-    expression resolves at connection time and puts the origin out of reach of
-    a static comparison.
+    own `base_url` is read, and it must carry a scheme and a host that are
+    knowable from the document — a scheme-less string has no origin to compare,
+    the object value-expression arms resolve at connection time, and a bare
+    string may still bear `${...}` placeholders that do the same.
     """
     default = connector["transports"][connector["default_transport"]]
     base_url = default.get("base_url")
-    assert isinstance(base_url, str) and _origin(base_url) not in ("://", SECOND_ORIGIN), (
-        f"the corpus default transport must declare a literal base_url on an "
-        f"origin other than {SECOND_ORIGIN}; it declares {base_url!r}, so the "
-        "second transport below states no second origin and records nothing"
+    parts = urlsplit(base_url) if isinstance(base_url, str) else None
+    assert (
+        parts is not None
+        and parts.scheme
+        and parts.netloc
+        and "${" not in base_url
+        and _origin(base_url) != SECOND_ORIGIN
+    ), (
+        "the corpus default transport must declare a base_url whose origin is "
+        f"knowable here and is not {SECOND_ORIGIN}; it declares {base_url!r}, "
+        "so the transport added below states no second origin and the record "
+        "records nothing"
     )
-    connector["transports"]["cdn"] = {
+    connector["transports"][SECOND_TRANSPORT] = {
         "transport_type": "http",
         "base_url": SECOND_ORIGIN + "/v1",
         "timeout_seconds": 30,
@@ -242,21 +253,23 @@ class TestOriginContainmentGapIsRecorded:
     This is that record, pinned through the connector-anchored walk, which is
     where an origin check would have to live for the same reason the NAME half
     does — origins are declared on the connector and consumed by the endpoint.
-    Three documents are recorded because a closure need not refuse all three,
-    and each is accepted for its own reason:
+    Three documents are recorded because a closure need not refuse all three.
+    The first two differ in what the document bounds the URL by; the third
+    repeats the second on the operation leg a read-only closure never reaches:
 
     * A next-page link read out of the response body: the document bounds that
       URL by no origin. A rule requiring every produced URL to land on a
-      declared origin refuses it — unless it is written to skip what is
-      statically unknowable, in which case it is skipped and this record must
-      be re-graded by hand rather than reddened.
+      declared origin refuses it — unless it skips what is statically
+      unknowable, the way the contract's `UNKNOWABLE_SKIP` convention treats an
+      authored path it cannot resolve. Skipped rather than refused, this record
+      stays green for a new reason and must be re-graded by hand.
     * A read request selected onto a declared transport the engine never opens.
       A rule pinned to the single session `default_transport` opens refuses it;
       the closure the description states as its intent — an origin rule over
       ANY declared transport, plus per-operation selection — makes the document
       correct instead, and then the record is retired rather than reddened.
-    * The same selection on the write path, which the engine guards separately
-      from the read path and, today, not at all.
+    * The same selection on the write path, which the read path's origin
+      pinning does not cover and which no separate guard covers either.
 
     Each asserts on EVERY error the walk emits, not on `endpoint-transport-ref`
     alone: the NAME half already owns that id, so an origin rule arriving under
@@ -290,28 +303,37 @@ class TestOriginContainmentGapIsRecorded:
         # read here only to grade the name.
         _declare_second_origin(connector_base)
         findings = _run(
-            tmp_path, connector_base, {"widgets.json": _read_endpoint("cdn")}, validator
+            tmp_path,
+            connector_base,
+            {"widgets.json": _read_endpoint(SECOND_TRANSPORT)},
+            validator,
         )
         assert not _errors(findings), findings
 
     def test_a_second_origin_on_the_write_path_is_accepted_too(
         self, tmp_path, connector_base, validator
     ):
-        # The write path is guarded separately from the read path, so recording
-        # only the read one would leave half the gap unrecorded.
+        # The read path's single-origin pinning does not extend to the write
+        # path, which has no origin guard of its own, so recording only the
+        # read one would leave half the gap unrecorded.
         _declare_second_origin(connector_base)
         findings = _run(
-            tmp_path, connector_base, {"widgets.json": _write_endpoint("cdn")}, validator
+            tmp_path,
+            connector_base,
+            {"widgets.json": _write_endpoint(SECOND_TRANSPORT)},
+            validator,
         )
         assert not _errors(findings), findings
 
     def test_a_response_driven_next_url_is_accepted_because_nothing_checks_origins(
         self, tmp_path, connector_base, validator
     ):
-        # The other direction, and the one no closure can leave correct: the
-        # next-page URL is read out of the response body, so the document
-        # bounds it by no origin at all. `pagination.link.next_url` is named in
-        # the description's ORIGIN half for exactly this reason.
+        # The other direction: the next-page URL is read out of the response
+        # body, so the document bounds it by no origin at all — which is why
+        # `pagination.link.next_url` is named in the description's ORIGIN half.
+        # An origin rule refuses this document unless it skips what is
+        # statically unknowable, in which case this record stays green for a
+        # new reason and must be re-graded by hand.
         endpoint = _read_endpoint(DECLARED_TRANSPORT)
         read = endpoint["operations"]["read"]
         read["pagination"] = {

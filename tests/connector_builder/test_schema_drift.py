@@ -1101,14 +1101,11 @@ EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
 EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
-# Each spec `_CLOSURE_FIX` names carries a sentence closing its set — "and
-# nothing else" in `spec-replication.md`, "exposes exactly these" in
-# `spec-resource-discovery.md`, "exactly the keys named below and no others" in
-# `spec-type-maps.md`. Whether such a sentence still closes the set is a
-# reader's call
-# (`.claude/rules/no-cardinality-restatements.md` §Closure claims): locating it
-# takes an English anchor, which stops matching when the sentence is reworded,
-# and grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
+# Each of the three specs above closes its set with an exhaustive-enumeration
+# sentence, and `_CLOSURE_FIX` is what sends a failing comparison back to the
+# right one. Grading such a sentence stays with the reader: locating it takes an
+# English anchor, which stops matching when the sentence is reworded, and
+# grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
 # keeps out of tests. What a mechanism decides is the contract's own member
 # sets, asserted below, each failing with the document that must be re-read.
 _CLOSURE_FIX = (
