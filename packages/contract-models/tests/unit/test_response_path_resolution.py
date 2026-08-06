@@ -1207,7 +1207,7 @@ class TestRequestSlotsAreSweptToo:
     def test_the_slot_tuple_still_covers_every_expression_carrying_field(self):
         """`_REQUEST_EXPRESSION_SLOTS` drives both site tables. Adding an
         expression-carrying request field without adding it here would silently
-        leave it unswept — the defect class this PR closed four times."""
+        leave it unswept — the defect class the four cases above each pin."""
         assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
 
 
@@ -1267,8 +1267,8 @@ class TestARecordShapeMustDeclareSomething:
     that None as "the ref did not resolve, go fix the endpoint", but the ref
     resolved perfectly: a fix loop with no exit.
 
-    The self-`$ref` spelling is newly reachable because this PR made `$ref`
-    following legal in the record locator.
+    The self-`$ref` spelling is reachable at all only because `$ref` following
+    is legal in the record locator.
     """
 
     def _payload(self, items, defs=None):

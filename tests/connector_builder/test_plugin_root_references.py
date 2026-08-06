@@ -183,7 +183,7 @@ def test_reference_detector_finds_all_forms() -> None:
         f"only {len(targets)} doc references found across the three forms — "
         "the bare-filename sweep is not reaching the sibling cross-references."
     )
-    # The wiring this PR extended: creators are routed to their spec skill.
+    # The routing that has to survive: creators reach their spec skill.
     assert any(t.startswith("skills/connector-spec-db/") for t in targets)
     assert "spec-sql-write-path.md" in targets
     # The unbackticked bucket on its own: 9 citations exist today (3 in

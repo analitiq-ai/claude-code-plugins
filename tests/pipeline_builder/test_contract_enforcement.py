@@ -255,8 +255,8 @@ def test_suite_exercises_in_repo_source_not_an_installed_wheel():
     matches the pin" is the wrong invariant — nothing should be installed.
 
     The assertion itself lives in `tests/connector_builder/_pins.py` so the two
-    suites share one implementation; duplicating it here is exactly the drift
-    surface `.claude/rules/no-drift-surfaces.md` forbids.
+    suites share one implementation; duplicating it here would be a second copy
+    free to drift from the first, which is the surface this repo does not open.
     """
     sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
     from _pins import assert_pinned_versions

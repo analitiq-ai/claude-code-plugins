@@ -4,10 +4,10 @@
 presence. It is blind to a *routing rule* — a mapper row, or a hard rule in an
 agent's prose — because those are single-member statements, not full-set
 restatements. Deleting the `truncate_insert` row from `WriteModeMapper` or the
-`kind`-discriminator rule from `stream-creator.md` left the whole suite green
-(measured on this PR); the contract tests keep passing because the contract is
-unchanged. What breaks is the plugin: the mode becomes unreachable, or the agent
-authors documents every validator rejects.
+`kind`-discriminator rule from `stream-creator.md` left the whole suite green —
+measured, by deleting each and running it. The contract tests keep passing
+because the contract is unchanged. What breaks is the plugin: the mode becomes
+unreachable, or the agent authors documents every validator rejects.
 
 Per the repo's own rule, agent prose is behaviour. These are the behaviours
 `rc19` added or changed, so they get tests.

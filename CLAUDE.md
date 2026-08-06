@@ -208,7 +208,7 @@ only — never add a static credential as a repo or environment secret, and neve
 use `pull_request_target` with a checkout of PR code.
 
 Full procedure, commit-type rules, and the `pypi` / `schemas` environment
-settings: see the `releasing` skill (`.claude/skills/releasing/SKILL.md`).
+settings: see the `releasing` skill.
 
 ## PR Review Process
 

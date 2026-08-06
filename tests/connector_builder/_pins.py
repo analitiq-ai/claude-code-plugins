@@ -93,9 +93,9 @@ def assert_pinned_versions() -> None:
 def assert_pinned_version_matches_pyproject() -> None:
     """`PINNED_VERSION` restates a value pyproject.toml owns — pin the copy.
 
-    Per `.claude/rules/no-drift-surfaces.md` an unavoidable restatement of a
-    contract value must be pinned by a test, or it is a defect rather than
-    documentation.
+    A second copy of a value drifts from the first; the repo's rule is that a
+    restatement which cannot be avoided must be pinned by a test, or it is a
+    defect rather than documentation.
     """
     import re
 

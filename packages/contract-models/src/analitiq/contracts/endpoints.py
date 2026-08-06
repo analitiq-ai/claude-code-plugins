@@ -3949,8 +3949,8 @@ def _materialize(
         #
         # gave `materialize_node(B)` an accepted `[integer, boolean]` while
         # `effective_properties(B)` refused. Truncation-tainting a shared cache
-        # instead was tried earlier in this PR and is exponential — the taint
-        # propagates to every ancestor, so one back-edge uncaches the whole walk.
+        # instead is exponential — the taint propagates to every ancestor, so
+        # one back-edge uncaches the whole walk.
         #
         # THE PRICE, stated because nothing else in this file will: one full
         # contributor walk per node that declares `properties`, which is cubic
@@ -4136,8 +4136,8 @@ def _sweep_expression_sites(
 
     The four checks — expression shape, leading scope, response sub-scope, and
     (where a `response.schema` exists) declared-path resolution with typedness —
-    were wired per CALL SITE rather than per slot, and every hole this PR closed
-    after the first was the same shape: a site that was not on somebody's list.
+    were wired per CALL SITE rather than per slot, and every hole found after
+    the first was the same shape: a site that was not on somebody's list.
     `request.path_params` was missing from two tables; `pagination` and the write
     `response` never reached the shape walk; `params.<name>.default` was added to
     three walks and not the fourth. `_validate_response_body_paths`' own
@@ -4507,8 +4507,8 @@ def _validate_records_in_response_schema(
         # exception inferred validity from the absence of one, so a record shape
         # that composes down to nothing at all passed: `items: {}`, and a `$defs`
         # entry that only `$ref`s itself, which the cycle rule collapses to `{}`
-        # without raising. The second is newly reachable because this PR made
-        # `$ref` following legal in the record locator.
+        # without raising. The second is reachable at all only because `$ref`
+        # following is legal in the record locator.
         #
         # Deliberately NOT "must declare fields": `{"type": "object"}` with no
         # `properties` is the documented unknowable-shape case the corpus uses,
