@@ -133,11 +133,12 @@ _BARE_REF = re.compile(r"`((?:\.{1,2}/)*(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_.-]+\.md)
 # `${CLAUDE_PLUGIN_ROOT}/…` reference is not re-matched. The directory-segment
 # charset mirrors `_BARE_REF`'s, and both spell the `./` and `../` prefixes a
 # sibling-skill citation uses — a citation the reader resolves from the
-# document it sits in, and so does `_candidates`. The second lookbehind hands
-# a link target to the link pass alone: without it `](skills/x/y.md)` matches
-# here too, and one broken link fails two tests.
+# document it sits in, and so does `_candidates`. The last two lookbehinds hand
+# a link target to the link pass alone: without them `](skills/x/y.md)` and its
+# angle-bracket spelling `](<…>)` match here too, and one broken link fails two
+# tests. It takes two because a lookbehind is fixed-width.
 _BARE_PATH_REF = re.compile(
-    r"(?<![\w`./-])(?<!\]\()"
+    r"(?<![\w`./-])(?<!\]\()(?<!\]\(<)"
     r"((?:\.{1,2}/)*(?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
 )
 
@@ -208,7 +209,7 @@ _SLUG_DROP = re.compile(r"[^\w\- ]")
 # them out means re-wrapping a paragraph re-points its anchor at the citing
 # document and fails the build naming a file the citation never mentioned.
 _ANCHOR_BINDING = re.compile(
-    r"([A-Za-z0-9_./-]+\.md)(?:[`\"'(,—–*_]|[ \t]|\n[ \t]*>?(?![ \t]*\n)){0,8}$"
+    r"([A-Za-z0-9_./-]+\.md)(?:[`\"'(,—–*_:]|[ \t]|\n[ \t]*>?(?![ \t]*\n)){0,8}$"
 )
 
 # How far past a `§` an anchor may reach. One bound, used by both the quoted
@@ -270,6 +271,11 @@ _FORM_PATTERNS = {
 }
 _FORMS = (*_FORM_PATTERNS, "anchor")
 
+# The forms `_scan_sites` reads line by line. `link` and `asset` have their own
+# sweeps — one resolves through the citing document, the other filters by the
+# plugin's directory vocabulary — so they are counted from those.
+_SCAN_FORMS = ("plugin_root", "backticked", "bare_path")
+
 # The floor below which an extractor is no longer reading prose at all. A
 # pattern that stops matching passes vacuously, so each form is floored
 # separately — a floor on the total would let one dead pattern hide behind
@@ -326,8 +332,10 @@ _FLOORS: dict[str, dict[str, int]] = {
 # a classifier routed to the release table. A rename here is a review moment,
 # not a silent pass. Written at full plugin-relative depth even where the prose
 # cites the file more shortly: the check compares the *file* each side resolves
-# to, and spelling a sentinel exactly as the prose spells it would let that
-# comparison rot back into string equality unnoticed.
+# to. Where the prose writes a path at some depth, the sentinel is written at
+# another, so a comparison that rotted back into string equality would fail;
+# the `backticked` sentinels are bare basenames because that is the only way
+# that form is ever written.
 #
 # `fixture` is a real file plus the opening words of a heading it carries (the
 # citation form the prose uses — `## Release version (`version`)` is cited as
@@ -346,7 +354,7 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             "plugin_root": "skills/connector-spec-db/spec-connector-package.md",
             "bare_path": "skills/connector-builder/references/metadata-and-versioning.md",
             "backticked": "spec-sql-write-path.md",
-            # The archetype an API creator copies, cited by three specs.
+            # The archetype an API creator copies, cited by two specs.
             "asset": "skills/connector-spec-api/examples/api-key/api-key.example.json",
         },
         "fixture": (
@@ -494,6 +502,12 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
       read; an anchor checked against none is unchecked).
     """
     cleaned = _clean(target)
+    # Before any branch: a path an installed plugin does not carry resolves to
+    # nothing, however it is spelled. Filtering only the path universe left the
+    # three `.exists()` branches below answering from the checkout — and CI
+    # grows `__pycache__` itself, so a citation of one passed there too.
+    if not _ships(cleaned):
+        return []
     if cleaned.startswith("plugins/"):
         candidate = REPO_ROOT / cleaned
         return [candidate] if candidate.exists() else []
@@ -524,23 +538,45 @@ def _resolve_files(target: str, citing: str, plugin: str) -> list[Path]:
     return [path for path in _candidates(target, plugin, citing) if path.is_file()]
 
 
-def _scan_text(text: str) -> list[tuple[int, str]]:
-    """Every (lineno, target) path citation in one document's text — the three
-    path patterns on every line, plus the path half of every `§` citation.
+def _scan_sites(text: str) -> list[tuple[int, str, str]]:
+    """Every (lineno, form, target) path citation in one document's text — the
+    three path patterns on every line, plus the path half of every `§`
+    citation.
 
-    De-duplicated per line: a `` `SKILL.md §Pipeline` `` citation is seen by
-    two extractors, and one broken citation must read as one finding.
+    De-duplicated per line and target: `` `spec-x.md` §Foo `` is seen by the
+    backticked pattern *and* by the anchor binding, and one broken citation
+    must read as one finding. `` `SKILL.md §Pipeline` `` is the opposite case —
+    the anchor binding is the only extractor that sees it, which is why that
+    half of the sweep exists.
+
+    Form-tagged so the floors can count what this sweep found rather than
+    re-running the patterns themselves: a floor that re-scans cannot notice
+    the sweep going blind.
     """
     from_paths = [
-        (lineno, match.group(1))
+        (lineno, form, match.group(1))
         for lineno, line in enumerate(text.splitlines(), 1)
-        for pattern in _PATH_PATTERNS
+        for form, pattern in _FORM_PATTERNS.items()
+        if form in _SCAN_FORMS
         for match in pattern.finditer(line)
     ]
     from_anchors = [
-        (site.lineno, site.target) for site in _anchor_sites(text) if site.target
+        (site.lineno, "anchor_path", site.target)
+        for site in _anchor_sites(text)
+        if site.target
     ]
-    return list(dict.fromkeys(from_paths + from_anchors))
+    seen, sites = set(), []
+    for lineno, form, target in from_paths + from_anchors:
+        if (lineno, target) in seen:
+            continue
+        seen.add((lineno, target))
+        sites.append((lineno, form, target))
+    return sites
+
+
+def _scan_text(text: str) -> list[tuple[int, str]]:
+    """`_scan_sites` without the form tag — what the file pass grades."""
+    return [(lineno, target) for lineno, _form, target in _scan_sites(text)]
 
 
 class Anchor(NamedTuple):
@@ -735,13 +771,23 @@ def _addresses_this_plugin(target: str, plugin: str) -> bool:
     return bool(segments) and segments[0] in _plugin_dirs(plugin)
 
 
-def _references(plugin: str) -> list[tuple[str, int, str]]:
-    """Every (relpath, lineno, target) path citation in the plugin."""
+def _tagged_references(plugin: str) -> list[tuple[str, int, str, str]]:
+    """Every (relpath, lineno, form, target) path citation the line sweep
+    finds — the sweep the file pass grades, with the form each citation came
+    from, so the floors can count it."""
     root = _plugin_root(plugin)
     return [
-        (path.relative_to(root).as_posix(), lineno, target)
+        (path.relative_to(root).as_posix(), lineno, form, target)
         for path in _prose_files(plugin)
-        for lineno, target in _scan_text(path.read_text(encoding="utf-8"))
+        for lineno, form, target in _scan_sites(path.read_text(encoding="utf-8"))
+    ]
+
+
+def _references(plugin: str) -> list[tuple[str, int, str]]:
+    """Every (relpath, lineno, target) path citation in the plugin."""
+    return [
+        (rel, lineno, target)
+        for rel, lineno, _form, target in _tagged_references(plugin)
     ] + _asset_citations(plugin)
 
 
@@ -984,6 +1030,15 @@ def _stale_waivers(sentinels: dict[str, str], waived: dict[str, str]) -> list[st
     return sorted(set(waived) & set(sentinels))
 
 
+def _unreachable_preemptive(
+    preemptive: dict[str, str], reachable: set[str]
+) -> list[str]:
+    """Pre-emptive entries naming a disposition no branch returns — config
+    that exempts nothing, in the registry whose point is that an exemption is
+    declared and reviewable."""
+    return sorted(set(preemptive) - reachable)
+
+
 def _falsified_waivers(plugin: str) -> dict[str, list[str]]:
     """Waivers the prose contradicts: the waiver says the form routes nobody,
     and the form is cited outside the plugin's reader-facing README."""
@@ -1088,20 +1143,21 @@ def _form_counts(plugin: str) -> dict[str, int]:
         path.read_text(encoding="utf-8")
         for path in _prose_files(plugin)
     ]
-    per_line = {
-        form: sum(
-            len(_FORM_PATTERNS[form].findall(line))
-            for text in texts
-            for line in text.splitlines()
-        )
-        for form in _FORM_PATTERNS
-        if form != "asset"
-    }
+    assert texts  # a plugin with no prose is not a plugin
+    # Counted from the sweeps that grade, never by re-running the patterns: a
+    # floor that re-scans the tree cannot notice the sweep going blind, which
+    # is the one failure a floor exists to make loud.
+    scanned = Counter(form for _rel, _lineno, form, _t in _tagged_references(plugin))
     _dangling, checked = _anchor_checks(plugin, _anchor_references(plugin))
-    # `asset` counts what the filter kept, not what the pattern matched: the
-    # pattern also sees paths this plugin does not own, and a floor on those
-    # would be met by prose about `definition/connector.json`.
-    return per_line | {"anchor": checked, "asset": len(_asset_citations(plugin))}
+    return (
+        {form: scanned.get(form, 0) for form in _SCAN_FORMS}
+        | {"link": len(_link_references(plugin))}
+        # `asset` counts what the filter kept, not what the pattern matched:
+        # the pattern also sees paths this plugin does not own, and a floor on
+        # those would be met by prose about `definition/connector.json`.
+        | {"asset": len(_asset_citations(plugin))}
+        | {"anchor": checked}
+    )
 
 
 def _unreached_sentinels(plugin: str, sentinels: dict[str, str]) -> dict[str, str]:
@@ -1118,7 +1174,8 @@ def _unreached_sentinels(plugin: str, sentinels: dict[str, str]) -> dict[str, st
 def _files_reached_by(plugin: str, form: str) -> set[Path]:
     """Every file one extractor's citations resolve to. Links resolve from the
     document they are written in, so they are read back with their citing file
-    rather than through `_candidates`, which knows nothing of `../`."""
+    rather than through the one-argument `_candidates` call the other forms
+    use — it resolves `../` only when told which document to resolve from."""
     if form == "link":
         return {
             ((_plugin_root(plugin) / rel).parent / target).resolve()
@@ -1274,15 +1331,14 @@ def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
     if form == "link":
         return [(rel, target) for rel, _lineno, target, _frag in _link_references(plugin)]
     if form == "asset":
-        # Filtered by the plugin's own directory vocabulary, so the raw pattern
-        # would over-count by half with paths this plugin does not own.
+        # Filtered by the plugin's own directory vocabulary. The raw pattern
+        # matches several times what this keeps; the surplus is paths the
+        # plugin does not own, and the count test pins kept < raw.
         return [(rel, target) for rel, _lineno, target in _asset_citations(plugin)]
-    root = _plugin_root(plugin)
     return [
-        (path.relative_to(root).as_posix(), match.group(1))
-        for path in _prose_files(plugin)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        for match in _FORM_PATTERNS[form].finditer(line)
+        (rel, target)
+        for rel, _lineno, tagged, target in _tagged_references(plugin)
+        if tagged == form
     ]
 
 
@@ -1543,6 +1599,67 @@ def test_every_mention_disposition_is_load_bearing() -> None:
         f"{arrived} — drop the _PREEMPTIVE_DISPOSITIONS entry; the tree proves "
         "the disposition itself."
     )
+    # And the other direction, which nothing else asks: a pre-emptive entry
+    # naming a reason `_mention_disposition` can never return is config that
+    # exempts nothing, sitting in the one registry whose whole point is that
+    # an exemption is declared and reviewable.
+    unreachable = _unreachable_preemptive(_PREEMPTIVE_DISPOSITIONS, set(cases))
+    # Driven, not merely evaluated: on today's registry the check has nothing
+    # to find, so without this it would pass as a constant.
+    assert _unreachable_preemptive({"typo url": "why"}, set(cases)) == ["typo url"]
+    assert _unreachable_preemptive({"glob": "why"}, set(cases)) == []
+    assert not unreachable, (
+        f"_PREEMPTIVE_DISPOSITIONS names dispositions no branch returns: "
+        f"{unreachable} — either the branch went away, or the name is a typo "
+        "nobody would ever see fail."
+    )
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_a_build_artifact_is_never_a_citation_target(plugin: str) -> None:
+    """Filtering the path universe is not enough: `_candidates` answers three
+    of its branches straight off the filesystem, so a citation of a
+    `__pycache__` entry resolved from the checkout — and CI grows that
+    directory itself, so it resolved there too. The refusal belongs at the top
+    of resolution, where every branch passes through it."""
+    root = _plugin_root(plugin)
+    cache = root / "__pycache__"
+    artifact = cache / "guard_probe.cpython-313.pyc"
+    created = not cache.exists()
+    try:
+        cache.mkdir(exist_ok=True)
+        artifact.write_text("", encoding="utf-8")
+        # The artifact is on disk, which is what the three `.exists()` branches
+        # of `_candidates` consult. Every one must still refuse it.
+        assert artifact.is_file()
+        rel = f"__pycache__/{artifact.name}"
+        assert _candidates(rel, plugin) == []
+        assert _candidates(rel, plugin, "agents/x.md") == []
+        assert _candidates(f"plugins/{plugin}/{rel}", plugin) == []
+        assert _is_dangling(rel, plugin, "agents/x.md")
+    finally:
+        artifact.unlink(missing_ok=True)
+        if created and cache.exists():
+            cache.rmdir()
+    # The twin: a file the plugin does ship resolves by the same route.
+    shipped = _fixture(plugin)[0]
+    assert _candidates(shipped, plugin)
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_the_floors_count_what_the_sweep_found(plugin: str) -> None:
+    """A floor that re-runs the patterns cannot notice the sweep going blind —
+    it would keep counting citations nothing grades. Every scanned form's count
+    comes from the same tagged sweep the file pass reads, so narrowing the
+    sweep drops the count with it."""
+    counts = _form_counts(plugin)
+    tagged = Counter(form for _rel, _lineno, form, _t in _tagged_references(plugin))
+    for form in _SCAN_FORMS:
+        assert counts[form] == tagged[form] > 0, form
+    assert counts["link"] == len(_link_references(plugin))
+    assert counts["asset"] == len(_asset_citations(plugin))
+    # And the sweep really is the plugin's whole prose, not one document of it.
+    assert len({rel for rel, _l, _f, _t in _tagged_references(plugin)}) > 5
 
 
 def test_the_shipped_universe_drops_build_artifacts(tmp_path: Path) -> None:
@@ -2261,7 +2378,7 @@ def test_a_comma_or_dash_still_binds_the_anchor_to_its_file() -> None:
     binding that broke on a comma would not merely lose the check — it would
     resolve the anchor against the citing document and report a section of the
     wrong file as missing."""
-    for glue in ("` ", "`, ", "` — ", "`\n  ", "`** ", "`\n> ", "`**\n> "):
+    for glue in ("` ", "`, ", "` — ", "`\n  ", "`** ", "`\n> ", "`**\n> ", "`: "):
         text = f"see `SKILL.md{glue}§Cross-field rules for the tuple."
         assert _anchor_sites(text)[0].target == "SKILL.md", glue
     # A sentence-final period is not glue: the clause naming the file ended, so
@@ -2331,5 +2448,8 @@ def test_anchored_forms_are_not_double_counted() -> None:
     anchored = [target for _lineno, target in _scan_text("See `spec-tls.md` §Shape.")]
     assert anchored == ["spec-tls.md"]
     # A link target belongs to the link pass alone: matched here too, one
-    # broken link would fail two tests and read as two breaks.
+    # broken link would fail two tests and read as two breaks. Both spellings
+    # CommonMark allows, since a lookbehind is fixed-width and each needs its
+    # own.
     assert _scan_text("See [envelope](skills/gone/spec-envelope.md).") == []
+    assert _scan_text("See [envelope](<skills/gone/spec-envelope.md>).") == []
