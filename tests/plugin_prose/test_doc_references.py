@@ -33,14 +33,17 @@ entries in the three per-plugin registries below, this suite is red.
      files do not exist, a link out of the tree dangles. A link's `#fragment`
      is checked as a section, below.
 
-   - Backticked paths with any other extension — `` `examples/api-key/
-     api-key.example.json` ``, `` `scripts/endpoint_id.py` `` — when the
-     citation's leading segment names a directory this plugin has. That is the
-     rule that tells a file of this plugin from `definition/connector.json`,
-     which is what the connector *author* writes, and from
-     `connection/latest.json` or `America/New_York`, which are not files at
-     all. An example an agent is told to copy starves it exactly as a missing
-     spec does.
+   - Paths with any other extension, wherever prose puts them — filling a code
+     span (`` `examples/api-key/api-key.example.json` ``), sharing one with the
+     flags a script runs with, bare in a frontmatter description, bare in a
+     fenced command line — when the citation's leading segment names a
+     directory this plugin has. That last clause is the whole rule: it tells a
+     file of this plugin from `definition/connector.json`, which is what the
+     connector *author* writes, and from `connection/latest.json` or
+     `America/New_York`, which are not files at all. Delimiters are not part of
+     it; requiring one hid the script a plugin's own contributor guidance tells
+     you to run. An example an agent is told to copy starves it exactly as a
+     missing spec does.
 
    What is **not** checked, each a decision rather than an oversight:
 
@@ -140,8 +143,8 @@ _BARE_PATH_REF = re.compile(
 
 _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 
-# A path with any other extension, wherever it is written: backticked on its
-# own (`` `scripts/endpoint_id.py` ``), sharing a code span with its flags
+# A path with any other extension, wherever it is written: filling a code span
+# (`` `scripts/endpoint_id.py` ``), sharing one with its flags
 # (`` `scripts/type_map_gaps.py --direction read` ``), bare in a frontmatter
 # description, or bare in a fenced command line. Delimiters are not the rule
 # here — `_addresses_this_plugin` is — because most such paths in prose are
@@ -149,14 +152,18 @@ _PATH_PATTERNS = (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
 # elsewhere entirely (`connection/latest.json`, `America/New_York`). Requiring
 # the path to fill a backtick span looked like a rule and was really a
 # delimiter, and it left the script this plugin's own CLAUDE.md tells a
-# contributor to run twice read by nobody. The directory-segment charset keeps
-# `.` so `.claude-plugin/plugin.json` is reachable.
-# Unlike `_BARE_PATH_REF`, the lookbehind admits a preceding backtick: there is
-# no separate backticked asset pattern to defer to, so excluding it would drop
-# every `` `scripts/endpoint_id.py` `` in the tree.
+# contributor to run twice read by nobody.
+# The lookbehind does two jobs. It admits a preceding backtick — unlike
+# `_BARE_PATH_REF`, there is no separate backticked asset pattern to defer to,
+# so excluding it would drop every `` `scripts/endpoint_id.py` `` in the tree —
+# and it refuses a start preceded by a path character, which is what keeps the
+# tail of a `${CLAUDE_PLUGIN_ROOT}/scripts/x.py` reference from being read a
+# second time as a bare citation, and keeps every interior position of a URL
+# out. The directory-segment charset carries `.`, so `.claude-plugin/
+# plugin.json` is reachable and a `./`- or `../`-prefixed hop needs no separate
+# alternative.
 _BARE_ASSET_REF = re.compile(
-    r"(?<![\w./-])((?:\.{1,2}/)*(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)"
-    r"(?![\w-])"
+    r"(?<![\w./-])((?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]+)(?![\w-])"
 )
 
 # A markdown link target and its optional fragment: `](spec-columns.md)`,
@@ -415,6 +422,15 @@ def _prose_files(plugin: str) -> list[Path]:
 _NOT_SHIPPED = ("__pycache__",)
 
 
+def _ships(relative: str) -> bool:
+    """Would an installed plugin carry this path? A predicate rather than a
+    comprehension inside the sweep, because the sweep can only be asked about
+    a checkout that happens to contain the artifact — and whether it does
+    depends on whether another suite imported a plugin script first, which is
+    the local-vs-CI disagreement this exists to remove."""
+    return not any(part in _NOT_SHIPPED for part in Path(relative).parts)
+
+
 @cache
 def _plugin_paths(plugin: str) -> tuple[str, ...]:
     """Every file and directory the plugin ships, as plugin-root-relative posix
@@ -424,9 +440,10 @@ def _plugin_paths(plugin: str) -> tuple[str, ...]:
     spec does."""
     root = _plugin_root(plugin)
     return tuple(
-        path.relative_to(root).as_posix()
+        rel
         for path in sorted(root.rglob("*"))
-        if not any(part in _NOT_SHIPPED for part in path.relative_to(root).parts)
+        for rel in [path.relative_to(root).as_posix()]
+        if _ships(rel)
     )
 
 
@@ -664,9 +681,9 @@ def _plugin_dirs(plugin: str) -> frozenset[str]:
 
 
 def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
-    """Backticked non-`.md` citations that name a file of *this plugin*.
+    """Non-`.md` citations that name a file of *this plugin*, however written.
 
-    Prose writes two very different things in this form. `examples/api-key/
+    Prose writes two very different things in this shape. `examples/api-key/
     api-key.example.json` and `scripts/endpoint_id.py` are files an agent is
     sent to read, and renaming one starves it exactly as a missing spec does.
     `definition/connector.json`, `.secrets/credentials.json`,
@@ -676,9 +693,12 @@ def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
 
     The discriminator is the plugin's own directory vocabulary: a citation
     whose leading segment names a directory this plugin has is addressing this
-    plugin. Measured over every backticked non-`.md` path in both plugins, that
-    separates them with one exception — a repo-root script cited from plugin
-    prose, which is what `_EXTERNAL_REFS` is for.
+    plugin. Measured over every non-`.md` path the extractor matches in both
+    plugins, that separates them with one exception — a repo-root script cited
+    from plugin prose, which is what `_EXTERNAL_REFS` is for. Delimiters play
+    no part: a path is as much a citation in a fenced command line as in a
+    code span, and treating the backticks as the rule left a real citation
+    unread.
     """
     root = _plugin_root(plugin)
     return [
@@ -693,9 +713,9 @@ def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
 
 
 def _addresses_this_plugin(target: str, plugin: str) -> bool:
-    """Is this backticked path a file of this plugin, or something else the
-    prose merely names? The one filter — the sweep and its tests read it, so
-    they cannot disagree about what an asset citation is."""
+    """Is this path a file of this plugin, or something else the prose merely
+    names? The one filter — the sweep and its tests read it, so they cannot
+    disagree about what an asset citation is."""
     if target.endswith(".md"):
         return False  # the `.md` forms already read it
     cleaned = _clean(target)
@@ -1697,15 +1717,34 @@ def test_a_cited_example_file_is_guarded(plugin: str) -> None:
     # last is how this plugin's own contributor guidance names the script it
     # tells you to run, and it was read by nobody while the extractor
     # required the path to fill a code span.
-    shapes = [
-        "Wraps scripts/x.py.",
-        "`scripts/x.py`",
-        "`scripts/x.py --direction read`",
-        "python3 plugins/{plugin}/scripts/x.py --check",
-    ]
-    for shape in shapes:
-        line = shape.format(plugin=plugin)
-        assert [m.group(1) for m in _BARE_ASSET_REF.finditer(line)], shape
+    shapes = {
+        "Wraps scripts/x.py.": ["scripts/x.py"],
+        "`scripts/x.py`": ["scripts/x.py"],
+        "`scripts/x.py --direction read`": ["scripts/x.py"],
+        "python3 plugins/{plugin}/scripts/x.py --check": [
+            "plugins/{plugin}/scripts/x.py"
+        ],
+        # A dot-leading directory is a directory. This is the shape the `.` in
+        # the segment charset exists for, and asserting the captured path — not
+        # merely that something matched — is what pins it.
+        "See `.claude-plugin/plugin.json` for the version.": [
+            ".claude-plugin/plugin.json"
+        ],
+        "See `./examples/x.json` and `../spec-db/examples/y.json`.": [
+            "./examples/x.json",
+            "../spec-db/examples/y.json",
+        ],
+        # And the negative that pins the lookbehind: the tail of a
+        # `${CLAUDE_PLUGIN_ROOT}` reference is that form's citation, already
+        # graded, and reading it again would double-count it into this form's
+        # floor.
+        'Run `${CLAUDE_PLUGIN_ROOT}/scripts/x.py --direction read`.': [],
+        "See https://schemas.analitiq.ai/connector/latest.json for the shape.": [],
+    }
+    for shape, expected in shapes.items():
+        line = shape.replace("{plugin}", plugin)
+        found = [match.group(1) for match in _BARE_ASSET_REF.finditer(line)]
+        assert found == [want.replace("{plugin}", plugin) for want in expected], shape
     # Each resolves from the document it is written in — the same predicate
     # the file pass runs, so this is the sweep, not a second opinion.
     unresolved = [
@@ -1739,8 +1778,15 @@ def test_only_this_plugins_files_are_read_as_asset_citations(plugin: str) -> Non
     assert _addresses_this_plugin(".claude-plugin/plugin.json", plugin)
     assert _addresses_this_plugin("./examples/x.json", plugin)
     # And nothing a local checkout grows is in the universe a citation
-    # resolves against — it would pass here and dangle in CI.
-    assert not [p for p in _plugin_paths(plugin) if "__pycache__" in p]
+    # resolves against — it would pass here and dangle in CI. Asserted on the
+    # predicate, not on the checkout: whether `__pycache__` exists right now
+    # depends on whether another suite imported a plugin script first, so a
+    # sweep-based assertion would pin the filter only sometimes.
+    assert not _ships("scripts/__pycache__/validate.cpython-313.pyc")
+    assert not _ships("__pycache__")
+    assert _ships("scripts/validate.py")
+    assert _ships("skills/x/examples/y.json")
+    assert all(_ships(path) for path in _plugin_paths(plugin))
     # And the floor counts what the filter kept. Counting raw matches would
     # let prose about `definition/connector.json` satisfy a floor meant to
     # prove this plugin's own examples are still cited.
