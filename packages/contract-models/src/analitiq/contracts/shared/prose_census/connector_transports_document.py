@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
     ENGINE_CONDUCT,
-    ENGINE_OWNED_DEFAULTING,
     ProseObligation,
 )
 
@@ -32,12 +31,17 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="HttpTransport", field="base_url",
         prose_hash="04961e5771bc",
         structural=(
-            "every arm of UrlValueExpression carries the non-empty constraint: "
-            "the bare-string arm is Annotated[str, StringConstraints("
-            "min_length=1)] and the object forms constrain their own payload"
+            "the literal and object arms of UrlValueExpression carry the "
+            "non-empty constraint: the bare-string arm is Annotated[str, "
+            "StringConstraints(min_length=1)] and TemplateExpression, "
+            "RefExpression and LiteralStringExpression each constrain their "
+            "own payload the same way"
         ),
         waiver=(
-            "the permission to omit it — that this entry exists only to extend "
+            "two remainders. The DerivedValue arm's `input` is typed Any, so a "
+            "function-form base_url resolving to an empty string is accepted "
+            "here and refused only at resolution time. And the permission to "
+            "omit the field — that this entry exists only to extend "
             "`transport_defaults` — is authoring intent no document states, so "
             "an entry omitting it for any other reason is accepted here and "
             "fails at engine transport build"
@@ -81,17 +85,22 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectorBase",
         prose_hash="a77be2f3abf3",
-        structural="Field(pattern=SLUG_PATTERN) on connector_id",
         waiver=(
-            "that the id equals the connector's REGISTRY REPO NAME is a "
-            "cross-repo fact: this document does not carry the registry, so "
-            "the shape is checkable here and the correspondence is not"
+            "the docstring states an identity, not a shape: that the id is the "
+            "connector's canonical identifier and its REGISTRY REPO NAME. The "
+            "registry is another repo, so no document here can carry the "
+            "correspondence"
         ),
     ),
     ProseObligation(
         model="ConnectorBase", field="connector_id",
         prose_hash="5655a4364ea4",
         structural="Field(pattern=SLUG_PATTERN)",
+        waiver=(
+            "the same cross-repo remainder: the pattern grades the spelling, "
+            "and that the spelling equals the registry repo name is not "
+            "checkable from this document"
+        ),
     ),
     ProseObligation(
         model="ConnectorBase", field="documentation_url",
@@ -114,7 +123,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectorBase", field="write_unit",
         prose_hash="037b6892bfbe",
-        waiver=ENGINE_OWNED_DEFAULTING,
+        waiver=ENGINE_CONDUCT,
     ),
     ProseObligation(
         model="WriteUnit", rule_ids=("ADV-CTOR-014",),

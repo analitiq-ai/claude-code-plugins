@@ -10,6 +10,7 @@ on-disk connector package.
 """
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -21,6 +22,28 @@ JS = "https://json-schema.org/draft/2020-12/schema"
 # The transport the corpus connector declares (`valid_connector.json`), asserted
 # below so this constant cannot silently drift from it.
 DECLARED_TRANSPORT = "api"
+
+# The origin the origin-containment record adds a second transport on.
+SECOND_ORIGIN = "https://cdn.example.test"
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _assert_cdn_is_a_second_origin(connector: dict) -> None:
+    """The added transport must be on a DIFFERENT origin than the default one.
+
+    Comparing the two NAMES would not establish that: a corpus whose default
+    transport moved to this host would state one origin under two names, and
+    the record would pass while recording nothing.
+    """
+    default = connector["transports"][connector["default_transport"]]
+    assert _origin(default["base_url"]) != SECOND_ORIGIN, (
+        f"the corpus default transport is already on {SECOND_ORIGIN} — the "
+        "second transport states no second origin, so this records nothing"
+    )
 
 
 @pytest.fixture
@@ -206,46 +229,82 @@ class TestOriginContainmentGapIsRecorded:
     `default_transport`, pins the read path to that single origin and has no
     write-path origin guard at all.
 
-    This is that record. It pins the BEHAVIOUR through the connector-anchored
-    walk, which is where an origin check would have to live for the same reason
-    the NAME half does — origins are declared on the connector and consumed by
-    the endpoint. So the day origin containment lands, this test goes red and
-    points at the prose that must change with it.
+    This is that record, pinned through the connector-anchored walk, which is
+    where an origin check would have to live for the same reason the NAME half
+    does — origins are declared on the connector and consumed by the endpoint.
+    Two documents are recorded because the gap closes in two independent
+    directions and each direction reddens a different one:
+
+    * A URL bounded by no declared origin at all — a next-page link read out of
+      the response body. Any origin rule whatsoever refuses it.
+    * A request selected onto a declared transport the engine never opens.
+      Requiring every URL to land on the origin of the single session
+      `default_transport` opens refuses it; the other closure — the engine
+      honouring `transport_ref` per operation — makes it correct instead, and
+      then the record is retired rather than reddened.
 
     That the field description still declares the half unenforced is a reader's
     check, not this module's: deciding it means reading what a description
     means, which `.claude/rules/validator-claims.md` keeps out of tests and
     `.claude/rules/contract-prose.md` states as an authoring obligation. The
-    description lives on `_RequestBase.transport_ref`, which every request
-    model — read and write alike — inherits; its census entry pins the wording
-    and records the unenforced half as its waiver, so softening it is a hash
-    mismatch a reviewer must re-affirm.
+    description lives on `_RequestBase.transport_ref`, which every
+    endpoint-operation request model — read and write alike — inherits. The
+    connector document's own `PostAuthOperationRequest.transport_ref` is a
+    separate site with its own description and census entry. Each entry pins
+    its wording and records the unenforced half as its waiver, so softening one
+    is a hash mismatch a reviewer must re-affirm.
     """
 
     def test_a_second_origin_is_accepted_because_nothing_checks_origins(
         self, tmp_path, connector_base, validator
     ):
         # Records the CURRENT behaviour, not the desired one. The connector
-        # declares a second transport on a different origin, and the endpoint
-        # dispatches through it rather than through `default_transport`. The
-        # NAME half is satisfied — `cdn` is declared — so the document states a
-        # second reachable origin and validates clean, though the engine opens
-        # one session from `default_transport` and no call site selects a
-        # transport per operation. Per-operation selection plus an origin guard
-        # is what closes the gap, and this assertion is what fails when it does.
+        # declares a second transport on its own origin, and the endpoint
+        # DECLARES dispatch through it rather than through `default_transport`.
+        # The NAME half is satisfied — `cdn` is declared — so the document
+        # states an origin nothing can currently reach, and it validates clean:
+        # the engine opens one session from `default_transport` and no call
+        # site reads an operation's `transport_ref`.
         connector_base["transports"]["cdn"] = {
             "transport_type": "http",
-            "base_url": "https://cdn.example.com/v1",
+            "base_url": SECOND_ORIGIN + "/v1",
             "timeout_seconds": 30,
         }
-        assert connector_base["default_transport"] != "cdn", (
-            "the corpus connector must default to a DIFFERENT transport, or "
-            "this test states no second origin at all"
-        )
+        _assert_cdn_is_a_second_origin(connector_base)
         findings = _run(
             tmp_path, connector_base, {"widgets.json": _read_endpoint("cdn")}, validator
         )
-        assert not _errors(findings), [e["message"] for e in _errors(findings)]
+        assert not _ref_errors(findings), findings
+
+    def test_a_response_driven_next_url_is_accepted_because_nothing_checks_origins(
+        self, tmp_path, connector_base, validator
+    ):
+        # The other direction, and the one no closure can leave correct: the
+        # next-page URL is read out of the response body, so the document
+        # bounds it by no origin at all. `pagination.link.next_url` is named in
+        # the description's ORIGIN half for exactly this reason.
+        endpoint = _read_endpoint(DECLARED_TRANSPORT)
+        read = endpoint["operations"]["read"]
+        read["pagination"] = {
+            "type": "link",
+            "link": {"next_url": {"ref": "response.body.next"}},
+            "stop_when": {"missing": {"ref": "response.body.next"}},
+        }
+        read["response"] = {
+            "records": {"ref": "response.body.data"},
+            "schema": {
+                "$schema": JS, "type": "object",
+                "properties": {
+                    "next": {"type": "string"},
+                    "data": {"type": "array", "items": {
+                        "type": "object", "properties": {"a": {
+                            "type": "string", "native_type": "STRING",
+                            "arrow_type": "Utf8"}}}},
+                },
+            },
+        }
+        findings = _run(tmp_path, connector_base, {"widgets.json": endpoint}, validator)
+        assert not _ref_errors(findings), findings
 
 
 class TestStandaloneEndpointValidation:

@@ -73,6 +73,10 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectionContract",
         prose_hash="57d2c52ff1d9",
+        structural=(
+            "the absence of a standalone `version` field is enforced by "
+            "StrictModel: extra='forbid' rejects a document declaring one"
+        ),
         waiver=(
             "the semver discipline it states — patch = no shape change, minor "
             "= additive, major = breaking — grades one revision of this "

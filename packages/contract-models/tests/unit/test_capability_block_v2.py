@@ -351,8 +351,8 @@ def test_sql_capabilities_accepts_limits_member():
 
 
 def test_sql_capabilities_limits_is_optional():
-    # A block carrying every required fact but omitting `limits` stays valid —
-    # `limits` is the one additive member of an otherwise all-required block.
+    # A block carrying every required fact but omitting `limits` stays valid:
+    # `limits` is additive, and every other member is required.
     caps = SqlCapabilities.model_validate(copy.deepcopy(VALID_SQL_CAPS))
     assert caps.limits is None
 

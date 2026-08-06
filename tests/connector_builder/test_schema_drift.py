@@ -1260,7 +1260,10 @@ def test_type_map_rule_keys_match_schema_and_prose() -> None:
     ):
         contract_keys = set(TypeAdapter(rule).json_schema()["properties"])
         assert contract_keys == EXPECTED_TYPE_MAP_RULE_KEYS, _set_diff_msg(
-            f"{rule.__name__} keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
+            f"{rule.__name__} keys",
+            contract_keys,
+            EXPECTED_TYPE_MAP_RULE_KEYS,
+            _CLOSURE_FIX.format(spec=TYPE_MAPS_SPEC.relative_to(REPO_ROOT)),
         )
     # Whether the sentence above the table still CLOSES the set is a reader's
     # call, per `.claude/rules/no-cardinality-restatements.md`. The table it
