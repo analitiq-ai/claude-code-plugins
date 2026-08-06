@@ -95,6 +95,7 @@ import re
 import sys
 from bisect import bisect_right
 from collections import Counter
+from collections.abc import Iterator
 from functools import cache
 from pathlib import Path
 from typing import NamedTuple
@@ -471,10 +472,37 @@ def _clean(target: str) -> str:
     return cleaned[:-1] if cleaned.endswith(".") else cleaned
 
 
+def _relative_target(citing: str, target: str, plugin: str) -> Path | None:
+    """Where a citation points when it is resolved the way a reader resolves
+    one: from the directory of the document it is written in.
+
+    `None` for a path an installed plugin never carries, so that refusal is
+    stated once for every pass that resolves relatively. Stating it per pass is
+    not a hypothetical failure — the refusal was added to `_candidates` alone,
+    and the link pass went on resolving what the other two had stopped
+    resolving.
+    """
+    if not _ships(target):
+        return None
+    return (_plugin_root(plugin) / citing).parent / target
+
+
+def _inside_plugin(path: Path, plugin: str) -> bool:
+    """The plugin boundary, stated once. An agent reads an installed plugin
+    cache and has the plugin directory, nothing else, so a citation resolving
+    past the root resolves against files that are not there — which is why
+    every pass that walks or hops has to stop at the same place."""
+    return path.resolve().is_relative_to(_plugin_root(plugin).resolve())
+
+
 def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Path]:
-    """Everything a citation could name. The one resolution rule in this file —
-    both passes read it, so they cannot come to different answers about whether
-    a citation resolves.
+    """Everything a citation could name. The one suffix-resolution rule in this
+    file — the file pass and the anchor pass both read it, so they cannot come
+    to different answers about whether a citation resolves. The link pass
+    resolves differently on purpose (a link means *this* directory, never a
+    nearest-ancestor search), but shares the two primitives above, so the
+    shipped-ness refusal and the plugin boundary cannot reach one pass and miss
+    another.
 
     The prose writes citations at whatever depth reads well from where it sits
     — `spec-tls.md`, `connector-spec-db/spec-type-maps.md`,
@@ -515,12 +543,13 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
     if cleaned.startswith(("./", "../")):
         if citing is None:
             return []
-        candidate = (root / citing).parent / cleaned
-        inside = candidate.resolve().is_relative_to(root.resolve())
-        return [candidate] if inside and candidate.exists() else []
+        candidate = _relative_target(citing, cleaned, plugin)
+        if candidate is None or not _inside_plugin(candidate, plugin):
+            return []
+        return [candidate] if candidate.exists() else []
     if citing is not None:
         for ancestor in (root / citing).parents:
-            if not ancestor.is_relative_to(root):
+            if not _inside_plugin(ancestor, plugin):
                 break
             candidate = ancestor / cleaned
             if candidate.exists():
@@ -847,21 +876,27 @@ def _link_dangles(target: str, fragment: str, citing: str, plugin: str) -> bool:
     """Does a markdown link point at something that is not there?
 
     The file resolves relative to the document the link is written in — that is
-    what a link means. It may leave the plugin only from a plugin-root README,
-    which is a page a reader browses in the repo; a skill or agent document is
-    read out of an installed plugin cache, where a repo file does not exist, so
-    a link out of the tree from there dangles for the same reason
-    `_candidates` refuses to walk past the plugin root.
+    what a link means, and why this pass cannot go through `_candidates`, whose
+    nearest-ancestor search would resolve a link to a namesake in some other
+    directory. What it does share is the two primitives that decide *whether* a
+    resolved path counts: `_relative_target` (an installed plugin has to carry
+    it) and `_inside_plugin` (an agent has to be able to reach it). Held apart,
+    they drifted — the build-artifact refusal reached `_candidates` and not
+    here.
+
+    The boundary has one exception, which is this pass's own: a plugin-root
+    README is a page a reader browses in the repo, so a link out of the tree is
+    legitimate there. From a skill or agent document, read out of an installed
+    plugin cache where repo files do not exist, the same link dangles.
 
     A fragment is the same claim a `§` citation makes, so it is held to the
     same standard: the heading it slugs to must exist in the file the link
     opens.
     """
-    root = _plugin_root(plugin)
-    path = (root / citing).parent / target
-    if not path.is_file():
+    path = _relative_target(citing, target, plugin)
+    if path is None or not path.is_file():
         return True
-    if not path.resolve().is_relative_to(root.resolve()) and citing != "README.md":
+    if not _inside_plugin(path, plugin) and citing != "README.md":
         return True
     if not fragment:
         return False
@@ -1172,18 +1207,30 @@ def _unreached_sentinels(plugin: str, sentinels: dict[str, str]) -> dict[str, st
 
 
 def _files_reached_by(plugin: str, form: str) -> set[Path]:
-    """Every file one extractor's citations resolve to. Links resolve from the
-    document they are written in, so they are read back with their citing file
-    rather than through the one-argument `_candidates` call the other forms
-    use — it resolves `../` only when told which document to resolve from."""
+    """Every file one extractor's citations resolve to, read out of the sweep
+    that grades them — never by re-running the pattern.
+
+    A sentinel is this file's claim that the routing an agent depends on is
+    still being read. Re-scanning answers a different question: whether the
+    regex still matches somewhere, which stays true while the sweep that grades
+    stops carrying the citation. For `asset` the two views are not even close —
+    the raw pattern matches five times what `_asset_citations` keeps, including
+    `.md` paths and strings that are not files — so the sentinel was pinned
+    against citations the guard never grades.
+
+    Links resolve from the document they are written in, so they are read back
+    with their citing file rather than through the one-argument `_candidates`
+    call the other forms use — it resolves `../` only when told which document
+    to resolve from.
+    """
     if form == "link":
         return {
             ((_plugin_root(plugin) / rel).parent / target).resolve()
-            for rel, _lineno, target, _fragment in _link_references(plugin)
+            for rel, target in _form_sites(plugin, "link")
         }
     return {
         path.resolve()
-        for target in _form_targets(plugin, form)
+        for _rel, target in _form_sites(plugin, form)
         for path in _candidates(target, plugin)
     }
 
@@ -1342,17 +1389,6 @@ def _form_sites(plugin: str, form: str) -> list[tuple[str, str]]:
     ]
 
 
-def _form_targets(plugin: str, form: str) -> set[str]:
-    """Every citation one extractor finds in a plugin — the form's own view,
-    not the union `_references` returns."""
-    return {
-        match.group(1)
-        for path in _prose_files(plugin)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        for match in _FORM_PATTERNS[form].finditer(line)
-    }
-
-
 def _below_floor(counts: dict[str, int], floors: dict[str, int]) -> dict[str, tuple[int, int]]:
     return {
         form: (counts[form], floor)
@@ -1422,7 +1458,9 @@ def test_the_registry_checks_fail_when_they_should() -> None:
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
-def test_the_waiver_check_reads_real_prose(plugin: str) -> None:
+def test_the_waiver_check_reads_real_prose(
+    plugin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """`_falsified_waivers` grades a waiver against `_form_sites`, so both have
     to be non-empty on the real tree — a `_form_sites` that returned nothing
     would make every waiver unfalsifiable while the suite stayed green."""
@@ -1441,13 +1479,13 @@ def test_the_waiver_check_reads_real_prose(plugin: str) -> None:
         "can be contradicted — the check below would pass vacuously."
     )
     cited_outside = outside_the_readme[0]
-    fixtures = _PLUGIN_FIXTURES[plugin]
-    original = fixtures["unsentinelled"]
-    try:
-        fixtures["unsentinelled"] = {cited_outside: "claims to route nobody"}
+    with monkeypatch.context() as patched:
+        patched.setitem(
+            _PLUGIN_FIXTURES[plugin],
+            "unsentinelled",
+            {cited_outside: "claims to route nobody"},
+        )
         assert cited_outside in _falsified_waivers(plugin)
-    finally:
-        fixtures["unsentinelled"] = original
     assert _falsified_waivers(plugin) == {}
 
 
@@ -1515,13 +1553,16 @@ def test_the_census_reads_coverage_from_the_passes_themselves() -> None:
     full depth inside the backticks looks uncovered though both passes grade
     it."""
     # Nothing reads this, and nothing may claim to. It ends the line, which is
-    # where a per-line `_ANCHOR_BINDING` would wrongly answer for it.
+    # where a per-line `_ANCHOR_BINDING` would wrongly answer for it. The span
+    # is read off the mention rather than counted out by hand: a hand-written
+    # offset drifts the moment the sample sentence is reworded, and this
+    # assertion is the negative half of the claim, so it would fail open.
     line_final = "The rule lives in /skills/nowhere/gone.md"
     assert _scan_text(line_final) == []
+    unread = _MD_MENTION.search(line_final)
     assert not any(
-        start < end2 and start2 < end
-        for start, end in [(18, len(line_final))]
-        for start2, end2 in _mention_spans(line_final)
+        unread.start() < end and start < unread.end()
+        for start, end in _mention_spans(line_final)
     )
     # This one *is* read — by the anchor pass, whose binding is the only thing
     # that sees a path with the anchor inside the backticks.
@@ -1615,35 +1656,78 @@ def test_every_mention_disposition_is_load_bearing() -> None:
     )
 
 
-@pytest.mark.parametrize("plugin", _plugin_names())
-def test_a_build_artifact_is_never_a_citation_target(plugin: str) -> None:
+@pytest.fixture
+def probe_plugin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """A plugin tree the test owns, standing in for `plugins/` while resolution
+    is driven against files a real checkout should never be asked to hold.
+
+    `plugins/` is copied verbatim into every user's plugin cache, so a probe
+    artifact does not belong there even transiently — and writing one meant a
+    hard interrupt left it behind. Naming the tree something no real plugin is
+    called keeps the `@cache` on `_plugin_paths` and `_plugin_dirs` keyed apart
+    from the real entries; the caches are cleared regardless, since this root
+    stops existing when the test ends.
+    """
+    plugin = "analitiq-probe-builder"
+    root = tmp_path / "plugins" / plugin
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "validate.py").write_text("", encoding="utf-8")
+    (root / "__pycache__").mkdir()
+    for name in ("probe.cpython-313.pyc", "probe.md"):
+        (root / "__pycache__" / name).write_text("", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# repo\n", encoding="utf-8")
+    module = sys.modules[__name__]
+    monkeypatch.setattr(module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(module, "PLUGINS_DIR", tmp_path / "plugins")
+    monkeypatch.setitem(_EXTERNAL_REFS, plugin, set())
+    _plugin_paths.cache_clear()
+    _plugin_dirs.cache_clear()
+    yield plugin
+    _plugin_paths.cache_clear()
+    _plugin_dirs.cache_clear()
+
+
+def test_a_build_artifact_is_never_a_citation_target(probe_plugin: str) -> None:
     """Filtering the path universe is not enough: `_candidates` answers three
     of its branches straight off the filesystem, so a citation of a
     `__pycache__` entry resolved from the checkout — and CI grows that
     directory itself, so it resolved there too. The refusal belongs at the top
     of resolution, where every branch passes through it."""
-    root = _plugin_root(plugin)
-    cache = root / "__pycache__"
-    artifact = cache / "guard_probe.cpython-313.pyc"
-    created = not cache.exists()
-    try:
-        cache.mkdir(exist_ok=True)
-        artifact.write_text("", encoding="utf-8")
-        # The artifact is on disk, which is what the three `.exists()` branches
-        # of `_candidates` consult. Every one must still refuse it.
-        assert artifact.is_file()
-        rel = f"__pycache__/{artifact.name}"
-        assert _candidates(rel, plugin) == []
-        assert _candidates(rel, plugin, "agents/x.md") == []
-        assert _candidates(f"plugins/{plugin}/{rel}", plugin) == []
-        assert _is_dangling(rel, plugin, "agents/x.md")
-    finally:
-        artifact.unlink(missing_ok=True)
-        if created and cache.exists():
-            cache.rmdir()
+    plugin = probe_plugin
+    artifact = _plugin_root(plugin) / "__pycache__" / "probe.cpython-313.pyc"
+    # The artifact is on disk, which is what the three `.exists()` branches of
+    # `_candidates` consult. Every one must still refuse it.
+    assert artifact.is_file()
+    rel = f"__pycache__/{artifact.name}"
+    assert _candidates(rel, plugin) == []
+    assert _candidates(rel, plugin, "agents/x.md") == []
+    assert _candidates(f"../{rel}", plugin, "scripts/x.md") == []
+    assert _candidates(f"plugins/{plugin}/{rel}", plugin) == []
+    assert _is_dangling(rel, plugin, "agents/x.md")
     # The twin: a file the plugin does ship resolves by the same route.
-    shipped = _fixture(plugin)[0]
-    assert _candidates(shipped, plugin)
+    assert _candidates("scripts/validate.py", plugin)
+
+
+def test_the_link_pass_refuses_what_the_file_pass_refuses(probe_plugin: str) -> None:
+    """The two passes resolve differently on purpose — a link means *this*
+    directory, never a nearest-ancestor search — and must still agree on what
+    counts once resolved. Each of those two questions is asked of one primitive,
+    so a policy change reaches every pass at once. Held apart they had already
+    drifted: the build-artifact refusal reached `_candidates` and not the link
+    pass, which went on resolving a file the other two had stopped resolving.
+
+    The plugin boundary is the other primitive, and `_ships` is not standing in
+    for it here — the artifact sits *inside* the plugin, so only the
+    shipped-ness question can refuse it.
+    """
+    plugin = probe_plugin
+    assert (_plugin_root(plugin) / "__pycache__" / "probe.md").is_file()
+    assert _inside_plugin(_plugin_root(plugin) / "__pycache__" / "probe.md", plugin)
+    assert _relative_target("README.md", "__pycache__/probe.md", plugin) is None
+    assert _link_dangles("__pycache__/probe.md", "", "README.md", plugin)
+    # The twin, on the same tree: a file the plugin ships is reached by both.
+    assert _relative_target("README.md", "scripts/validate.py", plugin) is not None
+    assert not _link_dangles("scripts/validate.py", "", "README.md", plugin)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -1714,7 +1798,9 @@ def test_a_link_fragment_is_read_out_of_the_prose() -> None:
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
-def test_sentinel_citations_are_still_found(plugin: str) -> None:
+def test_sentinel_citations_are_still_found(
+    plugin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Floors prove a form still matches something; these prove the extractor
     still reaches the specific routing citations agents depend on. A count
     cannot do that — an over-matching pattern raises the count while losing
@@ -1734,6 +1820,15 @@ def test_sentinel_citations_are_still_found(plugin: str) -> None:
         "form: a citation rewritten in another form fails here too, because "
         "this is what keeps each extractor pinned to real prose."
     )
+    # And every form's sentinel is reached through the sweep that grades, not
+    # through a fresh run of the pattern. Rebinding the sweep proves it: a
+    # sentinel still reachable with `_form_sites` returning nothing is pinned to
+    # a regex that matches somewhere, which stays true while the citation stops
+    # being carried by the pass that checks it.
+    with monkeypatch.context() as patched:
+        patched.setattr(sys.modules[__name__], "_form_sites", lambda *_a, **_k: [])
+        for form in _sentinels(plugin):
+            assert _files_reached_by(plugin, form) == set(), form
     # The form is load-bearing, not decorative: the same file filed under a
     # form that does not cite it must fail. Without this, one extractor could
     # die while another's citations kept every sentinel green.
@@ -1743,7 +1838,7 @@ def test_sentinel_citations_are_still_found(plugin: str) -> None:
     # the `bare_path` sentinel is deliberately spelled at a depth no prose
     # uses, so a rewrite of this check into string equality fails here.
     bare = _sentinels(plugin)["bare_path"]
-    assert bare not in _form_targets(plugin, "bare_path")
+    assert bare not in {target for _rel, target in _form_sites(plugin, "bare_path")}
 
 
 # A synthetic agent document shaped like the real ones: an unbackticked
@@ -1962,8 +2057,7 @@ def test_a_generated_changelog_is_not_graded_as_prose(plugin: str) -> None:
     assert _anchor_sites(entry)
 
 
-@pytest.mark.parametrize("plugin", _plugin_names())
-def test_a_link_to_another_repo_is_not_a_broken_link(plugin: str) -> None:
+def test_a_link_to_another_repo_is_not_a_broken_link() -> None:
     """An engine ADR linked by URL is a file this repo cannot open. Resolving
     it relative to the citing document would report every such link dangling —
     and the one ADR already allow-listed for the file pass is exactly the link
