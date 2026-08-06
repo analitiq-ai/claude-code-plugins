@@ -44,7 +44,7 @@ import json
 import re
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Annotated, Any, get_args, get_origin
+from typing import Annotated, Any, NamedTuple, get_args, get_origin
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -335,16 +335,59 @@ def _emit_class(items: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-#: Keywords under which a schema declares the shape of a COLLECTION's members,
-#: paired with how to build a one-member collection of that shape. A number
-#: reached through one of these is not the property itself, so the bad spelling
-#: goes into a member and the member goes into the container.
-_COLLECTION_KEYWORDS: dict[str, Callable[[Any], Any]] = {
+#: Every keyword under which a schema declares the shape of a COLLECTION's
+#: members. A number reached through one of these is not the property itself,
+#: so a bad spelling has to go into a member and the member into the container.
+#: Detection covers all of them, so a number under any collection is FOUND.
+_COLLECTION_KEYWORDS = ("items", "prefixItems", "additionalProperties", "patternProperties")
+
+#: How to build a one-member collection — for the keywords whose member the
+#: sweep can actually substitute into.
+#:
+#: Only `items` is here, and the omissions are the point rather than an
+#: oversight. A correct wrap for the others cannot be written without reading
+#: the rest of the schema: a `patternProperties` key has to MATCH the declared
+#: pattern, `additionalProperties` may be closed off by a sibling
+#: `properties`/`propertyNames`, and a `prefixItems` tuple has a declared arity
+#: and position. A plausible-looking wrap — a hardcoded `{"a": member}`, a
+#: one-element list for a two-element tuple — would build a document the schema
+#: rejects for a reason that has nothing to do with the number in it, and the
+#: sweep would report the field unreachable while pointing at the synthesiser.
+#:
+#: So a number under a keyword absent from this map is detected and reported
+#: unswept, naming THIS map. Add the entry when a field needs it, written
+#: against that field's actual shape.
+_MEMBER_WRAPS: dict[str, Callable[[Any], Any]] = {
     "items": lambda member: [member],
-    "prefixItems": lambda member: [member],
-    "additionalProperties": lambda member: {"a": member},
-    "patternProperties": lambda member: {"a": member},
 }
+
+
+def _identity(member: Any) -> Any:
+    """Wrap for a property that IS the number — the value goes in as-is."""
+    return member
+
+
+class Reach(NamedTuple):
+    """How a property admits a number.
+
+    ``wrap`` builds the value to substitute into the property; ``None`` means
+    the number was found but the sweep has no correct way to reach it, which is
+    reported rather than dropped. ``keyword`` is the collection keyword the
+    number sits under, or ``None`` when the property is the number itself.
+    """
+
+    wrap: Callable[[Any], Any] | None
+    keyword: str | None
+
+
+_SCALAR = Reach(wrap=_identity, keyword=None)
+
+
+def _prefer(current: Reach | None, found: Reach) -> Reach:
+    """Keep the more useful of two reaches — a sweepable shape beats an unsweepable one."""
+    if current is None or (current.wrap is None and found.wrap is not None):
+        return found
+    return current
 
 
 def _member_schemas(node: dict[str, Any], keyword: str) -> list[Any]:
@@ -364,20 +407,20 @@ def _member_schemas(node: dict[str, Any], keyword: str) -> list[Any]:
     return [c for c in candidates if isinstance(c, dict)]
 
 
-def _numeric_fields(
-    node: Any, defs: dict[str, Any], depth: int = 0
-) -> tuple[str, Callable[[Any], Any] | None] | None:
+def _numeric_fields(node: Any, defs: dict[str, Any], depth: int = 0) -> Reach | None:
     """How a property's schema admits ``integer``/``number``, if it does.
 
-    Returns ``("scalar", None)`` when the property IS the number, so a bad
-    spelling goes straight into it; ``("nested", wrap)`` when the number lives
-    inside a collection the property declares (``list[int]``,
-    ``dict[str, int]``), where ``wrap`` builds a one-member collection around a
-    member value; ``None`` when there is no number here.
+    Returns :data:`_SCALAR` when the property IS the number, a nested
+    :class:`Reach` when the number lives inside a collection the property
+    declares (``list[int]``, ``dict[str, int]``), or ``None`` when there is no
+    number here.
 
-    Both are swept. A collection member is reached by probing the member and
-    wrapping it — a guard that quietly ignored a shape it could not substitute
-    into would be the exact failure this file exists to prevent.
+    Detection spans every keyword in :data:`_COLLECTION_KEYWORDS`, while only
+    those in :data:`_MEMBER_WRAPS` can be substituted into. That split is
+    deliberate: a number the sweep cannot reach is found and reported anyway,
+    because a guard that quietly ignored a shape it did not want to think about
+    is the exact failure this file exists to prevent. Where a property admits
+    the number through more than one shape, the sweepable one wins.
 
     The walk stops at an object with ``properties``: that is another model's
     shape, and models are swept in their own right from :func:`contract_classes`,
@@ -389,22 +432,22 @@ def _numeric_fields(
     if not isinstance(node, dict):
         return None
     if node.get("type") in ("integer", "number"):
-        return ("scalar", None)
+        return _SCALAR
     if _is_objectish(node) and node.get("properties"):
         return None
-    nested: tuple[str, Callable[[Any], Any] | None] | None = None
+    nested: Reach | None = None
     for keyword in ("anyOf", "oneOf", "allOf"):
         for branch in node.get(keyword, []):
             found = _numeric_fields(branch, defs, depth + 1)
             if found is None:
                 continue
-            if found[0] == "scalar":
+            if found.keyword is None:  # the branch itself is the number
                 return found
-            nested = nested or found
-    for keyword, wrap in _COLLECTION_KEYWORDS.items():
+            nested = _prefer(nested, found)
+    for keyword in _COLLECTION_KEYWORDS:
         for member in _member_schemas(node, keyword):
             if _numeric_fields(member, defs, depth + 1) is not None:
-                return ("nested", wrap)
+                nested = _prefer(nested, Reach(_MEMBER_WRAPS.get(keyword), keyword))
     return nested
 
 
@@ -452,12 +495,18 @@ class Probe:
             for name, node in self.properties.items()
             if (found := _numeric_fields(node, self.defs)) is not None
         }
-        self.fields = list(reach)
         # How to put a probe value into each field: a scalar goes in directly,
-        # a collection member is wrapped first. Both are swept; nothing is
-        # dropped for being a shape the substitution has to think about.
+        # a collection member is wrapped first.
         self.wrap: dict[str, Callable[[Any], Any]] = {
-            name: (wrap or (lambda member: member)) for name, (_how, wrap) in reach.items()
+            name: r.wrap for name, r in reach.items() if r.wrap is not None
+        }
+        self.fields = list(self.wrap)
+        # Numbers found under a collection `_MEMBER_WRAPS` has no wrap for,
+        # against the keyword carrying them. Not swept — and so reported by
+        # `test_every_numeric_field_was_reached` rather than dropped, which is
+        # the whole reason detection is wider than substitution.
+        self.unsweepable: dict[str, str | None] = {
+            name: r.keyword for name, r in reach.items() if r.wrap is None
         }
         self._candidates: list[dict[str, Any]] | None = None
 
@@ -521,7 +570,7 @@ def _probes() -> list[Probe]:
                 contract_classes(), key=lambda c: (c.__module__, c.__name__)
             )
         )
-        if probe.fields
+        if probe.fields or probe.unsweepable
     ]
 
 
@@ -532,6 +581,13 @@ def _sweep() -> tuple[list[str], list[str], set[str], list[str]]:
     reached: set[str] = set()
     float_gap: list[str] = []
     for probe in _probes():
+        unreached += [
+            f"{probe.label}.{name}: a number under {keyword!r}, which "
+            f"`_MEMBER_WRAPS` carries no wrap for. Add one written against "
+            f"that field's shape — a {keyword!r} member has constraints a "
+            f"generic wrap cannot honour."
+            for name, keyword in probe.unsweepable.items()
+        ]
         try:
             probe.documents()
         except Unsynthesisable as exc:
@@ -596,8 +652,8 @@ def test_every_numeric_field_was_reached():
     _violations, unreached, _reached, _gap = SWEEP
     assert not unreached, (
         "the strict-numeric sweep could not reach these fields, so nothing "
-        "checked them. Teach `synthesise`/`enum_choices` to build a document "
-        "that reaches them:\n  " + "\n  ".join(sorted(unreached))
+        "checked them. Each entry names what blocked it:\n  "
+        + "\n  ".join(sorted(unreached))
     )
 
 
@@ -669,6 +725,50 @@ def test_the_sweep_detects_a_lax_field():
         and not probe.validator.is_valid({**base, "count": bad})
     ]
     assert sorted(caught) == sorted(spellings)
+
+
+def test_detection_spans_every_collection_keyword():
+    # Detection must never be narrower than substitution. If it were, a number
+    # under a collection with no wrap would not be found at all, and the field
+    # would drop out of the sweep silently instead of being reported — the
+    # failure mode this whole file is built to make impossible.
+    assert set(_MEMBER_WRAPS) <= set(_COLLECTION_KEYWORDS)
+
+    members = {"type": "integer", "minimum": 1}
+    per_keyword = {
+        "items": {"type": "array", "items": members},
+        "prefixItems": {"type": "array", "prefixItems": [members]},
+        "additionalProperties": {"type": "object", "additionalProperties": members},
+        "patternProperties": {"type": "object", "patternProperties": {"^x_": members}},
+    }
+    assert set(per_keyword) == set(_COLLECTION_KEYWORDS), (
+        "a collection keyword was added to `_COLLECTION_KEYWORDS` without a case "
+        "here, so nothing checks that a number under it is detected."
+    )
+    for keyword, schema in per_keyword.items():
+        found = _numeric_fields(schema, {})
+        assert found is not None, f"a number under {keyword!r} went undetected"
+        assert found.keyword == keyword
+        # Substitutable exactly when a wrap exists — no silent third state.
+        assert (found.wrap is not None) is (keyword in _MEMBER_WRAPS)
+
+
+def test_a_number_the_sweep_cannot_substitute_into_is_reported_not_dropped():
+    # `_MEMBER_WRAPS` deliberately covers only `items`, because a correct wrap
+    # for the others has to honour constraints a generic one cannot see (a
+    # `patternProperties` key must match the pattern; a `prefixItems` tuple has
+    # an arity). The cost of that restraint is paid here: such a field must
+    # still be FOUND and reported, so it fails the coverage arm loudly rather
+    # than vanishing from the field set.
+    class DictOfCounts(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        name: str = Field(...)
+        counts: dict[str, int] = Field(default_factory=dict)
+
+    probe = Probe(DictOfCounts)
+    assert probe.fields == []
+    assert probe.unsweepable == {"counts": "additionalProperties"}
 
 
 @pytest.mark.parametrize(
