@@ -154,7 +154,8 @@ def test_error_map_rejects(payload, why):
 # NARROWING fails loudly (same rationale as EXPECTED_SQL_CAP_ENUMS in
 # test_sql_capabilities.py). The vocabulary and key grammars are settled and
 # mirrored by the engine's typed parser (`cdk/declarations.py`);
-# this is the sanctioned "test's assertion target" copy (no-drift rule #3).
+# this is the sanctioned copy — a restatement that cannot be avoided, carrying
+# the test assertion that keeps it honest.
 EXPECTED_ERROR_CATEGORIES = {
     "transient",
     "config",

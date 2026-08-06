@@ -66,7 +66,7 @@ Four shapes:
 ## What it deliberately leaves wide
 
 **A bare `#N` is only recognised at two or more digits.** Single-digit `#N` in
-this codebase's prose is usually ordinal — `no-drift rule #3`, `point #2` — and
+this codebase's prose is usually ordinal — `clause #3`, `point #2` — and
 flagging those would make the gate cost more than it returns. This is a real
 hole, not a costless narrowing: single-digit issues exist in this tracker and
 `CONTRIBUTING.md` cites one. The keyword and cross-repo forms still catch
@@ -98,9 +98,11 @@ and a bare `issues?` + digits pattern over prose that says "issue 3 of the four"
 would cost more in false positives than it buys.
 
 **A reference split across a line break** — `issue #` ending one line and `89`
-opening the next. Scanning is line-at-a-time so a match cannot span the break.
-Listed for completeness rather than as a live risk: no reflow produces it,
-because the wrap would have to fall between the `#` and its digits.
+opening the next. Scanning is line-at-a-time, so no match spans the break. The
+consequence is smaller than it sounds and differs by digit count: at two or more
+digits the orphaned `#89` is still caught by the bare arm on the following line,
+so the site is reported, just as a bare ref. Only the single-digit case escapes
+entirely, and it escapes already — see the two-digit floor above.
 
 ## Two sibling classes, same invariant
 
@@ -112,13 +114,17 @@ something the reader does not have:
   `.claude/rules/…` resolves on the machine that wrote it and nowhere else —
   worse than a ticket number, which at least resolves for anyone in the org.
   Name the rule instead, or name a skill by its skill name, which is how Claude
-  Code resolves one anyway.
+  Code resolves one anyway. `.gitignore` is exempt in `_FOREIGN_ALLOWED`: it is
+  where the exclusion is declared, so naming the tree there is the rule rather
+  than a reference to it.
 - **"this PR" and friends.** A file outlives the pull request that wrote it, so
   "the hole this PR closed" points at a moment the reader is not in. Two sites
   legitimately name the PR being processed at runtime — CI comments and a
   message printed about the PR under check — and they are pinned in
-  `_EPHEMERAL_ALLOWED` rather than matched by a cleverer pattern. "this branch"
-  is left wide: in this repo it always means a control-flow branch.
+  `_EPHEMERAL_ALLOWED` rather than matched by a cleverer pattern — a CI comment
+  naming the source a job grades, and a message printed about the pull request
+  under check. "this branch" is left wide: in this repo it always means a
+  control-flow branch.
 """
 
 from __future__ import annotations
@@ -253,6 +259,17 @@ _PATTERNS = (_KEYWORD_TICKET, _CROSS_REPO_TICKET, _BARE_TICKET, _URL_TICKET)
 # and `plugins/analitiq-connector-builder/.claude-plugin/` is a different
 # directory that IS tracked — hence `/` immediately after `claude`.
 _FOREIGN_PATH = re.compile(r"\.claude/[A-Za-z0-9_./-]+")
+
+# `.gitignore` is the file that DECIDES the tree is absent, so it is the one
+# place naming a path under it is not a dangling citation — it is the rule
+# itself. It escapes today only by accident: its entry is a bare `.claude/`,
+# and the `+` tail needs at least one character after the slash. Adopting the
+# ordinary Claude Code split (track `.claude/settings.json`, ignore
+# `.claude/settings.local.json`) would turn this file red with no correct
+# remedy, since the citation cannot be reworded away. Exempt by PROVENANCE, so
+# the liveness check below grades existence only — requiring it to contain a
+# match would fail on today's bare entry.
+_FOREIGN_ALLOWED = (".gitignore",)
 
 # "this PR", "this pull request", "this commit" — a referent that resolves only
 # while the change is in flight.
@@ -437,13 +454,18 @@ def _sites(pattern: re.Pattern[str], *, skip: tuple[str, ...] = ()) -> list[tupl
     """Every (relpath, lineno, matched-text) for one pattern across the scan.
 
     The two sibling gates share this rather than each writing its own
-    comprehension. One traversal is one thing to guard: written inline, each
-    gate carried its own copy of `for relpath in _scanned_files()`, and each
-    copy was independently severable — `for relpath in []` turned a gate off
-    with the whole suite green, which is the round-3 hole re-opened once per new
-    gate. `test_the_gate_reads_every_file_the_scan_selected` covers this
-    function, so a new gate built on it inherits the guard instead of needing
-    its own.
+    comprehension, so there is one traversal to guard instead of one per gate.
+    A per-gate copy would be independently severable — `for relpath in []`
+    silences a gate while every other test stays green — and each new gate would
+    have to remember to bring its own guard.
+
+    Guarded on BOTH axes, which is the whole point of routing gates through it:
+    `test_the_gate_reads_every_file_the_scan_selected` pins WHICH files it
+    reaches, and `test_the_gate_scans_the_whole_document_it_read` pins that the
+    bytes reach the pattern and come back located. Selection alone is not
+    enough — a traversal that reads every file and scans none of it satisfies
+    the first and defeats the gate, which is exactly what happened to
+    `_references` before that second test existed.
     """
     return [
         (relpath, lineno, match.group(0))
@@ -454,9 +476,27 @@ def _sites(pattern: re.Pattern[str], *, skip: tuple[str, ...] = ()) -> list[tupl
     ]
 
 
+def _foreign_path_sites() -> list[tuple[str, int, str]]:
+    """The gitignored-path gate's findings.
+
+    A named collector rather than a bare `_sites(...)` call inside the gate, so
+    the exemption the gate passes is itself under test. Spelled only at the call
+    site, `skip=_FOREIGN_ALLOWED` can be widened to every scanned file and
+    nothing notices: the acceptance cases exercise the raw pattern, and a test
+    calling `_sites` directly grades the traversal but never the argument the
+    GATE hands it. Both tests below go through this function for that reason.
+    """
+    return _sites(_FOREIGN_PATH, skip=_FOREIGN_ALLOWED)
+
+
+def _ephemeral_referent_sites() -> list[tuple[str, int, str]]:
+    """The expiring-referent gate's findings. Named for the same reason."""
+    return _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
+
+
 def test_no_citation_of_a_path_the_reader_cannot_have() -> None:
     """A `.claude/` path is absent from every clone — `.gitignore` excludes it."""
-    found = _sites(_FOREIGN_PATH)
+    found = _foreign_path_sites()
     assert not found, (
         "citations of paths under `.claude/`, which `.gitignore` excludes:\n"
         + "\n".join(f"  {rel}:{lineno} -> {cited}" for rel, lineno, cited in found)
@@ -467,7 +507,7 @@ def test_no_citation_of_a_path_the_reader_cannot_have() -> None:
 
 def test_no_referent_that_expires_when_the_change_lands() -> None:
     """"this PR" points at a moment the reader of the file is not in."""
-    found = _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
+    found = _ephemeral_referent_sites()
     assert not found, (
         "referents that expire when the change lands:\n"
         + "\n".join(f"  {rel}:{lineno} -> {phrase}" for rel, lineno, phrase in found)
@@ -478,13 +518,19 @@ def test_no_referent_that_expires_when_the_change_lands() -> None:
 
 
 def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
-    """`_EPHEMERAL_ALLOWED` is pinned exactly and must still be doing work.
+    """Both allow-tuples are pinned exactly and must still be doing work.
 
-    Both halves matter. Pinned, because a whole-file exemption from a prose gate
-    is how the phrase comes back; live, because these two are exempt for their
-    CONTENT — each genuinely names the pull request being processed — so an
-    entry that no longer contains the phrase is an exemption standing over a
-    file nobody watches.
+    Pinned, because a whole-file exemption from a prose gate is how the phrase
+    comes back. Live for different reasons, and graded differently for the same
+    reason `test_exclusions_are_all_live` splits its two cases:
+
+    - `_EPHEMERAL_ALLOWED` is exempt for CONTENT — each entry genuinely names
+      the pull request being processed — so an entry that no longer contains the
+      phrase is an exemption standing over a file nobody watches.
+    - `_FOREIGN_ALLOWED` is exempt by PROVENANCE: `.gitignore` is where the
+      exclusion is declared, and it may say `.claude/` whether or not that
+      spelling happens to match. Asserting content there would fail today, on
+      the bare entry that is the whole reason the file is safe by accident.
     """
     assert _EPHEMERAL_ALLOWED == (
         ".github/workflows/tests.yml",
@@ -494,6 +540,15 @@ def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
         assert _EPHEMERAL_REFERENT.search(_read(relpath)), (
             f"{relpath} is exempt because the pull request is its runtime "
             "subject, and it no longer says so. Drop the exemption."
+        )
+
+    assert _FOREIGN_ALLOWED == (".gitignore",), (
+        "_FOREIGN_ALLOWED exempts a whole file from the gitignored-path gate; "
+        "state the reason inline and update this pin."
+    )
+    for relpath in _FOREIGN_ALLOWED:
+        assert (REPO_ROOT / relpath).exists(), (
+            f"{relpath} is exempt but names nothing in the tree — drop it."
         )
 
 
@@ -519,9 +574,10 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     `.md`, return the first 210 entries — leaves `expected` and `_scanned_files`
     agreeing perfectly on a truncated tree, and both an extent check and the gate
     pass over a repo they can no longer see. Two independent listings cannot be
-    narrowed by one edit, which also retires the arbitrary count floor an earlier
-    draft leaned on: 200 sounds like a lot until you notice the repo tracks
-    ~300, so a third of it could vanish under the floor.
+    narrowed by one edit, which also retires the arbitrary count floor an
+    earlier draft leaned on: `> 200` sounds like a lot until you notice 467
+    files are tracked and 298 scanned, so a third of the scan could vanish
+    under it.
     """
     listing = subprocess.run(
         ["git", "ls-files", "-z"],
@@ -544,16 +600,51 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     }
     # `expected` is what this test actually grades, and it can be emptied
     # without emptying `tracked`: loosen the `"schemas/"` literal above to `""`
-    # and every tracked file falls out of the set, leaving `missing` empty and
-    # the assertion below vacuous. `_tracked_files`'s refusal cannot help — this
-    # test asks git itself, by design. Proportional rather than an absolute
-    # count, so it states "most of the repo survived the predicate" without the
-    # magic number an earlier draft was rightly criticised for.
-    assert len(expected) > len(tracked) // 2, (
-        f"the scope predicate kept only {len(expected)} of {len(tracked)} "
-        "tracked files. `schemas/` is a small minority of this repo, so a "
-        "predicate discarding half of it is inverted or over-broad, and the "
-        "extent check below would pass over whatever it dropped."
+    # and everything but the one `_SCANNED_DESPITE_TREE` re-admission falls out,
+    # leaving `missing` empty and the assertion below vacuous. `_tracked_files`'s
+    # refusal cannot help — this test asks git itself, by design.
+    #
+    # State the invariant exactly rather than as a ratio. A proportional floor
+    # (`> len(tracked) // 2`) was tried and is a slow time bomb: `schemas/` is
+    # the LARGEST tree here, 165 of 467 tracked files, and it grows
+    # monotonically because published pins are immutable and never pruned —
+    # this change alone added three. `expected` stays flat while the ratio's
+    # denominator climbs, so the check reddens on its own after ~129 more pins,
+    # blaming a predicate that never changed. Counting what must survive has no
+    # such drift: everything outside the generated tree, minus the exemptions.
+    #
+    # Partition rather than filter, and require both halves. A floor is only as
+    # good as its operand: computing `outside_generated` with the same literal
+    # the predicate uses means loosening that literal to `""` empties it, the
+    # floor becomes `>= -5`, and the guard against a vacuous check is itself
+    # vacuous. This repo has both a generated tree and files outside it, so an
+    # empty half means the split is wrong, whatever the counts then say.
+    generated = {relpath for relpath in tracked if relpath.startswith("schemas/")}
+    outside_generated = tracked - generated
+    assert generated and outside_generated, (
+        f"the generated/authored split put {len(generated)} files under "
+        f"`schemas/` and {len(outside_generated)} outside it. Neither side is "
+        "empty in this repo, so an empty one means the prefix is wrong and "
+        "every count derived from it is meaningless."
+    )
+    # Which half is which, stated as a set relation rather than a count. Swap
+    # the two and the floor still passes — it just drops from 297 to 160 — so
+    # non-emptiness alone does not pin the orientation. The scope admits exactly
+    # authored files plus the recorded re-admissions, and nothing from the
+    # generated tree by accident.
+    assert expected <= outside_generated | set(_SCANNED_DESPITE_TREE), (
+        "the scope admitted files from the generated tree that "
+        "_SCANNED_DESPITE_TREE does not name: "
+        f"{sorted(expected - outside_generated - set(_SCANNED_DESPITE_TREE))[:10]}. "
+        "Either the partition is inverted or `schemas/` is being scanned."
+    )
+    assert len(expected) >= len(outside_generated) - len(_EXCLUDED_PATHS), (
+        f"the scope predicate kept {len(expected)} files, but {len(tracked)} "
+        f"are tracked and {len(outside_generated)} of them sit outside "
+        "`schemas/`. Every one of those is scanned unless _EXCLUDED_PATHS says "
+        "otherwise, so a smaller number means the predicate is inverted or "
+        "over-broad and the extent check below would pass over whatever it "
+        "dropped."
     )
     missing = sorted(expected - set(_scanned_files()))
     assert not missing, (
@@ -638,31 +729,58 @@ def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> Non
     call happened with the right argument and can say nothing about what came
     back. Two tests, two different questions.
 
-    The fixture is shaped to make each one fail. Three hundred filler lines put
-    both refs past any plausible head-slice; the 400-character line defeats a
-    length filter; asserting the LINE NUMBERS pins the enumerator, which every
+    The fixture is shaped to make each one fail. The 299 filler lines put both
+    refs past any plausible head-slice; the 400-character line defeats a length
+    filter; asserting the LINE NUMBERS pins the enumerator, which every
     single-line acceptance fixture leaves free to be a constant `1` — and when
     this gate is red, `rel:lineno -> matched` is its entire product, so a
     constant sends every author to line 1 of a 400-line file.
 
-    The `\r\n` and the form feed pin `splitlines()` against a plain
-    `split("\n")`. `splitlines()` treats `\x0c` as a break and `split("\n")`
-    does not, so that one character is worth a line: the refs sit at 302 and 303
-    under the real implementation and at 301 and 302 under the mutant. Counting
-    them by hand is what the arithmetic below spells out — 299 filler lines,
-    then a line the form feed splits in two.
+    The FORM FEED, alone, pins `splitlines()` against a plain `split("\n")`:
+    `splitlines()` treats `\x0c` as a break and `split("\n")` does not, so that
+    one character is worth a line — the refs sit at 302 and 303 under the real
+    implementation and at 301 and 302 under the mutant. The `\r\n` line endings
+    carry none of that (measured: identical counts with `\n`); they are here
+    because a repo holds CRLF files and this fixture should look like one.
+
+    `_sites` is driven through the same fixture, because it is a SECOND
+    traversal with the same four severances available and none of them shared
+    with `_references`. Routing the sibling gates through one helper bought one
+    place to guard, not automatic coverage: the first version of this file
+    guarded `_references` here and left `_sites` watched only for selection, at
+    which point reading every file and defanging the text turned both sibling
+    gates off with the suite green.
     """
     filler = "prose carrying no reference at all, padded out\r\n" * 299
-    body = (
-        filler
-        + "a line broken by a form feed\x0c\n"
+    tail = (
+        "a line broken by a form feed\x0c\n"
         + "x" * 400 + " see analitiq-engine#406 for it\n"
         + "settled in issue #89 upstream\n"
     )
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
-    (tmp_path / "notes.md").write_text(body, encoding="utf-8")
-    subprocess.run(["git", "add", "notes.md"], cwd=tmp_path, check=True)
+    (tmp_path / "notes.md").write_text(filler + tail, encoding="utf-8")
+    # A second document for the sibling gates, same shape: both referents land
+    # past line 300 and one rides a line no length filter would read.
+    (tmp_path / "guide.md").write_text(
+        filler
+        + "a line broken by a form feed\x0c\n"
+        + "x" * 400 + " per .claude/rules/no-drift-surfaces.md this holds\n"
+        + "the wiring this PR extended is routed\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "notes.md", "guide.md"], cwd=tmp_path, check=True)
     monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+
+    # Through the GATES' own collectors, not `_sites` directly: that is what
+    # puts the exemption each one passes under test. Neither `_FOREIGN_ALLOWED`
+    # nor `_EPHEMERAL_ALLOWED` names `guide.md`, so both must report it.
+    assert _foreign_path_sites() == [
+        ("guide.md", 302, ".claude/rules/no-drift-surfaces.md"),
+    ]
+    assert _ephemeral_referent_sites() == [("guide.md", 303, "this PR")]
+    # And `skip` removes exactly the named file, not the pattern's ability to
+    # match: the same document reports nothing once it is exempt.
+    assert _sites(_EPHEMERAL_REFERENT, skip=("guide.md",)) == []
 
     assert _references() == [
         ("notes.md", 302, "analitiq-engine#406"),
@@ -928,7 +1046,7 @@ def test_single_digit_bare_refs_are_left_wide() -> None:
     bare `(#7)` escapes with them. The keyword and cross-repo forms still catch
     `issue #7` and `analitiq-engine#7`.
     """
-    assert scan_text("this is the sanctioned copy (no-drift rule #3),") == []
+    assert scan_text("this is the sanctioned copy (clause #3),") == []
     assert scan_text("the ADR's #5 clause") == []
     # The hole itself, pinned so it is a decision on record rather than a
     # surprise the day someone hits it.

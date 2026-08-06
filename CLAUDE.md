@@ -208,7 +208,10 @@ only — never add a static credential as a repo or environment secret, and neve
 use `pull_request_target` with a checkout of PR code.
 
 Full procedure, commit-type rules, and the `pypi` / `schemas` environment
-settings: see the `releasing` skill.
+settings live in the `releasing` skill — Claude Code tooling under an ignored
+directory, so it ships with the maintainer's checkout and not with a clone. If
+you have it, invoke it by name; if you do not, the environment settings are on
+the GitHub settings pages and the rest is the four rules above.
 
 ## PR Review Process
 

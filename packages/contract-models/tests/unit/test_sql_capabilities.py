@@ -319,9 +319,9 @@ def test_sql_capabilities_rejects_unknown_key():
 # NARROWING of any enum (dropping/renaming a member) fails loudly. Neither the
 # off-vocabulary reject test nor `render_schemas.py check` catches a narrowing:
 # a narrow-then-re-render leaves the committed schema self-consistent and green.
-# This is the sanctioned "test's assertion target" copy (no-drift rule #3),
-# pinning the accept boundary the way test_connector_transports.py pins the
-# driver pattern verbatim.
+# This is the sanctioned copy — a restatement that cannot be avoided, carrying
+# the test assertion that keeps it honest — pinning the accept boundary the way
+# test_connector_transports.py pins the driver pattern verbatim.
 EXPECTED_SQL_CAP_ENUMS = {
     "catalog": {"none", "read", "full"},
     "session_targeting": {"per_statement", "session_default"},
