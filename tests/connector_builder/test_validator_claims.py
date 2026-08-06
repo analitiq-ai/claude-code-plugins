@@ -399,8 +399,8 @@ def test_scanner_positive_control(monkeypatch, tmp_path: Path) -> None:
 def test_scan_exemption_boundaries(monkeypatch, tmp_path: Path) -> None:
     """Every exemption path in `scan()` holds at its exact boundary.
 
-    Round-2 mutation testing showed the gate's aggregate verdict on a green
-    tree exercises none of its branches: `ADV_REACH = 1000`, a deleted
+    Mutation testing showed the gate's aggregate verdict on a green tree
+    exercises none of its branches: `ADV_REACH = 1000`, a deleted
     dangling-fence report, or column-anchored code fences all survived CI.
     One synthetic doc per rule, each asserting both sides of the boundary, so
     a reach constant or an exemption arm cannot drift silently.
@@ -504,9 +504,9 @@ def test_scope_table_refuses_probeless_cells() -> None:
     """`_cell` must refuse an empty probe tuple.
 
     An unmeasured cell rendered into the scope table is the exact claim class
-    this registry exists to pin — round 2 found three live ones. No live cell
-    is empty anymore, so the guard needs a direct negative or its deletion is
-    invisible.
+    this registry exists to pin, and the table shipped with such cells before
+    the registry required a probe for each. No live cell is empty anymore, so
+    the guard needs a direct negative or its deletion is invisible.
     """
     with pytest.raises(RuntimeError, match="no backing probe"):
         _REGISTRY._cell("spelling-only", ())
@@ -516,8 +516,8 @@ def test_run_probe_branches() -> None:
     """Every verdict branch in `run_probe` fires on a synthetic probe.
 
     The live probes all pass, so on a green tree none of these branches
-    executes — round-2 mutation testing removed the crash guard and the
-    forbid/require checks with everything staying green.
+    executes — mutation testing removed the crash guard and the forbid/require
+    checks with everything staying green.
     """
     Probe = _REGISTRY.Probe
 

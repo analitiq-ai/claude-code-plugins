@@ -1,6 +1,7 @@
 """The single place the suite states which contract it exercises.
 
-It exists so the pin is stated once instead of restated in every drift module.
+It exists so the pin is stated once instead of restated in every drift module,
+which is what `.claude/rules/no-drift-surfaces.md` asks for.
 The monorepo move changes *what* it asserts, not the principle:
 
   * Before, the contract arrived as a published wheel, so "am I running the

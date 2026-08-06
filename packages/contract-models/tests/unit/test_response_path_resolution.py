@@ -919,8 +919,9 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
     document that is honest about its schema.
 
     These two tests make the omission fail the build and name the keyword. They
-    are the pin an unavoidable restatement has to carry to be documentation
-    rather than a second copy free to drift.
+    are the pin an unavoidable restatement has to carry, per
+    `.claude/rules/no-drift-surfaces.md`, to be documentation rather than a
+    second copy free to drift.
     """
 
     #: Walker keywords that cannot conditionally declare a PROPERTY NAME, with
@@ -1208,7 +1209,8 @@ class TestRequestSlotsAreSweptToo:
     def test_the_slot_tuple_still_covers_every_expression_carrying_field(self):
         """`_REQUEST_EXPRESSION_SLOTS` drives both site tables. Adding an
         expression-carrying request field without adding it here would silently
-        leave it unswept — the defect class the three cases above each pin."""
+        leave it unswept — the defect class the free-slot sweeps above pin, one
+        slot at a time."""
         assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
 
 

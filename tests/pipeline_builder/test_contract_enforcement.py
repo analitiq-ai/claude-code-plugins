@@ -256,7 +256,8 @@ def test_suite_exercises_in_repo_source_not_an_installed_wheel():
 
     The assertion itself lives in `tests/connector_builder/_pins.py` so the two
     suites share one implementation; duplicating it here would be a second copy
-    free to drift from the first, which is the surface this repo does not open.
+    free to drift from the first, which is the surface
+    `.claude/rules/no-drift-surfaces.md` exists to keep closed.
     """
     sys.path.insert(0, str(REPO_ROOT / "tests" / "connector_builder"))
     from _pins import assert_pinned_versions

@@ -111,7 +111,8 @@ def test_exact_must_not_template():
 
 def test_exact_write_native_render_placeholders_validated():
     # A write exact `native` render may carry `${length}` hints, but malformed
-    # placeholders (empty / unclosed) must be rejected too — Codex round 5.
+    # placeholders (empty / unclosed) must be rejected too: they render into a
+    # DDL type the driver cannot parse, and nothing downstream re-checks them.
     _accepts(WRITE, [{"match": "exact", "canonical": "Utf8", "native": "VARCHAR(${length})"}])
     _rejects(WRITE, [{"match": "exact", "canonical": "Utf8", "native": "VARCHAR(${})"}])
     _rejects(WRITE, [{"match": "exact", "canonical": "Utf8", "native": "VARCHAR(${length)"}])

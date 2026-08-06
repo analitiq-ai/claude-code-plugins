@@ -361,8 +361,8 @@ class ConnectionContractInput(AdvisoryValidated, StrictModel):
         return self
 
 
-# Python attribute names of the five mutually-exclusive operator keys; `in_`
-# is aliased to the `in` grammar key.
+# Python attribute names of the mutually-exclusive operator keys — exactly one
+# of them may be set per predicate; `in_` is aliased to the `in` grammar key.
 _CONDITION_OPERATOR_FIELDS = ("eq", "in_", "not_in", "present", "regex")
 _CONDITION_OPERATOR_ALIASES = {"in_": "in"}
 
@@ -1269,8 +1269,8 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
 # (engine ADR §5) ---
 #
 # `sql_capabilities` — SQL-shape capabilities are DECLARED, not guessed. The
-# engine's SQL write path ("refuse, don't guess", settled in the engine ADR
-# `docs/sql-write-path-v2.md` §5) reads these facts from the connector
+# engine's SQL write path ("refuse, don't guess", settled in the SQL write path
+# v2 ADR that analitiq-core owns) reads these facts from the connector
 # definition and refuses any needed-but-undeclared fact at config/handshake
 # time, instead of probing the live database. A declared block is COMPLETE —
 # every top-level shape fact is required — because a partial declaration is a
@@ -1436,7 +1436,7 @@ class Concurrency(StrictModel):
 class SqlLimits(StrictModel):
     """Declared SQL driver caps.
 
-    The one additive member of `sql_capabilities`: unlike the five required
+    The one additive member of `sql_capabilities`: unlike the required
     shape facts, absence of the block or of any single cap — including an
     empty block — is legal and means "no declared cap", and absence never
     blocks a write. Declared values are validated strictly (positive
@@ -1716,7 +1716,7 @@ class SqlCapabilities(StrictModel):
         default=None,
         description=(
             "Declared SQL driver caps. The "
-            "one additive member of this block: unlike the five required "
+            "one additive member of this block: unlike the required "
             "shape facts, absence (of the block or any single cap) is legal "
             "and means \"no declared cap\"."
         ),

@@ -29,9 +29,11 @@ history, not an invented example:
   JSON Schema. "the breaking change below", resolving to a different change than
   the one meant. A cited path (`tests/schema_drift/`) that was never a path.
 - **A count that does not match what it counts.** "the four cases above" over
-  three tests. "the repo tracks ~300" when it tracks 467. Counts attached to a
-  set are the [[no-cardinality-restatements]] class; counts attached to *nearby
-  text* rot the same way and no census hash sees either.
+  three tests. A census figure quoted in a comment — "the repo tracks ~300" —
+  left standing while the repo grew past it, in the same pull request that
+  wrote it. Counts attached to a set are the [[no-cardinality-restatements]]
+  class; counts attached to *nearby text* rot the same way and no census hash
+  sees either.
 - **Invented history.** A comment asserting a past event the repo does not
   record — "tried earlier and abandoned", "each gate carried its own copy" — for
   a state no commit ever held. Plausible, unfalsifiable, and wrong.

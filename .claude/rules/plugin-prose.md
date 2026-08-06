@@ -39,8 +39,10 @@ because nothing read the sentence.
    constants and models read directly, behavioral facts derived by probing the
    validator with minimal documents, never hand-measured. One block id rendered
    into several files is the sanctioned way to repeat a fact.
-4. **Pin it hard.** A fact that must stay hand-typed (the three exemptions in
-   `no-drift-surfaces.md` §2) needs a test that reads **this file at this
+4. **Pin it hard.** A fact that must stay hand-typed (the exemptions listed
+   under checklist item 2 of `no-drift-surfaces.md` — decision/mapping logic, a
+   test's assertion target, a curated human-facing summary) needs a test that
+   reads **this file at this
    site**. A test comparing the contract to its own constant, naming the prose
    only in a failure hint, pins nothing — the prose can rot while it passes.
 5. **Declare the exemption.** A fact with no model in this repo (CDK surface,

@@ -1226,8 +1226,8 @@ class TestKeywordVocabularyHasOneOwner:
     was missed, so the shipped contract constrained a keyword while its prose
     said it did not recurse there.
 
-    The repo's rule for a restatement that cannot be avoided is that a test
-    pins it. These are the four comparisons that catch it: per bucket
+    `.claude/rules/no-drift-surfaces.md` requires an unavoidable restatement to
+    be pinned by a test. These are the four comparisons that catch it: per bucket
     (the bucket decides HOW the walker recurses), the rendered constraint map,
     and the rendered sentence.
     """

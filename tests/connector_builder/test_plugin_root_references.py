@@ -16,8 +16,8 @@ Three reference forms, all checked:
   frontmatter uses for required reading.
 - `` `spec-x.md` `` / `` `references/io-contracts.md` `` — the bare backticked
   form used for cross-references between sibling specs. This is the dominant
-  form by an order of magnitude, and it is the form the round-1 review found a
-  stale reference in, so leaving it unchecked would miss the very case that
+  form by an order of magnitude, and it is the form a stale reference was
+  actually found in, so leaving it unchecked would miss the very case that
   motivated this file.
 - Unbackticked bare paths with a directory segment, on every line — the
   `description:` citations the orchestrator reads to route work (frontmatter
@@ -71,9 +71,6 @@ _EXTERNAL_REFS = {
     "spec-file-transport.md",
     "spec-stdout-transport.md",
     "spec-s3-transport.md",
-    # The engine's own ADR, cited as the source of record for the write path.
-    # It lives in analitiq-core; the citation says so.
-    "docs/sql-write-path-v2.md",
 }
 
 

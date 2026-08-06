@@ -4,9 +4,9 @@ The orchestrator (`skills/pipeline-builder/SKILL.md`) dispatches
 `private-endpoint-creator` by sub-mode name, and the agent declares the modes
 as `### Mode N: `<name>`` headers. The names are prose on both sides, so a
 rename in one file would strand the other silently — this pins the vocabulary
-in both places. The repetition is unavoidable, and the repo's rule for that
-case is that the copy becomes a test's assertion target rather than prose
-nobody grades.
+in both places. The repetition is unavoidable, and
+`.claude/rules/no-drift-surfaces.md` requires that such a copy become a test's
+assertion target rather than prose nobody grades.
 """
 from __future__ import annotations
 

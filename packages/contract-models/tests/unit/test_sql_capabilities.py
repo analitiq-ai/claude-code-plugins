@@ -1,8 +1,9 @@
 """Pin the SQL write-path capability models and the connector-level write unit.
 
 The engine's SQL write path refuses rather than guesses when a SQL shape is
-undeclared (ADR `docs/sql-write-path-v2.md` §5) — it reads SQL-shape
-capabilities from the connector definition instead of probing the live database.
+undeclared, as settled in the SQL write path v2 ADR that analitiq-core owns —
+it reads SQL-shape capabilities from the connector definition instead of
+probing the live database.
 `DatabaseConnector` gains an optional `sql_capabilities` block and `ConnectorBase`
 gains an optional `write_unit`; the contract models are `extra="forbid"`, so a
 connector cannot declare either block until it ships here.

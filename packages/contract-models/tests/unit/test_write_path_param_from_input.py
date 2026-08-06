@@ -677,8 +677,9 @@ class TestMembershipHoldsThroughRefsAndAllOf:
     segment cannot be substituted from the record — the exact failure the record
     binding exists to make expressible and checkable.
 
-    The read half of this work had already been fixed this way; the write half
-    had not, and every existing test in this module used an inline schema.
+    The read half — `response_path` resolution — is already tested against a
+    `$ref`-and-`allOf` schema for exactly this reason; the write path was not,
+    and every other test in this module uses an inline schema.
     """
 
     REF_SCHEMA = {

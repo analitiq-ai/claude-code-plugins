@@ -487,7 +487,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities", field="limits",
-        prose_hash="e3f5a1ed8771",
+        prose_hash="e0c5f78fb10a",
         structural="a defaulted (optional) field on the otherwise-required `SqlCapabilities` shape",
     ),
     ProseObligation(
@@ -503,7 +503,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="SqlCapabilities", field="stage", prose_hash="31cbee74695d", descriptive=True),
     ProseObligation(
         model="SqlLimits",
-        prose_hash="8f08f5f98e84",
+        prose_hash="5b0f29ace860",
         structural=(
             "the caps are typed `_DeclaredCap`, the strict lower-bounded "
             "integer annotation"

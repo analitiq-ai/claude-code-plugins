@@ -22,29 +22,37 @@ is why this file exists: it is the half of the fix that keeps the class closed.
 ## What it scans, and why the scope is not a list of directories
 
 Every file git tracks, minus `schemas/` and minus `_EXCLUDED_PATHS` — plus the
-one hand-authored, mutable file under `schemas/` that the tree's rationale below
-does not cover (`_SCANNED_DESPITE_TREE`).
+hand-authored files under `schemas/` that the tree's rationale below does not
+cover (`_SCANNED_DESPITE_TREE`).
 
 An earlier draft named the trees to walk — `packages/`, `plugins/`, `scripts/`,
-… — and that shape is the wrong default in a way worth recording, because it
-failed twice. It fails **open**: a tree nobody listed is a tree nobody lints,
-which is how `CONTRIBUTING.md` and `.claude-plugin/` sat outside the gate. And
-it is a hand-maintained parallel copy of the repo layout, and a second copy of
-a fact drifts from the first — the same reason nothing in this repo restates a
-value the schema owns — and worse, narrowing it is the cheapest way to turn a
-red gate green. Enumerating
-from git inverts both: a new authored tree is scanned the day it lands, nothing
-restates the layout, and the only way to shrink the scan is to add a line to
-`_EXCLUDED_PATHS`, which is pinned literally and lands in a diff a reviewer
-reads.
+… — and that shape is the wrong default for two reasons. It fails **open**: a
+tree nobody listed is a tree nobody lints, which is how `CONTRIBUTING.md` and
+`.claude-plugin/` sat outside that draft's scope. And it is a hand-maintained
+parallel copy of the repo layout, so it drifts from the layout the way any
+second copy of a fact drifts from the first — the same reason nothing in this
+repo restates a value the schema owns — with narrowing it the cheapest way to
+turn a red gate green. Enumerating from git inverts both: a new authored tree is
+scanned the day it lands, nothing restates the layout, and the only way to
+shrink the scan is to add a line to `_EXCLUDED_PATHS`, which is pinned literally
+and lands in a diff a reviewer reads.
 
 `schemas/` is the one tree excluded structurally rather than by path, and
 permanently so: it is generated from the contract models, and its pinned
 `X.Y.Z.json` objects are immutable once published (the publish is
-first-write-wins and byte-compares on re-runs). Roughly forty already-published
-pins still carry the old ticket text and always will. The only way that text
-leaves the served schemas is a re-render advancing the version — driven from the
-models this guard does scan.
+first-write-wins and byte-compares on re-runs). Dozens of already-published pins
+still carry the old ticket text and always will. The only way that text leaves
+the served schemas is a re-render advancing the version — driven from the models
+this guard does scan.
+
+That rationale covers only what the renderer writes, so it cannot be applied to
+the tree by prefix and left there. A hand-authored file under `schemas/` is
+neither generated nor immutable-before-publication, and dropping it into the
+tree would exempt it from the gate with nothing said.
+`test_every_file_under_the_generated_tree_is_classified` closes that by asking
+the renderer's own `RESOURCES` registry which folders it owns: anything under
+`schemas/` outside a registered folder must be named in `_SCANNED_DESPITE_TREE`,
+which is to say scanned, or the build fails.
 
 ## What counts as a ticket reference
 
@@ -118,18 +126,20 @@ something the reader does not have:
   where the exclusion is declared, so naming the tree there is the rule rather
   than a reference to it.
 - **"this PR" and friends.** A file outlives the pull request that wrote it, so
-  "the hole this PR closed" points at a moment the reader is not in. Two sites
-  legitimately name the pull request being processed at runtime and are pinned
-  in `_EPHEMERAL_ALLOWED` rather than matched by a cleverer pattern — a CI
-  comment naming the source a job grades, and a message printed about the pull
-  request under check. "this branch" is left wide: in this repo it always means
-  a control-flow branch.
+  "the hole this PR closed" points at a moment the reader is not in. Where the
+  pull request is the thing being processed at runtime the phrase is literal,
+  and those files are pinned in `_EPHEMERAL_ALLOWED` rather than matched by a
+  cleverer pattern — a CI workflow naming the source a job grades, and the
+  pin-contract script's messages about the pull request under check. "this
+  branch" is left wide: in this repo it always means a control-flow branch.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -145,12 +155,24 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # makes the value itself the thing under review.
 _UNSCANNED_TREE = "schemas/"
 
-# The one file under that tree the rationale does not cover: hand-authored, no
-# version triple, served as a mutable pointer. Neither "generated" nor
-# "immutable pin" applies to it, so it is scanned like any other authored file.
-# Its sibling `data-sync-run-response/1.0.0.json` is hand-authored too but IS a
-# pinned triple, so it stays out with the rest of the tree.
-_SCANNED_DESPITE_TREE = ("schemas/data-sync-api/openapi.json",)
+# The files under that tree the rationale does not cover: hand-authored, so
+# "generated from the contract models" is false of them, and authored HERE, so
+# the gate reaches them in the pull request that writes them — which is the only
+# moment a ref in one can still be removed. `openapi.json` carries no version
+# triple and is served as a mutable pointer; `data-sync-run-response/1.0.0.json`
+# is a pinned triple and immutable once published, which makes scanning it more
+# useful rather than less: after publication its text cannot be corrected at
+# all, so the gate has to see it before that.
+#
+# Graded, not just listed. `test_the_guard_excludes_only_the_paths_it_records`
+# requires every entry to be tracked and to sit under `_UNSCANNED_TREE`, because
+# a stale entry here fails OPEN and silently: it is textually indistinguishable
+# from a correct one, and the file it meant to re-admit drops back under the
+# blanket exclusion with nothing red.
+_SCANNED_DESPITE_TREE = (
+    "schemas/data-sync-api/openapi.json",
+    "schemas/data-sync-run-response/1.0.0.json",
+)
 
 # Repo-relative posix paths the sweep does not reach. Every entry names a
 # surface where a ticket number is either GitHub-native, immutable, or not ours
@@ -158,11 +180,19 @@ _SCANNED_DESPITE_TREE = ("schemas/data-sync-api/openapi.json",)
 # exactly, so nothing joins it without review.
 _EXCLUDED_PATHS = (
     # A contributor-facing process document about the issue tracker itself: it
-    # teaches the consolidation rule by walking real issues as worked precedent
-    # ("the model to copy is …"). The numbers are the referent a reader is being
-    # sent to, not a pointer standing in for reasoning, and GitHub renders and
-    # auto-links them. Removing them would delete the instruction.
+    # teaches the consolidation rule by walking real issues as worked precedent,
+    # one of which it names as "the model to copy". The numbers are the referent
+    # a reader is being sent to, not a pointer standing in for reasoning, and
+    # GitHub renders and auto-links them. Removing them deletes the instruction.
     "CONTRIBUTING.md",
+    # The form a pull request is written in, which makes it the GitHub-native
+    # surface by definition — its own header tells the author that ticket
+    # numbers belong in it rather than in code, and "this PR" is the runtime
+    # subject there rather than a referent that expires. It passes the gate
+    # today only because the placeholder is a literal `Closes #N` carrying no
+    # digits, so the day anyone makes that example concrete the template teaching
+    # the rule is the file the rule reddens.
+    ".github/pull_request_template.md",
     # Release-please writes both of these, and every entry links into the
     # tracker: the changelog IS the GitHub-native surface, and hand-editing it
     # desyncs the release train from its own history. Exempt by PROVENANCE, not
@@ -279,6 +309,34 @@ _FOREIGN_PATH = re.compile(r"\.claude/[A-Za-z0-9_./-]+")
 # name no untracked `.claude/` path is perfectly ordinary.
 _FOREIGN_ALLOWED = (".gitignore",)
 
+# The same defect one level up. `.claude/` is the tree this repo cites most, but
+# nothing makes it special: ANY path `.gitignore` excludes is a path that exists
+# on the machine that wrote the citation and in no clone. Asking git which
+# tokens it ignores covers every such tree at once — `docs/`, `htmlcov/`,
+# `dist/` — and keeps covering them when the ignore file changes, which a
+# hardcoded prefix cannot.
+#
+# Any slash-joined token. `_looks_like_a_path` then narrows it, in Python
+# rather than in the pattern, because the two conditions are easier to read
+# apart than as one alternation — and an alternation gets this wrong quietly:
+# `(?:/|/\w+\.\w+)` prefers its first branch, so `docs/sql-write-path-v2.md`
+# matches as the bare `docs/` and the citation the gate is looking for never
+# reaches the ignore check.
+_PATHLIKE = re.compile(
+    r"(?<![A-Za-z0-9_./-])[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/?)*"
+)
+
+# Every `.gitignore` DECLARES exclusions, so naming an ignored path in one is
+# the rule rather than a citation of it — the same inversion `_FOREIGN_ALLOWED`
+# records for the `.claude/` gate. Listed by path rather than matched by
+# filename: a `.gitignore` added to a new package has to land in a diff here,
+# which is the same reason every other exemption tuple is pinned literally.
+_IGNORED_ALLOWED = (
+    ".gitignore",
+    "packages/contract-models/.gitignore",
+    "packages/validator/.gitignore",
+)
+
 # "this PR", "this pull request", "this commit" — a referent that resolves only
 # while the change is in flight.
 #
@@ -291,8 +349,8 @@ _EPHEMERAL_REFERENT = re.compile(
     r"\bthis\s+(?:PR|pull\s+request|commit)\b", re.IGNORECASE
 )
 
-# The two sites where the PR IS the runtime subject rather than a dangling
-# pointer: a CI comment about which source the job grades, and a message the
+# The files where the PR IS the runtime subject rather than a dangling pointer:
+# a CI comment about which source the job grades, and the messages the
 # pin-contract script prints about the pull request it is checking. Pinned as
 # paths for the same reason `_EXCLUDED_PATHS` is — an exemption a reviewer reads
 # beats a pattern that quietly decides which mentions are legitimate.
@@ -305,8 +363,8 @@ _EPHEMERAL_ALLOWED = (
 def _is_excluded(relpath: str) -> bool:
     """Exact-match only.
 
-    Prefix and suffix matching have both been tried and both leak: a `startswith`
-    arm exempts `CONTRIBUTING.md.bak`, an `endswith` arm exempts
+    Prefix and suffix matching both leak, which is why neither is used here: a
+    `startswith` arm exempts `CONTRIBUTING.md.bak`, an `endswith` arm exempts
     `docs/CONTRIBUTING.md`. Every entry is one file, so equality is the whole
     rule — and `test_exclusion_matching_is_exact` pins the near-misses.
     """
@@ -335,27 +393,36 @@ def _tracked_files() -> list[str]:
     pointing at the parent repo: `git ls-files` resolves it and lists the
     worktree's own index.
     """
+    # Bytes, decoded explicitly, rather than `text=True`. `text=True` decodes
+    # with `locale.getpreferredencoding(False)` in strict mode, so a tracked path
+    # carrying a non-ASCII byte raises `UnicodeDecodeError` under the `LC_ALL=C`
+    # of a minimal CI container — and `UnicodeDecodeError` is a `ValueError`,
+    # which this handler does not catch. The diagnostic below would be skipped
+    # for a traceback naming neither this gate nor the path. Git stores paths as
+    # bytes and this repo's are UTF-8, so decode them as UTF-8 whatever the
+    # locale says, inside the `try` that explains the failure.
     try:
         result = subprocess.run(
             ["git", "ls-files", "-z"],
             cwd=REPO_ROOT,
             capture_output=True,
-            text=True,
             check=True,
         )
-    except (OSError, subprocess.CalledProcessError) as exc:
+        listing = result.stdout.decode("utf-8")
+    except (OSError, UnicodeDecodeError, subprocess.CalledProcessError) as exc:
         # git's own reason lives in stderr, and `capture_output` swallowed it.
         # Without re-emitting it, "not a git repository" and the `safe.directory`
         # dubious-ownership refusal — the realistic CI-container failure — are
         # indistinguishable, and the second one is nothing to do with checkouts.
-        detail = (getattr(exc, "stderr", "") or "").strip()
+        stderr = getattr(exc, "stderr", b"") or b""
+        detail = stderr.decode("utf-8", errors="replace").strip()
         raise RuntimeError(
             f"could not enumerate tracked files under {REPO_ROOT} — this gate "
             "derives its scope from git, so it cannot run against a tree git "
             "does not know."
             + (f" git said: {detail}" if detail else "")
         ) from exc
-    tracked = [line for line in result.stdout.split("\0") if line]
+    tracked = [line for line in listing.split("\0") if line]
     if not tracked:
         raise RuntimeError(
             f"git tracks no files under {REPO_ROOT}. That is not a clean repo, "
@@ -390,15 +457,42 @@ def _read(relpath: str) -> str:
     avoid, so name the file and re-raise. That choice is held by
     `test_an_unreadable_file_is_never_skipped`; without it, swapping the `raise`
     for a `return ""` passes the whole suite.
+
+    The causes are separated because they take different remedies and only one
+    of them is `_EXCLUDED_PATHS`. A tracked path can also be unreadable because
+    it is a submodule gitlink (`git ls-files` lists the directory), or because
+    the worktree is missing a file the index still holds — an unstaged `rm`, a
+    sparse checkout, `skip-worktree`. Those are structural or transient, and an
+    author who follows a message saying "add it to _EXCLUDED_PATHS" exempts a
+    real, readable, authored file permanently. For the submodule case
+    `test_exclusions_are_all_live` then blesses the exemption forever, since
+    `.exists()` is true of the directory: a whole-file exemption standing over a
+    file nobody watches, which is the state that test exists to end.
     """
     try:
         return (REPO_ROOT / relpath).read_text(encoding="utf-8", errors="strict")
-    except (UnicodeDecodeError, OSError) as exc:
+    except UnicodeDecodeError as exc:
         raise RuntimeError(
-            f"{relpath} is tracked but could not be read as UTF-8 text. This "
-            "gate reads every file it scans, so a binary or missing path has to "
-            "be exempted deliberately — add it to _EXCLUDED_PATHS with its "
-            "reason rather than leaving it unscanned."
+            f"{relpath} is tracked but is not UTF-8 text. This gate reads every "
+            "file it scans, so if it is genuinely binary, add it to "
+            "_EXCLUDED_PATHS with its reason rather than leaving it unscanned."
+        ) from exc
+    except IsADirectoryError as exc:
+        raise RuntimeError(
+            f"{relpath} is tracked as a directory, which means a submodule "
+            "gitlink. This gate scans files; what is inside the submodule is "
+            "its own repo's gate to run. Do NOT exempt it as a path here."
+        ) from exc
+    except FileNotFoundError as exc:
+        raise RuntimeError(
+            f"{relpath} is in the index but absent from the worktree — a staged "
+            "deletion, a sparse checkout, or `skip-worktree`. Fix the checkout; "
+            "exempting it would hide a real authored file from the gate."
+        ) from exc
+    except OSError as exc:
+        raise RuntimeError(
+            f"{relpath} is tracked but could not be read: {exc}. This gate reads "
+            "every file it scans and will not skip one silently."
         ) from exc
 
 
@@ -487,10 +581,12 @@ def _sites(pattern: re.Pattern[str], *, skip: tuple[str, ...] = ()) -> list[tupl
 def _resolves_in_tree(cited: str, tracked: set[str]) -> bool:
     """Does a cited path name something git tracks — a file OR a directory?
 
-    Prose cites both: `.claude/rules/no-drift-surfaces.md` and, one line later,
-    the directory `.claude/rules/`. Git tracks files, so a set-membership test
-    alone calls the directory unresolvable and reddens an ordinary reference to
-    a tree that is right there in the clone.
+    Prose cites both shapes, in different files: `CLAUDE.md` names the tree
+    `.claude/rules/` where it says the rules are tracked, and
+    `.github/pull_request_template.md` names files inside it
+    (`.claude/rules/no-drift-surfaces.md`). Git tracks files, so a
+    set-membership test alone calls the directory citation unresolvable and
+    reddens an ordinary reference to a tree that is right there in the clone.
 
     Trailing punctuation is stripped first because a citation usually ends a
     sentence or sits inside parentheses, and `_FOREIGN_PATH`'s charset carries
@@ -525,6 +621,88 @@ def _foreign_path_sites() -> list[tuple[str, int, str]]:
 def _ephemeral_referent_sites() -> list[tuple[str, int, str]]:
     """The expiring-referent gate's findings. Named for the same reason."""
     return _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
+
+
+def _trim(cited: str) -> str:
+    """A cited path without the prose punctuation that ends the sentence."""
+    return cited.rstrip("/.,;:)`\"'")
+
+
+def _looks_like_a_path(cited: str) -> bool:
+    """Is this token a path, or just prose that happens to contain a slash?
+
+    A directory citation ends in `/`; a file citation's last segment carries an
+    extension. Everything else is prose — "Build/check", "read/write", "and/or"
+    — and prose gets matched by the ignore check for reasons that have nothing
+    to do with citations: on a case-insensitive filesystem "Build/check" is
+    ignored by a `build/` rule.
+    """
+    if cited.endswith("/"):
+        return True
+    return "." in cited.rsplit("/", 1)[-1]
+
+
+def _git_ignores(paths: set[str]) -> set[str]:
+    """Which of these repo-relative paths `.gitignore` excludes.
+
+    One batched `git check-ignore` rather than one call per candidate. Paths
+    that escape the repo are dropped first: a single `../../LICENSE` makes git
+    abort the whole batch with "is outside repository", which would silently
+    return no ignored paths at all and turn the gate off.
+    """
+    # `p` must be non-empty as well: stripping trailing punctuation can consume
+    # a whole token (`./`), and git rejects an empty pathspec by aborting the
+    # batch, which would look exactly like "nothing is ignored".
+    inside = sorted(
+        p for p in paths if p and ".." not in p and not p.startswith("/")
+    )
+    if not inside:
+        return set()
+    result = subprocess.run(
+        ["git", "check-ignore", "--stdin", "-z"],
+        cwd=REPO_ROOT,
+        input=("\0".join(inside) + "\0").encode("utf-8"),
+        capture_output=True,
+    )
+    # Exit 1 means "none of them are ignored", which is a normal answer; any
+    # other non-zero is git failing, and this gate does not report clean on a
+    # question it could not ask.
+    if result.returncode not in (0, 1):
+        raise RuntimeError(
+            "git check-ignore failed, so citations of ignored paths cannot be "
+            "identified and this gate would pass vacuously. git said: "
+            + result.stderr.decode("utf-8", errors="replace").strip()
+        )
+    return {p for p in result.stdout.decode("utf-8").split("\0") if p}
+
+
+def _ignored_path_sites() -> list[tuple[str, int, str]]:
+    """Citations of any path this repo's `.gitignore` excludes.
+
+    `_foreign_path_sites` asks whether a `.claude/` citation is tracked; this
+    asks the general form of the same question, and the two are not redundant.
+    A mistyped rule filename (`.claude/rules/no-such-rule.md`) is untracked but
+    NOT ignored, since the tree is re-admitted — only the first gate sees it.
+    An ignored path outside `.claude/` is not matched by the first pattern at
+    all — only this one sees it.
+    """
+    sites = [
+        site for site in _sites(_PATHLIKE, skip=_IGNORED_ALLOWED)
+        if _looks_like_a_path(site[2])
+    ]
+    ignored = _git_ignores({_trim(cited) for _, _, cited in sites})
+    return [site for site in sites if _trim(site[2]) in ignored]
+
+
+def test_no_citation_of_a_path_the_ignore_file_excludes() -> None:
+    """An ignored path is present for its author and absent from every clone."""
+    found = _ignored_path_sites()
+    assert not found, (
+        "citations of paths `.gitignore` excludes:\n"
+        + "\n".join(f"  {rel}:{lineno} -> {cited}" for rel, lineno, cited in found)
+        + "\nThe reader's clone does not contain them. Name the artifact and the "
+        "repo that owns it, or state the fact the path was standing in for."
+    )
 
 
 def test_no_citation_of_a_path_the_reader_cannot_have() -> None:
@@ -585,6 +763,29 @@ def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
             f"{relpath} is exempt but names nothing in the tree — drop it."
         )
 
+    assert _IGNORED_ALLOWED == (
+        ".gitignore",
+        "packages/contract-models/.gitignore",
+        "packages/validator/.gitignore",
+    ), (
+        "_IGNORED_ALLOWED exempts whole files from the ignored-path gate; state "
+        "the reason inline and update this pin."
+    )
+    # Exempt by PROVENANCE like `_FOREIGN_ALLOWED`, and for the same inversion:
+    # an ignore file names ignored paths because that is what an ignore file is.
+    # Existence is the whole check — but every entry must actually BE an ignore
+    # file, or the exemption is just a file removed from the gate under a name
+    # that reads like a rule.
+    for relpath in _IGNORED_ALLOWED:
+        assert (REPO_ROOT / relpath).exists(), (
+            f"{relpath} is exempt but names nothing in the tree — drop it."
+        )
+        assert Path(relpath).name == ".gitignore", (
+            f"{relpath} is exempt from the ignored-path gate as a declaration "
+            "of the exclusions, and it is not a `.gitignore`. That exemption "
+            "removes a file from the gate for a reason that is not true of it."
+        )
+
 
 def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     """Guard the guard: extent, not a sample.
@@ -608,10 +809,11 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     `.md`, return the first 210 entries — leaves `expected` and `_scanned_files`
     agreeing perfectly on a truncated tree, and both an extent check and the gate
     pass over a repo they can no longer see. Two independent listings cannot be
-    narrowed by one edit, which also retires the arbitrary count floor an
-    earlier draft leaned on: `> 200` sounds like a lot until you notice 467
-    files are tracked and 298 scanned, so a third of the scan could vanish
-    under it.
+    narrowed by one edit, which also retires the arbitrary count floor an earlier
+    draft leaned on. A floor is a magnitude claim standing in for an extent
+    claim: any number small enough to be safe as the repo shrinks is small enough
+    to let a large part of the scan disappear under it, and any number large
+    enough to bite reddens on its own as the repo grows.
     """
     listing = subprocess.run(
         ["git", "ls-files", "-z"],
@@ -634,57 +836,27 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     }
     # `expected` is what this test actually grades, and it can be emptied
     # without emptying `tracked`: loosen the `"schemas/"` literal above to `""`
-    # and everything but the one `_SCANNED_DESPITE_TREE` re-admission falls out,
-    # leaving `missing` empty and the assertion below vacuous. `_tracked_files`'s
-    # refusal cannot help — this test asks git itself, by design.
-    #
-    # State the invariant exactly rather than as a ratio. A proportional floor
-    # (`> len(tracked) // 2`) was tried and is a slow time bomb: `schemas/` is
-    # the LARGEST tree here, 165 of 467 tracked files, and it grows
-    # monotonically because published pins are immutable and never pruned —
-    # this change alone added three. `expected` stays flat while the ratio's
-    # denominator climbs, so the check reddens on its own after ~129 more pins,
-    # blaming a predicate that never changed. Counting what must survive has no
-    # such drift: everything outside the generated tree, minus the exemptions.
-    #
-    # Partition rather than filter, and require both halves. A floor is only as
-    # good as its operand: computing `outside_generated` with the same literal
-    # the predicate uses means loosening that literal to `""` empties it, the
-    # floor becomes `>= -5`, and the guard against a vacuous check is itself
-    # vacuous. This repo has both a generated tree and files outside it, so an
-    # empty half means the split is wrong, whatever the counts then say.
-    generated = {relpath for relpath in tracked if relpath.startswith("schemas/")}
-    outside_generated = tracked - generated
-    assert generated and outside_generated, (
-        f"the generated/authored split put {len(generated)} files under "
-        f"`schemas/` and {len(outside_generated)} outside it. Neither side is "
-        "empty in this repo, so an empty one means the prefix is wrong and "
-        "every count derived from it is meaningless."
+    # and everything but the `_SCANNED_DESPITE_TREE` re-admissions falls out.
+    # `_tracked_files`'s refusal cannot help — this test asks git itself, by
+    # design — so require the graded set to be non-empty here.
+    assert expected, (
+        f"the scope predicate kept nothing out of {len(tracked)} tracked files, "
+        "so the comparison below holds vacuously. Either the `schemas/` literal "
+        "in this test is wrong or every file has been exempted."
     )
-    # Which half is which, stated as a set relation rather than a count. Swap
-    # the two and the floor still passes — it just drops from 297 to 160 — so
-    # non-emptiness alone does not pin the orientation. The scope admits exactly
-    # authored files plus the recorded re-admissions, and nothing from the
-    # generated tree by accident.
-    assert expected <= outside_generated | set(_SCANNED_DESPITE_TREE), (
-        "the scope admitted files from the generated tree that "
-        "_SCANNED_DESPITE_TREE does not name: "
-        f"{sorted(expected - outside_generated - set(_SCANNED_DESPITE_TREE))[:10]}. "
-        "Either the partition is inverted or `schemas/` is being scanned."
-    )
-    assert len(expected) >= len(outside_generated) - len(_EXCLUDED_PATHS), (
-        f"the scope predicate kept {len(expected)} files, but {len(tracked)} "
-        f"are tracked and {len(outside_generated)} of them sit outside "
-        "`schemas/`. Every one of those is scanned unless _EXCLUDED_PATHS says "
-        "otherwise, so a smaller number means the predicate is inverted or "
-        "over-broad and the extent check below would pass over whatever it "
-        "dropped."
-    )
-    missing = sorted(expected - set(_scanned_files()))
-    assert not missing, (
-        f"{len(missing)} tracked files are not scanned but carry no exemption: "
-        f"{missing[:10]}. The gate is blind to them — either scan them or "
-        "record the exemption in _EXCLUDED_PATHS with its reason."
+    # Equality, not containment. `missing` alone (`expected - scanned`) is
+    # one-directional: it catches a scan that shrank and says nothing about one
+    # that reached files the predicate excludes, so `schemas/` re-entering the
+    # scan wholesale would pass. Equality also makes the two independent
+    # listings do their own work — no separate partition arithmetic, computed by
+    # this test out of this test's own literal, can be satisfied by construction.
+    scanned = set(_scanned_files())
+    assert scanned == expected, (
+        f"the scan and the scope disagree. Selected and never scanned: "
+        f"{sorted(expected - scanned)[:10]}; scanned without being in scope: "
+        f"{sorted(scanned - expected)[:10]}. The first blinds the gate to those "
+        "files — scan them, or record the exemption in _EXCLUDED_PATHS with its "
+        "reason. The second means the generated tree is being scanned after all."
     )
 
 
@@ -735,8 +907,8 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
 
     # Then each gate through ITS OWN collector, against the PINNED constant.
     # Spelling the exemption here instead grades an argument this test supplies,
-    # which is not the one the gate hands over: `skip=_FOREIGN_ALLOWED + ("
-    # "README.md", "CLAUDE.md")` inside the collector drops two real files from
+    # which is not the one the gate hands over: appending `"README.md"` and
+    # `"CLAUDE.md"` to the `skip` inside the collector drops two real files from
     # a gate with every constant untouched and the whole suite green. The
     # end-to-end fixture cannot see it either — its tmp repo holds no file by
     # those names. Comparing the collector's real read set against the pinned
@@ -745,6 +917,7 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
     for collector, allowed, name in (
         (_foreign_path_sites, _FOREIGN_ALLOWED, "gitignored-path"),
         (_ephemeral_referent_sites, _EPHEMERAL_ALLOWED, "expiring-referent"),
+        (_ignored_path_sites, _IGNORED_ALLOWED, "ignored-path"),
     ):
         seen.clear()
         collector()
@@ -768,19 +941,37 @@ def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> Non
         scan_text(_read(relpath).replace("#", ""))  # read everything, defang it
         text.splitlines()[:100]                     # scan the top of each file
         ... if len(line) < 200                      # skip long lines, i.e. most JSON
+        ... if relpath.endswith(".md")              # scan one file type
+        ... if not line.lstrip().startswith("#")    # skip comments and headings
+        ... if not line.startswith("    ")          # skip indented lines
 
-    All four leave the gate asserting an empty list is empty over the whole
+    All seven leave the gate asserting an empty list is empty over the whole
     repo. `test_the_gate_reads_every_file_the_scan_selected` cannot catch any of
     them and never could: its recording `_read` returns `""`, so it proves the
     call happened with the right argument and can say nothing about what came
     back. Two tests, two different questions.
 
-    The fixture is shaped to make each one fail. The 299 filler lines put both
-    refs past any plausible head-slice; the 400-character line defeats a length
-    filter; asserting the LINE NUMBERS pins the enumerator, which every
-    single-line acceptance fixture leaves free to be a constant `1` — and when
-    this gate is red, `rel:lineno -> matched` is its entire product, so a
-    constant sends every author to line 1 of a 400-line file.
+    The fixture is shaped to make each one fail, and it needs TWO axes to do it.
+    Magnitude is the obvious one: 299 filler lines put the refs past any
+    plausible head-slice, the 400-character line defeats a length filter, and
+    asserting the LINE NUMBERS pins the enumerator, which every single-line
+    acceptance fixture leaves free to be a constant `1` — and when this gate is
+    red, `rel:lineno -> matched` is its entire product, so a constant sends
+    every author to line 1 of a 400-line file.
+
+    Identity is the axis that was missing, and its absence is why the last three
+    severances above survived a fully green suite. Two `.md` documents of the
+    same size, both at the repo root, both carrying every ref on a flush-left
+    prose line, vary only in magnitude: any predicate over the PATH, the
+    extension, the file's size, or the shape of the LINE reads the whole scan,
+    passes the read-set check, matches both fixture files, and drops the rest of
+    the repo. So `pkg/mod.py` is deliberately unlike them in every one of those
+    dimensions — nested rather than root, `.py` rather than `.md`, a few hundred
+    bytes rather than 14 KB, and its refs sit on an indented line and on a
+    comment line, which is where refs actually live in this repo. The two
+    filters that blind the gate to every Python comment and every contract-model
+    docstring are the ones that matter most, because those descriptions render
+    into the published schemas.
 
     The FORM FEED, alone, pins `splitlines()` against a plain `split("\n")`:
     `splitlines()` treats `\x0c` as a break and `split("\n")` does not, so that
@@ -814,23 +1005,58 @@ def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> Non
         + "the wiring this PR extended is routed\n",
         encoding="utf-8",
     )
-    subprocess.run(["git", "add", "notes.md", "guide.md"], cwd=tmp_path, check=True)
+    # The identity axis: a third document unlike the other two in every
+    # dimension a post-read filter can test — nested path, `.py` suffix, small,
+    # and carrying each class of referent once on an INDENTED line and once on a
+    # COMMENT line. `pkg/` also gives `relpath` a directory component, which the
+    # two root-level documents leave untestable.
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "mod.py").write_text(
+        "def helper():\n"
+        + "    return 1\n" * 40
+        + "    settled in issue #89 upstream\n"
+        + "# see analitiq-engine#406 for the grammar\n"
+        + "    per .claude/skills/releasing/SKILL.md this holds\n"
+        + "# the wiring this PR extended is routed\n"
+        + "    stated in build/notes.md instead\n",
+        encoding="utf-8",
+    )
+    # The ignored-path gate needs an ignore file to have an opinion at all, and
+    # `build/` is ignored here so `build/notes.md` above is a citation of a path
+    # no clone of this fixture repo contains.
+    (tmp_path / ".gitignore").write_text("build/\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "notes.md", "guide.md", "pkg/mod.py", ".gitignore"],
+        cwd=tmp_path,
+        check=True,
+    )
     monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
 
     # Through the GATES' own collectors, not `_sites` directly: that is what
     # puts the exemption each one passes under test. Neither `_FOREIGN_ALLOWED`
-    # nor `_EPHEMERAL_ALLOWED` names `guide.md`, so both must report it.
+    # nor `_EPHEMERAL_ALLOWED` names either document, so both must report both.
     assert _foreign_path_sites() == [
         ("guide.md", 302, ".claude/rules/no-drift-surfaces.md"),
+        ("pkg/mod.py", 44, ".claude/skills/releasing/SKILL.md"),
     ]
-    assert _ephemeral_referent_sites() == [("guide.md", 303, "this PR")]
+    assert _ephemeral_referent_sites() == [
+        ("guide.md", 303, "this PR"),
+        ("pkg/mod.py", 45, "this PR"),
+    ]
     # And `skip` removes exactly the named file, not the pattern's ability to
-    # match: the same document reports nothing once it is exempt.
-    assert _sites(_EPHEMERAL_REFERENT, skip=("guide.md",)) == []
+    # match: the exempt document goes quiet and the other one still reports.
+    assert _sites(_EPHEMERAL_REFERENT, skip=("guide.md",)) == [
+        ("pkg/mod.py", 45, "this PR"),
+    ]
+    # The ignored-path gate through its own collector: the ignore file itself is
+    # exempt, the citation on the indented line is not.
+    assert _ignored_path_sites() == [("pkg/mod.py", 46, "build/notes.md")]
 
     assert _references() == [
         ("notes.md", 302, "analitiq-engine#406"),
         ("notes.md", 303, "issue #89"),
+        ("pkg/mod.py", 42, "issue #89"),
+        ("pkg/mod.py", 43, "analitiq-engine#406"),
     ]
 
 
@@ -906,12 +1132,34 @@ def test_the_guard_excludes_only_the_paths_it_records() -> None:
         "that still covers `schemas/` keeps the gate green while dropping "
         "whatever else shares the prefix."
     )
-    assert _SCANNED_DESPITE_TREE == ("schemas/data-sync-api/openapi.json",), (
+    assert _SCANNED_DESPITE_TREE == (
+        "schemas/data-sync-api/openapi.json",
+        "schemas/data-sync-run-response/1.0.0.json",
+    ), (
         "_SCANNED_DESPITE_TREE re-admits hand-authored files from the generated "
         "tree; each addition needs the reason stated inline."
     )
+    # The pin proves the STRING is unchanged. It cannot prove the string still
+    # RESOLVES, and this is the one tuple where staleness fails open: an
+    # `_EXCLUDED_PATHS` entry naming nothing is an exemption over nothing, while
+    # a `_SCANNED_DESPITE_TREE` entry naming nothing silently returns a real
+    # authored file to the blanket `schemas/` exclusion. A typo here is
+    # textually indistinguishable from the correct value, and the extent test
+    # cannot help because it reads this same tuple — the one input it does not
+    # keep an independent copy of, so both sides shrink together.
+    tracked = set(_tracked_files())
+    for readmitted in _SCANNED_DESPITE_TREE:
+        assert readmitted.startswith(_UNSCANNED_TREE), (
+            f"{readmitted} is not under `{_UNSCANNED_TREE}`, so re-admitting it "
+            "is a no-op — it was never excluded in the first place."
+        )
+        assert readmitted in tracked, (
+            f"{readmitted} re-admits a file from the generated tree and names "
+            "nothing git tracks. Whatever file it meant is silently unscanned."
+        )
     assert _EXCLUDED_PATHS == (
         "CONTRIBUTING.md",
+        ".github/pull_request_template.md",
         "plugins/analitiq-connector-builder/CHANGELOG.md",
         "plugins/analitiq-pipeline-builder/CHANGELOG.md",
         "packages/contract-models/src/analitiq/contracts/arrow_type_grammar.json",
@@ -923,13 +1171,76 @@ def test_the_guard_excludes_only_the_paths_it_records() -> None:
     )
 
 
+def test_every_file_under_the_generated_tree_is_classified() -> None:
+    """The blanket `schemas/` exclusion must only cover what the renderer writes.
+
+    The tree is excluded for a reason that is a claim about provenance —
+    generated from the contract models, published immutably — and the exclusion
+    is applied by prefix, which does not check that claim. A hand-authored file
+    dropped anywhere under `schemas/` is exempt from the gate the moment it
+    lands, with nothing said and nothing red. Two such files already exist, so
+    this is not hypothetical; a third arriving is the ordinary case.
+
+    `render_schemas.py check` does not cover it either. It re-renders the
+    registered resources and diffs them, so an extra file it never renders is
+    not a difference it can see.
+
+    Ask the renderer which folders it owns, rather than restating the answer:
+    `RESOURCES` is the registry the rendering is driven from, so a resource
+    added there is classified here the same day. Everything else under the tree
+    must be named in `_SCANNED_DESPITE_TREE` — that is, must be scanned. The
+    only sanctioned way to have a hand-authored file under `schemas/` is to let
+    the gate read it.
+    """
+    renderer = REPO_ROOT / "scripts" / "render_schemas.py"
+    spec = importlib.util.spec_from_file_location("_render_schemas", renderer)
+    assert spec and spec.loader, f"could not load the renderer at {renderer}"
+    render_schemas = importlib.util.module_from_spec(spec)
+    # Registered before execution, not after: the module defines dataclasses,
+    # and `dataclasses` resolves a field's annotations through
+    # `sys.modules[cls.__module__]`. Executing it unregistered raises inside
+    # `dataclass()` on a module that imports perfectly well by name.
+    sys.modules[spec.name] = render_schemas
+    try:
+        spec.loader.exec_module(render_schemas)
+    finally:
+        del sys.modules[spec.name]
+    generated_folders = tuple(
+        f"{_UNSCANNED_TREE}{resource.name}/" for resource in render_schemas.RESOURCES
+    )
+    assert generated_folders, (
+        "the renderer's RESOURCES registry is empty, so every file under "
+        f"`{_UNSCANNED_TREE}` would read as hand-authored and this check would "
+        "grade the wrong thing."
+    )
+    # `canonical-types.json` is generated too, from the vendored engine grammar
+    # rather than from a registered resource, so it has no folder of its own.
+    generated_files = (f"{_UNSCANNED_TREE}canonical-types.json",)
+
+    unclassified = sorted(
+        relpath
+        for relpath in _tracked_files()
+        if relpath.startswith(_UNSCANNED_TREE)
+        and not relpath.startswith(generated_folders)
+        and relpath not in generated_files
+        and relpath not in _SCANNED_DESPITE_TREE
+    )
+    assert not unclassified, (
+        f"{unclassified} sit under `{_UNSCANNED_TREE}` but no registered "
+        "resource renders them, so the tree's exclusion — generated, immutable "
+        "once published — is not true of them. They are hand-authored and "
+        "currently unscanned. Add each to _SCANNED_DESPITE_TREE with its reason "
+        "so the gate reads it, or register the resource that renders it."
+    )
+
+
 def test_a_cited_path_resolves_as_file_or_directory() -> None:
     """Both citation shapes, and the untracked case that must still report.
 
-    The directory form is not hypothetical: `CLAUDE.md` names
-    `.claude/rules/no-drift-surfaces.md` and the tree `.claude/rules/` within a
-    few lines of each other, and a file-only membership test reddens the second
-    while the first passes.
+    The directory form is not hypothetical: `CLAUDE.md` cites the tree
+    `.claude/rules/`, while `.github/pull_request_template.md` cites files
+    inside it. A file-only membership test passes the second and reddens the
+    first, on a tree the reader has in their clone.
     """
     tracked = {".claude/rules/no-drift-surfaces.md", "CLAUDE.md"}
     assert _resolves_in_tree(".claude/rules/no-drift-surfaces.md", tracked)
@@ -944,6 +1255,47 @@ def test_a_cited_path_resolves_as_file_or_directory() -> None:
     # A prefix that is not a path BOUNDARY does not resolve — `.claude/rul` is
     # not a directory just because `.claude/rules/…` starts with it.
     assert not _resolves_in_tree(".claude/rul", tracked)
+
+
+def test_a_slashed_phrase_is_not_a_path() -> None:
+    """The ignored-path gate must not fire on prose that contains a slash.
+
+    This is not a hypothetical tidy-up. On a case-insensitive filesystem git
+    reports `Build/check` — an ordinary phrase in a build script's comment — as
+    ignored by a `build/` rule, so without this narrowing the gate reports a
+    citation that was never a path and the fix is to reword English prose.
+    """
+    assert _looks_like_a_path("docs/sql-write-path-v2.md")
+    assert _looks_like_a_path(".claude/rules/")
+    assert _looks_like_a_path("htmlcov/")
+    assert not _looks_like_a_path("Build/check")
+    assert not _looks_like_a_path("read/write")
+    assert not _looks_like_a_path("and/or")
+    # A directory whose name carries a dot is still a directory, and a file with
+    # no extension in a cited directory is still prose as far as this can tell.
+    assert _looks_like_a_path("packages/contract-models/")
+    assert not _looks_like_a_path("packages/Makefile")
+
+
+def test_an_unanswerable_ignore_question_is_never_a_clean_answer(
+    tmp_path, monkeypatch
+) -> None:
+    """`_git_ignores` must raise rather than report nothing ignored.
+
+    Its return value is a filter: an empty set means "no citation is of an
+    ignored path", which is exactly what a green gate looks like. So every way
+    the question fails to get asked has to be loud. Pointing it at a directory
+    git does not manage is the reachable one — and a single unanswerable path
+    aborts the whole batch, which is why `..` paths are dropped before the call
+    rather than left to git.
+    """
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+    with pytest.raises(RuntimeError, match="check-ignore failed"):
+        _git_ignores({"docs/whatever.md"})
+
+    # The dropped-path branch: no answerable candidate means no call at all, and
+    # an empty answer is correct there rather than a swallowed failure.
+    assert _git_ignores({"../../LICENSE", "/etc/hosts"}) == set()
 
 
 def test_exclusion_matching_is_exact() -> None:
@@ -971,14 +1323,23 @@ def test_exclusions_are_all_live() -> None:
       worked precedent. If those citations were ever rewritten out, a whole-file
       exemption would persist over a file nobody watches, which is the state
       this guard exists to end. So assert it still cites something.
-    - The changelogs and the vendored manifest are exempt by PROVENANCE: a bot
-      writes the first, an upstream repo the second, and this repo may hand-edit
-      neither. Asserting they *contain* a ref would fail on a perfectly ordinary
-      release — release-please only carries `#N` when the squash subject did,
-      and the merge-commit release the package procedure requires yields entries
-      with a commit link and no number. Worse, the remedy that assertion implies
-      (drop the exemption) would put the gate back in front of a file nobody is
-      allowed to fix. Existence is the whole check for those.
+    - This file and `.claude/rules/resolvable-referents.md` are exempt for their
+      CONTENT too, and for the same reason as each other: both quote the shapes
+      they forbid, so scanning them is circular. Move the acceptance fixtures to
+      a sibling module, or rewrite the rule to describe the shapes instead of
+      showing them, and each exemption outlives its reason silently. Graded the
+      same way `CONTRIBUTING.md` is.
+    - The changelogs, the vendored manifest and the pull-request template are
+      exempt by PROVENANCE: a bot writes the first, an upstream repo the second,
+      and the third is a form whose whole purpose is to hold what the gate bans.
+      Asserting the changelogs *contain* a ref would fail on a perfectly
+      ordinary release — release-please only carries `#N` when the squash
+      subject did, and the merge-commit release the package procedure requires
+      yields entries with a commit link and no number. The template is worse
+      still: it passes the gate today precisely because its placeholder has no
+      digits. Worse, the remedy that assertion implies (drop the exemption)
+      would put the gate back in front of a file nobody is allowed to fix.
+      Existence is the whole check for those.
     """
     stale = [
         excluded for excluded in _EXCLUDED_PATHS if not (REPO_ROOT / excluded).exists()
@@ -992,6 +1353,15 @@ def test_exclusions_are_all_live() -> None:
         "precedent, and it no longer cites any. Drop the exemption so the file "
         "rejoins the gate."
     )
+    for circular in (
+        "tests/hygiene/test_ticket_references.py",
+        ".claude/rules/resolvable-referents.md",
+    ):
+        assert scan_text(_read(circular)), (
+            f"{circular} is exempt because it quotes the shapes it rejects, and "
+            "it no longer quotes any. The exemption is now a whole-file blind "
+            "spot with no reason behind it — drop it."
+        )
 
 
 # --- Acceptance: each recognised shape, and each deliberate non-match -------

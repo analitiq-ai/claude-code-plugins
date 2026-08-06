@@ -230,7 +230,7 @@ def test_unsupported_manifest_shapes_fail_loudly():
         {"kind": "int", "min": 1, "max": None, "name": "b"},
     ],
     # ALL-optional multi-param list: `\((?:A)?(?:\s*,\s*B)?\)` would accept
-    # the malformed `(,B)` — must refuse too (round-2 review finding)
+    # the malformed `(,B)`, since both groups may be skipped — must refuse too
     [
         {"kind": "int", "min": 1, "max": None, "name": "a", "optional": True},
         {"kind": "int", "min": 1, "max": None, "name": "b", "optional": True},
