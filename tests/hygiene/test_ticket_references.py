@@ -29,9 +29,10 @@ An earlier draft named the trees to walk — `packages/`, `plugins/`, `scripts/`
 … — and that shape is the wrong default in a way worth recording, because it
 failed twice. It fails **open**: a tree nobody listed is a tree nobody lints,
 which is how `CONTRIBUTING.md` and `.claude-plugin/` sat outside the gate. And
-it is a hand-maintained parallel copy of the repo layout, so it drifts exactly
-like the values `.claude/rules/no-drift-surfaces.md` forbids duplicating — and
-worse, narrowing it is the cheapest way to turn a red gate green. Enumerating
+it is a hand-maintained parallel copy of the repo layout, and a second copy of
+a fact drifts from the first — the same reason nothing in this repo restates a
+value the schema owns — and worse, narrowing it is the cheapest way to turn a
+red gate green. Enumerating
 from git inverts both: a new authored tree is scanned the day it lands, nothing
 restates the layout, and the only way to shrink the scan is to add a line to
 `_EXCLUDED_PATHS`, which is pinned literally and lands in a diff a reviewer
@@ -53,8 +54,9 @@ Four shapes:
   by a number.
 - `analitiq-engine#454`, `engine#413`, `infrastructure#1018` — the
   cross-repo form GitHub itself renders as a link.
-- A bare `#108` / `(#890)` / `pre-#125` — the dominant form in this repo's
-  older prose.
+- A bare `#108` / `(#890)` / `pre-#125`. Counted over the tree this swept, the
+  keyword and bare forms ran near-even (105 and 99 of the 230 sites), with 26
+  cross-repo and no URLs at all.
 - `https://github.com/analitiq-ai/analitiq-engine/issues/406` — the full URL.
   No swept site used it, and it is here precisely for that reason: it is the
   spelling closest to hand for an author whose `analitiq-engine#406` just went
@@ -71,13 +73,24 @@ hole, not a costless narrowing: single-digit issues exist in this tracker and
 `issue #7` and `analitiq-engine#7` at any digit count, so what actually escapes
 is the bare single-digit `(#7)`.
 
-**Markdown anchors into numbered headings** — `#12-era`, `(#12-section)`,
-`README.md#12`, `spec.yaml#3`. No ticket in this repo has ever been cited that
-way, so the ambiguity resolves toward the anchor. A hyphen *range* (`#150-#152`)
-is unaffected: both ends are caught.
+**Anchors into numbered headings** — `#12-era`, `(#12-section)`, `README.md#12`,
+`spec.yaml#3`, and the same hyphen tail on a slug with no document extension
+(`guide#12-section`). No ticket in this repo has ever been cited that way, so
+the ambiguity resolves toward the anchor. Two separate mechanisms do this and
+they cover different cases, which is why both are pinned below: the trailing
+`(?!-[^#])` lookahead handles the hyphenated tail on any slug, and `_DOC_ANCHOR`
+handles the purely numeric fragment (`README.md#12`) the lookahead cannot see.
+A hyphen *range* (`#150-#152`) is unaffected: both ends are caught.
 
 **A bare `#N` of six or more digits** — that is an all-digit hex colour, and it
 is far past any number this tracker will reach.
+
+**But a three-digit `#N` is NOT excluded, and short-form hex therefore reports.**
+`--accent: #123` is flagged. This one is a false positive rather than a
+narrowing, and it is unfixable in this direction: `#123` is equally a plausible
+issue number, so excluding it would blind the gate to a whole digit width of
+real refs. Recorded here so it is a known cost, met with a `_EXCLUDED_PATHS`
+entry or a long-form colour if it ever lands, not a mystery red build.
 
 **A keyword with no `#`** — `settled in issue 89`, `tracked as GH-123` — is not
 matched. Both read as unnatural enough that they are unlikely to be reached for,
@@ -91,12 +104,17 @@ import re
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Generated, and its published pins are immutable — see the module docstring.
 # Pinned literally alongside `_EXCLUDED_PATHS`: this is the other half of the
-# scope predicate, and shortening it (`"sc"` still covers `schemas/`) drops
-# `scripts/` from the scan while the gate stays green.
+# scope predicate, and shortening it (`"sc"` still covers `schemas/`) silently
+# drops `scripts/` from the scan. The extent test catches that too, because it
+# spells `schemas/` out itself — but only until someone editing this constant
+# updates that literal to match, which is one plausible edit. The pin is what
+# makes the value itself the thing under review.
 _UNSCANNED_TREE = "schemas/"
 
 # The one file under that tree the rationale does not cover: hand-authored, no
@@ -154,9 +172,13 @@ _KEYWORD_TICKET = re.compile(
 # ends in punctuation, and requiring it keeps prose like `pre-#125` reporting as
 # the bare ref it is rather than as a repo called `pre-`.
 #
-# `\d+\b` is load-bearing, not decorative. Without the `\b` the engine backtracks
-# when the lookahead fails — `README.md#12-layout` would fail at `#12` and then
-# happily match `README.md#1` — which silently defeats the anchor exclusion.
+# `\d+\b` is load-bearing, not decorative. Without it the engine backtracks when
+# the trailing lookahead fails: `guide#12-section` fails at `#12` and then
+# happily matches `guide#1`, so an ordinary heading anchor reports as a ticket.
+# Pick the example carefully — `README.md#12-layout` looks like it demonstrates
+# this and does not, because `_DOC_ANCHOR` drops that one either way. The `\b`
+# earns its place only on slugs with no document extension, which is exactly
+# what `test_ordinary_prose_is_not_flagged` pins.
 #
 # The slug body is optional so a one-character name still matches: requiring two
 # characters left `x#123` matched by nothing at all, since the bare pattern's
@@ -178,8 +200,11 @@ _DOC_ANCHOR = re.compile(
 
 # A bare `#108`. Two-digit floor per the module docstring. The lookbehind keeps
 # it from re-matching the tail of a cross-repo ref (including a markdown anchor
-# like `README.md#12-layout`), from firing on `##123`, and from firing on a
-# JSON-Pointer `#/$defs/…`. `-` is deliberately NOT in the lookbehind, so
+# like `README.md#12-layout`), from firing on `##123`, and — via `/` and `.` —
+# from firing on a `#` butted onto a path or version token, `docs/#123` and
+# `v1.#123`. It does NOT do the work for a JSON-Pointer `#/$defs/…`: there the
+# `/` follows the `#`, so `#\d` cannot match and the lookbehind is irrelevant.
+# `-` is deliberately NOT in the lookbehind, so
 # `pre-#125` and the far end of a `#150-#152` range are both caught; the
 # trailing lookahead is what separates a range from an anchor, and `\b` stops
 # the backtracking that would otherwise slip under it.
@@ -263,21 +288,23 @@ def _scanned_files() -> list[str]:
 def _read(relpath: str) -> str:
     """One scanned file's text, or a failure that says what went wrong.
 
-    Every tracked non-`schemas/` path is read as UTF-8. That holds for all of
-    them today, and nothing keeps it holding: the first tracked binary — an icon,
-    a screenshot in plugin docs — would otherwise kill the gate with a bare
-    `UnicodeDecodeError` naming neither the file nor this check. Skipping the
-    unreadable would be worse, since fail-open is the failure mode this whole
-    module exists to avoid, so name the file and re-raise.
+    Every scanned path is read as UTF-8. That holds for all of them today, and
+    nothing keeps it holding: the first tracked binary — an icon, a screenshot in
+    plugin docs — would otherwise kill the gate with a bare `UnicodeDecodeError`
+    naming neither the file nor this check. Skipping the unreadable would be
+    worse, since fail-open is the failure mode this whole module exists to
+    avoid, so name the file and re-raise. `test_an_unreadable_file_is_never_
+    skipped` holds that choice; without it, swapping the `raise` for a
+    `return ""` passes the whole suite.
     """
     try:
         return (REPO_ROOT / relpath).read_text(encoding="utf-8", errors="strict")
     except (UnicodeDecodeError, OSError) as exc:
         raise RuntimeError(
             f"{relpath} is tracked but could not be read as UTF-8 text. This "
-            "gate reads every tracked file outside `schemas/`, so a binary or "
-            "missing path has to be exempted deliberately — add it to "
-            "_EXCLUDED_PATHS with its reason rather than leaving it unscanned."
+            "gate reads every file it scans, so a binary or missing path has to "
+            "be exempted deliberately — add it to _EXCLUDED_PATHS with its "
+            "reason rather than leaving it unscanned."
         ) from exc
 
 
@@ -352,10 +379,28 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     the layout: every tracked file is scanned unless `schemas/` or
     `_EXCLUDED_PATHS` says otherwise, and nothing else may be skipped for any
     reason.
+
+    `expected` asks git ITSELF here rather than calling `_tracked_files()`, and
+    that independence is the whole point. Sharing the enumerator makes both
+    sides shrink together: a filter added inside `_tracked_files` — drop every
+    `.md`, return the first 210 entries — leaves `expected` and `_scanned_files`
+    agreeing perfectly on a truncated tree, and both an extent check and the gate
+    pass over a repo they can no longer see. Two independent listings cannot be
+    narrowed by one edit, which also retires the arbitrary count floor an earlier
+    draft leaned on: 200 sounds like a lot until you notice the repo tracks
+    ~300, so a third of it could vanish under the floor.
     """
+    listing = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    tracked = {line for line in listing.split("\0") if line}
     expected = {
         relpath
-        for relpath in _tracked_files()
+        for relpath in tracked
         if (not relpath.startswith("schemas/") or relpath in _SCANNED_DESPITE_TREE)
         and relpath not in _EXCLUDED_PATHS
     }
@@ -365,12 +410,67 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
         f"{missing[:10]}. The gate is blind to them — either scan them or "
         "record the exemption in _EXCLUDED_PATHS with its reason."
     )
-    # Sanity floor: `git ls-files` returning nothing (wrong cwd, no checkout)
-    # would make `expected` empty and the assertion above vacuous.
-    assert len(expected) > 200, (
-        f"only {len(expected)} tracked files enumerated — git listed far less "
-        "than this repo holds, so the extent check above proved nothing."
+
+
+def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
+    """Guard the guard, one level down: what the gate READS, not what it selects.
+
+    `test_the_guard_reaches_every_tracked_file_it_does_not_exempt` pins
+    `_scanned_files()`. The gate does not call `_scanned_files()` — it calls
+    `_references()`, which is one function further on and was watched by nothing.
+    Everything the extent test defends against re-enters there unseen: slicing
+    the loop, filtering it to `.py`, or the whole thing collapsing to
+    `return []`, at which point the gate asserts an empty list is empty and every
+    ticket reference in the repo is invisible to a fully green suite.
+
+    So record the argument of every `_read` the traversal performs, and require
+    that set to be exactly the scan. This is the assertion that makes "narrowing
+    the scan is the cheapest way to turn it green" true of the gate rather than
+    only of one helper.
+    """
+    seen: list[str] = []
+
+    def recording_read(relpath: str) -> str:
+        seen.append(relpath)
+        return ""
+
+    monkeypatch.setitem(globals(), "_read", recording_read)
+    _references()
+
+    scanned = set(_scanned_files())
+    assert set(seen) == scanned, (
+        f"the gate read {len(set(seen))} files but the scan selects "
+        f"{len(scanned)}: {sorted(scanned - set(seen))[:10]} were selected and "
+        "never read. _references() must traverse the whole scan — a filter or a "
+        "slice there turns the gate off without touching anything the other "
+        "guard-the-guard tests watch."
     )
+
+
+def test_an_unreadable_file_is_never_skipped(tmp_path, monkeypatch) -> None:
+    """`_read`'s fail-closed choice, held.
+
+    Its docstring argues at length that skipping an unreadable file would be
+    fail-open, "the failure mode this whole module exists to avoid". Nothing
+    held that: swapping the `raise` for `return ""`, or `errors="strict"` for
+    `errors="ignore"`, leaves the suite green while the file drops silently out
+    of the scan. Both are one word.
+
+    A repo-tracked binary cannot be planted from a test, so point `REPO_ROOT` at
+    a temp tree and exercise the two ways a path becomes unreadable.
+    """
+    (tmp_path / "icon.png").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xfe\x00")
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+
+    with pytest.raises(RuntimeError) as undecodable:
+        _read("icon.png")
+    assert "icon.png" in str(undecodable.value), (
+        "the failure must name the file — a bare UnicodeDecodeError names "
+        "neither the path nor this gate."
+    )
+
+    with pytest.raises(RuntimeError):
+        _read("never-existed.md")
 
 
 def test_the_guard_excludes_only_the_paths_it_records() -> None:
@@ -384,9 +484,11 @@ def test_the_guard_excludes_only_the_paths_it_records() -> None:
 
     `_UNSCANNED_TREE` is pinned here for the same reason and it is not
     decorative: it is the OTHER half of the scope predicate, and shortening it
-    is a one-character way to shrink the scan while the gate stays green.
-    `"sc"` still covers `schemas/` — and silently drops every file in
-    `scripts/`.
+    is a one-character way to shrink the scan. `"sc"` still covers `schemas/` —
+    and silently drops every file in `scripts/`. The extent test independently
+    reddens on that, since it spells `schemas/` out rather than reading this
+    constant; what this pin adds is that the value cannot be changed together
+    with that literal in one consistent-looking edit.
     """
     assert _UNSCANNED_TREE == "schemas/", (
         "_UNSCANNED_TREE is a scope control, not a convenience prefix: any value "
@@ -506,6 +608,17 @@ def test_cross_repo_form_is_flagged() -> None:
         # lookbehind rejects a `#` preceded by a word character — so requiring
         # two characters here left this shape matched by nothing.
         "tracked on x#123 upstream": "x#123",
+        # An extension `_DOC_ANCHOR` does NOT list still reports. `_DOC_ANCHOR`
+        # is a suppression list, so widening it hides refs just as effectively
+        # as narrowing the scan does, and nothing watched that direction:
+        # adding `png`, or simplifying the whole thing to `\.\w+#\d+$`, went
+        # green. This is the case that goes red when it does.
+        "the crop in diagram.png#12 is wrong": "diagram.png#12",
+        # A repo whose name merely ENDS in an extension word, with no dot. The
+        # `\.` that opens `_DOC_ANCHOR` is what separates `spec.py#3` (a file
+        # fragment) from this (a repo ref); dropping it suppresses both, and
+        # slugs like this one are ordinary repo names.
+        "vendored from analitiq-py#123 upstream": "analitiq-py#123",
     }
     for line, expected in cases.items():
         assert scan_text(line) == [(1, expected)], f"cross-repo arm missed: {line!r}"
@@ -529,6 +642,12 @@ def test_bare_form_is_flagged() -> None:
         (1, "#150"),
         (1, "#152"),
     ]
+    # Short-form hex reports. Pinned as a KNOWN FALSE POSITIVE, not as desired
+    # behaviour: `#123` is indistinguishable from a three-digit issue number, so
+    # the only way to spare the colour is to blind the gate to that whole digit
+    # width. Documented in "What it deliberately leaves wide"; here so the cost
+    # is on record executably and nobody "fixes" it without meeting the trade.
+    assert scan_text("  --accent: #123;") == [(1, "#123")]
 
 
 def test_url_form_is_flagged() -> None:
@@ -606,6 +725,15 @@ def test_ordinary_prose_is_not_flagged() -> None:
         # and a red build on an ordinary cross-reference.
         "see [the layout](../README.md#12) for the tree",
         "the fragment spec.yaml#3 names the third document",
+        # A hyphenated anchor on a slug with NO document extension. These are
+        # what `\d+\b` and the trailing `(?!-[^#])` actually defend — the
+        # `README.md#12-layout` case the pattern comment used to cite is
+        # dropped by `_DOC_ANCHOR` either way, so it proved nothing. Without
+        # the `\b` the first reports as `guide#1`; without the lookahead the
+        # second reports as `type#12`. Both are false positives on ordinary
+        # prose, the cost this gate is explicitly trying not to impose.
+        "see the guide#12-section for it",
+        "the field type#12-variant is odd",
         # An all-digit hex colour. Six digits is past the ceiling.
         "  --accent: #123456;",
     ):

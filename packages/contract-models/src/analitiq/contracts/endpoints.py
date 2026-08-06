@@ -446,7 +446,7 @@ class PageSize(_EndpointModel):
     # statically-known non-positive page size that validates here. Closing that
     # means bounding the literal expression wherever a positive number is
     # required (`max`, `OffsetCursor.increment_by`, `PageCursor.increment_by`),
-    # which is wider than this field's own bound and is not attempted here. Do not
+    # which is wider than this field, and is not attempted here. Do not
     # describe this field as "the literal branch is bounded"; it is not.
     default: Annotated[int, Field(gt=0), Strict()] | Expression | None = Field(  # type: ignore[valid-type]
         default=None,
@@ -2899,10 +2899,10 @@ def _validate_param_wiring(
             # pagination/replication — both read-side, neither reachable from a
             # write. So a write path param with no `default` provably cannot
             # resolve, and the placeholder it fills can never be substituted.
-            # That is the headline broken write document: contract-valid, and
-            # dead at the engine handshake. It is refused here, naming the
-            # binding that replaces it. Reads keep the old latitude: a read
-            # path param can be supplied by a stream filter.
+            # Such a document is contract-valid and dead at the engine
+            # handshake. It is refused here, naming the binding that replaces
+            # it. Reads keep the old latitude: a read path param can be
+            # supplied by a stream filter.
             if allow_from_input and param.default is None:
                 raise ValueError(
                     f"request.path_params[{placeholder!r}] binds to param {name!r}, "

@@ -16,11 +16,10 @@ class TestBatchingHasNoConcurrencyKnob:
     """`max_concurrent_batches` was declared here and on `stream.Execution`, and
     bounded nothing. Dead config, not ignored config: the pipeline-level key WAS
     parsed downstream, it just never limited concurrency. A knob that looks
-    load-bearing and is
-    inert is worse than an absent
-    one — it invites tuning advice that cannot have an effect — so it was
-    retired from both models rather than documented as a no-op. The stream half
-    is pinned in test_stream_mapping_shapes.py.
+    load-bearing and is inert is worse than an absent one — it invites tuning
+    advice that cannot have an effect — so it was retired from both models
+    rather than documented as a no-op. The stream half is pinned in
+    test_stream_mapping_shapes.py.
 
     This is a BREAKING removal, not a deprecation: the field had a non-null
     default, so any stored pipeline document that spells it out now fails

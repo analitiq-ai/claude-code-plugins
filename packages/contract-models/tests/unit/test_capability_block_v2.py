@@ -3,14 +3,13 @@ r"""Pin capability block v2: `error_map`, `concurrency`, `sql_capabilities.limit
 (Raw docstring: it quotes the published `(?![\s\S])` true-end regex, which a
 normal string literal would mangle into an invalid escape sequence.)
 
-The engine reads three additional driver-fact declarations from the connector
-definition — `error_map`, `concurrency`, and `sql_capabilities.limits`. The
-contract models are
-`extra="forbid"`, so a connector cannot declare any of them until they ship
-here. All three are ADDITIVE — unlike the five required shape facts of
-`sql_capabilities` (and unlike `write_unit`'s at-least-one-bound rule), absence
-of a block, a family, or a single cap is legal and means "no declared mapping /
-no declared cap"; an EMPTY block (`{}`) is legal and equivalent to omission.
+The engine reads all three as driver facts declared on the connector itself.
+The contract models are `extra="forbid"`, so a connector cannot declare any of
+them until they ship here. All three are ADDITIVE — unlike the five required
+shape facts of `sql_capabilities` (and unlike `write_unit`'s at-least-one-bound
+rule), absence of a block, a family, or a single cap is legal and means "no
+declared mapping / no declared cap"; an EMPTY block (`{}`) is legal and
+equivalent to omission.
 
 Facts that have to hold and stay held, so they are pinned here:
 
