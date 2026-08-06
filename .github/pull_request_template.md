@@ -22,8 +22,9 @@ which is exactly why they are worth stating.
 - [ ] **Referents resolve.** Applied `.claude/rules/resolvable-referents.md` to
       every comment, docstring and description this change touched: each pointer
       opened and confirmed, each count re-counted, no history asserted that the
-      repo does not record. The CI gate catches the mechanical shapes; this is
-      the half it cannot read.
+      repo does not record, and no "this PR" / "this commit" left in a file that
+      will outlive it. CI catches ticket numbers and marked citations of paths
+      git does not have; everything else in that rule is caught here or nowhere.
 - [ ] **No new drift surface.** Applied `.claude/rules/no-drift-surfaces.md` —
       nothing restates a value another source owns, or the copy is pinned by a
       test that reads this file at this site.

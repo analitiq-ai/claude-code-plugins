@@ -113,9 +113,9 @@ entirely, and it escapes already — see the two-digit floor above.
 
 ## The sibling classes, same invariant
 
-`_FOREIGN_PATH`, `_EPHEMERAL_REFERENT` and `_PATHLIKE` gate the same defect in
-other spellings, because a ticket number is only the most common way to point
-at something the reader does not have:
+`_FOREIGN_PATH` and `_PATHLIKE` gate the same defect in other spellings,
+because a ticket number is only the most common way to point at something the
+reader does not have:
 
 - **An untracked path under `.claude/`.** Most of that tree is gitignored, so a
   citation of `.claude/skills/…` resolves on the machine that wrote it and
@@ -126,20 +126,35 @@ at something the reader does not have:
   is rather than banning the prefix. `.gitignore` is exempt in
   `_FOREIGN_ALLOWED`: it is where the exclusion is declared, so naming the tree
   there is the rule rather than a reference to it.
-- **A citation of any path git ignores.** `.claude/` is only the instance this
-  repo cites most. `docs/`, `htmlcov/`, `dist/` are absent from every clone for
-  the same reason, and the check asks git rather than hardcoding a list, so it
-  follows `.gitignore` as that file changes. Every `.gitignore` is exempt for
-  the inversion above; the two package build scripts are exempt in
-  `_IGNORED_SUBJECT` because the ignored directory they name is the one they
-  create, which makes it their subject rather than a pointer.
-- **"this PR" and friends.** A file outlives the pull request that wrote it, so
-  "the hole this PR closed" points at a moment the reader is not in. Where the
-  pull request is the thing being processed at runtime the phrase is literal,
-  and those files are pinned in `_EPHEMERAL_ALLOWED` rather than matched by a
-  cleverer pattern — a CI workflow naming the source a job grades, and the
-  pin-contract script's messages about the pull request under check. "this
-  branch" is left wide: in this repo it always means a control-flow branch.
+- **A marked citation of any path git ignores.** `.claude/` is only the
+  instance this repo cites most. `docs/`, `htmlcov/`, `dist/` are absent from
+  every clone for the same reason, and the check asks git rather than
+  hardcoding a list, so it follows `.gitignore` as that file changes. Only
+  paths the author MARKED — backticked, or a markdown link target — are
+  considered, because that is the difference between reading intent and
+  guessing it. Every `.gitignore` is exempt for the inversion above; the two
+  package build scripts are exempt in `_IGNORED_SUBJECT` because the ignored
+  directory they name is the one they create, which makes it their subject
+  rather than a pointer.
+
+## What this file deliberately does NOT gate
+
+Anything whose verdict depends on what a sentence MEANS. Both gates above
+decide by a mechanism outside this file — a lexical token, or git's answer
+about the index and the ignore rules — and none of them needs to know what the
+surrounding prose is saying.
+
+"this PR", "the round-3 hole", a count that no longer counts, a comment
+asserting history the repo does not record: all the same defect class, none of
+them decidable this way. A pattern for "this PR" cannot separate the dangling
+referent from the CI job whose runtime subject genuinely IS the pull request,
+so it needs a hand-curated list of files where the phrase is allowed — and that
+list is the admission that a reader, not a regex, is making the call. Those
+classes live in `.claude/rules/resolvable-referents.md`, which is applied by
+whoever (or whatever) is authoring, and attested on the pull request. That is
+weaker than a gate, and it is chosen: a heuristic that guesses at meaning
+generates false positives whose remedy is to reword correct English, and it
+rots faster than the prose it polices.
 """
 
 from __future__ import annotations
@@ -330,14 +345,24 @@ _FOREIGN_ALLOWED = (".gitignore",)
 # `dist/` — and keeps covering them when the ignore file changes, which a
 # hardcoded prefix cannot.
 #
-# Any slash-joined token. `_looks_like_a_path` then narrows it, in Python
-# rather than in the pattern, because the two conditions are easier to read
-# apart than as one alternation — and an alternation gets this wrong quietly:
-# `(?:/|/\w+\.\w+)` prefers its first branch, so `docs/sql-write-path-v2.md`
-# matches as the bare `docs/` and the citation the gate is looking for never
-# reaches the ignore check.
+# Only a path the author MARKED as one: inside backticks, or the target of a
+# markdown link. The marking is the whole point. Deciding "is this slash-joined
+# token a path or ordinary English?" from the token alone is a judgment, and a
+# judgment in a regex is a bug with a schedule: `read/write`, `and/or` and
+# `Build/check` are prose, and the last of those is reported as ignored by a
+# `build/` rule on a case-insensitive filesystem. A heuristic sorting those
+# from real citations was tried, broke, and is not the kind of thing this file
+# should contain. Backticks are punctuation the author typed on purpose, so the
+# gate reads intent instead of guessing it.
+#
+# The delimiters also bound the match, which is why no trailing-punctuation
+# trimming is needed here: `` `dist/`: `` yields exactly `dist/`, keeping the
+# trailing slash that makes git answer about a directory at all.
+# Lookarounds rather than capture groups, so `match.group(0)` is the path
+# itself and `_sites` needs no special case for this pattern.
 _PATHLIKE = re.compile(
-    r"(?<![A-Za-z0-9_./-])[A-Za-z0-9_.-]+/(?:[A-Za-z0-9_.-]+/?)*"
+    r"(?<=`)[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*(?=`)"
+    r"|(?<=\]\()[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]*(?=\))"
 )
 
 # Every `.gitignore` DECLARES exclusions, so naming an ignored path in one is
@@ -352,7 +377,7 @@ _IGNORED_ALLOWED = (
 )
 
 # A path git ignores can also be a file's runtime SUBJECT rather than a
-# citation — the same inversion `_EPHEMERAL_ALLOWED` records for "this PR".
+# citation — the same inversion `_FOREIGN_ALLOWED` records for `.gitignore`.
 # These two build scripts create `dist/` and describe what they stage into it;
 # the directory is ignored precisely because they generate it. Graded by
 # content below, not by existence, because that is the claim being made.
@@ -371,28 +396,6 @@ _IGNORED_SUBJECT = (
 # the sentinel's own spelling would be deleted as if it were the probe. Under
 # `htmlcov/` so one directory rule covers both.
 _IGNORE_SENTINEL = "htmlcov/.ignore-rules-were-read"
-
-# "this PR", "this pull request", "this commit" — a referent that resolves only
-# while the change is in flight.
-#
-# "this branch" is deliberately NOT here. Every occurrence in this repo means a
-# control-flow branch — "without this branch it fell through", "this branch
-# disables the version guarantee" — and that is the dominant sense in code
-# prose generally. Flagging it would cost more than it returns, the same trade
-# the single-digit `#N` narrowing makes above.
-_EPHEMERAL_REFERENT = re.compile(
-    r"\bthis\s+(?:PR|pull\s+request|commit)\b", re.IGNORECASE
-)
-
-# The files where the PR IS the runtime subject rather than a dangling pointer:
-# a CI comment about which source the job grades, and the messages the
-# pin-contract script prints about the pull request it is checking. Pinned as
-# paths for the same reason `_EXCLUDED_PATHS` is — an exemption a reviewer reads
-# beats a pattern that quietly decides which mentions are legitimate.
-_EPHEMERAL_ALLOWED = (
-    ".github/workflows/tests.yml",
-    "scripts/check_validator_pin_contract.py",
-)
 
 
 def _is_excluded(relpath: str) -> bool:
@@ -652,45 +655,6 @@ def _foreign_path_sites() -> list[tuple[str, int, str]]:
     ]
 
 
-def _ephemeral_referent_sites() -> list[tuple[str, int, str]]:
-    """The expiring-referent gate's findings. Named for the same reason."""
-    return _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
-
-
-def _trim(cited: str) -> str:
-    """A cited path without the prose punctuation that ends the sentence.
-
-    The trailing `/` is KEPT, and that is the whole correctness of this
-    function. It is the character that tells git the token names a directory:
-    `git check-ignore` answers `htmlcov/` with "ignored" and `htmlcov` with
-    "not ignored", because a final component that is absent from disk is not
-    assumed to be a directory. Most of this repo's ignore rules are
-    directory-only, so stripping it hands every directory citation to git in
-    the one spelling git refuses — and the gate goes silent on `docs/`,
-    `htmlcov/` and `dist/`, the three trees its own rationale names.
-
-    The sibling `_resolves_in_tree` strips it deliberately, and the difference
-    is the question each one asks. That one matches a citation against tracked
-    FILE paths, where the slash is in the way; this one asks git about ignore
-    rules, where the slash is the question.
-    """
-    return cited.rstrip(".,;:)`\"'")
-
-
-def _looks_like_a_path(cited: str) -> bool:
-    """Is this token a path, or just prose that happens to contain a slash?
-
-    A directory citation ends in `/`; a file citation's last segment carries an
-    extension. Everything else is prose — "Build/check", "read/write", "and/or"
-    — and prose gets matched by the ignore check for reasons that have nothing
-    to do with citations: on a case-insensitive filesystem "Build/check" is
-    ignored by a `build/` rule.
-    """
-    if cited.endswith("/"):
-        return True
-    return "." in cited.rsplit("/", 1)[-1]
-
-
 def _is_rendered_artifact(
     relpath: str, generated_folders: tuple[str, ...], versioned: re.Pattern[str]
 ) -> bool:
@@ -776,17 +740,9 @@ def _ignored_path_sites() -> list[tuple[str, int, str]]:
     An ignored path outside `.claude/` is not matched by the first pattern at
     all — only this one sees it.
     """
-    # `_trim` FIRST, then the shape test. `_PATHLIKE`'s charset carries `.`, so
-    # a citation ending a sentence matches as `build/check.` — whose last
-    # segment now contains a dot, which is exactly what the shape test looks
-    # for. Testing the untrimmed token therefore promotes ordinary prose to a
-    # citation on the strength of the full stop after it.
-    sites = [
-        site for site in _sites(_PATHLIKE, skip=_IGNORED_ALLOWED + _IGNORED_SUBJECT)
-        if _looks_like_a_path(_trim(site[2]))
-    ]
-    ignored = _git_ignores({_trim(cited) for _, _, cited in sites})
-    return [site for site in sites if _trim(site[2]) in ignored]
+    sites = _sites(_PATHLIKE, skip=_IGNORED_ALLOWED + _IGNORED_SUBJECT)
+    ignored = _git_ignores({cited for _, _, cited in sites})
+    return [site for site in sites if site[2] in ignored]
 
 
 def test_no_citation_of_a_path_the_ignore_file_excludes() -> None:
@@ -812,28 +768,13 @@ def test_no_citation_of_a_path_the_reader_cannot_have() -> None:
     )
 
 
-def test_no_referent_that_expires_when_the_change_lands() -> None:
-    """"this PR" points at a moment the reader of the file is not in."""
-    found = _ephemeral_referent_sites()
-    assert not found, (
-        "referents that expire when the change lands:\n"
-        + "\n".join(f"  {rel}:{lineno} -> {phrase}" for rel, lineno, phrase in found)
-        + "\nA file outlives the pull request that wrote it. State the fact, the "
-        "mechanism, or the decision. If the pull request genuinely IS the "
-        "runtime subject, add the path to _EPHEMERAL_ALLOWED with its reason."
-    )
-
-
 def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
     """Every sibling allow-tuple is pinned exactly and must still be doing work.
 
-    Pinned, because a whole-file exemption from a prose gate is how the phrase
+    Pinned, because a whole-file exemption from a prose gate is how the defect
     comes back. Live for different reasons, and graded differently for the same
     reason `test_exclusions_are_all_live` splits its cases:
 
-    - `_EPHEMERAL_ALLOWED` is exempt for CONTENT — each entry genuinely names
-      the pull request being processed — so an entry that no longer contains the
-      phrase is an exemption standing over a file nobody watches.
     - `_FOREIGN_ALLOWED` is exempt by PROVENANCE: `.gitignore` is where the
       exclusion is declared, and it may say `.claude/` whether or not that
       spelling happens to match. Asserting content there would fail today, on
@@ -842,21 +783,11 @@ def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
       every entry must actually BE a `.gitignore`, since "this file declares
       the exclusions" is false of anything else and the exemption would then be
       a file removed from the gate under a name that reads like a rule.
-    - `_IGNORED_SUBJECT` is CONTENT, and the strictest of the four to justify:
+    - `_IGNORED_SUBJECT` is CONTENT, and the strictest of the three to justify:
       its entries are ordinary source files, so nothing about them says "not a
       citation" except the claim that the ignored path they name is their own
       output. Graded by asking git, so the claim is checked rather than taken.
     """
-    assert _EPHEMERAL_ALLOWED == (
-        ".github/workflows/tests.yml",
-        "scripts/check_validator_pin_contract.py",
-    ), "each entry exempts a whole file — state the reason inline and update this pin."
-    for relpath in _EPHEMERAL_ALLOWED:
-        assert _EPHEMERAL_REFERENT.search(_read(relpath)), (
-            f"{relpath} is exempt because the pull request is its runtime "
-            "subject, and it no longer says so. Drop the exemption."
-        )
-
     assert _FOREIGN_ALLOWED == (".gitignore",), (
         "_FOREIGN_ALLOWED exempts a whole file from the gitignored-path gate; "
         "state the reason inline and update this pin."
@@ -896,18 +827,18 @@ def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
         "_IGNORED_SUBJECT exempts whole files from the ignored-path gate; state "
         "the reason inline and update this pin."
     )
-    # Exempt for CONTENT, like `_EPHEMERAL_ALLOWED`: the claim is that the file
-    # NAMES an ignored path as the thing it operates on. A file that no longer
-    # names one is an exemption standing over a file nobody watches, and this
-    # is the tuple where that matters most — its entries are ordinary source
-    # files, not declarations, so nothing else about them says "not a citation".
+    # Exempt for CONTENT: the claim is that the file NAMES an ignored path as
+    # the thing it operates on. A file that no longer names one is an exemption
+    # standing over a file nobody watches, and this is the tuple where that
+    # matters most — its entries are ordinary source files, not declarations,
+    # so nothing else about them says "not a citation".
     for relpath in _IGNORED_SUBJECT:
         cited = {
-            _trim(match.group(0))
+            match.group(0)
             for line in _read(relpath).splitlines()
             for match in _PATHLIKE.finditer(line)
         }
-        assert _git_ignores({c for c in cited if _looks_like_a_path(c)}), (
+        assert _git_ignores(cited), (
             f"{relpath} is exempt because the ignored path it names is its own "
             "output rather than a citation, and it no longer names one. Drop "
             "the exemption so the file rejoins the gate."
@@ -1046,7 +977,6 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
     # themselves are pinned.
     for collector, allowed, name in (
         (_foreign_path_sites, _FOREIGN_ALLOWED, "gitignored-path"),
-        (_ephemeral_referent_sites, _EPHEMERAL_ALLOWED, "expiring-referent"),
         (_ignored_path_sites, _IGNORED_ALLOWED + _IGNORED_SUBJECT, "ignored-path"),
     ):
         seen.clear()
@@ -1132,8 +1062,7 @@ def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> Non
         filler
         + "a line broken by a form feed\x0c\n"
         + "x" * 400 + " per .claude/rules/no-drift-surfaces.md this holds\n"
-        + "the wiring this PR extended is routed\n"
-        + "the coverage report lands in htmlcov/ after a run\n",
+        + "the coverage report lands in `htmlcov/` after a run\n",
         encoding="utf-8",
     )
     # The identity axis: a third document unlike the other two in every
@@ -1148,14 +1077,12 @@ def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> Non
         + "    settled in issue #89 upstream\n"
         + "# see analitiq-engine#406 for the grammar\n"
         + "    per .claude/skills/releasing/SKILL.md this holds\n"
-        + "# the wiring this PR extended is routed\n"
-        + "    stated in build/notes.md.\n"
-        # Prose, not a citation — and it ends a sentence, which is the whole
-        # point: `_PATHLIKE` swallows the full stop, so testing the shape of the
-        # UNTRIMMED token sees a dotted last segment, calls it a path, and asks
-        # git about `build/check`, which the fixture's `build/` rule ignores.
-        # Lowercase deliberately, so the match does not depend on a
-        # case-insensitive filesystem.
+        + "    stated in `build/notes.md` instead\n"
+        # Unmarked prose that a path-shape heuristic would take for a citation:
+        # `build/check` is ignored by the fixture's `build/` rule, so a gate
+        # judging tokens by shape reports it. Marking is the rule here, and this
+        # line is not marked. Lowercase deliberately, so the match does not
+        # depend on a case-insensitive filesystem.
         + "    then it runs build/check.\n",
         encoding="utf-8",
     )
@@ -1173,31 +1100,26 @@ def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> Non
     monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
 
     # Through the GATES' own collectors, not `_sites` directly: that is what
-    # puts the exemption each one passes under test. Neither `_FOREIGN_ALLOWED`
-    # nor `_EPHEMERAL_ALLOWED` names either document, so both must report both.
+    # puts the exemption each one passes under test. Neither allow-tuple names
+    # either document, so both gates must report from both.
     assert _foreign_path_sites() == [
         ("guide.md", 302, ".claude/rules/no-drift-surfaces.md"),
         ("pkg/mod.py", 44, ".claude/skills/releasing/SKILL.md"),
     ]
-    assert _ephemeral_referent_sites() == [
-        ("guide.md", 303, "this PR"),
-        ("pkg/mod.py", 45, "this PR"),
-    ]
     # And `skip` removes exactly the named file, not the pattern's ability to
     # match: the exempt document goes quiet and the other one still reports.
-    assert _sites(_EPHEMERAL_REFERENT, skip=("guide.md",)) == [
-        ("pkg/mod.py", 45, "this PR"),
+    assert _sites(_FOREIGN_PATH, skip=("guide.md",)) == [
+        ("pkg/mod.py", 44, ".claude/skills/releasing/SKILL.md"),
     ]
-    # The ignored-path gate through its own collector, over TWO documents of
-    # different extension and path depth — the same identity axis the other two
-    # gates get, without which any post-collector predicate on `relpath`
-    # survives. `guide.md` cites an ignored DIRECTORY, which git only answers
-    # when the trailing slash survives `_trim`; `pkg/mod.py` cites a file and
-    # ends the sentence with a full stop, which is what pins the query and the
-    # lookup to the same trimmed spelling.
+    # The ignored-path gate over TWO documents of different extension and path
+    # depth — the same identity axis the other gate gets, without which any
+    # post-collector predicate on `relpath` survives. `guide.md` cites an
+    # ignored DIRECTORY, which git answers only because the delimiters keep the
+    # trailing slash; `pkg/mod.py` cites a file. The unmarked `build/check` on
+    # the line after it is ignored by the same rule and must stay unreported.
     assert _ignored_path_sites() == [
-        ("guide.md", 304, "htmlcov/"),
-        ("pkg/mod.py", 46, "build/notes.md."),
+        ("guide.md", 303, "htmlcov/"),
+        ("pkg/mod.py", 45, "build/notes.md"),
     ]
 
     assert _references() == [
@@ -1520,57 +1442,37 @@ def test_a_cited_path_resolves_as_file_or_directory() -> None:
     assert not _resolves_in_tree(".claude/rul", tracked)
 
 
-def test_pathlike_form_is_flagged() -> None:
-    """`_PATHLIKE` itself, the way the two sibling patterns are pinned.
+def test_only_a_marked_path_is_a_citation() -> None:
+    """`_PATHLIKE` matches what the author marked, and nothing else.
 
-    The other two gates each have an acceptance test asserting the matched
-    TEXT. This one had only the end-to-end fixture's single token, which every
-    narrowing of the pattern still matches: files-only, two-segments-maximum,
-    and a lowercase-only rewrite all keep matching `build/notes.md` while going
-    blind to a directory citation, a deeper path, and anything capitalised.
-    Assert the text so a narrowing has to fail here.
+    The marking is the entire decision procedure, so it is what gets asserted.
+    An unmarked slash-joined token is prose as far as this gate is concerned,
+    however much it looks like a path — which is the point: deciding that from
+    the token's shape is a judgment, and this file does not make judgments about
+    what a sentence means. It reads punctuation the author typed.
     """
-    assert _PATHLIKE.findall("stated in docs/guides/ instead") == ["docs/guides/"]
-    assert _PATHLIKE.findall("see docs/guides/setup.md now") == ["docs/guides/setup.md"]
-    assert _PATHLIKE.findall("under Build/Output/ today") == ["Build/Output/"]
-    assert _PATHLIKE.findall("in analitiq.contracts/shared/") == [
+    assert _PATHLIKE.findall("stated in `docs/guides/` instead") == ["docs/guides/"]
+    assert _PATHLIKE.findall("see `docs/guides/setup.md` now") == [
+        "docs/guides/setup.md"
+    ]
+    assert _PATHLIKE.findall("under `Build/Output/` today") == ["Build/Output/"]
+    assert _PATHLIKE.findall("in `analitiq.contracts/shared/`") == [
         "analitiq.contracts/shared/"
     ]
-    # A trailing full stop is part of the match — `_trim` removes it, and doing
-    # that in the pattern instead would drop the `/` a directory citation needs.
-    assert _PATHLIKE.findall("lands in htmlcov/.") == ["htmlcov/."]
-    # Not paths: no slash at all, and a slash the lookbehind refuses because it
-    # sits inside a longer token already being matched.
+    # A markdown link target is marked just as explicitly as a backtick.
+    assert _PATHLIKE.findall("see [the guide](docs/guides/setup.md) first") == [
+        "docs/guides/setup.md"
+    ]
+    # The delimiters bound the match, so a directory keeps the trailing slash
+    # git needs and sentence punctuation never joins the token.
+    assert _PATHLIKE.findall("lands in `htmlcov/`.") == ["htmlcov/"]
+    # Unmarked: prose, whatever its shape. `build/check` is genuinely ignored by
+    # a `build/` rule on a case-insensitive filesystem, and both package build
+    # scripts contain that phrase in an argparse `description=`.
+    assert _PATHLIKE.findall("then it runs build/check.") == []
+    assert _PATHLIKE.findall("a read/write split") == []
+    assert _PATHLIKE.findall("see docs/guides/setup.md now") == []
     assert _PATHLIKE.findall("a bare word") == []
-
-
-def test_a_slashed_phrase_is_not_a_path() -> None:
-    """The ignored-path gate must not fire on prose that contains a slash.
-
-    This is not a hypothetical tidy-up. On a case-insensitive filesystem git
-    reports `Build/check` — an ordinary phrase in the argparse `description=`
-    of both package build scripts — as ignored by a `build/` rule, so without
-    this narrowing the gate reports a citation that was never a path and the
-    fix it demands is to reword English prose. It is also the only one of the
-    three prose examples below that git ignores; `read/write` and `and/or` are
-    here because they are the same SHAPE, not because they misfire today.
-    """
-    assert _looks_like_a_path("docs/sql-write-path-v2.md")
-    assert _looks_like_a_path(".claude/rules/")
-    assert _looks_like_a_path("htmlcov/")
-    assert not _looks_like_a_path("Build/check")
-    assert not _looks_like_a_path("read/write")
-    assert not _looks_like_a_path("and/or")
-    # A directory whose name carries a dot is still a directory, and a file with
-    # no extension in a cited directory is still prose as far as this can tell.
-    assert _looks_like_a_path("packages/contract-models/")
-    assert not _looks_like_a_path("packages/Makefile")
-    # The extension test reads the LAST segment, and reads it for any dot at
-    # all. A dot in an earlier segment is not an extension, and a name with
-    # several dots is still one file — both spellings occur in this repo.
-    assert not _looks_like_a_path("analitiq.contracts/Makefile")
-    assert _looks_like_a_path("schemas/canonical-types.v2.json")
-    assert _looks_like_a_path("docs/report.html")
 
 
 def test_an_unanswerable_ignore_question_is_never_a_clean_answer(
@@ -1897,30 +1799,6 @@ def test_foreign_path_form_is_flagged() -> None:
         "the claude/rules directory is not the ignored one",
     ):
         assert not _FOREIGN_PATH.findall(line), f"false positive on: {line!r}"
-
-
-def test_ephemeral_referent_form_is_flagged() -> None:
-    cases = {
-        "the wiring this PR extended is routed": "this PR",
-        "the defect class This Pull Request closed": "This Pull Request",
-        "tried earlier in this  pull\trequest and abandoned": "this  pull\trequest",
-        "push the release tag at this commit": "this commit",
-    }
-    for line, expected in cases.items():
-        # No capture groups, so `findall` yields whole matches: this asserts the
-        # matched TEXT and the count at once, as the ticket arms above do.
-        assert _EPHEMERAL_REFERENT.findall(line) == [expected], (
-            f"ephemeral arm missed: {line!r}"
-        )
-
-    # The documented narrowing, and the words the pattern sits closest to.
-    for line in (
-        "without this branch it fell through to the dict case",
-        "this branch disables the version-exactness guarantee",
-        "this PRs list is not a thing anyone writes",
-        "the PR body carries the numbers instead",
-    ):
-        assert not _EPHEMERAL_REFERENT.findall(line), f"false positive on: {line!r}"
 
 
 def test_ordinary_prose_is_not_flagged() -> None:
