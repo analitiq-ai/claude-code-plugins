@@ -54,9 +54,14 @@ object.
   DDL — either invalidates downstream consumers).
 - **minor**: optional-input-added, optional-output-added,
   optional-endpoint-added, type-map-rule-added.
-- **patch**: bug-fix, doc-fix, tuning, type-map-rule-reordered (when the
-  reorder doesn't change first-match resolution for any existing input in
-  that map's direction).
+- **patch**: bug-fix, doc-fix, tuning, capability-block-added (a top-level
+  capability block the connector did not carry before (`sql_capabilities`,
+  `error_map`) appears for the first time — neither an input, an output nor
+  an endpoint. Introducing one is strictly enabling, so no saved connection
+  drifts; narrowing or removing it afterwards is
+  `sql-capabilities-changed`), type-map-rule-reordered (when the reorder
+  doesn't change first-match resolution for any existing input in that map's
+  direction).
 
 Rollup: any major-tier category → bump = `major`; else any minor-tier →
 `minor`; else any patch-tier → `patch`; else → `none`.

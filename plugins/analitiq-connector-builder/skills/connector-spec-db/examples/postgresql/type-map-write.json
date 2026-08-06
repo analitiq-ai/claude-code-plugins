@@ -128,5 +128,15 @@
     "match": "regex",
     "canonical": "^Timestamp\\([A-Z]+,\\s*UTC\\)$",
     "native": "TIMESTAMPTZ"
+  },
+  {
+    "match": "regex",
+    "canonical": "^Duration\\([A-Z]+\\)$",
+    "native": "INTERVAL"
+  },
+  {
+    "match": "exact",
+    "canonical": "Null",
+    "native": "TEXT"
   }
 ]

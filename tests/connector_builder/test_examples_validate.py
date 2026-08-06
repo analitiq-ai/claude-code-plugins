@@ -5,6 +5,10 @@ stale example is worse than no example — it teaches a shape the validator
 rejects. (All three API examples were silently invalid when this guard was
 added, including a `response.records` ref over a non-array node.)
 
+A type-map rule written inline in skill prose is an example too, and the one
+authoring agents reach first — so the templated pairs in the spec text are run
+through the same models as the files under `examples/`.
+
 Examples are laid out for readability (`<name>/<name>.example.json` beside its
 type maps and `endpoints/`), not as an on-disk connector, so each is staged into
 a `definition/` directory first — the layout the cross-file coverage checks walk.
@@ -16,6 +20,7 @@ packages are absent, hard-failed in CI via `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -66,6 +71,103 @@ def _stage(example_dir: Path, dest_root: Path) -> Path:
 
 def _errors(findings: list[dict]) -> list[dict]:
     return [f for f in findings if f["severity"] == "error"]
+
+
+#: An inline `native: "…"` / `canonical: "…"` field written in skill prose,
+#: JSON-quoted exactly as it would appear in a rule.
+_PROSE_FIELD_RE = re.compile(r"`(native|canonical):\s*(\"(?:[^\"\\]|\\.)*\")`")
+
+
+def _decode(raw: str) -> str | None:
+    """The field's text as JSON reads it, or None when JSON cannot read it.
+
+    A field shown in prose has to paste into a map verbatim, so text that is
+    not a JSON string literal (a lone `\\d` the author did not double) is a
+    prose defect the caller reports — not an exception out of the extractor.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
+    """Templated type-map rules authored inline in connector skill prose.
+
+    Scope is the pairs carrying `${…}`: a placeholder decides the direction
+    (read renders the canonical, write renders the native), and the templated
+    shape is the one whose validity is not readable by eye — an unbounded
+    capture feeding a bounded parameter position looks perfectly ordinary. A
+    pair with no placeholder is left to review; when one wants covering, give
+    it a direction and extend the classifier rather than guessing here.
+
+    A field whose text JSON cannot read comes back with a None value, and the
+    direction is None with it: the caller reports both as failures.
+    """
+    found: list[tuple[Path, int, str, dict]] = []
+    for path in sorted(SKILLS_ROOT.rglob("*.md")):
+        fields = [
+            (lineno, key, _decode(raw))
+            for lineno, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), 1
+            )
+            for key, raw in _PROSE_FIELD_RE.findall(line)
+        ]
+        for (line_a, key_a, val_a), (line_b, key_b, val_b) in zip(fields, fields[1:]):
+            if key_a == key_b or line_b - line_a > 1:
+                continue
+            rule = {"match": "regex", key_a: val_a, key_b: val_b}
+            if val_a is None or val_b is None:
+                found.append((path, line_a, "unquotable", rule))
+                continue
+            templated = [k for k in ("native", "canonical") if "${" in rule[k]]
+            if len(templated) != 1:
+                continue
+            direction = "write" if templated == ["native"] else "read"
+            found.append((path, line_a, direction, rule))
+    return found
+
+
+def test_prose_type_map_rules_validate(tmp_path: Path) -> None:
+    """A rule taught in prose must survive the model that judges the real one.
+
+    Prose is copied verbatim by authoring agents, so an example the contract
+    refuses ships a rule every author has to unlearn — and the `examples/`
+    walks above never see it, because it lives in backticks rather than in a
+    file.
+    """
+    rules = _prose_type_map_rules()
+    by_direction = {direction for _, _, direction, _ in rules}
+    assert by_direction >= {"read", "write"}, (
+        f"the prose extractor found {sorted(by_direction)} rules under "
+        f"{SKILLS_ROOT} — a spec teaching both directions should yield both; "
+        "the inline `native:`/`canonical:` shape it keys on has probably moved"
+    )
+
+    failures: list[str] = [
+        f"{path.relative_to(REPO_ROOT)}:{lineno} shows a field JSON cannot "
+        f"read, so it does not paste into a map: {rule}"
+        for path, lineno, direction, rule in rules
+        if direction == "unquotable"
+    ]
+    for path, lineno, direction, rule in rules:
+        if direction == "unquotable":
+            continue
+        map_path = tmp_path / f"type-map-{direction}.json"
+        map_path.write_text(json.dumps([rule]), encoding="utf-8")
+        findings = validate_document(
+            [rule],
+            doc_path=map_path.resolve(),
+            schema_url=TYPE_MAP_SCHEMAS[f"type-map-{direction}.json"],
+        )
+        failures += [
+            f"{path.relative_to(REPO_ROOT)}:{lineno} ({direction}) "
+            f"{f['validator']}: {f['message']}"
+            for f in _errors(findings)
+        ]
+    assert not failures, "type-map rules taught in prose that the contract refuses:\n" + "\n".join(
+        failures
+    )
 
 
 def test_every_example_dir_is_covered() -> None:

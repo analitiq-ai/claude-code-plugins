@@ -483,7 +483,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     ),
     AdvisoryRule(
         id="ADV-TMAP-004", kind="custom", resource="type-map",
-        prose="A native pattern with named captures must not map to a canonical that discards them.",
+        prose="A native pattern with named captures must not map to a canonical whose parenthesised parameters are all hardcoded, discarding them. The detector keys on the parentheses, so a capture dropped into a canonical carrying none is out of scope.",
         targets=("TypeMapReadRegexRule",), enforcer="_check",
     ),
     AdvisoryRule(
@@ -510,6 +510,11 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-TMAP-009", kind="custom", resource="type-map",
         prose="A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed.",
         targets=("TypeMapWriteRegexRule",), enforcer="_check",
+    ),
+    AdvisoryRule(
+        id="ADV-TMAP-010", kind="custom", resource="type-map",
+        prose="A ${name} capture feeding a canonical parameter position must be unable to match a value that position refuses — a byte width of 0, a unit only a sibling family admits — and where a cross-parameter bound applies (Decimal scale <= precision) that bound resolves against the literal sibling present; a literal in such a bounded position must in turn hold against every value the capture bounding it can match. Two things are left undecided: a position whose admissible values the grammar states as an open pattern rather than a member list (a timezone) is not interrogated, and where a bound carries a placeholder on each side every capture is judged against its own position, so the pair reachable from those captures together is not judged at all.",
+        targets=("TypeMapReadRegexRule",), enforcer="_check",
     ),
     # --- pipeline -----------------------------------------------------------
     AdvisoryRule(

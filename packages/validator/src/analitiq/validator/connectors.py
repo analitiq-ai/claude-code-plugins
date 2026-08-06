@@ -74,7 +74,12 @@ try:
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
         # placeholder syntax) from the model so the validator's rule-rendering can't
         # drift from the model's rule-validation.
-        from analitiq.contracts.type_map import _ECMA_NAMED_GROUP, _PLACEHOLDER_RE, _to_python_regex
+        from analitiq.contracts.type_map import (
+            _ECMA_NAMED_BACKREF, _ECMA_NAMED_GROUP, _PLACEHOLDER_RE, _to_python_regex,
+        )
+        # The executable Arrow vocabulary — the write-coverage probe set is
+        # derived from it rather than sampled by hand.
+        from analitiq.contracts import arrow_grammar
         # The single source of truth for read-match normalization — imported, not
         # re-implemented, so the validator's coverage check normalizes exactly as
         # every runtime reader does (`analitiq.contracts.type_map`).
@@ -332,18 +337,74 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     return findings
 
 
-# Representative canonical families a write map should render; gaps are warnings
-# (a dialect may override rendering for a family). Mirrors the published
-# authoring rule set. `Object`/`List` are the bare shape markers destination
-# columns carry verbatim when an API source hands over a struct/array field —
-# the engine probes the write map with the document's `arrow_type` literally,
-# so a map without rules for them hard-errors the stream at configuration.
-_WRITE_VOCABULARY_PROBES: tuple[str, ...] = (
-    "Boolean", "Int8", "Int16", "Int32", "Int64",
-    "UInt8", "UInt16", "UInt32", "UInt64",
-    "Float16", "Float32", "Float64", "Decimal128(38, 9)",
-    "Utf8", "LargeUtf8", "Json", "Object", "List", "Binary", "LargeBinary",
-    "Date32", "Date64", "Time64(MICROSECOND)", "Timestamp(MICROSECOND)",
+# Representative canonicals a write map should render; gaps are warnings (a
+# dialect may override rendering for a family). `Object`/`List` are the bare
+# shape markers destination columns carry verbatim when an API source hands over
+# a struct/array field — the engine probes the write map with the document's
+# `arrow_type` literally, so a map without rules for them hard-errors the stream
+# at configuration.
+#
+# DERIVED from the vendored engine grammar, one probe per family, so a family
+# the engine gains is probed the moment the pin moves rather than silently
+# missed. What the derivation does NOT reach is stated as data below, not as an
+# omission from a hand-written list.
+
+#: Families deliberately left unprobed, each with the reason. Checked against
+#: the manifest at import: an entry naming no family fails the build, so a
+#: family the engine drops cannot leave a stale excuse behind.
+_WRITE_PROBE_EXCLUDED_FAMILIES: dict[str, str] = {
+    "Decimal256": (
+        "probed via Decimal128 — a map whose decimal rule is narrowed to "
+        "Decimal128 shows nothing here, which is why the spec sends authors to "
+        "check it by hand"
+    ),
+    "FixedSizeBinary": (
+        "byte_width is unbounded, so no single probe represents the family: a "
+        "map rendering FixedSizeBinary(16) may still miss FixedSizeBinary(32)"
+    ),
+    "Time32": (
+        "coarse-unit sibling of Time64; a map covering one commonly covers the "
+        "other through a shared regex, so probing both doubles the warning for "
+        "one authoring decision"
+    ),
+}
+
+
+def _family_probe(name: str) -> str:
+    """One representative canonical for a family: each REQUIRED parameter takes
+    the first value its grammar allows, and optional parameters are omitted.
+
+    Omitting optionals is why the tz-aware `Timestamp(<unit>, <tz>)` spelling is
+    not probed while the bare one is — a variant-level gap this samples past.
+    """
+    params = arrow_grammar.FAMILIES[name].get("params") or ()
+    required = [p for p in params if not p.get("optional")]
+    if not required:
+        return name
+    args = []
+    for param in required:
+        if param["kind"] == "int":
+            lo, _hi = arrow_grammar.resolved_int_bounds(param, list(params))
+            args.append(str(lo))
+        else:
+            args.append(param["allowed"][0])
+    return f"{name}({', '.join(args)})"
+
+
+_unknown_exclusions = sorted(
+    set(_WRITE_PROBE_EXCLUDED_FAMILIES) - set(arrow_grammar.FAMILY_NAMES)
+)
+if _unknown_exclusions:
+    raise RuntimeError(
+        f"write-coverage probe exclusions name no family in the vendored engine "
+        f"grammar: {_unknown_exclusions}. The vocabulary moved — decide whether "
+        "each is now probed or drop the entry."
+    )
+
+_WRITE_VOCABULARY_PROBES: tuple[str, ...] = tuple(
+    _family_probe(name)
+    for name in arrow_grammar.FAMILY_NAMES
+    if name not in _WRITE_PROBE_EXCLUDED_FAMILIES
 )
 
 
@@ -400,10 +461,17 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
             # warning pass only; the model already rejects the malformed rule.
             pass
         if direction == "read" and match == "regex" and isinstance(matcher, str):
-            # Strip named groups, class/anchor escapes, AND `[...]` character-class
-            # contents ([A-Za-z] is a set, not a lowercase literal) before looking
-            # for a lowercase literal that can never match an UPPERCASED native.
+            # Strip named groups, named BACKREFERENCES, class/anchor escapes,
+            # AND `[...]` character-class contents ([A-Za-z] is a set, not a
+            # lowercase literal) before looking for a lowercase literal that can
+            # never match an UPPERCASED native. The backref strip must drop
+            # `\k<name>` whole: unescaping it leaves the literal `k<name>`, which
+            # reads as authored lowercase and warns about a rule that matches
+            # perfectly well. Both strips are needed and neither substitutes for
+            # the other — dropping backrefs while keeping class contents warns on
+            # `^FOO(?<x>[A-Za-z]+)$` instead.
             stripped = _ECMA_NAMED_GROUP.sub("(", matcher)
+            stripped = _ECMA_NAMED_BACKREF.sub("", stripped)
             stripped = re.sub(r"\[[^\]]*\]", "", stripped)
             stripped = re.sub(r"\\[dDsSwWbBAZfnrtvux0]", "", stripped)
             if re.search(r"[a-z]", re.sub(r"\\(.)", r"\1", stripped)):
