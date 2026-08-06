@@ -658,15 +658,19 @@ def _git_ignores(paths: set[str]) -> set[str]:
     )
     if not inside:
         return set()
+    # `check=False` deliberately: `git check-ignore` uses its exit code to
+    # ANSWER, not only to report failure — 1 means "none of these are ignored",
+    # which is the ordinary green case. `check=True` would raise on it. The
+    # codes are discriminated below instead, which is the part that matters.
     result = subprocess.run(
         ["git", "check-ignore", "--stdin", "-z"],
         cwd=REPO_ROOT,
         input=("\0".join(inside) + "\0").encode("utf-8"),
         capture_output=True,
+        check=False,
     )
-    # Exit 1 means "none of them are ignored", which is a normal answer; any
-    # other non-zero is git failing, and this gate does not report clean on a
-    # question it could not ask.
+    # Any code other than 0 or 1 is git failing, and this gate does not report
+    # clean on a question it could not ask.
     if result.returncode not in (0, 1):
         raise RuntimeError(
             "git check-ignore failed, so citations of ignored paths cannot be "
