@@ -341,6 +341,17 @@ _FLOORS: dict[str, dict[str, int]] = {
     },
 }
 
+# The other dimension a floor can be about. Every floor above counts
+# citations; this one counts the documents they are read out of, which nothing
+# measured until narrowing `_prose_files` turned out to be invisible to all of
+# them at once. It exists to keep `test_the_sweep_reads_every_authored_document`
+# from passing on two empty sets — the equality there is what catches a
+# narrowing, so this sits at half of today's count like the rest.
+_DOCUMENT_FLOORS: dict[str, int] = {
+    "analitiq-connector-builder": 18,
+    "analitiq-pipeline-builder": 18,
+}
+
 # What a plugin must state about itself for this suite to grade it: real
 # citations the extractors have to keep finding, and one real file to write the
 # acceptance tests against. One registry rather than two lists filled at the
@@ -435,11 +446,21 @@ _GENERATED_PROSE = {"CHANGELOG.md"}
 
 def _prose_files(plugin: str) -> list[Path]:
     """Every authored markdown document in the plugin — what an agent reads,
-    and the only text this guard grades."""
+    and the only text this guard grades.
+
+    `_ships` applies here as much as it does to the path universe, and this was
+    the one tree walk that did not ask. A `.md` under a directory an installed
+    plugin never carries is not prose any agent reads: swept, its citations are
+    graded, its matches counted into the floors, and it can fail the build on
+    text no user ever receives — the local-vs-CI disagreement `_ships` exists
+    to remove, arriving from the other side.
+    """
+    root = _plugin_root(plugin)
     return [
         path
-        for path in sorted(_plugin_root(plugin).rglob("*.md"))
+        for path in sorted(root.rglob("*.md"))
         if path.name not in _GENERATED_PROSE
+        and _ships(path.relative_to(root).as_posix())
     ]
 
 
@@ -1115,6 +1136,7 @@ def test_every_plugin_is_covered() -> None:
     by writing it down once."""
     registries = {
         "_FLOORS": set(_FLOORS),
+        "_DOCUMENT_FLOORS": set(_DOCUMENT_FLOORS),
         "_EXTERNAL_REFS": set(_EXTERNAL_REFS),
         "_PLUGIN_FIXTURES": set(_PLUGIN_FIXTURES),
     }
@@ -1763,6 +1785,73 @@ def test_the_floors_count_what_the_sweep_found(plugin: str) -> None:
     assert counts["asset"] == len(_asset_citations(plugin))
     # And the sweep really is the plugin's whole prose, not one document of it.
     assert len({rel for rel, _l, _f, _t in _tagged_references(plugin)}) > 5
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_the_sweep_reads_every_authored_document(plugin: str) -> None:
+    """Every device in this file counts *citations*. None counted *documents* —
+    so narrowing `_prose_files` was invisible.
+
+    Dropping every `references/` document, where the long-form contracts an
+    agent is routed to actually live, kept the whole suite green: each floor
+    stayed met, each sentinel stayed reached, and `graded == written` stayed
+    true because both sides shrank together. The census could not see it
+    either, and that is the load-bearing part — `_unread_mentions` iterates
+    `_prose_files`, so a document dropped from the sweep drops out of the one
+    device built to notice a citation nobody reads.
+
+    Stated as set equality against the shipped path universe rather than as a
+    floor: a floor at half of today's count would have let that mutation
+    through. The two sides are built by different walks (`rglob("*.md")` and
+    the filter, against `_paths_under` and an extension test), so this is not
+    the sweep agreeing with itself.
+    """
+    root = _plugin_root(plugin)
+    swept = {path.relative_to(root).as_posix() for path in _prose_files(plugin)}
+    shipped = {
+        rel
+        for rel in _plugin_paths(plugin)
+        if rel.endswith(".md") and Path(rel).name not in _GENERATED_PROSE
+    }
+    assert swept == shipped
+    # And neither side is empty, which set equality alone would accept. Through
+    # `_below_floor` rather than a second `>=` written here: that comparison is
+    # already driven in its failing direction by
+    # `test_a_starved_form_trips_its_floor`, and a floor whose comparison is
+    # hand-rolled at the call site is the vacuity this file is about.
+    below = _below_floor({"documents": len(swept)}, {"documents": _DOCUMENT_FLOORS[plugin]})
+    assert not below, _floor_failure(f"plugins/{plugin} prose", below)
+
+
+def test_the_prose_sweep_reads_only_what_ships(probe_plugin: str) -> None:
+    """`_prose_files` was the one tree walk that did not ask `_ships`. The real
+    tree cannot drive that — nothing puts a `.md` under `__pycache__` there —
+    so the equality above holds either way and the filter looked load-bearing
+    while being inert. The probe tree puts one there."""
+    root = _plugin_root(probe_plugin)
+    assert (root / "__pycache__" / "probe.md").is_file()
+    assert _prose_files(probe_plugin) == []
+    # And an authored document in the same tree is still read, so this is the
+    # filter refusing one path rather than the walk finding nothing.
+    (root / "SKILL.md").write_text("# Probe\n", encoding="utf-8")
+    assert [p.name for p in _prose_files(probe_plugin)] == ["SKILL.md"]
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_the_path_universe_is_the_shipped_sweep(
+    plugin: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`test_the_shipped_universe_drops_build_artifacts` proves `_paths_under`
+    filters; nothing proved `_plugin_paths` calls it. Inlining an unfiltered
+    `rglob` there stayed green — masked by the `_ships` refusal in
+    `_candidates`, but it widens `_plugin_dirs`, and that vocabulary is what
+    tells an asset citation of this plugin from a path about something else."""
+    with monkeypatch.context() as patched:
+        patched.setattr(sys.modules[__name__], "_paths_under", lambda _root: ("x",))
+        _plugin_paths.cache_clear()
+        assert _plugin_paths(plugin) == ("x",)
+    _plugin_paths.cache_clear()
+    assert len(_plugin_paths(plugin)) > 1
 
 
 def test_the_shipped_universe_drops_build_artifacts(tmp_path: Path) -> None:
