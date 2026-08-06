@@ -119,12 +119,11 @@ something the reader does not have:
   than a reference to it.
 - **"this PR" and friends.** A file outlives the pull request that wrote it, so
   "the hole this PR closed" points at a moment the reader is not in. Two sites
-  legitimately name the PR being processed at runtime — CI comments and a
-  message printed about the PR under check — and they are pinned in
-  `_EPHEMERAL_ALLOWED` rather than matched by a cleverer pattern — a CI comment
-  naming the source a job grades, and a message printed about the pull request
-  under check. "this branch" is left wide: in this repo it always means a
-  control-flow branch.
+  legitimately name the pull request being processed at runtime and are pinned
+  in `_EPHEMERAL_ALLOWED` rather than matched by a cleverer pattern — a CI
+  comment naming the source a job grades, and a message printed about the pull
+  request under check. "this branch" is left wide: in this repo it always means
+  a control-flow branch.
 """
 
 from __future__ import annotations
@@ -699,15 +698,27 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
         "it traverses, so a narrowing here turns both off at once."
     )
 
-    # And the one caller that skips: exactly the recorded exemptions, no more.
-    seen.clear()
-    _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
-    assert set(seen) == scanned - set(_EPHEMERAL_ALLOWED), (
-        "the ephemeral-referent gate read the wrong set: "
-        f"{sorted((scanned - set(_EPHEMERAL_ALLOWED)) - set(seen))[:10]} were "
-        "selected and never read. `skip` must drop the exemptions and nothing "
-        "else."
-    )
+    # Then each gate through ITS OWN collector, against the PINNED constant.
+    # Spelling the exemption here instead grades an argument this test supplies,
+    # which is not the one the gate hands over: `skip=_FOREIGN_ALLOWED + ("
+    # "README.md", "CLAUDE.md")` inside the collector drops two real files from
+    # a gate with every constant untouched and the whole suite green. The
+    # end-to-end fixture cannot see it either — its tmp repo holds no file by
+    # those names. Comparing the collector's real read set against the pinned
+    # tuple is what makes a narrowing land in a diff, the same way the tuples
+    # themselves are pinned.
+    for collector, allowed, name in (
+        (_foreign_path_sites, _FOREIGN_ALLOWED, "gitignored-path"),
+        (_ephemeral_referent_sites, _EPHEMERAL_ALLOWED, "expiring-referent"),
+    ):
+        seen.clear()
+        collector()
+        assert set(seen) == scanned - set(allowed), (
+            f"the {name} gate read the wrong set: "
+            f"{sorted((scanned - set(allowed)) - set(seen))[:10]} were selected "
+            "and never read. Its `skip` must be exactly the pinned exemption "
+            "tuple — no more, or files leave the gate without leaving a diff."
+        )
 
 
 def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> None:
