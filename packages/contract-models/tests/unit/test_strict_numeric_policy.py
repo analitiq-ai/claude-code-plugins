@@ -357,9 +357,42 @@ _COLLECTION_KEYWORDS = ("items", "prefixItems", "additionalProperties", "pattern
 #: So a number under a keyword absent from this map is detected and reported
 #: unswept, naming THIS map. Add the entry when a field needs it, written
 #: against that field's actual shape.
-_MEMBER_WRAPS: dict[str, Callable[[Any], Any]] = {
-    "items": lambda member: [member],
+def _items_wrap(container: dict[str, Any]) -> Callable[[Any], Any]:
+    """A list the container would accept — long enough for its own ``minItems``.
+
+    Built from the container rather than fixed at one element, because the
+    constraint belongs to the container and a wrap that ignores it produces a
+    document rejected for a reason that has nothing to do with the number.
+    """
+    count = max(1, container.get("minItems") or 1)
+    return lambda value: [value] * count
+
+
+#: Keyword -> a factory taking the CONTAINER schema and returning its wrap.
+#: A factory rather than a fixed callable because the constraints a wrap must
+#: honour (`minItems` here) live on the container, not on the member.
+_MEMBER_WRAPS: dict[str, Callable[[dict[str, Any]], Callable[[Any], Any]]] = {
+    "items": _items_wrap,
 }
+
+#: Container keys that say nothing about the shape a wrap has to satisfy.
+_CONTAINER_NOISE = frozenset(
+    {"type", "title", "description", "default", "examples"}
+) | frozenset(_COLLECTION_KEYWORDS)
+
+
+def _container_signature(node: dict[str, Any]) -> str:
+    """The container's own constraints, canonically — part of a reach identity.
+
+    Two alternatives can share a path and a leaf and still need different
+    probes: `list[int]` and `list[int]` with `minItems: 2` both land on an
+    integer under `items`, but a one-element probe never reaches the second.
+    Collapsing them left the longer branch unswept AND unreported.
+    """
+    return json.dumps(
+        {k: v for k, v in node.items() if k not in _CONTAINER_NOISE},
+        sort_keys=True, default=str,
+    )
 
 
 def _identity(member: Any) -> Any:
@@ -389,6 +422,7 @@ class Reach(NamedTuple):
     keyword: str | None
     leaf: dict[str, Any]
     path: tuple[str, ...] = ()
+    containers: tuple[str, ...] = ()
 
     @property
     def label(self) -> str:
@@ -404,8 +438,18 @@ class Reach(NamedTuple):
         different wraps (`[v]` and `[[v]]`). Keying on the outer keyword alone
         collapsed them and dropped one, leaving a lax nested branch unswept
         while the field read as covered.
+
+        ``containers`` carries each enclosing collection's own constraints for
+        the same reason one step out: two alternatives can share a path and a
+        leaf and still need different probes, because `minItems` lives on the
+        container.
         """
-        return (self.path, self.wrap is None, json.dumps(self.leaf, sort_keys=True))
+        return (
+            self.path,
+            self.containers,
+            self.wrap is None,
+            json.dumps(self.leaf, sort_keys=True),
+        )
 
 
 def _dedupe(reaches: list[Reach]) -> list[Reach]:
@@ -466,11 +510,14 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
     for keyword in ("anyOf", "oneOf", "allOf"):
         for branch in node.get(keyword, []):
             found += _numeric_reaches(branch, defs, depth + 1)
+    signature = _container_signature(node)
     for keyword in _COLLECTION_KEYWORDS:
-        outer = _MEMBER_WRAPS.get(keyword)
+        factory = _MEMBER_WRAPS.get(keyword)
+        outer = factory(node) if factory else None
         for member in _member_schemas(node, keyword):
             for child in _numeric_reaches(member, defs, depth + 1):
                 path = (keyword,) + child.path
+                containers = (signature,) + child.containers
                 if child.wrap is None:
                     # The number sits under a collection DEEPER IN that has no
                     # wrap (`list[dict[str, int]]`). The outer collection being
@@ -480,9 +527,9 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
                     # not the blocker.
                     # `keyword` stays the child's: it names the blocker, while
                     # the path records how the sweep would have got there.
-                    found.append(child._replace(path=path))
+                    found.append(child._replace(path=path, containers=containers))
                 elif outer is None:
-                    found.append(Reach(None, keyword, child.leaf, path))
+                    found.append(Reach(None, keyword, child.leaf, path, containers))
                 else:
                     # Wraps compose innermost-first: the member is built by the
                     # child's wrap, then placed in this collection, so
@@ -492,6 +539,7 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
                         keyword,
                         child.leaf,
                         path,
+                        containers,
                     ))
     return _dedupe(found)
 
@@ -856,8 +904,9 @@ def test_every_declared_wrap_builds_a_document_its_schema_accepts():
         "every collection keyword needs a case here, so a wrap added later is "
         "proven against the shape it claims to handle rather than assumed."
     )
-    for keyword, wrap in _MEMBER_WRAPS.items():
-        document = wrap(1)
+    for keyword, factory in _MEMBER_WRAPS.items():
+        container = _WRAP_CASES[keyword]
+        document = factory(container)(1)
         assert Draft202012Validator(_WRAP_CASES[keyword]).is_valid(document), (
             f"the {keyword!r} wrap built {document!r}, which its own schema "
             f"rejects. A wrap has to honour the shape it claims to handle, or "
@@ -967,6 +1016,30 @@ def test_alternatives_at_different_depths_are_both_swept():
     # The lax nested branch is caught, and the message names which branch.
     assert violations, "the nested lax alternative was never probed"
     assert all("items→items" in v for v in violations), violations
+
+
+def test_alternatives_with_different_container_constraints_are_both_swept():
+    # `list[StrictInt] | Annotated[list[int], min_length=2]`: same path, same
+    # leaf, different CONTAINER. A one-element probe satisfies only the first,
+    # so collapsing them left the lax length-2 branch accepting `["1", "1"]`
+    # — which its own schema rejects — with neither a violation nor an
+    # unreached report. The constraint lives on the container, so both the wrap
+    # and the reach identity have to account for it.
+    class TwoLengths(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        v: list[StrictInt] | Annotated[list[int], Field(min_length=2)] = Field(...)
+
+    probe = Probe(TwoLengths)
+    reaches = probe.reaches["v"]
+    assert len(reaches) == 2, "the two container shapes collapsed into one reach"
+    assert sorted(r.wrap(1) for r in reaches) == [[1], [1, 1]], (
+        "a wrap ignored its container's `minItems`"
+    )
+    violations, _unreached, _reached, _gap = _sweep(_probes([TwoLengths]))
+    assert any('["1", "1"]' in v for v in violations), (
+        f"the length-2 branch was never probed with a document it accepts: {violations}"
+    )
 
 
 def test_a_blocked_branch_is_reported_even_when_a_sibling_reaches():
