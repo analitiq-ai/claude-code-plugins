@@ -265,18 +265,19 @@ _RETRY_ERROR_HANDLING_CONDITIONAL_RULES: dict[str, Any] = {
 }
 
 
-# The retry contract's two field types, named once. The pipeline block
-# re-declares both fields to attach public descriptions; without a shared
-# annotation that re-declaration is a second hand-maintained copy of the bounds,
-# which is exactly the drift this base class exists to prevent.
+# The retry contract's field types, named once. The pipeline block re-declares
+# a field to attach a public description; without a shared annotation that
+# re-declaration is a second hand-maintained copy of the bounds, which is
+# exactly the drift this base class exists to prevent.
 RetryAttempts = Annotated[StrictInt, Field(ge=0, le=5)]
 RetryDelaySeconds = StrictNonNegativeInt
 
 # Records per batch, named once for the same reason. The stream-level field is
-# an OVERRIDE of the pipeline-level one, so the two have to admit the same set
-# of values or a document that is valid at the stream level describes a batch
-# size the pipeline default could never have taken. Spelling the bounds at each
-# site made that agreement a thing a human remembers.
+# an OVERRIDE of the pipeline-level one, so the override has to admit the same
+# set of values as the field it overrides — otherwise a document valid at the
+# stream level describes a batch size the pipeline default could never have
+# taken. Spelling the bounds at each site made that agreement a thing a human
+# remembers.
 BatchSize = Annotated[StrictInt, Field(ge=1, le=100_000)]
 
 

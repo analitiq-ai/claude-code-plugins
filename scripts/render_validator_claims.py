@@ -518,10 +518,10 @@ def _offset_paginated_endpoint(increment_by: Any) -> dict:
     """The example endpoint, re-cut onto the offset family.
 
     The shipped example paginates by page, so the offset slot has to be staged
-    to be probed at all — and the prose names it alongside the other two, so a
-    slot no probe reaches is a claim nobody measures. The `page` param is
-    renamed rather than added: pagination may only drive a declared param, and
-    an undeclared one would raise a second, unrelated finding that a probe
+    to be probed at all — and the prose names it among the slots that refuse a
+    literal, so a slot no probe reaches is a claim nobody measures. The `page`
+    param is renamed rather than added: pagination may only drive a declared
+    param, and an undeclared one would raise an unrelated finding that a probe
     asserting an outcome must not be carrying.
     """
     doc = _read_endpoint()

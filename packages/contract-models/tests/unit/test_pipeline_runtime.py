@@ -48,8 +48,8 @@ class TestStreamOverrideTakesTheSameBatchSizes:
     """`stream.Execution.batch_size` overrides `pipeline.runtime.batching.batch_size`.
 
     An override that admits a value the field it overrides could never hold
-    describes a batch size no pipeline default can express — so the two carry
-    one shared annotation rather than a bound spelled at each site. Asserted
+    describes a batch size no pipeline default can express — so each carries the
+    same shared annotation rather than a bound spelled at its own site. Asserted
     through the bound itself, not by comparing annotations, so the claim stays
     the behaviour a document actually meets.
     """
