@@ -14,9 +14,16 @@ The invariant asserted here is one-directional and deliberately so:
 
 The reverse gap stays open — JSON Schema's ``type: integer`` matches a
 zero-fraction float, so ``50.0`` passes the schema and fails ``Strict()``. That
-is the model being the tighter of the two, which is the safe direction; it is
-pinned by ``test_float_spelled_integer_is_a_one_directional_gap`` in
-``test_endpoint_model.py``.
+is the model being the tighter of the two, which is the safe direction. How far
+it reaches is measured here rather than listed, since a list of sites would rot
+on the next field; ``test_the_reverse_gap_is_measured_where_it_is_claimed``
+reads that measurement and ties it to the hand-written statement of the same
+asymmetry in ``test_endpoint_model.py``.
+
+Where the tighter side is NOT safe is a field this package reads off a
+producer, because there the refusal falls on a document the producer was
+entitled to send. Those fields opt out via ``CoerceInt``, and the last section
+of this file asserts their agreement in both directions.
 
 **Why this file enumerates instead of listing.** A hand-written table of
 ``(model, field)`` pairs would be correct the day it is written and would rot on
@@ -36,13 +43,15 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from typing import Any
+from decimal import Decimal
+from typing import Annotated, Any, get_args, get_origin
 
 import pytest
 from jsonschema import Draft202012Validator
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from analitiq.contracts.shared.introspect import contract_classes
+from analitiq.contracts.shared.types import _narrow_integral_number
 
 # Sampling a string that matches a declared `pattern` means walking the parsed
 # regex, and the stdlib exposes no public parser. `sre_parse` is deprecated in
@@ -610,6 +619,34 @@ def test_the_sweep_finds_a_real_field_set():
     assert len(reached) >= MINIMUM_FIELDS_SWEPT, sorted(reached)
 
 
+def test_the_reverse_gap_is_measured_where_it_is_claimed():
+    # The reverse direction is recorded by being COUNTED, not by being listed —
+    # a list of sites would rot on the next field. Counting only works if
+    # something reads the count: the gap arm shares its branch with the
+    # inversion check, so an edit that stopped either from finding anything
+    # would leave every assertion above green while the safe direction went
+    # unwatched.
+    #
+    # The membership assertion is what ties the two halves of the record
+    # together: `test_float_spelled_integer_is_a_one_directional_gap` in
+    # `test_endpoint_model.py` states the asymmetry by hand on `PageSize`, and
+    # a hand-written statement about a site the sweep no longer finds in the
+    # gap is a claim nobody is checking.
+    _violations, _unreached, _reached, gap = SWEEP
+    assert gap, (
+        "the sweep found the reverse direction nowhere. Either every integer "
+        "field became lax — in which case the violations above should have "
+        "fired — or the gap arm stopped running and the inversion check went "
+        "with it."
+    )
+    hand_pinned = {"PageSize.default", "PageSize.max"}
+    assert hand_pinned <= set(gap), (
+        f"{sorted(hand_pinned - set(gap))} is pinned by hand as a float-gap "
+        "site in `test_endpoint_model.py`, and the sweep no longer agrees. "
+        "Whichever moved, the two records of the same asymmetry now disagree."
+    )
+
+
 def test_the_sweep_detects_a_lax_field():
     # The detector proven able to go red. A diff that broke `Probe.accepts` or
     # the schema comparison would otherwise make every assertion above pass by
@@ -648,3 +685,152 @@ def test_regex_sample_produces_a_matching_string(pattern, expected_match):
     # model unreachable and show up as a coverage failure rather than a silent
     # skip, but pin it directly so the failure names the real cause.
     assert bool(re.match(pattern, regex_sample(pattern))) is expected_match
+
+
+# ---------------------------------------------------------------------------
+# The read path: where the policy is required to hold in BOTH directions
+# ---------------------------------------------------------------------------
+#
+# `CoerceInt` is the opt-out from the asymmetry the sweep measures above. On an
+# authoring gate the model may be the tighter side: the author picks the
+# spelling, so refusing `1500.0` costs a rewrite. On a field this package READS
+# off a producer, the same refusal rejects a response the published schema calls
+# valid and the producer was entitled to send. So on those fields agreement is
+# required in both directions, and the alias buys it with a before-validator.
+#
+# That before-validator is load-bearing rather than incidental: `CoerceInt` is
+# built on `StrictInt`, so it is the only path a `Decimal` or a `1500.0` has.
+
+
+def _carries_coerce_int(annotation: Any) -> bool:
+    """Whether ``annotation`` reaches a ``CoerceInt`` anywhere inside it.
+
+    Keyed off the marker the alias is BUILT from — the identity of its
+    before-validator function — rather than off a name or a field list. A site
+    spelled `CoerceInt | None`, or wrapped in a collection, is found without
+    the discovery having to know which spellings exist.
+    """
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        if any(
+            isinstance(marker, BeforeValidator)
+            and marker.func is _narrow_integral_number
+            for marker in args[1:]
+        ):
+            return True
+        return _carries_coerce_int(args[0])
+    return any(_carries_coerce_int(arg) for arg in get_args(annotation))
+
+
+COERCE_INT_SITES = [
+    (model, name)
+    for model in sorted(contract_classes(), key=lambda c: (c.__module__, c.__name__))
+    for name, field in model.model_fields.items()
+    if _carries_coerce_int(field.annotation)
+]
+COERCE_INT_IDS = [f"{model.__name__}.{name}" for model, name in COERCE_INT_SITES]
+
+
+def test_the_read_path_alias_is_in_use():
+    # Every assertion below is parametrized over the discovery, so an empty
+    # discovery turns them all into vacuous passes — including the only
+    # coverage the before-validator has. A contract that genuinely stopped
+    # reading producer-written integers would delete the alias too, and this
+    # failure is the prompt to delete these tests with it.
+    assert COERCE_INT_SITES, (
+        "no contract field carries `CoerceInt`. Either the read path lost its "
+        "alias or `_carries_coerce_int` stopped recognising it."
+    )
+
+
+@pytest.mark.parametrize(("model", "field"), COERCE_INT_SITES, ids=COERCE_INT_IDS)
+def test_the_read_path_agrees_with_its_schema_in_both_directions(model, field):
+    # The sweep above asserts one direction everywhere; here the reverse one is
+    # asserted too, which is the whole difference between an authoring field and
+    # a field a producer writes. `probe.accepts` and `probe.validator` are the
+    # same pair the sweep uses, so this cannot drift from it.
+    probe = Probe(model)
+    base = probe.reach(field)
+    assert base is not None, f"no document reaches {model.__name__}.{field}"
+    good = probe.good(field)
+    spellings = {
+        # A JSON producer serialising a computed count emits the zero-fraction
+        # float, which `type: integer` matches. This is the spelling the
+        # before-validator exists for.
+        "integral-float": float(good),
+        # Not a count. Converting it would invent one, so it stays refused —
+        # and the schema refuses it too, which is what makes that safe.
+        "fractional-float": float(good) + 0.5,
+        **bad_spellings(good),
+    }
+    for spelling, value in spellings.items():
+        document = {**base, field: probe.wrap[field](value)}
+        assert probe.accepts(document) == probe.validator.is_valid(document), (
+            f"{model.__name__}.{field} and its published schema disagree on the "
+            f"{spelling} spelling {value!r} (document {json.dumps(document)}). "
+            "On a field a producer writes, either direction is a defect: "
+            "looser than the schema accepts documents no external consumer "
+            "will, tighter refuses ones the producer was entitled to send."
+        )
+
+
+@pytest.mark.parametrize(("model", "field"), COERCE_INT_SITES, ids=COERCE_INT_IDS)
+def test_the_read_path_takes_the_decimal_a_driver_returns(model, field):
+    # A driver hands a numeric column back as `Decimal`. It never crosses JSON,
+    # so no schema spelling covers it and the agreement test above cannot see
+    # it — yet it is the spelling that reaches these fields when the row is read
+    # straight out of the database rather than off the wire.
+    probe = Probe(model)
+    base = probe.reach(field)
+    assert base is not None
+    good = probe.good(field)
+    document = {**base, field: probe.wrap[field](Decimal(good))}
+    assert probe.accepts(document), (
+        f"{model.__name__}.{field} refuses the `Decimal` a driver returns "
+        f"(document field {Decimal(good)!r})"
+    )
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        # Narrowed: the spellings a producer writes for a whole number.
+        (Decimal("1500"), 1500),
+        (Decimal("1500.000"), 1500),
+        (Decimal("-2"), -2),
+        (Decimal("0"), 0),
+        (1500.0, 1500),
+        (-2.0, -2),
+        (0.0, 0),
+        # Passed through, so `StrictInt` decides. Each of these would become a
+        # wrong answer if the narrowing were widened to whatever `int()`
+        # swallows: a truncated count, or the coercion the strict aliases exist
+        # to close.
+        (Decimal("1.5"), Decimal("1.5")),
+        (Decimal("NaN"), Decimal("NaN")),
+        (Decimal("Infinity"), Decimal("Infinity")),
+        (1.5, 1.5),
+        (float("inf"), float("inf")),
+        ("50", "50"),
+        (True, True),
+        (7, 7),
+        (None, None),
+    ],
+    ids=repr,
+)
+def test_the_read_path_narrows_only_an_integral_number(value, expected):
+    # The truth table of the before-validator itself. The wiring tests above
+    # prove it is reached; this proves what it does when it is, including the
+    # cases that have no JSON spelling and so cannot be asserted through a
+    # schema.
+    result = _narrow_integral_number(value)
+    if isinstance(expected, Decimal) and expected.is_nan():
+        assert isinstance(result, Decimal) and result.is_nan()
+        return
+    assert result == expected
+    # Equality is blind here — `Decimal("1500") == 1500 == 1500.0` — so the
+    # narrowing is only observable as a type change.
+    assert type(result) is type(expected), (
+        f"{value!r} came back as {type(result).__name__}, expected "
+        f"{type(expected).__name__}"
+    )

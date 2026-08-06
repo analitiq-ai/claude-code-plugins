@@ -2588,8 +2588,8 @@ class TestPageSizeDefault:
         # and rejects both — so this package would accept documents that every
         # external consumer of the published schema refuses. The premise is that
         # the model and the schema are one contract; see
-        # `test_float_spelled_integer_is_a_one_directional_gap` for the single
-        # value where `Strict()` makes the model the tighter of the two.
+        # `test_float_spelled_integer_is_a_one_directional_gap` for the spelling
+        # where `Strict()` makes the model the tighter of the two.
         with pytest.raises(ValidationError):
             PageSize.model_validate({"param": "limit", "default": value})
 
@@ -2618,10 +2618,18 @@ class TestPageSizeDefault:
 
     @pytest.mark.parametrize("field", ["default", "max"])
     def test_float_spelled_integer_is_a_one_directional_gap(self, field):
-        # The one place the two halves of the contract disagree, recorded so it
-        # cannot silently invert. JSON Schema's `type: integer` matches any
-        # number with a zero fractional part, so `50.0` is a valid integer to
-        # every external consumer; `Strict()` makes pydantic refuse it.
+        # The direction in which the two halves of the contract disagree, stated
+        # on a concrete field so it cannot silently invert. JSON Schema's
+        # `type: integer` matches any number with a zero fractional part, so
+        # `50.0` is a valid integer to every external consumer; `Strict()` makes
+        # pydantic refuse it.
+        #
+        # This is a sample of the asymmetry, not its extent: `Strict()` is the
+        # policy for every authoring field, so the gap reaches wherever that
+        # policy does. How far that is, is measured — not listed — by the sweep
+        # in `test_strict_numeric_policy.py`, which also asserts that the sites
+        # pinned here are among the ones it finds, so the two records of the
+        # same asymmetry cannot drift apart.
         #
         # Left as-is rather than reconciled. The model being the STRICTER side
         # is the safe direction — a document this package accepts is always one

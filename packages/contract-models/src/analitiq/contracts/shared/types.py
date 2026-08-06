@@ -87,8 +87,9 @@ def validate_versioned_uuid(value: str) -> str:
 # schema and fails here. Kept, because the property the plugins rely on is that
 # a document this package accepts is always one the schema accepts, and that
 # direction still holds. Which fields the gap reaches is not written down
-# anywhere — a list would rot on the next field. It is swept and enumerated by
-# `test_strict_numeric_policy.py`, which also pins that the gap never inverts.
+# anywhere — a list would rot on the next field. `test_strict_numeric_policy.py`
+# measures it instead, and reads its own measurement, so the arm that watches
+# for the gap INVERTING cannot go quiet by finding nothing.
 #
 # The gap is tolerable on an authoring gate, where the author controls the
 # spelling. It is not tolerable where a model READS a producer's document, so
@@ -111,8 +112,9 @@ StrictPositiveInt = Annotated[StrictInt, Field(ge=1)]
 def _narrow_integral_number(value: Any) -> Any:
     """Narrow an integral `Decimal` / `float` to `int`; pass everything else on.
 
-    Two producers reach a field spelled `CoerceInt`, and the alias has to read
-    what each of them writes:
+    A field spelled `CoerceInt` is written by a producer and read here, so the
+    alias has to accept every spelling a producer legitimately writes a whole
+    number in:
 
     - a driver hands a numeric column back as `Decimal`;
     - a JSON producer serialises a computed count as `1500.0` — which the
