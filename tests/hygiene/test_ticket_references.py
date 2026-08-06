@@ -15,9 +15,9 @@ or the mechanism, self-containedly.** Ticket numbers belong to GitHub-native
 surfaces — commit messages, PR bodies, issue threads — where the tracker is the
 medium rather than a dangling reference out of one.
 
-Nothing enforced this before, so the refs accumulated to 230 sites across 53
-files. Sweeping them without a guard would just restart the accumulation, which
-is why this file exists: it is the half of the fix that keeps the class closed.
+Nothing enforced this before, so the refs accumulated. Sweeping them without a
+guard would just restart the accumulation, which is why this file exists: it is
+the half of the fix that keeps the class closed.
 
 ## What it scans, and why the scope is not a list of directories
 
@@ -25,25 +25,24 @@ Every file git tracks, minus `schemas/` and minus `_EXCLUDED_PATHS` — plus the
 hand-authored files under `schemas/` that the tree's rationale below does not
 cover (`_SCANNED_DESPITE_TREE`).
 
-An earlier draft named the trees to walk — `packages/`, `plugins/`, `scripts/`,
-… — and that shape is the wrong default for two reasons. It fails **open**: a
-tree nobody listed is a tree nobody lints, which is how `CONTRIBUTING.md` and
-`.claude-plugin/` sat outside that draft's scope. And it is a hand-maintained
-parallel copy of the repo layout, so it drifts from the layout the way any
-second copy of a fact drifts from the first — the same reason nothing in this
-repo restates a value the schema owns — with narrowing it the cheapest way to
-turn a red gate green. Enumerating from git inverts both: a new authored tree is
-scanned the day it lands, nothing restates the layout, and the only way to
-shrink the scan is to add a line to `_EXCLUDED_PATHS`, which is pinned literally
-and lands in a diff a reviewer reads.
+Naming the trees to walk — `packages/`, `plugins/`, `scripts/`, … — is the wrong
+default for two reasons. It fails **open**: a tree nobody listed is a tree
+nobody lints, and `CONTRIBUTING.md` and `.claude-plugin/` are both outside any
+such list. And it is a hand-maintained parallel copy of the repo layout, so it
+drifts from the layout the way any second copy of a fact drifts from the first —
+the same reason nothing in this repo restates a value the schema owns — with
+narrowing it the cheapest way to turn a red gate green. Enumerating from git
+inverts both: a new authored tree is scanned the day it lands, nothing restates
+the layout, and the only way to shrink the scan is to add a line to
+`_EXCLUDED_PATHS`, which is pinned literally and lands in a diff a reviewer
+reads.
 
 `schemas/` is the one tree excluded structurally rather than by path, and
 permanently so: it is generated from the contract models, and its pinned
 `X.Y.Z.json` objects are immutable once published (the publish is
-first-write-wins and byte-compares on re-runs). Dozens of already-published pins
-still carry the old ticket text and always will. The only way that text leaves
-the served schemas is a re-render advancing the version — driven from the models
-this guard does scan.
+first-write-wins and byte-compares on re-runs). Published pins carrying the old
+ticket text keep it forever. The only way that text leaves the served schemas is
+a re-render advancing the version — driven from the models this guard does scan.
 
 That rationale covers only what the renderer writes, so it cannot be applied to
 the tree by prefix and left there. A hand-authored file under `schemas/` is
@@ -62,12 +61,12 @@ Four shapes:
   by a number.
 - `analitiq-engine#454`, `engine#413`, `infrastructure#1018` — the
   cross-repo form GitHub itself renders as a link.
-- A bare `#108` / `(#890)` / `pre-#125`. Counted over the tree this swept, the
-  keyword and bare forms ran near-even (105 and 99 of the 230 sites), with 26
-  cross-repo and no URLs at all.
+- A bare `#108` / `(#890)` / `pre-#125`. As common in this repo's prose as the
+  keyword form, which is why the bare arm carries its weight despite being the
+  one most exposed to false positives.
 - `https://github.com/analitiq-ai/analitiq-engine/issues/406` — the full URL.
-  No swept site used it, and it is here precisely for that reason: it is the
-  spelling closest to hand for an author whose `analitiq-engine#406` just went
+  Nothing in the tree uses it, and it is here precisely for that reason: it is
+  the spelling closest to hand for an author whose `analitiq-engine#406` just went
   red, and it looks enough like a citation to feel legitimate. It rots
   identically.
 
@@ -165,13 +164,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _UNSCANNED_TREE = "schemas/"
 
 # The files under that tree the rationale does not cover: hand-authored, so
-# "generated from the contract models" is false of them, and authored HERE, so
-# the gate reaches them in the pull request that writes them. `openapi.json`
-# carries no version triple and is served as a mutable pointer, so a ref in it
-# can be corrected later by republishing. `data-sync-run-response/1.0.0.json`
-# is a pinned triple and immutable once published, which makes scanning it more
-# useful rather than less: after publication its text cannot be corrected at
-# all, so that pull request is the only moment the gate can help.
+# "generated from the contract models" is false of them.
+#
+# `openapi.json` carries no version triple and is served as a mutable pointer,
+# so the gate is doing ordinary work on it — a ref can be found and corrected
+# any time.
+#
+# `data-sync-run-response/1.0.0.json` is a pinned triple, already published, and
+# therefore beyond correction: were it ever red, the remedy would be a new
+# version triple, not an edit. It is listed because it is clean and because the
+# rule that admits it — every hand-authored file under this tree is scanned — is
+# what reaches the NEXT such file in the pull request that writes it, which is
+# the only moment a ref in a pin can still be removed. An exemption instead
+# would buy nothing today and cost that.
 #
 # Graded, not just listed. `test_the_guard_excludes_only_the_paths_it_records`
 # requires every entry to be tracked and to sit under `_UNSCANNED_TREE`, because
@@ -303,9 +308,9 @@ _PATTERNS = (_KEYWORD_TICKET, _CROSS_REPO_TICKET, _BARE_TICKET, _URL_TICKET)
 # that IS tracked — hence `/` immediately after `claude`.
 #
 # A match is only a DEFECT if the path it names is untracked, which is checked
-# against git rather than assumed. `.claude/` used to be ignored wholesale; now
-# `rules/` is tracked and `skills/` is not, so "under `.claude/`" no longer
-# answers the question the gate is actually asking. Resolving against the index
+# against git rather than assumed. `rules/` is tracked and `skills/` is not, so
+# "under `.claude/`" does not answer the question the gate is asking — only
+# "does this resolve in a clone" does. Resolving against the index
 # keeps the two in step by construction — re-admitting another subtree changes
 # what the gate accepts without anyone editing this file, and re-ignoring one
 # turns its citations red the same day.
@@ -595,9 +600,8 @@ def _sites(pattern: re.Pattern[str], *, skip: tuple[str, ...] = ()) -> list[tupl
     `test_the_gate_reads_every_file_the_scan_selected` pins WHICH files it
     reaches, and `test_the_gate_scans_the_whole_document_it_read` pins that the
     bytes reach the pattern and come back located. Selection alone is not
-    enough — a traversal that reads every file and scans none of it satisfies
-    the first and defeats the gate, which is exactly what happened to
-    `_references` before that second test existed.
+    enough: a traversal that reads every file and scans none of it satisfies the
+    first and defeats the gate entirely.
     """
     return [
         (relpath, lineno, match.group(0))
@@ -915,11 +919,10 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
 
     The gate asserts a list is empty, so a scan reaching fewer files is
     indistinguishable from a clean repo — and narrowing the scan is the cheapest
-    way to turn it green. The earlier version of this test sampled: it named a
-    few roots, a few suffixes, one file per root. Sampling only ever proves the
-    scan touches *something* in a tree, never that it touches *everything*, so
-    swapping a root for one of its own subdirectories (dropping the whole
-    `analitiq-pipeline-builder` plugin, say) passed clean.
+    way to turn it green. Sampling cannot catch that: naming a few roots and a
+    file per root proves the scan touches *something* in a tree, never that it
+    touches *everything*, so swapping a root for one of its own subdirectories
+    (dropping the whole `analitiq-pipeline-builder` plugin, say) passes clean.
 
     So assert extent directly, against git rather than against a second copy of
     the layout: every tracked file is scanned unless `schemas/` or
@@ -1215,11 +1218,12 @@ def test_an_empty_listing_is_a_failure_not_a_clean_repo(tmp_path, monkeypatch) -
     missing, and the read-set check compares two empty sets. A source tarball
     unpacked and `git init`-ed for tooling lands exactly here.
 
-    An earlier draft caught this incidentally, with a `len(expected) > 200`
-    floor in the extent test. That floor was a magnitude claim standing in for a
-    non-vacuity claim, and it was removed as arbitrary — correctly, but the
-    behaviour it was covering had to move somewhere, not evaporate. It lives in
-    `_tracked_files` now, where it covers every consumer rather than one test.
+    The refusal lives in `_tracked_files` rather than in one test's assertion,
+    because it has to cover every consumer of the listing. A count floor in the
+    extent test would catch this case incidentally, but a magnitude claim
+    standing in for a non-vacuity claim is arbitrary in both directions: small
+    enough to be safe as the repo shrinks is small enough to hide most of the
+    scan, and large enough to bite reddens on its own as the repo grows.
     """
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     (tmp_path / "CLAUDE.md").write_text("settled in issue #89\n", encoding="utf-8")
@@ -1722,11 +1726,11 @@ def test_exclusions_are_all_live() -> None:
 # asserting the matched TEXT, not merely that something matched, so an arm
 # cannot be deleted and quietly covered by a broader pattern's tail.
 #
-# The fixtures below spell every ref out in full. An earlier draft split them
-# ("engine" + "#390") to keep the file from matching itself; that bought nothing
-# twice over — this file is exempt in `_EXCLUDED_PATHS`, and the splitting did
-# not even work, since `_BARE_TICKET` happily matches a `#390` preceded by a
-# quote. The exemption is what makes scanning safe, and it is recorded there.
+# The fixtures below spell every ref out in full rather than splitting them
+# ("engine" + "#390") to keep the file from matching itself. Splitting buys
+# nothing twice over: this file is exempt in `_EXCLUDED_PATHS`, and it does not
+# even work, since `_BARE_TICKET` matches a `#390` preceded by a quote. The
+# exemption is what makes scanning safe, and it is recorded there.
 
 
 def test_keyword_form_is_flagged() -> None:
