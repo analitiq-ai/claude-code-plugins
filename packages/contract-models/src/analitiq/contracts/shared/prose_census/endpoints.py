@@ -339,10 +339,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="_EndpointModel",
-        prose_hash="d4a23f9910d9",
+        prose_hash="b66d442779fa",
         structural=(
-            "the frozen ConfigDict the docstring itself describes — "
-            "instances reject post-construction mutation"
+            "the alias-handling ConfigDict the docstring describes; the "
+            "immutability it points at is the parse-only policy StrictModel "
+            "mixes in, which this class inherits rather than restates"
         ),
     ),
     ProseObligation(model="_RequestBase", prose_hash="87c66ef8d3e5", descriptive=True),

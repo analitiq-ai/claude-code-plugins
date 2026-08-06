@@ -150,8 +150,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === shared ==============================================================
     ProseObligation(
         model="StrictModel",
-        prose_hash="4e5d877fe00c",
-        structural="extra='forbid' rejects x-* keys like any unknown key",
+        prose_hash="280a934ea6fe",
+        structural=(
+            "the config and the constructor refusals the docstring describes — "
+            "extra='forbid' rejects x-* keys like any unknown key, frozen=True "
+            "rejects every assignment to a field, and the ParseOnly mixin "
+            "refuses model_construct and model_copy(update=...); the stated "
+            "limit (a list or dict a field holds stays mutable in place) is "
+            "the boundary of that same mechanism, claimed as a limit rather "
+            "than left to be discovered"
+        ),
     ),
     ProseObligation(
         model="RetryErrorHandlingBase",

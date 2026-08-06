@@ -18,7 +18,6 @@ from typing import Any, Literal
 from zoneinfo import available_timezones
 
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     field_validator,
@@ -289,7 +288,7 @@ _ACTIVE_REQUIRES_STREAMS_RULE: dict[str, Any] = {
 }
 
 
-class PipelineAuthored(BaseModel):
+class PipelineAuthored(StrictModel):
     """The authored pipeline fields.
 
     """
@@ -385,7 +384,6 @@ class PipelineInput(PipelineAuthored):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
         populate_by_name=True,
         json_schema_extra=_ACTIVE_REQUIRES_STREAMS_RULE,
     )
