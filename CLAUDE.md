@@ -188,6 +188,20 @@ not drift-exposed and stays.
 
 ## Authoring rules
 
+**Never name a ticket or a pull request in anything this repo tracks** —
+comments, docstrings, field descriptions, prose. Not a bare number, not a
+keyword-prefixed one, not the cross-repo `org/repo` form, not a tracker URL, and
+not "the pull request you are in", "this commit", or a review round. Commit
+message bodies, PR descriptions and issue threads are the exception: there the
+tracker is the medium rather than a dangling pointer out of a file.
+
+The file outlives the change that wrote it, and the reader has the file, not the
+change. So state what is true, never when it became true — "creators are routed
+to their spec skill", not "the wiring this change extended". CI fails the build
+on the ticket shapes; nothing fails on the pull-request phrasings, because no
+pattern separates them from a CI job whose runtime subject really is the pull
+request under check. That half is on the author.
+
 `.claude/rules/` holds the how-to-behave checklists this policy implies, tracked
 so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
 state and stays ignored). Read the one that matches what you are editing:
