@@ -156,22 +156,73 @@ def validate_tags(v: list[str] | None) -> list[str] | None:
 
 # --- Strict base for authored sub-models -----------------------------------
 
-class StrictModel(BaseModel):
-    """Base for authored sub-models. Rejects all unknown keys, and is frozen.
+class ParseOnly:
+    """The parse-only policy: an instance only ever comes out of a validator.
+
+    A plain mixin rather than a base model, so the one statement of the policy
+    also reaches the root model that cannot inherit :class:`StrictModel`.
+    It closes each route that would otherwise produce or alter an instance
+    without running the validators:
+
+    - ``frozen=True`` makes ``__setattr__`` raise, so no field can be rebound
+      to a value its validators never saw;
+    - ``model_construct`` and ``model_copy(update=...)`` write straight into
+      the instance dict, frozen or not, and are refused here.
+
+    The refusals point the caller at ``model_validate``: a changed document is
+    built by parsing one, so the cross-field rules run on the result. Inside a
+    ``mode="after"`` validator, :func:`set_derived_field` is the one sanctioned
+    write.
+
+    The freeze is pydantic's, and therefore shallow: it binds a field to the
+    value the validator accepted, not the contents of a list or dict that
+    value holds. In-place mutation of such a container is outside what this
+    policy reaches.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    @classmethod
+    def model_construct(cls, *args: Any, **values: Any) -> Any:
+        """Refuse the constructor whose whole purpose is skipping validation."""
+        raise TypeError(
+            f"{cls.__name__}.model_construct skips every validator, so it can "
+            f"build a document the contract rejects. Parse instead: "
+            f"{cls.__name__}.model_validate(...)."
+        )
+
+    def model_copy(
+        self, *, update: dict[str, Any] | None = None, deep: bool = False
+    ) -> Any:
+        """Copy freely; refuse the `update=` that writes past the validators."""
+        if update:
+            raise TypeError(
+                f"{type(self).__name__}.model_copy(update=...) writes the new "
+                f"values straight into the copy without validating them. Parse "
+                f"the changed document instead: "
+                f"{type(self).__name__}.model_validate(model.model_dump(...) | changes)."
+            )
+        return super().model_copy(deep=deep)
+
+
+class StrictModel(ParseOnly, BaseModel):
+    """Base for authored sub-models. Rejects all unknown keys, and is parse-only.
 
     `x-*` extension keys are NOT allowed; the authored contract is closed.
     Provider extensions must use first-class fields rather than `x-*`
     smuggling.
 
-    ``frozen=True`` prevents post-construction mutation, so the cross-field
-    invariants checked in model validators stay valid for the lifetime of an
-    instance. A caller that needs a changed document builds one —
-    ``model_validate(model.model_dump(...) | changes)`` — so the validators
-    run again on the result. This is the one statement of the policy: every
-    contract model inherits it from here.
+    The parse-only policy is `ParseOnly`, mixed in here: a field a validator
+    checked cannot be rebound afterwards, and the constructors that skip the
+    validators are refused, so a caller that needs a changed document builds
+    one — ``model_validate(model.model_dump(...) | changes)`` — and the
+    validators run again on the result. That policy reaches every contract
+    model through this base, and it reaches as far as the mixin says it does:
+    a list or dict a field holds can still be mutated in place, which no
+    config setting prevents.
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid")
 
 
 def set_derived_field(model: BaseModel, field: str, value: Any) -> None:

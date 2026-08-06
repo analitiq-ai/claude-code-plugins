@@ -18,7 +18,6 @@ from typing import Any, Literal
 from zoneinfo import available_timezones
 
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     field_validator,

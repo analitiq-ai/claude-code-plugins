@@ -18,15 +18,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import ConfigDict, RootModel
+from pydantic import RootModel
+
+from analitiq.contracts.shared.common import ParseOnly
 
 # `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
-# setting on a root model — so this is the one contract model that has to
-# restate the frozen policy `StrictModel` owns. The tree-wide scan in
-# `test_model_immutability` is what keeps the restatement honest.
+# setting on a root model — so this model mixes in the parse-only policy
+# `StrictModel` carries for every other contract model, rather than restating
+# it. The tree-wide scan in `test_model_immutability` is what keeps that
+# honest.
 
 
-class CredentialsFile(RootModel[dict[str, Any]]):
+class CredentialsFile(ParseOnly, RootModel[dict[str, Any]]):
     """Flat `{ "<name>": <secret value> }` map for one connection.
 
     Each key is a connection-contract input (or post-auth output) name; each
@@ -36,7 +39,5 @@ class CredentialsFile(RootModel[dict[str, Any]]):
     be any JSON type (the engine string-coerces on read) — prefer strings, and
     JSON-encode a structured credential as a string for a lossless round-trip.
     """
-
-    model_config = ConfigDict(frozen=True)
 
     root: dict[str, Any]
