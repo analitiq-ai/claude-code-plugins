@@ -48,7 +48,7 @@ from typing import Annotated, Any, NamedTuple, get_args, get_origin
 
 import pytest
 from jsonschema import Draft202012Validator
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, StrictInt
 
 from analitiq.contracts.shared.introspect import contract_classes
 from analitiq.contracts.shared.types import _narrow_integral_number
@@ -368,26 +368,39 @@ def _identity(member: Any) -> Any:
 
 
 class Reach(NamedTuple):
-    """How a property admits a number.
+    """ONE way a property admits a number.
 
     ``wrap`` builds the value to substitute into the property; ``None`` means
     the number was found but the sweep has no correct way to reach it, which is
     reported rather than dropped. ``keyword`` is the collection keyword the
     number sits under, or ``None`` when the property is the number itself.
+    ``leaf`` is the numeric sub-schema this reach lands on, carried HERE rather
+    than looked up again, so the value built and the wrap it goes into always
+    come from the same branch.
+
+    A property can admit a number more than one way — ``list[int] | dict[str,
+    int]`` is two reaches — so they are collected, never collapsed to a winner.
+    Collapsing is what makes a guard go quiet: the losing branch stops being
+    swept while the field still counts as covered, so a lax alternative keeps
+    accepting values its own schema rejects with nothing to report it.
     """
 
     wrap: Callable[[Any], Any] | None
     keyword: str | None
+    leaf: dict[str, Any]
+
+    @property
+    def key(self) -> tuple[Any, ...]:
+        """Identity for de-duplication: same shape, same depth, same bound."""
+        return (self.keyword, self.wrap is None, json.dumps(self.leaf, sort_keys=True))
 
 
-_SCALAR = Reach(wrap=_identity, keyword=None)
-
-
-def _prefer(current: Reach | None, found: Reach) -> Reach:
-    """Keep the more useful of two reaches — a sweepable shape beats an unsweepable one."""
-    if current is None or (current.wrap is None and found.wrap is not None):
-        return found
-    return current
+def _dedupe(reaches: list[Reach]) -> list[Reach]:
+    """Drop reaches describing the same shape at the same depth, keeping order."""
+    seen: dict[tuple[Any, ...], Reach] = {}
+    for reach in reaches:
+        seen.setdefault(reach.key, reach)
+    return list(seen.values())
 
 
 def _member_schemas(node: dict[str, Any], keyword: str) -> list[Any]:
@@ -407,97 +420,63 @@ def _member_schemas(node: dict[str, Any], keyword: str) -> list[Any]:
     return [c for c in candidates if isinstance(c, dict)]
 
 
-def _numeric_fields(node: Any, defs: dict[str, Any], depth: int = 0) -> Reach | None:
-    """How a property's schema admits ``integer``/``number``, if it does.
+def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Reach]:
+    """EVERY way a property's schema admits ``integer``/``number``.
 
-    Returns :data:`_SCALAR` when the property IS the number, a nested
-    :class:`Reach` when the number lives inside a collection the property
-    declares (``list[int]``, ``dict[str, int]``), or ``None`` when there is no
-    number here.
+    A list, not a winner. ``list[int] | dict[str, int]`` yields two reaches:
+    one sweepable through ``items``, one not, and both are carried. Returning a
+    single reach meant a sweepable branch masked an unsweepable sibling — the
+    field read as covered while the sibling went unswept and unreported — and
+    the leaf of the branch that lost desynced from the wrap that won.
 
     Detection spans every keyword in :data:`_COLLECTION_KEYWORDS`, while only
     those in :data:`_MEMBER_WRAPS` can be substituted into. That split is
     deliberate: a number the sweep cannot reach is found and reported anyway,
     because a guard that quietly ignored a shape it did not want to think about
-    is the exact failure this file exists to prevent. Where a property admits
-    the number through more than one shape, the sweepable one wins.
+    is the exact failure this file exists to prevent.
 
     The walk stops at an object with ``properties``: that is another model's
     shape, and models are swept in their own right from :func:`contract_classes`,
     so descending would report every nested model's numbers a second time.
     """
     if depth > _MAX_DEPTH:
-        return None
+        return []
     node = _resolve(node, defs)
     if not isinstance(node, dict):
-        return None
+        return []
     if node.get("type") in ("integer", "number"):
-        return _SCALAR
+        return [Reach(_identity, None, node)]
     if _is_objectish(node) and node.get("properties"):
-        return None
-    nested: Reach | None = None
+        return []
+
+    found: list[Reach] = []
     for keyword in ("anyOf", "oneOf", "allOf"):
         for branch in node.get(keyword, []):
-            found = _numeric_fields(branch, defs, depth + 1)
-            if found is None:
-                continue
-            if found.keyword is None:  # the branch itself is the number
-                return found
-            nested = _prefer(nested, found)
+            found += _numeric_reaches(branch, defs, depth + 1)
     for keyword in _COLLECTION_KEYWORDS:
         outer = _MEMBER_WRAPS.get(keyword)
         for member in _member_schemas(node, keyword):
-            child = _numeric_fields(member, defs, depth + 1)
-            if child is None:
-                continue
-            if child.wrap is None:
-                # The number sits under a collection DEEPER IN that has no
-                # wrap (`list[dict[str, int]]`). The outer collection being
-                # substitutable is irrelevant — the value still cannot be
-                # built — so carry the child's reach up. Reporting the outer
-                # keyword instead would name a shape that is not the blocker.
-                nested = _prefer(nested, child)
-            elif outer is None:
-                nested = _prefer(nested, Reach(None, keyword))
-            else:
-                # Wraps compose: the member is built by the child's wrap, then
-                # placed in this collection. `list[list[int]]` becomes
-                # `[[value]]`, not `[value]`.
-                nested = _prefer(
-                    nested,
-                    Reach(lambda v, o=outer, i=child.wrap: o(i(v)), keyword),
-                )
-    return nested
-
-
-def _numeric_leaf(node: Any, defs: dict[str, Any], depth: int = 0) -> Any:
-    """The sub-schema that IS the number, so a numeric value can be synthesised.
-
-    :func:`synthesise` takes the first satisfiable branch of a union, which for
-    a permissive member type (``str | int | float | bool``) is the string — the
-    one spelling that would make the probe vacuous. This picks the numeric
-    branch instead, so the bad spellings are derived from a number.
-    """
-    if depth > _MAX_DEPTH:
-        raise Unsynthesisable("nesting too deep")
-    node = _resolve(node, defs)
-    if not isinstance(node, dict):
-        raise Unsynthesisable(f"not a schema object: {node!r}")
-    if node.get("type") in ("integer", "number"):
-        return node
-    for keyword in ("anyOf", "oneOf", "allOf"):
-        for branch in node.get(keyword, []):
-            try:
-                return _numeric_leaf(branch, defs, depth + 1)
-            except Unsynthesisable:
-                continue
-    for keyword in _COLLECTION_KEYWORDS:
-        for member in _member_schemas(node, keyword):
-            try:
-                return _numeric_leaf(member, defs, depth + 1)
-            except Unsynthesisable:
-                continue
-    raise Unsynthesisable("no numeric branch")
+            for child in _numeric_reaches(member, defs, depth + 1):
+                if child.wrap is None:
+                    # The number sits under a collection DEEPER IN that has no
+                    # wrap (`list[dict[str, int]]`). The outer collection being
+                    # substitutable is irrelevant — the value still cannot be
+                    # built — so the child's reach travels up unchanged.
+                    # Reporting the outer keyword would name a shape that is
+                    # not the blocker.
+                    found.append(child)
+                elif outer is None:
+                    found.append(Reach(None, keyword, child.leaf))
+                else:
+                    # Wraps compose innermost-first: the member is built by the
+                    # child's wrap, then placed in this collection, so
+                    # `list[list[int]]` becomes `[[value]]`, not `[value]`.
+                    found.append(Reach(
+                        lambda v, o=outer, i=child.wrap: o(i(v)),
+                        keyword,
+                        child.leaf,
+                    ))
+    return _dedupe(found)
 
 
 class Probe:
@@ -509,24 +488,27 @@ class Probe:
         self.defs = self.schema.get("$defs", {})
         self.properties = self.schema.get("properties") or {}
         self.validator = Draft202012Validator({**self.schema, "$defs": self.defs})
-        reach = {
+        # Every way each property admits a number — all of them, so an
+        # alternative can neither mask nor be masked by a sibling.
+        self.reaches: dict[str, list[Reach]] = {
             name: found
             for name, node in self.properties.items()
-            if (found := _numeric_fields(node, self.defs)) is not None
+            if (found := _numeric_reaches(node, self.defs))
         }
-        # How to put a probe value into each field: a scalar goes in directly,
-        # a collection member is wrapped first.
-        self.wrap: dict[str, Callable[[Any], Any]] = {
-            name: r.wrap for name, r in reach.items() if r.wrap is not None
-        }
-        self.fields = list(self.wrap)
-        # Numbers found under a collection `_MEMBER_WRAPS` has no wrap for,
-        # against the keyword carrying them. Not swept — and so reported by
-        # `test_every_numeric_field_was_reached` rather than dropped, which is
-        # the whole reason detection is wider than substitution.
-        self.unsweepable: dict[str, str | None] = {
-            name: r.keyword for name, r in reach.items() if r.wrap is None
-        }
+        self.fields = [
+            name for name, rs in self.reaches.items()
+            if any(r.wrap is not None for r in rs)
+        ]
+        # Numbers under a collection `_MEMBER_WRAPS` has no wrap for, against
+        # the keyword carrying each. Reported by
+        # `test_every_numeric_field_was_reached` rather than dropped — and
+        # reported even when a SIBLING alternative on the same field is
+        # sweepable, because that sibling proves nothing about this one.
+        self.unsweepable: list[tuple[str, str | None]] = [
+            (name, r.keyword)
+            for name, rs in self.reaches.items()
+            for r in rs if r.wrap is None
+        ]
         self._candidates: list[dict[str, Any]] | None = None
 
     @property
@@ -555,11 +537,21 @@ class Probe:
             return False
         return True
 
-    def good(self, field: str) -> Any:
-        """A legal NUMERIC value for ``field``, at the depth the number lives."""
-        return synthesise(_numeric_leaf(self.properties[field], self.defs), self.defs)
+    def sweepable(self, field: str) -> list[Reach]:
+        """The reaches of ``field`` the sweep can substitute into."""
+        return [r for r in self.reaches[field] if r.wrap is not None]
 
-    def reach(self, field: str) -> dict[str, Any] | None:
+    def good(self, reach: Reach) -> Any:
+        """A legal NUMERIC value for ``reach``, from ITS OWN leaf.
+
+        Taking the leaf off the reach rather than re-deriving it from the
+        property is what keeps the value and the wrap on the same branch. A
+        shared lookup would synthesise against one alternative's bound and
+        substitute into another's shape.
+        """
+        return synthesise(reach.leaf, self.defs)
+
+    def reach(self, field: str, reach: Reach) -> dict[str, Any] | None:
         """A document both halves accept, carrying a legal value in ``field``.
 
         A candidate is also tried stripped to its required properties. Some
@@ -569,7 +561,7 @@ class Probe:
         and adding the field under test makes the document illegal for a reason
         that has nothing to do with the number in it.
         """
-        good = self.wrap[field](self.good(field))
+        good = reach.wrap(self.good(reach))
         required = set(self.schema.get("required", ()))
         for candidate in self.documents():
             minimal = {k: v for k, v in candidate.items() if k in required}
@@ -578,6 +570,21 @@ class Probe:
                 if self.accepts(document) and self.validator.is_valid(document):
                     return base
         return None
+
+
+def _only_reach(probe: "Probe", field: str) -> Reach:
+    """The single sweepable reach of ``field``, asserted to be unambiguous.
+
+    A caller substituting one value wants one shape. If a field ever admits a
+    number two ways, that caller has to say which — so this fails rather than
+    silently picking.
+    """
+    sweepable = probe.sweepable(field)
+    assert len(sweepable) == 1, (
+        f"{probe.label}.{field} has {len(sweepable)} sweepable reaches "
+        f"({[r.keyword for r in sweepable]}); the caller must choose one"
+    )
+    return sweepable[0]
 
 
 def _probes(models: Iterable[type[BaseModel]] | None = None) -> list[Probe]:
@@ -616,7 +623,7 @@ def _sweep(probes: list[Probe] | None = None) -> tuple[list[str], list[str], set
             f"`_MEMBER_WRAPS` carries no wrap for. Add one written against "
             f"that field's shape — a {keyword!r} member has constraints a "
             f"generic wrap cannot honour."
-            for name, keyword in probe.unsweepable.items()
+            for name, keyword in probe.unsweepable
         ]
         try:
             probe.documents()
@@ -625,38 +632,48 @@ def _sweep(probes: list[Probe] | None = None) -> tuple[list[str], list[str], set
             continue
         for field in probe.fields:
             site = f"{probe.label}.{field}"
-            try:
-                base = probe.reach(field)
-            except Unsynthesisable as exc:
-                unreached.append(f"{site}: no legal value ({exc})")
-                continue
-            if base is None:
-                unreached.append(f"{site}: no document both halves accept")
-                continue
-            reached.add(site)
-            good = probe.good(field)
-            wrap = probe.wrap[field]
-            for spelling, bad in bad_spellings(good).items():
-                document = {**base, field: wrap(bad)}
-                if probe.accepts(document) and not probe.validator.is_valid(document):
-                    violations.append(
-                        f"{site}: model accepts {spelling} {bad!r}, schema rejects it "
-                        f"(document {json.dumps(document)})"
-                    )
-            # The reverse direction, measured rather than listed: an integer
-            # field whose schema accepts the float spelling of its own legal
-            # value while `Strict()` refuses it.
-            if isinstance(good, int) and not isinstance(good, bool):
-                document = {**base, field: wrap(float(good))}
-                model_ok = probe.accepts(document)
-                schema_ok = probe.validator.is_valid(document)
-                if schema_ok and not model_ok:
-                    float_gap.append(site)
-                elif model_ok and not schema_ok:
-                    violations.append(
-                        f"{site}: model accepts float-spelled {float(good)!r}, "
-                        f"schema rejects it (document {json.dumps(document)})"
-                    )
+            # EVERY sweepable alternative is probed, each with its own leaf and
+            # its own wrap. A field is unreached only when no alternative got
+            # through — one that does reach says nothing about a sibling, which
+            # is why the branch-level failures are collected rather than
+            # reported the moment the first one appears.
+            blocked: list[str] = []
+            for reach in probe.sweepable(field):
+                branch = f"{site} (via {reach.keyword or 'the bare value'})"
+                try:
+                    base = probe.reach(field, reach)
+                except Unsynthesisable as exc:
+                    blocked.append(f"{branch}: no legal value ({exc})")
+                    continue
+                if base is None:
+                    blocked.append(f"{branch}: no document both halves accept")
+                    continue
+                reached.add(site)
+                good = probe.good(reach)
+                wrap = reach.wrap
+                for spelling, bad in bad_spellings(good).items():
+                    document = {**base, field: wrap(bad)}
+                    if probe.accepts(document) and not probe.validator.is_valid(document):
+                        violations.append(
+                            f"{branch}: model accepts {spelling} {bad!r}, schema "
+                            f"rejects it (document {json.dumps(document)})"
+                        )
+                # The reverse direction, measured rather than listed: an integer
+                # field whose schema accepts the float spelling of its own legal
+                # value while `Strict()` refuses it.
+                if isinstance(good, int) and not isinstance(good, bool):
+                    document = {**base, field: wrap(float(good))}
+                    model_ok = probe.accepts(document)
+                    schema_ok = probe.validator.is_valid(document)
+                    if schema_ok and not model_ok:
+                        float_gap.append(site)
+                    elif model_ok and not schema_ok:
+                        violations.append(
+                            f"{branch}: model accepts float-spelled {float(good)!r}, "
+                            f"schema rejects it (document {json.dumps(document)})"
+                        )
+            if site not in reached:
+                unreached += blocked
     return violations, unreached, reached, float_gap
 
 
@@ -745,9 +762,10 @@ def test_the_sweep_detects_a_lax_field():
 
     probe = Probe(Lax)
     assert probe.fields == ["count"]
-    base = probe.reach("count")
+    reach = _only_reach(probe, "count")
+    base = probe.reach("count", reach)
     assert base is not None
-    spellings = bad_spellings(synthesise(probe.properties["count"], probe.defs))
+    spellings = bad_spellings(probe.good(reach))
     caught = [
         spelling
         for spelling, bad in spellings.items()
@@ -776,10 +794,11 @@ def test_detection_spans_every_collection_keyword():
         "here, so nothing checks that a number under it is detected."
     )
     for keyword, schema in per_keyword.items():
-        found = _numeric_fields(schema, {})
-        assert found is not None, f"a number under {keyword!r} went undetected"
-        assert found.keyword == keyword
-    # Which of them are substitutable is NOT asserted here: `_numeric_fields`
+        found = _numeric_reaches(schema, {})
+        assert found, f"a number under {keyword!r} went undetected"
+        assert [r.keyword for r in found] == [keyword]
+        assert found[0].leaf == members, "the reach lost the bound it landed on"
+    # Which of them are substitutable is NOT asserted here: `_numeric_reaches`
     # reads the wrap straight out of `_MEMBER_WRAPS`, so comparing the two
     # would be true by construction whatever that map contained. The
     # substitution half is proven behaviourally below instead.
@@ -848,7 +867,7 @@ def test_a_number_the_sweep_cannot_substitute_into_is_reported_not_dropped():
 
     probe = Probe(DictOfCounts)
     assert probe.fields == []
-    assert probe.unsweepable == {"counts": "additionalProperties"}
+    assert probe.unsweepable == [("counts", "additionalProperties")]
 
     # Detection alone is not the guarantee — the field has to survive the
     # filter in `_probes` and the reporting in `_sweep` to actually reach the
@@ -881,13 +900,58 @@ def test_an_unsweepable_collection_nested_under_a_sweepable_one_names_the_blocke
 
     probe = Probe(ListOfDicts)
     assert probe.fields == []
-    assert probe.unsweepable == {"rows": "additionalProperties"}
+    assert probe.unsweepable == [("rows", "additionalProperties")]
     _violations, unreached, _reached, _gap = _sweep(_probes([ListOfDicts]))
     assert len(unreached) == 1, unreached
     assert "additionalProperties" in unreached[0], unreached[0]
     assert "'items'" not in unreached[0], (
         f"named the outer collection, which is not what blocked it: {unreached[0]}"
     )
+
+
+def test_each_alternative_keeps_its_own_bound():
+    # A property admitting a number two ways carries two reaches, and each has
+    # to synthesise from ITS OWN leaf. Deriving the value from the property
+    # instead takes the first numeric leaf found — here the dict branch's
+    # `ge=100` — and substitutes it into the list branch's shape, whose bound
+    # is `le=10`. The probe then fails to reach a field that is perfectly
+    # reachable, and reports it as uncovered.
+    class Mixed(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        v: (
+            dict[str, Annotated[int, Field(ge=100)]]
+            | list[Annotated[int, Field(le=10)]]
+        ) = Field(...)
+
+    probe = Probe(Mixed)
+    by_keyword = {r.keyword: r for r in probe.reaches["v"]}
+    assert by_keyword["additionalProperties"].leaf["minimum"] == 100
+    assert by_keyword["items"].leaf["maximum"] == 10
+    # The sweepable branch reaches, using its own bound rather than the other's.
+    _violations, _unreached, reached, _gap = _sweep(_probes([Mixed]))
+    assert reached == {"Mixed.v"}
+
+
+def test_an_unsweepable_alternative_is_reported_even_beside_a_sweepable_one():
+    # `list[StrictInt] | dict[str, int]`: the list branch is strict and
+    # sweepable, the dict branch is lax and is not. If the sweepable branch
+    # were allowed to stand for the field, the field would read as covered
+    # while the lax alternative kept accepting values its own schema rejects —
+    # a hole hidden by the very guard meant to find it.
+    class Masked(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        v: list[StrictInt] | dict[str, int] = Field(...)
+
+    probe = Probe(Masked)
+    assert probe.fields == ["v"], "the sweepable branch should still be swept"
+    assert ("v", "additionalProperties") in probe.unsweepable, (
+        "the unsweepable alternative was dropped because a sibling was sweepable"
+    )
+    _violations, unreached, reached, _gap = _sweep(_probes([Masked]))
+    assert reached == {"Masked.v"}
+    assert any("additionalProperties" in u for u in unreached), unreached
 
 
 def test_nested_sweepable_collections_compose_their_wraps():
@@ -902,7 +966,7 @@ def test_nested_sweepable_collections_compose_their_wraps():
 
     probe = Probe(ListOfLists)
     assert probe.fields == ["grid"]
-    assert probe.wrap["grid"](1) == [[1]]
+    assert _only_reach(probe, "grid").wrap(1) == [[1]]
     _violations, unreached, reached, _gap = _sweep(_probes([ListOfLists]))
     assert not unreached, unreached
     assert reached == {"ListOfLists.grid"}
@@ -987,9 +1051,10 @@ def test_the_read_path_agrees_with_its_schema_in_both_directions(model, field):
     # a field a producer writes. `probe.accepts` and `probe.validator` are the
     # same pair the sweep uses, so this cannot drift from it.
     probe = Probe(model)
-    base = probe.reach(field)
+    reach = _only_reach(probe, field)
+    base = probe.reach(field, reach)
     assert base is not None, f"no document reaches {model.__name__}.{field}"
-    good = probe.good(field)
+    good = probe.good(reach)
     spellings = {
         # A JSON producer serialising a computed count emits the zero-fraction
         # float, which `type: integer` matches. This is the spelling the
@@ -1001,7 +1066,7 @@ def test_the_read_path_agrees_with_its_schema_in_both_directions(model, field):
         **bad_spellings(good),
     }
     for spelling, value in spellings.items():
-        document = {**base, field: probe.wrap[field](value)}
+        document = {**base, field: reach.wrap(value)}
         assert probe.accepts(document) == probe.validator.is_valid(document), (
             f"{model.__name__}.{field} and its published schema disagree on the "
             f"{spelling} spelling {value!r} (document {json.dumps(document)}). "
@@ -1018,10 +1083,11 @@ def test_the_read_path_takes_the_decimal_a_driver_returns(model, field):
     # it — yet it is the spelling that reaches these fields when the row is read
     # straight out of the database rather than off the wire.
     probe = Probe(model)
-    base = probe.reach(field)
+    reach = _only_reach(probe, field)
+    base = probe.reach(field, reach)
     assert base is not None
-    good = probe.good(field)
-    document = {**base, field: probe.wrap[field](Decimal(good))}
+    good = probe.good(reach)
+    document = {**base, field: reach.wrap(Decimal(good))}
     assert probe.accepts(document), (
         f"{model.__name__}.{field} refuses the `Decimal` a driver returns "
         f"(document field {Decimal(good)!r})"
