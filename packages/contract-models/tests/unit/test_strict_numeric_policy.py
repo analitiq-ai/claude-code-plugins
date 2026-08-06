@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from decimal import Decimal
 from typing import Annotated, Any, NamedTuple, get_args, get_origin
 
@@ -561,26 +561,37 @@ class Probe:
         return None
 
 
-def _probes() -> list[Probe]:
+def _probes(models: Iterable[type[BaseModel]] | None = None) -> list[Probe]:
+    """Probes for every model carrying a number, reachable or not.
+
+    ``models`` defaults to the whole contract tree; a caller passes its own so
+    the filter and the reporting below can be exercised on a shape the contract
+    does not currently declare.
+    """
     return [
         probe
         for probe in (
             Probe(model)
             for model in sorted(
-                contract_classes(), key=lambda c: (c.__module__, c.__name__)
+                contract_classes() if models is None else models,
+                key=lambda c: (c.__module__, c.__name__),
             )
         )
         if probe.fields or probe.unsweepable
     ]
 
 
-def _sweep() -> tuple[list[str], list[str], set[str], list[str]]:
-    """``(violations, unreached, reached_labels, float_gap)`` over the tree."""
+def _sweep(probes: list[Probe] | None = None) -> tuple[list[str], list[str], set[str], list[str]]:
+    """``(violations, unreached, reached_labels, float_gap)`` over the tree.
+
+    ``probes`` defaults to the whole contract tree; a caller passes its own to
+    assert what this reports for a shape the contract does not yet declare.
+    """
     violations: list[str] = []
     unreached: list[str] = []
     reached: set[str] = set()
     float_gap: list[str] = []
-    for probe in _probes():
+    for probe in (_probes() if probes is None else probes):
         unreached += [
             f"{probe.label}.{name}: a number under {keyword!r}, which "
             f"`_MEMBER_WRAPS` carries no wrap for. Add one written against "
@@ -749,8 +760,58 @@ def test_detection_spans_every_collection_keyword():
         found = _numeric_fields(schema, {})
         assert found is not None, f"a number under {keyword!r} went undetected"
         assert found.keyword == keyword
-        # Substitutable exactly when a wrap exists — no silent third state.
-        assert (found.wrap is not None) is (keyword in _MEMBER_WRAPS)
+    # Which of them are substitutable is NOT asserted here: `_numeric_fields`
+    # reads the wrap straight out of `_MEMBER_WRAPS`, so comparing the two
+    # would be true by construction whatever that map contained. The
+    # substitution half is proven behaviourally below instead.
+
+
+#: For each collection keyword, a schema declaring a number under it in the most
+#: constrained form the contract could plausibly render — a closed object, a
+#: key pattern, a fixed-arity tuple. A wrap that ignores those constraints
+#: builds a document this schema rejects, which is what makes the test below
+#: able to fail.
+_WRAP_CASES: dict[str, dict[str, Any]] = {
+    "items": {"type": "array", "items": {"type": "integer"}, "minItems": 1},
+    "prefixItems": {
+        "type": "array",
+        "prefixItems": [{"type": "integer"}, {"type": "integer"}],
+        "minItems": 2,
+    },
+    "additionalProperties": {
+        "type": "object",
+        "propertyNames": {"pattern": "^x_"},
+        "additionalProperties": {"type": "integer"},
+    },
+    "patternProperties": {
+        "type": "object",
+        "patternProperties": {"^x_": {"type": "integer"}},
+        "additionalProperties": False,
+    },
+}
+
+
+def test_every_declared_wrap_builds_a_document_its_schema_accepts():
+    # The substitution half, proven rather than named. A wrap that ignores the
+    # shape it claims to handle — a key that must match a pattern, a tuple with
+    # a declared arity — builds a document the schema rejects for a reason that
+    # has nothing to do with the number in it. The field is then reported
+    # unreachable, and the reader is sent to the synthesiser rather than here.
+    #
+    # This is the test that decides what may live in `_MEMBER_WRAPS`: the three
+    # generic wraps that once sat beside `items` all fail it.
+    assert set(_WRAP_CASES) == set(_COLLECTION_KEYWORDS), (
+        "every collection keyword needs a case here, so a wrap added later is "
+        "proven against the shape it claims to handle rather than assumed."
+    )
+    for keyword, wrap in _MEMBER_WRAPS.items():
+        document = wrap(1)
+        assert Draft202012Validator(_WRAP_CASES[keyword]).is_valid(document), (
+            f"the {keyword!r} wrap built {document!r}, which its own schema "
+            f"rejects. A wrap has to honour the shape it claims to handle, or "
+            f"the probe reports the field unreachable for a reason unrelated "
+            f"to the number in it."
+        )
 
 
 def test_a_number_the_sweep_cannot_substitute_into_is_reported_not_dropped():
@@ -769,6 +830,23 @@ def test_a_number_the_sweep_cannot_substitute_into_is_reported_not_dropped():
     probe = Probe(DictOfCounts)
     assert probe.fields == []
     assert probe.unsweepable == {"counts": "additionalProperties"}
+
+    # Detection alone is not the guarantee — the field has to survive the
+    # filter in `_probes` and the reporting in `_sweep` to actually reach the
+    # coverage arm. Asserting only `Probe.unsweepable` would keep passing if
+    # either of those dropped it, which is the exact silence this guards.
+    assert [p.label for p in _probes([DictOfCounts])] == ["DictOfCounts"], (
+        "a probe carrying only unsweepable numbers was filtered out, so its "
+        "field reaches no assertion at all"
+    )
+    _violations, unreached, reached, _gap = _sweep(_probes([DictOfCounts]))
+    assert not reached
+    assert len(unreached) == 1, unreached
+    assert unreached[0].startswith("DictOfCounts.counts:")
+    # The message has to name the real cause. Sending the reader to the
+    # synthesiser is what made this worth fixing in the first place.
+    assert "additionalProperties" in unreached[0]
+    assert "_MEMBER_WRAPS" in unreached[0]
 
 
 @pytest.mark.parametrize(
