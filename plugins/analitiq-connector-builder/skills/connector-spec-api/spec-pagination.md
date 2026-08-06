@@ -88,9 +88,9 @@ provider's `offset` counts:
 - **records returned** → `{ "ref": "response.record_count" }`
 - **the requested window** → the page size actually sent:
   `{ "ref": "runtime.batch_size" }` when no smaller `limit.max` clamps it;
-  with a cap, the clamped literal — a raw batch size would overshoot and
-  skip rows
-- a positive-integer literal is a fixed step (`1` for page-index-style
+  with a cap, the clamped size as a bare integer — a raw batch size would
+  overshoot and skip rows
+- a bare positive integer is a fixed step (`1` for page-index-style
   offsets)
 
 <!-- validate: api-endpoint#/operations/read/pagination -->
