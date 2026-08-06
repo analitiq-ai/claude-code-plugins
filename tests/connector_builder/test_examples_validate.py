@@ -89,7 +89,7 @@ def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
     it a direction and extend the classifier rather than guessing here.
     """
     found: list[tuple[Path, int, str, dict]] = []
-    for path in sorted(SKILLS_ROOT.glob("connector-spec-*/*.md")):
+    for path in sorted(SKILLS_ROOT.rglob("*.md")):
         fields = [
             (lineno, key, json.loads(raw))
             for lineno, line in enumerate(

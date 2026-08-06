@@ -245,7 +245,9 @@ def test_every_parameterized_family_is_reached_by_the_bound_check():
     """Scope comes from the manifest, not from a listed set of families.
 
     Anything the grammar parameterizes is interrogated where its position has a
-    probe alphabet; nothing selects a subset of families by name.
+    probe alphabet; nothing selects a subset of families by name. A family
+    arriving with no interrogable position at all fails here on purpose — that
+    is an alphabet to design, not a default to inherit.
     """
     reached = {
         name
@@ -346,7 +348,14 @@ def test_int_probe_alphabet_covers_every_admissible_value():
     """
     probes = arrow_grammar.param_probe_values(
         {"kind": "int", "min": 0, "max": 38, "name": "scale"})
-    assert set(probes) >= {str(v) for v in range(0, 77)}  # every decimal ceiling
+    ceilings = [
+        param["max"]
+        for spec in arrow_grammar.FAMILIES.values()
+        for param in spec.get("params") or ()
+        if param["kind"] == "int" and isinstance(param.get("max"), int)
+    ]
+    assert ceilings  # non-vacuous: read from the manifest, not typed out here
+    assert set(probes) >= {str(v) for v in range(0, max(ceilings) + 1)}
     assert "00" in probes  # leading-zero spellings the grammar forbids
 
     units = arrow_grammar.param_probe_values({"kind": "unit", "name": "u"})
