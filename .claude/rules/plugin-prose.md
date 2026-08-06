@@ -132,6 +132,11 @@ Read for it. When you touch a plugin document, check each of these:
   endpoint carrying no `replication` block. Reword that away and
   `test_prose_absence_claims.py` sits green protecting a claim nobody makes; it
   can only check the token `replication` is still somewhere in the document.
+- **A sentence that closes a set.** "…and nothing else" is what tells an agent
+  the enumeration beside it is exhaustive; drop the closure and the sentence
+  stays true while the agent starts authoring keys the contract rejects. The
+  member list is pinned against the contract; the closure is yours —
+  `no-cardinality-restatements.md` §Closure claims.
 
 The pattern: where a test pins a contract fact and the prose is what teaches it,
 the test guards the fact and **you** guard the teaching.

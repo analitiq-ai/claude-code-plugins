@@ -1087,80 +1087,17 @@ EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
 EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
-def _sentence(spec: Path, anchor: str) -> str | None:
-    """The text from `anchor` to the end of its sentence.
-
-    Prose wraps, so the text is flattened first and the span runs to the next
-    period — scoping to one line would silently read half a claim. None when
-    the anchor is absent or ambiguous, which the caller fails on rather than
-    comparing against an empty set.
-
-    Code spans are masked before the terminator is located: a cross-reference
-    like `spec-tls.md` or `type-map-read.json` carries a period that would cut
-    the claim mid-span, and the resulting token mismatch would read as contract
-    drift rather than as the parsing accident it is.
-    """
-    flat = " ".join(spec.read_text(encoding="utf-8").split())
-    if flat.count(anchor) != 1:
-        return None
-    tail = flat.split(anchor, 1)[1]
-    masked = _BACKTICKED.sub(lambda m: "`" + "_" * len(m.group(1)) + "`", tail)
-    end = masked.find(".")
-    return tail if end < 0 else tail[:end]
-
-
-@pytest.mark.parametrize(
-    "spec, anchor, closure, expected",
-    [
-        (
-            REPLICATION_SPEC,
-            "the block carries",
-            "nothing else",
-            EXPECTED_REPLICATION_KEYS,
-        ),
-        (
-            DISCOVERY_SPEC,
-            "the discovery contract",
-            "exactly these",
-            EXPECTED_DISCOVERY_ACTIONS,
-        ),
-    ],
-)
-def test_prose_closure_claims_name_exactly_the_contract_members(
-    spec: Path, anchor: str, closure: str, expected: set[str]
-) -> None:
-    """A "nothing else" sentence must enumerate exactly what the model carries."""
-    # Meta-guard: a closure phrase living inside the anchor makes the closure
-    # assertion below unfailable, and the next case added that way would look
-    # graded without being graded.
-    assert closure not in anchor, (
-        f"the closure phrase {closure!r} is part of the anchor {anchor!r}, so "
-        "asserting it proves nothing. Shorten the anchor so the closure falls "
-        "inside the sentence span."
-    )
-    sentence = _sentence(spec, anchor)
-    assert sentence is not None, (
-        f"{spec.relative_to(REPO_ROOT)}: the phrase {anchor!r} is missing or "
-        "appears more than once — the claim was reworded, so this guard would "
-        "have passed vacuously. Re-anchor it on the new wording."
-    )
-    # Grade the closure, not just the enumeration. Dropping "and nothing else"
-    # leaves a weaker-but-true sentence and would otherwise pass here, quietly
-    # retiring the claim this guard exists to hold.
-    assert closure in anchor + sentence, (
-        f"{spec.relative_to(REPO_ROOT)}: the sentence after {anchor!r} no "
-        f"longer closes the set ({closure!r} is gone). Either restore the "
-        "closure or drop this case — a guard for a claim nobody makes is worse "
-        "than no guard."
-    )
-    named = set(_BACKTICKED.findall(sentence))
-    assert named == expected, (
-        f"{spec.relative_to(REPO_ROOT)}: the closure claim after {anchor!r} "
-        f"names different members than the contract — "
-        f"prose-only={sorted(named - expected)} "
-        f"contract-only={sorted(expected - named)}. A member landed (or left) "
-        "and the sentence now says something false; reword it in this change."
-    )
+# `spec-replication.md` and `spec-resource-discovery.md` each carry a sentence
+# closing its set — "the block carries X and Y, nothing else". Both used to be
+# graded here by locating the sentence with a hand-typed English anchor and
+# asserting a hand-typed closure phrase inside it. Neither half survived its
+# own terms: the anchor un-graded the case the moment anyone reworded the
+# sentence (the failure text asked for the old wording back), and the closure
+# phrase is a verdict about what the English means, which
+# `.claude/rules/validator-claims.md` bans. `.claude/rules/no-cardinality-restatements.md`
+# carries the obligation for a reader. What a mechanism can decide — the
+# contract's own member sets — is asserted below, so a member landing or
+# leaving still fails here and points at the sentence to reword.
 
 
 def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
@@ -1306,15 +1243,11 @@ def test_type_map_rule_keys_match_schema_and_prose() -> None:
         assert contract_keys == EXPECTED_TYPE_MAP_RULE_KEYS, _set_diff_msg(
             f"{rule.__name__} keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
         )
-    # Grade the claim's existence, not only the table it defers to. Dropping
-    # "and no others" retires the closure while leaving the table intact, and
-    # this guard would have gone on passing for a sentence nobody makes.
-    claim = _sentence(TYPE_MAPS_SPEC, "carries exactly the keys named below")
-    assert claim is not None and "no others" in claim, (
-        f"{TYPE_MAPS_SPEC.relative_to(REPO_ROOT)}: the rule-shape closure claim "
-        '("carries exactly the keys named below and no others") was reworded or '
-        "removed. Re-anchor this guard, or drop it if the claim is gone."
-    )
+    # Whether the sentence above the table still CLOSES the set is a reader's
+    # call, per `.claude/rules/no-cardinality-restatements.md` — matching
+    # "no others" was a verdict about English, blind to a rewording that means
+    # the same thing and equally blind to one that means the opposite. The
+    # table it defers to is structural, so that half stays here.
     cells = _table_cells_containing("match", TYPE_MAPS_SPEC)
     assert cells is not None, (
         f"no single table in {TYPE_MAPS_SPEC.relative_to(REPO_ROOT)} has a "

@@ -51,6 +51,40 @@ decides membership**, or defer to the enumeration that follows ("named below",
 "in the table", "the sub-bullets"). Where you defer to an enumeration, make sure
 a guard pins *that* — otherwise the drift has only moved.
 
+## Closure claims
+
+A closure claim is the recommended fix's finished form: "the block carries
+`supported_methods` and `cursor_mappings`, nothing else". It states the
+membership rule (an exhaustive list) instead of its size, and it stays true as
+long as the list does.
+
+Three of them are load-bearing in this repo — `spec-replication.md`,
+`spec-resource-discovery.md`, and the rule-shape sentence in
+`spec-type-maps.md`. Each is what tells an authoring agent the set is closed,
+so an agent reading a claim that has lost its closure will author extra keys
+the validator then rejects.
+
+**What a guard covers.** The contract's own member sets are pinned in
+`tests/connector_builder/test_schema_drift.py`, so a member landing or leaving
+fails the build and the failure names the spec to reword.
+
+**What you cover.** Whether the sentence still closes the set. Deleting "and
+nothing else" leaves a sentence that is weaker, still true, and no longer
+teaching the thing it exists to teach. That verdict needs someone reading the
+sentence: a check for the phrase fires on prose that was reworded better, and
+passes on prose that says the opposite (`validator-claims.md` carries the
+argument).
+
+So on any edit to a spec carrying a closure claim, and on any change to the set
+it closes:
+
+1. Read the sentence. Does it still say the list is exhaustive?
+2. Does the list still name exactly the contract's members? The test tells you
+   when the contract moved; it never tells you the sentence went stale on its
+   own.
+3. If the closure is gone deliberately — the set opened — the guarding test for
+   that set goes in the same change, or it now guards a claim nobody makes.
+
 ## Counting words to watch
 
 `one two three four five six seven eight nine ten`, `both`, `a pair of`, and

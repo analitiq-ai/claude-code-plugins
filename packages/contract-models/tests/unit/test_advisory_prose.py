@@ -11,30 +11,30 @@ enums pydantic publishes the class docstring into the schema description;
 private helper enums ride along under the same category rather than requiring
 a per-class publishability judgment that would rot; exception classes and
 other plain classes publish nothing and are out of scope, as are enum MEMBER
-docstrings, which pydantic does not publish — a guard below keeps modal
-obligations out of them), not just sites matching a modal
-vocabulary — must carry a :class:`ProseObligation` entry binding it to an
-``ADV-*`` rule, a structural mechanism, an explicit waiver, or a
-``descriptive=True`` marking, and pinning its exact wording by content hash.
+docstrings, which pydantic does not publish) — must carry a
+:class:`ProseObligation` entry binding it to an ``ADV-*`` rule, a structural
+mechanism, an explicit waiver, or a ``descriptive=True`` marking, and pinning
+its exact wording by content hash.
 
 The lint is bidirectional so the census cannot rot in either direction: an
 uncatalogued site fails (the unenforced-obligation direction), and so do a
-stale entry, a broken hash pin (prose re-worded since its disposition was
-affirmed), and a tripwire hit (``descriptive=True`` on modal prose). All four
-groups come from one computation —
+stale entry and a broken hash pin (prose re-worded since its disposition was
+affirmed). All three groups come from one computation —
 :func:`analitiq.contracts.shared.introspect.census_report`, the same diff
 ``scripts/render_prose_census.py`` prints — so the lint and the maintenance
 tool can never disagree.
+
+Every one of those is a set or hash comparison. Whether an entry declares the
+RIGHT disposition — whether this sentence states an obligation at all — is a
+judgment, and it lives in ``.claude/rules/contract-prose.md``. A hash mismatch
+is how this suite summons the person who makes it.
 """
 from __future__ import annotations
 
-import ast
-import inspect
 import os
 import re
 import subprocess
 import sys
-import textwrap
 from enum import Enum
 from pathlib import Path
 from typing import get_args
@@ -42,17 +42,12 @@ from typing import get_args
 import pytest
 
 from analitiq.contracts.shared.advisory import all_rules
-from analitiq.contracts.shared.advisory_prose import (
-    MEMBER_DOCSTRING_WAIVERS,
-    NORMATIVE_PATTERN,
-    ProseObligation,
-)
+from analitiq.contracts.shared.advisory_prose import ProseObligation
 from analitiq.contracts.shared.introspect import (
     ProseSite,
     SiteKey,
     census_report,
     contract_classes,
-    contract_enums,
     prose_fingerprint,
 )
 from analitiq.contracts.shared.prose_census import PROSE_OBLIGATIONS
@@ -121,21 +116,6 @@ def test_census_hashes_match_live_prose():
         "census entries whose prose changed since their disposition was "
         "affirmed — re-affirm each, then run "
         "scripts/render_prose_census.py write to restamp:\n" + "\n".join(lines)
-    )
-
-
-def test_descriptive_entries_carry_no_modal_language():
-    """The tripwire: ``descriptive=True`` may not sit on modal prose.
-
-    Prose matching ``NORMATIVE_PATTERN`` that genuinely states no obligation
-    takes ``waiver=DESCRIPTIVE`` instead — marking modal text harmless must
-    cost an explicit waiver, never a one-word flag.
-    """
-    lines = [f"  {site.label} [{site.module}]" for site in REPORT.tripwires]
-    assert not REPORT.tripwires, (
-        "descriptive=True entries whose live prose carries a modal marker — "
-        "use waiver=DESCRIPTIVE (or a real disposition) for these:\n"
-        + "\n".join(lines)
     )
 
 
@@ -225,116 +205,15 @@ def test_census_texts_reference_live_names():
 #
 # The census covers every Enum's CLASS docstring; member docstrings are out of
 # scope because pydantic does not publish them into the schema. That exclusion
-# is safe only while no member docstring states an obligation — these guards
-# make the escape hatch loud instead of silent.
-
-
-def _enum_member_own_docstrings(enum_cls: type[Enum]) -> dict[str, str]:
-    """``member name -> docstring`` for members carrying their OWN docstring.
-
-    On this Python a string literal following a member assignment is NOT
-    attached to the member at runtime — ``member.__doc__`` falls back to the
-    class docstring and ``member.__dict__`` carries no ``__doc__`` — so the
-    trailing literals are recovered from the class-body AST. An explicitly
-    assigned ``member.__doc__`` (visible in ``member.__dict__``) is also
-    collected, in case a future runtime or a hand assignment attaches one.
-    """
-    docs: dict[str, str] = {}
-    tree = ast.parse(textwrap.dedent(inspect.getsource(enum_cls)))
-    body = tree.body[0].body
-    for prev, node in zip(body, body[1:]):
-        if not (
-            isinstance(node, ast.Expr)
-            and isinstance(node.value, ast.Constant)
-            and isinstance(node.value.value, str)
-        ):
-            continue
-        # An annotated assignment (`A: str = "a"`) is still an enum member;
-        # matching only ast.Assign would let its docstring escape the guard.
-        targets = (
-            prev.targets
-            if isinstance(prev, ast.Assign)
-            else [prev.target]
-            if isinstance(prev, ast.AnnAssign) and prev.value is not None
-            else []
-        )
-        for target in targets:
-            if isinstance(target, ast.Name):
-                docs[target.id] = node.value.value
-    for member in enum_cls:
-        own = member.__dict__.get("__doc__")
-        if isinstance(own, str) and own != enum_cls.__doc__:
-            docs[member.name] = own
-    return docs
-
-
-def test_member_docstring_detection_sees_the_existing_ones():
-    """Self-test: the detector must actually see the member docstrings that
-    exist today (they are source-only trailing literals, invisible at
-    runtime), or the modal guard below guards nothing."""
-    from analitiq.contracts.pipelines.data_sync import PublicRunStatus
-
-    docs = _enum_member_own_docstrings(PublicRunStatus)
-    # A superset check, not equality: members are free to omit docstrings —
-    # this test only proves the detector sees source-only trailing literals.
-    assert set(docs) >= {"QUEUED", "CANCELLED"}, (
-        "the member-docstring detector no longer sees PublicRunStatus's "
-        "source-only trailing literals; the modal guard is blind"
-    )
-    assert all(docs.values())
-
-
-def test_enum_member_docstrings_carry_no_modal_language():
-    """Member docstrings are excluded from the census (pydantic publishes
-    only the class docstring), so an obligation stated on a member would be
-    censused by nothing. Keep members descriptive: move a modal sentence to
-    the class docstring (a censused site), bind it to a rule / structural
-    mechanism there, or — for a genuinely descriptive line the frozen pattern
-    misreads — register a ``MEMBER_DOCSTRING_WAIVERS`` entry."""
-    waived = {(cls, member) for cls, member, _, _ in MEMBER_DOCSTRING_WAIVERS}
-    offenders = [
-        f"  {enum_cls.__name__}.{name}: {doc!r}"
-        for enum_cls in sorted(contract_enums(), key=lambda c: c.__name__)
-        for name, doc in sorted(_enum_member_own_docstrings(enum_cls).items())
-        if NORMATIVE_PATTERN.search(doc) and (enum_cls.__name__, name) not in waived
-    ]
-    assert not offenders, (
-        "enum MEMBER docstrings carrying a modal marker — the census does not "
-        "cover member docstrings (pydantic never publishes them), so state the "
-        "obligation in the enum's CLASS docstring (a censused site) or bind "
-        "it, and keep the member line descriptive; a line that is descriptive "
-        "despite the modal-shaped word takes a MEMBER_DOCSTRING_WAIVERS entry "
-        "in advisory_prose.py:\n" + "\n".join(offenders)
-    )
-
-
-def test_member_docstring_waivers_are_live_and_needed():
-    """The rot direction for the member-docstring registry: every waiver must
-    name a member whose own docstring still trips the modal pattern AND still
-    reads as the wording the waiver blessed (its pinned hash), with a
-    non-blank reason. A waiver outliving its docstring, its modal word, or
-    its exact wording is dead data — remove or re-affirm it."""
-    member_docs = {
-        (enum_cls.__name__, name): doc
-        for enum_cls in contract_enums()
-        for name, doc in _enum_member_own_docstrings(enum_cls).items()
-    }
-    for cls, member, pinned_hash, reason in MEMBER_DOCSTRING_WAIVERS:
-        assert reason.strip(), f"{cls}.{member}: blank waiver reason"
-        doc = member_docs.get((cls, member))
-        assert doc is not None, (
-            f"{cls}.{member}: waived member docstring no longer exists"
-        )
-        assert NORMATIVE_PATTERN.search(doc), (
-            f"{cls}.{member}: waived docstring no longer carries a modal "
-            "marker — remove the waiver"
-        )
-        assert pinned_hash == prose_fingerprint(doc), (
-            f"{cls}.{member}: waived docstring was reworded since the waiver "
-            f"was granted (pinned {pinned_hash}, live "
-            f"{prose_fingerprint(doc)}) — re-judge the new wording and "
-            "re-affirm or remove the waiver"
-        )
+# is safe only while no member docstring states an obligation, which is a
+# judgment about what a sentence says — so it is an authoring obligation in
+# `.claude/rules/contract-prose.md`, read by a person, not a guard here.
+#
+# What stood here instead: a modal-word regex over every member docstring, an
+# AST detector built to feed it, and a waiver registry with pinned hashes for
+# the lines it would misread. The registry was empty, which is the tell — a
+# guard nobody had yet needed to override, carrying the machinery for the day
+# they would. `.claude/rules/validator-claims.md` argues the general case.
 
 
 _HASH = "0" * 12  # format-valid placeholder for the refusal probes
@@ -373,32 +252,6 @@ def test_prose_obligation_refuses_descriptive_combined_with_a_disposition():
             )
     # descriptive=True alone is a complete disposition
     ProseObligation(model="X", field="y", prose_hash=_HASH, descriptive=True)
-
-
-def test_normative_pattern_tolerates_wrapped_modal_phrases():
-    """Docstrings wrap; a two-word modal split across a newline must still
-    match, or the first wrapped modal phrase silently escapes the tripwire."""
-    for phrase in (
-        "defaults\n    to",
-        "may\n  not",
-        "is\n  required\n  to",
-        "MUST NOT",
-    ):
-        assert NORMATIVE_PATTERN.search(f"lead {phrase} trail"), (
-            f"modal phrase not detected when wrapped: {phrase!r}"
-        )
-
-
-def test_normative_pattern_source_is_frozen():
-    # The freeze is deliberate: the census no longer detects obligations by
-    # modal vocabulary — every site is catalogued and the per-entry hash
-    # ratchet catches new phrasings — so this pin failing means someone
-    # widened (or narrowed) the frozen pattern. The answer to a review
-    # proposing a wider modal set is: rely on the ratchet, not this pattern.
-    assert NORMATIVE_PATTERN.pattern == (
-        r"\bmust\b|\bevery\b|\brequires\b|\bmay\s+not\b|\bdefaults\s+to\b"
-        r"|\bis\s+required\s+to\b|\bonly\b"
-    )
 
 
 def test_census_stays_importable_without_pydantic():
@@ -451,17 +304,6 @@ def test_census_report_flags_a_hash_mismatch():
     )
     report = census_report(live={site.key: site}, census=(entry,))
     assert [(m.site, m.recorded) for m in report.hash_mismatches] == [(site, stale_hash)]
-    assert not report.clean
-
-
-def test_census_report_flags_a_descriptive_tripwire():
-    site = _synthetic_site("SyntheticModel", None, "authors must do a thing")
-    entry = ProseObligation(
-        model="SyntheticModel", prose_hash=site.fingerprint, descriptive=True
-    )
-    report = census_report(live={site.key: site}, census=(entry,))
-    assert report.tripwires == (site,)
-    assert not report.hash_mismatches
     assert not report.clean
 
 

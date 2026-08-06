@@ -5,7 +5,6 @@ expressions, transports, capability blocks, and the connector documents."""
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
-    DESCRIPTIVE,
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -72,7 +71,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     # === connector: connection contract + discovery ==========================
     ProseObligation(
-        model="ConnectionContract", waiver=DESCRIPTIVE,
+        model="ConnectionContract", descriptive=True,
         prose_hash="57d2c52ff1d9",
     ),
     ProseObligation(

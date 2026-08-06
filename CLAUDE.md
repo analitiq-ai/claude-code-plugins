@@ -231,9 +231,14 @@ state and stays ignored). Read the one that matches what you are editing:
 
 - `no-drift-surfaces.md` — before hardcoding a value another source owns.
 - `no-cardinality-restatements.md` — before writing how many members a shape
-  has. Counts are the one restatement class every guard here is blind to.
+  has. Counts are the one restatement class every guard here is blind to. Also
+  owns closure claims — the "and nothing else" a set's enumeration ends with.
 - `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships
   verbatim to users and is executed by agents.
+- `contract-prose.md` — before writing a field description or docstring under
+  `analitiq.contracts`. It renders into a published schema, and a published
+  `X.Y.Z.json` is immutable. Choosing its census disposition is the judgment
+  the census itself cannot make.
 - `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
   count, "the rule above". The PR template asks you to attest you applied it.
 - `validator-claims.md` — before writing a sentence about what a tool checks or

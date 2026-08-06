@@ -8,7 +8,9 @@ the schema ``description``, and private helper enums ride along under the
 same category rather than requiring a per-class publishability judgment that
 would rot. Exception classes and other plain classes publish nothing and are
 out of scope, as are enum MEMBER docstrings — pydantic does not publish
-those; the lint suite keeps modal obligations out of them.
+those, so state an obligation in the enum's CLASS docstring, which the census
+covers, and keep the member line descriptive
+(``.claude/rules/contract-prose.md``).
 
 :mod:`advisory_rules` is the census of relational rules; this module is its
 missing other half. The registry's tests verify the integrity of rules that
@@ -34,23 +36,18 @@ vocabulary of modal words — must carry exactly one entry in
 Each entry pins its prose with ``prose_hash``
 (:func:`analitiq.contracts.shared.introspect.prose_fingerprint`): any wording
 change breaks the pin and forces the author to re-affirm the disposition. That
-hash ratchet — not modal-word detection — is what catches a new obligation
-slipping into existing prose.
-
-``descriptive=True`` versus the :data:`DESCRIPTIVE` waiver: plain
-``descriptive=True`` is only for prose carrying no :data:`NORMATIVE_PATTERN`
-marker. Prose that DOES carry a modal marker yet states no obligation takes
-``waiver=DESCRIPTIVE`` instead — the tripwire in ``census_report`` flags
-``descriptive=True`` there (its consumers, the lint suite and the CI check,
-are what fail on the finding), deliberately, so marking modal text harmless
-always costs an explicit, reviewable waiver.
+hash ratchet is what catches a new obligation slipping into existing prose.
+Whether a given sentence states an obligation at all is the author's and the
+reviewer's judgment, written down in ``.claude/rules/contract-prose.md``: a
+regex over modal words returns a verdict about what English means, which
+``.claude/rules/validator-claims.md`` bans.
 
 ``tests/unit/test_advisory_prose.py`` enforces the census bidirectionally
 through :func:`analitiq.contracts.shared.introspect.census_report` (the same
 diff ``scripts/render_prose_census.py`` prints): an uncatalogued prose site
-fails the build, and so do an entry whose site disappeared, a broken hash pin,
-and a tripwire hit. A waiver is therefore *data* — a declared, reviewable
-state — never a comment or an absence nobody can review.
+fails the build, and so do an entry whose site disappeared and a broken hash
+pin. A waiver is therefore *data* — a declared, reviewable state — never a
+comment or an absence nobody can review.
 
 This module imports no contract models (the :mod:`advisory` convention):
 entries bind to their prose sites by class name, so tooling can read the
@@ -65,21 +62,6 @@ from dataclasses import dataclass
 # introspect's top-level imports are stdlib-only (it lazy-imports pydantic),
 # so this import keeps the census readable without pulling in pydantic.
 from analitiq.contracts.shared.introspect import SiteKey
-
-#: Modal-language tripwire — FROZEN forever. The census no longer depends on
-#: this pattern to find obligations (every prose site is catalogued, and the
-#: per-entry ``prose_hash`` ratchet catches any rewording); its only remaining
-#: job is rejecting ``descriptive=True`` on prose that carries one of these
-#: markers. Its false negatives are covered by the hash ratchet — a reworded
-#: site breaks its pin and forces re-affirmation — so a review proposing to
-#: widen the modal set should rely on that mechanism instead of amending the
-#: pattern. Two-word phrases tolerate any whitespace (docstrings wrap);
-#: ``\bmust\b`` covers "must not".
-NORMATIVE_PATTERN = re.compile(
-    r"\bmust\b|\bevery\b|\brequires\b|\bmay\s+not\b|\bdefaults\s+to\b"
-    r"|\bis\s+required\s+to\b|\bonly\b",
-    re.IGNORECASE,
-)
 
 #: The exact shape of a ``prose_hash``: the first 12 hex chars of the
 #: whitespace-normalized prose's sha256 (see ``introspect.prose_fingerprint``).
@@ -121,29 +103,6 @@ ENGINE_CONDUCT = (
     "document"
 )
 
-#: The modal word is descriptive prose (a role, a permission, a scope note);
-#: the sentence states no obligation an instance could violate. This waiver —
-#: not plain ``descriptive=True`` — is the required form for MODAL prose that
-#: is harmless: the tripwire rejects ``descriptive=True`` wherever the live
-#: prose matches :data:`NORMATIVE_PATTERN`.
-DESCRIPTIVE = (
-    "no obligation stated: the modal word is descriptive prose, not a "
-    "requirement an instance could violate"
-)
-
-#: Enum MEMBER docstrings sit outside the census (pydantic publishes only the
-#: class docstring), so the member-docstring guard refuses modal language on
-#: them outright. A member line that is genuinely descriptive despite a
-#: modal-shaped word is waived HERE — data, reviewable, beside the census —
-#: as ``(enum class name, member name, prose_hash, reason)``. The hash pins
-#: the waived wording exactly like an entry's ``prose_hash``: rewording the
-#: member line voids the waiver, so a harmless "only" cannot be edited into a
-#: real obligation under an old blessing. Empty is the steady state: prefer
-#: rewording the member line over waiving it, and the guard fails a waiver
-#: whose member, modal marker, or pinned wording no longer holds.
-MEMBER_DOCSTRING_WAIVERS: tuple[tuple[str, str, str, str], ...] = ()
-
-
 # --- Census datum ------------------------------------------------------------
 
 
@@ -159,12 +118,13 @@ class ProseObligation:
     (``introspect.prose_fingerprint``).
 
     Disposition: either ``descriptive=True`` alone (the prose states no
-    obligation an instance could violate — allowed only on non-modal prose;
-    the tripwire in ``census_report`` surfaces a violation for the lint and
-    CI to fail on), or at least one of ``rule_ids`` /
+    obligation an instance could violate), or at least one of ``rule_ids`` /
     ``structural`` / ``waiver``. A mixed description (several obligations,
     differently carried) may combine those three — the waiver then names the
-    unenforced remainder.
+    unenforced remainder. Which one a sentence takes is a judgment
+    (``.claude/rules/contract-prose.md``); what this class enforces is that
+    exactly one coherent disposition is declared, and the ``prose_hash``
+    ratchet is what forces it to be re-judged when the wording moves.
     """
 
     model: str

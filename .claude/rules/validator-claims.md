@@ -30,6 +30,23 @@ property — validator behaviour, destructive routes, "the doc still teaches it"
 tone, completeness. If the check needs to know what the English means, it is a
 rule here and a review item, not code.
 
+The shape is not always a tuple of regexes. These were the same thing wearing
+other clothes, and all four are gone:
+
+| what it matched | what it decided | where the obligation lives now |
+|---|---|---|
+| a ticket-shaped token in every tracked file | this reference will not resolve | `resolvable-referents.md` |
+| `"enforced by nothing today"` in a field description | the contract still declares this half unenforced | `contract-prose.md` |
+| `"nothing else"`, `"no others"` beside an enumeration | this sentence still closes the set | `no-cardinality-restatements.md` |
+| `must` / `every` / `only` / `defaults to` over contract prose | this sentence states an obligation | `contract-prose.md` |
+
+The last one had already conceded the argument in its own docstring: the census
+it belonged to catches new obligations by hashing every prose site, so the
+pattern's only remaining job was choosing which of two spellings an author had
+to type for "harmless". It carried a waiver registry for the lines it misread.
+The registry was empty — machinery kept ready for overrides nobody had needed
+yet, which is the cheapest version of the same defect.
+
 ## Why, from what this repo measured
 
 - **It fails on improvement.** Rewriting a claim more clearly stops matching the
@@ -68,6 +85,11 @@ sentence in plugin prose stating what the validator **does or does not** check:
 When you touch plugin prose, read the sentences you changed and ask: does this
 one assert something about what a tool checks, refuses, or lets through? If yes,
 it needs one of the four above.
+
+For contract prose — field descriptions and docstrings under
+`analitiq.contracts` — the same sentence takes a census disposition instead;
+`contract-prose.md` is the rule, and the `prose_hash` ratchet is what brings
+the question back to a reader when the wording moves.
 
 ## Quick test
 

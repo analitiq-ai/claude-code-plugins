@@ -205,31 +205,19 @@ class TestOriginContainmentGapIsRecorded:
     `default_transport`, pins the read path to that single origin and has no
     write-path origin guard at all.
 
-    This is that record. It pins the disclaimer so it cannot be quietly softened
-    back into an implied guarantee, and it pins the behaviour so the day origin
-    containment lands, this test goes red and points at the prose that must
-    change with it.
+    This is that record. It pins the BEHAVIOUR, so the day origin containment
+    lands this test goes red and points at the prose that must change with it.
+
+    That the field description still declares the half unenforced is not
+    asserted here. Matching it was two hand-typed English phrases deciding what
+    a description means — the shape `.claude/rules/validator-claims.md` bans,
+    and polarity-blind besides: a description promising origin containment
+    carries "per-operation transport selection" exactly as well as one
+    disclaiming it. `.claude/rules/contract-prose.md` carries the obligation.
+    The description is `_RequestBase.transport_ref`, which these three inherit;
+    its census entry pins the wording and records the unenforced half as its
+    waiver, so softening it is a hash mismatch a reviewer must re-affirm.
     """
-
-    @pytest.mark.parametrize(
-        "model_name", ["GetReadRequest", "PostReadRequest", "WriteRequest"]
-    )
-    def test_the_unenforced_half_is_declared_unenforced(self, model_name):
-        from analitiq.contracts import endpoints
-
-        description = getattr(endpoints, model_name).model_fields[
-            "transport_ref"
-        ].description
-        assert "enforced by nothing today" in description, (
-            f"{model_name}.transport_ref no longer states that origin containment "
-            "is unenforced. Either it became enforced — in which case this test "
-            "and the description must both change — or the contract has started "
-            "promising a guarantee it does not provide."
-        )
-        assert "per-operation transport selection" in description, (
-            f"{model_name}.transport_ref no longer names what closing the "
-            "unenforced half would take; the gap would become undiscoverable."
-        )
 
     def test_a_second_origin_is_accepted_because_nothing_checks_origins(self):
         # Records the CURRENT behaviour, not the desired one: a next-page link on

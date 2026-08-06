@@ -13,7 +13,8 @@ the JSON Schema ``description`` exactly like a model docstring; private helper
 enums ride along under the same category rather than requiring a per-class
 publishability judgment that would rot. Exception classes and other plain
 classes publish nothing and are out of scope, as are enum MEMBER docstrings —
-pydantic does not publish those (a lint keeps modal obligations out of them).
+pydantic does not publish those, so an obligation belongs in the enum's
+CLASS docstring (``.claude/rules/contract-prose.md``).
 
 :func:`census_report` computes the full live-prose vs census diff in ONE
 place, consumed by both ``tests/unit/test_advisory_prose.py`` and
@@ -178,8 +179,8 @@ def _scan() -> dict[SiteKey, ProseSite]:
     contract enum's own docstring — membership by category, whether or not a
     private helper's docstring reaches a published schema. Enums contribute
     class-docstring sites only: they declare no fields, and member docstrings
-    are not published by pydantic (a lint keeps modal obligations out of
-    them).
+    are not published by pydantic, so an obligation stated on a member is
+    censused by nothing and belongs in the class docstring instead.
 
     The census binds sites by class name (the advisory registry's own
     convention), so two distinct prose-carrying classes sharing a bare name
@@ -247,18 +248,22 @@ class CensusReport:
 
     ``missing`` — live sites with no census entry; ``stale`` — entry keys
     with no live site; ``hash_mismatches`` — entries whose prose was re-worded
-    since their ``prose_hash`` was stamped; ``tripwires`` — ``descriptive=True``
-    entries whose live prose carries a ``NORMATIVE_PATTERN`` modal marker.
+    since their ``prose_hash`` was stamped.
+
+    Every field is a comparison of the census against the live tree, decided
+    by set membership or a hash. Whether a site's declared disposition is the
+    RIGHT one is not here and cannot be: it needs someone to read the sentence
+    (``.claude/rules/contract-prose.md``). A hash mismatch is how that reader
+    is summoned.
     """
 
     missing: tuple[ProseSite, ...]
     stale: tuple[SiteKey, ...]
     hash_mismatches: tuple[HashMismatch, ...]
-    tripwires: tuple[ProseSite, ...]
 
     @property
     def clean(self) -> bool:
-        return not (self.missing or self.stale or self.hash_mismatches or self.tripwires)
+        return not (self.missing or self.stale or self.hash_mismatches)
 
 
 def _site_order(key: SiteKey) -> tuple[str, str]:
@@ -274,8 +279,6 @@ def census_report(live=None, census=None) -> CensusReport:
     inputs — a diff only ever asserted empty is a diff nobody has proven can
     go non-empty.
     """
-    from analitiq.contracts.shared.advisory_prose import NORMATIVE_PATTERN
-
     if live is None:
         live = _scan()
     if census is None:
@@ -289,7 +292,6 @@ def census_report(live=None, census=None) -> CensusReport:
     )
     stale = tuple(sorted((key for key in entries if key not in live), key=_site_order))
     mismatches: list[HashMismatch] = []
-    tripwires: list[ProseSite] = []
     for key in sorted(entries, key=_site_order):
         site = live.get(key)
         if site is None:
@@ -297,11 +299,6 @@ def census_report(live=None, census=None) -> CensusReport:
         entry = entries[key]
         if entry.prose_hash != site.fingerprint:
             mismatches.append(HashMismatch(site=site, recorded=entry.prose_hash))
-        if entry.descriptive and NORMATIVE_PATTERN.search(site.text):
-            tripwires.append(site)
     return CensusReport(
-        missing=missing,
-        stale=stale,
-        hash_mismatches=tuple(mismatches),
-        tripwires=tuple(tripwires),
+        missing=missing, stale=stale, hash_mismatches=tuple(mismatches)
     )

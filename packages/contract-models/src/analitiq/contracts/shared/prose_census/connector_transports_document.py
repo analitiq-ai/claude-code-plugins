@@ -4,7 +4,6 @@ classes. Part 1 is :mod:`.connector_auth_contract`."""
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
-    DESCRIPTIVE,
     ENGINE_CONDUCT,
     ProseObligation,
 )
@@ -29,7 +28,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="HttpTransport", field="base_url", waiver=DESCRIPTIVE,
+        model="HttpTransport", field="base_url", descriptive=True,
         prose_hash="04961e5771bc",
     ),
     ProseObligation(
@@ -68,7 +67,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural="the `ConnectorKind` `Enum`'s own closed membership",
     ),
     ProseObligation(
-        model="ConnectorBase", waiver=DESCRIPTIVE,
+        model="ConnectorBase", descriptive=True,
         prose_hash="a77be2f3abf3",
     ),
     ProseObligation(
@@ -95,7 +94,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ConnectorBase", field="write_unit", waiver=DESCRIPTIVE,
+        model="ConnectorBase", field="write_unit", descriptive=True,
         prose_hash="037b6892bfbe",
     ),
     ProseObligation(

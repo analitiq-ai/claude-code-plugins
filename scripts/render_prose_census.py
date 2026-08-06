@@ -17,15 +17,15 @@ tool can never disagree.
 
 Usage:
     render_prose_census.py check    # exit 1 on any missing / stale /
-                                    # hash-mismatch / tripwire finding (CI)
+                                    # hash-mismatch finding (CI)
     render_prose_census.py write    # restamp changed hashes in the census
                                     # area files; print skeleton entries for
                                     # uncatalogued sites. Exits non-zero when
                                     # manual work remains after its edits
-                                    # (an entry it could not restamp, a stale
-                                    # entry, an uncatalogued site, a tripwire
-                                    # hit); exits 0 only when the census is
-                                    # fully current.
+                                    # (an entry it could not restamp, a
+                                    # stale entry, an uncatalogued site);
+                                    # exits 0 only when the census is fully
+                                    # current.
 
 `write` never invents dispositions: it rewrites only the `prose_hash` of
 entries whose prose was re-worded (re-affirm each disposition when committing
@@ -183,13 +183,6 @@ def check(report) -> int:
         lambda m: m.site.module,
         lambda m: f"{m.site.label}: census {m.recorded} -> live {m.site.fingerprint}",
     )
-    _print_group(
-        "tripwire — descriptive=True on modal prose (use waiver=DESCRIPTIVE "
-        "or a real disposition)",
-        report.tripwires,
-        lambda s: s.module,
-        lambda s: s.label,
-    )
     if report.clean:
         print("prose census is complete and current")
         return 0
@@ -227,20 +220,12 @@ def write(report) -> int:
             print(f"\n  # {module}")
             for site in group:
                 print(_skeleton(site))
-    _print_group(
-        "tripwire — descriptive=True on modal prose; `write` cannot fix "
-        "these: change each disposition to waiver=DESCRIPTIVE, or bind the "
-        "obligation to a rule / structural mechanism",
-        report.tripwires,
-        lambda s: s.module,
-        lambda s: s.label,
-    )
     if report.clean:
         print("prose census is complete and current — nothing to do")
         return 0
     # Restamps are the only edit `write` makes itself; everything else above
     # is manual work still to do, so the exit code must say so.
-    return 1 if (unrestamped or report.stale or report.missing or report.tripwires) else 0
+    return 1 if (unrestamped or report.stale or report.missing) else 0
 
 
 def main(argv: list[str]) -> int:
