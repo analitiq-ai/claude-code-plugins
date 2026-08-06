@@ -175,12 +175,16 @@ _BARE_ASSET_REF = re.compile(
 # captured, not discarded: it is the same claim a `§` citation makes, and
 # leaving it unread would close the section-citation hole in one form while
 # leaving it open in the other.
-# The leading lookahead drops anything with a URL scheme: an engine ADR linked
+# The scheme lookahead drops anything with a URL scheme: an engine ADR linked
 # as `https://…/docs/sql-write-path-v2.md` is a file this repo cannot open, and
 # resolving it relative to the citing document would report every such link
-# dangling.
+# dangling. It sits *after* the optional `<`, not before it: CommonMark's
+# angle-bracket spelling is a form this file deliberately reads, and with the
+# lookahead in front the `<` satisfied it — `](<https://…/adr.md>)` was
+# captured whole and reported as a broken link to a file in another repo, the
+# one outcome the exclusion exists to prevent.
 _LINK_REF = re.compile(
-    r"\]\((?!\w+:)<?([^)\s#<>]+\.md)>?(#[^)\s]*)?(?:\s+[\"'(][^)]*)?\)"
+    r"\]\(<?(?!\w+:)([^)\s#<>]+\.md)>?(#[^)\s]*)?(?:\s+[\"'(][^)]*)?\)"
 )
 
 # What GitHub keeps when it slugs a heading into a fragment: case folded,
@@ -209,8 +213,23 @@ _SLUG_DROP = re.compile(r"[^\w\- ]")
 # resumes. Both already sit around `.md` citations in the tree, so leaving
 # them out means re-wrapping a paragraph re-points its anchor at the citing
 # document and fails the build naming a file the citation never mentioned.
+# The glue class carries a colon: `` `SKILL.md`: §Rules `` is how prose
+# introduces a citation, and without it the anchor silently re-points at the
+# citing document. No `:`-glued site exists in the tree, so this comment is the
+# only record of why it is there.
+# The capture is segment-structured — directory segments and a final filename —
+# rather than one charset containing `/`. A charset that admits `/` lets the
+# match start *on* one, and `re.search` takes the leftmost start it can: in
+# `${CLAUDE_PLUGIN_ROOT}/skills/x/y.md §Heading`, the two forms the module
+# docstring teaches written as one citation, that is the `/` after the brace.
+# The binding then reports `/skills/x/y.md`, which resolves to nothing however
+# it is spelled (an absolute join replaces the ancestor; the suffix branch
+# compares against `"/" + cleaned`) — so one correct citation failed the file
+# pass on a path that exists, went ungraded by the anchor pass, and defeated
+# the per-(line, target) dedup by arriving under two different strings.
 _ANCHOR_BINDING = re.compile(
-    r"([A-Za-z0-9_./-]+\.md)(?:[`\"'(,—–*_:]|[ \t]|\n[ \t]*>?(?![ \t]*\n)){0,8}$"
+    r"((?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.md)"
+    r"(?:[`\"'(,—–*_:]|[ \t]|\n[ \t]*>?(?![ \t]*\n)){0,8}$"
 )
 
 # How far past a `§` an anchor may reach. One bound, used by both the quoted
@@ -2057,6 +2076,31 @@ def test_a_generated_changelog_is_not_graded_as_prose(plugin: str) -> None:
     assert _anchor_sites(entry)
 
 
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_the_two_taught_forms_combine_into_one_citation(plugin: str) -> None:
+    """`${CLAUDE_PLUGIN_ROOT}/skills/x/y.md §Heading` — the absolute form and
+    the section form, written as one citation, which is a shape the module
+    docstring teaches both halves of and no prose has combined yet.
+
+    The binding used to take the `/` after the brace as the start of the path,
+    because `re.search` takes the leftmost start its charset allows. One
+    correct citation then produced three wrong answers at once: the file pass
+    failed the build on `/skills/…`, a path that cannot resolve however it is
+    spelled; the anchor pass graded nothing; and the per-(line, target) dedup
+    was defeated, so one break read as two.
+    """
+    existing, heading = _fixture(plugin)
+    citing = "agents/synthetic-classifier.md"
+    doc = f"Read ${{CLAUDE_PLUGIN_ROOT}}/{existing} §{heading} before authoring.\n"
+    # One citation, one target — not the path twice under two spellings.
+    assert [target for _lineno, target in _scan_text(doc)] == [existing]
+    assert _dangling_in(doc, plugin) == []
+    # And the anchor half is graded rather than skipped.
+    sites = [(citing, site) for site in _anchor_sites(doc)]
+    assert [site.target for _rel, site in sites] == [existing]
+    assert _anchor_checks(plugin, sites) == ([], 1)
+
+
 def test_a_link_to_another_repo_is_not_a_broken_link() -> None:
     """An engine ADR linked by URL is a file this repo cannot open. Resolving
     it relative to the citing document would report every such link dangling —
@@ -2071,6 +2115,21 @@ def test_a_link_to_another_repo_is_not_a_broken_link() -> None:
     assert [
         m.group(1) for m in _LINK_REF.finditer("[a](x.md) and [b](http://y/z.md)")
     ] == ["x.md"]
+    # Every spelling of the target, since the exclusion has to survive each one
+    # this file reads. The angle-bracket form defeated it while the lookahead
+    # sat in front of the `<`: the URL was captured whole and then reported as
+    # a broken link to a file in another repo — a build failure on prose that
+    # is correct, which is exactly what the exclusion exists to prevent.
+    for spelling in (
+        "[a](<https://host/docs/adr.md>)",
+        '[a](https://host/docs/adr.md "ADR")',
+        '[a](<https://host/docs/adr.md> "ADR")',
+        "[a](https://host/docs/adr.md#a-section)",
+    ):
+        assert _links_in(spelling) == [], spelling
+    # The same spellings with a repo-relative target are still read.
+    assert _links_in("[a](<x.md>)") == [(1, "x.md", "")]
+    assert _links_in('[a](<x.md> "T")') == [(1, "x.md", "")]
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
