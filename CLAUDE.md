@@ -191,9 +191,15 @@ not drift-exposed and stays.
 **Never name a ticket or a pull request in anything this repo tracks** —
 comments, docstrings, field descriptions, prose. Not a bare number, not a
 keyword-prefixed one, not the cross-repo `org/repo` form, not a tracker URL, and
-not "the pull request you are in", "this commit", or a review round. Commit
-message bodies, PR descriptions and issue threads are the exception: there the
-tracker is the medium rather than a dangling pointer out of a file.
+not "the pull request you are in", "this commit", or a review round.
+
+The exception is a surface that IS a tracker surface: commit message bodies, PR
+descriptions and issue threads, plus the tracked files whose subject is the
+tracker itself — `CONTRIBUTING.md`, which teaches the consolidation rule by
+walking real issues, the two release-please changelogs, and the PR template.
+Those are exempt in `_EXCLUDED_PATHS` in `tests/hygiene/test_ticket_references.py`,
+each with its reason inline, and `CONTRIBUTING.md`'s exemption is graded: it
+fails if the file ever stops citing.
 
 The file outlives the change that wrote it, and the reader has the file, not the
 change. So state what is true, never when it became true — "creators are routed
@@ -202,15 +208,15 @@ on the ticket shapes; nothing fails on the pull-request phrasings, because no
 pattern separates them from a CI job whose runtime subject really is the pull
 request under check. That half is on the author.
 
-**A test may read marked text or a token. It may never judge a sentence.** If a
-check needs to decide what prose *means*, it does not belong in a test — state
-it as a rule in `.claude/rules/` and let a reader apply it. That covers regexes
-over English, curated phrase or vocabulary lists, and "the document must still
-say X" substring assertions. What a test may read instead is anything whose
-verdict comes from outside the prose: backticked identifiers, fenced blocks, a
-named heading, a generated-block marker, a name the contract owns, a path
-resolved against git or the filesystem. The authority is then the contract, git,
-a parser or a hash — never the test's own reading.
+**A check may match text to LOCATE something. It may never match text to DECIDE
+something.** Locating is lexical — a backticked identifier, a fenced block, a
+named heading, a generated-block marker, a name the contract owns, a path handed
+to git. Deciding is semantic: does this sentence assert that the validator
+checks X, does this paragraph still teach the rule. If the verdict needs to know
+what the English means, it belongs in `.claude/rules/`, applied by a reader, not
+in a test. `.claude/rules/validator-claims.md` owns this rule and the worked
+cases; the short version is that hand-curated English regexes and phrase lists
+are banned outright, whatever property they claim to measure.
 
 Three reasons, all observed here rather than predicted. A phrase pin reddens the
 build when prose is *improved*, and the failure it prints asks the author to

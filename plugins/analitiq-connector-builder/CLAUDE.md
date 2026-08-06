@@ -83,12 +83,12 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   pair** — the script overwrites it and CI fails.
 - A sentence asserting validator behavior outside a generated block must have
   a `PROBE:` fence comment naming the probe(s) that prove it placed directly
-  above it (a fence reaches only a few lines down — it cannot pin a whole
-  checklist), cite the `ADV-*` rule that enforces it in the same sentence, or
-  be registered as a `Waiver` in the script with the reason it cannot be
-  pinned. The `check` mode's trigger-phrase scan fails on anything else.
-  (Code fences are exempt spans — example output is not a claim — so never
-  quote a claim as prose inside one to dodge the gate.)
+  above it, or cite the `ADV-*` rule that enforces it in the same sentence.
+  **Nothing detects an unpinned one** — that took a list of hand-curated
+  English regexes, and `.claude/rules/validator-claims.md` says why no such
+  list belongs in a check. Recognising that a sentence makes a claim is yours;
+  what still fails the build is a fence naming a probe that does not exist, and
+  a probe nothing references.
 - A probe that stops matching the contract means the contract moved: update
   the prose AND the probe together, then re-run `write`.
 - Do NOT restate validator rules in `references/definition-of-done.md`: if an

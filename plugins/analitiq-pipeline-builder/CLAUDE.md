@@ -80,13 +80,14 @@ Rules when editing this plugin's prose:
 ## Validator-behavior claims — the repo-wide gate
 
 <!-- PROBE: pipeline-draft-runnability-unchecked -->
-A second gate, `scripts/render_validator_claims.py` (repo root),
-scans THIS plugin's prose too: a sentence stating what the validator checks or
-does not check ("runnability is not checked for a draft") must be pinned by a
+A second registry, `scripts/render_validator_claims.py` (repo root), covers
+THIS plugin's prose too: a sentence stating what the validator checks or does
+not check ("runnability is not checked for a draft") must be pinned by a
 `<!-- PROBE: <id> -->` fence placed directly above it, naming an executable
-probe in that script — or registered there as a `Waiver` with a reason. Full
-rules: the connector plugin's `CLAUDE.md`, "Validator-behavior claims". Two
-things specific to this plugin:
+probe in that script. Nothing detects an unpinned sentence — see
+`.claude/rules/validator-claims.md` — so writing one is the moment to pin it.
+Full rules: the connector plugin's `CLAUDE.md`, "Validator-behavior claims".
+Two things specific to this plugin:
 
 - The claims gate's `BEGIN GENERATED` blocks (`claim:*` and friends) are
   rendered **only into the connector plugin's tree**. Never author one here:

@@ -25,20 +25,19 @@ This module is the fix, in three parts:
    neither can drift from the measurement behind it. One block family stands
    on data instead of probes: the connector release-policy projections (see
    `_release_table`).
-3. **The scan** — a trigger-phrase gate over every markdown file in BOTH
-   plugins. A sentence that asserts validator behavior (matches
-   `CLAIM_TRIGGERS`) must be pinned: inside a generated region, within reach
-   of a `<!-- PROBE: <id>[, <id>…] -->` fence placed above it or of an
-   `ADV-*` citation beside it (see `FENCE_REACH` / `ADV_REACH`), or
-   explicitly waived in `WAIVERS` with a reason. An unpinned, unwaived claim
-   fails the build — that is what covers the class rather than the instances.
+3. **Fence bookkeeping** — a `<!-- PROBE: <id>[, <id>…] -->` fence naming an id
+   no probe defines fails the build, and a probe no block renders and no fence
+   names fails the build. Both directions are decidable: an id either resolves
+   in this registry or it does not.
+
+   What is NOT here: a gate deciding whether a SENTENCE asserts validator
+   behavior. That was a list of hand-curated English regexes, and the rule
+   against it is in `.claude/rules/validator-claims.md` — which also states the
+   authoring obligation the regexes were standing in for. Pinning a claim is
+   still required; noticing that a sentence makes one is a reader's job.
 
 Stated limits (deliberate, in the repo tradition of measured gates):
 
-* The scan is lexical. A validator claim phrased without any trigger phrase is
-  not caught; the trigger list errs toward the negative/limit claims that
-  actually rotted plus the positive-limit phrasings that burned us
-  ("accepts nothing else", "only the leading token").
 * A PROBE fence pins the *fact* (the probe) and the *association* (the fence);
   the wording of a fenced sentence is still hand-maintained. The dense clusters
   are generated for exactly that reason — prefer a generated block when a whole
@@ -1150,157 +1149,10 @@ def generated_docs() -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# The scan: unpinned validator-behavior claims fail the build
+# Probe fences
 # ---------------------------------------------------------------------------
 
-#: Sentence shapes that assert validator behavior. Lexical by design; the
-#: docstring states the coverage limit.
-CLAIM_TRIGGERS: tuple[str, ...] = (
-    r"validates?\s+(?:clean|cleanly|with\s+zero\s+findings)",
-    r"passes?\s+(?:validation|every\s+check)",
-    # "still passes." (validation) — but not "still passes the …" (an argument)
-    r"still\s+passes\b(?!\s+(?:the|a|an)\b)",
-    r"(?:is|are)\s+(?:not|never)\s+(?:checked|validated|resolved|proved|proven|enforced|caught)",
-    r"(?:never|nothing)\s+(?:checks?|checked|validates?|rejects?|proves?|enforces?|catch(?:es)?)",
-    r"(?:does|do)\s+not\s+(?:check|validate|resolve|read\s+filter)",
-    r"\bnot\s+checked\b",
-    r"\bno\s+(?:check\b|backstop|validator\s+(?:checks|will))",
-    r"\bunchecked\b",
-    r"spelling[-\s](?:checked|only)",
-    r"\bleading\s+token\b",
-    r"read-?only\s+scope",
-    r"accepts?\s+nothing\s+else",
-    r"slips?\s+past",
-)
-
-_TRIGGER_RE = re.compile("|".join(f"(?:{t})" for t in CLAIM_TRIGGERS), re.IGNORECASE)
 _FENCE_RE = re.compile(r"<!--\s*PROBE:\s*(?P<ids>[a-z0-9-]+(?:\s*,\s*[a-z0-9-]+)*)\s*-->")
-_ADV_RE = re.compile(r"ADV-[A-Z]+-\d+")
-
-
-@dataclass(frozen=True)
-class Violation:
-    path: str
-    line: int
-    text: str
-
-
-@dataclass(frozen=True)
-class Waiver:
-    """A validator claim declared unpinnable, with the reason on record.
-
-    `contains` is matched against the whole contiguous block a trigger hit
-    sits in, and one matching waiver suppresses every hit in that block. A
-    waiver that matches no trigger-carrying block is stale and fails the scan,
-    so the registry cannot accumulate dead exemptions.
-    """
-
-    path: str  # repo-relative
-    contains: str  # unique substring of the waived line
-    reason: str
-
-
-WAIVERS: tuple[Waiver, ...] = (
-    Waiver(
-        "plugins/analitiq-connector-builder/agents/db-connector-creator.md",
-        "Nothing validates the match; a",
-        "resource_discovery strategy fit is a property of the live database's "
-        "object hierarchy at run time; no authored document exists to probe.",
-    ),
-    Waiver(
-        "plugins/analitiq-connector-builder/skills/connector-builder/references/pipeline.md",
-        "type maps MUST validate clean before the phase-5 endpoint fan-out",
-        "imperative workflow instruction to the orchestrator, not a claim about "
-        "what the validator checks.",
-    ),
-    # The BigQuery "primary keys are NOT ENFORCED" waiver was dropped here: the
-    # sentence lived in the rc13 `_record_batch_commit_via_adbc` section that
-    # the rc17 write-path rewrite deleted. A waiver matching nothing is exactly
-    # what `check`'s stale-waiver arm exists to catch.
-    Waiver(
-        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-sql-write-path.md",
-        "Nothing catches this: the engine verifies",
-        "engine RUNTIME behavior (what the write path verifies after landing "
-        "rows), not this repo's validator. No model here can probe it, and the "
-        "engine is the authority — so it is declared rather than pinned.",
-    ),
-    Waiver(
-        "plugins/analitiq-pipeline-builder/agents/stream-creator.md",
-        "do not validate — those are downstream steps",
-        "describes the agent's own role boundary, not validator behavior.",
-    ),
-)
-
-
-def _code_fence_spans(lines: list[str]) -> list[tuple[int, int]]:
-    """(start, end) line-index spans of ``` / ~~~ code fences.
-
-    Paired line-wise, tolerating indentation (fences inside list items are
-    common in both plugins) — a single multiline regex anchored at column 0
-    mis-paired an indented opener with a later column-0 closer and silently
-    swallowed the prose between two code blocks. An unclosed fence runs to
-    EOF, which can only over-exempt the tail of that one file, loudly visible
-    in the doc itself.
-    """
-    spans: list[tuple[int, int]] = []
-    open_at: int | None = None
-    marker = ""
-    for i, line in enumerate(lines):
-        stripped = line.lstrip()
-        if open_at is None:
-            if stripped.startswith("```") or stripped.startswith("~~~"):
-                open_at, marker = i, stripped[:3]
-        elif stripped.startswith(marker):
-            spans.append((open_at, i))
-            open_at = None
-    if open_at is not None:
-        spans.append((open_at, len(lines) - 1))
-    return spans
-
-
-def _line_spans(text: str, known_block_ids: set[str]) -> list[tuple[int, int]]:
-    """(start, end) line-index spans the scan treats as pinned.
-
-    Two kinds: generated regions whose block id a real renderer owns (an
-    unknown id pins nothing — see `_known_block_ids_for`), and code fences
-    (example output is not a claim).
-    """
-    lines = text.splitlines()
-    spans = _code_fence_spans(lines)
-    offsets = [0]
-    for line in text.splitlines(keepends=True):
-        offsets.append(offsets[-1] + len(line))
-
-    def to_line(pos: int) -> int:
-        lo, hi = 0, len(offsets) - 1
-        while lo < hi:
-            mid = (lo + hi + 1) // 2
-            if offsets[mid] <= pos:
-                lo = mid
-            else:
-                hi = mid - 1
-        return lo
-
-    for match in _BLOCK_RE.finditer(text):
-        if match.group("id") in known_block_ids:
-            spans.append((to_line(match.start()), to_line(match.end())))
-    return spans
-
-
-def _blocks(lines: list[str]) -> list[tuple[int, int]]:
-    """Contiguous runs of non-blank lines, as (start, end) inclusive indexes."""
-    runs: list[tuple[int, int]] = []
-    start: int | None = None
-    for i, line in enumerate(lines):
-        if line.strip():
-            if start is None:
-                start = i
-        elif start is not None:
-            runs.append((start, i - 1))
-            start = None
-    if start is not None:
-        runs.append((start, len(lines) - 1))
-    return runs
 
 
 def _scannable_docs() -> list[Path]:
@@ -1318,55 +1170,6 @@ def _scannable_docs() -> list[Path]:
     return docs
 
 
-def _normalize(text: str) -> str:
-    """Strip markdown emphasis so `validates **clean**` still matches a trigger.
-
-    Backticks, asterisks and underscores are removed; newlines are kept so a
-    match position still maps back to a source line.
-    """
-    return re.sub(r"[*_`]", "", text)
-
-
-#: A fence pins its own line and the lines below it, this far. Directional on
-#: purpose: fences are placed ABOVE the sentence they prove, and a downward-only
-#: reach stops a fence from retroactively pinning an unrelated claim that
-#: happens to sit just above it in the same list.
-FENCE_REACH = 10
-#: An ADV-* citation pins its own sentence, which may wrap — a couple of lines
-#: either side, no more. A citation of rule X two paragraphs up must not exempt
-#: a negative claim about Y.
-ADV_REACH = 2
-
-
-def _hit_is_pinned(line_index: int, block: tuple[int, int],
-                   pinned_spans: list[tuple[int, int]],
-                   fence_lines: list[int], adv_lines: list[int]) -> bool:
-    start, end = block
-    if any(s <= line_index <= e for s, e in pinned_spans):
-        return True
-    if any(start <= f <= end and f <= line_index <= f + FENCE_REACH
-           for f in fence_lines):
-        return True
-    return any(start <= a <= end and abs(a - line_index) <= ADV_REACH
-               for a in adv_lines)
-
-
-def _matching_waiver(rel: str, window: str, trigger_text: str) -> Waiver | None:
-    """The waiver covering this hit, if any.
-
-    Both conditions are load-bearing: `contains in window` binds the waiver to
-    the hit's location, and `trigger in contains` binds it to this specific
-    trigger phrase — without the second, a new claim appended beside a waived
-    sentence would ride its neighbour's waiver.
-    """
-    return next(
-        (w for w in WAIVERS
-         if w.path == rel
-         and (w.contains in window or w.contains in _normalize(window))
-         and trigger_text in _normalize(w.contains)),
-        None)
-
-
 def _dangling_fence_ids(rel: str, text: str) -> list[str]:
     return [
         f"{rel}: fence names unknown probe {fence_id!r}"
@@ -1376,54 +1179,22 @@ def _dangling_fence_ids(rel: str, text: str) -> list[str]:
     ]
 
 
-def _scan_doc(path: Path) -> tuple[list[Violation], list[str], set[Waiver]]:
-    text = path.read_text(encoding="utf-8")
-    rel = path.relative_to(REPO_ROOT).as_posix()
-    lines = text.splitlines()
-    pinned_spans = _line_spans(text, _known_block_ids_for(path))
-    fence_lines = [i for i, line in enumerate(lines) if _FENCE_RE.search(line)]
-    adv_lines = [i for i, line in enumerate(lines) if _ADV_RE.search(line)]
+def dangling_fence_ids() -> list[str]:
+    """Probe fences naming an id no probe defines.
 
-    violations: list[Violation] = []
-    used: set[Waiver] = set()
-    for block in _blocks(lines):
-        start, end = block
-        normalized = _normalize("\n".join(lines[start:end + 1]))
-        for match in _TRIGGER_RE.finditer(normalized):
-            line_index = start + normalized[:match.start()].count("\n")
-            if _hit_is_pinned(line_index, block, pinned_spans, fence_lines, adv_lines):
-                continue
-            window = "\n".join(
-                lines[max(start, line_index - 1):min(end, line_index + 1) + 1])
-            waiver = _matching_waiver(rel, window, match.group(0))
-            if waiver is not None:
-                used.add(waiver)
-                continue
-            violations.append(Violation(rel, line_index + 1, match.group(0)))
-    return violations, _dangling_fence_ids(rel, text), used
-
-
-def scan() -> tuple[list[Violation], list[str], list[Waiver]]:
-    """Returns (violations, dangling fence ids, stale waivers).
-
-    Matching runs over each contiguous block's joined, emphasis-normalized text,
-    so a trigger phrase wrapped across lines ("Nothing\\nvalidates …") is still
-    caught. Pinning is windowed, not block-wide: a fence covers its own line
-    plus `FENCE_REACH` lines below it, an ADV citation `ADV_REACH` lines either
-    side, and a waiver's `contains` must match within one line of the hit —
-    a 50-line checklist is one contiguous "block", and block-wide pinning let
-    one fence exempt every other bullet in it.
+    All that survives of the old prose scan, and the only part of it a
+    mechanism could ever decide: a fence either names a registered probe or it
+    does not. Whether a SENTENCE asserts validator behaviour is a judgment, and
+    judgments live in `.claude/rules/validator-claims.md`.
     """
-    violations: list[Violation] = []
-    dangling: list[str] = []
-    used_waivers: set[Waiver] = set()
-    for path in _scannable_docs():
-        doc_violations, doc_dangling, doc_used = _scan_doc(path)
-        violations.extend(doc_violations)
-        dangling.extend(doc_dangling)
-        used_waivers |= doc_used
-    stale = [w for w in WAIVERS if w not in used_waivers]
-    return violations, dangling, stale
+    return [
+        problem
+        for path in _scannable_docs()
+        for problem in _dangling_fence_ids(
+            path.relative_to(REPO_ROOT).as_posix(),
+            path.read_text(encoding="utf-8"),
+        )
+    ]
 
 
 def fence_probe_ids() -> set[str]:
@@ -1475,27 +1246,13 @@ def _render_docs(docs: list[Path], write: bool) -> list[str]:
 
 def _check_problems(stale_docs: list[str]) -> list[str]:
     """Every gate failure as a printable message; empty means the gate holds."""
-    violations, dangling, stale_waivers = scan()
+    dangling = dangling_fence_ids()
     referenced = rendered_block_probe_ids() | fence_probe_ids()
     unreferenced = sorted(set(PROBES_BY_ID) - referenced)
     unembedded = sorted(set(RENDERERS) - embedded_block_ids())
     broken_markers = malformed_marker_docs()
-    # Generated regions are pinned spans for the scan, an exemption earned by
-    # the probes behind them — which the release-policy blocks don't have. A
-    # validator claim rendered into one would ship looking machine-pinned
-    # while backed by nothing, so their output faces the same trigger gate.
-    unprobed_claims = sorted(
-        block_id for block_id in _release_table().RENDERERS
-        if _TRIGGER_RE.search(_normalize(RENDERERS[block_id]()))
-    )
 
     problems: list[str] = []
-    if unprobed_claims:
-        problems.append(
-            "release-policy block(s) state validator behavior: "
-            f"{', '.join(unprobed_claims)} — these blocks stand on data, not "
-            "probes, so such a sentence is pinned by nothing; carry it as a "
-            "Claim with a probe instead, or reword it.")
     if unembedded:
         problems.append(
             f"renderer(s) with no embedded block: {', '.join(unembedded)} — "
@@ -1511,20 +1268,8 @@ def _check_problems(stale_docs: list[str]) -> list[str]:
         problems.append(
             f"{len(stale_docs)} document(s) stale: {', '.join(stale_docs)}\n"
             "Run: python3 scripts/render_validator_claims.py write")
-    if violations:
-        listing = "\n".join(f"  {v.path}:{v.line}: {v.text[:120]}" for v in violations)
-        problems.append(
-            f"{len(violations)} unpinned validator-behavior claim(s):\n{listing}\n"
-            "Each flagged sentence states what the validator does or does not "
-            "check. Pin it: move it into a generated block, add a "
-            "`<!-- PROBE: <id> -->` fence backed by a probe in "
-            "scripts/render_validator_claims.py, cite the ADV-* rule that enforces "
-            "it, or register a Waiver with the reason it cannot be pinned.")
     if dangling:
         problems.append("dangling probe fences:\n  " + "\n  ".join(dangling))
-    for waiver in stale_waivers:
-        problems.append(
-            f"stale waiver (matches nothing): {waiver.path}: {waiver.contains!r}")
     if unreferenced:
         problems.append(
             f"unreferenced probe(s): {', '.join(unreferenced)} — a probe must "
