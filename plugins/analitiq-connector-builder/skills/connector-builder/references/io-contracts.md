@@ -314,8 +314,7 @@ access and may not guess field types).
           },
           "severity": { "type": "string", "enum": ["error", "warning"] },
           "path": { "type": "string", "description": "JSON pointer into the document" },
-          "message": { "type": "string" },
-          "rule_doc": { "type": "string" }
+          "message": { "type": "string" }
         }
       }
     }
@@ -353,7 +352,8 @@ access and may not guess field types).
               "type-map-rule-removed", "type-map-canonical-changed",
               "optional-input-added", "optional-output-added",
               "optional-endpoint-added", "type-map-rule-added", "bug-fix",
-              "doc-fix", "tuning", "type-map-rule-reordered"
+              "doc-fix", "tuning", "capability-block-added",
+              "type-map-rule-reordered"
             ]
           },
           "note": { "type": "string" }

@@ -67,7 +67,7 @@ the connector release table:
 <!-- BEGIN GENERATED: release-table -->
 | Bump | Meaning | Examples |
 |---|---|---|
-| Patch | No connection drift. | Bug fixes, doc fixes, transport implementation tuning, type-map rule reordered (when the reorder does not change first-match resolution for any existing input). |
+| Patch | No connection drift. | Bug fixes, doc fixes, transport implementation tuning, top-level capability block introduced where the connector carried none (`sql_capabilities`, `error_map`), type-map rule reordered (when the reorder does not change first-match resolution for any existing input). |
 | Minor | Additive, non-drifting. | Optional input added, optional discovery output added, optional endpoint added, type-map rule added. |
 | Major | Possible connection drift. | Input removed, input renamed, input type changed, input enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, `sql_capabilities` shape fact narrowed, removed, or replaced with one an existing connection may not satisfy (any `stage.scope` or `stage.schema` change), type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
 <!-- END GENERATED: release-table -->

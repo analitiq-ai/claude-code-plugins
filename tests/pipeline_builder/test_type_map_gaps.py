@@ -25,7 +25,7 @@ pytest.importorskip("analitiq.validator",
 
 CONNECTOR_READ = [
     {"match": "exact", "native": "CITEXT", "canonical": "Utf8"},
-    {"match": "regex", "native": "^NUMERIC\\((?<precision>[0-9]+),\\s*(?<scale>[0-9]+)\\)$",
+    {"match": "regex", "native": "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$",
      "canonical": "Decimal128(${precision}, ${scale})"},
 ]
 CONNECTOR_WRITE = [
