@@ -1079,6 +1079,9 @@ DISCOVERY_SPEC = (
     PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-resource-discovery.md"
 )
 TYPE_MAPS_SPEC = PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-type-maps.md"
+IO_CONTRACTS = (
+    PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "io-contracts.md"
+)
 
 EXPECTED_REPLICATION_KEYS = {"supported_methods", "cursor_mappings"}
 EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
@@ -1469,63 +1472,110 @@ def test_kinds_match_schema(connector_schema: dict) -> None:
     )
 
 
-def test_write_coverage_probe_gaps_are_documented() -> None:
-    """`spec-type-maps.md` names the families the write-coverage check misses.
+def test_write_coverage_probes_derive_from_the_grammar_manifest() -> None:
+    """Every canonical family is probed or explicitly excluded — no third state.
 
-    That warning is the only signal an author gets about write-map gaps, so the
-    prose tells them which families it does NOT exercise. If a future validator
-    starts probing one of them, the prose becomes a false warning about a check
-    that now works — and if it stops probing another, the list is incomplete.
-    Assert the documented gaps against the real probe set.
+    The probe set is the one restatement of the Arrow vocabulary that used to
+    stand on nothing: its coverage was compared against the prose describing
+    its own omissions, so a family the engine added went unprobed with the
+    suite green. Pin it to the manifest instead, in both directions — a family
+    the manifest gains must be probed or named in the exclusion registry, and
+    an exclusion naming no family is dead.
+    """
+    from analitiq.contracts import arrow_grammar
+    from analitiq.validator import connectors
+
+    probes = getattr(connectors, "_WRITE_VOCABULARY_PROBES", ())
+    excluded = getattr(connectors, "_WRITE_PROBE_EXCLUDED_FAMILIES", None)
+    assert probes and excluded is not None, (
+        "_WRITE_VOCABULARY_PROBES / _WRITE_PROBE_EXCLUDED_FAMILIES not found — "
+        "the validator was restructured; recheck the write-coverage guidance in "
+        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-type-maps.md."
+    )
+
+    probed = {probe.partition("(")[0] for probe in probes}
+    families = set(arrow_grammar.FAMILY_NAMES)
+    assert probed | set(excluded) == families, _diff_msg(
+        "write-coverage family coverage",
+        families,
+        probed | set(excluded),
+        "every family in the vendored engine grammar must be probed or carry an "
+        "entry in _WRITE_PROBE_EXCLUDED_FAMILIES naming why it is not.",
+    )
+    assert not (probed & set(excluded)), (
+        f"families both probed and excluded: {sorted(probed & set(excluded))}"
+    )
+    assert all(reason.strip() for reason in excluded.values()), (
+        "every exclusion states its reason — an unexplained one is the "
+        "by-omission list this guard replaced."
+    )
+
+    # Each probe is a real canonical, so a coverage gap is never an author
+    # chasing a spelling the vocabulary would reject anyway.
+    canonical = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
+    unmatched = [probe for probe in probes if not canonical.fullmatch(probe)]
+    assert not unmatched, f"probes are not canonical types: {unmatched}"
+
+    # The optional-parameter policy the tz-aware Timestamp gap rests on.
+    assert "Timestamp(SECOND)" in probes and not any(
+        "UTC" in probe for probe in probes
+    ), "a probe now carries an optional parameter — the spec's tz-aware gap moved"
+
+
+def test_write_coverage_exclusions_are_named_in_the_spec() -> None:
+    """The by-hand list an author reads must name exactly the excluded families.
+
+    The exclusions are data in the validator now; this is the guard that keeps
+    the prose deferring to them rather than drifting into a second list.
     """
     from analitiq.validator import connectors
 
-    probes = set(getattr(connectors, "_WRITE_VOCABULARY_PROBES", ()))
-    assert probes, (
-        "_WRITE_VOCABULARY_PROBES not found — the validator was restructured; "
-        "recheck the write-coverage guidance in "
-        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-type-maps.md."
+    section = TYPE_MAPS_SPEC.read_text(encoding="utf-8")
+    start = section.index("A clean warning is not proof of coverage")
+    window = section[start:section.index("Mind precision survival", start)]
+    missing = sorted(
+        family for family in connectors._WRITE_PROBE_EXCLUDED_FAMILIES
+        if f"`{family}`" not in window
+    )
+    assert not missing, (
+        f"write-coverage exclusions {missing} are not named in the by-hand list "
+        f"in {TYPE_MAPS_SPEC.relative_to(REPO_ROOT)} — an author gets no signal "
+        "for them from the validator and none from the prose either."
     )
 
-    # Families spec-type-maps.md tells authors to verify by hand.
-    documented_gaps = {
-        "FixedSizeBinary": lambda p: p.startswith("FixedSizeBinary"),
-        "Time32": lambda p: p.startswith("Time32"),
-        "tz-aware Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" in p,
-        "Decimal256": lambda p: p.startswith("Decimal256"),
-    }
-    now_probed = sorted(
-        name for name, matches in documented_gaps.items() if any(matches(p) for p in probes)
-    )
-    assert not now_probed, (
-        f"write-coverage now probes {now_probed}, which "
-        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-type-maps.md still lists as unprobed. "
-        "Drop them from that list."
-    )
 
-    # The other direction: families the prose implies ARE probed. Without this,
-    # the check only catches gaps closing, never new gaps opening — and the
-    # prose would quietly become an incomplete list of what to verify by hand.
-    expected_probed = {
-        "Boolean": lambda p: p == "Boolean",
-        "Json": lambda p: p == "Json",
-        # The bare shape markers reach the write map verbatim from API-sourced
-        # endpoint documents (issue #75) — the probe set must keep exercising
-        # them or the spec's container-coverage rule loses its only automated
-        # signal.
-        "Object": lambda p: p == "Object",
-        "List": lambda p: p == "List",
-        "Decimal128": lambda p: p.startswith("Decimal128"),
-        "bare Timestamp": lambda p: p.startswith("Timestamp(") and "UTC" not in p,
-        "Utf8": lambda p: p == "Utf8",
-    }
-    stopped_probing = sorted(
-        name for name, matches in expected_probed.items() if not any(matches(p) for p in probes)
+def test_diagnostics_properties_match_the_finding_constructor() -> None:
+    """The `Diagnostics` finding shape, pinned to the only thing that builds one.
+
+    `finding()` is the sole construction point across every document kind and
+    its signature is closed, so a property the fragment names that the
+    signature does not is a field no consumer will ever see — which is how
+    `rule_doc` survived in the prose. The enum inside is pinned separately by
+    `test_validator_ids_match_package`; nothing pinned the property SET.
+    """
+    import inspect
+
+    from analitiq.validator._core import finding
+
+    doc = IO_CONTRACTS.read_text(encoding="utf-8")
+    fragment = doc[doc.index("## Diagnostics"):doc.index("## DriftVerdict")]
+    body = json.loads(fragment[fragment.index("{"):fragment.rindex("}") + 1])
+    item = body["properties"]["findings"]["items"]
+    stated = set(item["properties"])
+    produced = set(inspect.signature(finding).parameters)
+    assert stated == produced, _diff_msg(
+        "Diagnostics finding properties",
+        produced,
+        stated,
+        "update the Diagnostics fragment in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md "
+        "to match the finding() signature — a property nothing constructs is "
+        "prose an agent will look for and never find.",
     )
-    assert not stopped_probing, (
-        f"write-coverage no longer probes {stopped_probing}, so authors get no "
-        "warning for those families. Add them to the by-hand list in "
-        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-type-maps.md."
+    assert set(item["required"]) == produced, (
+        f"Diagnostics `required` {sorted(item['required'])} does not match the "
+        f"finding() signature {sorted(produced)} — every argument is positional "
+        "and non-optional, so every property is required."
     )
 
 

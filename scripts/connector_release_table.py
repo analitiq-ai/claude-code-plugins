@@ -105,6 +105,19 @@ CATEGORIES: tuple[Category, ...] = (
     Category("doc-fix", "patch", "Doc fixes"),
     Category("tuning", "patch", "Transport implementation tuning"),
     Category(
+        "capability-block-added",
+        "patch",
+        "Top-level capability block introduced where the connector carried "
+        "none (`sql_capabilities`, `error_map`)",
+        note=(
+            "a top-level capability block the connector did not carry before "
+            "(`sql_capabilities`, `error_map`) appears for the first time — "
+            "neither an input, an output nor an endpoint. Introducing one is "
+            "strictly enabling, so no saved connection drifts; narrowing or "
+            "removing it afterwards is `sql-capabilities-changed`"
+        ),
+    ),
+    Category(
         "type-map-rule-reordered",
         "patch",
         "Type-map rule reordered (when the reorder does not change "

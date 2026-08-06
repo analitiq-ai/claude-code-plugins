@@ -18,7 +18,7 @@ connection, and database-endpoint rules are excluded — they belong to other
 tools, and database endpoints are generated at runtime by the connector's
 `resource_discovery`, never authored here.
 
-**60 rules** across 4 resources.
+**61 rules** across 4 resources.
 
 ## connector
 | ID | Rule | Enforced on |
@@ -83,12 +83,13 @@ tools, and database endpoints are generated at runtime by the connector's
 | ADV-TMAP-001 | A schemaless or structured native type must not resolve to a scalar canonical type. | `TypeMapReadExactRule` |
 | ADV-TMAP-002 | A schemaless or structured native pattern must not resolve to a scalar canonical type. | `TypeMapReadRegexRule` |
 | ADV-TMAP-003 | Every ${name} in the canonical render must name a capture group in the native pattern. | `TypeMapReadRegexRule` |
-| ADV-TMAP-004 | A native pattern with named captures must not map to a canonical that discards them. | `TypeMapReadRegexRule` |
+| ADV-TMAP-004 | A native pattern with named captures must not map to a canonical whose parenthesised parameters are all hardcoded, discarding them. The detector keys on the parentheses, so a capture dropped into a canonical carrying none is out of scope. | `TypeMapReadRegexRule` |
 | ADV-TMAP-005 | A regex read rule's native must compile as an ECMA-262 regex; Python-only (?P…) syntax and otherwise-invalid patterns are rejected. | `TypeMapReadRegexRule` |
 | ADV-TMAP-006 | A regex read rule's canonical must be a valid (optionally ${name}-templated) Arrow type matched full-string, so a trailing newline is rejected. | `TypeMapReadRegexRule` |
 | ADV-TMAP-007 | A ${...} placeholder in a canonical render must be well-formed: no empty ${} and no unclosed ${. | `TypeMapReadRegexRule` |
 | ADV-TMAP-008 | A write exact rule's canonical must satisfy the cross-parameter Arrow bounds (Decimal scale <= precision), and its native DDL render's ${...} placeholders must be well-formed. | `TypeMapWriteExactRule` |
 | ADV-TMAP-009 | A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed. | `TypeMapWriteRegexRule` |
+| ADV-TMAP-010 | A ${name} capture feeding a canonical parameter position must be unable to match a value that position refuses, where a cross-parameter bound (Decimal scale <= precision) resolves against the literal sibling present; and a literal in a bounded position must hold against every value the capture it is bounded by can match. | `TypeMapReadRegexRule` |
 
 ## shared
 | ID | Rule | Enforced on |

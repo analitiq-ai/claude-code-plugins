@@ -483,7 +483,7 @@ ADVISORY_RULES: list[AdvisoryRule] = [
     ),
     AdvisoryRule(
         id="ADV-TMAP-004", kind="custom", resource="type-map",
-        prose="A native pattern with named captures must not map to a canonical that discards them.",
+        prose="A native pattern with named captures must not map to a canonical whose parenthesised parameters are all hardcoded, discarding them. The detector keys on the parentheses, so a capture dropped into a canonical carrying none is out of scope.",
         targets=("TypeMapReadRegexRule",), enforcer="_check",
     ),
     AdvisoryRule(
@@ -510,6 +510,11 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-TMAP-009", kind="custom", resource="type-map",
         prose="A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed.",
         targets=("TypeMapWriteRegexRule",), enforcer="_check",
+    ),
+    AdvisoryRule(
+        id="ADV-TMAP-010", kind="custom", resource="type-map",
+        prose="A ${name} capture feeding a canonical parameter position must be unable to match a value that position refuses, where a cross-parameter bound (Decimal scale <= precision) resolves against the literal sibling present; and a literal in a bounded position must hold against every value the capture it is bounded by can match.",
+        targets=("TypeMapReadRegexRule",), enforcer="_check",
     ),
     # --- pipeline -----------------------------------------------------------
     AdvisoryRule(

@@ -213,6 +213,70 @@ def test_cross_ref_int_bound_resolves_to_referenced_ceiling():
     assert not templated.fullmatch("Decimal128(${p}, 99)")
 
 
+def test_cross_ref_bound_resolves_to_the_literal_sibling_present():
+    """The family-level pattern can only know the referenced param's own
+    ceiling; a caller holding one concrete canonical knows the literal sibling,
+    and that is the bound the position actually admits."""
+    params = arrow_grammar.FAMILIES["Decimal128"]["params"]
+    scale = next(p for p in params if p["name"] == "scale")
+
+    assert arrow_grammar.resolved_int_bounds(scale, params) == (0, 38)
+    assert arrow_grammar.resolved_int_bounds(scale, params, {"precision": "5"}) == (0, 5)
+    # A templated sibling carries no literal, so the envelope stands.
+    assert arrow_grammar.resolved_int_bounds(
+        scale, params, {"precision": "${p}"}) == (0, 38)
+
+    admits = re.compile(arrow_grammar._param_literal_pattern(scale, params, {"precision": "5"}))
+    assert admits.fullmatch("5") and not admits.fullmatch("6")
+
+
+def test_unsatisfiable_resolved_bound_admits_nothing():
+    """A resolved ceiling below the floor is an empty position, not a crash."""
+    params = [
+        {"kind": "int", "min": 1, "max": 38, "name": "precision"},
+        {"kind": "int", "min": 2, "max": "precision", "name": "scale"},
+    ]
+    pattern = re.compile(
+        arrow_grammar._param_literal_pattern(params[1], params, {"precision": "1"}))
+    assert not any(pattern.fullmatch(str(v)) for v in range(0, 40))
+
+
+def test_cross_param_families_are_derived_not_listed():
+    """Scope of the templated bound check comes from the manifest."""
+    assert set(arrow_grammar.CROSS_PARAM_FAMILY_NAMES) == {
+        name for name, spec in arrow_grammar.FAMILIES.items()
+        if any(isinstance(p.get(k), str)
+               for p in spec.get("params") or () for k in ("min", "max"))
+    }
+    assert arrow_grammar.CROSS_PARAM_FAMILY_NAMES  # non-vacuous
+
+
+def test_template_bounds_ignore_a_family_without_a_cross_bound():
+    """A capture that can match anything is left alone outside the scope."""
+    arrow_grammar.validate_template_bounds(
+        "Timestamp(${u})", lambda name, probes: frozenset(probes))
+
+
+def test_template_bounds_skip_an_unreadable_capture():
+    """None means "cannot be read" and must not be read as "matches nothing"."""
+    arrow_grammar.validate_template_bounds(
+        "Decimal128(5, ${s})", lambda name, probes: None)
+    with pytest.raises(ValueError, match="does not admit"):
+        arrow_grammar.validate_template_bounds(
+            "Decimal128(5, ${s})", lambda name, probes: frozenset(probes))
+
+
+def test_int_probe_alphabet_reaches_past_the_grammar_ceiling():
+    """The alphabet has to contain a witness for every quantifier width, or a
+    capture wider than the position would be reported as safe."""
+    probes = arrow_grammar.param_probe_values(
+        {"kind": "int", "min": 0, "max": 38, "name": "scale"})
+    widths = {len(p) for p in probes}
+    assert widths >= {1, 2, 3, 4, 5, 6}
+    assert "00" in probes  # leading-zero spellings the grammar forbids
+    assert arrow_grammar.param_probe_values({"kind": "unit", "name": "u"}) == ()
+
+
 def test_unsupported_manifest_shapes_fail_loudly():
     with pytest.raises(ValueError):
         arrow_grammar._int_range_pattern(1, 100)  # beyond the two-digit builder

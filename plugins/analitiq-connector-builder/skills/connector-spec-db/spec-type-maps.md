@@ -285,6 +285,9 @@ database-package concept (DDL rendering).
     `Decimal{128,256}(${precision}, 0)`. Precision > 76 exceeds Arrow, so
     leave it uncovered (visible hard-error, per the no-wildcard rule
     above); the bare/unparameterized native takes the fixed default.
+    Bound the **scale** capture to its tier the way the precision capture
+    already is — an unbounded `\d+` renders decimals the contract refuses
+    (ADV-TMAP-010), and no engine-side check stands behind it.
   - **Timestamp/time:** the native carries a fractional-second *digit
     count*, but Arrow's unit is a symbolic enum — so ladder the digit
     count to the smallest unit that holds it exactly: `(0)`→`SECOND`,
@@ -310,19 +313,20 @@ ships no Decimal rule because NUMERIC/BIGNUMERIC selection needs
 precision-range arithmetic rules cannot express), never as a way to cut scope.
 
 <!-- PROBE: write-coverage-sample-gap -->
-**A clean warning is not proof of coverage.** The check probes a representative
-sample, so whole families go unexercised — a map missing all of these still
-passes. Verify by hand at least:
+**A clean warning is not proof of coverage.** The check sends one probe per
+canonical family, drawn from the same engine-published grammar the vocabulary
+comes from, so a family it skips is a declared exclusion rather than an
+oversight. One probe per family is also one parameter *value* per family: a map
+missing a skipped family, or matching only the probed spelling of a probed one,
+still passes. Verify these by hand:
 
-- `FixedSizeBinary`
+- `FixedSizeBinary` — `byte_width` is unbounded, so no single probe stands for
+  the family
 - `Time32` (only `Time64` is probed)
-- **tz-aware** `Timestamp` — easy to miss, because the bare `Timestamp` probe
-  passes without it
+- **tz-aware** `Timestamp` — easy to miss, because each probe omits optional
+  parameter positions, so the bare `Timestamp` probe passes without it
 - `Decimal256` (only `Decimal128` is probed, so a map whose Decimal rule is
   narrowed to `Decimal128` shows nothing)
-
-Treat that as the floor rather than the whole set: rarer scalars are
-unprobed too.
 
 Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a

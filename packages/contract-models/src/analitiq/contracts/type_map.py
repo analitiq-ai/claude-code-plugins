@@ -28,6 +28,7 @@ from analitiq.contracts.arrow_grammar import (
     CONTAINER_CANONICAL_HEADS as _CONTAINER_CANONICAL_HEADS,
     TEMPLATE_DUMMY_SUBSTITUTIONS,
     validate_cross_params,
+    validate_template_bounds,
 )
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 from analitiq.contracts.shared.common import StrictModel
@@ -95,13 +96,11 @@ def _validate_type_map_canonical(value: str) -> None:
     # Pattern first, cross-parameter bound second — same order as the endpoint
     # model sites, so one mistake gets one diagnosis (a shape error never
     # surfaces as a scale complaint) and the check only ever sees
-    # pattern-valid ASCII digits. Literals only: a placeholder has no value to
-    # compare (`Decimal128(${p}, 9)` is not `scale > precision`), and the
-    # unsatisfiable-literal case (`Decimal128(${p}, 99)`) is already rejected
-    # by the pattern above, whose scale position is capped at the referenced
-    # param's own ceiling.
-    if not _PLACEHOLDER_RE.search(value):
-        validate_cross_params(value)
+    # pattern-valid ASCII digits. `validate_cross_params` skips any position
+    # holding a placeholder rather than digits, so it needs no guard here; what
+    # a placeholder CAN become is decided against the native matcher instead,
+    # by `validate_template_bounds` at the rule level.
+    validate_cross_params(value)
 # ECMA-262 named group `(?<name>…)` + named backreference `\k<name>` — the only
 # named forms the contract allows; translated to Python's `(?P<name>…)` / `(?P=name)`
 # spellings only to compile-check.
@@ -125,6 +124,64 @@ def _to_python_regex(pattern: str) -> str:
     translated, or an ECMA rule using `\\k<name>` fails to compile and is rejected."""
     pattern = _ECMA_NAMED_GROUP.sub(r"(?P<\1>", pattern)
     return _ECMA_NAMED_BACKREF.sub(r"(?P=\1)", pattern)
+
+
+def _named_group_source(pattern: str, name: str) -> str | None:
+    """The sub-pattern inside ECMA named group `(?<name>…)`, by paren balancing.
+
+    Returned unanchored and unwrapped, so the caller decides how to compile it.
+    None when the group is absent or its parentheses never close. Escapes are
+    consumed in pairs and `[...]` runs are skipped whole, so a `\\)` or a `)`
+    inside a character class does not end the group early.
+    """
+    opener = f"(?<{name}>"
+    start = pattern.find(opener)
+    if start < 0:
+        return None
+    i = start + len(opener)
+    depth = 1
+    in_class = False
+    body: list[str] = []
+    while i < len(pattern):
+        char = pattern[i]
+        if char == "\\":
+            body.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if in_class:
+            in_class = char != "]"
+        elif char == "[":
+            in_class = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return "".join(body)
+        body.append(char)
+        i += 1
+    return None
+
+
+def _capture_language(
+    native: str, name: str, probes: tuple[str, ...]
+) -> frozenset[str] | None:
+    """Which of `probes` the native's `(?<name>…)` capture can match.
+
+    An over-approximation on purpose: the capture is interrogated in isolation,
+    so surrounding context that would further constrain it is ignored. None
+    when the group cannot be read or its sub-pattern does not compile on its
+    own (a backreference to a group declared outside it, say) — an unreadable
+    capture proves nothing and must not be reported as proving something.
+    """
+    source = _named_group_source(native, name)
+    if source is None:
+        return None
+    try:
+        compiled = re.compile(_to_python_regex(source))
+    except re.error:
+        return None
+    return frozenset(probe for probe in probes if compiled.fullmatch(probe))
 
 
 def _strip_regex_meta(pattern: str) -> str:
@@ -266,6 +323,14 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
                 "reference the captures (e.g. `Decimal128(${p}, ${s})`) or use a "
                 "non-capturing group `(?:…)` if the parameter is intentionally dropped"
             )
+        # Last, because it presumes every `${name}` resolves to a real capture:
+        # what the rule RENDERS must be a canonical whatever the native matches,
+        # which for a cross-parameter bound (Decimal scale <= precision) can
+        # only be decided by reading the captures the render draws from.
+        validate_template_bounds(
+            self.canonical,
+            lambda name, probes: _capture_language(self.native, name, probes),
+        )
         return self
 
 

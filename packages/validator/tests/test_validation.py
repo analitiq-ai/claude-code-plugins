@@ -295,7 +295,7 @@ def test_walk_collects_tuple_form_items(validator):
 def test_coverage_regex_rule_with_capture(tmp_path, connector_base, validator):
     # A regex read rule with a named capture + ${name} render must resolve.
     _write_tree(tmp_path, connector_base,
-                [{"match": "regex", "native": r"NUMERIC\((?<p>\d+),\s*(?<s>\d+)\)",
+                [{"match": "regex", "native": r"NUMERIC\((?<p>[1-9]|[12]\d|3[0-8]),\s*(?<s>\d|[12]\d|3[0-8])\)",
                   "canonical": "Decimal128(${p}, ${s})"}],
                 {"widgets.json": _endpoint("NUMERIC(38,9)", "Decimal128(38, 9)")})
     assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
@@ -643,6 +643,30 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     assert any("duplicate" in w["message"] for w in warns)
 
 
+@pytest.mark.parametrize("native,warns", [
+    # A named BACKREFERENCE contributes no literal text: `\\k<t>` must be
+    # dropped whole, not unescaped into the literal `k<t>`.
+    (r"^A(?<t>[0-9])B\k<t>$", False),
+    # A character CLASS is a set, not a lowercase literal — its contents are
+    # dropped too, which is why the backref strip is added to the class strip
+    # rather than swapped for a strip that keeps class contents.
+    (r"^FOO(?<x>[A-Za-z]+)$", False),
+    # A genuine lowercase literal outside any class or capture: dead against
+    # uppercased natives, and the whole reason the check exists.
+    (r"^varchar\((?<n>\d+)\)$", True),
+    # The blind spot both strips share, recorded rather than fixed: a
+    # lowercase-ONLY class really is dead, and the class strip hides it.
+    (r"^[a-z]+$", False),
+])
+def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native, warns):
+    findings = validator.validate_document(
+        [{"match": "regex", "native": native, "canonical": "Utf8"}],
+        doc_path=tmp_path / "type-map-read.json")
+    dead = [w for w in _warnings(findings)
+            if w["validator"] == "type-map-rule" and "can never match" in w["message"]]
+    assert bool(dead) is warns, findings
+
+
 def test_write_vocabulary_gap_warns(validator, tmp_path):
     # A write map missing whole canonical families → advisory warning.
     p = tmp_path / "type-map-write.json"
@@ -688,12 +712,14 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
             ("Utf8", "TEXT"), ("LargeUtf8", "TEXT"), ("Json", "JSONB"),
             ("Object", "JSONB"), ("List", "JSONB"), ("Binary", "BYTEA"),
             ("LargeBinary", "BYTEA"), ("Date32", "DATE"), ("Date64", "DATE"),
+            ("Null", "TEXT"),
         ]
     ] + [
         {"match": "regex", "canonical": r"^Decimal(128|256)\((?<p>\d+),\s*(?<s>\d+)\)$",
          "native": "NUMERIC(${p}, ${s})"},
         {"match": "regex", "canonical": r"^Time(32|64)\([A-Z]+\)$", "native": "TIME"},
         {"match": "regex", "canonical": r"^Timestamp\([A-Z]+\)$", "native": "TIMESTAMP"},
+        {"match": "regex", "canonical": r"^Duration\([A-Z]+\)$", "native": "INTERVAL"},
     ]
     findings = validator.validate_document(full_map, doc_path=tmp_path / "type-map-write.json")
     coverage = [f for f in findings if f["validator"] == "type-map-write-coverage"]
