@@ -13,10 +13,11 @@ Two halves, and only one is mechanical.
 ## The mechanical half — already gated, do not hand-check
 
 `tests/hygiene/test_ticket_references.py` fails the build on shapes it can match
-literally: `issue #89`, `analitiq-engine#406`, a bare `(#123)`, a GitHub URL, a
-path under `.claude/` that is not tracked, and "this PR" / "this commit". Its
-module docstring owns the pattern set and every deliberate narrowing. You do not
-need to look for these — CI does, on every file git tracks.
+literally: `issue #89`, `analitiq-engine#406`, a bare `(#123)`, a GitHub URL,
+"this PR" / "this commit", an untracked path under `.claude/`, and a citation of
+any path `.gitignore` excludes — `docs/…`, `htmlcov/`, `dist/…`. Its module
+docstring owns the pattern set and every deliberate narrowing. You do not need
+to look for these — CI does, on every file git tracks.
 
 ## The semantic half — this is what the rule is for
 
@@ -29,9 +30,9 @@ history, not an invented example:
   JSON Schema. "the breaking change below", resolving to a different change than
   the one meant. A cited path (`tests/schema_drift/`) that was never a path.
 - **A count that does not match what it counts.** "the four cases above" over
-  three tests. A census figure quoted in a comment — "the repo tracks ~300" —
-  left standing while the repo grew past it, in the same pull request that
-  wrote it. Counts attached to a set are the [[no-cardinality-restatements]]
+  three tests. A comment saying the repo tracks ~300 files where it tracked 467
+  — the number was the *scanned* count, and naming the wrong set made it wrong
+  by half. Counts attached to a set are the `no-cardinality-restatements.md`
   class; counts attached to *nearby text* rot the same way and no census hash
   sees either.
 - **Invented history.** A comment asserting a past event the repo does not

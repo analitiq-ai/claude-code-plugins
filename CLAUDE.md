@@ -82,8 +82,8 @@ generator) — never by hand-editing the vocabulary.
 The publish is additive — pinned `X.Y.Z.json` objects are first-write-wins
 (byte-compared on re-runs; divergence fails the publish) and never overwritten,
 nothing is ever deleted — and mutable pointers (`latest.json`, `index.json`,
-the two versionless hand-authored files) rely on a 5-minute TTL, not CloudFront
-invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
+and `data-sync-api/openapi.json`, the one hand-authored file with no version
+triple) rely on a 5-minute TTL, not CloudFront invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
 
 Only the 13 public resources render here. The ~40 internal-audience schemas stay
 in the infra repo with the private half of the renderer;

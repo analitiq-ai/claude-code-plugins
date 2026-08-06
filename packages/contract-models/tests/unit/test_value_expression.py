@@ -1,7 +1,7 @@
 """Unit tests for analitiq.contracts.value_expression.resolve_value_expression.
 
-Covers the warning logged when a dict value carries none of the four recognised
-expression keys (template, function, literal, ref), and confirms that
+Covers the warning logged when a dict value carries none of the recognised
+expression keys (`_EXPRESSION_KEYS`), and confirms that
 recognised forms and non-dict passthrough values do not produce spurious warnings.
 
 Also covers base64_encode / url_encode dropping (returning None) on

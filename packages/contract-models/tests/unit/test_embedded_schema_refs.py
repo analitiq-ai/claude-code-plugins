@@ -1227,7 +1227,7 @@ class TestKeywordVocabularyHasOneOwner:
     said it did not recurse there.
 
     `.claude/rules/no-drift-surfaces.md` requires an unavoidable restatement to
-    be pinned by a test. These are the four comparisons that catch it: per bucket
+    be pinned by a test. These are the comparisons that catch it: per bucket
     (the bucket decides HOW the walker recurses), the rendered constraint map,
     and the rendered sentence.
     """
