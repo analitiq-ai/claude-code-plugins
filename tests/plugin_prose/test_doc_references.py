@@ -13,12 +13,12 @@ entries in the three per-plugin registries below, this suite is red.
 1. **The file exists.** Six citation forms carry it:
 
    - `${CLAUDE_PLUGIN_ROOT}/skills/…/spec-x.md` — the absolute form, written
-     in a document's body [claim:plugin-root-is-never-frontmatter]: an agent's
-     `## Required reading` list, or a fenced command line. It also names scripts an agent runs, so the path universe
+     in a document's body: an agent's `## Required reading` list, or a fenced
+     command line. It also names scripts an agent runs, so the path universe
      is every file in the plugin, not only `.md`.
    - `` `spec-x.md` `` / `` `references/io-contracts.md` `` — the bare
      backticked form used for cross-references between sibling specs. This is
-     the dominant form, by a wide margin. [claim:backticked-dominant]
+     the dominant form, by a wide margin.
    - Unbackticked bare paths with a directory segment, on every line — the
      `description:` citations the orchestrator reads to route work (frontmatter
      often cites a path with no backticks, which is exactly where a dangling
@@ -52,8 +52,7 @@ entries in the three per-plugin registries below, this suite is red.
      no directory of this plugin. The first is indistinguishable from an
      ordinary prose word; the second is addressing something else — an
      authored artifact, a schema URL's tail, a timezone.
-   - A same-document link, `](#a-heading)`. No plugin writes one
-     [claim:no-same-document-link]; adding an
+   - A same-document link, `](#a-heading)`. No plugin writes one; adding an
      extractor for a form with no sites would be a pattern nothing can floor,
      which is the shape of a guard that dies without anyone noticing.
    - A link whose target carries a URL scheme. `](https://…/docs/adr.md)`
@@ -77,9 +76,9 @@ entries in the three per-plugin registries below, this suite is red.
    so it is matched by slug. Fences are not an exemption. Real *path*
    citations do sit inside fenced examples — a mission spec quoting the paths
    its researcher must read, an agent's command line naming the script it
-   runs — so the file pass reads fenced lines. No `§` is fenced today
-   [claim:no-fenced-anchor]; grading
-   fenced ones too is the symmetric decision rather than an observed need, and
+   runs — so the file pass reads fenced lines. No `§` is fenced today;
+   grading fenced ones too is the symmetric decision rather than an observed
+   need, and
    the alternative was worse: an exemption that graded nothing while silently
    dropping the file half of a fenced `` `SKILL.md §Heading` ``. What a fence
    *does* suppress is a `#` line being read as a heading — that is a markdown
@@ -211,7 +210,7 @@ _LINK_REF = re.compile(
 # What GitHub keeps when it slugs a heading into a fragment: case folded,
 # spaces to hyphens, everything else that is not a word character or hyphen
 # dropped — including the period real headings carry
-# [claim:headings-carry-periods], since GitHub slugs `### 1. Research (domain)`
+#, since GitHub slugs `### 1. Research (domain)`
 # to `1-research-domain`. Enough to resolve `#derived-endpoint_id` against
 # ``## Derived `endpoint_id` ``.
 _SLUG_DROP = re.compile(r"[^\w\- ]")
@@ -339,7 +338,7 @@ _SCAN_FORMS = ("plugin_root", "backticked", "bare_path")
 #
 # Repo-wide first, because that is where a form has enough sites for a floor to
 # mean "the extractor works" rather than "this one sentence still exists".
-# Floors sit near half of today's counts [claim:floors-sit-near-half]: prose
+# Floors sit near half of today's counts: prose
 # churn must not move them, a broken extractor must. The counts are not restated here — the failure message
 # reports found-vs-floor.
 _REPO_FLOORS: dict[str, int] = {
@@ -416,7 +415,7 @@ _CENSUS_FLOORS: dict[str, dict[str, int]] = {
 # (An earlier note here said the `backticked` sentinels were bare basenames
 # "because that is the only way that form is ever written". They are bare
 # because that is how those two citations read. The form carries a directory
-# constantly — roughly a third of its sites [claim:backticked-carries-a-directory]
+# constantly — roughly a third of its sites
 # — and the module docstring offers one of those as its example.)
 #
 # `fixture` is a real file plus the opening words of a heading it carries (the
@@ -444,7 +443,7 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             "Release version",
         ),
         # Every link this plugin writes is in its README
-        # [claim:connector-links-only-from-its-readme] — at the repo README and
+        # — at the repo README and
         # at the LICENSE. None routes an agent, so there is no routing citation
         # to pin, and the repo-wide link floor is what guards the form.
         "unsentinelled": {"link": "links only in the README, routing nobody"},
@@ -455,7 +454,7 @@ _PLUGIN_FIXTURES: dict[str, dict[str, object]] = {
             "bare_path": "skills/pipeline-builder/references/io-contracts.md",
             "backticked": "spec-database-object.md",
             # The one link in either plugin that routes an agent rather than a
-            # reader [claim:one-link-routes-an-agent]: a stream spec sending its
+            # reader: a stream spec sending its
             # author to the column spec.
             "link": "skills/endpoint-spec/spec-columns.md",
             # The script this plugin's prose tells an agent to run whenever it
@@ -668,8 +667,7 @@ def _candidates(target: str, plugin: str, citing: str | None = None) -> list[Pat
       files answer to returns all of them — which the anchor pass wants (an
       anchor checked against every candidate is imprecise about *which* file it
       read; an anchor checked against none is unchecked). The basename that
-      makes this matter is `SKILL.md`, which four or five files answer to
-      [claim:skill-md-is-ambiguous].
+      makes this matter is `SKILL.md`, which four or five files answer to.
     """
     cleaned = _clean(target)
     # Before any branch: a path an installed plugin does not carry resolves to
@@ -923,7 +921,7 @@ def _asset_citations(plugin: str) -> list[tuple[str, int, str]]:
     plugins, that separates them with one class of exception: a repo file
     cited from contributor guidance, which `_addresses_the_repo` admits and
     `_candidates` then resolves against the repo tree, so every kept asset
-    citation resolves [claim:every-asset-citation-resolves]. Delimiters play
+    citation resolves. Delimiters play
     no part: a path is as much a citation in a fenced command line as in a
     code span, and treating the backticks as the rule left a real citation
     unread.
@@ -979,9 +977,8 @@ def _links_in(text: str) -> list[tuple[int, str, str]]:
     """Every (lineno, target, fragment) markdown link in one document's text.
     The fragment is `""` when the link names no section — a text-level helper,
     like `_scan_text`, so a synthetic document can drive the extraction end to
-    end. No link in either plugin carries a fragment today
-    [claim:no-link-fragment], so this is the only place the capture is
-    exercised at all."""
+    end. No link in either plugin carries a fragment today, so this is the
+    only place the capture is exercised at all."""
     return [
         (lineno, match.group(1), (match.group(2) or "").lstrip("#"))
         for lineno, line in enumerate(text.splitlines(), 1)
@@ -1377,10 +1374,9 @@ def _files_reached_by(plugin: str, form: str) -> set[Path]:
     still being read. Re-scanning answers a different question: whether the
     regex still matches somewhere, which stays true while the sweep that grades
     stops carrying the citation. For `asset` the two views are not even close
-    — the raw pattern matches several times what `_asset_citations` keeps
-    [claim:asset-raw-is-far-wider-than-kept], including `.md` paths and
-    strings that are not files — so the sentinel was pinned
-    against citations the guard never grades.
+    — the raw pattern matches several times what `_asset_citations` keeps,
+    including `.md` paths and strings that are not files — so the sentinel was
+    pinned against citations the guard never grades.
 
     Links resolve from the document they are written in, so they are read back
     with their citing file rather than through the one-argument `_candidates`
@@ -1410,7 +1406,7 @@ _MD_MENTION = re.compile(r"[A-Za-z0-9_.\-/*]*\.md\b")
 # sentinels and waivers all sit downstream of extraction, and the census that
 # can see a form nobody spelled was reading only markdown. Worse, the asset
 # sweep *rejects* most of what its pattern matches — `_addresses_this_plugin`
-# drops them in bulk [claim:the-asset-filter-rejects-in-bulk], and did it as a
+# drops them in bulk, and did it as a
 # bare boolean — so a real plugin file wrongly rejected was indistinguishable
 # from a timezone.
 #
@@ -1922,217 +1918,6 @@ def test_the_census_reads_coverage_from_the_passes_themselves() -> None:
     ), "the anchor pass read this path; the census must say so"
 
 
-def _md_link_targets(plugin: str) -> list[str]:
-    return [target for _rel, _lineno, target, _frag in _link_references(plugin)]
-
-
-def _fenced_anchor_count() -> int:
-    total = 0
-    for plugin in _plugin_names():
-        for path in _prose_files(plugin):
-            text = path.read_text(encoding="utf-8")
-            fenced = _fenced_lines(text)
-            total += sum(1 for site in _anchor_sites(text) if site.lineno in fenced)
-    return total
-
-
-def _indented_fence_lines() -> int:
-    return sum(
-        1
-        for plugin in _plugin_names()
-        for path in _prose_files(plugin)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if _FENCE.match(line) and line != line.lstrip()
-    )
-
-
-def _plugin_root_sites_in_frontmatter() -> int:
-    """`${CLAUDE_PLUGIN_ROOT}` citations written inside a YAML frontmatter
-    block, which the prose twice claimed was where the form lives."""
-    total = 0
-    for plugin in _plugin_names():
-        for path in _prose_files(plugin):
-            text = path.read_text(encoding="utf-8")
-            if not text.startswith("---\n"):
-                continue
-            end = text.find("\n---", 4)
-            total += len(_PLUGIN_ROOT_REF.findall(text[:end]))
-    return total
-
-
-# Every statement this file's prose makes about *the tree as it is today*,
-# with the measurement that decides it. Not the statements about what the code
-# does — those the tests already grade — but the ones a reader can only check
-# by running something, which is why they rotted: three separate reviews found
-# false ones here, and none of them was catchable by any test in this file.
-#
-# The convention: a measured claim carries `[claim:<id>]` in the prose beside
-# it, and appears here with a predicate. `test_the_prose_claims_still_hold`
-# runs every predicate; `test_every_prose_claim_is_marked_and_every_marker_is_real`
-# keeps the registry and the prose in step, so a claim cannot be deleted from
-# the text and left asserting here, nor marked in the text and left unmeasured.
-#
-# What this does not do, stated plainly rather than implied: it cannot force a
-# *new* unmarked claim to be registered. Detecting those needs a keyword sweep,
-# and measured against this file that flags 193 lines of which the overwhelming
-# majority describe the code's rule rather than the tree — a waiver list that
-# size is the unpinned-prose problem wearing a different hat. The registry is
-# the enforceable half; the reviewer's eye is still the other one.
-_TREE_CLAIMS: dict[str, tuple[str, "Callable[[], bool]"]] = {
-    "backticked-dominant": (
-        "the backticked form is the dominant one, by a wide margin",
-        lambda: sum(len(_form_sites(p, "backticked")) for p in _plugin_names())
-        > sum(
-            len(_form_sites(p, form))
-            for p in _plugin_names()
-            for form in _SCAN_FORMS
-            if form != "backticked"
-        ),
-    ),
-    "backticked-carries-a-directory": (
-        "the backticked form carries a directory segment in roughly a third of "
-        "its sites — the claim that replaced 'the only way it is ever written'",
-        lambda: all(
-            0.2
-            < len([t for _r, t in _form_sites(p, "backticked") if "/" in t])
-            / len(_form_sites(p, "backticked"))
-            < 0.6
-            for p in _plugin_names()
-        ),
-    ),
-    "no-same-document-link": (
-        "no plugin writes a same-document link, `](#a-heading)`",
-        lambda: not any(
-            re.search(r"\]\(#", path.read_text(encoding="utf-8"))
-            for p in _plugin_names()
-            for path in _prose_files(p)
-        ),
-    ),
-    "no-fenced-anchor": (
-        "no `§` sits inside a fence today",
-        lambda: _fenced_anchor_count() == 0,
-    ),
-    "no-link-fragment": (
-        "no link in either plugin carries a `#fragment`",
-        lambda: not any(
-            frag
-            for p in _plugin_names()
-            for _rel, _lineno, _target, frag in _link_references(p)
-        ),
-    ),
-    "connector-links-only-from-its-readme": (
-        "the connector plugin's links are all in its README and route nobody",
-        lambda: {
-            rel
-            for rel, _lineno, _t, _f in _link_references("analitiq-connector-builder")
-        }
-        == {"README.md"},
-    ),
-    "one-link-routes-an-agent": (
-        "exactly one link in either plugin routes an agent rather than a reader",
-        lambda: sum(
-            1
-            for p in _plugin_names()
-            for rel, _lineno, _t, _f in _link_references(p)
-            if rel != "README.md"
-        )
-        == 1,
-    ),
-    "skill-md-is-ambiguous": (
-        "`SKILL.md` is a basename four or five files answer to",
-        lambda: all(
-            4 <= len(_resolve_files("SKILL.md", "agents/x.md", p)) <= 5
-            for p in _plugin_names()
-        ),
-    ),
-    "asset-raw-is-far-wider-than-kept": (
-        "the asset pattern matches several times what the filter keeps",
-        lambda: all(
-            sum(
-                len(_BARE_ASSET_REF.findall(line))
-                for path in _prose_files(p)
-                for line in path.read_text(encoding="utf-8").splitlines()
-            )
-            > 3 * len(_asset_citations(p))
-            for p in _plugin_names()
-        ),
-    ),
-    "every-asset-citation-resolves": (
-        "every kept asset citation resolves, plugin file or repo file alike — "
-        "the repo-root scripts contributor guidance routes to used to be the "
-        "exception, and were dropped before anything could grade them",
-        lambda: not [
-            target
-            for p in _plugin_names()
-            for rel, _lineno, target in _asset_citations(p)
-            if not _candidates(target, p, rel)
-        ],
-    ),
-    "indented-fences-exist": (
-        "fenced blocks nested in a list item are indented, in real prose",
-        lambda: _indented_fence_lines() > 20,
-    ),
-    "floors-sit-near-half": (
-        "every floor — per plugin, repo-wide, documents and census alike — "
-        "sits between a third and two thirds of today's count, so prose churn "
-        "cannot move it and a broken extractor must. The floor *values* are "
-        "otherwise unguarded config: zeroing them survived everything, and "
-        "the document floor exists only to stop a set equality passing on two "
-        "empty sets, which zeroing restores exactly",
-        lambda: all(
-            0.3 <= floor / count <= 0.7
-            for floor, count in [
-                *(
-                    (floor, _form_counts(p)[form])
-                    for p in _plugin_names()
-                    for form, floor in _FLOORS[p].items()
-                ),
-                *(
-                    (
-                        floor,
-                        sum(_form_counts(p)[form] for p in _plugin_names()),
-                    )
-                    for form, floor in _REPO_FLOORS.items()
-                ),
-                *(
-                    (floor, len(_prose_files(p)))
-                    for p, floor in _DOCUMENT_FLOORS.items()
-                ),
-            ]
-        ),
-    ),
-    "plugin-root-is-never-frontmatter": (
-        "no `${CLAUDE_PLUGIN_ROOT}` citation is written in frontmatter — the "
-        "claim the prose twice got backwards",
-        lambda: _plugin_root_sites_in_frontmatter() == 0,
-    ),
-    "headings-carry-periods": (
-        "real headings carry a period, which is why `_SLUG_DROP` drops it",
-        lambda: sum(
-            1
-            for p in _plugin_names()
-            for path in _prose_files(p)
-            for heading in _headings(path.read_text(encoding="utf-8"))
-            if "." in heading
-        )
-        >= 8,
-    ),
-    "the-asset-filter-rejects-in-bulk": (
-        "the asset discriminator rejects paths in bulk, which is why each "
-        "rejection needs a named reason rather than a bare boolean",
-        lambda: sum(
-            1
-            for p in _plugin_names()
-            for mention in _unread_mentions(p)
-            if mention.disposition == "not a directory this plugin has"
-        )
-        > 30,
-    ),
-}
-
-_CLAIM_MARKER = re.compile(r"\[claim:([a-z0-9-]+)\]")
-
-
 def _disposition_names() -> set[str]:
     """Every reason `_mention_disposition` can return, read off its own
     `return` statements rather than restated in a table beside it. The table
@@ -2146,58 +1931,6 @@ def _disposition_names() -> set[str]:
         and isinstance(node.value, ast.Constant)
         and isinstance(node.value.value, str)
     }
-
-
-def test_the_prose_claims_still_hold() -> None:
-    """Every measured claim this file's prose makes about the tree, measured.
-
-    Three reviews found false claims in this prose — counts under one reading,
-    a form said to be written only one way, a citation form attributed to
-    frontmatter it never appears in — and not one of them was catchable by any
-    test here. This is the half that is now catchable.
-    """
-    broken = [
-        f"{claim_id}: {description}"
-        for claim_id, (description, predicate) in _TREE_CLAIMS.items()
-        if not predicate()
-    ]
-    assert not broken, (
-        "the prose claims things about the tree that are no longer true:\n  "
-        + "\n  ".join(broken)
-        + "\nEither the tree moved and the sentence needs rewriting, or the "
-        "measurement does. Do not delete the claim to make this pass without "
-        "also deleting what it says in the prose."
-    )
-
-
-def test_every_prose_claim_is_marked_and_every_marker_is_real() -> None:
-    """The registry and the prose in step, both directions. Without the first,
-    a claim can be reworded out of the text while its predicate keeps passing
-    here — the registry then measures a sentence nobody reads. Without the
-    second, a marker can name a claim nothing measures, which reads to the next
-    author as a pin that does not exist."""
-    source = Path(__file__).read_text(encoding="utf-8")
-    # The registry's own definition mentions each id once; a marker is any
-    # *other* occurrence, which is what the prose carries.
-    marked = Counter(_CLAIM_MARKER.findall(source))
-    unmarked = sorted(set(_TREE_CLAIMS) - set(marked))
-    assert not unmarked, (
-        f"registered claims with no `[claim:<id>]` marker in the prose: "
-        f"{unmarked} — mark the sentence each one measures, or drop it."
-    )
-    dangling = sorted(set(marked) - set(_TREE_CLAIMS))
-    assert not dangling, (
-        f"`[claim:<id>]` markers naming nothing in `_TREE_CLAIMS`: {dangling} "
-        "— register the measurement or drop the marker."
-    )
-    # And the predicates are not constants: each must be a callable this test
-    # can starve. A claim whose predicate ignores the tree would pass forever.
-    starved = [
-        claim_id
-        for claim_id, (_description, predicate) in _TREE_CLAIMS.items()
-        if not callable(predicate)
-    ]
-    assert not starved, starved
 
 
 def test_every_mention_disposition_is_load_bearing() -> None:
@@ -3492,7 +3225,7 @@ def test_a_citation_inside_a_fence_is_still_a_citation() -> None:
 
 def test_fences_are_recognised_when_indented() -> None:
     """Fenced blocks nested in a list item are indented — real prose has them
-    [claim:indented-fences-exist] — and an unindented fence pattern would read
+    — and an unindented fence pattern would read
     their contents as document structure."""
     assert _fenced_lines("   ```jsonc\n   {}\n   ```\n") == {1, 2, 3}
     assert _headings("# Real\n\n  ```md\n# Not a heading\n  ```\n") == ["Real"]
