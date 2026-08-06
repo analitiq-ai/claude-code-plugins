@@ -245,6 +245,14 @@ def _tracked_files() -> list[str]:
     the repo root and no wheel ships tests — so "git cannot list this tree" means
     the environment is wrong, not that the check is inapplicable.
 
+    An EMPTY listing is that same failure wearing a success exit code, and it is
+    the one shape `check=True` cannot catch: `git ls-files` exits 0 in a repo
+    that tracks nothing, so every consumer downstream — the scan, the gate, and
+    the extent check that grades them — reports clean over a tree it never
+    looked at. Unpacking a source tarball and running `git init` for tooling
+    reaches it. Refusing here covers all three at once; asserting non-vacuity in
+    one test would leave the other consumers believing an empty repo.
+
     `cwd=REPO_ROOT` is correct inside a git worktree too, where `.git` is a file
     pointing at the parent repo: `git ls-files` resolves it and lists the
     worktree's own index.
@@ -269,7 +277,15 @@ def _tracked_files() -> list[str]:
             "does not know."
             + (f" git said: {detail}" if detail else "")
         ) from exc
-    return [line for line in result.stdout.split("\0") if line]
+    tracked = [line for line in result.stdout.split("\0") if line]
+    if not tracked:
+        raise RuntimeError(
+            f"git tracks no files under {REPO_ROOT}. That is not a clean repo, "
+            "it is a repo this gate cannot see: the scan, the gate, and the "
+            "extent check would all pass over an empty listing. Run the suite "
+            "from a checkout with an index."
+        )
+    return tracked
 
 
 def _scanned_files() -> list[str]:
@@ -398,6 +414,11 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
         check=True,
     ).stdout
     tracked = {line for line in listing.split("\0") if line}
+    assert tracked, (
+        f"git listed no tracked files under {REPO_ROOT}, so this check and the "
+        "gate both pass over an empty scan. `_tracked_files` refuses this too; "
+        "the listing here is independent, so it needs its own refusal."
+    )
     expected = {
         relpath
         for relpath in tracked
@@ -445,6 +466,30 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
         "slice there turns the gate off without touching anything the other "
         "guard-the-guard tests watch."
     )
+
+
+def test_an_empty_listing_is_a_failure_not_a_clean_repo(tmp_path, monkeypatch) -> None:
+    """The one enumeration failure that arrives with a success exit code.
+
+    `check=True` catches "not a git repository" and the `safe.directory`
+    refusal. It cannot catch a repo that simply tracks nothing: `git ls-files`
+    exits 0 with empty stdout, and an empty scan satisfies every assertion in
+    this module — the gate finds no refs, the extent check finds nothing
+    missing, and the read-set check compares two empty sets. A source tarball
+    unpacked and `git init`-ed for tooling lands exactly here.
+
+    An earlier draft caught this incidentally, with a `len(expected) > 200`
+    floor in the extent test. That floor was a magnitude claim standing in for a
+    non-vacuity claim, and it was removed as arbitrary — correctly, but the
+    behaviour it was covering had to move somewhere, not evaporate. It lives in
+    `_tracked_files` now, where it covers every consumer rather than one test.
+    """
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "CLAUDE.md").write_text("settled in issue #89\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+
+    with pytest.raises(RuntimeError, match="tracks no files"):
+        _tracked_files()
 
 
 def test_an_unreadable_file_is_never_skipped(tmp_path, monkeypatch) -> None:
