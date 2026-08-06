@@ -445,9 +445,28 @@ def _numeric_fields(node: Any, defs: dict[str, Any], depth: int = 0) -> Reach | 
                 return found
             nested = _prefer(nested, found)
     for keyword in _COLLECTION_KEYWORDS:
+        outer = _MEMBER_WRAPS.get(keyword)
         for member in _member_schemas(node, keyword):
-            if _numeric_fields(member, defs, depth + 1) is not None:
-                nested = _prefer(nested, Reach(_MEMBER_WRAPS.get(keyword), keyword))
+            child = _numeric_fields(member, defs, depth + 1)
+            if child is None:
+                continue
+            if child.wrap is None:
+                # The number sits under a collection DEEPER IN that has no
+                # wrap (`list[dict[str, int]]`). The outer collection being
+                # substitutable is irrelevant — the value still cannot be
+                # built — so carry the child's reach up. Reporting the outer
+                # keyword instead would name a shape that is not the blocker.
+                nested = _prefer(nested, child)
+            elif outer is None:
+                nested = _prefer(nested, Reach(None, keyword))
+            else:
+                # Wraps compose: the member is built by the child's wrap, then
+                # placed in this collection. `list[list[int]]` becomes
+                # `[[value]]`, not `[value]`.
+                nested = _prefer(
+                    nested,
+                    Reach(lambda v, o=outer, i=child.wrap: o(i(v)), keyword),
+                )
     return nested
 
 
@@ -847,6 +866,46 @@ def test_a_number_the_sweep_cannot_substitute_into_is_reported_not_dropped():
     # synthesiser is what made this worth fixing in the first place.
     assert "additionalProperties" in unreached[0]
     assert "_MEMBER_WRAPS" in unreached[0]
+
+
+def test_an_unsweepable_collection_nested_under_a_sweepable_one_names_the_blocker():
+    # `list[dict[str, int]]`: the OUTER collection is substitutable, the inner
+    # one is not. Reporting the outer keyword — or worse, marking the field
+    # sweepable and substituting `[1]` for a list of objects — names a shape
+    # that is not the blocker and sends the reader to the wrong place. The
+    # child's reach has to win.
+    class ListOfDicts(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        rows: list[dict[str, int]] = Field(default_factory=list)
+
+    probe = Probe(ListOfDicts)
+    assert probe.fields == []
+    assert probe.unsweepable == {"rows": "additionalProperties"}
+    _violations, unreached, _reached, _gap = _sweep(_probes([ListOfDicts]))
+    assert len(unreached) == 1, unreached
+    assert "additionalProperties" in unreached[0], unreached[0]
+    assert "'items'" not in unreached[0], (
+        f"named the outer collection, which is not what blocked it: {unreached[0]}"
+    )
+
+
+def test_nested_sweepable_collections_compose_their_wraps():
+    # `list[list[int]]` needs `[[value]]`. A wrap that stopped at the outer
+    # collection would substitute `[value]` — a document the schema rejects for
+    # a reason unrelated to the number — and the field would be reported
+    # unreachable despite every shape on the path being substitutable.
+    class ListOfLists(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        grid: list[list[int]] = Field(default_factory=list)
+
+    probe = Probe(ListOfLists)
+    assert probe.fields == ["grid"]
+    assert probe.wrap["grid"](1) == [[1]]
+    _violations, unreached, reached, _gap = _sweep(_probes([ListOfLists]))
+    assert not unreached, unreached
+    assert reached == {"ListOfLists.grid"}
 
 
 @pytest.mark.parametrize(
