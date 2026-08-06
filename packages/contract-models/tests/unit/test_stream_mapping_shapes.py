@@ -30,8 +30,9 @@ from typing import get_args
 
 import pytest
 from jsonschema import Draft202012Validator
-from pydantic import TypeAdapter, ValidationError
+from pydantic import Tag, TypeAdapter, ValidationError
 
+from analitiq.contracts.endpoints import WRITE_MODES
 from analitiq.contracts.shared.common import NonEmptyStr
 from analitiq.contracts.stream import (
     ApiStreamDestination,
@@ -69,6 +70,18 @@ _API_ENDPOINT_REF = {
     "connection_id": "00000000-0000-4000-8000-000000000002_v1",
     "endpoint_id": "transfers",
 }
+
+
+def _destination_union_tags() -> tuple[str, ...]:
+    """Every scope `StreamDestination`'s discriminator selects a variant by."""
+    tags = tuple(
+        meta.tag
+        for variant in get_args(get_args(StreamDestination)[0])
+        for meta in getattr(variant, "__metadata__", ())
+        if isinstance(meta, Tag)
+    )
+    assert tags, "StreamDestination is no longer a Tag-annotated union"
+    return tags
 
 
 class TestGetExpressionPath:
@@ -443,21 +456,97 @@ class TestDatabaseWriteModes:
                 {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "overwrite"}}
             )
 
-    def test_api_destination_mode_stays_endpoint_owned(self):
-        # Closing the database side must not accidentally close the API side,
-        # whose mode is whatever key the selected endpoint declares.
+    @pytest.mark.parametrize("mode", WRITE_MODES)
+    def test_api_destination_accepts_every_universe_mode(self, mode):
+        # The API branch is bounded by the UNIVERSE, not by the SQL subset: a
+        # mode the SQL write path does not implement is still a key an endpoint
+        # may declare, so closing the database side must not close the API side
+        # to the same set.
         dest = _DESTINATION.validate_python(
-            {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}
+            {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": mode}}
         )
-        assert dest.write.mode == "create_transfer"
+        assert dest.write.mode == mode
+
+    def test_api_mode_vocabulary_is_the_endpoint_write_key_universe(self):
+        # An API destination's mode names a key of the selected endpoint's
+        # `operations.write`, and that map is keyed by `endpoints.WriteMode` —
+        # so the vocabulary IS enumerable, from the same declaration the
+        # endpoint document is bound by. Derived, never restated here.
+        assert set(get_args(ApiWrite.model_fields["mode"].annotation)) == set(
+            WRITE_MODES
+        )
+
+    def test_api_destination_rejects_a_mode_no_endpoint_can_declare(self):
+        # THE silent wrong answer this closes: a stream could bind an API
+        # destination to a write operation no api-endpoint document is able to
+        # declare, and nothing in the contract saw it.
+        with pytest.raises(ValidationError):
+            _DESTINATION.validate_python(
+                {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}
+            )
 
     def test_api_destination_mode_rejects_whitespace(self):
-        # `NonEmptyStr`, not `min_length=1`: an endpoint declares no operation
-        # named "   ", so a mode that is only whitespace names nothing.
+        # Falls out of the `Literal`: an endpoint declares no operation named
+        # "   ", so a mode that is only whitespace names nothing.
         with pytest.raises(ValidationError):
             _DESTINATION.validate_python(
                 {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "   "}}
             )
+
+    def test_the_two_branches_are_bounded_by_different_facts(self):
+        # The bound on each branch comes from a different source — the universe
+        # for the API branch, the disposition table for the database branch —
+        # and the SQL subset must never be widened by aliasing the two. They
+        # are equal today only because no mode is dispositioned API-only.
+        assert _DB_WRITE_MODES <= set(WRITE_MODES)
+
+
+class TestDestinationScopeDiagnostics:
+    """A destination whose `endpoint_ref.scope` is missing or unknown.
+
+    The variant is selected by a nested key, which a plain field discriminator
+    cannot reach, so a callable reads it — and pydantic's default diagnostic
+    then names that private function instead of the document key. The key is
+    what an author can act on, so the union states it.
+    """
+
+    def _destination(self, ref: dict) -> dict:
+        return {"endpoint_ref": ref, "write": {"mode": "insert"}}
+
+    @pytest.mark.parametrize(
+        "label, ref",
+        [
+            ("missing", {k: v for k, v in _DB_ENDPOINT_REF.items() if k != "scope"}),
+            ("unknown", {**_DB_ENDPOINT_REF, "scope": "nonsense"}),
+        ],
+    )
+    def test_the_diagnostic_names_the_document_key(self, label, ref):
+        # `_destination_scope` appears in no document, no published schema and
+        # no skill prose, so naming it tells an author nothing. One message
+        # covers both cases because a callable discriminator has one.
+        with pytest.raises(ValidationError) as exc:
+            _DESTINATION.validate_python(self._destination(ref))
+        message = exc.value.errors()[0]["msg"]
+        assert "endpoint_ref.scope" in message, message
+        assert "_destination_scope" not in message, message
+
+    @pytest.mark.parametrize(
+        "label, ref",
+        [
+            ("missing", {k: v for k, v in _DB_ENDPOINT_REF.items() if k != "scope"}),
+            ("unknown", {**_DB_ENDPOINT_REF, "scope": "nonsense"}),
+        ],
+    )
+    def test_the_diagnostic_names_every_scope_the_union_tags(self, label, ref):
+        # Derived from the union's own tags, not restated: a variant added to
+        # the union must appear in the diagnostic without anyone remembering to
+        # edit the sentence. The default unknown-tag message named the expected
+        # tags, and replacing it must not lose that.
+        with pytest.raises(ValidationError) as exc:
+            _DESTINATION.validate_python(self._destination(ref))
+        message = exc.value.errors()[0]["msg"]
+        for tag in _destination_union_tags():
+            assert tag in message, (tag, message)
 
 
 class TestWriteShapesAreScopeDiscriminated:
@@ -512,7 +601,9 @@ class TestWriteShapesAreScopeDiscriminated:
          {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "overwrite"}}),
         ("api conflict_keys are endpoint-owned",
          {"endpoint_ref": _API_ENDPOINT_REF,
-          "write": {"mode": "create", "conflict_keys": ["id"]}}),
+          "write": {"mode": "upsert", "conflict_keys": ["id"]}}),
+        ("api mode outside the endpoint write-key universe",
+         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}),
         ("db upsert without its conflict key set",
          {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "upsert"}}),
         ("db upsert with an empty conflict key set",
@@ -528,7 +619,7 @@ class TestWriteShapesAreScopeDiscriminated:
          {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "   "}}),
         ("a scope no branch declares",
          {"endpoint_ref": {**_API_ENDPOINT_REF, "scope": "workspace"},
-          "write": {"mode": "create"}}),
+          "write": {"mode": "insert"}}),
     ]
 
     @pytest.mark.parametrize("label, doc", REJECTED, ids=[r[0] for r in REJECTED])
@@ -551,7 +642,7 @@ class TestWriteShapesAreScopeDiscriminated:
         ("db truncate_insert", {"endpoint_ref": _DB_ENDPOINT_REF,
                                 "write": {"mode": "truncate_insert"}}),
         ("api endpoint-owned mode",
-         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "create_transfer"}}),
+         {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "upsert"}}),
         ("db insert with an execution override",
          {"endpoint_ref": _DB_ENDPOINT_REF, "write": {"mode": "insert"},
           "execution": {"batch_size": 1000}}),
@@ -616,6 +707,14 @@ _LIST_TARGET = {
         "properties": {"sku": {"arrow_type": "Utf8"}},
     },
 }
+# A nested field whose NAME contains a dot. `properties` keys are field names,
+# not paths, so this is a legally declared field — and therefore one a rule has
+# to be able to address.
+_DOTTED_NAME_TARGET = {
+    "path": "meta",
+    "arrow_type": "Object",
+    "properties": {"user.id": {"arrow_type": "Utf8"}},
+}
 
 
 class TestValidationRuleField:
@@ -643,13 +742,38 @@ class TestValidationRuleField:
                 _mapping(_OBJECT_TARGET, [{"type": "required", "field": "address.city"}])
             )
 
-    def test_dotted_token_rejected(self):
-        # Same reasoning one level down: the tokens carry the target path's
-        # pattern, not the looser source-segment rule, so `["address.city"]` is
-        # not a way to smuggle the dotted spelling back in.
-        with pytest.raises(ValidationError):
+    def test_a_dotted_token_is_one_field_name_not_a_nested_path(self):
+        # A token array carries no splitting convention — that is the whole
+        # reason it replaced the dotted string — so `["address.city"]` names
+        # ONE field called `address.city`. `_OBJECT_TARGET` declares no such
+        # field, so it fails at resolution rather than at the shape, and the
+        # dotted spelling is still not a way back to nesting.
+        with pytest.raises(ValidationError, match="names no assignment target"):
             StreamMapping.model_validate(
                 _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address.city"]}])
+            )
+
+    def test_a_dotted_field_name_is_addressable(self):
+        # The gap this closes: `properties` keys are unconstrained field names,
+        # so a nested field called `user.id` is declarable. A token pattern
+        # forbidding `.` made it permanently unaddressable — no spelling of a
+        # rule could name it — so the contract admitted a field that could not
+        # be validated at all. Tokens match the source `get` segment rule
+        # instead, which is the rule this field's own description cites.
+        StreamMapping.model_validate(
+            _mapping(
+                _DOTTED_NAME_TARGET,
+                [{"type": "required", "field": ["meta", "user.id"]}],
+            )
+        )
+
+    def test_a_dotted_field_name_is_not_reachable_by_splitting_it(self):
+        with pytest.raises(ValidationError, match="declares no field"):
+            StreamMapping.model_validate(
+                _mapping(
+                    _DOTTED_NAME_TARGET,
+                    [{"type": "required", "field": ["meta", "user", "id"]}],
+                )
             )
 
     def test_empty_array_rejected(self):
@@ -735,7 +859,13 @@ class TestValidationRuleField:
         assert validator.is_valid(
             _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address", "city"]}])
         )
-        for bad in ("address.city", ["address.city"], [], ["  "]):
+        for bad in ("address.city", [], ["  "]):
             assert not validator.is_valid(
                 _mapping(_OBJECT_TARGET, [{"type": "required", "field": bad}])
             ), f"published schema accepts field={bad!r}, which the model rejects"
+        # `["address.city"]` is a well-SHAPED token array naming one field, so
+        # the shape check passes and only the referential rule rejects it —
+        # which is the split this test exists to state, not a hole in it.
+        assert validator.is_valid(
+            _mapping(_OBJECT_TARGET, [{"type": "required", "field": ["address.city"]}])
+        )

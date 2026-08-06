@@ -37,9 +37,12 @@
       "description": "Stream-selected write behavior for an API (connector-scope) destination.\n\nCarries no `conflict_keys`: an API upsert's conflict target is\nendpoint-owned (`operations.write.upsert.conflict_keys`), so there is no\nstream-authored key to declare.",
       "properties": {
         "mode": {
-          "description": "Write mode \u2014 the selected endpoint's `operations.write` key. Endpoint-declared, so no contract enum can enumerate it.",
-          "minLength": 1,
-          "pattern": "\\S",
+          "description": "Write mode \u2014 the selected endpoint's `operations.write` key. Which key that endpoint declares is a cross-document fact; that the key belongs to the destination write-mode universe is not.",
+          "enum": [
+            "insert",
+            "upsert",
+            "truncate_insert"
+          ],
           "title": "Mode",
           "type": "string"
         }
@@ -1538,7 +1541,7 @@
       "description": "Stream record validation rule \u2014 see \u00a7Assignment Validation.",
       "properties": {
         "field": {
-          "description": "Mapped output field addressed by this rule, as an ordered token array \u2014 one entry per path segment, outermost first, spelled like a source `get` path. The first token names an `assignments[].target.path` declared in the same mapping; each later token names a field declared under that target's `properties` (descending through `items` for a `List`), so a rule can address a field nested inside an `Object` target. A token containing `.` is rejected: nesting is a further token, never a dotted string.",
+          "description": "Mapped output field addressed by this rule, as an ordered token array \u2014 one entry per path segment, outermost first, spelled like a source `get` path. The first token names an `assignments[].target.path` declared in the same mapping; each later token names a field declared under that target's `properties` (descending through `items` for a `List`), so a rule can address a field nested inside an `Object` target. A token is one field name, so a `.` inside it is part of that name: nesting is a further token, never a dotted string.",
           "examples": [
             [
               "email"
@@ -1549,7 +1552,8 @@
             ]
           ],
           "items": {
-            "pattern": "^[^.]*[^.\\s][^.]*$",
+            "minLength": 1,
+            "pattern": "\\S",
             "type": "string"
           },
           "minItems": 1,

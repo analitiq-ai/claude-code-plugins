@@ -43,7 +43,7 @@ from — where the two differ, naming the source is the mistake to watch for.
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
 | `type` | **yes** | 'required' \| 'not_null' \| 'min_length' \| 'max_length' \| 'pattern' \| 'range' \| 'in_list' | — | — |
-| `field` | **yes** | array of string | — | `minItems=1`, `item pattern=^[^.]*[^.\s][^.]*$` |
+| `field` | **yes** | array of string | — | `minItems=1`, `item pattern=\S`, `item minLength=1` |
 | `value` | no | any | `None` | — |
 | `message` | no | string \| null | `None` | — |
 
@@ -68,6 +68,8 @@ neither it nor the table states is what each member *means*:
 declared anywhere in the same mapping, later tokens the nesting under it. Reach
 into an `Object` target with a further token (`["address", "city"]`), never a
 dotted string — the destination declares nesting with `arrow_type` + `properties`.
+One token is one field name, so a `.` inside a token is part of that name, as in
+a source `get` path.
 
 ## `error_handling`
 

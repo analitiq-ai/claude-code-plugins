@@ -680,14 +680,20 @@ def published_vocabularies() -> dict[str, dict]:
             [get_args(v.model_fields[discriminator].annotation)[0] for v in variants],
             f"discriminated union `analitiq.contracts.stream.{union_name}`")
 
-    # Only the database destination closes `write.mode`. An API destination's
-    # mode is whatever key its endpoint declares under `operations.write`, which
-    # no contract enum can enumerate — hence a vocabulary for one branch of the
-    # destination union and an open string on the other.
+    # Each branch of the destination union closes `write.mode`, but against a
+    # different fact, so only the database one is a row here. The database
+    # branch is bounded by what the SQL write path implements; the API branch is
+    # bounded by the write-mode UNIVERSE, because an API mode names a key of the
+    # selected endpoint's `operations.write` and that map is keyed by
+    # `endpoints.WriteMode`. WHICH key the endpoint declares stays a
+    # cross-document fact. The API bound is rendered by the `ApiWrite` field
+    # table in the destinations doc, so a second row of the same members here
+    # would tell a reader nothing the tables do not.
     add("write.mode", "`stream.destinations[].write.mode` (database)",
         sorted(stream._DB_WRITE_MODES),  # skipcq: PYL-W0212 — contract-internal vocabulary rendered into prose; the generator is the one sanctioned reader
         "discriminated union `analitiq.contracts.stream.DatabaseWrite` "
-        "(API modes are endpoint-declared, so that branch's field is `str`)")
+        "(an API destination's mode is bounded by the endpoint write-key "
+        "universe instead)")
 
     return vocabularies
 

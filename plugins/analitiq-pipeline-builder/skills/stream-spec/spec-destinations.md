@@ -72,14 +72,14 @@ warehouse is a normal shape, not a duplicate.
 
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
-| `mode` | **yes** | string | — | `pattern=\S`, `minLength=1` |
+| `mode` | **yes** | 'insert' \| 'upsert' \| 'truncate_insert' | — | — |
 <!-- END GENERATED: fields-stream-write -->
 
 The destination's `endpoint_ref.scope` picks the whole shape, write block
 included — pick the endpoint first, then author the write block its variant
-declares. An API destination's mode is one of the selected endpoint's
-`operations.write` keys (e.g. `create`, `update`, `upsert`), taken verbatim; a
-database destination's is a member of the closed set in the tables above. The
+declares. Each variant's `mode` vocabulary is in the tables above; an API
+destination's mode must additionally be a key the selected endpoint declares
+under `operations.write`, which only that endpoint document can tell you. The
 orchestrator's `WriteModeMapper` (see
 `../pipeline-builder/references/enum-mappers.md`) classifies the user's intent
 to one of the database modes.

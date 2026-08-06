@@ -16,6 +16,7 @@ from analitiq.contracts.endpoints import (
     ARROW_TYPE_PATTERN,
     WRITE_MODES,
     DatabaseObject,
+    WriteMode,
 )
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
 from analitiq.contracts.shared.advisory import AdvisoryValidated, find_duplicates
@@ -463,10 +464,12 @@ class StreamSource(StrictModel):
         # (endpoint_ref) knows it, like `_validate_filter_operator_scope`
         # above (ADV-STRM-012). This check is ADV-STRM-014. `is not None`
         # rather than truthiness: declaring an empty list is still declaring
-        # the feature. StreamSource publishes no scope-conditioned `if`/`then`
-        # mirror (ADV-STRM-012 has none either; only StreamDestination
-        # carries them) — adding one is a restriction, hence a major stream
-        # schema bump, and belongs in its own change.
+        # the feature. No scope-conditioned `if`/`then` mirror is published for
+        # either check, and none exists anywhere in the stream schema to copy —
+        # the destination reached the same end by becoming a scope-tagged union
+        # instead, which is the precedent to follow here. Doing that to
+        # StreamSource is a restriction, hence a major stream schema bump, and
+        # belongs in its own change.
         if self.endpoint_ref.scope == SCOPE_CONNECTION:
             return self
         declared = [
@@ -642,11 +645,18 @@ class ApiWrite(StrictModel):
     stream-authored key to declare.
     """
 
-    mode: NonEmptyStr = Field(
+    # Bounded by the UNIVERSE, not by the SQL subset. Which operation an API
+    # endpoint actually declares is a cross-document fact this model cannot see,
+    # but the KEYS of `endpoints.Operations.write` are typed `WriteMode`, so a
+    # mode outside the universe names an operation no api-endpoint document is
+    # able to declare — an illegal binding, and representable until this closed.
+    # Read from `endpoints` rather than restated, so the two move together.
+    mode: WriteMode = Field(
         ...,
         description=(
             "Write mode — the selected endpoint's `operations.write` key. "
-            "Endpoint-declared, so no contract enum can enumerate it."
+            "Which key that endpoint declares is a cross-document fact; that "
+            "the key belongs to the destination write-mode universe is not."
         ),
     )
 
@@ -688,8 +698,8 @@ def _destination_scope(value: Any) -> str | None:
 
     The selecting field is nested (`endpoint_ref.scope`), which a plain field
     discriminator cannot reach, so the tag is read by this callable instead. A
-    ref that declares no scope returns None and fails at the union with
-    `union_tag_not_found`, exactly as a missing top-level discriminator would.
+    ref that declares no scope returns None and fails at the union, exactly as
+    a missing top-level discriminator would.
     """
     ref = (
         value.get("endpoint_ref")
@@ -701,29 +711,58 @@ def _destination_scope(value: Any) -> str | None:
     return getattr(ref, "scope", None)
 
 
+def _union_tags(union: Any) -> tuple[str, ...]:
+    """The tags a `Tag`-annotated union selects its variants by, in order."""
+    tags = tuple(
+        meta.tag
+        for variant in get_args(union)
+        for meta in getattr(variant, "__metadata__", ())
+        if isinstance(meta, Tag)
+    )
+    if not tags:
+        raise AssertionError(
+            f"{union!r} carries no `Tag` metadata; the diagnostic below would "
+            "name no scope at all"
+        )
+    return tags
+
+
+_DESTINATION_VARIANTS = (
+    Annotated[DatabaseStreamDestination, Tag(SCOPE_CONNECTION)]
+    | Annotated[ApiStreamDestination, Tag(SCOPE_CONNECTOR)]
+)
+
 # Destination binding as a `endpoint_ref.scope`-tagged union. Which write shapes
 # are legal is a function of the destination's scope — an API destination's mode
-# is endpoint-declared and its conflict target endpoint-owned, a database
-# destination's mode is the closed SQL vocabulary and its conflict key
-# stream-declared — so the scope selects the whole destination shape rather than
-# being cross-checked against it afterwards. The published JSON Schema renders a
-# `oneOf` over the two closed variants; because each variant's `endpoint_ref`
-# pins `scope` to a `const`, exactly one branch can ever match, so an external
-# validator rejects precisely what this model does.
+# is the endpoint's declared write-operation key and its conflict target
+# endpoint-owned, a database destination's mode is the closed SQL vocabulary and
+# its conflict key stream-declared — so the scope selects the whole destination
+# shape rather than being cross-checked against it afterwards. The published JSON
+# Schema renders a `oneOf` over the closed variants; because each variant's
+# `endpoint_ref` pins `scope` to a `const`, exactly one branch can ever match, so
+# an external validator rejects precisely what this model does.
+#
+# The diagnostic is stated rather than defaulted. Pydantic names the CALLABLE
+# ("Unable to extract tag using discriminator _destination_scope()"), and that
+# function appears in no document, no published schema and no skill prose, so it
+# tells an author nothing — where the sibling source-side union, discriminated
+# by a plain field, names `scope`. A custom error type replaces BOTH the
+# missing-tag and the unknown-tag message, so this one carries what each of them
+# carried: the key that selects the variant, and every scope that selects one.
+# The scopes are read off the union's own tags, so a variant added to it appears
+# here without anyone remembering to edit the sentence.
 StreamDestination = Annotated[
-    Annotated[DatabaseStreamDestination, Tag(SCOPE_CONNECTION)]
-    | Annotated[ApiStreamDestination, Tag(SCOPE_CONNECTOR)],
-    Discriminator(_destination_scope),
+    _DESTINATION_VARIANTS,
+    Discriminator(
+        _destination_scope,
+        custom_error_type="destination_endpoint_ref_scope",
+        custom_error_message=(
+            "endpoint_ref.scope selects the destination shape; it must be "
+            "present and one of "
+            + ", ".join(repr(tag) for tag in _union_tags(_DESTINATION_VARIANTS))
+        ),
+    ),
 ]
-
-_STREAM_DESTINATION_ADAPTER = TypeAdapter(StreamDestination)
-
-
-def validate_stream_destination(
-    data: Any,
-) -> DatabaseStreamDestination | ApiStreamDestination:
-    """Validate a raw destination dict into its concrete scope variant."""
-    return _STREAM_DESTINATION_ADAPTER.validate_python(data)
 
 
 # ---------------------------------------------------------------------------
@@ -1145,7 +1184,15 @@ class ValidationRule(StrictModel):
     type: Literal[
         "required", "not_null", "min_length", "max_length", "pattern", "range", "in_list"
     ] = Field(...)
-    field: list[Annotated[str, Field(pattern=SINGLE_SEGMENT_PATH_PATTERN)]] = Field(
+    # `NonEmptyStr` tokens, matching a source `get` segment and NOT the tighter
+    # `AssignmentTarget.path` rule. The tight rule exists because a dotted
+    # STRING is ambiguous — it could be read as a path — and a token array
+    # removes that ambiguity by construction, so the reason does not carry over.
+    # It also cannot be applied here without breaking addressing: nested field
+    # names are `properties` keys, which are unconstrained, so a declared field
+    # named `user.id` would be addressable by no rule at all. `["a.b"]` is one
+    # field called `a.b`; nesting is `["a", "b"]`.
+    field: list[NonEmptyStr] = Field(
         ...,
         min_length=1,
         description=(
@@ -1155,9 +1202,9 @@ class ValidationRule(StrictModel):
             "`assignments[].target.path` declared in the same mapping; each "
             "later token names a field declared under that target's "
             "`properties` (descending through `items` for a `List`), so a rule "
-            "can address a field nested inside an `Object` target. A token "
-            "containing `.` is rejected: nesting is a further token, never a "
-            "dotted string."
+            "can address a field nested inside an `Object` target. A token is "
+            "one field name, so a `.` inside it is part of that name: nesting "
+            "is a further token, never a dotted string."
         ),
         examples=[["email"], ["address", "city"]],
     )

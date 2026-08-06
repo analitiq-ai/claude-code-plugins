@@ -334,12 +334,13 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(model="ValidationRule", prose_hash="abaa76935a9d", descriptive=True),
     ProseObligation(
-        model="ValidationRule", field="field", prose_hash="51e3c57eab3a",
+        model="ValidationRule", field="field", prose_hash="0e4f13107d1d",
         rule_ids=("ADV-STRM-015",),
         structural=(
-            "a `Field` item pattern (`SINGLE_SEGMENT_PATH_PATTERN`) and a list "
-            "length floor carry the token-array shape; the rule carries the "
-            "resolution against the mapping's targets"
+            "`NonEmptyStr` items and a list length floor carry the token-array "
+            "shape — one token is one field name, matching a source `get` "
+            "segment; the rule carries the resolution against the mapping's "
+            "targets"
         ),
     ),
     ProseObligation(model="ValidationRule", field="message", prose_hash="15b46cce1ca8", descriptive=True),
@@ -378,12 +379,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ApiWrite", field="mode", prose_hash="9fce2604737e",
-        structural="`NonEmptyStr` carries the static constraint",
+        model="ApiWrite", field="mode", prose_hash="2b80af8d1987",
+        structural=(
+            "`WriteMode` — the same `Literal` that types the keys of "
+            "`endpoints.Operations.write`, so a mode no api-endpoint document "
+            "could declare is unrepresentable here"
+        ),
         waiver=(
-            "cross-document: an API destination's mode names the selected "
-            "endpoint's write-operation key, which lives on the endpoint "
-            "document this one cannot see"
+            "cross-document: WHICH of those keys the selected endpoint actually "
+            "declares lives on the endpoint document this one cannot see; only "
+            "the vocabulary it is drawn from is reachable"
         ),
     ),
     ProseObligation(model="_StreamDestinationBase", prose_hash="79a9457b1ac7", descriptive=True),
