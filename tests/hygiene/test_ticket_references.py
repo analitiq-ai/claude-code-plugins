@@ -463,6 +463,12 @@ def test_exclusions_are_all_live() -> None:
 # stay green if a pattern were later broken. These pin the detector itself —
 # asserting the matched TEXT, not merely that something matched, so an arm
 # cannot be deleted and quietly covered by a broader pattern's tail.
+#
+# The fixtures below spell every ref out in full. An earlier draft split them
+# ("engine" + "#390") to keep the file from matching itself; that bought nothing
+# twice over — this file is exempt in `_EXCLUDED_PATHS`, and the splitting did
+# not even work, since `_BARE_TICKET` happily matches a `#390` preceded by a
+# quote. The exemption is what makes scanning safe, and it is recorded there.
 
 
 def test_keyword_form_is_flagged() -> None:
@@ -472,16 +478,16 @@ def test_keyword_form_is_flagged() -> None:
     two-digit case proves nothing about the keyword arm that produced it.
     """
     cases = {
-        "the block (issue " + "#7) adds three facts": "issue " + "#7",
-        "Issue " + "#4 — canonical arrow_type parameters": "Issue " + "#4",
-        "Review findings (PR " + "#3) shipped as documents": "PR " + "#3",
-        "See pull request " + "#7 for the rationale": "pull request " + "#7",
-        "See pull requests " + "#7 and elsewhere": "pull requests " + "#7",
-        "the two issues " + "#8 and later": "issues " + "#8",
+        "the block (issue #7) adds three facts": "issue #7",
+        "Issue #4 — canonical arrow_type parameters": "Issue #4",
+        "Review findings (PR #3) shipped as documents": "PR #3",
+        "See pull request #7 for the rationale": "pull request #7",
+        "See pull requests #7 and elsewhere": "pull requests #7",
+        "the two issues #8 and later": "issues #8",
         # Whitespace runs: a reflowed comment collapses to two spaces or a tab
         # far more often than anyone reaches for a second space on purpose.
-        "see pull  request  " + "#9 for this": "pull  request  " + "#9",
-        "settled in issue\t" + "#6 upstream": "issue\t" + "#6",
+        "see pull  request  #9 for this": "pull  request  #9",
+        "settled in issue\t#6 upstream": "issue\t#6",
     }
     for line, expected in cases.items():
         assert scan_text(line) == [(1, expected)], f"keyword arm missed: {line!r}"
@@ -489,20 +495,17 @@ def test_keyword_form_is_flagged() -> None:
 
 def test_cross_repo_form_is_flagged() -> None:
     cases = {
-        "the SQL write path (analitiq-engine" + "#390, settled)":
-            "analitiq-engine" + "#390",
-        "artifacts self-declare their version (engine" + "#413)":
-            "engine" + "#413",
-        "the IAM role is specified by infrastructure" + "#1018":
-            "infrastructure" + "#1018",
-        "Adopted verbatim from analitiq-ai/analitiq-engine" + "#392.":
-            "analitiq-ai/analitiq-engine" + "#392",
+        "the SQL write path (analitiq-engine#390, settled)": "analitiq-engine#390",
+        "artifacts self-declare their version (engine#413)": "engine#413",
+        "the IAM role is specified by infrastructure#1018": "infrastructure#1018",
+        "Adopted verbatim from analitiq-ai/analitiq-engine#392.":
+            "analitiq-ai/analitiq-engine#392",
         # Single digit: only this arm can catch it.
-        "settled in analitiq-engine" + "#7 last year": "analitiq-engine" + "#7",
+        "settled in analitiq-engine#7 last year": "analitiq-engine#7",
         # A one-character slug. No other arm can reach it — the bare pattern's
         # lookbehind rejects a `#` preceded by a word character — so requiring
         # two characters here left this shape matched by nothing.
-        "tracked on x" + "#123 upstream": "x" + "#123",
+        "tracked on x#123 upstream": "x#123",
     }
     for line, expected in cases.items():
         assert scan_text(line) == [(1, expected)], f"cross-repo arm missed: {line!r}"
@@ -510,19 +513,19 @@ def test_cross_repo_form_is_flagged() -> None:
 
 def test_bare_form_is_flagged() -> None:
     cases = {
-        "a token array rather than the dotted string (" + "#108).": "#108",
-        "the shape " + "#125 was filed to eliminate.": "#125",
-        "ADV-STRM-008 retired in 1.0.0rc19 (" + "#108).": "#108",
+        "a token array rather than the dotted string (#108).": "#108",
+        "the shape #125 was filed to eliminate.": "#125",
+        "ADV-STRM-008 retired in 1.0.0rc19 (#108).": "#108",
         # A hyphen prefix is a ref, not an anchor: the lookbehind must allow it.
-        "the pre-" + "#125 spelling stayed valid": "#125",
+        "the pre-#125 spelling stayed valid": "#125",
         # Five digits is inside the window. The ceiling exists to skip six-digit
         # hex colours, so it must not creep down onto real issue numbers.
-        "closes " + "#12345 upstream": "#12345",
+        "closes #12345 upstream": "#12345",
     }
     for line, expected in cases.items():
         assert scan_text(line) == [(1, expected)], f"bare arm missed: {line!r}"
     # A range: both ends, not just the first.
-    assert scan_text("closes " + "#150-" + "#152 in one PR") == [
+    assert scan_text("closes #150-#152 in one PR") == [
         (1, "#150"),
         (1, "#152"),
     ]
@@ -563,19 +566,19 @@ def test_single_digit_bare_refs_are_left_wide() -> None:
     assert scan_text("the ADR's #5 clause") == []
     # The hole itself, pinned so it is a decision on record rather than a
     # surprise the day someone hits it.
-    assert scan_text("the over-strict scope check (" + "#7) fixed this") == []
+    assert scan_text("the over-strict scope check (#7) fixed this") == []
 
 
 def test_overlapping_forms_report_one_site() -> None:
     """`issue #81` is one ref, not a keyword match plus a bare match."""
-    assert scan_text("the engine grammar (issue " + "#81) is vendored.") == [
-        (1, "issue " + "#81")
+    assert scan_text("the engine grammar (issue #81) is vendored.") == [
+        (1, "issue #81")
     ]
-    assert scan_text("mirrored from analitiq-engine" + "#406 today.") == [
-        (1, "analitiq-engine" + "#406")
+    assert scan_text("mirrored from analitiq-engine#406 today.") == [
+        (1, "analitiq-engine#406")
     ]
     # Two genuinely distinct refs on one line still report as two.
-    assert len(scan_text("(engine ADR; issues " + "#87, " + "#89)")) == 2
+    assert len(scan_text("(engine ADR; issues #87, #89)")) == 2
 
 
 def test_ordinary_prose_is_not_flagged() -> None:
@@ -596,14 +599,14 @@ def test_ordinary_prose_is_not_flagged() -> None:
         "python-version: ['3.12', '3.13']",
         '"$ref": "connector.json#/$defs/Transport"',
         "see [the layout](../README.md#12-layout) for the tree",
-        "##" + "123 — a doubled marker, not a ref",
-        "jump to [the section](" + "#12-section) below",
+        "##123 — a doubled marker, not a ref",
+        "jump to [the section](#12-section) below",
         # A purely numeric heading anchor: no hyphen for the lookahead to catch,
         # so the doc-extension filter is the only thing standing between this
         # and a red build on an ordinary cross-reference.
-        "see [the layout](../README.md" + "#12) for the tree",
-        "the fragment spec.yaml" + "#3 names the third document",
+        "see [the layout](../README.md#12) for the tree",
+        "the fragment spec.yaml#3 names the third document",
         # An all-digit hex colour. Six digits is past the ceiling.
-        "  --accent: " + "#123456;",
+        "  --accent: #123456;",
     ):
         assert scan_text(line) == [], f"false positive on: {line!r}"

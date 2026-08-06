@@ -1296,8 +1296,7 @@ def _canonical_types_description() -> str:
         "(`Dictionary`, `RunEndEncoded`), and `Interval` are not part of this "
         "canonical vocabulary: the platform does not execute them end-to-end. "
         "They return, if ever, by shipping in the engine first and re-consuming "
-        "the grammar manifest (the re-add policy above) — never by editing "
-        "this document."
+        "the grammar manifest — never by editing this document."
     )
 
 
