@@ -388,11 +388,24 @@ class Reach(NamedTuple):
     wrap: Callable[[Any], Any] | None
     keyword: str | None
     leaf: dict[str, Any]
+    path: tuple[str, ...] = ()
+
+    @property
+    def label(self) -> str:
+        """How this reach gets to the number, for a failure message."""
+        return "→".join(self.path) if self.path else "the bare value"
 
     @property
     def key(self) -> tuple[Any, ...]:
-        """Identity for de-duplication: same shape, same depth, same bound."""
-        return (self.keyword, self.wrap is None, json.dumps(self.leaf, sort_keys=True))
+        """Identity for de-duplication: same PATH, same depth, same bound.
+
+        The whole path, not just the outermost keyword: `list[int]` and
+        `list[list[int]]` both land on an integer under `items`, but they need
+        different wraps (`[v]` and `[[v]]`). Keying on the outer keyword alone
+        collapsed them and dropped one, leaving a lax nested branch unswept
+        while the field read as covered.
+        """
+        return (self.path, self.wrap is None, json.dumps(self.leaf, sort_keys=True))
 
 
 def _dedupe(reaches: list[Reach]) -> list[Reach]:
@@ -445,7 +458,7 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
     if not isinstance(node, dict):
         return []
     if node.get("type") in ("integer", "number"):
-        return [Reach(_identity, None, node)]
+        return [Reach(_identity, None, node, ())]
     if _is_objectish(node) and node.get("properties"):
         return []
 
@@ -457,6 +470,7 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
         outer = _MEMBER_WRAPS.get(keyword)
         for member in _member_schemas(node, keyword):
             for child in _numeric_reaches(member, defs, depth + 1):
+                path = (keyword,) + child.path
                 if child.wrap is None:
                     # The number sits under a collection DEEPER IN that has no
                     # wrap (`list[dict[str, int]]`). The outer collection being
@@ -464,9 +478,11 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
                     # built — so the child's reach travels up unchanged.
                     # Reporting the outer keyword would name a shape that is
                     # not the blocker.
-                    found.append(child)
+                    # `keyword` stays the child's: it names the blocker, while
+                    # the path records how the sweep would have got there.
+                    found.append(child._replace(path=path))
                 elif outer is None:
-                    found.append(Reach(None, keyword, child.leaf))
+                    found.append(Reach(None, keyword, child.leaf, path))
                 else:
                     # Wraps compose innermost-first: the member is built by the
                     # child's wrap, then placed in this collection, so
@@ -475,6 +491,7 @@ def _numeric_reaches(node: Any, defs: dict[str, Any], depth: int = 0) -> list[Re
                         lambda v, o=outer, i=child.wrap: o(i(v)),
                         keyword,
                         child.leaf,
+                        path,
                     ))
     return _dedupe(found)
 
@@ -632,21 +649,20 @@ def _sweep(probes: list[Probe] | None = None) -> tuple[list[str], list[str], set
             continue
         for field in probe.fields:
             site = f"{probe.label}.{field}"
-            # EVERY sweepable alternative is probed, each with its own leaf and
-            # its own wrap. A field is unreached only when no alternative got
-            # through — one that does reach says nothing about a sibling, which
-            # is why the branch-level failures are collected rather than
-            # reported the moment the first one appears.
-            blocked: list[str] = []
+            # EVERY sweepable alternative is probed, each with its own leaf
+            # and its own wrap, and each reports its own failure. Suppressing a
+            # blocked branch because a sibling reached is the same masking this
+            # file keeps having to close: the field would read as covered while
+            # one of its alternatives went unchecked.
             for reach in probe.sweepable(field):
-                branch = f"{site} (via {reach.keyword or 'the bare value'})"
+                branch = f"{site} (via {reach.label})"
                 try:
                     base = probe.reach(field, reach)
                 except Unsynthesisable as exc:
-                    blocked.append(f"{branch}: no legal value ({exc})")
+                    unreached.append(f"{branch}: no legal value ({exc})")
                     continue
                 if base is None:
-                    blocked.append(f"{branch}: no document both halves accept")
+                    unreached.append(f"{branch}: no document both halves accept")
                     continue
                 reached.add(site)
                 good = probe.good(reach)
@@ -672,8 +688,6 @@ def _sweep(probes: list[Probe] | None = None) -> tuple[list[str], list[str], set
                             f"{branch}: model accepts float-spelled {float(good)!r}, "
                             f"schema rejects it (document {json.dumps(document)})"
                         )
-            if site not in reached:
-                unreached += blocked
     return violations, unreached, reached, float_gap
 
 
@@ -931,6 +945,60 @@ def test_each_alternative_keeps_its_own_bound():
     # The sweepable branch reaches, using its own bound rather than the other's.
     _violations, _unreached, reached, _gap = _sweep(_probes([Mixed]))
     assert reached == {"Mixed.v"}
+
+
+def test_alternatives_at_different_depths_are_both_swept():
+    # `list[StrictInt] | list[list[int]]`: both land on an integer under
+    # `items`, so an identity keyed on the outer keyword and the leaf alone
+    # calls them the same reach and drops one. The nested branch is the lax
+    # one here, so dropping it leaves a field accepting `[["1"]]` while the
+    # sweep reports it covered. Identity has to carry the whole path.
+    class TwoDepths(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        v: list[StrictInt] | list[list[int]] = Field(...)
+
+    probe = Probe(TwoDepths)
+    assert sorted(r.path for r in probe.reaches["v"]) == [
+        ("items",), ("items", "items"),
+    ]
+    violations, _unreached, reached, _gap = _sweep(_probes([TwoDepths]))
+    assert reached == {"TwoDepths.v"}
+    # The lax nested branch is caught, and the message names which branch.
+    assert violations, "the nested lax alternative was never probed"
+    assert all("items→items" in v for v in violations), violations
+
+
+def test_a_blocked_branch_is_reported_even_when_a_sibling_reaches():
+    # The field-level `reached` set must not gate branch-level reporting. A
+    # branch the sweep cannot build a document for is an unchecked branch
+    # whatever its siblings manage, and swallowing it is the same masking as
+    # electing a winner, moved one layer out.
+    #
+    # The unreachable branch is injected rather than found in the contract: no
+    # model declares one today, and the guard has to hold for the day one does.
+    class OneGoodBranch(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        v: list[int] = Field(...)
+
+    probe = Probe(OneGoodBranch)
+    (good_reach,) = probe.sweepable("v")
+    # A leaf whose bounds no value satisfies: `synthesise` returns 1, which the
+    # schema then rejects on `minimum`, so no document reaches this branch.
+    impossible = Reach(
+        wrap=lambda value: [[value]],
+        keyword="items",
+        leaf={"type": "integer", "minimum": 5, "maximum": 1},
+        path=("items", "items"),
+    )
+    probe.reaches["v"] = [good_reach, impossible]
+
+    _violations, unreached, reached, _gap = _sweep([probe])
+    assert reached == {"OneGoodBranch.v"}, "the healthy branch should still reach"
+    assert [u for u in unreached if "items→items" in u], (
+        "the blocked branch was swallowed because a sibling reached: " f"{unreached}"
+    )
 
 
 def test_an_unsweepable_alternative_is_reported_even_beside_a_sweepable_one():
