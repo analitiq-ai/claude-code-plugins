@@ -186,6 +186,22 @@ is engine-owned" above). Craft the schema never defined (the `ssl_mode`
 vocabulary, the driver-selection decision order, datetime naive/tz judgment) is
 not drift-exposed and stays.
 
+## Authoring rules
+
+`.claude/rules/` holds the how-to-behave checklists this policy implies, tracked
+so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
+state and stays ignored). Read the one that matches what you are editing:
+
+- `no-drift-surfaces.md` — before hardcoding a value another source owns.
+- `no-cardinality-restatements.md` — before writing how many members a shape
+  has. Counts are the one restatement class every guard here is blind to.
+- `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships
+  verbatim to users and is executed by agents.
+- `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
+  count, "the rule above". `tests/hygiene/test_ticket_references.py` gates the
+  shapes a regex can match; that rule covers the half it cannot read, and the
+  PR template asks you to attest you applied it.
+
 ## Conventions
 
 - JSON Schema Draft 2020-12 throughout.

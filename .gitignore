@@ -9,7 +9,15 @@ __pycache__/
 htmlcov/
 coverage.xml
 .idea/
-.claude/
+# Claude Code's working directory: local settings, session state, and
+# `worktrees/`, which holds whole nested checkouts. `skills/` stays out too — it
+# carries symlinks into a separate private repo, so tracking it would publish a
+# path nobody outside can follow.
+.claude/*
+# `rules/` is the exception: authoring policy this repo's prose and tests cite
+# by path. Ignored, those citations resolved only on the machine that wrote
+# them; tracked, they resolve for anyone with a clone.
+!.claude/rules/
 
 # Python packaging build artifacts
 build/

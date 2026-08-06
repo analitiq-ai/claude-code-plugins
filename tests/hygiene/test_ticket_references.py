@@ -183,6 +183,12 @@ _EXCLUDED_PATHS = (
     # synthetic acceptance fixtures below. Scanning itself is guaranteed
     # circular.
     "tests/hygiene/test_ticket_references.py",
+    # The prose half of the same rule, and circular for the same reason: it
+    # teaches the shapes by showing them, so it names `issue #89`,
+    # `analitiq-engine#406` and "this PR" in the course of forbidding them.
+    # Its subject is the judgment this gate cannot mechanise, so the gate has
+    # nothing to say about it either way.
+    ".claude/rules/resolvable-referents.md",
 )
 
 
@@ -251,23 +257,26 @@ _URL_TICKET = re.compile(
 
 _PATTERNS = (_KEYWORD_TICKET, _CROSS_REPO_TICKET, _BARE_TICKET, _URL_TICKET)
 
-# `.claude/rules/no-drift-surfaces.md`, `.claude/skills/releasing/SKILL.md`.
-# `.gitignore` excludes `.claude/`, so any path under it is absent from every
-# clone. Matched anywhere in a line, backticked or not, since these appear both
-# ways. The leading `.` is required: `claude/` alone is not the ignored tree,
-# and `plugins/analitiq-connector-builder/.claude-plugin/` is a different
-# directory that IS tracked — hence `/` immediately after `claude`.
+# `.claude/skills/releasing/SKILL.md`, `.claude/settings.local.json`. Matched
+# anywhere in a line, backticked or not, since citations appear both ways. The
+# leading `.` is required: `claude/` alone is not that tree, and
+# `plugins/analitiq-connector-builder/.claude-plugin/` is a different directory
+# that IS tracked — hence `/` immediately after `claude`.
+#
+# A match is only a DEFECT if the path it names is untracked, which is checked
+# against git rather than assumed. `.claude/` used to be ignored wholesale; now
+# `rules/` is tracked and `skills/` is not, so "under `.claude/`" no longer
+# answers the question the gate is actually asking. Resolving against the index
+# keeps the two in step by construction — re-admitting another subtree changes
+# what the gate accepts without anyone editing this file, and re-ignoring one
+# turns its citations red the same day.
 _FOREIGN_PATH = re.compile(r"\.claude/[A-Za-z0-9_./-]+")
 
-# `.gitignore` is the file that DECIDES the tree is absent, so it is the one
-# place naming a path under it is not a dangling citation — it is the rule
-# itself. It escapes today only by accident: its entry is a bare `.claude/`,
-# and the `+` tail needs at least one character after the slash. Adopting the
-# ordinary Claude Code split (track `.claude/settings.json`, ignore
-# `.claude/settings.local.json`) would turn this file red with no correct
-# remedy, since the citation cannot be reworded away. Exempt by PROVENANCE, so
-# the liveness check below grades existence only — requiring it to contain a
-# match would fail on today's bare entry.
+# `.gitignore` is where the exclusion is DECLARED, so naming an unignored path
+# there is the rule itself rather than a citation of it — the one place the
+# resolvability check above gets the answer backwards. Exempt by PROVENANCE:
+# the liveness check grades existence only, since a `.gitignore` that happens to
+# name no untracked `.claude/` path is perfectly ordinary.
 _FOREIGN_ALLOWED = (".gitignore",)
 
 # "this PR", "this pull request", "this commit" — a referent that resolves only
@@ -475,8 +484,24 @@ def _sites(pattern: re.Pattern[str], *, skip: tuple[str, ...] = ()) -> list[tupl
     ]
 
 
+def _resolves_in_tree(cited: str, tracked: set[str]) -> bool:
+    """Does a cited path name something git tracks — a file OR a directory?
+
+    Prose cites both: `.claude/rules/no-drift-surfaces.md` and, one line later,
+    the directory `.claude/rules/`. Git tracks files, so a set-membership test
+    alone calls the directory unresolvable and reddens an ordinary reference to
+    a tree that is right there in the clone.
+
+    Trailing punctuation is stripped first because a citation usually ends a
+    sentence or sits inside parentheses, and `_FOREIGN_PATH`'s charset carries
+    `.` and `/` so it swallows them.
+    """
+    cited = cited.rstrip("/.,;:)`\"'")
+    return cited in tracked or any(path.startswith(cited + "/") for path in tracked)
+
+
 def _foreign_path_sites() -> list[tuple[str, int, str]]:
-    """The gitignored-path gate's findings.
+    """Citations of a `.claude/` path git does not track.
 
     A named collector rather than a bare `_sites(...)` call inside the gate, so
     the exemption the gate passes is itself under test. Spelled only at the call
@@ -484,8 +509,17 @@ def _foreign_path_sites() -> list[tuple[str, int, str]]:
     nothing notices: the acceptance cases exercise the raw pattern, and a test
     calling `_sites` directly grades the traversal but never the argument the
     GATE hands it. Both tests below go through this function for that reason.
+
+    The tracked-path filter is what makes this a resolvability check instead of
+    a directory ban. `.claude/rules/` is tracked and `.claude/skills/` is not,
+    so the same prefix now covers citations that resolve and citations that do
+    not, and only git can tell them apart.
     """
-    return _sites(_FOREIGN_PATH, skip=_FOREIGN_ALLOWED)
+    tracked = set(_tracked_files())
+    return [
+        site for site in _sites(_FOREIGN_PATH, skip=_FOREIGN_ALLOWED)
+        if not _resolves_in_tree(site[2], tracked)
+    ]
 
 
 def _ephemeral_referent_sites() -> list[tuple[str, int, str]]:
@@ -494,13 +528,14 @@ def _ephemeral_referent_sites() -> list[tuple[str, int, str]]:
 
 
 def test_no_citation_of_a_path_the_reader_cannot_have() -> None:
-    """A `.claude/` path is absent from every clone — `.gitignore` excludes it."""
+    """An untracked `.claude/` path is absent from every clone."""
     found = _foreign_path_sites()
     assert not found, (
-        "citations of paths under `.claude/`, which `.gitignore` excludes:\n"
+        "citations of `.claude/` paths git does not track:\n"
         + "\n".join(f"  {rel}:{lineno} -> {cited}" for rel, lineno, cited in found)
         + "\nThe file exists only on the machine that wrote the citation. State "
-        "the rule itself, or name a skill by its skill name."
+        "the rule itself, or name a skill by its skill name. (`.claude/rules/` "
+        "IS tracked — citing a rule there resolves and is not flagged.)"
     )
 
 
@@ -881,10 +916,34 @@ def test_the_guard_excludes_only_the_paths_it_records() -> None:
         "plugins/analitiq-pipeline-builder/CHANGELOG.md",
         "packages/contract-models/src/analitiq/contracts/arrow_type_grammar.json",
         "tests/hygiene/test_ticket_references.py",
+        ".claude/rules/resolvable-referents.md",
     ), (
         "_EXCLUDED_PATHS changed. Each entry exempts a whole file from the gate, "
         "so state the reason inline and update this pin in the same diff."
     )
+
+
+def test_a_cited_path_resolves_as_file_or_directory() -> None:
+    """Both citation shapes, and the untracked case that must still report.
+
+    The directory form is not hypothetical: `CLAUDE.md` names
+    `.claude/rules/no-drift-surfaces.md` and the tree `.claude/rules/` within a
+    few lines of each other, and a file-only membership test reddens the second
+    while the first passes.
+    """
+    tracked = {".claude/rules/no-drift-surfaces.md", "CLAUDE.md"}
+    assert _resolves_in_tree(".claude/rules/no-drift-surfaces.md", tracked)
+    assert _resolves_in_tree(".claude/rules/", tracked)
+    assert _resolves_in_tree(".claude/rules", tracked)
+    # Trailing punctuation from surrounding prose must not defeat resolution.
+    assert _resolves_in_tree(".claude/rules/no-drift-surfaces.md.", tracked)
+    assert _resolves_in_tree(".claude/rules/no-drift-surfaces.md`", tracked)
+    # Untracked: the whole point of the gate.
+    assert not _resolves_in_tree(".claude/skills/releasing/SKILL.md", tracked)
+    assert not _resolves_in_tree(".claude/settings.local.json", tracked)
+    # A prefix that is not a path BOUNDARY does not resolve — `.claude/rul` is
+    # not a directory just because `.claude/rules/…` starts with it.
+    assert not _resolves_in_tree(".claude/rul", tracked)
 
 
 def test_exclusion_matching_is_exact() -> None:
