@@ -438,7 +438,15 @@ def _plugin_paths(plugin: str) -> tuple[str, ...]:
     scripts it runs by the same `${CLAUDE_PLUGIN_ROOT}/…` form, and a citation
     of a deleted script starves an agent exactly as a citation of a deleted
     spec does."""
-    root = _plugin_root(plugin)
+    return _paths_under(_plugin_root(plugin))
+
+
+def _paths_under(root: Path) -> tuple[str, ...]:
+    """The sweep, over a root the caller names. Split out so a test can build
+    a tree containing a build artifact and prove the sweep drops it: asking the
+    real checkout instead only works when some earlier suite happened to import
+    a plugin script, which is test-execution order deciding whether a guard
+    guards."""
     return tuple(
         rel
         for path in sorted(root.rglob("*"))
@@ -1537,6 +1545,22 @@ def test_every_mention_disposition_is_load_bearing() -> None:
     )
 
 
+def test_the_shipped_universe_drops_build_artifacts(tmp_path: Path) -> None:
+    """The sweep has to *call* the filter — asserting that everything it
+    returned passes the filter is true by construction, and asking the real
+    checkout only bites when an earlier suite happened to import a plugin
+    script and leave a `__pycache__` behind. So: a tree this test builds, with
+    the artifact in it."""
+    (tmp_path / "scripts" / "__pycache__").mkdir(parents=True)
+    (tmp_path / "scripts" / "validate.py").write_text("", encoding="utf-8")
+    (tmp_path / "scripts" / "__pycache__" / "validate.cpython-313.pyc").write_text(
+        "", encoding="utf-8"
+    )
+    paths = _paths_under(tmp_path)
+    assert "scripts/validate.py" in paths
+    assert not [path for path in paths if "__pycache__" in path]
+
+
 def test_a_starved_form_trips_its_floor() -> None:
     """The floors are this file's anti-vacuity device, and their comparison is
     only ever run on a tree that must not trip it — so the failing direction
@@ -1786,7 +1810,6 @@ def test_only_this_plugins_files_are_read_as_asset_citations(plugin: str) -> Non
     assert not _ships("__pycache__")
     assert _ships("scripts/validate.py")
     assert _ships("skills/x/examples/y.json")
-    assert all(_ships(path) for path in _plugin_paths(plugin))
     # And the floor counts what the filter kept. Counting raw matches would
     # let prose about `definition/connector.json` satisfy a floor meant to
     # prove this plugin's own examples are still cited.
