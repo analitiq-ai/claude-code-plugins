@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal, get_args
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     TypeAdapter,
@@ -33,6 +32,7 @@ from analitiq.contracts.shared.common import (
     TAGS_MAX,
     TrimmedTag,
     schema_url_for,
+    set_derived_field,
     validate_display_name,
     validate_tags,
 )
@@ -159,7 +159,7 @@ class ConnectionEndpointRef(_EndpointRefBase):
         obj = self.database_object
         canonical = derive_db_endpoint_id(obj.catalog, obj.schema_, obj.name)
         if self.endpoint_id is None:
-            self.endpoint_id = canonical
+            set_derived_field(self, "endpoint_id", canonical)
         elif self.endpoint_id != canonical:
             raise ValueError(
                 f"endpoint_id {self.endpoint_id!r} does not match the id derived "
@@ -1198,7 +1198,7 @@ class StreamMapping(AdvisoryValidated, StrictModel):
 # ---------------------------------------------------------------------------
 
 
-class StreamAuthored(AdvisoryValidated, BaseModel):
+class StreamAuthored(AdvisoryValidated, StrictModel):
     """Authored stream fields shared between input and persisted models."""
 
     schema_url: Literal[STREAM_SCHEMA_URL] | None = Field(
@@ -1274,7 +1274,7 @@ class StreamInput(StreamAuthored):
     service assigns one when the create payload omits it.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     stream_id: str | None = Field(
         default=None,

@@ -18,7 +18,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import RootModel
+from pydantic import ConfigDict, RootModel
+
+# `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
+# setting on a root model — so this is the one contract model that has to
+# restate the frozen policy `StrictModel` owns. The tree-wide scan in
+# `test_model_immutability` is what keeps the restatement honest.
 
 
 class CredentialsFile(RootModel[dict[str, Any]]):
@@ -31,5 +36,7 @@ class CredentialsFile(RootModel[dict[str, Any]]):
     be any JSON type (the engine string-coerces on read) — prefer strings, and
     JSON-encode a structured credential as a string for a lossless round-trip.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     root: dict[str, Any]

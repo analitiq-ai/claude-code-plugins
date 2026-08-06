@@ -164,7 +164,7 @@ DATABASE_ENDPOINT_SCHEMA_URL = schema_url_for("database-endpoint")
 
 
 # ---------------------------------------------------------------------------
-# Shared base — x-* extension policy + frozen instances
+# Shared base — x-* extension policy + alias handling
 # ---------------------------------------------------------------------------
 
 
@@ -177,16 +177,14 @@ _RESERVED_ENDPOINT_FIELDS: frozenset[str] = frozenset({
 
 
 class _EndpointModel(StrictModel):
-    """Endpoint-module base: `StrictModel` plus alias handling and immutability.
+    """Endpoint-module base: `StrictModel` plus alias handling.
 
-    ``frozen=True`` prevents post-construction mutation, so the cross-field
-    invariants checked in model validators stay valid for the lifetime of an
-    instance.
+    Immutability is not set here — `StrictModel` freezes every contract model,
+    and stating it a second time would be a copy to keep in sync.
     """
 
     model_config = ConfigDict(
         populate_by_name=True,
-        frozen=True,
         # Default `model_dump()` to wire-format names. Without this, dumps emit
         # Python attribute names (`schema_url`, `schema_`, `location`,
         # `and_`/`or_`/`not_`) and round-trip via `parse_endpoint(model.model_dump())`

@@ -21,7 +21,6 @@ import re
 from typing import Annotated, Any, Literal
 
 from pydantic import (
-    BaseModel,
     ConfigDict,
     Field,
     StringConstraints,
@@ -34,6 +33,7 @@ from analitiq.contracts.shared.common import (
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
+    StrictModel,
     TAGS_MAX,
     TrimmedTag,
     schema_url_for,
@@ -163,7 +163,7 @@ SecretRefValue = Annotated[str, StringConstraints(pattern=SECRET_REF_VALUE_PATTE
 # --- Authored shape ---
 
 
-class ConnectionAuthored(BaseModel):
+class ConnectionAuthored(StrictModel):
     """Authored connection metadata.
 
     The storage maps (`parameters` / `selections` / `discovered` /
@@ -216,7 +216,7 @@ class ConnectionAuthored(BaseModel):
         return validate_tags(v)
 
 
-class ConnectionStoredMaps(BaseModel):
+class ConnectionStoredMaps(StrictModel):
     """The maps a connection is made of.
 
     Mixed into `ConnectionInput`: `parameters` (authored values),
@@ -332,7 +332,7 @@ class ConnectionInput(ConnectionAuthored, ConnectionStoredMaps):
     authored shape: each value goes in the bucket that says what it is.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     connection_id: str | None = Field(
         default=None,

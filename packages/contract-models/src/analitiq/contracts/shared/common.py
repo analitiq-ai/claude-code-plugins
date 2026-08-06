@@ -157,14 +157,36 @@ def validate_tags(v: list[str] | None) -> list[str] | None:
 # --- Strict base for authored sub-models -----------------------------------
 
 class StrictModel(BaseModel):
-    """Base for authored sub-models. Rejects all unknown keys.
+    """Base for authored sub-models. Rejects all unknown keys, and is frozen.
 
     `x-*` extension keys are NOT allowed; the authored contract is closed.
     Provider extensions must use first-class fields rather than `x-*`
     smuggling.
+
+    ``frozen=True`` prevents post-construction mutation, so the cross-field
+    invariants checked in model validators stay valid for the lifetime of an
+    instance. A caller that needs a changed document builds one —
+    ``model_validate(model.model_dump(...) | changes)`` — so the validators
+    run again on the result. This is the one statement of the policy: every
+    contract model inherits it from here.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+def set_derived_field(model: BaseModel, field: str, value: Any) -> None:
+    """Write a value a `mode="after"` validator derived from validated input.
+
+    Contract models are frozen, so a validator cannot assign to `self`. This is
+    the ONE sanctioned way past that, and only for a value that is a pure
+    function of what the author already wrote — never for accepting caller
+    input, which must go through `model_validate` so the validators run.
+
+    It deliberately leaves `__pydantic_fields_set__` alone: a derived value is
+    not author input, and an `exclude_unset` dump must keep saying so. Every
+    derived field re-derives on re-parse, so such a dump still round-trips.
+    """
+    object.__setattr__(model, field, value)
 
 
 # --- Shared retry/error-handling behavior ----------------------------------
@@ -222,17 +244,18 @@ class RetryErrorHandlingBase(StrictModel):
     def _default_retry_delay(self) -> "RetryErrorHandlingBase":
         # Fill the effective default here, never by mutating the input dict in a
         # `mode="before"` validator: that marks the key as provided, corrupting
-        # the one signal consumers use to tell author-set from defaulted (#938).
+        # the one signal consumers use to tell author-set from defaulted.
         # `retry_delay_seconds is None` means the author omitted it (or sent
-        # null); after assigning, discard it from the field-set — pydantic's
-        # `__setattr__` records the assignment, and the injected default must
-        # not read as author input. The `0 if max_retries == 0 else 5` value is
-        # consistent with the cross-field rule above regardless of validator
-        # order (an author-supplied delay under `max_retries == 0` is rejected
-        # there; the only value ever injected for that case is 0).
+        # null); `set_derived_field` writes without recording the assignment, so
+        # the injected default cannot read as author input. The
+        # `0 if max_retries == 0 else 5` value is consistent with the cross-field
+        # rule above regardless of validator order (an author-supplied delay
+        # under `max_retries == 0` is rejected there; the only value ever
+        # injected for that case is 0).
         if self.retry_delay_seconds is None:
-            self.retry_delay_seconds = 0 if self.max_retries == 0 else 5
-            self.__pydantic_fields_set__.discard("retry_delay_seconds")
+            set_derived_field(
+                self, "retry_delay_seconds", 0 if self.max_retries == 0 else 5
+            )
         return self
 
 
@@ -254,7 +277,7 @@ def validation_error_summary(e: ValidationError) -> str:
     )
 
 
-class CorruptedPlaceholderBase(BaseModel):
+class CorruptedPlaceholderBase(StrictModel):
     """Shared base for the read contracts' corrupted-row placeholders.
 
     Owns the `_corrupted` discriminator, the client-safe `error` reason, and
@@ -269,7 +292,7 @@ class CorruptedPlaceholderBase(BaseModel):
     Resource placeholders subclass this with their identity fields.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     corrupted: Literal[True] = Field(
         alias="_corrupted",
