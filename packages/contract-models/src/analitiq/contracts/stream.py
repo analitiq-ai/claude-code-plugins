@@ -464,12 +464,13 @@ class StreamSource(StrictModel):
         # (endpoint_ref) knows it, like `_validate_filter_operator_scope`
         # above (ADV-STRM-012). This check is ADV-STRM-014. `is not None`
         # rather than truthiness: declaring an empty list is still declaring
-        # the feature. No scope-conditioned `if`/`then` mirror is published for
-        # either check, and none exists anywhere in the stream schema to copy —
-        # the destination reached the same end by becoming a scope-tagged union
-        # instead, which is the precedent to follow here. Doing that to
-        # StreamSource is a restriction, hence a major stream schema bump, and
-        # belongs in its own change.
+        # the feature. Neither check publishes a scope-conditioned `if`/`then`
+        # mirror, and the stream schema carries none to copy: every published
+        # `if`/`then` selects on a sibling value (`arrow_type`, `operator`,
+        # `type`), never on the binding's scope. The destination reached the
+        # same end by becoming a scope-tagged union instead, which is the
+        # precedent to follow here. Doing that to StreamSource is a restriction,
+        # hence a major stream schema bump, and belongs in its own change.
         if self.endpoint_ref.scope == SCOPE_CONNECTION:
             return self
         declared = [

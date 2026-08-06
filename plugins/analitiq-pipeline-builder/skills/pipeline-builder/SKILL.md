@@ -35,7 +35,8 @@ Pick the mode from the user's intent:
 - `write_mode` (optional, default per destination capability) — for a database
   destination, a member of the write-mode vocabulary in §Closed vocabularies
   (`upsert` additionally requires `conflict_keys`); for an API destination, one of
-  the endpoint's `operations.write` keys, which no contract enum can enumerate.
+  the endpoint's `operations.write` keys — drawn from the same vocabulary, but
+  which of them that endpoint declares only its own document says.
 - `schedule_type` (optional) — a member of the schedule vocabulary in
   §Closed vocabularies. Omit it and the contract's own default applies.
 - `previous_release_path` (optional) — path to the prior released directory

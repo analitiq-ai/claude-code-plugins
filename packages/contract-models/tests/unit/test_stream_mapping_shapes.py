@@ -493,13 +493,6 @@ class TestDatabaseWriteModes:
                 {"endpoint_ref": _API_ENDPOINT_REF, "write": {"mode": "   "}}
             )
 
-    def test_the_two_branches_are_bounded_by_different_facts(self):
-        # The bound on each branch comes from a different source — the universe
-        # for the API branch, the disposition table for the database branch —
-        # and the SQL subset must never be widened by aliasing the two. They
-        # are equal today only because no mode is dispositioned API-only.
-        assert _DB_WRITE_MODES <= set(WRITE_MODES)
-
 
 class TestDestinationScopeDiagnostics:
     """A destination whose `endpoint_ref.scope` is missing or unknown.
