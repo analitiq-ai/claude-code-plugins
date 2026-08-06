@@ -25,6 +25,8 @@ from pydantic import (
     model_validator,
 )
 
+from analitiq.contracts.shared.types import StrictInt, StrictNonNegativeInt
+
 # --- Schema URL base --------------------------------------------------------
 #
 # `DOMAIN` is the canonical environment variable the deploy stamps into every
@@ -263,6 +265,14 @@ _RETRY_ERROR_HANDLING_CONDITIONAL_RULES: dict[str, Any] = {
 }
 
 
+# The retry contract's two field types, named once. The pipeline block
+# re-declares both fields to attach public descriptions; without a shared
+# annotation that re-declaration is a second hand-maintained copy of the bounds,
+# which is exactly the drift this base class exists to prevent.
+RetryAttempts = Annotated[StrictInt, Field(ge=0, le=5)]
+RetryDelaySeconds = StrictNonNegativeInt
+
+
 class RetryErrorHandlingBase(StrictModel):
     """Shared error-handling contract for the pipeline and stream blocks.
 
@@ -280,8 +290,8 @@ class RetryErrorHandlingBase(StrictModel):
     )
 
     strategy: Literal["fail", "dlq", "skip"] = Field(default="dlq")
-    max_retries: int = Field(default=3, ge=0, le=5)
-    retry_delay_seconds: int | None = Field(default=None, ge=0)
+    max_retries: RetryAttempts = Field(default=3)
+    retry_delay_seconds: RetryDelaySeconds | None = Field(default=None)
 
     @model_validator(mode="after")
     def _validate_retry_fields(self) -> "RetryErrorHandlingBase":

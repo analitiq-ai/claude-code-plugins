@@ -14,7 +14,7 @@ Classes:
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from zoneinfo import available_timezones
 
 from pydantic import (
@@ -32,6 +32,8 @@ from analitiq.contracts.shared.common import (
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
     NonEmptyStr,
+    RetryAttempts,
+    RetryDelaySeconds,
     RetryErrorHandlingBase,
     StrictModel,
     TAGS_MAX,
@@ -40,7 +42,12 @@ from analitiq.contracts.shared.common import (
     validate_display_name,
     validate_tags,
 )
-from analitiq.contracts.shared.types import UUID_PATTERN
+from analitiq.contracts.shared.types import (
+    UUID_PATTERN,
+    StrictFloat,
+    StrictInt,
+    StrictPositiveInt,
+)
 PIPELINE_SCHEMA_URL = schema_url_for("pipeline")
 
 
@@ -116,14 +123,14 @@ class Schedule(StrictModel):
         default="manual", description="Schedule type"
     )
     timezone: str = Field(default="UTC", description="IANA timezone name")
-    # Plain `int` (not `CoerceInt`) so Pydantic emits `minimum: 1` on the
-    # published JSON Schema. `CoerceInt`'s `BeforeValidator` causes the JSON
+    # `StrictPositiveInt` (not `CoerceInt`) so Pydantic emits `minimum: 1` on
+    # the published JSON Schema. `CoerceInt`'s `BeforeValidator` causes the JSON
     # Schema generator to fall back to `ge: 1`, which JSON Schema 2020-12
     # ignores — leaving external validators with a weaker contract than the
     # runtime. Persisted Decimal coercion isn't needed here because the field
     # is populated from JSON request bodies, where it always arrives as `int`.
-    interval_minutes: int | None = Field(
-        default=None, ge=1, description="Positive integer minutes (interval schedule only)"
+    interval_minutes: StrictPositiveInt | None = Field(
+        default=None, description="Positive integer minutes (interval schedule only)"
     )
     cron_expression: str | None = Field(
         default=None,
@@ -180,8 +187,12 @@ class Engine(StrictModel):
     floor (0.25 vCPU / 512 MB) after subtracting the destination container.
     """
 
-    vcpu: float = Field(default=1.0, ge=0.5, description="vCPU allocation")
-    memory: int = Field(default=8192, ge=1024, description="Memory allocation in MB")
+    vcpu: Annotated[StrictFloat, Field(ge=0.5)] = Field(
+        default=1.0, description="vCPU allocation"
+    )
+    memory: Annotated[StrictInt, Field(ge=1024)] = Field(
+        default=8192, description="Memory allocation in MB"
+    )
 
 
 class Logging(StrictModel):
@@ -198,7 +209,9 @@ class Logging(StrictModel):
 class Batching(StrictModel):
     """Pipeline-wide record batching defaults."""
 
-    batch_size: int = Field(default=100, ge=1, le=100_000, description="Records per batch")
+    batch_size: Annotated[StrictInt, Field(ge=1, le=100_000)] = Field(
+        default=100, description="Records per batch"
+    )
 
 
 class ErrorHandling(RetryErrorHandlingBase):
@@ -214,10 +227,11 @@ class ErrorHandling(RetryErrorHandlingBase):
     strategy: Literal["fail", "dlq", "skip"] = Field(
         default="dlq", description="Action after retries are exhausted"
     )
-    max_retries: int = Field(default=3, ge=0, le=5, description="Retry attempts before strategy")
-    retry_delay_seconds: int | None = Field(
+    max_retries: RetryAttempts = Field(
+        default=3, description="Retry attempts before strategy"
+    )
+    retry_delay_seconds: RetryDelaySeconds | None = Field(
         default=None,
-        ge=0,
         description=(
             "Non-negative integer delay between retry attempts. Optional: when "
             "omitted the effective delay is 5 if max_retries > 0, else 0. Must "
@@ -229,7 +243,9 @@ class ErrorHandling(RetryErrorHandlingBase):
 class Runtime(StrictModel):
     """Pipeline-wide execution defaults."""
 
-    buffer_size: int = Field(default=5000, ge=100, description="Record buffer size")
+    buffer_size: Annotated[StrictInt, Field(ge=100)] = Field(
+        default=5000, description="Record buffer size"
+    )
     logging: Logging = Field(default_factory=Logging)
     batching: Batching = Field(default_factory=Batching)
     error_handling: ErrorHandling = Field(default_factory=ErrorHandling)

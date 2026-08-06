@@ -33,7 +33,6 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
-    Strict,
     Tag as UnionTag,
     field_validator,
     model_validator,
@@ -60,6 +59,12 @@ from analitiq.contracts.shared.common import (
     schema_url_for,
     validate_display_name,
     validate_tags,
+)
+from analitiq.contracts.shared.types import (
+    StrictFloat,
+    StrictInt,
+    StrictNonNegativeInt,
+    StrictPositiveInt,
 )
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPES,
@@ -311,6 +316,35 @@ Expression = Annotated[
 ]
 
 
+# The expression forms admissible where the slot also accepts a bounded number
+# (`limit.default`, `limit.max`, `offset.increment_by`, `page.increment_by`).
+#
+# `LiteralExpression` is excluded, and that exclusion is the whole point. Its
+# payload is `Any` and its documented purpose is to opt OUT of expression
+# interpretation — so on a numeric slot it is a second spelling of the bare
+# scalar that carries none of the bare scalar's bound. `{"literal": 0}` on
+# `offset.increment_by` is a pagination step of zero: a loop that never
+# advances, accepted by a model whose sibling spelling rejects `0` outright.
+# Dropping the branch makes that unrepresentable rather than merely rejected,
+# and costs nothing an author needs: a statically-known page size IS the bare
+# integer spelling.
+#
+# The other three forms resolve at request time, so no bound can be checked
+# here and none is applied.
+NumericExpression = Annotated[
+    Union[
+        Annotated[RefExpression, UnionTag("ref")],
+        Annotated[TemplateExpression, UnionTag("template")],
+        Annotated[FunctionExpression, UnionTag("function")],
+    ],
+    Discriminator(_expression_discriminator),
+]
+
+# The literal key, named once, so the drift guard below and the exclusion above
+# cannot disagree about which form was dropped.
+_UNBOUNDABLE_EXPRESSION_KEY = "literal"
+
+
 # ---------------------------------------------------------------------------
 # Param contract
 # ---------------------------------------------------------------------------
@@ -368,12 +402,12 @@ class Param(_EndpointModel):
     enum: list[Any] | None = Field(default=None)
     format: str | None = Field(default=None)
     pattern: str | None = Field(default=None)
-    minimum: float | None = Field(default=None)
-    maximum: float | None = Field(default=None)
-    min_length: int | None = Field(default=None, alias="minLength", ge=0)
-    max_length: int | None = Field(default=None, alias="maxLength", ge=0)
-    min_items: int | None = Field(default=None, alias="minItems", ge=0)
-    max_items: int | None = Field(default=None, alias="maxItems", ge=0)
+    minimum: StrictFloat | None = Field(default=None)
+    maximum: StrictFloat | None = Field(default=None)
+    min_length: StrictNonNegativeInt | None = Field(default=None, alias="minLength")
+    max_length: StrictNonNegativeInt | None = Field(default=None, alias="maxLength")
+    min_items: StrictNonNegativeInt | None = Field(default=None, alias="minItems")
+    max_items: StrictNonNegativeInt | None = Field(default=None, alias="maxItems")
     operators: list[Literal[
         "eq", "neq", "gt", "gte", "lt", "lte",
         "in", "not_in", "contains", "starts_with", "ends_with",
@@ -426,52 +460,33 @@ class PageSize(_EndpointModel):
     """Optional ``limit`` block shared by paginated strategies that accept page size."""
 
     param: str | None = Field(default=None)
-    # `Strict()` on the int branch is not decoration. Without it pydantic's lax
-    # mode coerces `true` -> 1 and `"50"` -> 50, while the rendered schema says
-    # `type: integer` and rejects both — so this package would accept documents
-    # that every external consumer of the published schema rejects. The premise
-    # is that the two agree.
-    #
-    # `Strict()` costs one deliberate asymmetry in the other direction: JSON
-    # Schema's `type: integer` accepts a zero-fraction float, so `50.0` passes
-    # the published schema and fails here. Kept, because a document this
-    # package accepts must always be one the schema accepts, and that direction
-    # still holds. Pinned by
-    # `test_float_spelled_integer_is_a_one_directional_gap`.
-    #
-    # Note the bound reaches the BARE-SCALAR spelling only. `Expression`
-    # contains `LiteralExpression`, so `{"literal": 0}` is still a
-    # statically-known non-positive page size that validates here. Closing that
-    # means bounding the literal expression wherever a positive number is
-    # required (`max`, `OffsetCursor.increment_by`, `PageCursor.increment_by`),
-    # which is a wider change than #108 — tracked separately. Do not describe
-    # this field as "the literal branch is bounded"; it is not.
-    default: Annotated[int, Field(gt=0), Strict()] | Expression | None = Field(  # type: ignore[valid-type]
+    # `StrictPositiveInt` on the scalar branch, and `NumericExpression` (which
+    # drops `{literal}`) on the other, are what make the bound reach EVERY
+    # spelling of this field. Both rationales are stated where the names are
+    # defined — the strict-numeric policy in `analitiq.contracts.shared.types`,
+    # the literal exclusion beside `NumericExpression` above.
+    default: StrictPositiveInt | NumericExpression | None = Field(  # type: ignore[valid-type]
         default=None,
         description=(
             "Default page size. Either a positive integer (e.g. `50`) or a "
             "value expression the engine resolves per request — typically "
             "`{ref: runtime.batch_size}`, so the run's configured batch size "
-            "flows through. A bare non-positive integer is rejected: it is a "
-            "meaningless request rather than one the provider gets to refuse. "
-            "The `{literal: N}` expression form carries no such bound."
+            "flows through. A non-positive integer is rejected: it is a "
+            "meaningless request rather than one the provider gets to refuse."
         ),
     )
-    # `Strict()` for the same reason as `default` above: lax coercion would read
-    # `"50"` and `true` as integers here while the rendered schema rejects them,
-    # so the two halves of the contract would disagree.
-    max: Annotated[int, Field(ge=1), Strict()] | None = Field(default=None)
+    max: StrictPositiveInt | None = Field(default=None)
 
 
 class OffsetCursor(_EndpointModel):
     param: str = Field(..., min_length=1, description="Param that receives the offset/start index.")
     initial: Any = Field(..., description="Initial offset/start index value.")
-    increment_by: Annotated[int, Field(gt=0)] | Expression = Field(  # type: ignore[valid-type]
+    increment_by: StrictPositiveInt | NumericExpression = Field(  # type: ignore[valid-type]
         ...,
         description=(
             "Per-page offset step. Required, with no default: the two offset "
             "families cannot be told apart from the document, so any default "
-            "silently breaks one of them. A positive-integer literal is a fixed "
+            "silently breaks one of them. A bare positive integer is a fixed "
             "step (`1` for page-index-style offsets). A value expression lets the "
             "engine advance by a per-page value (analitiq-engine #346/#347): "
             "`{ref: response.record_count}` when `offset` counts records returned "
@@ -488,7 +503,14 @@ class OffsetCursor(_EndpointModel):
 class PageCursor(_EndpointModel):
     param: str = Field(..., min_length=1, description="Param that receives the page number.")
     initial: Any = Field(..., description="Initial page number.")
-    increment_by: Any | None = Field(default=None, description="Increment per page (defaults to 1).")
+    increment_by: StrictPositiveInt | NumericExpression | None = Field(  # type: ignore[valid-type]
+        default=None,
+        description=(
+            "Increment per page (defaults to 1). Either a positive integer or a "
+            "value expression the engine resolves per page. A page step of zero "
+            "is a loop that never advances, so it is rejected in every spelling."
+        ),
+    )
 
 
 class Cursor(_EndpointModel):
@@ -750,6 +772,15 @@ if _union_tags(Expression) != frozenset(_EXPRESSION_KEYS):
     raise AssertionError(
         f"Expression Union members {sorted(_union_tags(Expression))!r} do not match "
         f"_EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r}")
+# `NumericExpression` is `Expression` minus exactly the unboundable form —
+# derived from the same tag list, so a new expression form joins the numeric
+# slots automatically and only the deliberate exclusion stays excluded.
+if _union_tags(NumericExpression) != frozenset(_EXPRESSION_KEYS) - {
+    _UNBOUNDABLE_EXPRESSION_KEY
+}:
+    raise AssertionError(
+        f"NumericExpression Union members {sorted(_union_tags(NumericExpression))!r} "
+        f"must be _EXPRESSION_KEYS minus {_UNBOUNDABLE_EXPRESSION_KEY!r}")
 if _union_tags(Pagination) != frozenset({"offset", "page", "cursor", "link", "keyset"}):
     raise AssertionError(
         f"Pagination Union members {sorted(_union_tags(Pagination))!r} do not match "
@@ -1685,8 +1716,8 @@ class WriteError(_EndpointModel):
 class Batching(_EndpointModel):
     """Batching declaration for a write mode."""
 
-    max_records: int = Field(
-        ..., ge=2,
+    max_records: Annotated[StrictInt, Field(ge=2)] = Field(
+        ...,
         description="Provider's maximum records per request. Must be ≥ 2.",
     )
 
@@ -2458,7 +2489,7 @@ class Column(_EndpointModel):
     nullable: bool | None = Field(default=None)
     default: Any | None = Field(default=None)
     comment: str | None = Field(default=None)
-    ordinal_position: int | None = Field(default=None, ge=1)
+    ordinal_position: StrictPositiveInt | None = Field(default=None)
     # `properties` here is a field-spec map (recursive ColumnFieldSpec),
     # distinct from JSON Schema `properties` blocks used by API endpoints.
     # Both are enforced by `enforce_container_shape` via the validator below.

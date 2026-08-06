@@ -45,6 +45,7 @@ from analitiq.contracts.shared.common import (
     validate_display_name,
     validate_tags,
 )
+from analitiq.contracts.shared.types import StrictPositiveInt
 
 CONNECTOR_SCHEMA_URL = schema_url_for("connector")
 # Host-tolerant matcher for the `$schema` field: a connector authored against
@@ -851,7 +852,7 @@ class TransportRateLimit(StrictModel):
     """Rate limit declaration for a transport. Spec: §Transport Contracts."""
 
 
-    max_requests: int = Field(..., ge=1, description="Maximum requests allowed per window")
+    max_requests: StrictPositiveInt = Field(..., description="Maximum requests allowed per window")
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
@@ -878,9 +879,8 @@ class HttpTransport(AdvisoryValidated, StrictModel):
         default=None,
         description="Header names to delete from inherited defaults (case-insensitive)",
     )
-    timeout_seconds: int | None = Field(
+    timeout_seconds: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Request timeout in seconds",
     )
     rate_limit: "TransportRateLimit | None" = Field(
@@ -1217,9 +1217,8 @@ class TransportDefaults(AdvisoryValidated, StrictModel):
         default=None,
         description="Header names to delete from any inherited defaults",
     )
-    timeout_seconds: int | None = Field(
+    timeout_seconds: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Default request timeout in seconds",
     )
     rate_limit: "TransportRateLimit | None" = Field(
@@ -1752,14 +1751,12 @@ class WriteUnit(StrictModel):
         },
     )
 
-    rows: int | None = Field(
+    rows: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Preferred number of rows per write operation (≥ 1).",
     )
-    bytes: int | None = Field(
+    bytes: StrictPositiveInt | None = Field(
         default=None,
-        ge=1,
         description="Preferred payload size in bytes per write operation (≥ 1).",
     )
 

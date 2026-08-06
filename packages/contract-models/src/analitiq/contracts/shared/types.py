@@ -1,9 +1,17 @@
 """
 Shared type aliases and validators for Pydantic models.
 """
+from decimal import Decimal
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BeforeValidator, StringConstraints
+from pydantic import (  # noqa: F401  (StrictInt/StrictFloat are re-exported)
+    AfterValidator,
+    BeforeValidator,
+    Field,
+    StrictFloat,
+    StrictInt,
+    StringConstraints,
+)
 
 # Identifier forms: a bare UUID, or a UUID with a `_v{n}` version suffix. Both
 # patterns are declared in `_identity` alongside the runtime checks that compile
@@ -61,8 +69,53 @@ def validate_versioned_uuid(value: str) -> str:
     return value
 
 
-# Coerce persisted Decimal to int
-CoerceInt = Annotated[int, BeforeValidator(lambda v: int(v) if v is not None else v)]
+# --- Strict numeric aliases -------------------------------------------------
+#
+# The strict-numeric policy: a numeric contract field is spelled with one of
+# these, never bare `int` / `float`.
+#
+# Pydantic's lax mode coerces on the way in — `true` becomes 1, `"50"` becomes
+# 50 — while the rendered JSON Schema says `type: integer` and rejects both. A
+# bare `int` therefore makes this package accept documents that every external
+# consumer of the published schema refuses, and `true -> 1` does it silently and
+# with the wrong value. `Strict()` closes that; the bound rides in the alias so
+# "positive integer" is named once rather than respelled `ge=1` / `gt=0` per
+# field.
+#
+# `Strict()` costs one deliberate asymmetry in the other direction: JSON
+# Schema's `type: integer` matches a zero-fraction float, so `50.0` passes the
+# published schema and fails here. Kept, because the property the plugins rely
+# on is that a document this package accepts is always one the schema accepts,
+# and that direction still holds.
+#
+# Schema-neutral: pydantic emits `type: integer` with or without `Strict()`, and
+# the bound is an ordinary `Field(ge=...)`.
+#
+# `StrictInt` / `StrictFloat` are pydantic's own; they are re-exported above so
+# every contract module reaches the whole vocabulary through one import.
+# `StrictFloat` accepts an int (as `type: number` does) and refuses `bool`/`str`.
+
+# Integer ≥ 0 — a count, an offset, a window that may legitimately be zero.
+StrictNonNegativeInt = Annotated[StrictInt, Field(ge=0)]
+
+# Integer ≥ 1 — a size, a step, a limit for which zero is meaningless.
+StrictPositiveInt = Annotated[StrictInt, Field(ge=1)]
+
+
+def _decimal_to_int(value: Any) -> Any:
+    """Narrow a persisted `Decimal` to `int`; pass everything else through.
+
+    Only `Decimal` is converted. The wire never carries one — this exists for
+    numeric columns a driver hands back as `Decimal` — so widening it to any
+    value `int()` happens to accept would re-open exactly the `"50"` / `True`
+    coercion the strict aliases above close, on a field whose published schema
+    says `type: integer`.
+    """
+    return int(value) if isinstance(value, Decimal) else value
+
+
+# Integer that additionally accepts a persisted `Decimal`. Strict otherwise.
+CoerceInt = Annotated[StrictInt, BeforeValidator(_decimal_to_int)]
 
 # Plain UUID string
 UuidStr = Annotated[

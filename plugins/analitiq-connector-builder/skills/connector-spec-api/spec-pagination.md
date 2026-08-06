@@ -47,12 +47,9 @@ and bound this way.
   through, rather than hardcoding a number and overriding the operator's
   choice. Hardcode only when the provider's usable page size is genuinely
   fixed, and then write it as a **bare positive integer** (`"default": 50`) —
-  <!-- PROBE: pagination-limit-bare-zero-rejected, pagination-limit-literal-zero-accepted -->
+  <!-- PROBE: pagination-limit-bare-zero-rejected -->
   that spelling is bounded by the contract, so a zero or negative size is
-  rejected at authoring time rather than at the first request. Do **not**
-  hardcode it as `{"literal": 50}`: that is the expression form, it carries no
-  bound, and `{"literal": 0}` would validate cleanly and then fail against the
-  provider.
+  rejected at authoring time rather than at the first request.
 
 ## `stop_when` is a predicate, not a keyword
 

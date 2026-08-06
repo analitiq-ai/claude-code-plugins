@@ -502,9 +502,9 @@ def _p_pagination_limit_bare_zero() -> list[dict]:
     return _validate(doc)
 
 
-def _p_pagination_limit_literal_zero() -> list[dict]:
+def _p_pagination_limit_literal() -> list[dict]:
     doc = _read_endpoint()
-    doc["operations"]["read"]["pagination"]["limit"]["default"] = {"literal": 0}
+    doc["operations"]["read"]["pagination"]["limit"]["default"] = {"literal": 50}
     return _validate(doc)
 
 
@@ -637,8 +637,9 @@ PROBES: tuple[Probe, ...] = (
           forbid_re=r"FixedSizeBinary|Time32|Decimal256",
           require_re=r"no rule rendering"),
     Probe("pagination-limit-bare-zero-rejected", "error", _p_pagination_limit_bare_zero,
-          message_re=r"greater than 0"),
-    Probe("pagination-limit-literal-zero-accepted", "clean", _p_pagination_limit_literal_zero),
+          message_re=r"greater than or equal to 1"),
+    Probe("pagination-limit-literal-rejected", "error", _p_pagination_limit_literal,
+          message_re=r"(?i)tag 'literal'"),
     # connection / pipeline / stream
     Probe("connection-sidecar-name-unconstrained", "clean", _p_connection_sidecar_name,
           forbid_re=r"(?i)sidecar"),
