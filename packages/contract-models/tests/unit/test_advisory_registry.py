@@ -80,6 +80,14 @@ RETIRED_RULE_IDS = {
     # 1.0.0rc19: `AssignmentValue` became a `kind`-discriminated union, so the
     # union states the rule and no validator enforces it.
     "ADV-STRM-008",
+    # ADV-STRM-011 ("conflict_keys required for a connection-scope upsert,
+    # forbidden otherwise") and ADV-STRM-013 ("a database destination's
+    # write.mode belongs to the closed database vocabulary"): the destination
+    # became an `endpoint_ref.scope`-tagged union whose database branch is
+    # itself `mode`-discriminated, so both rules are now the shape rather than
+    # a check over it.
+    "ADV-STRM-011",
+    "ADV-STRM-013",
 }
 
 

@@ -154,7 +154,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="Concurrency",
         prose_hash="978ee0a3b0fd",
         structural=(
-            "`max_connections` is typed `_DeclaredCap`, the strict "
+            "`max_connections` is typed `StrictPositiveInt`, the strict "
             "lower-bounded integer annotation"
         ),
         waiver=ENGINE_CONDUCT,
@@ -163,7 +163,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="Concurrency", field="max_connections",
         prose_hash="b1bebfade44f",
         structural=(
-            "typed `_DeclaredCap`, the strict lower-bounded integer annotation"
+            "typed `StrictPositiveInt`, the strict lower-bounded integer "
+            "annotation"
         ),
     ),
     ProseObligation(model="ConnectorBase", field="auth", prose_hash="0e36e023b46c", descriptive=True),
@@ -505,7 +506,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="SqlLimits",
         prose_hash="5b0f29ace860",
         structural=(
-            "the caps are typed `_DeclaredCap`, the strict lower-bounded "
+            "the caps are typed `StrictPositiveInt`, the strict lower-bounded "
             "integer annotation"
         ),
         waiver=ENGINE_CONDUCT,
@@ -514,14 +515,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="SqlLimits", field="max_bind_params",
         prose_hash="935e80f50d25",
         structural=(
-            "typed `_DeclaredCap`, the strict lower-bounded integer annotation"
+            "typed `StrictPositiveInt`, the strict lower-bounded integer "
+            "annotation"
         ),
     ),
     ProseObligation(
         model="SqlLimits", field="max_identifier_len",
         prose_hash="563bba60bf19",
         structural=(
-            "typed `_DeclaredCap`, the strict lower-bounded integer annotation"
+            "typed `StrictPositiveInt`, the strict lower-bounded integer "
+            "annotation"
         ),
     ),
     ProseObligation(

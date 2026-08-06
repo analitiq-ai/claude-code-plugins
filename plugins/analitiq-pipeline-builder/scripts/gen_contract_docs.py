@@ -389,8 +389,6 @@ FIELD_TABLE_MODELS = {
     "fields-database-object": ("analitiq.contracts.endpoints", "DatabaseObject"),
     "fields-column": ("analitiq.contracts.endpoints", "Column"),
     "fields-stream-source": ("analitiq.contracts.stream", "StreamSource"),
-    "fields-stream-destination": ("analitiq.contracts.stream", "StreamDestination"),
-    "fields-stream-write": ("analitiq.contracts.stream", "Write"),
     "fields-stream-execution": ("analitiq.contracts.stream", "Execution"),
     "fields-connector-endpoint-ref": ("analitiq.contracts.stream", "ConnectorEndpointRef"),
     "fields-connection-endpoint-ref": ("analitiq.contracts.stream", "ConnectionEndpointRef"),
@@ -511,7 +509,73 @@ def _constraint_summary(schema: dict) -> str:
 def _render_field_table(module_path: str, class_name: str) -> str:
     import importlib
 
-    model = getattr(importlib.import_module(module_path), class_name)
+    return _field_table(getattr(importlib.import_module(module_path), class_name))
+
+
+def _model_variants(annotation) -> tuple[type, ...]:
+    """Every concrete model a (possibly `Annotated`) union annotation admits.
+
+    Derived, never hand-listed: a doc block over a union must gain a table the
+    moment the union gains a variant, or the prose teaches a shape set the
+    contract no longer has. Union metadata (`Tag`, `Discriminator`, `FieldInfo`)
+    carries no type arguments and no model class, so the walk simply skips it.
+    """
+    from typing import get_args
+
+    from pydantic import BaseModel
+
+    found: list[type] = []
+
+    def walk(node) -> None:
+        if isinstance(node, type) and issubclass(node, BaseModel):
+            if node not in found:
+                found.append(node)
+            return
+        for arg in get_args(node):
+            walk(arg)
+
+    walk(annotation)
+    if not found:
+        raise RuntimeError(
+            f"{annotation!r} yielded no model variants; the pinned contract "
+            "changed shape and this renderer needs updating")
+    return tuple(found)
+
+
+def _stream_destination_variants() -> tuple[type, ...]:
+    from analitiq.contracts import stream
+
+    return _model_variants(stream.StreamDestination)
+
+
+def render_fields_stream_destination() -> str:
+    """One table per destination variant — the union has no single field table.
+
+    `StreamDestination` is tagged by `endpoint_ref.scope`: a destination's whole
+    shape, write block included, follows from which endpoint it binds. The
+    reader needs both shapes, so both are rendered.
+    """
+    return "\n".join(_field_table(v) for v in _stream_destination_variants())
+
+
+def render_fields_stream_write() -> str:
+    """One table per write shape, reached from the destination variants.
+
+    Read off the destinations rather than listed here: which write shapes exist
+    is exactly which ones a destination can carry, and a hand-kept list would be
+    a second place to remember.
+    """
+    writes: list[type] = []
+    for destination in _stream_destination_variants():
+        for write in _model_variants(destination.model_fields["write"].annotation):
+            if write not in writes:
+                writes.append(write)
+    return "\n".join(_field_table(w) for w in writes)
+
+
+def _field_table(model) -> str:
+    class_name = model.__name__
+    module_path = model.__module__
     schema = model.model_json_schema()
     required = set(schema.get("required", ()))
     properties = schema.get("properties", {})
@@ -616,12 +680,20 @@ def published_vocabularies() -> dict[str, dict]:
             [get_args(v.model_fields[discriminator].annotation)[0] for v in variants],
             f"discriminated union `analitiq.contracts.stream.{union_name}`")
 
-    # `write.mode` is deliberately an open string: a database destination is closed
-    # to this set, but an API destination's mode is whatever key the endpoint
-    # declares under operations.write, which no contract enum can enumerate.
+    # Each branch of the destination union closes `write.mode`, but against a
+    # different fact, so only the database one is a row here. The database
+    # branch is bounded by what the SQL write path implements; the API branch is
+    # bounded by the write-mode UNIVERSE, because an API mode names a key of the
+    # selected endpoint's `operations.write` and that map is keyed by
+    # `endpoints.WriteMode`. WHICH key the endpoint declares stays a
+    # cross-document fact. The API bound is rendered by the `ApiWrite` field
+    # table in the destinations doc, so a second row of the same members here
+    # would tell a reader nothing the tables do not.
     add("write.mode", "`stream.destinations[].write.mode` (database)",
         sorted(stream._DB_WRITE_MODES),  # skipcq: PYL-W0212 — contract-internal vocabulary rendered into prose; the generator is the one sanctioned reader
-        "`ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`)")
+        "discriminated union `analitiq.contracts.stream.DatabaseWrite` "
+        "(an API destination's mode is bounded by the endpoint write-key "
+        "universe instead)")
 
     return vocabularies
 
@@ -725,6 +797,8 @@ RENDERERS = {
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,
+    "fields-stream-destination": render_fields_stream_destination,
+    "fields-stream-write": render_fields_stream_write,
     **{
         block_id: (lambda m=module, c=cls: _render_field_table(m, c))
         for block_id, (module, cls) in FIELD_TABLE_MODELS.items()

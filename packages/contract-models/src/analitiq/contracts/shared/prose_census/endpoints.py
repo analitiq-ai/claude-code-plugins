@@ -71,7 +71,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="OffsetCursor", field="increment_by",
-        prose_hash="0be61986cb94",
+        prose_hash="63c56c5e53b4",
         structural="required, with no default (the leading ... sentinel)",
         waiver=(
             "which step value is correct (records-returned vs requested-window "
@@ -81,7 +81,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="PageCursor", field="increment_by", waiver=ENGINE_OWNED_DEFAULTING,
-        prose_hash="d17d2ce2c053",
+        prose_hash="3c8ef0a97bd4",
+        structural=(
+            "StrictPositiveInt | NumericExpression | None — the positivity "
+            "claim is carried by the bound on the scalar branch and by "
+            "`NumericExpression` having no literal branch, so no spelling of "
+            "the field expresses a zero step. Only the stated default of 1 "
+            "is unenforceable here, and that is what the waiver covers"
+        ),
     ),
     ProseObligation(
         model="Keyset", field="order_by_field",
@@ -235,12 +242,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="PageSize", prose_hash="3cf85819e8cc", descriptive=True),
     ProseObligation(
         model="PageSize", field="default",
-        prose_hash="cd3567d289ee",
+        prose_hash="738f51b4416a",
         structural=(
-            "a Field gt lower bound with Strict() on the bare-integer "
-            "branch; the expression spellings are the typed `Expression` "
-            "union, whose literal branch the prose itself states is "
-            "unbounded"
+            "StrictPositiveInt on the bare-integer branch, and "
+            "`NumericExpression` — `Expression` minus its literal branch — on "
+            "the expression side, so the rejection of a non-positive page size "
+            "holds for every spelling the field has"
         ),
     ),
     ProseObligation(model="Param", prose_hash="ac26d8a264f8", descriptive=True),
@@ -339,10 +346,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="_EndpointModel",
-        prose_hash="d4a23f9910d9",
+        prose_hash="b66d442779fa",
         structural=(
-            "the frozen ConfigDict the docstring itself describes — "
-            "instances reject post-construction mutation"
+            "the alias-handling ConfigDict the docstring describes; the "
+            "immutability it points at is the parse-only policy StrictModel "
+            "mixes in, which this class inherits rather than restates"
         ),
     ),
     ProseObligation(model="_RequestBase", prose_hash="87c66ef8d3e5", descriptive=True),

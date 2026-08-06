@@ -25,6 +25,8 @@ from pydantic import (
     model_validator,
 )
 
+from analitiq.contracts.shared.types import StrictInt, StrictNonNegativeInt
+
 # --- Schema URL base --------------------------------------------------------
 #
 # `DOMAIN` is the canonical environment variable the deploy stamps into every
@@ -156,15 +158,88 @@ def validate_tags(v: list[str] | None) -> list[str] | None:
 
 # --- Strict base for authored sub-models -----------------------------------
 
-class StrictModel(BaseModel):
-    """Base for authored sub-models. Rejects all unknown keys.
+class ParseOnly:
+    """The parse-only policy: an instance only ever comes out of a validator.
+
+    A plain mixin rather than a base model, so the one statement of the policy
+    also reaches the root model that cannot inherit :class:`StrictModel`.
+    It closes each route that would otherwise produce or alter an instance
+    without running the validators:
+
+    - ``frozen=True`` makes ``__setattr__`` raise, so no field can be rebound
+      to a value its validators never saw;
+    - ``model_construct`` and ``model_copy(update=...)`` write straight into
+      the instance dict, frozen or not, and are refused here.
+
+    The refusals point the caller at ``model_validate``: a changed document is
+    built by parsing one, so the cross-field rules run on the result. Inside a
+    ``mode="after"`` validator, :func:`set_derived_field` is the one sanctioned
+    write.
+
+    The freeze is pydantic's, and therefore shallow: it binds a field to the
+    value the validator accepted, not the contents of a list or dict that
+    value holds. In-place mutation of such a container is outside what this
+    policy reaches.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    @classmethod
+    def model_construct(cls, *args: Any, **values: Any) -> Any:
+        """Refuse the constructor whose whole purpose is skipping validation."""
+        raise TypeError(
+            f"{cls.__name__}.model_construct skips every validator, so it can "
+            f"build a document the contract rejects. Parse instead: "
+            f"{cls.__name__}.model_validate(...)."
+        )
+
+    def model_copy(
+        self, *, update: dict[str, Any] | None = None, deep: bool = False
+    ) -> Any:
+        """Copy freely; refuse the `update=` that writes past the validators."""
+        if update:
+            raise TypeError(
+                f"{type(self).__name__}.model_copy(update=...) writes the new "
+                f"values straight into the copy without validating them. Parse "
+                f"the changed document instead: "
+                f"{type(self).__name__}.model_validate(model.model_dump(...) | changes)."
+            )
+        return super().model_copy(deep=deep)
+
+
+class StrictModel(ParseOnly, BaseModel):
+    """Base for authored sub-models. Rejects all unknown keys, and is parse-only.
 
     `x-*` extension keys are NOT allowed; the authored contract is closed.
     Provider extensions must use first-class fields rather than `x-*`
     smuggling.
+
+    The parse-only policy is `ParseOnly`, mixed in here: a field a validator
+    checked cannot be rebound afterwards, and the constructors that skip the
+    validators are refused, so a caller that needs a changed document builds
+    one — ``model_validate(model.model_dump(...) | changes)`` — and the
+    validators run again on the result. That policy reaches every contract
+    model through this base, and it reaches as far as the mixin says it does:
+    a list or dict a field holds can still be mutated in place, which no
+    config setting prevents.
     """
 
     model_config = ConfigDict(extra="forbid")
+
+
+def set_derived_field(model: BaseModel, field: str, value: Any) -> None:
+    """Write a value a `mode="after"` validator derived from validated input.
+
+    Contract models are frozen, so a validator cannot assign to `self`. This is
+    the ONE sanctioned way past that, and only for a value that is a pure
+    function of what the author already wrote — never for accepting caller
+    input, which must go through `model_validate` so the validators run.
+
+    It deliberately leaves `__pydantic_fields_set__` alone: a derived value is
+    not author input, and an `exclude_unset` dump must keep saying so. Every
+    derived field re-derives on re-parse, so such a dump still round-trips.
+    """
+    object.__setattr__(model, field, value)
 
 
 # --- Shared retry/error-handling behavior ----------------------------------
@@ -190,6 +265,22 @@ _RETRY_ERROR_HANDLING_CONDITIONAL_RULES: dict[str, Any] = {
 }
 
 
+# The retry contract's field types, named once. The pipeline block re-declares
+# a field to attach a public description; without a shared annotation that
+# re-declaration is a second hand-maintained copy of the bounds, which is
+# exactly the drift this base class exists to prevent.
+RetryAttempts = Annotated[StrictInt, Field(ge=0, le=5)]
+RetryDelaySeconds = StrictNonNegativeInt
+
+# Records per batch, named once for the same reason. The stream-level field is
+# an OVERRIDE of the pipeline-level one, so the override has to admit the same
+# set of values as the field it overrides — otherwise a document valid at the
+# stream level describes a batch size the pipeline default could never have
+# taken. Spelling the bounds at each site made that agreement a thing a human
+# remembers.
+BatchSize = Annotated[StrictInt, Field(ge=1, le=100_000)]
+
+
 class RetryErrorHandlingBase(StrictModel):
     """Shared error-handling contract for the pipeline and stream blocks.
 
@@ -207,8 +298,8 @@ class RetryErrorHandlingBase(StrictModel):
     )
 
     strategy: Literal["fail", "dlq", "skip"] = Field(default="dlq")
-    max_retries: int = Field(default=3, ge=0, le=5)
-    retry_delay_seconds: int | None = Field(default=None, ge=0)
+    max_retries: RetryAttempts = Field(default=3)
+    retry_delay_seconds: RetryDelaySeconds | None = Field(default=None)
 
     @model_validator(mode="after")
     def _validate_retry_fields(self) -> "RetryErrorHandlingBase":
@@ -224,15 +315,16 @@ class RetryErrorHandlingBase(StrictModel):
         # `mode="before"` validator: that marks the key as provided, corrupting
         # the one signal consumers use to tell author-set from defaulted.
         # `retry_delay_seconds is None` means the author omitted it (or sent
-        # null); after assigning, discard it from the field-set — pydantic's
-        # `__setattr__` records the assignment, and the injected default must
-        # not read as author input. The `0 if max_retries == 0 else 5` value is
-        # consistent with the cross-field rule above regardless of validator
-        # order (an author-supplied delay under `max_retries == 0` is rejected
-        # there; the only value ever injected for that case is 0).
+        # null); `set_derived_field` writes without recording the assignment, so
+        # the injected default cannot read as author input. The
+        # `0 if max_retries == 0 else 5` value is consistent with the cross-field
+        # rule above regardless of validator order (an author-supplied delay
+        # under `max_retries == 0` is rejected there; the only value ever
+        # injected for that case is 0).
         if self.retry_delay_seconds is None:
-            self.retry_delay_seconds = 0 if self.max_retries == 0 else 5
-            self.__pydantic_fields_set__.discard("retry_delay_seconds")
+            set_derived_field(
+                self, "retry_delay_seconds", 0 if self.max_retries == 0 else 5
+            )
         return self
 
 
@@ -254,7 +346,7 @@ def validation_error_summary(e: ValidationError) -> str:
     )
 
 
-class CorruptedPlaceholderBase(BaseModel):
+class CorruptedPlaceholderBase(StrictModel):
     """Shared base for the read contracts' corrupted-row placeholders.
 
     Owns the `_corrupted` discriminator, the client-safe `error` reason, and
@@ -269,7 +361,7 @@ class CorruptedPlaceholderBase(BaseModel):
     Resource placeholders subclass this with their identity fields.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True)
 
     corrupted: Literal[True] = Field(
         alias="_corrupted",

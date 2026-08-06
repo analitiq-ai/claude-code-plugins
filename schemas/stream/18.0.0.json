@@ -1,5 +1,58 @@
 {
   "$defs": {
+    "ApiStreamDestination": {
+      "additionalProperties": false,
+      "description": "A destination bound to a connector-scope (API) endpoint.",
+      "properties": {
+        "endpoint_ref": {
+          "$ref": "#/$defs/ConnectorEndpointRef",
+          "description": "Structured endpoint reference."
+        },
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Execution"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stream-level destination execution override."
+        },
+        "write": {
+          "$ref": "#/$defs/ApiWrite",
+          "description": "Stream-selected write behavior for this destination."
+        }
+      },
+      "required": [
+        "endpoint_ref",
+        "write"
+      ],
+      "title": "ApiStreamDestination",
+      "type": "object"
+    },
+    "ApiWrite": {
+      "additionalProperties": false,
+      "description": "Stream-selected write behavior for an API (connector-scope) destination.\n\nCarries no `conflict_keys`: an API upsert's conflict target is\nendpoint-owned (`operations.write.upsert.conflict_keys`), so there is no\nstream-authored key to declare.",
+      "properties": {
+        "mode": {
+          "description": "Write mode \u2014 the selected endpoint's `operations.write` key. Which key that endpoint declares is a cross-document fact; that the key belongs to the destination write-mode universe is not.",
+          "enum": [
+            "insert",
+            "upsert",
+            "truncate_insert"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "ApiWrite",
+      "type": "object"
+    },
     "ArrowFieldSpec": {
       "additionalProperties": false,
       "allOf": [
@@ -667,6 +720,55 @@
       "title": "ConstantValue",
       "type": "object"
     },
+    "DatabaseConflictKeyedWrite": {
+      "additionalProperties": false,
+      "description": "A database write that matches existing rows on a stream-declared key set.",
+      "properties": {
+        "conflict_keys": {
+          "description": "Conflict target \u2014 a single composite key set of destination field names. Multiple alternative key sets are out of scope until a connector needs them.",
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Conflict Keys",
+          "type": "array"
+        },
+        "mode": {
+          "const": "upsert",
+          "description": "Database write mode for a load that matches existing rows on the declared conflict key set.",
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "conflict_keys"
+      ],
+      "title": "DatabaseConflictKeyedWrite",
+      "type": "object"
+    },
+    "DatabaseKeylessWrite": {
+      "additionalProperties": false,
+      "description": "A database write that matches no existing row, so it declares no key.\n\nNo `conflict_keys` field exists on this shape: a load that overwrites or\nappends wholesale has nothing to match on, so the key is absent from the\ntype rather than rejected on the way in.",
+      "properties": {
+        "mode": {
+          "description": "Database write mode for a load that matches no existing row.",
+          "enum": [
+            "insert",
+            "truncate_insert"
+          ],
+          "title": "Mode",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "DatabaseKeylessWrite",
+      "type": "object"
+    },
     "DatabaseObject": {
       "additionalProperties": false,
       "description": "Provider-native database object identity.\n\nIdentifier strings are stored verbatim from introspection \u2014 no\ncase-folding, quoting, or normalization.",
@@ -705,6 +807,54 @@
         "name"
       ],
       "title": "DatabaseObject",
+      "type": "object"
+    },
+    "DatabaseStreamDestination": {
+      "additionalProperties": false,
+      "description": "A destination bound to a connection-scope (database) endpoint.",
+      "properties": {
+        "endpoint_ref": {
+          "$ref": "#/$defs/ConnectionEndpointRef",
+          "description": "Structured endpoint reference."
+        },
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Execution"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Stream-level destination execution override."
+        },
+        "write": {
+          "description": "Stream-selected write behavior for this destination.",
+          "discriminator": {
+            "mapping": {
+              "insert": "#/$defs/DatabaseKeylessWrite",
+              "truncate_insert": "#/$defs/DatabaseKeylessWrite",
+              "upsert": "#/$defs/DatabaseConflictKeyedWrite"
+            },
+            "propertyName": "mode"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/DatabaseKeylessWrite"
+            },
+            {
+              "$ref": "#/$defs/DatabaseConflictKeyedWrite"
+            }
+          ],
+          "title": "Write"
+        }
+      },
+      "required": [
+        "endpoint_ref",
+        "write"
+      ],
+      "title": "DatabaseStreamDestination",
       "type": "object"
     },
     "Execution": {
@@ -836,7 +986,7 @@
     },
     "FnExpression": {
       "additionalProperties": false,
-      "description": "`{\"op\": \"fn\", \"name\": \"<conversion fn>\"}` \u2014 one conversion stage of a\n`pipe`.\n\nMirrors the engine's `fn` AST node. `name` is closed over the conversion\nfunctions the engine-published conversion matrix declares for `explicit`\nconversions \u2014 the matrix cell's `fn` is what an author (the FE mapping\neditor) wires in, so a name the engine would reject at transform build is\nnot authorable. The engine's optional `version`/`args` node fields are\nintentionally not published: the engine defaults them (`version=1`,\n`args=[]`) and no declarable conversion takes arguments.",
+      "description": "`{\"op\": \"fn\", \"name\": \"<conversion fn>\"}` \u2014 one conversion stage of a\n`pipe` (#887).\n\nMirrors the engine's `fn` AST node. `name` is closed over the conversion\nfunctions the engine-published conversion matrix declares for `explicit`\nconversions \u2014 the matrix cell's `fn` is what an author (the FE mapping\neditor) wires in, so a name the engine would reject at transform build is\nnot authorable. The engine's optional `version`/`args` node fields are\nintentionally not published: the engine defaults them (`version=1`,\n`args=[]`) and no declarable conversion takes arguments.",
       "properties": {
         "name": {
           "const": "to_string",
@@ -1080,7 +1230,7 @@
     },
     "PipeExpression": {
       "additionalProperties": false,
-      "description": "`{\"op\": \"pipe\", \"args\": [<get>, <fn>, ...]}` \u2014 a source read piped\nthrough one or more declared conversion functions.\n\nMirrors the engine's `pipe` AST node: `args[0]` is the seed expression \u2014\na `get` in the stream grammar (constants use `value.constant`, never an\nexpression node) \u2014 and every later entry is an `fn` conversion stage\napplied left to right. This is how an assignment satisfies an `explicit`\nconversion-matrix pair (e.g. `Int64 \u2192 Utf8` needs `to_string`): the\nengine rejects a bare `get` for such a pair at both the transform build\nand the destination cast.",
+      "description": "`{\"op\": \"pipe\", \"args\": [<get>, <fn>, ...]}` \u2014 a source read piped\nthrough one or more declared conversion functions (#887).\n\nMirrors the engine's `pipe` AST node: `args[0]` is the seed expression \u2014\na `get` in the stream grammar (constants use `value.constant`, never an\nexpression node) \u2014 and every later entry is an `fn` conversion stage\napplied left to right. This is how an assignment satisfies an `explicit`\nconversion-matrix pair (e.g. `Int64 \u2192 Utf8` needs `to_string`): the\nengine rejects a bare `get` for such a pair at both the transform build\nand the destination cast.",
       "properties": {
         "args": {
           "description": "Seed `get` expression followed by one or more `fn` conversion stages, applied left to right.",
@@ -1107,203 +1257,6 @@
         "args"
       ],
       "title": "PipeExpression",
-      "type": "object"
-    },
-    "StreamDestination": {
-      "additionalProperties": false,
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "endpoint_ref": {
-                "properties": {
-                  "scope": {
-                    "const": "connection"
-                  }
-                },
-                "required": [
-                  "scope"
-                ]
-              }
-            },
-            "required": [
-              "endpoint_ref"
-            ]
-          },
-          "then": {
-            "properties": {
-              "write": {
-                "properties": {
-                  "mode": {
-                    "enum": [
-                      "insert",
-                      "truncate_insert",
-                      "upsert"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "endpoint_ref": {
-                "properties": {
-                  "scope": {
-                    "const": "connector"
-                  }
-                },
-                "required": [
-                  "scope"
-                ]
-              }
-            },
-            "required": [
-              "endpoint_ref"
-            ]
-          },
-          "then": {
-            "properties": {
-              "write": {
-                "properties": {
-                  "conflict_keys": {
-                    "type": "null"
-                  }
-                }
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "endpoint_ref": {
-                "properties": {
-                  "scope": {
-                    "const": "connection"
-                  }
-                },
-                "required": [
-                  "scope"
-                ]
-              },
-              "write": {
-                "properties": {
-                  "mode": {
-                    "const": "upsert"
-                  }
-                },
-                "required": [
-                  "mode"
-                ]
-              }
-            },
-            "required": [
-              "endpoint_ref",
-              "write"
-            ]
-          },
-          "then": {
-            "properties": {
-              "write": {
-                "properties": {
-                  "conflict_keys": {
-                    "minItems": 1,
-                    "type": "array"
-                  }
-                },
-                "required": [
-                  "conflict_keys"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "endpoint_ref": {
-                "properties": {
-                  "scope": {
-                    "const": "connection"
-                  }
-                },
-                "required": [
-                  "scope"
-                ]
-              },
-              "write": {
-                "properties": {
-                  "mode": {
-                    "not": {
-                      "const": "upsert"
-                    }
-                  }
-                }
-              }
-            },
-            "required": [
-              "endpoint_ref"
-            ]
-          },
-          "then": {
-            "properties": {
-              "write": {
-                "properties": {
-                  "conflict_keys": {
-                    "type": "null"
-                  }
-                }
-              }
-            }
-          }
-        }
-      ],
-      "description": "Destination endpoint binding and stream-owned destination options.",
-      "properties": {
-        "endpoint_ref": {
-          "description": "Structured endpoint reference.",
-          "discriminator": {
-            "mapping": {
-              "connection": "#/$defs/ConnectionEndpointRef",
-              "connector": "#/$defs/ConnectorEndpointRef"
-            },
-            "propertyName": "scope"
-          },
-          "oneOf": [
-            {
-              "$ref": "#/$defs/ConnectorEndpointRef"
-            },
-            {
-              "$ref": "#/$defs/ConnectionEndpointRef"
-            }
-          ],
-          "title": "Endpoint Ref"
-        },
-        "execution": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Execution"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Stream-level destination execution override."
-        },
-        "write": {
-          "$ref": "#/$defs/Write",
-          "description": "Stream-selected write behavior for this destination."
-        }
-      },
-      "required": [
-        "endpoint_ref",
-        "write"
-      ],
-      "title": "StreamDestination",
       "type": "object"
     },
     "StreamMapping": {
@@ -1588,10 +1541,24 @@
       "description": "Stream record validation rule \u2014 see \u00a7Assignment Validation.",
       "properties": {
         "field": {
-          "description": "Mapped output field path validated by this rule.",
-          "minLength": 1,
+          "description": "Mapped output field addressed by this rule, as an ordered token array \u2014 one entry per path segment, outermost first, spelled like a source `get` path. The first token names an `assignments[].target.path` declared in the same mapping; each later token names a field declared under that target's `properties` (descending through `items` for a `List`), so a rule can address a field nested inside an `Object` target. A token is one field name, so a `.` inside it is part of that name: nesting is a further token, never a dotted string.",
+          "examples": [
+            [
+              "email"
+            ],
+            [
+              "address",
+              "city"
+            ]
+          ],
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "minItems": 1,
           "title": "Field",
-          "type": "string"
+          "type": "array"
         },
         "message": {
           "anyOf": [
@@ -1631,44 +1598,9 @@
       ],
       "title": "ValidationRule",
       "type": "object"
-    },
-    "Write": {
-      "additionalProperties": false,
-      "description": "Stream-selected write behavior for one destination.",
-      "properties": {
-        "conflict_keys": {
-          "anyOf": [
-            {
-              "items": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "minItems": 1,
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Database upsert conflict target \u2014 a single composite key set (non-empty list of destination field names). Required for a database (`scope=connection`) upsert; forbidden for an API (`scope=connector`) destination, whose conflict key is endpoint-owned (`operations.write.upsert.conflict_keys`). Presence is enforced by `StreamDestination`, which knows the destination scope. Multiple alternative key sets are out of scope until a connector needs them.",
-          "title": "Conflict Keys"
-        },
-        "mode": {
-          "description": "Write mode. API destination (endpoint_ref.scope='connector'): the selected endpoint's operations.write key. Database destination (scope='connection'): a member of the closed database write-mode vocabulary, enumerated by the StreamDestination conditional rule that selects on that scope.",
-          "minLength": 1,
-          "title": "Mode",
-          "type": "string"
-        }
-      },
-      "required": [
-        "mode"
-      ],
-      "title": "Write",
-      "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/stream/17.0.2.json",
+  "$id": "https://schemas.analitiq.ai/stream/18.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for Analitiq stream documents \u2014 the authored shape used in source control, PR review, and author-time tooling. Server-managed fields (stream_id, version, org_id, created_at, updated_at) are forbidden in the authored shape and assigned by the stream service on ingest. The persisted-record shape is internal and not published. Source of truth: analitiq.contracts.stream.StreamInput (Pydantic).",
@@ -1704,7 +1636,14 @@
     "destinations": {
       "description": "Non-empty array of destination bindings.",
       "items": {
-        "$ref": "#/$defs/StreamDestination"
+        "oneOf": [
+          {
+            "$ref": "#/$defs/DatabaseStreamDestination"
+          },
+          {
+            "$ref": "#/$defs/ApiStreamDestination"
+          }
+        ]
       },
       "minItems": 1,
       "title": "Destinations",
@@ -1805,5 +1744,5 @@
   ],
   "title": "Analitiq Stream",
   "type": "object",
-  "version": "17.0.2"
+  "version": "18.0.0"
 }

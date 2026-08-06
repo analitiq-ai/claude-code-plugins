@@ -50,7 +50,7 @@ retype it, and never invent a version-pinned variant of it:
 | `description` | no | string \| null | `None` | `maxLength=2000` |
 | `pipeline_id` | **yes** | string | — | `pattern=\S`, `minLength=1` |
 | `source` | **yes** | StreamSource | — | — |
-| `destinations` | **yes** | array of StreamDestination | — | `minItems=1` |
+| `destinations` | **yes** | array of DatabaseStreamDestination \| ApiStreamDestination | — | `minItems=1` |
 | `mapping` | no | StreamMapping \| null | `None` | — |
 | `status` | no | 'draft' \| 'active' \| 'inactive' | `'draft'` | — |
 | `tags` | no | array of string \| null | `None` | `maxItems=50`, `item pattern=^\S(?:[\s\S]*\S)?$`, `item minLength=1` |
@@ -79,7 +79,7 @@ validation error, not a pass-through value.
 | `stream.source.replication.method` | `full_refresh`, `incremental` | discriminated union `analitiq.contracts.stream.Replication` |
 | `stream.source.database_pagination.type` | `offset`, `keyset` | discriminated union `analitiq.contracts.stream.DatabasePagination` |
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
-| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | `ADV-STRM-013` (API modes are endpoint-declared, so the field itself is `str`) |
+| `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | discriminated union `analitiq.contracts.stream.DatabaseWrite` (an API destination's mode is bounded by the endpoint write-key universe instead) |
 <!-- END GENERATED: enum-vocabulary -->
 
 `status` is the only execution gate on a stream — there is no parallel boolean
@@ -98,7 +98,7 @@ flag, and no member beyond those listed exists (in particular there is no
 
 These are the relational constraints no single field can express. The validator
 emits each one's stable id in the finding message, so a failure like
-`[ADV-STRM-011] …` points straight at the rule below.
+`[ADV-STRM-001] …` points straight at the rule below.
 
 <!-- BEGIN GENERATED: advisory-stream -->
 | Rule | Constraint |
@@ -112,10 +112,9 @@ emits each one's stable id in the finding message, so a failure like
 | `ADV-STRM-007` | constant.value's JSON kind must match arrow_type, and the Object/List/scalar container shape rule applies. |
 | `ADV-STRM-009` | A validation rule requires value for value-taking types and omits it for required/not_null. |
 | `ADV-STRM-010` | An assignment target's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
-| `ADV-STRM-011` | conflict_keys is required for a connection-scope upsert destination and forbidden for a connector-scope or non-upsert destination. |
 | `ADV-STRM-012` | A filter operator must belong to the source scope's vocabulary: the database operator set for a connection source, the API operator set for a connector source. |
-| `ADV-STRM-013` | A database (connection-scope) destination's write.mode must belong to the closed database write-mode vocabulary; an API (connector-scope) destination's mode is an endpoint-declared operations.write key. |
 | `ADV-STRM-014` | selected_columns, replication.tie_breaker_fields and database_pagination are database-source features: a connector-scope (API) source must not declare them. |
+| `ADV-STRM-015` | A validation rule's field must resolve against the mapping's assignment targets: its first token names a declared target.path and each later token names a field declared under that target's properties. |
 <!-- END GENERATED: advisory-stream -->
 
 ## Output rules

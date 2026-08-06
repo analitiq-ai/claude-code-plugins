@@ -60,7 +60,8 @@ The orchestrator passes:
    omit (the registry applies pass-through). Each assignment's `value` declares
    `kind` — `"expression"` (a `get`, or a `pipe`/`fn` chain) or `"constant"` —
    alongside that variant's single payload key. A `get` path is a token array
-   (`["address", "city"]`), never a dotted string.
+   (`["address", "city"]`), never a dotted string; so is a `validate.rules[].field`,
+   which addresses a target this mapping declares (`ADV-STRM-015`).
 7. Return a `CreatorOutput` (`entity: stream`).
 
 ## Output format

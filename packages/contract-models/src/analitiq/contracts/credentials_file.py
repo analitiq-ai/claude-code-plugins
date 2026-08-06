@@ -20,8 +20,16 @@ from typing import Any
 
 from pydantic import RootModel
 
+from analitiq.contracts.shared.common import ParseOnly
 
-class CredentialsFile(RootModel[dict[str, Any]]):
+# `RootModel` cannot inherit `StrictModel` — pydantic rejects an `extra`
+# setting on a root model — so this model mixes in the parse-only policy
+# `StrictModel` carries for every other contract model, rather than restating
+# it. The tree-wide scan in `test_model_immutability` is what keeps that
+# honest.
+
+
+class CredentialsFile(ParseOnly, RootModel[dict[str, Any]]):
     """Flat `{ "<name>": <secret value> }` map for one connection.
 
     Each key is a connection-contract input (or post-auth output) name; each

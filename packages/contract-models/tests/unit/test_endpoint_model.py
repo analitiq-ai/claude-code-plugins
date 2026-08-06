@@ -22,6 +22,8 @@ from analitiq.contracts.endpoints import (
     Column,
     ColumnFieldSpec,
     DatabaseEndpointDoc,
+    OffsetCursor,
+    PageCursor,
     PageSize,
     Param,
     PredicateAnd,
@@ -2012,21 +2014,19 @@ class TestPaginationStrategies:
             parse_endpoint(self._offset_payload({"param": "o", "initial": 0}))
 
     def test_offset_increment_by_literal_zero_rejected(self):
-        # A bare-int literal 0 would re-request the same offset forever; the
-        # `gt=0` guard on the int branch rejects it. (A `{literal: 0}` value
-        # expression is opaque to this shape contract — see the runtime-gate
-        # test below.)
-        with pytest.raises(ValidationError, match="greater than 0"):
+        # A step of 0 re-requests the same offset forever. Rejected in every
+        # spelling now — the bare integer by the bound, `{literal: 0}` by the
+        # numeric slots having no literal branch at all.
+        with pytest.raises(ValidationError, match="greater than or equal to 1"):
             parse_endpoint(self._offset_payload({"param": "o", "initial": 0, "increment_by": 0}))
 
     def test_offset_increment_by_non_integer_literal_rejected(self):
-        # A non-integer numeric literal is rejected. The int branch is lax
-        # (Pydantic's standard `int` coercion), so a stringy/bool/integer-valued
-        # number would be coerced — the published JSON Schema (`type: integer`)
-        # is the tighter author-time gate for those, and the authoritative
-        # validator stays a superset of it (no "passes schema, rejected on
-        # ingest").
-        for bad in (1.5, 2.5):
+        # A non-integer numeric literal is rejected, and so are the spellings
+        # pydantic's lax mode used to coerce: `"50"` and `true` (the latter read
+        # as a step of 1). The published JSON Schema says `type: integer` and
+        # refuses all of them, so the model must too — see
+        # `test_strict_numeric_policy.py` for the package-wide sweep.
+        for bad in (1.5, 2.5, "50", True):
             with pytest.raises(ValidationError):
                 parse_endpoint(self._offset_payload(
                     {"param": "o", "initial": 0, "increment_by": bad}
@@ -2046,16 +2046,17 @@ class TestPaginationStrategies:
                 {"param": "o", "initial": 0, "increment_by": {"foo": "bar"}}
             ))
 
-    def test_offset_increment_by_literal_zero_accepted_at_contract_layer(self):
-        # Boundary documentation, not an endorsement: a `{literal: 0}` (or a
-        # `{ref}`/`{function}` that resolves to 0) passes the *shape* contract —
-        # this model does not evaluate expression values (consistent with every
-        # other Expression-typed field). Resolved-value positivity is checked
-        # by the engine at runtime, once the expression has a value. Only the
-        # bare-int branch is positivity-constrained here.
-        parse_endpoint(self._offset_payload(
-            {"param": "o", "initial": 0, "increment_by": {"literal": 0}}
-        ))
+    def test_offset_increment_by_literal_form_rejected(self):
+        # This used to be the boundary: `{literal: 0}` passed the *shape*
+        # contract because the model does not evaluate expression values. The
+        # boundary moved instead of being policed — a numeric slot has no
+        # literal branch, so the statically-known bad step is unrepresentable
+        # rather than deferred to the engine's runtime gate. A step that is only
+        # knowable at request time (`{ref}`/`{function}`) still is.
+        with pytest.raises(ValidationError):
+            parse_endpoint(self._offset_payload(
+                {"param": "o", "initial": 0, "increment_by": {"literal": 0}}
+            ))
 
 
 # ---------------------------------------------------------------------------
@@ -2490,10 +2491,11 @@ class TestWriteModeVocabulary:
     it should fail here and be re-stated deliberately rather than land as a
     silent widening.
 
-    `stream._DB_WRITE_MODES` is declared independently rather than derived from
-    this tuple — the two are different facts, and stream.py states why — but it
-    is BOUNDED by it: an import-time guard there refuses a database mode outside
-    this vocabulary.
+    `stream._DB_WRITE_MODES` is a different fact — which of these modes the SQL
+    write path implements — and stream.py states why the two are not aliased.
+    It is derived from a table that dispositions every member of this tuple, so
+    adding one here fails that table's import-time guard until someone decides
+    whether a database destination may select it.
     """
 
     def test_exact_members(self):
@@ -2542,14 +2544,14 @@ class TestWriteModeVocabulary:
 
 
 class TestPageSizeDefault:
-    """`default`'s BARE-SCALAR spelling is bounded. Nothing else is.
+    """Every statically-known spelling of `default` is bounded.
 
     `default` was a bare `Any` while `max` carried `ge=1` — the same intent at
     two strengths, and a non-positive page size is a meaningless request rather
-    than one the provider gets to refuse. The reach of the new bound is narrower
-    than "the literal branch", though, and the tests below pin where it stops:
-    `{literal: 0}` still validates. Do not restate this class's scope as
-    "literals are positive" — see `test_literal_expression_bypasses_the_bound`.
+    than one the provider gets to refuse. The bound now reaches the bare integer
+    AND the `{literal: N}` form, the latter by the form no longer existing in a
+    numeric slot; the request-time expression forms stay unbounded because
+    nothing here could check them.
     """
 
     def test_positive_literal_accepted(self):
@@ -2587,8 +2589,8 @@ class TestPageSizeDefault:
         # and rejects both — so this package would accept documents that every
         # external consumer of the published schema refuses. The premise is that
         # the model and the schema are one contract; see
-        # `test_float_spelled_integer_is_a_one_directional_gap` for the single
-        # value where `Strict()` makes the model the tighter of the two.
+        # `test_float_spelled_integer_is_a_one_directional_gap` for the spelling
+        # where `Strict()` makes the model the tighter of the two.
         with pytest.raises(ValidationError):
             PageSize.model_validate({"param": "limit", "default": value})
 
@@ -2617,10 +2619,18 @@ class TestPageSizeDefault:
 
     @pytest.mark.parametrize("field", ["default", "max"])
     def test_float_spelled_integer_is_a_one_directional_gap(self, field):
-        # The one place the two halves of the contract disagree, recorded so it
-        # cannot silently invert. JSON Schema's `type: integer` matches any
-        # number with a zero fractional part, so `50.0` is a valid integer to
-        # every external consumer; `Strict()` makes pydantic refuse it.
+        # The direction in which the two halves of the contract disagree, stated
+        # on a concrete field so it cannot silently invert. JSON Schema's
+        # `type: integer` matches any number with a zero fractional part, so
+        # `50.0` is a valid integer to every external consumer; `Strict()` makes
+        # pydantic refuse it.
+        #
+        # This is a sample of the asymmetry, not its extent: `Strict()` is the
+        # policy for every authoring field, so the gap reaches wherever that
+        # policy does. How far that is, is measured — not listed — by the sweep
+        # in `test_strict_numeric_policy.py`, which also asserts that the sites
+        # pinned here are among the ones it finds, so the two records of the
+        # same asymmetry cannot drift apart.
         #
         # Left as-is rather than reconciled. The model being the STRICTER side
         # is the safe direction — a document this package accepts is always one
@@ -2650,18 +2660,118 @@ class TestPageSizeDefault:
         with pytest.raises(ValidationError):
             PageSize.model_validate({"max": {"ref": "runtime.batch_size"}})
 
-    def test_literal_expression_bypasses_the_bound(self):
-        # Known hole, recorded rather than left for someone to discover: the
-        # `Expression` branch contains `LiteralExpression`, whose payload is
-        # `Any`, so a statically-known non-positive page size is one spelling
-        # away. Closing it means bounding the literal expression everywhere a
-        # positive number is required (`max`, `OffsetCursor.increment_by`,
-        # `PageCursor.increment_by`) — wider than the bare-scalar bound this
-        # class pins, and not attempted here.
-        # This test exists so that fix flips it, rather than silently passing.
-        assert PageSize.model_validate(
-            {"param": "limit", "default": {"literal": 0}}
-        ).default.literal == 0
+    @pytest.mark.parametrize("literal", [0, -5, "abc", 50])
+    def test_literal_expression_no_longer_bypasses_the_bound(self, literal):
+        # `{literal: N}` used to be the one spelling of this field that carried
+        # no bound: its payload is `Any` and its documented purpose is to opt
+        # OUT of expression interpretation, so `{"literal": 0}` was a
+        # statically-known non-positive page size that validated. The numeric
+        # slots take `NumericExpression`, which has no literal branch, so the
+        # form is gone rather than bounded — including the well-formed `50`,
+        # whose meaning the bare-integer spelling already carries.
+        with pytest.raises(ValidationError):
+            PageSize.model_validate({"param": "limit", "default": {"literal": literal}})
+
+    @pytest.mark.parametrize(
+        "expression",
+        [
+            {"ref": "runtime.batch_size"},
+            {"template": "${runtime.batch_size}"},
+            {"function": "lookup", "input": "${runtime.batch_size}"},
+        ],
+    )
+    def test_the_request_time_expression_forms_survive(self, expression):
+        # Only the literal form was dropped. A form the engine resolves per
+        # request is one no bound here could have checked anyway.
+        assert PageSize.model_validate({"param": "limit", "default": expression})
+
+
+class TestPaginationStepBounds:
+    """A pagination step is positive in every spelling it has.
+
+    `PageSize` was fixed first and alone, which left the sibling steps carrying
+    the identical defect — `OffsetCursor.increment_by` bounded on the bare
+    scalar only, `PageCursor.increment_by` a bare `Any` with no type at all.
+    `{"literal": 0}` on either is a loop that never advances: the run reports
+    success having read page one forever or not at all. These pin the whole
+    class, not the one field that got noticed.
+    """
+
+    def _offset(self, increment_by):
+        return OffsetCursor.model_validate(
+            {"param": "offset", "initial": 0, "increment_by": increment_by}
+        )
+
+    def _page(self, increment_by):
+        return PageCursor.model_validate(
+            {"param": "page", "initial": 1, "increment_by": increment_by}
+        )
+
+    @pytest.mark.parametrize("step", [1, 50])
+    def test_positive_integer_step_accepted(self, step):
+        assert self._offset(step).increment_by == step
+        assert self._page(step).increment_by == step
+
+    @pytest.mark.parametrize("step", [0, -1])
+    def test_non_positive_integer_step_rejected(self, step):
+        with pytest.raises(ValidationError):
+            self._offset(step)
+        with pytest.raises(ValidationError):
+            self._page(step)
+
+    @pytest.mark.parametrize("literal", [0, -1, 1, "abc"])
+    def test_literal_expression_step_rejected(self, literal):
+        # The spelling that used to slip past: `{"literal": 0}` is a zero step
+        # the bare-scalar bound never saw.
+        with pytest.raises(ValidationError):
+            self._offset({"literal": literal})
+        with pytest.raises(ValidationError):
+            self._page({"literal": literal})
+
+    @pytest.mark.parametrize("bad", [True, "50", "one", 1.5, {}, []])
+    def test_non_numeric_step_rejected(self, bad):
+        # `PageCursor.increment_by` was `Any`: a string, a dict and `true` all
+        # validated, and the last read as a step of 1.
+        with pytest.raises(ValidationError):
+            self._offset(bad)
+        with pytest.raises(ValidationError):
+            self._page(bad)
+
+    def test_request_time_expression_step_accepted(self):
+        # The authored form the engine resolves per page — the reason these
+        # fields are not plain integers.
+        assert isinstance(
+            self._offset({"ref": "response.record_count"}).increment_by, RefExpression
+        )
+        assert isinstance(
+            self._page({"ref": "response.record_count"}).increment_by, RefExpression
+        )
+
+    def test_page_step_is_still_optional(self):
+        # It documents a default of 1; omitting it must stay legal.
+        assert self._page(None).increment_by is None
+        assert (
+            PageCursor.model_validate({"param": "page", "initial": 1}).increment_by
+            is None
+        )
+
+    def test_published_schema_agrees_on_the_literal_form(self):
+        # The model and the rendered schema are one contract: the dropped branch
+        # has to be gone from `$defs` too, or an external consumer still accepts
+        # the zero step this package now refuses.
+        schema = TypeAdapter(ApiEndpointDoc).json_schema(ref_template="#/$defs/{model}")
+        for model, document in (
+            ("OffsetCursor", {"param": "offset", "initial": 0}),
+            ("PageCursor", {"param": "page", "initial": 1}),
+        ):
+            validator = Draft202012Validator(
+                {"$ref": f"#/$defs/{model}", "$defs": schema["$defs"]}
+            )
+            assert validator.is_valid({**document, "increment_by": 1})
+            for step in ({"literal": 0}, {"literal": 1}, 0, -1, True, "50"):
+                assert not validator.is_valid({**document, "increment_by": step}), (
+                    f"published schema accepts {model}.increment_by={step!r}"
+                )
 
 
 # ---------------------------------------------------------------------------

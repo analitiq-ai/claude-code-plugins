@@ -3,15 +3,21 @@
 `stream.destinations[]` is a non-empty array of:
 
 <!-- BEGIN GENERATED: fields-stream-destination -->
-`analitiq.contracts.stream.StreamDestination` — closed (`additionalProperties: false`); required: `endpoint_ref`, `write`
+`analitiq.contracts.stream.DatabaseStreamDestination` — closed (`additionalProperties: false`); required: `endpoint_ref`, `write`
 
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
-| `endpoint_ref` | **yes** | ConnectorEndpointRef \| ConnectionEndpointRef (by `scope`) | — | — |
-| `write` | **yes** | Write | — | — |
 | `execution` | no | Execution \| null | `None` | — |
+| `endpoint_ref` | **yes** | ConnectionEndpointRef | — | — |
+| `write` | **yes** | DatabaseKeylessWrite \| DatabaseConflictKeyedWrite (by `mode`) | — | — |
 
-Carries 4 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+`analitiq.contracts.stream.ApiStreamDestination` — closed (`additionalProperties: false`); required: `endpoint_ref`, `write`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `execution` | no | Execution \| null | `None` | — |
+| `endpoint_ref` | **yes** | ConnectorEndpointRef | — | — |
+| `write` | **yes** | ApiWrite | — | — |
 <!-- END GENERATED: fields-stream-destination -->
 
 The sketch below illustrates a filled-in destination.
@@ -49,33 +55,41 @@ warehouse is a normal shape, not a duplicate.
 ## `write`
 
 <!-- BEGIN GENERATED: fields-stream-write -->
-`analitiq.contracts.stream.Write` — closed (`additionalProperties: false`); required: `mode`
+`analitiq.contracts.stream.DatabaseKeylessWrite` — closed (`additionalProperties: false`); required: `mode`
 
 | Field | Required | Type | Default | Constraints |
 |---|---|---|---|---|
-| `mode` | **yes** | string | — | `minLength=1` |
-| `conflict_keys` | no | array of string \| null | `None` | `minItems=1`, `item minLength=1` |
+| `mode` | **yes** | 'insert' \| 'truncate_insert' | — | — |
+
+`analitiq.contracts.stream.DatabaseConflictKeyedWrite` — closed (`additionalProperties: false`); required: `conflict_keys`, `mode`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `mode` | **yes** | const 'upsert' | — | — |
+| `conflict_keys` | **yes** | array of string | — | `minItems=1`, `item pattern=\S`, `item minLength=1` |
+
+`analitiq.contracts.stream.ApiWrite` — closed (`additionalProperties: false`); required: `mode`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `mode` | **yes** | 'insert' \| 'upsert' \| 'truncate_insert' | — | — |
 <!-- END GENERATED: fields-stream-write -->
 
-### `write.mode`
-
-| Destination kind | allowed values |
-|---|---|
-| database (scope=connection) | the closed database write-mode set — see `ADV-STRM-013` |
-| API (scope=connector) | one of the endpoint's `operations.write` keys (e.g. `create`, `update`, `upsert`) — taken verbatim |
-
-`ADV-STRM-013` is what makes `write.mode` scope-sensitive: the field's type is an
-open string because an API mode is endpoint-declared, but a database destination
-is narrowed to the closed set. The orchestrator's `WriteModeMapper` (see
-`../pipeline-builder/references/enum-mappers.md`) classifies the user's intent to
-one of these.
+The destination's `endpoint_ref.scope` picks the whole shape, write block
+included — pick the endpoint first, then author the write block its variant
+declares. Each variant's `mode` vocabulary is in the tables above; an API
+destination's mode must additionally be a key the selected endpoint declares
+under `operations.write`, which only that endpoint document can tell you. The
+orchestrator's `WriteModeMapper` (see
+`../pipeline-builder/references/enum-mappers.md`) classifies the user's intent
+to one of the database modes.
 
 ### `write.conflict_keys`
 
-`ADV-STRM-011` governs when this field is required and when it is forbidden; the
-`StreamDestination` model can enforce it because the destination's ref tells it
-the scope. It is a **single composite key set** of destination field names — not
-a list of alternative key sets:
+Only the conflict-keyed database variant declares this field — no other write
+shape has it to set, and an API upsert's conflict target is endpoint-owned
+(`operations.write.upsert.conflict_keys`). It is a **single composite key set**
+of destination field names, not a list of alternative key sets:
 
 <!-- validate: stream#/destinations/0/write/conflict_keys -->
 ```jsonc

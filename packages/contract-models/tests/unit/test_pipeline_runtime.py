@@ -2,7 +2,9 @@
 
 Narrow by design: the runtime block is mostly bounded scalars that the rendered
 JSON Schema already states. What is worth a test is the shape the contract
-deliberately *stopped* offering — `TestBatchingHasNoConcurrencyKnob`.
+deliberately *stopped* offering — `TestBatchingHasNoConcurrencyKnob` — and the
+one bound that has to agree with a field in another module,
+`TestStreamOverrideTakesTheSameBatchSizes`.
 """
 from __future__ import annotations
 
@@ -10,6 +12,7 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.pipelines.config import Batching
+from analitiq.contracts.stream import Execution
 
 
 class TestBatchingHasNoConcurrencyKnob:
@@ -38,3 +41,26 @@ class TestBatchingHasNoConcurrencyKnob:
         # loudly instead of having it silently dropped.
         with pytest.raises(ValidationError):
             Batching.model_validate({"batch_size": 100, "max_concurrent_batches": 3})
+
+
+class TestStreamOverrideTakesTheSameBatchSizes:
+    """`stream.Execution.batch_size` overrides `pipeline.runtime.batching.batch_size`.
+
+    An override that admits a value the field it overrides could never hold
+    describes a batch size no pipeline default can express — so each carries the
+    same shared annotation rather than a bound spelled at its own site. Asserted
+    through the bound itself, not by comparing annotations, so the claim stays
+    the behaviour a document actually meets.
+    """
+
+    @pytest.mark.parametrize("value", [1, 100_000])
+    def test_the_edges_of_the_range_hold_on_both(self, value):
+        assert Batching.model_validate({"batch_size": value}).batch_size == value
+        assert Execution.model_validate({"batch_size": value}).batch_size == value
+
+    @pytest.mark.parametrize("value", [0, -1, 100_001])
+    def test_outside_the_range_is_refused_by_both(self, value):
+        with pytest.raises(ValidationError):
+            Batching.model_validate({"batch_size": value})
+        with pytest.raises(ValidationError):
+            Execution.model_validate({"batch_size": value})

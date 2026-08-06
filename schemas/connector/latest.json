@@ -3760,7 +3760,7 @@
             }
           ],
           "default": null,
-          "description": "Declared SQL driver caps. The one additive member of this block: unlike the five required shape facts, absence (of the block or any single cap) is legal and means \"no declared cap\"."
+          "description": "Declared SQL driver caps. The one additive member of this block: unlike the required shape facts, absence (of the block or any single cap) is legal and means \"no declared cap\"."
         },
         "merge_form": {
           "description": "The upsert grammar the destination supports: SQL-standard `merge` (`MERGE`), Postgres-style `insert_on_conflict` (`INSERT \u2026 ON CONFLICT`), MySQL-style `insert_on_duplicate_key` (`INSERT \u2026 ON DUPLICATE KEY`), or `none` (no native upsert).",
@@ -3799,7 +3799,7 @@
     },
     "SqlLimits": {
       "additionalProperties": false,
-      "description": "Declared SQL driver caps.\n\nThe one additive member of `sql_capabilities`: unlike the five required\nshape facts, absence of the block or of any single cap \u2014 including an\nempty block \u2014 is legal and means \"no declared cap\", and absence never\nblocks a write. Declared values are validated strictly (positive\nintegers, booleans rejected) and are enforced by the engine.",
+      "description": "Declared SQL driver caps.\n\nThe one additive member of `sql_capabilities`: unlike the required\nshape facts, absence of the block or of any single cap \u2014 including an\nempty block \u2014 is legal and means \"no declared cap\", and absence never\nblocks a write. Declared values are validated strictly (positive\nintegers, booleans rejected) and are enforced by the engine.",
       "properties": {
         "max_bind_params": {
           "anyOf": [
