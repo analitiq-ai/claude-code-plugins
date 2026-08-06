@@ -96,6 +96,29 @@ entry or a long-form colour if it ever lands, not a mystery red build.
 matched. Both read as unnatural enough that they are unlikely to be reached for,
 and a bare `issues?` + digits pattern over prose that says "issue 3 of the four"
 would cost more in false positives than it buys.
+
+**A reference split across a line break** — `issue #` ending one line and `89`
+opening the next. Scanning is line-at-a-time so a match cannot span the break.
+Listed for completeness rather than as a live risk: no reflow produces it,
+because the wrap would have to fall between the `#` and its digits.
+
+## Two sibling classes, same invariant
+
+`_FOREIGN_PATH` and `_EPHEMERAL_REFERENT` gate the same defect in other
+spellings, because a ticket number is only the most common way to point at
+something the reader does not have:
+
+- **A path under `.claude/`.** `.gitignore` excludes that tree, so a citation of
+  `.claude/rules/…` resolves on the machine that wrote it and nowhere else —
+  worse than a ticket number, which at least resolves for anyone in the org.
+  Name the rule instead, or name a skill by its skill name, which is how Claude
+  Code resolves one anyway.
+- **"this PR" and friends.** A file outlives the pull request that wrote it, so
+  "the hole this PR closed" points at a moment the reader is not in. Two sites
+  legitimately name the PR being processed at runtime — CI comments and a
+  message printed about the PR under check — and they are pinned in
+  `_EPHEMERAL_ALLOWED` rather than matched by a cleverer pattern. "this branch"
+  is left wide: in this repo it always means a control-flow branch.
 """
 
 from __future__ import annotations
@@ -223,6 +246,36 @@ _URL_TICKET = re.compile(
 
 _PATTERNS = (_KEYWORD_TICKET, _CROSS_REPO_TICKET, _BARE_TICKET, _URL_TICKET)
 
+# `.claude/rules/no-drift-surfaces.md`, `.claude/skills/releasing/SKILL.md`.
+# `.gitignore` excludes `.claude/`, so any path under it is absent from every
+# clone. Matched anywhere in a line, backticked or not, since these appear both
+# ways. The leading `.` is required: `claude/` alone is not the ignored tree,
+# and `plugins/analitiq-connector-builder/.claude-plugin/` is a different
+# directory that IS tracked — hence `/` immediately after `claude`.
+_FOREIGN_PATH = re.compile(r"\.claude/[A-Za-z0-9_./-]+")
+
+# "this PR", "this pull request", "this commit" — a referent that resolves only
+# while the change is in flight.
+#
+# "this branch" is deliberately NOT here. Every occurrence in this repo means a
+# control-flow branch — "without this branch it fell through", "this branch
+# disables the version guarantee" — and that is the dominant sense in code
+# prose generally. Flagging it would cost more than it returns, the same trade
+# the single-digit `#N` narrowing makes above.
+_EPHEMERAL_REFERENT = re.compile(
+    r"\bthis\s+(?:PR|pull\s+request|commit)\b", re.IGNORECASE
+)
+
+# The two sites where the PR IS the runtime subject rather than a dangling
+# pointer: a CI comment about which source the job grades, and a message the
+# pin-contract script prints about the pull request it is checking. Pinned as
+# paths for the same reason `_EXCLUDED_PATHS` is — an exemption a reviewer reads
+# beats a pattern that quietly decides which mentions are legitimate.
+_EPHEMERAL_ALLOWED = (
+    ".github/workflows/tests.yml",
+    "scripts/check_validator_pin_contract.py",
+)
+
 
 def _is_excluded(relpath: str) -> bool:
     """Exact-match only.
@@ -309,9 +362,9 @@ def _read(relpath: str) -> str:
     plugin docs — would otherwise kill the gate with a bare `UnicodeDecodeError`
     naming neither the file nor this check. Skipping the unreadable would be
     worse, since fail-open is the failure mode this whole module exists to
-    avoid, so name the file and re-raise. `test_an_unreadable_file_is_never_
-    skipped` holds that choice; without it, swapping the `raise` for a
-    `return ""` passes the whole suite.
+    avoid, so name the file and re-raise. That choice is held by
+    `test_an_unreadable_file_is_never_skipped`; without it, swapping the `raise`
+    for a `return ""` passes the whole suite.
     """
     try:
         return (REPO_ROOT / relpath).read_text(encoding="utf-8", errors="strict")
@@ -380,6 +433,70 @@ def test_no_ticket_references_in_authored_text() -> None:
     )
 
 
+def _sites(pattern: re.Pattern[str], *, skip: tuple[str, ...] = ()) -> list[tuple[str, int, str]]:
+    """Every (relpath, lineno, matched-text) for one pattern across the scan.
+
+    The two sibling gates share this rather than each writing its own
+    comprehension. One traversal is one thing to guard: written inline, each
+    gate carried its own copy of `for relpath in _scanned_files()`, and each
+    copy was independently severable — `for relpath in []` turned a gate off
+    with the whole suite green, which is the round-3 hole re-opened once per new
+    gate. `test_the_gate_reads_every_file_the_scan_selected` covers this
+    function, so a new gate built on it inherits the guard instead of needing
+    its own.
+    """
+    return [
+        (relpath, lineno, match.group(0))
+        for relpath in _scanned_files()
+        if relpath not in skip
+        for lineno, line in enumerate(_read(relpath).splitlines(), 1)
+        for match in pattern.finditer(line)
+    ]
+
+
+def test_no_citation_of_a_path_the_reader_cannot_have() -> None:
+    """A `.claude/` path is absent from every clone — `.gitignore` excludes it."""
+    found = _sites(_FOREIGN_PATH)
+    assert not found, (
+        "citations of paths under `.claude/`, which `.gitignore` excludes:\n"
+        + "\n".join(f"  {rel}:{lineno} -> {cited}" for rel, lineno, cited in found)
+        + "\nThe file exists only on the machine that wrote the citation. State "
+        "the rule itself, or name a skill by its skill name."
+    )
+
+
+def test_no_referent_that_expires_when_the_change_lands() -> None:
+    """"this PR" points at a moment the reader of the file is not in."""
+    found = _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
+    assert not found, (
+        "referents that expire when the change lands:\n"
+        + "\n".join(f"  {rel}:{lineno} -> {phrase}" for rel, lineno, phrase in found)
+        + "\nA file outlives the pull request that wrote it. State the fact, the "
+        "mechanism, or the decision. If the pull request genuinely IS the "
+        "runtime subject, add the path to _EPHEMERAL_ALLOWED with its reason."
+    )
+
+
+def test_the_sibling_class_exemptions_are_pinned_and_live() -> None:
+    """`_EPHEMERAL_ALLOWED` is pinned exactly and must still be doing work.
+
+    Both halves matter. Pinned, because a whole-file exemption from a prose gate
+    is how the phrase comes back; live, because these two are exempt for their
+    CONTENT — each genuinely names the pull request being processed — so an
+    entry that no longer contains the phrase is an exemption standing over a
+    file nobody watches.
+    """
+    assert _EPHEMERAL_ALLOWED == (
+        ".github/workflows/tests.yml",
+        "scripts/check_validator_pin_contract.py",
+    ), "each entry exempts a whole file — state the reason inline and update this pin."
+    for relpath in _EPHEMERAL_ALLOWED:
+        assert _EPHEMERAL_REFERENT.search(_read(relpath)), (
+            f"{relpath} is exempt because the pull request is its runtime "
+            "subject, and it no longer says so. Drop the exemption."
+        )
+
+
 def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
     """Guard the guard: extent, not a sample.
 
@@ -425,6 +542,19 @@ def test_the_guard_reaches_every_tracked_file_it_does_not_exempt() -> None:
         if (not relpath.startswith("schemas/") or relpath in _SCANNED_DESPITE_TREE)
         and relpath not in _EXCLUDED_PATHS
     }
+    # `expected` is what this test actually grades, and it can be emptied
+    # without emptying `tracked`: loosen the `"schemas/"` literal above to `""`
+    # and every tracked file falls out of the set, leaving `missing` empty and
+    # the assertion below vacuous. `_tracked_files`'s refusal cannot help — this
+    # test asks git itself, by design. Proportional rather than an absolute
+    # count, so it states "most of the repo survived the predicate" without the
+    # magic number an earlier draft was rightly criticised for.
+    assert len(expected) > len(tracked) // 2, (
+        f"the scope predicate kept only {len(expected)} of {len(tracked)} "
+        "tracked files. `schemas/` is a small minority of this repo, so a "
+        "predicate discarding half of it is inverted or over-broad, and the "
+        "extent check below would pass over whatever it dropped."
+    )
     missing = sorted(expected - set(_scanned_files()))
     assert not missing, (
         f"{len(missing)} tracked files are not scanned but carry no exemption: "
@@ -456,9 +586,9 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
         return ""
 
     monkeypatch.setitem(globals(), "_read", recording_read)
-    _references()
-
     scanned = set(_scanned_files())
+
+    _references()
     assert set(seen) == scanned, (
         f"the gate read {len(set(seen))} files but the scan selects "
         f"{len(scanned)}: {sorted(scanned - set(seen))[:10]} were selected and "
@@ -466,6 +596,78 @@ def test_the_gate_reads_every_file_the_scan_selected(monkeypatch) -> None:
         "slice there turns the gate off without touching anything the other "
         "guard-the-guard tests watch."
     )
+
+    # `_sites` is the same traversal for the two sibling gates, and it needs the
+    # same guard for the same reason: `for relpath in []` there silences both
+    # while every other test stays green.
+    seen.clear()
+    _sites(_FOREIGN_PATH)
+    assert set(seen) == scanned, (
+        "_sites() skipped "
+        f"{sorted(scanned - set(seen))[:10]} — the sibling gates read whatever "
+        "it traverses, so a narrowing here turns both off at once."
+    )
+
+    # And the one caller that skips: exactly the recorded exemptions, no more.
+    seen.clear()
+    _sites(_EPHEMERAL_REFERENT, skip=_EPHEMERAL_ALLOWED)
+    assert set(seen) == scanned - set(_EPHEMERAL_ALLOWED), (
+        "the ephemeral-referent gate read the wrong set: "
+        f"{sorted((scanned - set(_EPHEMERAL_ALLOWED)) - set(seen))[:10]} were "
+        "selected and never read. `skip` must drop the exemptions and nothing "
+        "else."
+    )
+
+
+def test_the_gate_scans_the_whole_document_it_read(tmp_path, monkeypatch) -> None:
+    """The data path, end to end: bytes in, located matches out.
+
+    Every other guard-the-guard test here verifies SELECTION — which files are
+    listed, which are scanned, which are read. The path from the bytes `_read`
+    returned to the matches the gate reports was verified nowhere, and it is
+    just as cheap to sever:
+
+        scan_text(_read(relpath) and "")            # read everything, scan nothing
+        scan_text(_read(relpath).replace("#", ""))  # read everything, defang it
+        text.splitlines()[:100]                     # scan the top of each file
+        ... if len(line) < 200                      # skip long lines, i.e. most JSON
+
+    All four leave the gate asserting an empty list is empty over the whole
+    repo. `test_the_gate_reads_every_file_the_scan_selected` cannot catch any of
+    them and never could: its recording `_read` returns `""`, so it proves the
+    call happened with the right argument and can say nothing about what came
+    back. Two tests, two different questions.
+
+    The fixture is shaped to make each one fail. Three hundred filler lines put
+    both refs past any plausible head-slice; the 400-character line defeats a
+    length filter; asserting the LINE NUMBERS pins the enumerator, which every
+    single-line acceptance fixture leaves free to be a constant `1` — and when
+    this gate is red, `rel:lineno -> matched` is its entire product, so a
+    constant sends every author to line 1 of a 400-line file.
+
+    The `\r\n` and the form feed pin `splitlines()` against a plain
+    `split("\n")`. `splitlines()` treats `\x0c` as a break and `split("\n")`
+    does not, so that one character is worth a line: the refs sit at 302 and 303
+    under the real implementation and at 301 and 302 under the mutant. Counting
+    them by hand is what the arithmetic below spells out — 299 filler lines,
+    then a line the form feed splits in two.
+    """
+    filler = "prose carrying no reference at all, padded out\r\n" * 299
+    body = (
+        filler
+        + "a line broken by a form feed\x0c\n"
+        + "x" * 400 + " see analitiq-engine#406 for it\n"
+        + "settled in issue #89 upstream\n"
+    )
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    (tmp_path / "notes.md").write_text(body, encoding="utf-8")
+    subprocess.run(["git", "add", "notes.md"], cwd=tmp_path, check=True)
+    monkeypatch.setitem(globals(), "REPO_ROOT", tmp_path)
+
+    assert _references() == [
+        ("notes.md", 302, "analitiq-engine#406"),
+        ("notes.md", 303, "issue #89"),
+    ]
 
 
 def test_an_empty_listing_is_a_failure_not_a_clean_repo(tmp_path, monkeypatch) -> None:
@@ -733,6 +935,21 @@ def test_single_digit_bare_refs_are_left_wide() -> None:
     assert scan_text("the over-strict scope check (#7) fixed this") == []
 
 
+def test_a_keyword_without_a_hash_is_left_wide() -> None:
+    """The fifth documented narrowing, which had no case of its own.
+
+    `_KEYWORD_TICKET` requires the `#`. Widening it to `#?` — or bolting on a
+    `GH-\\d+` arm — passed every other test here, so the narrowing the module
+    docstring argues for could be reversed silently. The argument is that prose
+    counts things: "issue 3 of the four" and "PR 2 of a stack" are ordinary
+    sentences, and a digits-after-keyword pattern reddens both.
+    """
+    assert scan_text("settled in issue 89 of the old tracker") == []
+    assert scan_text("tracked as GH-123 elsewhere") == []
+    assert scan_text("issue 3 of the four is the hard one") == []
+    assert scan_text("PR 2 of a three-part stack") == []
+
+
 def test_overlapping_forms_report_one_site() -> None:
     """`issue #81` is one ref, not a keyword match plus a bare match."""
     assert scan_text("the engine grammar (issue #81) is vendored.") == [
@@ -743,6 +960,54 @@ def test_overlapping_forms_report_one_site() -> None:
     ]
     # Two genuinely distinct refs on one line still report as two.
     assert len(scan_text("(engine ADR; issues #87, #89)")) == 2
+
+
+def test_foreign_path_form_is_flagged() -> None:
+    """Both spellings the swept sites used, backticked and bare."""
+    cases = {
+        "Per `.claude/rules/no-drift-surfaces.md` a restatement must be pinned":
+            ".claude/rules/no-drift-surfaces.md",
+        "see the `releasing` skill (.claude/skills/releasing/SKILL.md).":
+            ".claude/skills/releasing/SKILL.md",
+        "settings live in .claude/settings.json today": ".claude/settings.json",
+    }
+    for line, expected in cases.items():
+        found = _FOREIGN_PATH.findall(line)
+        assert found == [expected], f"foreign-path arm missed: {line!r}"
+
+    # The tracked look-alikes. `.claude-plugin/` is a real directory in this
+    # repo — the marketplace manifest lives there — so requiring `/` straight
+    # after `claude` is what keeps the gate off it.
+    for line in (
+        "`.claude-plugin/marketplace.json` declares the marketplace",
+        "plugins/analitiq-connector-builder/.claude-plugin/plugin.json",
+        "the claude/rules directory is not the ignored one",
+    ):
+        assert not _FOREIGN_PATH.findall(line), f"false positive on: {line!r}"
+
+
+def test_ephemeral_referent_form_is_flagged() -> None:
+    cases = {
+        "the wiring this PR extended is routed": "this PR",
+        "the defect class This Pull Request closed": "This Pull Request",
+        "tried earlier in this  pull\trequest and abandoned": "this  pull\trequest",
+        "push the release tag at this commit": "this commit",
+    }
+    for line, expected in cases.items():
+        # No capture groups, so `findall` yields whole matches: this asserts the
+        # matched TEXT and the count at once, as the ticket arms above do.
+        assert _EPHEMERAL_REFERENT.findall(line) == [expected], (
+            f"ephemeral arm missed: {line!r}"
+        )
+
+    # The documented narrowing, and the words the pattern sits closest to.
+    for line in (
+        "without this branch it fell through to the dict case",
+        "this branch disables the version-exactness guarantee",
+        "this PRs list is not a thing anyone writes",
+        "the PR body carries the numbers instead",
+    ):
+        assert not _EPHEMERAL_REFERENT.findall(line), f"false positive on: {line!r}"
 
 
 def test_ordinary_prose_is_not_flagged() -> None:
@@ -770,6 +1035,9 @@ def test_ordinary_prose_is_not_flagged() -> None:
         # and a red build on an ordinary cross-reference.
         "see [the layout](../README.md#12) for the tree",
         "the fragment spec.yaml#3 names the third document",
+        # `.py` is in the extension list and was the one entry nothing held:
+        # deleting it turns an ordinary source cross-reference red.
+        "the fragment spec.py#3 names the third document",
         # A hyphenated anchor on a slug with NO document extension. These are
         # what `\d+\b` and the trailing `(?!-[^#])` actually defend — the
         # `README.md#12-layout` case the pattern comment used to cite is
@@ -779,6 +1047,17 @@ def test_ordinary_prose_is_not_flagged() -> None:
         # prose, the cost this gate is explicitly trying not to impose.
         "see the guide#12-section for it",
         "the field type#12-variant is odd",
+        # `_BARE_TICKET`'s lookbehind names these two in its comment and nothing
+        # else held them: drop `/` or `.` from the class and both report.
+        "the note at docs/#123 covers it",
+        "pinned at v1.#123 for now",
+        # `_KEYWORD_TICKET`'s leading `\b`. Without it the keyword matches
+        # inside a longer word, and both of these are ordinary English.
+        "a reissue #7 of the doc went out",
+        "the tissues #4 metaphor never landed",
+        # `_URL_TICKET` requires at least one digit. With `\d*` a link to the
+        # issue LIST reports as a reference to an issue.
+        "browse github.com/analitiq-ai/analitiq-engine/issues/ for context",
         # An all-digit hex colour. Six digits is past the ceiling.
         "  --accent: #123456;",
     ):
