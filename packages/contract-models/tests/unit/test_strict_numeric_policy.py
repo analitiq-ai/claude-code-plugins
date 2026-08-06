@@ -44,10 +44,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from analitiq.contracts.shared.introspect import contract_classes
 
+# Sampling a string that matches a declared `pattern` means walking the parsed
+# regex, and the stdlib exposes no public parser. `sre_parse` is deprecated in
+# favour of `re._parser`, which is why the import is tried first; the fallback
+# is reached only on the Python 3.10 that `requires-python` still admits, so it
+# stays until the support window moves — a decision for a release, not for a
+# test-side patch.
 try:  # Python >= 3.11 renamed the private regex parser.
     import re._parser as _sre_parse
 except ImportError:  # pragma: no cover - Python 3.10 and earlier
-    import sre_parse as _sre_parse  # type: ignore[no-redef]
+    import sre_parse as _sre_parse  # type: ignore[no-redef]  # skipcq: PYL-W0402
 
 
 def bad_spellings(good: Any) -> dict[str, Any]:
