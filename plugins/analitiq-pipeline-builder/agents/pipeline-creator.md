@@ -71,15 +71,13 @@ stitches in `stream_id` UUIDs in phase 8.
   own; do not omit it (the orchestrator generates one specifically so
   sibling docs can cross-reference).
 - Always emit `streams: []` — stitching happens later.
-- For `schedule.type=manual`: omit `interval_minutes` and
-  `cron_expression` entirely.
-- For `schedule.type=interval`: require `interval_minutes`; omit
-  `cron_expression`.
-- For `schedule.type=cron`: require `cron_expression` matching
-  the contract's cron pattern; omit `interval_minutes`. See
-  `pipeline-spec/spec-schedule.md` for the generated shape.
-- Default to `{type: "manual", timezone: "UTC"}` when no schedule
-  facts are supplied.
+- Author only the schedule fields the chosen `type` calls for
+  (`ADV-PIPE-002`); leave the other type's field out entirely rather
+  than setting it to `null`. See `pipeline-spec/spec-schedule.md` for
+  the generated shape.
+- Omit `schedule.type` and `schedule.timezone` when no schedule facts
+  are supplied, rather than authoring the values they default to
+  (`ADV-PIPE-006`).
 - Use the engine / runtime defaults from the published schema unless
   the orchestrator explicitly passed overrides.
 - Do **not** author `version`, `org_id`, `created_at`, `updated_at` —

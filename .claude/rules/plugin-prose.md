@@ -31,6 +31,21 @@ bump.
 1. **Cite, don't state.** An `ADV-*` id, the generated advisory reference, a
    schema URL, a path to a validated `examples/` file. Citation is the pinned
    form of repetition — a dangling `ADV-*` id already fails the build.
+
+   The registry spans three tiers, so "no rule enforces this" is no longer a
+   reason to restate a fact. A **relational** rule is one the validator rejects
+   and names; a **structural** one the published schema rejects, naming the
+   field — those ids exist so prose stops copying enum members and patterns,
+   and the rendered reference prints the members off the live model. A
+   **waived** rule is one nothing here rejects: the entry declares which
+   surface would have to be read (`connector-package`, `engine-runtime`,
+   `authoring-choice`, `cross-artifact`) and why it is out of reach.
+
+   So an obligation with no id is a **missing registry entry**, not a licence
+   to hand-write it. Add the entry — a data edit in `advisory_rules.py` or
+   `authoring_rules.py` — then cite it. What stays in prose beside the citation
+   is the craft the one-line entry deliberately does not carry: the worked
+   example, the consequence of getting it wrong, the decision procedure.
 2. **A "validates clean but breaks" warning is a validator gap.** Raise the
    contract gap; when the rule lands, its `ADV-*` entry carries the fact and
    the warning is deleted. Only a refused gap drops to rung 3.

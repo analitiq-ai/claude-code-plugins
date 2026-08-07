@@ -34,9 +34,8 @@ downstream, or ask the connector to expose a suitable parameter.
   the inclusive operator.
 - `like` / `ilike` accept SQL wildcard syntax in `value` (`%`, `_`). The engine
   routes these to the dialect's pattern operator.
-- All non-unary operators include `value` matching the column's data type — or,
-  for `in` / `not_in`, an array of such values.
-- `field` references a column (database) or a parameter key (API).
+- `value` typing follows the referenced field (`ADV-STRM-027`).
+- `field` names a column (database) or a parameter key (API) — `ADV-STRM-022`.
 
 ## What the local validator still cannot check
 
@@ -51,9 +50,8 @@ database dialect **may reject** an operator it cannot render safely for a given
 column or type, even though the operator is in the set above. Local validation
 proves the operator is *authorable*, never that the target database will run it.
 
-For an API source, the endpoint document narrows the vocabulary further. A read
-parameter is stream-filterable exactly when it declares `operators` **and**
-carries no `controlled_by` — the two together are the test:
+For an API source, the endpoint document narrows the vocabulary further
+(`ADV-STRM-026`):
 
 - `operators` present, no `controlled_by` → filterable; the declared list is the
   subset that parameter accepts.

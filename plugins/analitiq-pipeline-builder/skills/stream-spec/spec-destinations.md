@@ -42,10 +42,10 @@ The sketch below illustrates a filled-in destination.
 
 ## Uniqueness and repeated connections
 
-Destinations must be distinct by their endpoint ref — `ADV-STRM-001` (see
-`SKILL.md` § Cross-field rules) states the tuple and the contract model enforces
-it. The emitted JSON Schema carries no `uniqueItems` keyword for `destinations`,
-so a schema-only reading looks permissive; it is not. Duplicates fail validation.
+Destinations must be distinct by their endpoint ref — `ADV-STRM-001` states the
+tuple and the contract model enforces it. The emitted JSON Schema carries no
+`uniqueItems` keyword for `destinations`, so a schema-only reading looks
+permissive; it is not. Duplicates fail validation.
 
 Because uniqueness is over the whole ref and not over `connection_id`, the **same
 destination connection may legitimately appear in several destination entries**
@@ -78,9 +78,8 @@ warehouse is a normal shape, not a duplicate.
 The destination's `endpoint_ref.scope` picks the whole shape, write block
 included — pick the endpoint first, then author the write block its variant
 declares. Each variant's `mode` vocabulary is in the tables above; an API
-destination's mode must additionally be a key the selected endpoint declares
-under `operations.write`, which only that endpoint document can tell you. The
-orchestrator's `WriteModeMapper` (see
+destination's mode is bounded further by `ADV-STRM-024`. The orchestrator's
+`WriteModeMapper` (see
 `../pipeline-builder/references/enum-mappers.md`) classifies the user's intent
 to one of the database modes.
 
@@ -96,8 +95,8 @@ of destination field names, not a list of alternative key sets:
 ["id"]                       // or ["org_id", "external_id"] for a composite key
 ```
 
-Every key field must exist in the destination endpoint's schema; that is resolved
-server-side at save time, not by the local validator.
+Every key field names a destination-endpoint field (`ADV-STRM-022`); that is
+resolved server-side at save time, not by the local validator.
 
 ## `execution` (per-destination override)
 
@@ -109,8 +108,8 @@ server-side at save time, not by the local validator.
 | `batch_size` | no | integer \| null | `None` | `min=1`, `max=100000` |
 <!-- END GENERATED: fields-stream-execution -->
 
-`execution` is one of **three** places batching is decided, and each has a
-different owner:
+`execution` is one of the places batching is decided, and each has a different
+owner:
 
 | Layer | Field | Owner | Meaning |
 |---|---|---|---|
@@ -118,10 +117,8 @@ different owner:
 | Stream override | destination `execution` | this stream | overrides the default for *this* `(stream, destination)` binding only |
 | Provider capacity | destination endpoint `operations.write.batching` | the endpoint | how much the provider will accept in one request |
 
-Resolution runs in that order — pipeline defaults, then the stream override, then
-endpoint and runtime hard limits capping whatever the override produced. The
-endpoint's `batching` is not a default and not an override: it is a ceiling
-describing the provider, and no stream may raise it.
+The layers resolve under `ADV-PIPE-007`. The endpoint's `batching` is not a
+default and not an override: it is a ceiling describing the provider.
 
 Use `execution` sparingly — pipeline defaults exist for a reason. Typical use: a
 low-throughput destination next to a high-throughput one in the same

@@ -8,6 +8,7 @@ re-implementation reconciles against the same JSON fixtures.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,13 @@ from analitiq.contracts.pipelines import data_sync
 from analitiq.contracts.shared import common
 from analitiq.contracts.shared.advisory import (
     CUSTOM_KIND,
+    DESCRIPTIVE_TIER,
     GENERIC_KINDS,
+    STRUCTURAL_TIER,
+    TIERS,
+    WAIVED_SURFACES,
+    WAIVER_TIER,
+    AdvisoryRule,
     AdvisoryValidated,
     all_rules,
 )
@@ -226,6 +233,142 @@ def test_rule_targets_are_unambiguous_class_names():
     assert not ambiguous, (
         f"registry-bound class names resolved by more than one class: {ambiguous}"
     )
+
+
+# --- Tiers ------------------------------------------------------------------
+
+
+def test_every_tier_is_populated():
+    """Non-vacuity: an empty tier makes every guard below pass over nothing.
+
+    The renderer grows a section per tier and the guards that follow all
+    iterate one; a tier that fell to zero entries would leave a heading with no
+    rows and a green suite that checked nothing. If a tier genuinely empties,
+    that is a deliberate retirement — delete the tier, do not leave it standing.
+    """
+    populated = {r.tier for r in all_rules()}
+    assert populated == set(TIERS), f"tiers with no rules: {sorted(set(TIERS) - populated)}"
+
+
+def test_descriptive_prose_cannot_take_a_rule_id():
+    """The fourth disposition is named so it can be refused, not registered.
+
+    Prose stating no obligation has nothing to comply with, so an id minted for
+    it resolves to advice. The registry says no at construction; this pins that
+    the refusal names the census as the place such a sentence belongs, because
+    an author hitting it needs to know where to put the sentence instead.
+    """
+    with pytest.raises(ValueError) as exc:
+        AdvisoryRule(
+            id="ADV-TEST-001",
+            resource="connector",
+            prose="Connectors are versioned by git tag.",
+            tier=DESCRIPTIVE_TIER,
+        )
+    assert "prose census" in str(exc.value)
+
+
+def _field_head(expr: str) -> str:
+    """The plain model attribute a field expression starts from."""
+    return expr.split("[]")[0].split(".")[0]
+
+
+def test_structural_fields_resolve_on_their_model():
+    """A structural entry's claim is checkable, or it is a comment.
+
+    The entry says "this model's shape carries the rule"; the only thing that
+    makes that a claim rather than a gesture is that the named field still
+    exists. Renaming the field then fails here instead of leaving prose citing
+    an id whose mechanism moved.
+    """
+    unresolved = []
+    for rule in all_rules():
+        if rule.tier != STRUCTURAL_TIER:
+            continue
+        for target in rule.targets:
+            model = MODEL_INDEX[target]
+            for expr in rule.fields:
+                head = _field_head(expr)
+                if head not in model.model_fields:
+                    unresolved.append(f"{rule.id}: {target} has no field {head!r}")
+    assert not unresolved, unresolved
+
+
+def _literal_members(annotation) -> list[str]:
+    """Every string Literal member reachable in a field annotation, flattened."""
+    import typing
+
+    found: list[str] = []
+    stack = [annotation]
+    while stack:
+        current = stack.pop()
+        if typing.get_origin(current) is typing.Literal:
+            found += [a for a in typing.get_args(current) if isinstance(a, str)]
+        else:
+            stack += list(typing.get_args(current))
+    return found
+
+
+def test_structural_rules_do_not_restate_the_values_they_point_at():
+    """The tier exists to STOP the copy, so an entry must not become one.
+
+    A structural entry names where a value list lives; the renderer reads the
+    members off the live model. Spelling them into ``prose`` too would recreate
+    the drift surface one layer down, where nothing regenerates it.
+
+    Two members is the threshold, not one: a lone member can be ordinary
+    English in a sentence about the field (an ``ssl_mode`` rule may say "none"),
+    while two whole-word hits in one sentence is an enumeration.
+    """
+    leaked = []
+    for rule in all_rules():
+        if rule.tier != STRUCTURAL_TIER or rule.mechanism != "literal_enum":
+            continue
+        for target in rule.targets:
+            model = MODEL_INDEX[target]
+            for expr in rule.fields:
+                info = model.model_fields.get(_field_head(expr))
+                if info is None:
+                    continue  # test_structural_fields_resolve_on_their_model owns this
+                hits = sorted(
+                    m
+                    for m in set(_literal_members(info.annotation))
+                    if re.search(rf"\b{re.escape(m)}\b", rule.prose)
+                )
+                if len(hits) >= 2:
+                    leaked.append(f"{rule.id}: prose enumerates {hits} — say what the "
+                                  f"member list is FOR; {target}.{_field_head(expr)} carries it")
+    assert not leaked, leaked
+
+
+def test_every_waived_surface_is_populated():
+    """Each surface names a real reason this repo cannot reach a rule.
+
+    The vocabulary is closed so the unenforced surface stays countable by
+    category. A member no rule uses is not a spare slot — it is a category that
+    turned out not to exist, and leaving it standing invites the next author to
+    file a rule under a heading nothing else shares.
+    """
+    used = {r.governs for r in all_rules() if r.tier == WAIVER_TIER}
+    assert used == set(WAIVED_SURFACES), (
+        f"waived surfaces no rule uses: {sorted(set(WAIVED_SURFACES) - used)}"
+    )
+
+
+def test_waived_rules_say_more_than_their_surface():
+    """The reason has to add something the ``governs`` category does not.
+
+    ``governs`` says which surface is out of reach; the waiver says why *this*
+    rule falls off it — which check stops short, what an author sees instead of
+    a rejection. A reason that only paraphrases the category makes the entry
+    unreviewable, and the category was already machine-readable.
+    """
+    thin = [
+        f"{r.id}: {r.waiver!r}"
+        for r in all_rules()
+        if r.tier == WAIVER_TIER and len(r.waiver.split()) < 12
+    ]
+    assert not thin, thin
 
 
 # --- Shared fixture corpus --------------------------------------------------

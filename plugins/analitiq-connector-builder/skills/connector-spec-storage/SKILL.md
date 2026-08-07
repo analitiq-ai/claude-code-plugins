@@ -6,9 +6,8 @@ disable-model-invocation: true
 
 # connector-spec-storage (stub)
 
-This skill is a placeholder. The published connector schema accepts
-`kind ∈ {file, s3, stdout}`, but the Analitiq engine does not execute
-these kinds yet. Until engine support lands:
+This skill is a placeholder for `kind ∈ {file, s3, stdout}`
+(`ADV-CTOR-037`). Until engine support lands:
 
 - The orchestrator should route `kind = file | s3 | stdout` to the
   `storage-connector-creator` agent.

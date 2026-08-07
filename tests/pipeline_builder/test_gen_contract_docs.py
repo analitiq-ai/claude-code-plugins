@@ -224,7 +224,7 @@ def test_advisory_map_keys_are_real_renderer_blocks():
     means test_every_renderer_is_referenced_by_a_doc carries it the rest of the
     way to an actual document.
     """
-    orphans = sorted(set(G._ADVISORY_BLOCK_FAMILIES) - set(G.RENDERERS))
+    orphans = sorted(set(G._ADVISORY_BLOCKS) - set(G.RENDERERS))
     assert not orphans, (
         f"advisory map claims block ids with no renderer: {orphans}; "
         "their families would count as rendered while reaching no agent")

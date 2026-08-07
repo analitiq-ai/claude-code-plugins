@@ -13,7 +13,7 @@ Arrow canonical types, in two directions:
   connector's declarative DDL vocabulary: every transport (SQLAlchemy
   DDL, ADBC DDL, control-plane create_table) renders column types
   through `dialect.render_column_type`, whose default implementation is
-  this map. Connectors must NOT ship Python type-rendering tables.
+  this map (`ADV-PKG-023`).
 
 ## On-disk location
 
@@ -39,16 +39,16 @@ it and the validator rejects it with a migration finding.
 
 ## File shape
 
-Each file is a top-level JSON array of rule objects. Order is
-significant: **first match wins** during resolution. Each rule object
-carries exactly the keys named below and no others — but which key is
-the *matcher* and which is *rendered* depends on the direction:
+Each file is a top-level JSON array of rule objects, authored in resolution
+order (`ADV-TMAP-013`). Each rule object carries exactly the keys named below
+and no others — but which key is the *matcher* and which is *rendered*
+depends on the direction:
 
 | Key | Read map (`type-map-read.json`) | Write map (`type-map-write.json`) |
 |---|---|---|
 | `match` | `"exact"` or `"regex"` — how the matcher is compared. | Same. |
-| `native` | **Matcher.** Literal label (`exact`) or ECMA-262 regex (`regex`). | **Rendered.** The native DDL emitted for a matching canonical; may carry `${name}` substitutions on `regex` rules. |
-| `canonical` | **Rendered.** Literal Arrow type, or (on `regex` rules) a template with `${name}` placeholders. | **Matcher.** Literal Arrow type (`exact`) or ECMA-262 regex over the canonical string (`regex`). |
+| `native` | **Matcher.** Literal label (`exact`) or pattern (`regex`). | **Rendered.** The native DDL emitted for a matching canonical; may carry `${name}` substitutions on `regex` rules. |
+| `canonical` | **Rendered.** Literal Arrow type, or (on `regex` rules) a template with `${name}` placeholders. | **Matcher.** Literal Arrow type (`exact`) or pattern over the canonical string (`regex`). |
 
 Matching uses full-string semantics (Python `re.fullmatch`), so leading
 `^` and trailing `$` are harmless but redundant — keep them for
@@ -66,11 +66,10 @@ rule:
   Case and spacing genuinely don't matter here — SQL type names are
   case-insensitive and drivers report inconsistent casing, so matching verbatim
   would be a silent-miss footgun.
-- **`regex` rules normalize the probe only.** The pattern is used exactly as
-  authored, deliberately: uppercasing it would corrupt classes like `\d` into
-  `\D`. So **literals inside a pattern must be uppercase** —
-  `^VARCHAR\(\d+\)$`, never `^varchar\(\d+\)$`, which can never match. The
-  validator warns on this one.
+- **`regex` rules normalize the probe only** (`ADV-TMAP-014`). The pattern is
+  used exactly as authored, deliberately: uppercasing it would corrupt classes
+  like `\d` into `\D` — so write `^VARCHAR\(\d+\)$`, never
+  `^varchar\(\d+\)$`, which can never match. The validator warns on this one.
 - **Named capture group names stay lowercase** (`(?<precision>…)`) — only the
   matched text is uppercased, not the group names.
 
@@ -79,9 +78,8 @@ consistently against the regex rules that sit beside them — but it is a
 convention there, not a correctness requirement.
 
 <!-- PROBE: write-map-regex-canonical-case-unchecked -->
-Write-map matchers run against PascalCase canonical strings **case-preserving**
-(the Arrow vocabulary is mixed-case), so case *is* significant there. How
-loudly a mistake fails depends on the rule kind: a lowercase **`exact`**
+Case matters on the write side (`ADV-TMAP-015`), and how loudly a mistake
+fails depends on the rule kind: a lowercase **`exact`**
 canonical is rejected outright (it fails the Arrow type pattern), while a
 lowercase **`regex`** canonical is not checked at all —
 `{"match": "regex", "canonical": "^utf8$"}` validates with zero findings and
@@ -89,14 +87,13 @@ simply never fires.
 
 ## `${name}` substitution in regex rules
 
-When a `regex` rule's rendered side carries `${name}` placeholders,
-every placeholder must be backed by a matching **named capture group**
-in the matcher side. Both directions compile the matcher as ECMA-262,
-so write the capture form `(?<name>…)` — Python-only `(?P<name>…)` is
-rejected on either side (ADV-TMAP-005 on the read side; model-level on
-the write side). The backing-captures half is enforced on the read side
-only (ADV-TMAP-003): an unbacked write-side `${name}` surfaces first at
-DDL render — verify that half yourself.
+A `${name}` on a rule's rendered side names a **named capture group** on its
+matcher side (`ADV-TMAP-003` read, `ADV-TMAP-016` write) — but only the read
+side is enforced: an unbacked write-side `${name}` surfaces first at DDL
+render, so verify that half yourself. Both directions compile the matcher as
+ECMA-262, so write the capture form `(?<name>…)` — Python-only `(?P<name>…)`
+is rejected on either side (ADV-TMAP-005 on the read side; model-level on
+the write side).
 
 - Read map: placeholders in `canonical`, captures in `native` —
   `native: "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$"`,
@@ -107,9 +104,9 @@ DDL render — verify that half yourself.
   `native: "NUMERIC(${p}, ${s})"`.
 
 Placeholders are only legal in **parameter positions** of parameterized
-types (`Decimal128(${precision}, ${scale})`, `FixedSizeBinary(${n})` on
-the read side; `NUMERIC(${p}, ${s})`, `VARCHAR(${len})` and similar on
-the write side).
+types (`ADV-TMAP-006`) — `Decimal128(${precision}, ${scale})`,
+`FixedSizeBinary(${n})` on the read side; `NUMERIC(${p}, ${s})`,
+`VARCHAR(${len})` and similar on the write side.
 
 On the **read** side a templated render is only legal on a `regex` rule —
 an `exact` rule's `canonical` must be a fully-resolved Arrow type (the
@@ -132,11 +129,11 @@ it to a unit instead. See "Database coverage → Read map".)
 
 A schemaless or structured-container native — `JSON`, `JSONB`, `VARIANT`,
 `OBJECT`, `ARRAY`, `MAP`, `STRUCT`, a parameterized container like
-`array<object>`, or a SQL array suffix like `integer[]` — **must** map to
-**`Json`**, **never a scalar** like `Utf8`. The canonical is a *claim about
-the shape* of the data: `Utf8` asserts an opaque string and throws the
-structure away, so it is wrong for a JSON / array / struct column even when
-the driver happens to hand the value over as text on the wire.
+`array<object>`, or a SQL array suffix like `integer[]` — maps to **`Json`**
+(`ADV-TMAP-001`). The canonical is a *claim about the shape* of the data:
+`Utf8` asserts an opaque string and throws the structure away, so it is wrong
+for a JSON / array / struct column even when the driver happens to hand the
+value over as text on the wire.
 
 `Json` is the **only** container canonical a read map can render. The shape
 markers `Object` / `List` need a sibling `properties` / `items` sub-schema
@@ -174,8 +171,8 @@ The shape markers `Object` and `List` split by direction:
   sibling sub-schema they require). The endpoint walker accepts a field
   typed `Object` or `List` as a valid narrowing of a `Json` read-map
   rule; the validator does not treat that as a mismatch.
-- **Write maps must cover them.** The engine renders every destination
-  column's frozen `arrow_type` through the write map **verbatim**
+- **Write maps must cover them** (`ADV-TMAP-017`). The engine renders every
+  destination column's frozen `arrow_type` through the write map **verbatim**
   (`shared/type-maps.md`), and endpoint documents legitimately carry the
   bare markers — an API source's struct field arrives at a database
   destination as the literal canonical `Object`, an array field as
@@ -221,7 +218,8 @@ mechanical — the same judgment transfers across providers:
   a bare time-of-day carries no instant). Contrast
   `TIMESTAMP WITH TIME ZONE` → `Timestamp(<unit>, UTC)`.
 - **Bare vs zoned timestamp**: choose the tz-aware canonical only when the
-  native (or, for APIs, the sample value) actually carries a zone.
+  native (or, for APIs, the sample value) actually carries a zone
+  (`ADV-SHRD-002`).
 - **A boolean spelled as a narrow numeric** — some systems have no boolean
   type and document a width-1 integer as their boolean (MySQL's `TINYINT(1)`).
   Map the documented boolean spelling to `Boolean`, and keep the general
@@ -272,20 +270,20 @@ database-package concept (DDL rendering).
   native vocabulary.
 - For warehouses and document stores (Snowflake, MongoDB), restrict to
   the researched, documented list — provider docs are authoritative.
-- Do NOT ship a wildcard fallback rule. If a native type isn't covered,
-  let the runtime hard-error so the gap is visible.
+- Do NOT ship a wildcard fallback rule (`ADV-TMAP-011`) — let an uncovered
+  native hard-error at runtime so the gap is visible.
 - Use `Utf8` (not `String`) for Arrow's UTF-8 string type — `String` is
   not a member of the published Arrow vocabulary.
 - Capture declared precision on parameterized natives — never collapse it
-  to a constant. The fixed default belongs only on the unparameterized
-  fallback rule.
+  to a constant (`ADV-TMAP-004`). The fixed default belongs only on the
+  unparameterized fallback rule.
   - **Decimal:** regex `(precision, scale)` into named captures and route
     by Arrow width — precision ≤ 38 → `Decimal128(${precision},
     ${scale})`, 39–76 → `Decimal256(...)`. A precision-only declaration
     (`NUMERIC(p)`, implicit scale 0) needs its own tier rendering
     `Decimal{128,256}(${precision}, 0)`. Precision > 76 exceeds Arrow, so
-    leave it uncovered (visible hard-error, per the no-wildcard rule
-    above); the bare/unparameterized native takes the fixed default.
+    leave it uncovered (visible hard-error, `ADV-TMAP-011`); the
+    bare/unparameterized native takes the fixed default.
     Bound the **scale** capture to its tier the way the precision capture
     already is — ADV-TMAP-010 refuses an unbounded `\d+` there, and its prose
     states what bounding each capture separately still leaves reachable.
@@ -299,19 +297,19 @@ database-package concept (DDL rendering).
     off the same unit: `Time32(SECOND|MILLISECOND)` for coarse,
     `Time64(MICROSECOND|NANOSECOND)` for fine.
 
-**Write map:** cover the **full executable canonical vocabulary** — every
-Arrow type a source can actually hand this system needs a rendering (the
-angle-bracket nested families are dead grammar and get no rules — see
-"Canonical types"), including the parameterized families (Decimal via a
-regex with `${p}`/`${s}` captures), both the bare and tz-aware `Timestamp`
-forms, and the bare container markers `Object` / `List` (see "Schemaless /
-JSON-shaped natives" — API sources hand them over as literal canonicals).
+**Write map:** cover the full executable canonical vocabulary
+(`ADV-TMAP-017`). The angle-bracket nested families are dead grammar and get
+no rules (see "Canonical types"); what remains includes the parameterized
+families (Decimal via a regex with `${p}`/`${s}` captures), the bare and
+tz-aware `Timestamp` forms, and the bare container markers `Object` / `List`
+(see "Schemaless / JSON-shaped natives" — API sources hand them over as
+literal canonicals).
 
 Run the validator and reconcile every family its `type-map-write-coverage`
-warning names. A gap is legitimate **only** when the connector's dialect takes
-over that family's rendering via a `render_column_type` override (BigQuery
-ships no Decimal rule because NUMERIC/BIGNUMERIC selection needs
-precision-range arithmetic rules cannot express), never as a way to cut scope.
+warning names. A gap is legitimate only where the connector's dialect renders
+that family itself (`ADV-TMAP-019`) — BigQuery ships no Decimal rule because
+NUMERIC/BIGNUMERIC selection needs precision-range arithmetic rules cannot
+express.
 
 <!-- PROBE: write-coverage-sample-gap -->
 **A clean warning is not proof of coverage.** The check sends one probe per
@@ -383,9 +381,8 @@ See the reference write map, `examples/postgresql/type-map-write.json` —
 `canonical` is the matcher (note the regexes over the canonical string
 with lowercase capture names), and `native` is the rendered DDL.
 
-First-match-wins applies per file: more specific rules come **before**
-broader fallbacks. In that file the bare `^Timestamp\([A-Z]+\)$` rule
-sits before the tz rule yet cannot swallow a two-argument canonical —
+Ordering is what that file demonstrates: the bare `^Timestamp\([A-Z]+\)$`
+rule sits before the tz rule yet cannot swallow a two-argument canonical —
 but a genuinely overlapping family rule must be ordered carefully.
 
 ## Out of scope

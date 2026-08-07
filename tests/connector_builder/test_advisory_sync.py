@@ -64,11 +64,24 @@ def test_reference_covers_only_authored_resources() -> None:
     Pipelines, streams, connection documents, and database endpoints belong to
     other tools; carrying their rules here would invite agents to enforce rules
     against documents they do not own.
+
+    "Carrying" means occupying a row — the id in a table's first cell. An
+    out-of-scope id NAMED inside another rule's text is the opposite of a leak:
+    that is how a waived rule says which enforcer stops short of it, and the
+    reader learns a boundary rather than a rule to apply. A plain substring
+    search cannot tell those apart, so it would force the registry to describe
+    its own gaps vaguely to keep this green.
     """
     from analitiq.contracts.shared.advisory import all_rules
 
     renderer = _load_renderer()
     rendered = renderer.OUTPUT_PATH.read_text(encoding="utf-8")
+    listed = {
+        line.split("|")[1].strip()
+        for line in rendered.splitlines()
+        if line.startswith("| ADV-")
+    }
+    assert listed, "no rule rows found — the renderer's table shape moved"
 
     foreign = [
         rule
@@ -77,8 +90,34 @@ def test_reference_covers_only_authored_resources() -> None:
     ]
     assert foreign, "expected the registry to carry rules outside the plugin's scope"
 
-    leaked = sorted(rule.id for rule in foreign if rule.id in rendered)
-    assert not leaked, f"reference leaked out-of-scope rule ids: {leaked}"
+    borrowed = set(renderer.BORROWED_RULE_IDS)
+    leaked = sorted(rule.id for rule in foreign if rule.id in listed - borrowed)
+    assert not leaked, (
+        f"reference leaked out-of-scope rule ids: {leaked}. A rule on a document "
+        "this plugin does not author reaches the reference only by being named in "
+        "BORROWED_RULE_IDS, which is a per-id argument, not a resource."
+    )
+
+
+def test_borrowed_rules_are_actually_cited() -> None:
+    """The borrowed list is an exception, and an exception has to be earned.
+
+    Each id is there because some prose site cites it to mark a boundary. Let
+    the citation go and the entry becomes a foreign rule sitting in the
+    reference with nothing asking for it — which is the leak the test above
+    exists to prevent, arriving through the door built to allow it.
+    """
+    renderer = _load_renderer()
+    prose = "".join(
+        path.read_text(encoding="utf-8")
+        for path in (REPO_ROOT / "plugins" / "analitiq-connector-builder").rglob("*.md")
+        if path != renderer.OUTPUT_PATH
+    )
+    unwanted = [i for i in renderer.BORROWED_RULE_IDS if i not in prose]
+    assert not unwanted, (
+        f"BORROWED_RULE_IDS carries ids no prose in this plugin cites: {unwanted}. "
+        "Drop them from the list — they are somebody else's rules."
+    )
 
 
 def test_scope_covers_every_authored_resource() -> None:

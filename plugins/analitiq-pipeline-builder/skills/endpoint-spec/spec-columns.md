@@ -69,7 +69,7 @@ admits only the units its alternative above lists — `Time32(MICROSECOND)` and
 
 ### `Timestamp` timezone
 
-Optional second argument. Three valid forms:
+Optional second argument. Valid forms:
 
 - **Omit the slot** — naive timestamp, no implied zone: `Timestamp(MICROSECOND)`.
 - **Literal `null`** — explicit naive marker: `Timestamp(MICROSECOND, null)`
@@ -124,13 +124,12 @@ Json
 There are **no angle-bracket container canonicals** (`Struct<…>`, `List<…>`,
 `Map<…>`): the engine does not execute them, and the contract — generated
 from the engine's own grammar — rejects them. Declare nested shape with the
-bare markers plus sibling keys on the **column itself**:
+bare markers plus sibling keys on the **column itself** (`ADV-ENDP-021`):
 
-- `Object` — requires a non-empty sibling `properties` map of field specs
-  (recursive: each child is `{arrow_type, …}` and may itself be `Object`/`List`).
-- `List` — requires a sibling `items` field spec for the element.
-- `Json` — opaque; no `properties` or `items` permitted. Use it when you do
-  not introspect the inner shape.
+- `Object` — the sibling `properties` map is recursive: each child is
+  `{arrow_type, …}` and may itself be `Object`/`List`.
+- `List` — the sibling `items` field spec describes the element.
+- `Json` — opaque. Use it when you do not introspect the inner shape.
 
 See `examples/bigquery-struct-table.example.json` for a BigQuery `STRUCT`
 column declared as `Object` + `properties`. For schemaless or opaque container
@@ -159,7 +158,7 @@ Canonicalizes column order for hashing. Omit for schemaless engines (MongoDB).
 
 ## Uniqueness
 
-The contract model enforces three advisory rules over this array:
+The registry's database-endpoint rules over this array:
 
 <!-- BEGIN GENERATED: advisory-endpoint -->
 | Rule | Constraint |
@@ -167,4 +166,17 @@ The contract model enforces three advisory rules over this array:
 | `ADV-DBEP-001` | columns[].name must be unique. |
 | `ADV-DBEP-002` | columns[].ordinal_position must be unique where present. |
 | `ADV-DBEP-003` | primary_keys must reference declared columns[].name. |
+| `ADV-ENDP-021` | A column's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
+
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+
+| Rule | Constraint | Rejected by |
+|---|---|---|
+| `ADV-DBEP-004` | A column's frozen `arrow_type` and `native_type` are the values the type maps render for it, not a re-derivation; judgment supplies a value only for a native or canonical no map covers. | nothing here (engine-runtime) |
+| `ADV-DBEP-005` | A discovered object records every namespace level its system actually has and invents none it lacks, so `catalog` comes back populated where the system has one and absent where it does not. | nothing here (engine-runtime) |
+| `ADV-DBEP-006` | A database endpoint document is produced by the connector's `resource_discovery` at connection time and is never authored into a connector release. | nothing here (engine-runtime) |
+| `ADV-DBEP-007` | A derived `endpoint_id` is an opaque lookup handle: database identity is read from `database_object` and never parsed back out of the handle. | nothing here (engine-runtime) |
+| `ADV-DBEP-008` | An authored endpoint declares no column the engine synthesises at table creation, and drops such columns from a mirrored source's column list. | nothing here (engine-runtime) |
+| `ADV-DBEP-009` | A database endpoint records every provider identifier exactly as the source reports it, with no case-folding, quoting or other normalization. | nothing here (cross-artifact) |
+| `ADV-DBEP-010` | A new-table database endpoint targets a namespace that discovery returned. | nothing here (cross-artifact) |
 <!-- END GENERATED: advisory-endpoint -->

@@ -113,8 +113,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="PipelineAuthored", field="status", prose_hash="fc5404ea0fb0", descriptive=True),
     ProseObligation(
         model="PipelineAuthored", field="streams",
-        prose_hash="4d22ef37fed7",
+        prose_hash="9be6c94e9555",
         structural="typed as a list of `NonEmptyStr`",
+        rule_ids=("ADV-PIPE-010",),
     ),
     ProseObligation(
         model="PipelineAuthored", field="tags",

@@ -97,10 +97,10 @@ Run the closed-enum mappers inline (see `enum-mappers.md`):
 - `AuthTypeMapper` → `auth.type`.
 - `TransportTypeMapper` → `transport_type` per transport.
 
-Storage kinds (`file`, `s3`, `stdout`) are accepted by the schema but not
-yet supported by the engine. If the user explicitly asked for one,
-dispatch to `storage-connector-creator` (which currently returns a
-structured refusal); otherwise fail closed and ask.
+Storage kinds (`file`, `s3`, `stdout`) route to
+`storage-connector-creator`, which returns a structured refusal
+(`ADV-CTOR-037`). Dispatch there only if the user explicitly asked for
+one; otherwise fail closed and ask.
 
 ### 3. Dispatch creator (domain body + type maps)
 
@@ -233,7 +233,7 @@ to diff, so stage the freshly-authored draft to a temporary path first.
 - **`build`** — if `previous_release_path` was supplied, invoke
   `connector-drift-classifier` the same way (staged draft as
   `current_path`) and apply `next_version`; otherwise this is a first
-  release; set `version` to `1.0.0`.
+  release (`ADV-CTOR-032`).
 
 ### 7. Write
 
@@ -253,11 +253,11 @@ the Python package for database connectors:
 │   ├── type-map-write.json         # database only; Arrow → native DDL render rules
 │   └── endpoints/
 │       └── {endpoint_id}.json      # api connectors only — one file per endpoint; filename = document.endpoint_id
-├── __init__.py                     # database only — re-exports the connector class
+├── __init__.py                     # database only — see ADV-PKG-009
 ├── connector.py                    # database only — {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
 ├── requirements.txt                # database only — THIS connector's driver(s) only
-├── pyproject.toml                  # database only — analitiq-connector-{connector_id}; entry points named {connector_id}
-└── README.md
+├── pyproject.toml                  # database only — see ADV-PKG-007
+└── README.md                       # see ADV-PKG-025
 ```
 
 **Reproducibility (update mode).** An update fully regenerates the tree

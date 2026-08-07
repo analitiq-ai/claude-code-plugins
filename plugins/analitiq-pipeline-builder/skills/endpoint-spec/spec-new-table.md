@@ -12,14 +12,13 @@ introspection; the mode contract lives in `private-endpoint-creator`
 
 ## Identity
 
-- `schema` / `name` are the user's spelling, **verbatim** — for a new table
+- `schema` / `name` are the user's spelling (`ADV-DBEP-009`) — for a new table
   the user's spelling *is* the canonical identifier; it determines what the
   engine creates. Pass it to `endpoint_id.py` unchanged, `--object-type table`.
-- The target namespace must be one discovery returned (`schema`, or the
-  database-as-`catalog` for schemaless dialects). Whether the engine creates
-  a missing schema is dialect-owned (a connector pre-DDL hook; not every
-  dialect declares one), so a discovered namespace is the only target that
-  succeeds everywhere.
+- The target namespace is `schema`, or the database-as-`catalog` for schemaless
+  dialects (`ADV-DBEP-010`). Whether the engine creates a missing schema is
+  dialect-owned (a connector pre-DDL hook; not every dialect declares one), so a
+  discovered namespace is the only target that succeeds everywhere.
 
 ## Column derivation
 
@@ -47,14 +46,14 @@ Columns mirror the source that will feed the table:
   annotation is contract-legal — derive its canonical from the field's
   JSON-Schema shape with `spec-columns.md` judgment.
 - Never author `_synced_at` or `_record_hash`, and drop them from the mirror
-  when the source carries them (an engine-created source table does) — the
-  engine appends its own synthetic columns at creation.
+  when the source carries them — an engine-created source table does
+  (`ADV-DBEP-008`).
 
 ## `native_type` for a table that does not exist
 
-The honest value is the one the engine will create: resolve each distinct
-`arrow_type` through the write maps (invocation and precedence per
-`spec-type-map-gaps.md`) and freeze the rendered native.
+Resolve each distinct `arrow_type` through the write maps (invocation and
+precedence per `spec-type-map-gaps.md`) and freeze the rendered native
+(`ADV-DBEP-004`).
 
 For an uncovered canonical:
 

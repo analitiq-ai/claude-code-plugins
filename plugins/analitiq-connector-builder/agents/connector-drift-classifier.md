@@ -72,7 +72,7 @@ Rollup: any major-tier category → bump = `major`; else any minor-tier →
 - Never bump major silently. Major bumps require a `note` per change.
 - If the previous file is missing, return `bump: "none"` with a single
   rationale entry explaining the absence; the orchestrator treats this as a
-  first release and sets the version manually (typically `1.0.0`).
+  first release and sets the version manually (`ADV-CTOR-032`).
 - Do not modify either document.
 
 ## Output format

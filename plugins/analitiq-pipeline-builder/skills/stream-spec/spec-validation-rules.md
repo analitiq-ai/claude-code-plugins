@@ -23,8 +23,8 @@ block (`analitiq.contracts.stream.Validation`, whose members are
 }
 ```
 
-This is **stream record validation** — one of two unrelated validation-rule
-families in the platform. The other is connection **input** validation, which
+This is **stream record validation** — one of the platform's unrelated
+validation-rule families. The other is connection **input** validation, which
 lives on the connector's `connection_contract` and is connection/connector-owned;
 it validates configuration a user typed, not records the pipeline moved. Never
 carry a rule from one family into the other, and never expect this block to
@@ -52,8 +52,9 @@ Carries 1 declarative cross-field `if`/`then` rule(s) — see the advisory rules
 
 ### `rules[].type`
 
-`ADV-STRM-009` settles which members take a `value` and which must omit it. What
-neither it nor the table states is what each member *means*:
+`ADV-STRM-009` settles which members take a `value` and which must omit it, and
+`ADV-STRM-021` the shape that `value` takes. What neither those nor the table
+state is what each member *means*:
 
 - `required` — the field must be present.
 - `not_null` — the field must be present and non-null.
@@ -75,7 +76,7 @@ a source `get` path.
 
 `StreamValidationErrorHandling` is a mirror of `pipeline.runtime.error_handling`
 (`analitiq.contracts.pipelines.config.ErrorHandling`) — the same strategy
-vocabulary, the same retry fields, the same retry/delay gating rule. Read the
+vocabulary, the same retry fields, the same gating (`ADV-RETRY-001`). Read the
 members and bounds off those models.
 
 Its scope, however, is narrow, and that is the whole point of the block: **it

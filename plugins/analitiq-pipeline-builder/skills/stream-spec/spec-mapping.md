@@ -56,12 +56,11 @@ Each `assignments[]` entry (`analitiq.contracts.stream.Assignment`) pairs a
 }
 ```
 
-## `assignments` order is significant
+## `assignments` order is significant (`ADV-STRM-019`)
 
-`assignments[]` is a sequence, not a set. The engine applies assignments in the
-order authored, so preserve the order a caller gave you and never re-sort the
-array for tidiness — a reordering is a semantic change, and in edit mode it is a
-diff the user did not ask for.
+Preserve the order a caller gave you and never re-sort the array for tidiness —
+a reordering is a semantic change, and in edit mode it is a diff the user did
+not ask for.
 
 ## `assignments[].value`
 
@@ -122,13 +121,11 @@ array makes that failure unrepresentable.
 `constant` is
 `{"arrow_type": "<fully-qualified Arrow type>", "value": <JSON value>}`.
 
-### When a bare `get` is not enough
+### When a bare `get` is not enough (`ADV-STRM-020`)
 
-The engine's conversion matrix classifies each `(source type, target type)` pair.
-A pair classified **`explicit`** — `Int64 → Utf8` is the canonical example — is
-writable only when the assignment names the matrix's conversion `fn` in a `pipe`.
-A bare `get` across such a pair is **rejected**, not silently coerced. So when
-source and target Arrow types differ, check the pair before reaching for `get`:
+The engine's conversion matrix classifies each `(source type, target type)` pair;
+`Int64 → Utf8` is the canonical **`explicit`** one. So when source and target
+Arrow types differ, check the pair before reaching for `get`:
 if it is an explicit conversion, the assignment must be
 `{"op": "pipe", "args": [{"op": "get", "path": [...]}, {"op": "fn", "name": …}]}`. The
 conversion function names are closed (`analitiq.contracts.stream.FnExpression`);
@@ -173,9 +170,8 @@ dotted target, was the defect — two spellings of one thing, one of which the
 engine rejected after splitting it.
 
 <!-- PROBE: stream-mapping-target-unresolved-locally -->
-Cross-document: each `target.path` must exist in the resolved destination
-endpoint schema. Endpoint resolution is server-side at save time; the local
-validator does **not** check this.
+Cross-document (`ADV-STRM-022`): endpoint resolution is server-side at save
+time; the local validator does **not** check this.
 
 ## `arrow_type` vocabulary
 
@@ -186,13 +182,13 @@ endpoint columns use, generated from the engine-published grammar manifest —
 so bare parameterized forms (`Timestamp`, `Decimal128`, `Time64`, `Duration`,
 `FixedSizeBinary`, …) are rejected. See
 [`endpoint-spec/spec-columns.md`](../endpoint-spec/spec-columns.md) for the
-canonical walkthrough: the two shapes (bare / `( )`), the authored-shape
+canonical walkthrough: the shapes (bare / `( )`), the authored-shape
 container markers, unit identifiers and timezone forms apply identically here.
 
 Container shape is not free-form either: `ADV-STRM-006`, `ADV-STRM-007` and
 `ADV-STRM-010` tie `arrow_type` to whether the field declares `properties`,
 `items`, or neither, and tie a constant's JSON kind to its declared type.
 
-Stick to what the destination endpoint's `columns[]` declares — if the
-destination column is `Decimal128(12, 2)`, the assignment's `target.arrow_type`
-must match exactly, precision and scale included.
+The destination endpoint's `columns[]` decides `target.arrow_type`
+(`ADV-STRM-028`) — a `Decimal128(12, 2)` column gives a `Decimal128(12, 2)`
+target, precision and scale included.

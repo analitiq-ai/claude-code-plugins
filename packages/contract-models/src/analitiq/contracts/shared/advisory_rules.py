@@ -1,12 +1,24 @@
-"""The advisory rule registry — authored data, the single source for the
-relational (cross-field) contract tier.
+"""The contract's rules — authored data, one entry per rule about a document.
 
-Every entry is enforced at runtime by :mod:`advisory` (generic kinds) or by the
+Two tiers live here. The **relational** tier is what this registry started as:
+every entry is enforced at runtime by :mod:`advisory` (generic kinds) or by the
 bespoke method it names (``kind="custom"``). Generic rules additionally carry a
 valid/invalid fixture corpus (``contract-models/tests/fixtures/advisory``) a
 non-Python second system reconciles against; custom rules are enforced only
 in-process by their named validator and may carry no fixtures. Adding a
 relational rule is a data edit here — never new imperative code.
+
+The **structural** tier catalogues rules the models already enforce through
+their own shape. Those rules were always enforced and always anonymous, so
+plugin prose had no id to cite and hand-copied the shape instead — the member
+list, the pattern, the required set — and the copies drifted. A structural
+entry names the mechanism and the field; the values stay in the model and are
+read from it at render time. An entry that spells them out again has recreated
+the surface it was added to remove, and ``test_advisory_registry.py`` fails it.
+
+Rules about anything other than a document — a connector's Python package, a
+choice between transports that both validate — are the waived tier, in
+:mod:`authoring_rules`.
 
 IDs are ``ADV-<AREA>-NNN``, stable and never reused. ``targets`` name model
 classes by string; a rule on a base class covers its subclasses (MRO match).
@@ -548,6 +560,265 @@ ADVISORY_RULES: list[AdvisoryRule] = [
         id="ADV-RETRY-001", kind="custom", resource="shared",
         prose="retry_delay_seconds must be omitted or 0 when max_retries is 0.",
         targets=("RetryErrorHandlingBase",), enforcer="_validate_retry_fields",
+    ),
+    # === Rules the plugins' prose carried, catalogued here =============
+    #
+    # Below this line are rules the contract always enforced and never
+    # named: relational checks whose enforcer carried no id, and the
+    # structural tier, which had no ids at all. Plugin prose restated them
+    # instead — an enum's members typed into a table, a pattern spelled
+    # out — and the copies drifted from the models and from each other.
+    # Grouped by document family, as above.
+    # --- api-endpoint document --------------------------------------------
+    AdvisoryRule(
+        id="ADV-ENDP-032", tier="relational", resource="api-endpoint",
+        prose=(
+            "A request slot must not carry a direct ref into the per-run "
+            "scopes; a per-run value reaches the request only through a "
+            "declared param."
+        ),
+        kind="custom", enforcer="_wiring",
+        targets=("ReadOperation", "WriteOperation"),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-033", tier="relational", resource="api-endpoint",
+        prose=(
+            "Every ref and every `${...}` template placeholder in a request "
+            "slot must lead with one of the contract's declared resolution "
+            "scopes."
+        ),
+        kind="custom", enforcer="_wiring",
+        targets=("ReadOperation", "WriteOperation"),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-034", tier="relational", resource="api-endpoint",
+        prose=(
+            "A `from_input` binding is confined to the request sites where a "
+            "record is in scope: it is refused in `request.headers` and "
+            "`request.query`, and anywhere in a read operation's request."
+        ),
+        kind="custom", enforcer="_wiring",
+        targets=("ReadOperation", "WriteOperation"),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-035", tier="relational", resource="api-endpoint",
+        prose=(
+            "A write request body's `from_input` value must address the record, "
+            "the batch, or one dotted field of the record; a dotted path "
+            "through the batch array is refused."
+        ),
+        kind="custom", enforcer="_wiring",
+        targets=("WriteOperation",),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-036", tier="structural", resource="api-endpoint",
+        prose=(
+            "An endpoint document's `endpoint_id` matches the slug pattern "
+            "`_EndpointBase.endpoint_id` declares."
+        ),
+        mechanism="pattern",
+        targets=("_EndpointBase",),
+        fields=("endpoint_id",),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-037", tier="structural", resource="api-endpoint",
+        prose=(
+            "A predicate object carries exactly one operator key, and that key "
+            "selects the branch of the contract's predicate union that shapes "
+            "it; a key the union does not tag is not a predicate."
+        ),
+        mechanism="discriminated_union",
+        targets=(
+            "PredicateEq", "PredicateNeq", "PredicateLt",
+            "PredicateLte", "PredicateGt", "PredicateGte",
+            "PredicateExists", "PredicateMissing", "PredicateEmpty",
+            "PredicateNotEmpty", "PredicateAnd", "PredicateOr",
+            "PredicateNot"
+        ),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-038", tier="structural", resource="api-endpoint",
+        prose=(
+            "An endpoint's `replication.supported_methods` names only methods "
+            "the vocabulary `Replication.supported_methods` declares, and the "
+            "block carries no separate default-method key."
+        ),
+        mechanism="literal_enum",
+        targets=("Replication",),
+        fields=("supported_methods",),
+    ),
+    AdvisoryRule(
+        id="ADV-ENDP-039", tier="structural", resource="api-endpoint",
+        prose=(
+            "A write operation's `idempotency` declares only where the "
+            "provider's key is placed, from the placement vocabulary "
+            "`Idempotency.location` carries; the key's value is engine-owned "
+            "and is never authored."
+        ),
+        mechanism="literal_enum",
+        targets=("Idempotency",),
+        fields=("location",),
+    ),
+    # --- connector document -----------------------------------------------
+    AdvisoryRule(
+        id="ADV-CTOR-016", tier="structural", resource="connector",
+        prose=(
+            "An ADBC transport's `driver` names a member of the closed enum "
+            "`AdbcTransport.driver` carries; a driver the enum does not name "
+            "cannot be declared at all."
+        ),
+        mechanism="literal_enum",
+        targets=("AdbcTransport",),
+        fields=("driver",),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-017", tier="structural", resource="connector",
+        prose=(
+            "A `sql_capabilities.bulk_load` family key names a mechanism the "
+            "matching field on `SqlBulkLoad` admits — the families' "
+            "vocabularies differ, so a mechanism is declarable only under the "
+            "family whose field carries it — and a protocol outside them is not "
+            "declarable."
+        ),
+        mechanism="literal_enum",
+        targets=("SqlBulkLoad",),
+        fields=("sqlalchemy", "adbc"),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-018", tier="structural", resource="connector",
+        prose=(
+            "Every binding in a `url_template` DSN declares an `encoding` from "
+            "the closed vocabulary `DsnBinding.encoding` carries, selected for "
+            "the URL position the value is substituted into."
+        ),
+        mechanism="literal_enum",
+        targets=("DsnBinding",),
+        fields=("encoding",),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-019", tier="structural", resource="connector",
+        prose=(
+            "A `resource_discovery.produces` entry names an artifact kind the "
+            "contract's `produces` vocabulary admits, and discovery writes "
+            "nothing outside it."
+        ),
+        mechanism="literal_enum",
+        targets=("ResourceDiscovery",),
+        fields=("produces",),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-020", tier="structural", resource="connector",
+        prose=(
+            "Each discovery action on `ResourceDiscoveryTriggers` declares its "
+            "trigger from the same closed vocabulary, so the actions never "
+            "differ in what may trigger them."
+        ),
+        mechanism="literal_enum",
+        targets=("ResourceDiscoveryTriggers",),
+        fields=("list_resources", "describe_resource"),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-021", tier="structural", resource="connector",
+        prose=(
+            "A connection-contract input's provisioning, lifecycle phase, "
+            "storage location and value type are each drawn from the closed "
+            "vocabulary the matching field on `ConnectionContractInput` "
+            "declares."
+        ),
+        mechanism="literal_enum",
+        targets=("ConnectionContractInput",),
+        fields=("source", "phase", "storage", "type"),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-022", tier="structural", resource="connector",
+        prose=(
+            "A post-auth output's `mode` and `storage` are each drawn from the "
+            "closed vocabulary the matching field on `PostAuthOutput` declares; "
+            "which pairings are legal is ADV-CTOR-002."
+        ),
+        mechanism="literal_enum",
+        targets=("PostAuthOutput",),
+        fields=("mode", "storage"),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-023", tier="structural", resource="connector",
+        prose=(
+            "A connector document's `connector_id` matches the slug pattern "
+            "`ConnectorBase.connector_id` declares."
+        ),
+        mechanism="pattern",
+        targets=("ConnectorBase",),
+        fields=("connector_id",),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-024", tier="structural", resource="connector",
+        prose=(
+            "A connector's `auth` block declares the children its `type` branch "
+            "declares and no others, so an operation belonging to a different "
+            "auth type is rejected rather than ignored."
+        ),
+        mechanism="discriminated_union",
+        targets=(
+            "ApiKeyAuth", "BasicAuth", "OAuth2AuthorizationCodeAuth",
+            "OAuth2ClientCredentialsAuth", "JwtAuth", "DbAuth",
+            "CredentialsAuth", "AwsIamAuth", "NoneAuth"
+        ),
+    ),
+    AdvisoryRule(
+        id="ADV-CTOR-025", tier="structural", resource="connector",
+        prose=(
+            "Every auth operation slot holds an `AuthOperationTemplate`, which "
+            "declares exactly the request fields that model names and rejects "
+            "any other key."
+        ),
+        mechanism="closed_object",
+        targets=("AuthOperationTemplate",),
+    ),
+    # --- pipeline document ------------------------------------------------
+    AdvisoryRule(
+        id="ADV-PIPE-005", tier="structural", resource="pipeline",
+        prose=(
+            "A pipeline's `schedule.type` is a member of the vocabulary "
+            "`Schedule.type` declares, and the chosen type gates which schedule "
+            "fields are legal (ADV-PIPE-002)."
+        ),
+        mechanism="literal_enum",
+        targets=("Schedule",),
+        fields=("type",),
+    ),
+    AdvisoryRule(
+        id="ADV-PIPE-006", tier="structural", resource="pipeline",
+        prose=(
+            "A pipeline authored with no scheduling facts omits `schedule.type` "
+            "and `schedule.timezone` and takes the defaults `Schedule` declares "
+            "for them."
+        ),
+        mechanism="default",
+        targets=("Schedule",),
+        fields=("type", "timezone"),
+    ),
+    # --- stream document --------------------------------------------------
+    AdvisoryRule(
+        id="ADV-STRM-016", tier="structural", resource="stream",
+        prose=(
+            "A stream destination's `write.mode` selects the write shape, and "
+            "only the conflict-keyed database shape declares `conflict_keys` — "
+            "every other shape has no such field to set."
+        ),
+        mechanism="discriminated_union",
+        targets=(
+            "DatabaseKeylessWrite", "DatabaseConflictKeyedWrite",
+            "ApiWrite"
+        ),
+    ),
+    AdvisoryRule(
+        id="ADV-STRM-017", tier="structural", resource="stream",
+        prose=(
+            "A stream's `replication.method` selects the replication branch, "
+            "and the branch decides which further fields the block declares."
+        ),
+        mechanism="discriminated_union",
+        targets=("FullRefreshReplication", "IncrementalReplication"),
     ),
 ]
 

@@ -94,10 +94,10 @@ flag, and no member beyond those listed exists (in particular there is no
 - Endpoint bodies. The stream **references** endpoints by ref; it does
   not embed them.
 
-## Cross-field rules the contract enforces
+## Registered rules for a stream
 
-These are the relational constraints no single field can express. The validator
-emits each one's stable id in the finding message, so a failure like
+The relational constraints no single field can express. The validator emits
+each one's stable id in the finding message, so a failure like
 `[ADV-STRM-001] …` points straight at the rule below.
 
 <!-- BEGIN GENERATED: advisory-stream -->
@@ -115,13 +115,35 @@ emits each one's stable id in the finding message, so a failure like
 | `ADV-STRM-012` | A filter operator must belong to the source scope's vocabulary: the database operator set for a connection source, the API operator set for a connector source. |
 | `ADV-STRM-014` | selected_columns, replication.tie_breaker_fields and database_pagination are database-source features: a connector-scope (API) source must not declare them. |
 | `ADV-STRM-015` | A validation rule's field must resolve against the mapping's assignment targets: its first token names a declared target.path and each later token names a field declared under that target's properties. |
+
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+
+| Rule | Constraint | Rejected by |
+|---|---|---|
+| `ADV-STRM-016` | A stream destination's `write.mode` selects the write shape, and only the conflict-keyed database shape declares `conflict_keys` — every other shape has no such field to set. | the published schema — the error names the field, not the rule |
+| `ADV-STRM-017` | A stream's `replication.method` selects the replication branch, and the branch decides which further fields the block declares. | the published schema — the error names the field, not the rule |
+| `ADV-STRM-018` | A connection-scoped `endpoint_ref` carries the derived `endpoint_id` whenever the plugin can compute it, so the cross-document bundle check can resolve the reference. | nothing here (authoring-choice) |
+| `ADV-STRM-019` | A mapping's `assignments` are applied in the order authored, so an authored order is preserved and never re-sorted. | nothing here (engine-runtime) |
+| `ADV-STRM-020` | An assignment across a conversion pair the engine classifies as explicit names that conversion function in a `pipe`; a bare `get` across the pair is refused, not coerced. | nothing here (engine-runtime) |
+| `ADV-STRM-021` | A validation rule's `value` takes the shape its `type` requires; ADV-STRM-009 settles only whether a `value` is present. | nothing here (engine-runtime) |
+| `ADV-STRM-022` | Every field name a stream references resolves to a field the endpoint document on that side of the transfer declares. | nothing here (cross-artifact) |
+| `ADV-STRM-023` | A stream reproduces every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization. | nothing here (cross-artifact) |
+| `ADV-STRM-024` | An API destination's `write.mode` is a key the referenced api-endpoint document declares under `operations.write`. | nothing here (cross-artifact) |
+| `ADV-STRM-025` | An API source's `replication.method` is one the referenced endpoint declares in `operations.read.replication.supported_methods`. | nothing here (cross-artifact) |
+| `ADV-STRM-026` | A filter on an API source targets a read parameter the endpoint declares as filterable — one carrying `operators` and no `controlled_by`. | nothing here (cross-artifact) |
+| `ADV-STRM-027` | A filter's `value` carries the type the referenced field declares, and a membership operator carries an array of such values. | nothing here (cross-artifact) |
+| `ADV-STRM-028` | An assignment `target.arrow_type` reproduces the destination column's declared type exactly, parameters included. | nothing here (cross-artifact) |
+| `ADV-STRM-029` | A stream source omits `replication` only when the source endpoint supports full refresh. | nothing here (cross-artifact) |
+| `ADV-STRM-030` | A stream declares `source.primary_keys` exactly when the source endpoint carries no primary-key metadata of its own and the transfer needs record identity, never as keys contradicting the endpoint's. | nothing here (cross-artifact) |
+| `ADV-STRM-031` | A stream references an API endpoint with connector scope only; connection scope is for database endpoints. | nothing here (cross-artifact) |
 <!-- END GENERATED: advisory-stream -->
 
 ## Output rules
 
 Every authored document must:
 
-1. Declare `$schema` with the stream URL from the table at the top of this file.
+1. Declare `$schema` with the stream URL from the table at the top of this file
+   (`ADV-SHRD-003`).
 2. Carry every required field from the top-level shape table. Author `stream_id`
    as an RFC-4122 UUID the plugin generates (plugin convention; the contract
    permits omission and the service assigns one on ingest). `pipeline_id`
@@ -131,7 +153,6 @@ Every authored document must:
    document.
 4. Shape each `endpoint_ref` by its `scope` (see `spec-endpoint-refs.md`): a
    `connector` ref carries `endpoint_id` (the connector endpoint key); a
-   `connection` ref carries the endpoint's `database_object`, plus the derived
-   `endpoint_id` handle when the plugin can compute it.
+   `connection` ref carries the endpoint's `database_object` (`ADV-STRM-018`).
 5. Pass validation (the `pipeline-schema-validator`, entity `stream`) with zero
    error findings.

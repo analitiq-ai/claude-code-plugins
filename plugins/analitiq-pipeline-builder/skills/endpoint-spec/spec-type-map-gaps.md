@@ -22,8 +22,8 @@ vs rendered key per direction, `${name}` captures) is identical to the
 connector's own maps — the connector files you resolve against during gap
 detection are the live reference for it; do not restate their vocabulary here.
 
-Filenames are load-bearing: the engine loads exactly these two names from the
-connection's `definition/`. The pre-split `type-map.json` is dead — the engine
+Filenames are load-bearing: the engine loads exactly the names in the table
+above from the connection's `definition/`. The pre-split `type-map.json` is dead — the engine
 never reads it, and the validators reject it with a migration finding. The
 published `type-map-write-coverage` warning does not apply here — it presumes
 a connector's full-vocabulary write map, which a gap-only connection map
@@ -51,23 +51,58 @@ printf '%s' '["citext", "vector(3)"]' | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/t
 `resolved` gives the rendered value per covered probe; `gaps` lists the
 uncovered ones. Pass only map files that exist.
 
+## Registered rules for a type map
+
+The rules a type-map document is graded by, at either scope. The relational
+ones are the connector plugin's business too; the rest are yours, and the
+`Rejected by` column says which of them you will not hear about.
+
+<!-- BEGIN GENERATED: advisory-type-map -->
+| Rule | Constraint |
+|---|---|
+| `ADV-TMAP-001` | A schemaless or structured native type must not resolve to a scalar canonical type. |
+| `ADV-TMAP-002` | A schemaless or structured native pattern must not resolve to a scalar canonical type. |
+| `ADV-TMAP-003` | Every ${name} in the canonical render must name a capture group in the native pattern. |
+| `ADV-TMAP-004` | A native pattern with named captures must not map to a canonical whose parenthesised parameters are all hardcoded, discarding them. The detector keys on the parentheses, so a capture dropped into a canonical carrying none is out of scope. |
+| `ADV-TMAP-005` | A regex read rule's native must compile as an ECMA-262 regex; Python-only (?P…) syntax and otherwise-invalid patterns are rejected. |
+| `ADV-TMAP-006` | A regex read rule's canonical must be a valid (optionally ${name}-templated) Arrow type matched full-string, so a trailing newline is rejected. |
+| `ADV-TMAP-007` | A ${...} placeholder in a canonical render must be well-formed: no empty ${} and no unclosed ${. |
+| `ADV-TMAP-008` | A write exact rule's canonical must satisfy the cross-parameter Arrow bounds (Decimal scale <= precision), and its native DDL render's ${...} placeholders must be well-formed. |
+| `ADV-TMAP-009` | A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed. |
+| `ADV-TMAP-010` | A ${name} capture feeding a canonical parameter position must be unable to match a value that position refuses — a byte width of 0, a unit only a sibling family admits — and where a cross-parameter bound applies (Decimal scale <= precision) that bound resolves against the literal sibling present; a literal in such a bounded position must in turn hold against every value the capture bounding it can match. Two things are left undecided: a position whose admissible values the grammar states as an open pattern rather than a member list (a timezone) is not interrogated, and where a bound carries a placeholder on each side every capture is judged against its own position, so the pair reachable from those captures together is not judged at all. |
+
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+
+| Rule | Constraint | Rejected by |
+|---|---|---|
+| `ADV-TMAP-011` | A type map declares no wildcard or catch-all fallback rule, leaving an uncovered native or canonical to hard-error at runtime so the coverage gap stays visible. | nothing here (authoring-choice) |
+| `ADV-TMAP-012` | New rules on a connection-scoped type map are appended after the rules already present, and an existing rule is never removed, reordered, or edited. | nothing here (authoring-choice) |
+| `ADV-TMAP-013` | A type map's rules are authored in the order they must resolve — the reader stops at the first rule whose matcher hits — so a narrow rule is placed ahead of any broader rule that would also match its input. | nothing here (engine-runtime) |
+| `ADV-TMAP-014` | A read map's `regex` rule is matched against the probe after the engine's native-type normalization while the pattern itself is used exactly as authored, so a literal written in any other form yields a rule that validates and never fires. | nothing here (engine-runtime) |
+| `ADV-TMAP-015` | A write map's `canonical` matcher is authored in the exact casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not. | nothing here (engine-runtime) |
+| `ADV-TMAP-016` | Every `${name}` in a write rule's rendered native names a capture group declared by that same rule's `canonical` matcher. | nothing here (engine-runtime) |
+| `ADV-TMAP-017` | A connector's write map declares a rendering for every canonical type a source can hand its system, including the container markers an API source emits as literal canonicals, and a family is left uncovered only where the connector's dialect renders it in code. | nothing here (engine-runtime) |
+| `ADV-TMAP-018` | A connection-scoped type map declares a rule only for a native or canonical its connector's map leaves unresolved; a rule repeating one the connector already covers replaces the connector's rendering for every stream on that connection. | nothing here (engine-runtime) |
+| `ADV-TMAP-019` | A canonical family a connector's `type-map-write.json` leaves unrendered is one the connector's dialect renders itself through a `render_column_type` override, never one left out to cut scope. | nothing here (cross-artifact) |
+| `ADV-TMAP-021` | A connection-scoped read rule renders the same canonical type the endpoint document froze for the native it matches. | nothing here (cross-artifact) |
+<!-- END GENERATED: advisory-type-map -->
+
 ## Authoring rules
 
-- **Gap-only.** Author a rule only for a probe in `gaps`. A connection rule
-  for anything the connector already covers *overrides* the connector for
-  every stream on this connection — never shadow.
+- **Gap-only** (`ADV-TMAP-018`). The probes to author for are
+  the ones `type_map_gaps.py` reports under `gaps`. A connection rule for
+  anything the connector already covers *overrides* the connector for every
+  stream on this connection — never shadow.
 - **No gaps → no file.** A present-but-empty `[]` is an engine load-time error
   (worse than absent) and the contract rejects it. Write nothing.
-- **Extend, never rewrite.** When the connection already ships a map, append
-  new rules **after** the existing ones; never remove, reorder, or edit
-  existing rules — they are prior authored behavior on this connection.
+- **Extend, never rewrite** (`ADV-TMAP-012`). Append after the rules a
+  connection map already carries — they are prior authored behavior on this
+  connection.
 - **Read rules.** Choose the canonical for an uncovered native with
-  `spec-columns.md` judgment. The `arrow_type` frozen into the endpoint
-  document and the canonical the new rule renders **must agree** — the rule is
-  the durable record of the same judgment. Generalize a parameterized native
-  family with one regex rule and `${name}` captures (`vector(3)` observed →
-  match the family, not the instance); literals inside a regex must be
-  uppercase (read-side probes are normalized to uppercase; the pattern is not).
+  `spec-columns.md` judgment; the rule is the durable record of that judgment
+  (`ADV-TMAP-021`). Generalize a parameterized native family with one regex rule
+  and `${name}` captures (`vector(3)` observed → match the family, not the
+  instance); literals inside a regex must be uppercase (`ADV-TMAP-014`).
 - **Write rules.** For an uncovered canonical, render the discovered native
   that produced it — the deployment's own spelling is the one type the
   deployment certainly accepts as DDL. When **several distinct** discovered

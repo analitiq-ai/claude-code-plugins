@@ -96,15 +96,9 @@ Three documents have a say, and they are not alternatives:
 - **destination endpoint write `batching`** — the provider's declared capacity,
   owned by the connector and never authored here.
 
-Resolution order is: pipeline defaults → stream overrides → endpoint and
-runtime hard limits. An explicit stream pagination or destination `execution`
-value overrides the pipeline default, and the hard limits then cap whatever
-that override resolved to — an override can lower a value below the provider's
-capacity but never raise it above.
-
-So the pipeline-level values are defaults, and stream-level overrides win
-within those caps. When a user asks for a specific write size on one
-destination, change the stream, not the pipeline.
+Pipeline-level values are defaults; stream-level overrides win within the
+endpoint's declared caps (`ADV-PIPE-007`). When a user asks for a specific
+write size on one destination, change the stream, not the pipeline.
 
 Batch **concurrency** is not authorable at all. `max_concurrent_batches` used
 to sit on both `runtime.batching` and `destinations[].execution`, and nothing

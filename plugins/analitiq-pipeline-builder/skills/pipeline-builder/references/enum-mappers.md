@@ -30,9 +30,8 @@ onto them is not, and is what this file adds.
 | "cron expression", "at 02:00 UTC", "weekdays at 9am" (anything that needs a cron spec) | → | `cron` |
 
 After selecting `type`, the contract gates which sibling fields may appear
-(`ADV-PIPE-002`); `pipeline-spec/spec-schedule.md` carries the generated shape.
-The scheduler validates a cron expression's inner spec at runtime — the contract
-check is deliberately coarse.
+(`ADV-PIPE-002`); `pipeline-spec/spec-schedule.md` carries the generated shape
+and the cron dialect (`ADV-PIPE-009`).
 
 ## ReplicationMethodMapper
 
@@ -45,9 +44,8 @@ For `incremental`, the user must name the `cursor_field`. If they
 can't, halt and ask for the column/parameter name they want to use as
 the watermark.
 
-For an API endpoint, `replication.method` must be in the source endpoint's
-declared support set — the connector document lists
-`operations.read.replication.supported_methods`. A database endpoint carries
+For an API endpoint, `replication.method` is bounded by the source endpoint's
+own declared support set (`ADV-STRM-025`). A database endpoint carries
 no `replication` block, so no endpoint-declared support set constrains it;
 the stream-side rule above still does, and `incremental` still requires a
 `cursor_field`.

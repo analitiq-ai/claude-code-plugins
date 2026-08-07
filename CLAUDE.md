@@ -164,6 +164,16 @@ defines — reference or load it.** Carry only craft the schema can't express
   validation agree on one contract. Where a plugin must restate a schema-owned
   enum as decision logic (e.g. the DSN-binding `encoding` set), the drift-check
   CI below pins it to the pinned contract models.
+- **Every rule has an id, whether or not anything enforces it.** The registry
+  (`analitiq.contracts.shared.advisory_rules` for rules about a document,
+  `authoring_rules` for the rest) spans three tiers: **relational**, which the
+  validator rejects and names; **structural**, which the published schema
+  rejects while naming only the field; and **waived**, which nothing here
+  rejects — the entry declares which surface would have to be read and why it
+  is out of reach. Prose cites the id. An obligation with no id is a missing
+  registry entry, not a sentence to hand-write; `scripts/render_advisory.py`
+  and the pipeline plugin's `gen_contract_docs.py` render the tiers into each
+  plugin, and a citation that stops resolving fails the build.
 - **Fetch-once, pass-down** — an orchestrator hands the live contract schema URLs
   to its researcher (the mission spec) and the creators read the same schemas as
   vocabulary, so authoring and validation agree on one contract.

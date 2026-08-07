@@ -39,10 +39,10 @@ Both kinds emit the same outer shape. Concrete inputs differ:
 
 ## What belongs in the contract at all
 
-**A connector must not own customer-specific values.** A host, tenant id,
-account id, database name, profile, credential, or token belongs to a
-*connection*, not to the connector — the connector declares the *shape* of the
-input, and the connection supplies the value. A connector carrying a real
+**A connector must not own customer-specific values** (`ADV-CTOR-028`). A host,
+tenant id, account id, database name, profile, credential, or token belongs to
+a *connection*, not to the connector — the connector declares the *shape* of
+the input, and the connection supplies the value. A connector carrying a real
 customer's host is not reusable, which is the whole point of the split. (This
 is broader than "no secrets": a tenant slug isn't secret and still doesn't
 belong.)
@@ -74,8 +74,8 @@ context. Required fields per output:
 The durable reference path is **derived** as `storage` + `"."` + the output
 key — e.g. an output keyed `api_domain` with `storage: "connection.discovered"`
 materializes at `connection.discovered.api_domain`, which is what refs and
-`required_for_activation` target. For `user_selection` outputs, `label_path` /
-`options_path` are response-extraction paths too.
+`required_for_activation` target (`ADV-CTOR-007`). For `user_selection`
+outputs, `label_path` / `options_path` are response-extraction paths too.
 
 Discovery mechanics (`options_request` / `discovery_request`) are
 declared in the same output entry where applicable.
@@ -88,11 +88,10 @@ it "feels safer" makes it unreadable to the refs that need it and misreports the
 connector's secret surface. (ADV-CTOR-002 enforces the mode↔storage pairing;
 it cannot tell whether a value is truly secret.)
 
-**Don't rely on output ordering.** `post_auth_outputs` is a map, and nothing in
-the contract declares or validates an execution order between entries. Author
-each output so it stands on its own: never write one that quietly depends on
-another having already run, and don't build a chain of outputs referencing each
-other's values.
+**Don't rely on output ordering** (`ADV-CTOR-038`). Author each output so it
+stands on its own: never write one that quietly depends on another having
+already run, and don't build a chain of outputs referencing each other's
+values.
 
 ## Cross-input validation (`validation`)
 

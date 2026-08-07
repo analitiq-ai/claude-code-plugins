@@ -10,9 +10,8 @@ This skill is loaded by `api-connector-creator` when authoring an API
 connector. It carries the API-specific vocabulary and examples needed to
 populate `transports`, `auth`, `connection_contract`, and
 `resource_discovery` for `kind: "api"`, plus the standalone
-`type-map-read.json` shipped alongside the connector. API connectors
-ship no write map and no package files — those are database-connector
-artifacts.
+`type-map-read.json` shipped alongside the connector — an API connector's
+release carries nothing else (`ADV-CTOR-043`).
 
 ## Required reading (load on demand)
 

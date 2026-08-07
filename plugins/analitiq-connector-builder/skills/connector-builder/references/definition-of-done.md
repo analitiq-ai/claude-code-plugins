@@ -25,8 +25,7 @@ shared core.
   `transport_type` match the provider's *actual* documented behavior —
   not merely a schema-valid value. (The validator checks the value is
   in-enum; it cannot check it is the right one.)
-- [ ] **`connector_id` is the intended stable slug** and matches the
-  on-disk `{connector_id}/` directory the orchestrator will write. (The
+- [ ] **`connector_id` is the intended stable slug** (`ADV-CTOR-042`). (The
   schema checks the slug pattern, not that it is the slug the
   user/provider actually means.)
 - [ ] **`display_name`, `description`, and `tags` are meaningful**, not
@@ -39,17 +38,16 @@ shared core.
   reference.)
 - [ ] <!-- PROBE: connector-secret-literal-undetected -->
   **No secret value is embedded as a literal** anywhere (passwords,
-  tokens, keys) — every credential is a `ref` / `template` / `function`
-  into `secrets.*`. (Nothing can tell a literal default from a leaked
-  secret.)
-- [ ] **No customer-specific value is baked into the connector** — no real
-  host, tenant id, account id, or database name. The connector declares the
-  input's shape; the connection supplies the value.
+  tokens, keys) — `ADV-SHRD-001`. (Nothing can tell a literal default from
+  a leaked secret.)
+- [ ] **No customer-specific value is baked into the connector**
+  (`ADV-CTOR-028`) — no real host, tenant id, account id, or database
+  name.
 - [ ] <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
-  **Every `function` name is in the registered catalog**
-  (`value-expressions.md` §Function catalog). Nothing validates function
-  names, so a typo or a planned-but-unregistered function ships silently and
-  fails at connect.
+  **Every `function` name is in the registered catalog** (`ADV-SHRD-007`;
+  the catalog is `value-expressions.md` §Function catalog). Nothing
+  validates function names, so a typo or a planned-but-unregistered
+  function ships silently and fails at connect.
 - [ ] <!-- PROBE: write-body-path-typo-unresolved, scope-tail-unchecked -->
   **Every ref resolves to something a declaration produces.** What the
   validator proves is exactly the measured table in `value-expressions.md`
@@ -61,15 +59,14 @@ shared core.
 - [ ] **`default_transport` is the right default**, and any
   multi-transport split (auth / discovery / api origins) reflects the
   provider's real topology.
-- [ ] **README is present** and describes what the connector connects
-  to, its auth, and any setup. (The in-plugin validator ignores README
-  entirely.)
+- [ ] **README is present** (`ADV-PKG-025`). (The in-plugin validator
+  ignores README entirely.)
 - [ ] **Both read and write land as a working unit for this system**
   (the both-directions-first-class *capability* principle) — scope was
   not cut to source-only or destination-only. This means the connector's
   read/write capability, not a write *type-map* file: an API connector
   realizes the write direction through endpoints/operations (and ships
-  no write map), a database connector through its two `pyproject.toml`
-  entry-point groups.
-- [ ] **Version is consistent**: first release → `1.0.0`; otherwise the
-  drift verdict the orchestrator computed was applied.
+  no write map), a database connector through its `pyproject.toml`
+  entry-point registrations (`ADV-PKG-008`).
+- [ ] **Version is consistent**: first release → `ADV-CTOR-032`; otherwise
+  the drift verdict the orchestrator computed was applied.

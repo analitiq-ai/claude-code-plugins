@@ -95,8 +95,8 @@ mode-level envelope (`{"mode", "outputs", …}`, plus `type_maps` in
 `create-endpoints` / `author-new-table`) — that envelope is defined in the
 agent file itself, not here.
 
-For unsupported cases (e.g., a connector kind the engine can't run),
-the creator returns:
+For unsupported cases (e.g., a connector kind the engine can't run —
+`ADV-CTOR-037`), the creator returns:
 
 <!-- illustrative -->
 ```jsonc

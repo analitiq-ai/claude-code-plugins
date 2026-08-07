@@ -97,12 +97,14 @@ import gen_contract_docs as G  # noqa: E402
 # Plugin policy (which doc shows what), not a contract fact, and asserted against
 # reality in both directions so it cannot rot.
 REQUIRED_BLOCKS = {
-    "skills/connection-spec/SKILL.md": {"fields-connection", "schema-urls"},
+    "skills/connection-spec/SKILL.md": {
+        "advisory-connection", "fields-connection", "schema-urls"},
     "skills/connection-spec/spec-envelope.md": {"secret-ref-grammar"},
     "skills/endpoint-spec/SKILL.md": {"fields-database-endpoint", "schema-urls"},
     "skills/endpoint-spec/spec-columns.md": {"advisory-endpoint", "arrow-types", "fields-column"},
     "skills/endpoint-spec/spec-database-object.md": {"endpoint-id-derivation", "fields-database-object"},
-    "skills/pipeline-builder/SKILL.md": {"enum-vocabulary"},
+    "skills/endpoint-spec/spec-type-map-gaps.md": {"advisory-type-map"},
+    "skills/pipeline-builder/SKILL.md": {"advisory-shared", "enum-vocabulary"},
     "skills/pipeline-builder/references/enum-mappers.md": {"enum-vocabulary"},
     "skills/pipeline-builder/references/identity-and-versioning.md": {"shared-vocabulary"},
     "skills/pipeline-builder/references/io-contracts.md": {"validator-ids"},

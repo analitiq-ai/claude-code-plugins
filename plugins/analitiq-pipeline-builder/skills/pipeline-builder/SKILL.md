@@ -34,9 +34,8 @@ Pick the mode from the user's intent:
   when the method is `incremental`.
 - `write_mode` (optional, default per destination capability) — for a database
   destination, a member of the write-mode vocabulary in §Closed vocabularies
-  (`upsert` additionally requires `conflict_keys`); for an API destination, one of
-  the endpoint's `operations.write` keys — drawn from the same vocabulary, but
-  which of them that endpoint declares only its own document says.
+  (`upsert` additionally requires `conflict_keys`); for an API destination, one
+  the referenced endpoint declares (`ADV-STRM-024`).
 - `schedule_type` (optional) — a member of the schedule vocabulary in
   §Closed vocabularies. Omit it and the contract's own default applies.
 - `previous_release_path` (optional) — path to the prior released directory
@@ -69,6 +68,36 @@ carries the phrasing tables — and halt rather than inventing a member:
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
 | `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | discriminated union `analitiq.contracts.stream.DatabaseWrite` (an API destination's mode is bounded by the endpoint write-key universe instead) |
 <!-- END GENERATED: enum-vocabulary -->
+
+## Registered rules for every document
+
+These bind whatever you are authoring — pipeline, stream, connection or
+database endpoint — so they are not repeated in the per-document specs. None
+of them is rejected in-process: the `Rejected by` column says what would have
+to look to catch a violation, and every one of these is something an agent
+gets wrong by writing a plausible value that validates.
+
+<!-- BEGIN GENERATED: advisory-shared -->
+| Rule | Constraint |
+|---|---|
+
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+
+| Rule | Constraint | Rejected by |
+|---|---|---|
+| `ADV-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute is declined rather than authored, even though the contract accepts the kind. | nothing here (engine-runtime) |
+| `ADV-CTOR-045` | A connector's slug names the same entity in its document, its registry repository and its on-disk directory, and never changes: rewriting a `connector_id` or a derived `endpoint_id` mints a different entity instead of editing this one. | nothing here (cross-artifact) |
+| `ADV-SHRD-001` | A credential appears in an authored document only as a reference expression into the secret scope, never as a literal value. | nothing here (authoring-choice) |
+| `ADV-SHRD-002` | A temporal field's declared Arrow type carries a zone only when a real wire sample carries one, and a `date-time` is never defaulted to zone-aware. | nothing here (authoring-choice) |
+| `ADV-SHRD-003` | Every document a plugin authors declares `$schema` with the published canonical URL, including the families whose contract leaves the field optional. | nothing here (authoring-choice) |
+| `ADV-SHRD-004` | A default the contract or the connector already declares is not copied into an authored document; a value is authored only where the user asked for one. | nothing here (authoring-choice) |
+| `ADV-SHRD-005` | An identity handle is opaque: no version, tenant, or object identity is encoded into one or parsed back out of one. | nothing here (authoring-choice) |
+| `ADV-SHRD-006` | A `${...}` placeholder appears only where the value-expression grammar resolves a `template`; every other slot takes the characters literally. | nothing here (engine-runtime) |
+| `ADV-SHRD-007` | A `function` expression names a function the engine's registry declares; a name the engine has not registered is authored nowhere, including one the docs describe as planned. | nothing here (engine-runtime) |
+| `ADV-SHRD-008` | A ref path is authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | nothing here (engine-runtime) |
+| `ADV-SHRD-009` | A value the platform can derive at connection time is declared as a `function` expression and never authored as a pre-computed literal. | nothing here (engine-runtime) |
+| `ADV-SHRD-010` | An inherited header is removed with `headers_remove`; a header whose value resolves to null or empty is not a deletion. | nothing here (engine-runtime) |
+<!-- END GENERATED: advisory-shared -->
 
 ## Required reading
 
@@ -240,12 +269,10 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    - Collect the full target identity: `{schema}.{table}`, plus
      `catalog` where the dialect uses one (for schemaless dialects
      the database travels as `catalog` and `schema` is omitted —
-     same identity rules as discovery). The target namespace must be
-     one discovery returned — whether the engine creates a missing
-     schema is dialect-owned, so a discovered namespace is the only
-     target that succeeds everywhere; halt and ask for a discovered
-     one (or a different target) instead of authoring a first run
-     that may fail.
+     same identity rules as discovery). If the target namespace is not
+     one discovery returned (`ADV-DBEP-010`), halt and ask for a
+     discovered one (or a different target) instead of authoring a
+     first run that may fail.
    - Collect the new table's `primary_keys`, suggesting the source
      endpoint's own primary keys as the default. An `upsert` write
      mode needs them as the stream's `conflict_keys`.
@@ -428,9 +455,9 @@ Report to the user:
   enforce this; pass `bundle_root: .` when validating the stitched
   pipeline.
 - Authored documents declare `$schema` with the published host
-  (the per-entity URLs are tabulated in `references/schema-hosts.md`).
-  Validation is offline and
-  model-driven — no schema is fetched. See `references/schema-hosts.md`.
+  (`ADV-SHRD-003`); the per-entity URLs are tabulated in
+  `references/schema-hosts.md`. Validation is offline and model-driven —
+  no schema is fetched.
 - The published schemas are **closed** (`additionalProperties: false`).
   Do not author unknown fields, including `x-*` extension keys.
 - Never infer undeclared behavior. If the contract does not declare a

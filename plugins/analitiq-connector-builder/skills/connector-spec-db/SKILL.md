@@ -19,8 +19,8 @@ installable Python package.
 ## Required reading (load on demand)
 
 - This skill's `spec-driver-selection.md` — the transport/driver
-  decision order (ADBC → Flight SQL → a declared bulk mechanism →
-  landing via executemany) and the sync/async dispatch constraints.
+  decision order (`ADV-CTOR-027`) and the sync/async dispatch
+  constraints.
 - This skill's `spec-dsn-bindings.md` — DSN URL templates and bindings.
 - This skill's `spec-tls.md` — TLS declaration mechanics.
 - This skill's `spec-resource-discovery.md` — schema/table enumeration at
@@ -70,4 +70,5 @@ installable Python package.
 
 - HTTP transport idioms (that's `connector-spec-api`).
 - OAuth flows or other API auth types.
-- API endpoint authoring (database connectors do not ship endpoint files).
+- API endpoint authoring (database connectors do not ship endpoint files —
+  `ADV-CTOR-044`).

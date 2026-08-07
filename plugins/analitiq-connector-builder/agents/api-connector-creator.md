@@ -68,9 +68,8 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 
 1. **Top-level metadata** — `$schema` (`https://schemas.analitiq.ai/connector/latest.json`),
    `kind: "api"`, `connector_id` (the stable connector slug — pattern in
-   `metadata-and-versioning.md`; this also names the on-disk
-   `{connector_id}/` directory), `display_name`, `description`, `tags`,
-   `version` (start at `1.0.0`).
+   `metadata-and-versioning.md`; `ADV-CTOR-042`), `display_name`,
+   `description`, `tags`, `version` (`ADV-CTOR-032`).
 2. **Transports** — populate `transports` map, `default_transport`, and
    `transport_defaults`. Use `transport_type: "http"`. For multi-origin
    providers (e.g. separate `auth` / `discovery` / `api` origins), define
@@ -94,19 +93,16 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    `{match, native, canonical}` rules) covering every `(native_type,
    arrow_type)` pair the endpoint-creator emits on typed field schemas.
    Schemaless natives (e.g. `jsonb`, `VARIANT`, MongoDB documents) map
-   to `"Json"`; endpoint authors may narrow these to `Object` / `List`
-   inline. The validator walks endpoint files and asserts every
+   to `"Json"` (`ADV-TMAP-001`); endpoint authors may narrow these to
+   `Object` / `List` inline. The validator walks endpoint files and asserts every
    `native_type` resolves through this array with a rendered canonical
    equal to the endpoint's declared `arrow_type` (`Object` / `List` are
    accepted narrowings of `Json`). The orchestrator writes this array
    to `{connector_id}/definition/type-map-read.json` and validates it
-   against `https://schemas.analitiq.ai/type-map-read/latest.json`. Regex
-   `native` patterns are matched against UPPERCASED, whitespace-collapsed
-   native strings — author them uppercase (exact rules are normalized
-   automatically; capture group names stay lowercase). API connectors
-   ship NO `type-map-write.json` — the write direction is a
-   database-package concept; return `type_map_write: null` and
-   `package_files: null`.
+   against `https://schemas.analitiq.ai/type-map-read/latest.json`. Author
+   read-side regex `native` literals uppercase (`ADV-TMAP-014`). API
+   connectors ship no write map and no package files (`ADV-CTOR-043`):
+   return `type_map_write: null` and `package_files: null`.
 
 ## Definition of Done
 
@@ -144,19 +140,18 @@ connector body) and `type_map_read` (the top-level rules array), with
 - Schema enums are **owned by the live published schema**; when prose
   and schema disagree, the schema wins — the validator enforces it.
 - Never author `created_at` / `updated_at` — those are registry-stamped.
-  `connector_id` is author-supplied and matches the on-disk directory name.
-- Never use `${...}` interpolation outside a `template` value expression.
+  `connector_id` is author-supplied.
+- Never use `${...}` interpolation outside a `template` value expression
+  (`ADV-SHRD-006`).
 - Never pre-compute base64 / SHA / signature values — use `function`
-  expressions.
+  expressions (`ADV-SHRD-009`). A baked-in signature works in your testing
+  and breaks for every other tenant.
 - Never embed DSN templates. If you find yourself reaching for one, the
   classification was wrong; report and stop.
 - Do not author endpoint files. The endpoint-creator sub-agent does that.
 - Never embed type-map rules inside `connector.json` — the connector
   schema rejects unknown fields. Emit them as the standalone
   `type_map_read` output instead.
-- Never author a write map or package files (`connector.py`,
-  `requirements.txt`, `pyproject.toml`) — those are database-connector
-  artifacts.
 
 ## Output format
 

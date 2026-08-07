@@ -77,8 +77,8 @@ The orchestrator passes:
 }
 ```
 
-If the destination kind is one the engine doesn't yet run (file / s3 / stdout),
-return a structured refusal:
+If the destination kind is one the engine doesn't yet run (file / s3 / stdout —
+`ADV-CTOR-037`), return a structured refusal:
 
 <!-- illustrative -->
 ```jsonc
@@ -102,8 +102,8 @@ return a structured refusal:
 - A `scope: "connection"` `endpoint_ref` **must** carry `database_object` (the
   verbatim `{schema, name, …}` from the endpoint document) and should carry the
   derived `endpoint_id`. A `scope: "connector"` ref carries `endpoint_id` only.
-- `scope: "connection"` is invalid for API endpoints (until snapshot hashing
-  lands). Return a structured refusal if the orchestrator asks for that.
+- `scope: "connection"` is invalid for API endpoints (`ADV-STRM-031`). Return a
+  structured refusal if the orchestrator asks for that.
 - `write.conflict_keys` is a **flat list of field names** (`["id"]` or
   `["org_id", "external_id"]`), required for a database `upsert`, forbidden for
   `insert`, for `truncate_insert`, and for API destinations.
@@ -118,8 +118,8 @@ return a structured refusal:
 - `mapping.assignments[].target.path` is the opposite: a **single segment**, no
   dots. Nesting on the destination is declared with `arrow_type: "Object"` plus
   `properties` (or `"List"` plus `items`), never with a dotted path.
-- Database-only source options (`selected_columns`, `tie_breaker_fields`,
-  `database_pagination`) are forbidden when the source is a `connector` (API) ref.
+- Database-only source options are forbidden when the source is a `connector`
+  (API) ref (`ADV-STRM-014`).
 - Do **not** author `version`, `org_id`, `created_at`, `updated_at`,
   `schema_hash`, `mapping.assignments_hash`, or any other server-managed field
   (see `references/reserved-fields.md`).

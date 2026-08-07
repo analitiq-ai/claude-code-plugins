@@ -123,8 +123,8 @@ was raised.
      map is wrong (a domain-level type-map fix, re-author + re-validate the
      domain), not the endpoint. Do not invent or guess field types — every
      type comes from the researched facts.
-     - **Temporal fields follow the sample value, never a default.** A
-       `date-time` field is *not* automatically tz-aware. Use the field's
+     - **Temporal fields follow the sample value, never a default**
+       (`ADV-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
        offset/`Z` → `Timestamp(<unit>, UTC)`. When two fields share a native
@@ -217,9 +217,7 @@ was raised.
   application/json` in `request.headers` unless the selected transport
   already provides an equivalent default. Provider-specific JSON media types
   (e.g. `application/vnd.api+json`) are allowed when the provider requires them.
-- Do not author database endpoints. Database endpoint shape is
-  connection-scoped and produced by the connector's `resource_discovery`
-  workflow at runtime, not by this sub-agent.
+- Do not author database endpoints (`ADV-DBEP-006`) — not by this sub-agent.
 
 ## Output format
 

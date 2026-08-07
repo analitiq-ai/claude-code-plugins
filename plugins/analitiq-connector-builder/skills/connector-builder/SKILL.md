@@ -18,9 +18,8 @@ writing files.
   omitted, `connector-provider-researcher` locates the provider's
   official docs via WebSearch; facts are still extracted from
   first-party documentation pages only.
-- `kind_hint` (optional) — `api` or `database`. (Storage kinds `file`,
-  `s3`, `stdout` are recognized by the schema but not yet supported by
-  the engine.)
+- `kind_hint` (optional) — `api` or `database`. Storage kinds (`file`,
+  `s3`, `stdout`) are declined; see **Hard rules**.
 - `mode` (optional) — `build` (default), `update`, or `validate`. See
   **Modes** below.
 - `connector_path` (required for `update` / `validate`) — path to the
@@ -96,9 +95,8 @@ Report to the user:
 
 ## Hard rules
 
-- The plugin authors `connector_id` (the stable connector slug, same
-  value as the on-disk `{connector_id}/` directory name). The
-  registry-stamped fields `created_at` and
+- The plugin authors `connector_id` (the stable connector slug —
+  `ADV-CTOR-042`). The registry-stamped fields `created_at` and
   `updated_at` are written by the registry on insert/update and must
   not appear in authored documents — `connector_id` is NOT in that
   set.
@@ -114,15 +112,14 @@ Report to the user:
   and fix. Your only specs are the orchestrator references
   (`pipeline.md`, `io-contracts.md`, `enum-mappers.md`, plus
   `value-expressions.md` for scope lookups).
-- All cross-cutting context references (`secrets.*`, `connection.*`,
-  `auth.*`, `runtime.*`, `stream.*`) must come from the documented
-  scopes in `references/value-expressions.md`. Unknown scope = stop and
-  ask.
-- Authored documents declare `$schema` with the published host
-  (`https://schemas.analitiq.ai/...`). The validator matches on this URL
-  offline; it does not fetch it.
-- Storage kinds (`file`, `s3`, `stdout`) currently produce a structured
-  refusal. If the user asks for one, surface the refusal note and stop.
+- Every cross-cutting context reference comes from the documented scopes
+  in `references/value-expressions.md` (`ADV-SHRD-008`). Unknown scope =
+  stop and ask.
+- Authored documents declare `$schema` (`ADV-SHRD-003`) with the
+  published host (`https://schemas.analitiq.ai/...`). The validator
+  matches on this URL offline; it does not fetch it.
+- Storage kinds produce a structured refusal (`ADV-CTOR-037`). If the
+  user asks for one, surface the refusal note and stop.
 - In `build` mode, never overwrite an existing `{connector_id}/`
   directory — the phase-0 check halts the run and asks the user to
   remove it manually. In `update` mode, regeneration replaces the

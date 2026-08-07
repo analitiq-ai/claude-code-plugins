@@ -340,8 +340,10 @@ class PipelineAuthored(StrictModel):
     streams: list[NonEmptyStr] = Field(
         default_factory=list,
         description=(
-            "Ordered list of stream references. Typically versioned stream "
-            "IDs (e.g. 'uuid_v1'); the schema accepts any non-empty string."
+            "The stream references this pipeline runs, as an unordered set — "
+            "position encodes no dependency and no execution order. Typically "
+            "versioned stream IDs (e.g. 'uuid_v1'); the schema accepts any "
+            "non-empty string."
         ),
         json_schema_extra={"uniqueItems": True},
     )

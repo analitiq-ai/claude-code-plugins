@@ -265,33 +265,99 @@ def render_filter_operators() -> str:
 
 # Advisory families this plugin is in the lane of — every one is rendered into
 # the prose by a renderer below.
-IN_SCOPE_ADVISORY_FAMILIES = ("ADV-DBEP-", "ADV-PIPE-", "ADV-RETRY-", "ADV-STRM-")
+IN_SCOPE_ADVISORY_FAMILIES = (
+    "ADV-CONN-", "ADV-DBEP-", "ADV-PIPE-", "ADV-RETRY-", "ADV-SHRD-",
+    "ADV-STRM-", "ADV-TMAP-",
+)
 
-# Families deliberately NOT rendered: they govern connector / api-endpoint
-# documents or server-side run records, none of which this plugin authors.
-# Recorded rather than merely omitted so the judgment is reviewable, and so a
-# family the contract adds later matches neither list and fails the test that
-# pins these two — forcing a decision instead of a silent omission.
+# Families deliberately NOT rendered: they govern connector or api-endpoint
+# documents, a connector's Python package, or server-side run records, none of
+# which this plugin authors. Recorded rather than merely omitted so the
+# judgment is reviewable, and so a family the contract adds later matches
+# neither list and fails the test that pins these two — forcing a decision
+# instead of a silent omission.
+#
+# Out as a FAMILY is not out entirely: a block may still borrow a named rule
+# from one (`extra_ids` above), which is how a single api-endpoint column rule
+# reaches the database-endpoint spec without dragging the family with it.
 OUT_OF_SCOPE_ADVISORY_FAMILIES = (
-    "ADV-CONN-", "ADV-CTOR-", "ADV-DSYNC-", "ADV-ENDP-", "ADV-HTTP-", "ADV-TMAP-",
+    "ADV-CTOR-", "ADV-DSYNC-", "ADV-ENDP-", "ADV-HTTP-", "ADV-PKG-",
 )
 
 
-def _advisory_block(prefixes: tuple[str, ...]) -> str:
-    from analitiq.contracts.shared.advisory import all_rules
+#: What rejects a violation, per tier — the column that keeps the second table
+#: honest. The relational tier is the only one the validator runs, and the
+#: heading above each block says so; a structural or waived rule rendered under
+#: that heading without this qualifier would claim an enforcement it does not
+#: have.
+_REJECTED_BY = {
+    "structural": "the published schema — the error names the field, not the rule",
+    "waiver": "nothing here",
+}
 
-    rules = sorted(
-        (r for r in all_rules() if r.id.startswith(prefixes)),
-        key=lambda r: r.id,
-    )
+
+def _advisory_block(
+    prefixes: tuple[str, ...],
+    *,
+    resource: str | None = None,
+    extra_ids: tuple[str, ...] = (),
+) -> str:
+    """The registry's rules for one block, all tiers.
+
+    ``resource`` narrows a family whose ids span more than one document — the
+    ``ADV-CONN-*`` family predates the convention and carries both connector
+    and connection rules, and rendering a connector rule into this plugin would
+    invite an agent to enforce it against a document it does not author.
+
+    ``extra_ids`` names individual rules from a family that is out of scope as
+    a whole. A database endpoint's columns are graded by a rule filed under the
+    api-endpoint resource because both documents share the model; the rule
+    genuinely binds here, and the family does not.
+    """
+    from analitiq.contracts.shared.advisory import RELATIONAL_TIER, all_rules
+
+    every = list(all_rules())
+    by_id = {r.id: r for r in every}
+    missing = [i for i in extra_ids if i not in by_id]
+    if missing:
+        raise RuntimeError(f"extra_ids names rules that do not exist: {missing}")
+
+    selected = [
+        r for r in every
+        if r.id.startswith(prefixes) and (resource is None or r.resource == resource)
+    ]
+    rules = sorted({r.id: r for r in selected + [by_id[i] for i in extra_ids]}.values(),
+                   key=lambda r: r.id)
     # Per-prefix, not just overall: a sibling family still matching would
     # otherwise mask one that vanished (dropping ADV-RETRY-* still leaves the
-    # four ADV-PIPE-* rules, and the block would render as if nothing were lost).
+    # ADV-PIPE-* rules, and the block would render as if nothing were lost).
     for prefix in prefixes:
         if not any(r.id.startswith(prefix) for r in rules):
             raise RuntimeError(f"no advisory rules matched {prefix!r}")
+
+    enforced = [r for r in rules if r.tier == RELATIONAL_TIER]
+    catalogued = [r for r in rules if r.tier != RELATIONAL_TIER]
+
     out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.prose)} |" for r in rules]
+    out += [f"| {_code(r.id)} | {_md_escape(r.prose)} |" for r in enforced]
+    if catalogued:
+        out += [
+            "",
+            "The registry carries these under the same ids, and they are worth "
+            "citing, but a violation does not come back as a finding — the "
+            "last column says what does reject it, and `nothing here` means "
+            "the document validates and fails later.",
+            "",
+            "| Rule | Constraint | Rejected by |",
+            "|---|---|---|",
+        ]
+        out += [
+            f"| {_code(r.id)} | {_md_escape(r.prose)} | "
+            f"{_md_escape(_REJECTED_BY[r.tier])}"
+            + (f" ({_md_escape(r.governs)})" if r.governs else "")
+            + " |"
+            for r in catalogued
+        ]
     return "\n".join(out) + "\n"
 
 
@@ -299,28 +365,68 @@ def _advisory_block(prefixes: tuple[str, ...]) -> str:
 # from here and `advisory_families_rendered()` derives its answer from the same
 # map, so the two cannot drift — a second hardcoded tuple would reintroduce
 # exactly the dead-constant defect this map exists to remove.
-_ADVISORY_BLOCK_FAMILIES: dict[str, tuple[str, ...]] = {
-    "advisory-pipeline": ("ADV-PIPE-", "ADV-RETRY-"),
-    "advisory-stream": ("ADV-STRM-",),
-    "advisory-endpoint": ("ADV-DBEP-",),
+_ADVISORY_BLOCKS: dict[str, dict] = {
+    "advisory-pipeline": {"prefixes": ("ADV-PIPE-", "ADV-RETRY-")},
+    "advisory-stream": {"prefixes": ("ADV-STRM-",)},
+    # `ADV-ENDP-021` grades a column's arrow_type against its container shape.
+    # It is filed under the api-endpoint resource because both documents share
+    # the `Column` model; a database endpoint is graded by it all the same.
+    "advisory-endpoint": {"prefixes": ("ADV-DBEP-",), "extra_ids": ("ADV-ENDP-021",)},
+    # The ADV-CONN-* family predates the id-prefix-names-the-resource
+    # convention and still carries three connector rules; narrow to the
+    # document this plugin authors.
+    "advisory-connection": {"prefixes": ("ADV-CONN-",), "resource": "connection"},
+    "advisory-type-map": {"prefixes": ("ADV-TMAP-",)},
+    # Not tied to one document family: these bind every artifact the plugin
+    # authors, so they render once in the orchestrator skill rather than being
+    # copied into each spec. The two connector rules ride along because this
+    # plugin authors *against* a connector it downloads — one bounds what it
+    # will build at all, the other what a connector's slug may be assumed to
+    # mean.
+    "advisory-shared": {
+        "prefixes": ("ADV-SHRD-",),
+        "extra_ids": ("ADV-CTOR-037", "ADV-CTOR-045"),
+    },
 }
 
 
 def advisory_families_rendered() -> tuple[str, ...]:
-    """Every family the advisory renderers actually emit, derived not restated."""
-    return tuple(sorted({f for fams in _ADVISORY_BLOCK_FAMILIES.values() for f in fams}))
+    """Every family the advisory renderers emit WHOLE, derived not restated.
+
+    ``extra_ids`` are deliberately excluded: naming one rule out of a family is
+    the opposite of claiming the family, and folding them in here would let a
+    single borrowed id mark a whole family as in scope.
+    """
+    return tuple(sorted({f for b in _ADVISORY_BLOCKS.values() for f in b["prefixes"]}))
+
+
+def _render_block(block_id: str) -> str:
+    spec = dict(_ADVISORY_BLOCKS[block_id])
+    return _advisory_block(spec.pop("prefixes"), **spec)
 
 
 def render_advisory_pipeline() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-pipeline"])
+    return _render_block("advisory-pipeline")
 
 
 def render_advisory_stream() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-stream"])
+    return _render_block("advisory-stream")
 
 
 def render_advisory_endpoint() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-endpoint"])
+    return _render_block("advisory-endpoint")
+
+
+def render_advisory_connection() -> str:
+    return _render_block("advisory-connection")
+
+
+def render_advisory_type_map() -> str:
+    return _render_block("advisory-type-map")
+
+
+def render_advisory_shared() -> str:
+    return _render_block("advisory-shared")
 
 
 def render_validator_ids() -> str:
@@ -794,6 +900,9 @@ RENDERERS = {
     "advisory-pipeline": render_advisory_pipeline,
     "advisory-stream": render_advisory_stream,
     "advisory-endpoint": render_advisory_endpoint,
+    "advisory-connection": render_advisory_connection,
+    "advisory-type-map": render_advisory_type_map,
+    "advisory-shared": render_advisory_shared,
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,
