@@ -58,6 +58,33 @@ def test_advisory_reference_is_in_sync() -> None:
     )
 
 
+def test_every_table_line_closes_its_own_row() -> None:
+    """A cell carrying a raw newline splits its row, and markdown stops parsing.
+
+    Every `statement` is a YAML folded scalar, so it reaches the renderer with a
+    trailing newline. Written into a cell verbatim it ends the row early: the id
+    stays on one line and severity, enforcement and values orphan onto the next,
+    which renders as body text rather than a table. The rule is still *in* the
+    file, so a citation resolves and the agent reading it learns nothing.
+
+    Checked on the generated file rather than on `_cell`, because the defect is
+    a property of the emitted row: any cell — a statement, a live value list, a
+    validator symbol — can carry the newline that causes it.
+    """
+    rendered = _load_renderer().OUTPUT_PATH.read_text(encoding="utf-8")
+    unclosed = [
+        (n, line)
+        for n, line in enumerate(rendered.splitlines(), 1)
+        if line.lstrip().startswith("|") and not line.rstrip().endswith("|")
+    ]
+    assert not unclosed, (
+        "these lines open a markdown table row and never close it, so the "
+        f"columns after them are orphaned onto the next line: {unclosed}. A "
+        "cell reached the row with a newline in it — flatten it in "
+        "`render_advisory._cell`, not at the call site."
+    )
+
+
 def test_reference_covers_only_authored_resources() -> None:
     """The reference must not leak rules for documents this plugin never authors.
 

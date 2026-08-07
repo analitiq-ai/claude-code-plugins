@@ -211,8 +211,20 @@ def _applied_by(rule) -> str:
 
 
 def _cell(text: str) -> str:
-    """Markdown table cells cannot carry a bare pipe."""
-    return text.replace("|", "\\|")
+    """Flatten a value into something a markdown table cell can hold.
+
+    Two hazards, and the second is the one that bites. A bare `|` ends the cell.
+    A newline ends the *row*: every `statement` is authored as a YAML folded
+    scalar, so each one arrives with a trailing newline, and a row built from it
+    verbatim splits across two lines — the id on the first, every remaining
+    column orphaned on the second. The table stops rendering and each rule's
+    severity and enforcement detach from the rule.
+
+    `split()` on arbitrary whitespace collapses runs as well, which is what the
+    fold already did to the interior of the scalar; doing it here means a record
+    reformatted across different line widths renders identically.
+    """
+    return " ".join(text.replace("|", "\\|").split())
 
 
 def _table(header: str, rows: list[str]) -> list[str]:

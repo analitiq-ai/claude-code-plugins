@@ -43,10 +43,16 @@ PLUGINS = REPO_ROOT / "plugins"
 #: A citation anywhere in the prose.
 CITED = re.compile(r"ADV-[A-Z]+-\d+")
 
-#: A rendered row: the id in a markdown table's first cell. This is what an
-#: agent can actually read the rule off — an id merely mentioned in another
-#: rule's text resolves nothing.
-RENDERED_ROW = re.compile(r"^\|\s*`?(ADV-[A-Z]+-\d+)`?\s*\|")
+#: A rendered row: the id in a markdown table's first cell, and the row closed
+#: on the same line. This is what an agent can actually read the rule off — an
+#: id merely mentioned in another rule's text resolves nothing, and neither does
+#: a row whose remaining cells landed on the next line.
+#:
+#: The closing `|` is load-bearing, not decoration. A cell carrying a raw
+#: newline splits the row in two: the id stays on the first line and severity,
+#: enforcement and values orphan onto the second, where markdown renders neither
+#: as a table. Matching only the id would call that row readable.
+RENDERED_ROW = re.compile(r"^\|\s*`?(ADV-[A-Z]+-\d+)`?\s*\|.*\|\s*$")
 
 
 def _scan(plugin: Path) -> tuple[dict[str, set[str]], set[str]]:
