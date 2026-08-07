@@ -250,26 +250,14 @@ class TestOriginContainmentGapIsRecorded:
     `default_transport`, pins the read path to that single origin and has no
     write-path origin guard at all.
 
-    This is that record, pinned through the connector-anchored walk, which is
-    where an origin check would have to live for the same reason the NAME half
-    does — origins are declared on the connector and consumed by the endpoint.
-    Three documents are recorded because a closure need not refuse all three.
-    The first two differ in what the document bounds the URL by; the third
-    repeats the second on the operation leg a read-only closure never reaches:
-
-    * A next-page link read out of the response body: the document bounds that
-      URL by no origin. A rule requiring every produced URL to land on a
-      declared origin refuses it — unless it skips what is statically
-      unknowable, the way the contract's `UNKNOWABLE_SKIP` convention treats an
-      authored path it cannot resolve. Skipped rather than refused, this record
-      stays green for a new reason and must be re-graded by hand.
-    * A read request selected onto a declared transport the engine never opens.
-      A rule pinned to the single session `default_transport` opens refuses it;
-      the closure the description states as its intent — an origin rule over
-      ANY declared transport, plus per-operation selection — makes the document
-      correct instead, and then the record is retired rather than reddened.
-    * The same selection on the write path, which the read path's origin
-      pinning does not cover and which no separate guard covers either.
+    Each test below asserts the CURRENT behaviour, not the desired one: a
+    document the ORIGIN half would refuse, accepted. They run through the
+    connector-anchored walk, which is where an origin check would have to live
+    for the same reason the NAME half does — origins are declared on the
+    connector and consumed by the endpoint. Three documents, because they reach
+    the walk by different legs and a check need not cover all three: a read
+    request, a write request, and a next-page URL the document takes from the
+    response body.
 
     Each asserts on EVERY error the walk emits, not on `endpoint-transport-ref`
     alone: the NAME half already owns that id, so an origin rule arriving under
@@ -293,14 +281,13 @@ class TestOriginContainmentGapIsRecorded:
     def test_a_second_origin_is_accepted_because_nothing_checks_origins(
         self, tmp_path, connector_base, validator
     ):
-        # Records the CURRENT behaviour, not the desired one. The connector
-        # declares a second transport on its own origin, and the endpoint
-        # DECLARES dispatch through it rather than through `default_transport`.
-        # The NAME half is satisfied — `cdn` is declared — so the document
-        # states an origin nothing can currently reach, and it validates clean:
-        # the engine opens one session from `default_transport` and no
-        # production call site selects a transport per operation. The ref is
-        # read here only to grade the name.
+        # The connector declares a second transport on its own origin, and the
+        # endpoint DECLARES dispatch through it rather than through
+        # `default_transport`. The NAME half is satisfied — the transport is
+        # declared — so the document states an origin nothing can currently
+        # reach, and it validates clean: the engine opens one session from
+        # `default_transport` and no production call site selects a transport
+        # per operation. The ref is read here only to grade the name.
         _declare_second_origin(connector_base)
         findings = _run(
             tmp_path,
@@ -328,12 +315,9 @@ class TestOriginContainmentGapIsRecorded:
     def test_a_response_driven_next_url_is_accepted_because_nothing_checks_origins(
         self, tmp_path, connector_base, validator
     ):
-        # The other direction: the next-page URL is read out of the response
-        # body, so the document bounds it by no origin at all — which is why
+        # The next-page URL is read out of the response body, so the document
+        # bounds it by no origin at all — which is why
         # `pagination.link.next_url` is named in the description's ORIGIN half.
-        # An origin rule refuses this document unless it skips what is
-        # statically unknowable, in which case this record stays green for a
-        # new reason and must be re-graded by hand.
         endpoint = _read_endpoint(DECLARED_TRANSPORT)
         read = endpoint["operations"]["read"]
         read["pagination"] = {
