@@ -1,0 +1,29 @@
+id: ADV-ENDP-026
+statement: >
+  Every `$ref` in an embedded response or input schema MUST be an
+  in-document pointer that resolves to a schema node in the same document,
+  and the schema MUST NOT use a keyword that retargets the base URI or
+  defers a reference to evaluation time.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate"
+owners: [connector-plugin, engine]
+data:
+  targets: [ResponseExtraction, WriteInput]
+  kind: custom
+rationale: >
+  Everything on the path that reads an embedded schema runs offline — the
+  validator by design, the engine when it resolves an endpoint, the
+  conformance kit when it executes a read — so a reference out of the
+  document is never followed by anything that could object to it. The
+  subtree behind it is not annotation-checked, not covered by a type map,
+  and not reported; the author is told nothing. A dangling local pointer
+  fails the same way while looking safer, because a reference to nothing
+  asserts nothing and every instance satisfies it. Closing all of those is
+  also what makes it safe for declared-path resolution to follow a `$ref`
+  at all: by the time a path is resolved, every reference it can meet is
+  local, real, and lands on a node both structural walkers visited.
+status: active
+superseded_by: null

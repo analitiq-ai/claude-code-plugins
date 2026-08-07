@@ -50,7 +50,7 @@ from analitiq.contracts.endpoints import (
     resolve_read_record_schema,
     resolve_schema_ref,
 )
-from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
+from analitiq.contracts.shared.advisory import all_rules
 
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -421,13 +421,15 @@ class TestAdvisoryRegistration:
         # Look the rule up by id rather than `next(...)`: an unregistered rule
         # is the failure this test exists to catch, and a KeyError on a dict
         # names it, where a bare StopIteration does not.
-        rules = {rule.id: rule for rule in ADVISORY_RULES}
+        rules = {rule.id: rule for rule in all_rules()}
         assert "ADV-ENDP-026" in rules, "ADV-ENDP-026 is not registered"
         rule = rules["ADV-ENDP-026"]
         assert set(rule.targets) == {"ResponseExtraction", "WriteInput"}
-        # One enforcer name must exist on every target.
-        assert hasattr(ResponseExtraction, rule.enforcer)
-        assert hasattr(WriteInput, rule.enforcer)
+        # The record's `validator` binds one symbol; the same method name must
+        # exist on every target, since the rule runs on each.
+        enforcer = rule.validator_symbol.split(".")[-1]
+        assert hasattr(ResponseExtraction, enforcer)
+        assert hasattr(WriteInput, enforcer)
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,27 @@
+id: ADV-STRM-002
+statement: >
+  Each assignment in a mapping MUST own a destination path no other
+  assignment in that mapping writes.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by"
+owners: [pipeline-plugin]
+data:
+  targets: [StreamMapping]
+  fields: [assignments]
+  options:
+    key: [target.path]
+  kind: unique_by
+rationale: >
+  Two assignments writing one destination field leave the value decided by
+  array position rather than by anything the author declared, and the
+  registry expands and hashes the assignment list, so the same document
+  would hash to a mapping nobody chose. Authors reach for a second
+  assignment on the same path when they want to reach inside a container
+  target; the contract answers that with the target's own nested
+  declaration, so the duplicate is always the wrong shape rather than a
+  missing feature.
+status: active
+superseded_by: null

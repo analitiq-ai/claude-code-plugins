@@ -1,0 +1,27 @@
+id: ADV-DBEP-002
+statement: >
+  Where a database endpoint's columns carry an ordinal position, each column's
+  MUST differ from every other's.
+tier: advisory
+severity: error
+scope: database-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by"
+owners: [pipeline-plugin, engine]
+data:
+  targets: [DatabaseEndpointDoc]
+  fields: [columns]
+  options:
+    key: [ordinal_position]
+    skip_null: true
+  kind: unique_by
+rationale: >
+  The ordinal is what canonicalises column order for the server-managed schema
+  hash, so columns claiming the same position leave that order ambiguous and
+  let the hash move for a document that did not change — which reads as schema
+  drift on an object that never drifted, and drift is the signal a user is
+  meant to act on. Schemaless sources expose no ordinal at all and simply omit
+  the field, which is why the rule binds where the value is present instead of
+  requiring one.
+status: active
+superseded_by: null

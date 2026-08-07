@@ -1,0 +1,24 @@
+id: ADV-CTOR-041
+statement: >
+  A capability fact the provider's own documentation does not establish MUST
+  be left undeclared and reported as a research gap, and MUST NOT be inferred
+  from a similar or wire-compatible system.
+tier: procedural
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [SqlCapabilities]
+rationale: >
+  Wire compatibility invites the inference and does not support it: a system
+  reachable over another system's protocol routinely differs in exactly the
+  facts declared here, and because the engine trusts the declaration rather
+  than probing, a borrowed value becomes wrong SQL against a real database
+  instead of a refusal the user can read. An inferred value is a well-formed
+  declaration indistinguishable from a researched one, so catching it means
+  going back to the vendor's documentation fact by fact — which is why the
+  gap is reported rather than quietly filled.
+status: active
+superseded_by: null

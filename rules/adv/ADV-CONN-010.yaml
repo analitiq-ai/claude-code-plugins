@@ -1,0 +1,25 @@
+id: ADV-CONN-010
+statement: >
+  A `sidecar:` pointer MUST name an entry in a credentials file keyed by
+  connection-contract input name, never a key of the env-var-keyed template the
+  plugin emits.
+tier: referential
+severity: error
+scope: connection
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [ConnectionAuthored, ConnectionInput]
+rationale: >
+  The plugin's credentials template and a sidecar credentials file look alike
+  and resolve nothing alike. The template is keyed by env-var name and is read
+  by nothing — the user exports it, and `env:` pointers pick the values up out
+  of the environment — while a sidecar file is read by the engine directly and
+  keyed by the same contract input name that keys `secret_refs`. Alone among
+  the pointer schemes, `sidecar:` constrains nothing after its prefix, so a
+  pointer aimed at the wrong file validates cleanly and fails only when the
+  engine resolves it at connect time, with an error about a missing entry
+  rather than a mismatched file.
+status: active
+superseded_by: null

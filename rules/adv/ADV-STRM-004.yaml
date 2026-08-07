@@ -1,0 +1,21 @@
+id: ADV-STRM-004
+statement: >
+  A filter MUST carry a value unless its operator takes no operand, and an
+  operator that takes none MUST NOT carry one.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::Filter._validate_value_presence"
+owners: [pipeline-plugin]
+data:
+  targets: [Filter]
+  kind: custom
+rationale: >
+  A value beside an operand-free operator is dead weight the engine never
+  reads, so the author believes a predicate is narrowing the read when
+  nothing is; the reverse leaves a predicate with nothing to compare
+  against. The operator alone decides this — there is no separate flag —
+  which is why it is checked at the filter rather than left to the endpoint.
+status: active
+superseded_by: null

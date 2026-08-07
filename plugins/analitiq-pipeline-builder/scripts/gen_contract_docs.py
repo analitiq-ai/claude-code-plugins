@@ -285,15 +285,19 @@ OUT_OF_SCOPE_ADVISORY_FAMILIES = (
 )
 
 
-#: What rejects a violation, per tier — the column that keeps the second table
-#: honest. The relational tier is the only one the validator runs, and the
-#: heading above each block says so; a structural or waived rule rendered under
-#: that heading without this qualifier would claim an enforcement it does not
-#: have.
-_REJECTED_BY = {
-    "structural": "the published schema — the error names the field, not the rule",
-    "waiver": "nothing here",
-}
+#: What applies a rule, for the second table's last column — the thing that
+#: keeps it honest. The heading above each block says the validator enforces
+#: these, which is true only of the `advisory` tier; every other tier rendered
+#: under it needs to say what does, and `nothing here` is the answer a reader
+#: most needs.
+def _applied_by(rule) -> str:
+    if not rule.validator:
+        return "nothing here"
+    if rule.validator.endswith(".md"):
+        return f"the agent rule `{rule.validator}`"
+    if rule.tier == "structural":
+        return "the published schema — the error names the field, not the rule"
+    return f"`{rule.validator_symbol}`"
 
 
 def _advisory_block(
@@ -314,7 +318,8 @@ def _advisory_block(
     api-endpoint resource because both documents share the model; the rule
     genuinely binds here, and the family does not.
     """
-    from analitiq.contracts.shared.advisory import RELATIONAL_TIER, all_rules
+    from analitiq.contracts.shared.advisory import all_rules
+    from analitiq.contracts.shared.rule_record import ADVISORY_TIER
 
     every = list(all_rules())
     by_id = {r.id: r for r in every}
@@ -324,7 +329,7 @@ def _advisory_block(
 
     selected = [
         r for r in every
-        if r.id.startswith(prefixes) and (resource is None or r.resource == resource)
+        if r.id.startswith(prefixes) and (resource is None or r.scope == resource)
     ]
     rules = sorted({r.id: r for r in selected + [by_id[i] for i in extra_ids]}.values(),
                    key=lambda r: r.id)
@@ -335,27 +340,25 @@ def _advisory_block(
         if not any(r.id.startswith(prefix) for r in rules):
             raise RuntimeError(f"no advisory rules matched {prefix!r}")
 
-    enforced = [r for r in rules if r.tier == RELATIONAL_TIER]
-    catalogued = [r for r in rules if r.tier != RELATIONAL_TIER]
+    enforced = [r for r in rules if r.tier == ADVISORY_TIER]
+    catalogued = [r for r in rules if r.tier != ADVISORY_TIER]
 
     out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.prose)} |" for r in enforced]
+    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in enforced]
     if catalogued:
         out += [
             "",
             "The registry carries these under the same ids, and they are worth "
             "citing, but a violation does not come back as a finding — the "
-            "last column says what does reject it, and `nothing here` means "
+            "last column says what does apply it, and `nothing here` means "
             "the document validates and fails later.",
             "",
-            "| Rule | Constraint | Rejected by |",
-            "|---|---|---|",
+            "| Rule | Constraint | Tier | Applied by |",
+            "|---|---|---|---|",
         ]
         out += [
-            f"| {_code(r.id)} | {_md_escape(r.prose)} | "
-            f"{_md_escape(_REJECTED_BY[r.tier])}"
-            + (f" ({_md_escape(r.governs)})" if r.governs else "")
-            + " |"
+            f"| {_code(r.id)} | {_md_escape(r.statement)} | {r.tier} | "
+            f"{_md_escape(_applied_by(r))} |"
             for r in catalogued
         ]
     return "\n".join(out) + "\n"

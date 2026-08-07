@@ -163,20 +163,20 @@ The registry's database-endpoint rules over this array:
 <!-- BEGIN GENERATED: advisory-endpoint -->
 | Rule | Constraint |
 |---|---|
-| `ADV-DBEP-001` | columns[].name must be unique. |
-| `ADV-DBEP-002` | columns[].ordinal_position must be unique where present. |
-| `ADV-DBEP-003` | primary_keys must reference declared columns[].name. |
-| `ADV-ENDP-021` | A column's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
+| `ADV-DBEP-001` | Every column a database endpoint declares MUST carry a name no other column in that document repeats.  |
+| `ADV-DBEP-002` | Where a database endpoint's columns carry an ordinal position, each column's MUST differ from every other's.  |
+| `ADV-DBEP-003` | Every name in a database endpoint's `primary_keys` MUST name a column the same document declares.  |
+| `ADV-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker.  |
 
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
 
-| Rule | Constraint | Rejected by |
-|---|---|---|
-| `ADV-DBEP-004` | A column's frozen `arrow_type` and `native_type` are the values the type maps render for it, not a re-derivation; judgment supplies a value only for a native or canonical no map covers. | nothing here (engine-runtime) |
-| `ADV-DBEP-005` | A discovered object records every namespace level its system actually has and invents none it lacks, so `catalog` comes back populated where the system has one and absent where it does not. | nothing here (engine-runtime) |
-| `ADV-DBEP-006` | A database endpoint document is produced by the connector's `resource_discovery` at connection time and is never authored into a connector release. | nothing here (engine-runtime) |
-| `ADV-DBEP-007` | A derived `endpoint_id` is an opaque lookup handle: database identity is read from `database_object` and never parsed back out of the handle. | nothing here (engine-runtime) |
-| `ADV-DBEP-008` | An authored endpoint declares no column the engine synthesises at table creation, and drops such columns from a mirrored source's column list. | nothing here (engine-runtime) |
-| `ADV-DBEP-009` | A database endpoint records every provider identifier exactly as the source reports it, with no case-folding, quoting or other normalization. | nothing here (cross-artifact) |
-| `ADV-DBEP-010` | A new-table database endpoint targets a namespace that discovery returned. | nothing here (cross-artifact) |
+| Rule | Constraint | Tier | Applied by |
+|---|---|---|---|
+| `ADV-DBEP-004` | A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical.  | referential | nothing here |
+| `ADV-DBEP-005` | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks.  | judgment | nothing here |
+| `ADV-DBEP-006` | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time.  | procedural | nothing here |
+| `ADV-DBEP-007` | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from.  | procedural | nothing here |
+| `ADV-DBEP-008` | An authored endpoint MUST NOT declare a column the engine synthesises when it creates a table, and MUST drop such a column from a mirrored source's column list.  | procedural | nothing here |
+| `ADV-DBEP-009` | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation.  | referential | nothing here |
+| `ADV-DBEP-010` | A database endpoint for a table that does not exist yet MUST target a namespace discovery returned.  | referential | nothing here |
 <!-- END GENERATED: advisory-endpoint -->

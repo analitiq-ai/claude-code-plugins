@@ -1,0 +1,26 @@
+id: ADV-CTOR-016
+statement: >
+  An ADBC transport's `driver` MUST name a member of the closed vocabulary the
+  contract declares for it; a driver the vocabulary does not name cannot be
+  declared at all.
+tier: structural
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport.driver"
+owners: [engine, connector-plugin]
+data:
+  targets: [AdbcTransport]
+  fields: [driver]
+  mechanism: literal_enum
+rationale: >
+  The driver name selects the ADBC backend the runtime loads, so it is not free
+  text the way a SQLAlchemy `dialect+driver` string is — an unrecognised name
+  has no library behind it and the connection dies at load. The vocabulary is
+  closed rather than advisory because a backend is a capability the runtime has
+  to ship first: opening it here would only let a connector declare a transport
+  nothing can execute. Since the model's own shape carries this, the rejection
+  names the field rather than this rule, which is what prose citing the id has
+  to say.
+status: active
+superseded_by: null

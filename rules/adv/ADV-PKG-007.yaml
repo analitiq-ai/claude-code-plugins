@@ -1,0 +1,24 @@
+id: ADV-PKG-007
+statement: >
+  Every name in a database connector's `pyproject.toml` MUST derive from
+  its `connector_id`: the distribution `analitiq-connector-{connector_id}`,
+  the importable package `analitiq_connector_{connector_id}` mapped to the
+  repository root, and the entry-point name `{connector_id}` the engine
+  resolves.
+tier: referential
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  `connector_id` is the connector's identity, and the engine reaches the
+  class by looking that exact name up among the installed entry points, so
+  a name that merely disagrees with the sibling `connector.json` builds a
+  clean wheel and fails only when a run tries to resolve the connector. The
+  derivation lives in TOML no contract model reads; registry CI's wheel
+  build catches a broken package mapping, but it has nothing to compare a
+  distribution or entry-point name against.
+status: active
+superseded_by: null

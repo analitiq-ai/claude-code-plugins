@@ -1,0 +1,23 @@
+id: ADV-CTOR-034
+statement: >
+  A DSN binding's `value` MUST resolve to the unencoded value, because the
+  binding's declared `encoding` is applied once, by the runtime, when the
+  DSN is rendered.
+tier: advisory
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [DsnBinding]
+rationale: >
+  Pre-encoding is the instinct of anyone who has hand-built a DSN, and it
+  fails in the most expensive way: the double-encoded DSN is still
+  well-formed, so the connection is attempted and rejected as a bad
+  credential rather than as a malformed URL, sending the author after the
+  secret instead of the binding. A pre-encoded value is also a perfectly
+  well-formed value expression, so nothing here can see it — the second
+  encoding exists only in the DSN the runtime renders at connection time.
+status: active
+superseded_by: null

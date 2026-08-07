@@ -1,0 +1,25 @@
+id: ADV-ENDP-044
+statement: >
+  A keyset pagination block MUST omit `initial` when there is no first-page key,
+  and MUST NOT spell that absence as an explicit null.
+tier: structural
+severity: warning
+scope: api-endpoint
+mechanized: false
+validator: null
+owners: [connector-plugin]
+data:
+  targets: [Keyset]
+rationale: >
+  Omission is how the block says "send no keyset on the first request"; a null
+  is a value, so a document writing one is claiming a first-page key that
+  happens to be null. Today the two behave alike, which is exactly why it goes
+  unnoticed and why it is not yet a broken run — but the document has lost the
+  distinction, and it stays lost until something needs it: a provider whose
+  first key genuinely is null, or a stricter reading of the field. Nothing
+  catches it: `Keyset.initial` admits null as an ordinary value, so the refusal
+  ADV-ENDP-031 makes for namespace fields has no counterpart here, and seeing
+  the mistake means reading the pagination block knowing that omission is the
+  intended spelling.
+status: active
+superseded_by: null

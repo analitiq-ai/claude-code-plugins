@@ -1,0 +1,25 @@
+id: ADV-ENDP-025
+statement: >
+  A write mode MUST NOT declare both a `from_input` path_params binding and
+  `batching`.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
+owners: [connector-plugin, engine]
+data:
+  targets: [WriteOperation]
+  kind: custom
+rationale: >
+  A batched request carries many records and one URL, so there is no single
+  record for the path segment to come from; whichever record the engine
+  happened to pick would send every other record in the batch to the wrong
+  resource. An update-by-id route is per-record by nature, and an author
+  adding batching to it is usually reaching for throughput that route
+  cannot give — the bulk route a provider offers alongside it is a separate
+  mode with its own path. Batching is a property of the write mode rather
+  than of the request, so this is the innermost scope that can see both
+  halves.
+status: active
+superseded_by: null

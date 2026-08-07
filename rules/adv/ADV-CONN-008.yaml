@@ -1,0 +1,24 @@
+id: ADV-CONN-008
+statement: >
+  A connection selecting a TLS mode that verifies the server certificate MUST
+  also supply the CA material the connector declares an input for.
+tier: referential
+severity: error
+scope: connection
+mechanized: false
+validator: null
+owners: [pipeline-plugin, connector-plugin]
+data:
+  targets: [ConnectionAuthored, ConnectionInput]
+rationale: >
+  The mode vocabulary and the CA input are both declared on the connector, and
+  the pairing spans separate keys of an untyped map, so the connection on its
+  own cannot be judged — and judging a mode means reading what the connector
+  says it does, not recognising a familiar spelling. It is an error rather than
+  a warning because the good case is the dangerous one: a driver handed a
+  verifying mode with no CA material may fall back to the host's trust store
+  and verify against whatever certificates happen to be installed there, which
+  is not the guarantee the user selected the mode for and looks entirely
+  healthy, while another driver simply refuses to connect.
+status: active
+superseded_by: null

@@ -1,0 +1,27 @@
+id: ADV-CTOR-021
+statement: >
+  A connection-contract input MUST state how it is provisioned, when in the
+  connection lifecycle it is provisioned, where its resolved value is durably
+  stored and what value type it carries using only the vocabulary
+  `ConnectionContractInput` declares for each.
+tier: structural
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput.source"
+owners: [connector-plugin, engine]
+data:
+  targets: [ConnectionContractInput]
+  fields: [source, phase, storage, type]
+  mechanism: literal_enum
+rationale: >
+  Every one of these vocabularies is engine behaviour rather than
+  documentation: the storage value picks which store materialises the value at
+  connect time and is the prefix of the reference path other documents target,
+  the phase value picks when the platform collects it, and the type value
+  drives coercion. A value outside the vocabulary has nowhere to land, so an
+  invented one would produce refs that resolve to nothing at connect — the
+  field's own closed set moves that failure to authoring time and into the
+  published JSON Schema.
+status: active
+superseded_by: null

@@ -103,39 +103,39 @@ each one's stable id in the finding message, so a failure like
 <!-- BEGIN GENERATED: advisory-stream -->
 | Rule | Constraint |
 |---|---|
-| `ADV-STRM-001` | destinations must be unique by (endpoint_ref.scope, endpoint_ref.connection_id, endpoint_ref.endpoint_id). |
-| `ADV-STRM-002` | mapping.assignments[].target.path must be unique within the mapping. |
-| `ADV-STRM-003` | A supplied endpoint_id must equal derive_db_endpoint_id(database_object). |
-| `ADV-STRM-004` | A unary filter operator (is_null/is_not_null) must omit value; every other operator requires it. |
-| `ADV-STRM-005` | A pipe expression must start with a get step and be followed only by fn steps. |
-| `ADV-STRM-006` | An arrow field's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
-| `ADV-STRM-007` | constant.value's JSON kind must match arrow_type, and the Object/List/scalar container shape rule applies. |
-| `ADV-STRM-009` | A validation rule requires value for value-taking types and omits it for required/not_null. |
-| `ADV-STRM-010` | An assignment target's arrow_type must match its container shape: Object declares properties, List declares items, scalars neither. |
-| `ADV-STRM-012` | A filter operator must belong to the source scope's vocabulary: the database operator set for a connection source, the API operator set for a connector source. |
-| `ADV-STRM-014` | selected_columns, replication.tie_breaker_fields and database_pagination are database-source features: a connector-scope (API) source must not declare them. |
-| `ADV-STRM-015` | A validation rule's field must resolve against the mapping's assignment targets: its first token names a declared target.path and each later token names a field declared under that target's properties. |
+| `ADV-STRM-001` | Each entry in a stream's destinations MUST address an endpoint no other entry addresses.  |
+| `ADV-STRM-002` | Each assignment in a mapping MUST own a destination path no other assignment in that mapping writes.  |
+| `ADV-STRM-003` | A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces.  |
+| `ADV-STRM-004` | A filter MUST carry a value unless its operator takes no operand, and an operator that takes none MUST NOT carry one.  |
+| `ADV-STRM-005` | A pipe expression's arguments MUST begin with the source-read node that seeds it and continue only with conversion stages applied left to right.  |
+| `ADV-STRM-006` | An arrow field spec MUST declare the inner shape its arrow_type calls for and no other: a container marker carries its own inner declaration, and any other type carries none.  |
+| `ADV-STRM-007` | A constant MUST carry a value of the JSON kind its declared arrow_type admits, and MUST declare the inner shape that type calls for and no other.  |
+| `ADV-STRM-009` | A validation rule MUST carry a value when its type takes a parameter, and MUST omit one when its type takes none.  |
+| `ADV-STRM-010` | An assignment target MUST declare the inner shape its arrow_type calls for and no other: a container marker carries its own inner declaration, and any other type carries none.  |
+| `ADV-STRM-012` | A filter's operator MUST belong to the operator vocabulary of the scope its source endpoint reference declares.  |
+| `ADV-STRM-014` | A stream source bound to a connector-scoped endpoint MUST NOT declare any read feature the source model reserves for database sources.  |
+| `ADV-STRM-015` | A validation rule's field MUST resolve within its own mapping: the first token naming an assignment target the mapping declares, and each later token a field declared beneath the one before it.  |
+| `ADV-STRM-021` | A validation rule's value MUST carry the payload shape its type requires.  |
 
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
 
-| Rule | Constraint | Rejected by |
-|---|---|---|
-| `ADV-STRM-016` | A stream destination's `write.mode` selects the write shape, and only the conflict-keyed database shape declares `conflict_keys` — every other shape has no such field to set. | the published schema — the error names the field, not the rule |
-| `ADV-STRM-017` | A stream's `replication.method` selects the replication branch, and the branch decides which further fields the block declares. | the published schema — the error names the field, not the rule |
-| `ADV-STRM-018` | A connection-scoped `endpoint_ref` carries the derived `endpoint_id` whenever the plugin can compute it, so the cross-document bundle check can resolve the reference. | nothing here (authoring-choice) |
-| `ADV-STRM-019` | A mapping's `assignments` are applied in the order authored, so an authored order is preserved and never re-sorted. | nothing here (engine-runtime) |
-| `ADV-STRM-020` | An assignment across a conversion pair the engine classifies as explicit names that conversion function in a `pipe`; a bare `get` across the pair is refused, not coerced. | nothing here (engine-runtime) |
-| `ADV-STRM-021` | A validation rule's `value` takes the shape its `type` requires; ADV-STRM-009 settles only whether a `value` is present. | nothing here (engine-runtime) |
-| `ADV-STRM-022` | Every field name a stream references resolves to a field the endpoint document on that side of the transfer declares. | nothing here (cross-artifact) |
-| `ADV-STRM-023` | A stream reproduces every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization. | nothing here (cross-artifact) |
-| `ADV-STRM-024` | An API destination's `write.mode` is a key the referenced api-endpoint document declares under `operations.write`. | nothing here (cross-artifact) |
-| `ADV-STRM-025` | An API source's `replication.method` is one the referenced endpoint declares in `operations.read.replication.supported_methods`. | nothing here (cross-artifact) |
-| `ADV-STRM-026` | A filter on an API source targets a read parameter the endpoint declares as filterable — one carrying `operators` and no `controlled_by`. | nothing here (cross-artifact) |
-| `ADV-STRM-027` | A filter's `value` carries the type the referenced field declares, and a membership operator carries an array of such values. | nothing here (cross-artifact) |
-| `ADV-STRM-028` | An assignment `target.arrow_type` reproduces the destination column's declared type exactly, parameters included. | nothing here (cross-artifact) |
-| `ADV-STRM-029` | A stream source omits `replication` only when the source endpoint supports full refresh. | nothing here (cross-artifact) |
-| `ADV-STRM-030` | A stream declares `source.primary_keys` exactly when the source endpoint carries no primary-key metadata of its own and the transfer needs record identity, never as keys contradicting the endpoint's. | nothing here (cross-artifact) |
-| `ADV-STRM-031` | A stream references an API endpoint with connector scope only; connection scope is for database endpoints. | nothing here (cross-artifact) |
+| Rule | Constraint | Tier | Applied by |
+|---|---|---|---|
+| `ADV-STRM-016` | A stream destination's write block MUST take the shape its mode selects and carry only the fields that shape declares.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-STRM-017` | A stream's replication block MUST take the shape its method selects and carry only the fields that shape declares.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-STRM-018` | A connection-scoped endpoint reference SHOULD carry the derived endpoint_id whenever the author can compute it, so the cross-document bundle check can resolve the reference.  | judgment | nothing here |
+| `ADV-STRM-019` | A mapping's assignments MUST be kept in the order they were authored and MUST NOT be re-sorted, because the engine applies them in that order.  | procedural | nothing here |
+| `ADV-STRM-020` | An assignment whose source and target types form a conversion the engine classifies as explicit MUST name that conversion function in a pipe stage rather than reading the field bare.  | referential | nothing here |
+| `ADV-STRM-022` | Every field name a stream references MUST resolve to a field the endpoint document on that side of the transfer declares.  | referential | nothing here |
+| `ADV-STRM-023` | A stream MUST reproduce every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization.  | referential | nothing here |
+| `ADV-STRM-024` | An API destination's write mode MUST be one the referenced api-endpoint document declares a write operation for.  | referential | nothing here |
+| `ADV-STRM-025` | An API source's replication method MUST be one the referenced endpoint declares in its supported set.  | referential | nothing here |
+| `ADV-STRM-026` | A filter on an API source MUST name a read parameter the referenced endpoint declares filterable — one that publishes its own operator set and is not reserved to the runtime.  | referential | nothing here |
+| `ADV-STRM-027` | A filter's value MUST carry the type the referenced field declares, and a membership operator MUST carry an array of such values.  | referential | nothing here |
+| `ADV-STRM-028` | An assignment target's arrow_type MUST reproduce the destination column's declared type exactly, its parameters included.  | referential | nothing here |
+| `ADV-STRM-029` | A stream source MUST declare a replication policy unless the referenced source endpoint supports full refresh.  | referential | nothing here |
+| `ADV-STRM-030` | A stream MUST declare source primary keys when the transfer needs record identity and the source endpoint carries no primary-key metadata of its own, and MUST NOT declare keys that contradict the endpoint's.  | referential | nothing here |
+| `ADV-STRM-031` | A stream's reference to an API endpoint MUST use connector scope; connection scope refers to a database endpoint only.  | referential | nothing here |
 <!-- END GENERATED: advisory-stream -->
 
 ## Output rules

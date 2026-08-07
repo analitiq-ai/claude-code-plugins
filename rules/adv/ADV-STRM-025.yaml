@@ -1,0 +1,22 @@
+id: ADV-STRM-025
+statement: >
+  An API source's replication method MUST be one the referenced endpoint
+  declares in its supported set.
+tier: referential
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [IncrementalReplication, FullRefreshReplication]
+rationale: >
+  The declared support set lives in the connector's api-endpoint document,
+  which the stream model cannot read, so the stream-side vocabulary check
+  cannot narrow to it — every method in the contract validates against every
+  API source. The asymmetry is the trap: a database endpoint declares no
+  such set, so an author who has been reading database endpoints has no
+  reason to expect one to exist. Catching a violation means opening the
+  referenced endpoint's read operation and reading the set.
+status: active
+superseded_by: null

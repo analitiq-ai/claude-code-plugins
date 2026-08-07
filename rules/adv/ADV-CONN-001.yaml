@@ -1,0 +1,25 @@
+id: ADV-CONN-001
+statement: >
+  A connection-contract input's `ui.options` MUST offer exactly the value set
+  its `enum` declares.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_set_equal"
+owners: [connector-plugin]
+data:
+  targets: [ConnectionContractInput]
+  fields: ["ui.options[].value", enum]
+  kind: set_equal
+rationale: >
+  `enum` and `ui.options` are two hand-kept copies of one vocabulary: the enum
+  decides what the contract accepts, the options decide what a user is ever
+  shown. An option outside the enum is a value the picker offers and the
+  contract then rejects; an enum member with no option is a legal configuration
+  no user can reach. Neither failure is visible in the connector document a
+  human reads, and both surface only when somebody configures a connection —
+  so the pair is checked at the one place both are in view, the input
+  declaration itself.
+status: active
+superseded_by: null

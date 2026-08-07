@@ -1,0 +1,265 @@
+"""The rule record — one datum, loaded from the registry, never hand-written here.
+
+The registry is ``rules/adv/*.yaml`` at the repo root: one YAML file per rule,
+schema in ``rules/SCHEMA.md``. That record is the source of truth. Everything
+else — the published references, the plugin prose, the checker bindings, this
+package's runtime enforcement — is generated from it or validated against it.
+
+The wheel cannot read the YAML: parsing it would put a YAML dependency in a
+package the engine installs, for data that never changes at run time. So
+``scripts/render_rules.py`` compiles the registry into :data:`RULES_PATH`, a
+JSON document shipped beside this module and read with the standard library.
+That projection is a *pinned copy*, not a second source: ``render_rules.py
+check`` re-compiles and fails on any difference, the way ``render_schemas.py``
+already guards ``schemas/``.
+
+Three axes, deliberately independent — collapsing them is what made the old
+single-tier registry unable to describe most of its own rules:
+
+``tier``
+    What kind of rule it is: a shape, an agreement between fields, an agreement
+    between artifacts, a procedure, a judgment.
+``mechanized`` / ``validator``
+    Whether anything applies the rule without a human deciding to, and what
+    does. Two fields rather than one because the mechanism is not always code:
+    an agent rule under ``.claude/rules/`` binds every edit an agent makes and
+    has no symbol to point at. A rule is not a lesser rule for being
+    unmechanized — it is one whose enforcement lives where this repo cannot
+    reach.
+``severity``
+    What a violation costs.
+
+This module imports no contract models: records bind to their target classes by
+*name*, so tooling can read the whole registry without pulling in pydantic.
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+#: The compiled registry this package ships. Written by `scripts/render_rules.py`.
+RULES_PATH = Path(__file__).with_name("rules.json")
+
+# --- Closed vocabularies ----------------------------------------------------
+
+STRUCTURAL_TIER = "structural"
+ADVISORY_TIER = "advisory"
+REFERENTIAL_TIER = "referential"
+PROCEDURAL_TIER = "procedural"
+JUDGMENT_TIER = "judgment"
+
+#: The tiers a record may take. ``descriptive`` is the sixth name in the
+#: vocabulary and is deliberately absent here: prose that states no obligation
+#: has no rule to register, so a record claiming it is refused rather than
+#: stored (see :meth:`RuleRecord._validate`). The name exists in `SCHEMA.md` so
+#: "this states nothing" stays a verdict someone writes down instead of a
+#: silence nobody can review.
+TIERS = (
+    STRUCTURAL_TIER,
+    ADVISORY_TIER,
+    REFERENTIAL_TIER,
+    PROCEDURAL_TIER,
+    JUDGMENT_TIER,
+)
+DESCRIPTIVE_TIER = "descriptive"
+
+SEVERITIES = ("error", "warning", "info")
+
+#: A rule's lifecycle, and the reason no record carries a boolean: `active` is
+#: not the opposite of one thing. `draft` is written down but not yet in force;
+#: `deprecated` is still in force and on its way out, so prose citing it still
+#: resolves while authors are moved off it; `retired` no longer binds and its
+#: record survives only to keep the id from being reused.
+STATUSES = ("draft", "active", "deprecated", "retired")
+
+#: Who applies the rule and decides a change to it. A list — plenty of rules
+#: bind more than one component, and a type map is authored by both plugins.
+#: These are this repo's actual parts, not teams: `engine` covers the engine
+#: and the CDK it publishes, including registry CI and the conformance kit.
+OWNERS = ("engine", "connector-plugin", "pipeline-plugin")
+
+#: Artifact kinds a rule can bind. `any` is for the rules that bind every
+#: authored document — a `$schema` convention, a secret never appearing
+#: literally — which would otherwise be filed under whichever document happened
+#: to state them first.
+SCOPES = (
+    "connector",
+    "connector-package",
+    "api-endpoint",
+    "database-endpoint",
+    "type-map",
+    "stream",
+    "pipeline",
+    "connection",
+    # A server-side response shape, in the registry because it is part of the
+    # published contract surface even though neither plugin authors one.
+    "data-sync-run-status",
+    "any",
+)
+
+#: RFC 2119 keywords, which `statement` must use in caps. Checked rather than
+#: assumed: a statement with no keyword is usually a description that drifted
+#: into the registry, and the tier vocabulary has a name for that.
+RFC2119 = ("MUST NOT", "MUST", "SHOULD NOT", "SHOULD", "MAY NOT", "MAY")
+
+#: Where the registry's own generic validators live. A `validator` pointing here is
+#: dispatched by :func:`analitiq.contracts.shared.advisory.check_rule`; one
+#: pointing anywhere else is applied where it lives, and the binding is a
+#: declaration the lint resolves rather than a call site.
+ENGINE_MODULE = "packages/contract-models/src/analitiq/contracts/shared/advisory.py"
+
+
+# --- The record -------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RuleRecord:
+    """One rule, as authored in `rules/adv/<id>.yaml`.
+
+    Field meanings are `rules/SCHEMA.md`; this class is where they are
+    enforced. Construction is the only gate — a record that reaches tooling has
+    already been checked, so no consumer re-validates.
+    """
+
+    id: str
+    statement: str
+    tier: str
+    severity: str
+    scope: str
+    rationale: str
+    #: Whether anything applies this rule without a human deciding to. Not the
+    #: same question as whether `validator` is set: a rule can be mechanized by
+    #: an agent rule under `.claude/rules/`, which binds every edit an agent
+    #: makes and has no Python behind it.
+    mechanized: bool = False
+    #: What applies it — `path/to/module.py::Symbol.attr` for code, or a
+    #: `.claude/rules/*.md` path for an agent rule. Lint-resolved either way, so
+    #: a renamed validator or a deleted rules file fails the build instead of
+    #: leaving a record claiming an enforcement it lost.
+    validator: str | None = None
+    owners: tuple[str, ...] = ()
+    status: str = "active"
+    data: dict[str, Any] = field(default_factory=dict)
+    superseded_by: str | None = None
+
+    def __post_init__(self) -> None:
+        self._validate()
+
+    def _fail(self, message: str) -> None:
+        raise ValueError(f"{self.id}: {message}")
+
+    def _validate(self) -> None:
+        if self.tier == DESCRIPTIVE_TIER:
+            self._fail(
+                f"'{DESCRIPTIVE_TIER}' is the disposition of prose that states "
+                "no obligation an instance could violate, so there is no rule "
+                "to register. Leave the sentence where it is."
+            )
+        for value, allowed, label in (
+            (self.tier, TIERS, "tier"),
+            (self.severity, SEVERITIES, "severity"),
+            (self.scope, SCOPES, "scope"),
+            (self.status, STATUSES, "status"),
+        ):
+            if value not in allowed:
+                self._fail(f"unknown {label} {value!r}; expected one of {allowed}")
+        for text, label in ((self.statement, "statement"), (self.rationale, "rationale")):
+            if not (text or "").strip():
+                self._fail(f"{label} is empty")
+        if not any(k in self.statement for k in RFC2119):
+            self._fail(
+                "statement carries no RFC 2119 keyword in caps. A rule states an "
+                f"obligation; if this one does not, it is not a rule. ({RFC2119})"
+            )
+        if not self.owners:
+            self._fail(f"name who applies this rule — one or more of {OWNERS}")
+        unknown = [o for o in self.owners if o not in OWNERS]
+        if unknown:
+            self._fail(f"unknown owner(s) {unknown}; expected from {OWNERS}")
+        if self.validator and not self.mechanized:
+            self._fail(
+                "validator names what applies this rule, so mechanized cannot "
+                "be false"
+            )
+        if self.validator and not (
+            self.validator.endswith(".md") or "::" in self.validator
+        ):
+            self._fail(
+                f"validator {self.validator!r} is neither "
+                "path/to/module.py::Symbol nor a .claude/rules/*.md path"
+            )
+        if self.status == "retired" and not self.superseded_by:
+            self._fail(
+                "a retired rule names the id that replaced it — a retirement "
+                "with no successor leaves every prose site citing it with "
+                "nowhere to go"
+            )
+        if self.superseded_by == self.id:
+            self._fail("a rule cannot supersede itself")
+
+    # --- Derived ------------------------------------------------------------
+
+    @property
+    def engine_dispatched(self) -> bool:
+        """Whether the registry's own runner calls this rule's validator.
+
+        A generic relational validator lives in the registry engine and is
+        dispatched per instance; every other binding — a model validator, a
+        field annotation, an agent rule, a CI job — applies itself where it is,
+        and the `validator` string exists so a rename fails the build.
+        """
+        return bool(self.validator) and self.validator.startswith(ENGINE_MODULE + "::")
+
+    @property
+    def validator_symbol(self) -> str | None:
+        return self.validator.split("::", 1)[1] if self.validator else None
+
+    @property
+    def targets(self) -> tuple[str, ...]:
+        """Model class names the rule binds to, matched against the whole MRO."""
+        return tuple(self.data.get("targets", ()))
+
+    @property
+    def fields(self) -> tuple[str, ...]:
+        """Field expressions the rule relates (see `advisory.resolve`)."""
+        return tuple(self.data.get("fields", ()))
+
+    @property
+    def options(self) -> dict[str, Any]:
+        return dict(self.data.get("options", {}))
+
+    @property
+    def kind(self) -> str | None:
+        """Which generic relational check applies, for an engine-dispatched rule."""
+        return self.data.get("kind")
+
+    @property
+    def mechanism(self) -> str | None:
+        """Which shape device carries a structural rule (`literal_enum`, …)."""
+        return self.data.get("mechanism")
+
+    @property
+    def fixture_model(self) -> str | None:
+        """Concrete model the shared fixture corpus validates against."""
+        return self.data.get("fixture_model") or (self.targets[0] if self.targets else None)
+
+
+# --- Loading ----------------------------------------------------------------
+
+
+def load_records(path: Path | None = None) -> list[RuleRecord]:
+    """Read the compiled registry. Every record is validated on construction."""
+    source = path or RULES_PATH
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    records = [
+        RuleRecord(**{**r, "owners": tuple(r.get("owners", ()))})
+        for r in payload["rules"]
+    ]
+    seen: dict[str, RuleRecord] = {}
+    for record in records:
+        if record.id in seen:
+            raise ValueError(f"duplicate rule id {record.id}")
+        seen[record.id] = record
+    return records

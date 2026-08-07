@@ -22,15 +22,18 @@ from analitiq.contracts.pipelines import data_sync
 from analitiq.contracts.shared import common
 from analitiq.contracts.shared.advisory import (
     CUSTOM_KIND,
-    DESCRIPTIVE_TIER,
     GENERIC_KINDS,
-    STRUCTURAL_TIER,
-    TIERS,
-    WAIVED_SURFACES,
-    WAIVER_TIER,
-    AdvisoryRule,
     AdvisoryValidated,
     all_rules,
+)
+from analitiq.contracts.shared.rule_record import (
+    ADVISORY_TIER,
+    DESCRIPTIVE_TIER,
+    OWNERS,
+    SEVERITIES,
+    STRUCTURAL_TIER,
+    TIERS,
+    RuleRecord,
 )
 
 
@@ -123,15 +126,25 @@ def test_generic_targets_use_the_mixin():
             )
 
 
+def _enforcer_name(rule) -> str:
+    """The bare method name a custom rule's `validator` binding ends in."""
+    return rule.validator_symbol.split(".")[-1]
+
+
 def test_custom_rules_name_a_real_enforcer():
-    """A custom rule's enforcer must exist on EVERY target — it runs on each."""
+    """A custom rule's enforcer must exist on EVERY target — it runs on each.
+
+    `render_rules.py` resolves the `validator` binding, but only against the
+    one symbol it names. A rule bound to several targets runs on all of them,
+    so a method present on the named class and missing on a sibling is a rule
+    that silently does not fire for half its targets.
+    """
     for rule in all_rules():
         if rule.kind != CUSTOM_KIND:
             continue
-        missing = [t for t in rule.targets if not hasattr(MODEL_INDEX[t], rule.enforcer)]
-        assert not missing, (
-            f"{rule.id}: enforcer {rule.enforcer!r} missing on {missing}"
-        )
+        enforcer = _enforcer_name(rule)
+        missing = [t for t in rule.targets if not hasattr(MODEL_INDEX[t], enforcer)]
+        assert not missing, f"{rule.id}: enforcer {enforcer!r} missing on {missing}"
 
 
 #: @model_validator methods that are deliberately NOT registry rules. Keyed by
@@ -181,7 +194,7 @@ def test_every_model_validator_is_registered_or_exempt():
         if (owner, name) in EXEMPT_MODEL_VALIDATORS:
             continue
         registered = any(
-            rule.enforcer == name
+            rule.validator_symbol and _enforcer_name(rule) == name
             and any(
                 owner in (a.__name__ for a in cls.__mro__)
                 for t in rule.targets
@@ -241,31 +254,51 @@ def test_rule_targets_are_unambiguous_class_names():
 def test_every_tier_is_populated():
     """Non-vacuity: an empty tier makes every guard below pass over nothing.
 
-    The renderer grows a section per tier and the guards that follow all
-    iterate one; a tier that fell to zero entries would leave a heading with no
+    The renderers grow a section per tier and the guards that follow all
+    iterate one; a tier that fell to zero records would leave a heading with no
     rows and a green suite that checked nothing. If a tier genuinely empties,
-    that is a deliberate retirement — delete the tier, do not leave it standing.
+    that is a deliberate retirement — delete the tier from the vocabulary, do
+    not leave it standing.
     """
     populated = {r.tier for r in all_rules()}
     assert populated == set(TIERS), f"tiers with no rules: {sorted(set(TIERS) - populated)}"
 
 
+def test_every_severity_is_used():
+    """The same, for the cost axis.
+
+    A severity nobody assigns is a distinction the registry claims to draw and
+    does not — and `error` swallowing everything is exactly how a severity
+    field becomes decoration.
+    """
+    used = {r.severity for r in all_rules()}
+    assert used == set(SEVERITIES), f"severities no rule uses: {sorted(set(SEVERITIES) - used)}"
+
+
+def test_every_owner_owns_something():
+    used = {o for r in all_rules() for o in r.owners}
+    assert used == set(OWNERS), f"owners nothing is assigned to: {sorted(set(OWNERS) - used)}"
+
+
 def test_descriptive_prose_cannot_take_a_rule_id():
-    """The fourth disposition is named so it can be refused, not registered.
+    """The sixth tier name is there so it can be refused, not stored.
 
     Prose stating no obligation has nothing to comply with, so an id minted for
-    it resolves to advice. The registry says no at construction; this pins that
-    the refusal names the census as the place such a sentence belongs, because
-    an author hitting it needs to know where to put the sentence instead.
+    it resolves to advice. `RuleRecord` says no at construction; this pins that
+    it still says WHY, because an author who reaches for `descriptive` needs to
+    learn the sentence stays prose rather than that the word is misspelled.
     """
     with pytest.raises(ValueError) as exc:
-        AdvisoryRule(
+        RuleRecord(
             id="ADV-TEST-001",
-            resource="connector",
-            prose="Connectors are versioned by git tag.",
+            statement="A connector MUST be versioned by git tag.",
             tier=DESCRIPTIVE_TIER,
+            severity="info",
+            scope="connector",
+            rationale="—",
+            owners=("connector-plugin",),
         )
-    assert "prose census" in str(exc.value)
+    assert "no obligation" in str(exc.value)
 
 
 def _field_head(expr: str) -> str:
@@ -333,42 +366,42 @@ def test_structural_rules_do_not_restate_the_values_they_point_at():
                 hits = sorted(
                     m
                     for m in set(_literal_members(info.annotation))
-                    if re.search(rf"\b{re.escape(m)}\b", rule.prose)
+                    if re.search(rf"\b{re.escape(m)}\b", rule.statement)
                 )
                 if len(hits) >= 2:
-                    leaked.append(f"{rule.id}: prose enumerates {hits} — say what the "
+                    leaked.append(f"{rule.id}: statement enumerates {hits} — say what the "
                                   f"member list is FOR; {target}.{_field_head(expr)} carries it")
     assert not leaked, leaked
 
 
-def test_every_waived_surface_is_populated():
-    """Each surface names a real reason this repo cannot reach a rule.
+def test_unmechanized_rules_say_what_would_catch_them():
+    """An unmechanized record's rationale is the only thing a reader gets.
 
-    The vocabulary is closed so the unenforced surface stays countable by
-    category. A member no rule uses is not a spare slot — it is a category that
-    turned out not to exist, and leaving it standing invites the next author to
-    file a rule under a heading nothing else shares.
-    """
-    used = {r.governs for r in all_rules() if r.tier == WAIVER_TIER}
-    assert used == set(WAIVED_SURFACES), (
-        f"waived surfaces no rule uses: {sorted(set(WAIVED_SURFACES) - used)}"
-    )
-
-
-def test_waived_rules_say_more_than_their_surface():
-    """The reason has to add something the ``governs`` category does not.
-
-    ``governs`` says which surface is out of reach; the waiver says why *this*
-    rule falls off it — which check stops short, what an author sees instead of
-    a rejection. A reason that only paraphrases the category makes the entry
-    unreviewable, and the category was already machine-readable.
+    When nothing applies a rule, the record has to say what would have to be
+    read to catch a violation and how far away that is — that distance is the
+    whole point of recording the rule instead of enforcing it. A one-clause
+    rationale cannot carry that, and leaves "unmechanized" as a bare claim.
     """
     thin = [
-        f"{r.id}: {r.waiver!r}"
+        f"{r.id}: {r.rationale!r}"
         for r in all_rules()
-        if r.tier == WAIVER_TIER and len(r.waiver.split()) < 12
+        if not r.mechanized and len(r.rationale.split()) < 12
     ]
     assert not thin, thin
+
+
+def test_mechanized_rules_name_what_applies_them():
+    """`mechanized` is a claim; `validator` is what makes it checkable.
+
+    `RuleRecord` allows the two to disagree in only one direction, so this
+    catches the other: a record claiming automation while naming none, which
+    would sail past the lint that resolves bindings — there would be nothing to
+    resolve.
+    """
+    unnamed = [r.id for r in all_rules() if r.mechanized and not r.validator]
+    assert not unnamed, (
+        f"records claiming mechanization with no validator named: {unnamed}"
+    )
 
 
 # --- Shared fixture corpus --------------------------------------------------
@@ -393,7 +426,7 @@ def test_no_orphan_fixture_directories():
 @pytest.mark.parametrize("rule_id, group, path", list(_iter_fixtures()))
 def test_fixture_matches_enforcement(rule_id, group, path):
     rule = RULES[rule_id]
-    model = MODEL_INDEX[rule.fixture_target]
+    model = MODEL_INDEX[rule.fixture_model]
     payload = json.loads(path.read_text())
     if group == "valid":
         model.model_validate(payload)  # must not raise

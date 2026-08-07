@@ -1,0 +1,26 @@
+id: ADV-DBEP-001
+statement: >
+  Every column a database endpoint declares MUST carry a name no other column
+  in that document repeats.
+tier: advisory
+severity: error
+scope: database-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by"
+owners: [pipeline-plugin, engine]
+data:
+  targets: [DatabaseEndpointDoc]
+  fields: [columns]
+  options:
+    key: [name]
+  kind: unique_by
+rationale: >
+  The column name is the address everything downstream uses — a stream's field
+  selections, the type maps that render DDL, the engine's match between source
+  and destination — so a repeated name makes every one of those lookups resolve
+  to whichever entry the reader happened to reach, and the endpoint's captured
+  shape stops describing the object. Nobody types the same column twice; the
+  duplicate arrives from mirroring a source whose columns were merged or
+  renamed, which is why the document is checked rather than trusted.
+status: active
+superseded_by: null

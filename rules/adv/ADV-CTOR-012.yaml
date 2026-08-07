@@ -1,0 +1,23 @@
+id: ADV-CTOR-012
+statement: >
+  A connection condition predicate MUST name the input it tests and MUST
+  declare exactly one operator key per predicate.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionConditionPredicate._exactly_one_operator"
+owners: [connector-plugin]
+data:
+  targets: [ConnectionConditionPredicate]
+  kind: custom
+rationale: >
+  The operator is the whole test. With none declared there is nothing to
+  evaluate, and with several there is no defined precedence between them, so
+  two evaluators can legitimately disagree about whether the same rule fired.
+  Declared means carrying a usable value, not merely present: a serialized
+  predicate round-trips the unused operators as explicit nulls, so counting
+  keys rather than values would let a dump of a valid predicate read as a
+  predicate with several operators.
+status: active
+superseded_by: null

@@ -1,0 +1,24 @@
+id: ADV-ENDP-019
+statement: >
+  The upsert write mode MUST declare conflict keys, and every other write mode
+  MUST NOT declare them.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._conflict_keys_by_mode"
+owners: [connector-plugin]
+data:
+  targets: [Operations]
+  kind: custom
+rationale: >
+  An upsert matches existing rows against a provider-defined natural key; with
+  none declared there is nothing to match on, so the operation degrades to an
+  insert and duplicates rows. On every other mode the concept does not apply,
+  and a key declared there is an author's misunderstanding of what the mode
+  does — it would be carried in the document and ignored at run time. Whether
+  the key is required is a property of the mode, and the mode is the map key, so
+  only the enclosing block can see both halves; that is why the rule lives one
+  level above the write mode that carries the field.
+status: active
+superseded_by: null

@@ -1,0 +1,23 @@
+id: ADV-CTOR-036
+statement: >
+  A `resource_discovery.strategy` MUST name a strategy the engine has
+  registered, unless the connector ships that strategy itself through its
+  own `connector_plugin` implementation.
+tier: referential
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [ResourceDiscovery]
+rationale: >
+  Naming a strategy and shipping one are separate edits in separate files,
+  so the pair drifts easily: an author who renames the entry-point class, or
+  who copies a strategy id from a connector whose package they did not copy,
+  leaves a document that validates and a connection that finds no strategy
+  at all. The registry of built-in strategies is the engine's and `strategy`
+  is an open string here, so an unregistered id passes every check and fails
+  the first time discovery runs against a real connection.
+status: active
+superseded_by: null

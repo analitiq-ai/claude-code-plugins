@@ -1,0 +1,25 @@
+id: ADV-TMAP-021
+statement: >
+  A connection-scoped read rule MUST render the canonical type the endpoint
+  document already froze for the native it matches.
+tier: referential
+severity: error
+scope: type-map
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [TypeMapReadExactRule, TypeMapReadRegexRule]
+rationale: >
+  Discovery resolves each native through the read map once and freezes the
+  result into the endpoint document; from then on the frozen value is what runs
+  are configured against, so the rule is the durable record of a judgment the
+  endpoint already recorded. Authoring the two independently — the endpoint
+  from the discovered column, the map rule from the type name — is the ordinary
+  path to two records of one column's type that disagree, and which one wins
+  depends on which path reads it. Both files are on disk when the connection is
+  authored, so this is a gap a bundle-aware check could close rather than an
+  inherently unreachable one; today it means reading the endpoint's frozen
+  type beside the rule.
+status: active
+superseded_by: null

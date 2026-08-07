@@ -81,22 +81,22 @@ gets wrong by writing a plausible value that validates.
 | Rule | Constraint |
 |---|---|
 
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
 
-| Rule | Constraint | Rejected by |
-|---|---|---|
-| `ADV-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute is declined rather than authored, even though the contract accepts the kind. | nothing here (engine-runtime) |
-| `ADV-CTOR-045` | A connector's slug names the same entity in its document, its registry repository and its on-disk directory, and never changes: rewriting a `connector_id` or a derived `endpoint_id` mints a different entity instead of editing this one. | nothing here (cross-artifact) |
-| `ADV-SHRD-001` | A credential appears in an authored document only as a reference expression into the secret scope, never as a literal value. | nothing here (authoring-choice) |
-| `ADV-SHRD-002` | A temporal field's declared Arrow type carries a zone only when a real wire sample carries one, and a `date-time` is never defaulted to zone-aware. | nothing here (authoring-choice) |
-| `ADV-SHRD-003` | Every document a plugin authors declares `$schema` with the published canonical URL, including the families whose contract leaves the field optional. | nothing here (authoring-choice) |
-| `ADV-SHRD-004` | A default the contract or the connector already declares is not copied into an authored document; a value is authored only where the user asked for one. | nothing here (authoring-choice) |
-| `ADV-SHRD-005` | An identity handle is opaque: no version, tenant, or object identity is encoded into one or parsed back out of one. | nothing here (authoring-choice) |
-| `ADV-SHRD-006` | A `${...}` placeholder appears only where the value-expression grammar resolves a `template`; every other slot takes the characters literally. | nothing here (engine-runtime) |
-| `ADV-SHRD-007` | A `function` expression names a function the engine's registry declares; a name the engine has not registered is authored nowhere, including one the docs describe as planned. | nothing here (engine-runtime) |
-| `ADV-SHRD-008` | A ref path is authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | nothing here (engine-runtime) |
-| `ADV-SHRD-009` | A value the platform can derive at connection time is declared as a `function` expression and never authored as a pre-computed literal. | nothing here (engine-runtime) |
-| `ADV-SHRD-010` | An inherited header is removed with `headers_remove`; a header whose value resolves to null or empty is not a deletion. | nothing here (engine-runtime) |
+| Rule | Constraint | Tier | Applied by |
+|---|---|---|---|
+| `ADV-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind.  | procedural | nothing here |
+| `ADV-CTOR-045` | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one.  | referential | nothing here |
+| `ADV-SHRD-001` | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value.  | structural | nothing here |
+| `ADV-SHRD-002` | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware.  | judgment | nothing here |
+| `ADV-SHRD-003` | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional.  | structural | nothing here |
+| `ADV-SHRD-004` | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one.  | judgment | nothing here |
+| `ADV-SHRD-005` | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one.  | procedural | nothing here |
+| `ADV-SHRD-006` | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally.  | structural | nothing here |
+| `ADV-SHRD-007` | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned.  | referential | nothing here |
+| `ADV-SHRD-008` | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing.  | referential | nothing here |
+| `ADV-SHRD-009` | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal.  | procedural | nothing here |
+| `ADV-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion.  | structural | nothing here |
 <!-- END GENERATED: advisory-shared -->
 
 ## Required reading

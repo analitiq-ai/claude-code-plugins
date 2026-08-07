@@ -1,0 +1,23 @@
+id: ADV-ENDP-030
+statement: >
+  A write operation's response expressions MUST NOT reference
+  `response.record_count`, a scope only a read response carries.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._reject_record_count"
+owners: [connector-plugin, engine]
+data:
+  targets: [WriteResponse]
+  kind: custom
+rationale: >
+  The record count is a read-path quantity, so on a write the ref resolves to
+  nothing rather than to zero — and a `success_when` predicate over a ref that
+  resolves to nothing holds unconditionally, so every write reports success
+  including the ones whose rejected rows the provider listed. The author is
+  usually adapting a read response block to the write side, where the scope
+  silently stops existing; refusing the ref at author time is what keeps that
+  from becoming partial data loss under a green run.
+status: active
+superseded_by: null

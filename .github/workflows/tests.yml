@@ -86,6 +86,18 @@ jobs:
           # runs the script directly.
           DOMAIN: analitiq.ai
         run: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check
+      - name: Check the rule registry is valid and compiled
+        # `rules/adv/*.yaml` is the source of truth for every ADV-* rule. This
+        # validates each record against rules/SCHEMA.md, resolves every
+        # `checker` binding against the live models — a rule claiming an
+        # enforcement it lost is what this catches — and fails when the
+        # `rules.json` the wheel ships no longer matches the records.
+        # Runs BEFORE the renderers below: they all read the compiled registry,
+        # so a failure here explains any failure there.
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        env:
+          DOMAIN: analitiq.ai
+        run: python3 scripts/render_rules.py check
       - name: Check the generated advisory reference is current
         # references/advisory-rules.md is rendered from the contract's advisory
         # registry; stale prose here misleads every creator agent that reads it.

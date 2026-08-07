@@ -1,0 +1,27 @@
+id: ADV-ENDP-020
+statement: >
+  A column field spec MUST declare the sibling shape key its arrow_type's
+  container marker takes, and MUST declare no shape key at all when its
+  arrow_type is not a container marker.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ColumnFieldSpec._validate_container_shape"
+owners: [connector-plugin, pipeline-plugin, engine]
+data:
+  targets: [ColumnFieldSpec]
+  kind: custom
+rationale: >
+  The contract has no angle-bracket container canonicals, so a nested shape
+  is declared by a bare container marker plus a sibling shape key — which
+  makes the marker and the sibling two halves of one declaration that only
+  mean something together. A container marker with no sibling declares a
+  structure whose inner shape nobody stated, and a scalar carrying one
+  declares a shape the engine will never look at; both read as complete to
+  an author and lose the nesting silently downstream. The recursion is why
+  this rule exists separately from the column-level one: every level of a
+  nested container is a fresh chance to declare the marker and forget the
+  sibling.
+status: active
+superseded_by: null

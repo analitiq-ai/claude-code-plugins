@@ -1,0 +1,23 @@
+id: ADV-TMAP-011
+statement: >
+  A type map MUST NOT carry a catch-all rule standing in for whatever the rules
+  above it leave uncovered.
+tier: structural
+severity: error
+scope: type-map
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+data: {}
+rationale: >
+  An unmapped native or canonical is meant to stop the stream loudly, so the
+  gap is visible and gets closed in whichever map owns it; a catch-all converts
+  that into silent type corruption, handing every unrecognised column whatever
+  the fallback renders while the map reads as complete. The temptation is real
+  on families the vocabulary cannot express at all — a precision beyond Arrow's
+  range — where a fallback feels like graceful degradation rather than the
+  wrong answer. Nothing here can catch it: a catch-all is a well-formed rule
+  like any other, so only the author's intent separates a deliberate fallback
+  from a coverage gap papered over.
+status: active
+superseded_by: null

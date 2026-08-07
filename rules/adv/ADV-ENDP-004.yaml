@@ -1,0 +1,24 @@
+id: ADV-ENDP-004
+statement: >
+  A cursor mapping MUST carry the fields of a single filter form and MUST NOT
+  mix fields belonging to different forms.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication._reject_mixed_cursor_forms"
+owners: [connector-plugin]
+data:
+  targets: [Replication]
+  kind: custom
+rationale: >
+  The mapping forms describe incompatible provider filters — one an open-ended
+  bound, the other a closed window — and the union discriminator picks a branch
+  from whichever form's fields it sees. A mixed mapping is routed to one branch
+  and reported as missing that branch's fields, which sends the author looking
+  for a typo instead of at the real mistake, so the parent rejects it before a
+  branch is chosen. Deliberately not mirrored into the published schema: a
+  synthetic third branch would leak a permissive definition external validators
+  would accept.
+status: active
+superseded_by: null

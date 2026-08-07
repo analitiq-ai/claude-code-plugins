@@ -1,0 +1,24 @@
+id: ADV-STRM-010
+statement: >
+  An assignment target MUST declare the inner shape its arrow_type calls for
+  and no other: a container marker carries its own inner declaration, and
+  any other type carries none.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::AssignmentTarget._validate_container_shape"
+owners: [pipeline-plugin]
+data:
+  targets: [AssignmentTarget]
+  kind: custom
+rationale: >
+  A target's path addresses the assignment root only, so the inner
+  declaration is the sole way the document describes structure beneath it —
+  a container marker without one leaves the nested destination field
+  undeclared, and there is no second assignment that could declare it.
+  Authors coming from dotted-path tooling expect to reach inside a container
+  with another assignment; this rule is what makes the recursive
+  declaration, rather than that missing feature, the answer.
+status: active
+superseded_by: null

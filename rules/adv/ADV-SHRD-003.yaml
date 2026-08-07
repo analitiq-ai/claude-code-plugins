@@ -1,0 +1,22 @@
+id: ADV-SHRD-003
+statement: >
+  Every document a plugin authors MUST declare `$schema` with the published
+  canonical URL for its family, including the families whose contract leaves
+  the field optional.
+tier: structural
+severity: warning
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin]
+data: {}
+rationale: >
+  Where the contract leaves the field optional an omission validates cleanly,
+  so requiring it everywhere is a plugin house rule no validator expresses. It
+  earns that status because the URL is the only thing in the document that
+  says which contract it was authored against: without it a reviewer, an
+  editor's live validation and any future migration all have to guess, and the
+  document silently reads as belonging to whatever is current. Nothing breaks
+  the day it is omitted, which is precisely why the omission survives.
+status: active
+superseded_by: null

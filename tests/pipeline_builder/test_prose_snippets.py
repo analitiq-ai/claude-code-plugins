@@ -530,8 +530,8 @@ def _grading_entity(marker: Marker, label: str) -> str:
     the top-level merge places for them.
     """
     if marker.kind == "invalid":
-        from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
-        rules = {rule.id: rule for rule in ADVISORY_RULES}
+        from analitiq.contracts.shared.advisory import all_rules
+        rules = {rule.id: rule for rule in all_rules()}
         assert marker.adv in rules, (
             f"{label}: '<!-- invalid: {marker.adv} -->' names no rule in the "
             "advisory registry — a dangling ADV id pins nothing.")
@@ -539,7 +539,7 @@ def _grading_entity(marker: Marker, label: str) -> str:
         # (database-endpoint), the validator adapter spells entities with
         # underscores (database_endpoint). Without it, a hyphenated resource
         # would surface as a misdirecting KeyError deeper in the splice.
-        entity = rules[marker.adv].resource.replace("-", "_")
+        entity = rules[marker.adv].scope.replace("-", "_")
     else:
         entity = marker.entity
     assert entity in ENTITY_SKILL, (
@@ -703,14 +703,14 @@ def test_invalid_disposition_translates_hyphenated_registry_resources():
     boundary — the failure for an unhosted entity is then the actionable
     membership assertion naming the underscore spelling, never a misdirecting
     KeyError on the hyphenated one."""
-    from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
+    from analitiq.contracts.shared.advisory import all_rules
     rule = next(
-        (r for r in ADVISORY_RULES
-         if "-" in r.resource and r.resource.replace("-", "_") not in HOST_EXAMPLE),
+        (r for r in all_rules()
+         if "-" in r.scope and r.scope.replace("-", "_") not in HOST_EXAMPLE),
         None)
     if rule is None:  # every hyphenated resource gained a host: real blocks cover it
         pytest.skip("no hyphenated-resource rule without a host in the registry")
     marker = _parse_marker(f"<!-- invalid: {rule.id} -->")
     with pytest.raises(AssertionError,
-                       match=re.escape(repr(rule.resource.replace("-", "_")))):
+                       match=re.escape(repr(rule.scope.replace("-", "_")))):
         _grading_entity(marker, "synthetic")

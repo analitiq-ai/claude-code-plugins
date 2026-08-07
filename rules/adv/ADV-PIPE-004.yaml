@@ -1,0 +1,22 @@
+id: ADV-PIPE-004
+statement: >
+  A pipeline in the status that schedules it MUST reference at least one
+  stream.
+tier: advisory
+severity: error
+scope: pipeline
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._check_active_requires_streams"
+owners: [pipeline-plugin]
+data:
+  targets: [PipelineAuthored]
+  kind: custom
+rationale: >
+  Status is the only gate on execution, so a running pipeline with nothing to
+  run is scheduled, wakes on its cadence, moves no data and reports success
+  every time — the failure is a silence, and it looks healthy in every status
+  view a user has. Requiring a stream turns that into a document the author
+  has to finish before the pipeline can be switched on; the empty list stays
+  legal while the pipeline is not yet scheduled, which is where drafts live.
+status: active
+superseded_by: null

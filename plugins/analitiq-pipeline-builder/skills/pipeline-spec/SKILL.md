@@ -77,22 +77,22 @@ each one's stable id in the finding message, so a failure like
 <!-- BEGIN GENERATED: advisory-pipeline -->
 | Rule | Constraint |
 |---|---|
-| `ADV-PIPE-001` | connections.destinations must not contain duplicate connection IDs. |
-| `ADV-PIPE-002` | schedule.type gates its fields: manual forbids interval/cron, interval requires interval_minutes, cron requires cron_expression. |
-| `ADV-PIPE-003` | streams must be unique by version-stripped base id. |
-| `ADV-PIPE-004` | An active pipeline must reference at least one stream. |
-| `ADV-RETRY-001` | retry_delay_seconds must be omitted or 0 when max_retries is 0. |
+| `ADV-PIPE-001` | A pipeline's destination list MUST NOT name the same connection more than once.  |
+| `ADV-PIPE-002` | A pipeline's schedule MUST author exactly the fields its chosen `type` calls for, and MUST omit the fields belonging to the types it did not choose.  |
+| `ADV-PIPE-003` | A pipeline MUST NOT list two streams that reduce to the same version-stripped base id.  |
+| `ADV-PIPE-004` | A pipeline in the status that schedules it MUST reference at least one stream.  |
+| `ADV-RETRY-001` | A block that allows no retry attempts MUST NOT declare a non-zero retry delay.  |
 
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
 
-| Rule | Constraint | Rejected by |
-|---|---|---|
-| `ADV-PIPE-005` | A pipeline's `schedule.type` is a member of the vocabulary `Schedule.type` declares, and the chosen type gates which schedule fields are legal (ADV-PIPE-002). | the published schema — the error names the field, not the rule |
-| `ADV-PIPE-006` | A pipeline authored with no scheduling facts omits `schedule.type` and `schedule.timezone` and takes the defaults `Schedule` declares for them. | the published schema — the error names the field, not the rule |
-| `ADV-PIPE-007` | A stream's batching override may lower the resolved batch size but never raise it past the destination endpoint's declared provider capacity. | nothing here (engine-runtime) |
-| `ADV-PIPE-008` | Every connection a pipeline references belongs to the same organization as the pipeline. | nothing here (engine-runtime) |
-| `ADV-PIPE-009` | A `cron_expression`'s inner spec is authored valid for the scheduler that runs it; the contract checks the wrapper only. | nothing here (engine-runtime) |
-| `ADV-PIPE-010` | A pipeline's `streams` array carries no execution order, so ordering never encodes a dependency between streams and is never presented to the user as one. | nothing here (engine-runtime) |
+| Rule | Constraint | Tier | Applied by |
+|---|---|---|---|
+| `ADV-PIPE-005` | A pipeline's `schedule.type` MUST be a member of the vocabulary `Schedule.type` declares; the member chosen then gates which schedule fields are legal (ADV-PIPE-002).  | structural | the published schema — the error names the field, not the rule |
+| `ADV-PIPE-006` | A pipeline MAY omit any schedule field `Schedule` declares a default for, and a document that omits one takes that default.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-PIPE-007` | A stream's per-destination batching override MAY lower the batch size resolved from the pipeline default, but MUST NOT raise it above the capacity the destination endpoint declares.  | referential | nothing here |
+| `ADV-PIPE-008` | Every connection a pipeline references MUST belong to the same organization as the pipeline.  | referential | nothing here |
+| `ADV-PIPE-009` | A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone.  | structural | nothing here |
+| `ADV-PIPE-010` | The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one.  | procedural | nothing here |
 <!-- END GENERATED: advisory-pipeline -->
 
 ## Output rules

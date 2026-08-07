@@ -1,0 +1,25 @@
+id: ADV-DBEP-006
+statement: >
+  A connector release MUST NOT contain a database endpoint document; the
+  connector's resource discovery produces one per connection at connection
+  time.
+tier: procedural
+severity: error
+scope: database-endpoint
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [DatabaseEndpointDoc]
+rationale: >
+  A database endpoint describes one customer's objects, enumerated with that
+  customer's credentials, so shipping one in the connector makes a customer's
+  schema part of every install and pins every later connection to a snapshot
+  taken somewhere else. The model is fully authorable — a hand-written document
+  validates perfectly — and nothing in it records where it came from, so only
+  its location makes it wrong. Catching a violation means looking at the
+  release's file list, not at any document, and the mistake is easy to make
+  because writing the endpoint by hand is the fastest way to see the connector
+  work before discovery is finished.
+status: active
+superseded_by: null

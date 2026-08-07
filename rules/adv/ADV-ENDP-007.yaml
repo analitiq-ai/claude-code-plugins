@@ -1,0 +1,23 @@
+id: ADV-ENDP-007
+statement: >
+  A read operation issued as GET MUST NOT declare a parameter located in the
+  request body.
+tier: structural
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
+owners: [connector-plugin]
+data:
+  targets: [ReadOperation]
+  kind: custom
+rationale: >
+  A GET carries no body, so a param declared to live there can never reach the
+  provider: the request is built without it and the absence shows up as an
+  unfiltered or unscoped call rather than an error. Authors reach for it when a
+  provider documents a body-bearing search route — that route is a POST read,
+  and declaring the request as one is the fix, not moving the param. Rejudged
+  structural: a conditional on the shape of one operation block, mirrored into
+  the published schema off the request's method constant.
+status: active
+superseded_by: null

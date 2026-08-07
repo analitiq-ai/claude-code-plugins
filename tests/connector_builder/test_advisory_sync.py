@@ -86,7 +86,7 @@ def test_reference_covers_only_authored_resources() -> None:
     foreign = [
         rule
         for rule in all_rules()
-        if rule.resource not in renderer.PLUGIN_RESOURCES
+        if rule.scope not in renderer.PLUGIN_SCOPES
     ]
     assert foreign, "expected the registry to carry rules outside the plugin's scope"
 
@@ -121,12 +121,12 @@ def test_borrowed_rules_are_actually_cited() -> None:
 
 
 def test_scope_covers_every_authored_resource() -> None:
-    """A newly-added in-scope resource must not slip past the renderer.
+    """A newly-added in-scope artifact must not slip past the renderer.
 
-    `PLUGIN_RESOURCES` is an allowlist, so adding a resource to the contract
-    leaves the rendered output byte-identical and the sync test green while its
-    rules go missing. Pin the complement instead: everything excluded must be a
-    resource this plugin genuinely does not author.
+    `PLUGIN_SCOPES` is an allowlist, so adding a scope to the registry leaves
+    the rendered output byte-identical and the sync test green while its rules
+    go missing. Pin the complement instead: everything excluded must be an
+    artifact this plugin genuinely does not author.
     """
     from analitiq.contracts.shared.advisory import all_rules
 
@@ -141,12 +141,12 @@ def test_scope_covers_every_authored_resource() -> None:
         "data-sync-run-status",
         "database-endpoint",
     }
-    resources = {rule.resource for rule in all_rules()}
-    unclassified = resources - set(renderer.PLUGIN_RESOURCES) - known_foreign
+    scopes = {rule.scope for rule in all_rules()}
+    unclassified = scopes - set(renderer.PLUGIN_SCOPES) - known_foreign
 
     assert not unclassified, (
         f"contract added resource(s) {sorted(unclassified)} — decide whether this "
-        "plugin authors them. If yes, add to PLUGIN_RESOURCES in "
+        "plugin authors them. If yes, add to PLUGIN_SCOPES in "
         "scripts/render_advisory.py and regenerate; if no, add to known_foreign here."
     )
 

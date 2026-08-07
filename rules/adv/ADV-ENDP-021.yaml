@@ -1,0 +1,26 @@
+id: ADV-ENDP-021
+statement: >
+  A database column MUST declare the sibling shape key its arrow_type's
+  container marker takes, and MUST declare no shape key at all when its
+  arrow_type is not a container marker.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Column._validate_container_shape"
+owners: [connector-plugin, pipeline-plugin, engine]
+data:
+  targets: [Column]
+  kind: custom
+rationale: >
+  A discovered column is where a provider's nested type — a STRUCT, an
+  array, a document — either survives into the transport contract or is
+  thrown away. Declaring the container marker without its sibling shape key
+  says "there is structure here" and then says nothing about it, which is
+  indistinguishable downstream from an opaque JSON column except that the
+  document claims otherwise; declaring a shape key beside a scalar marker
+  is a mapping mistake the type map made and nothing else would surface.
+  Holding the marker and the sibling together is what makes the opaque
+  choice an explicit one rather than an omission.
+status: active
+superseded_by: null

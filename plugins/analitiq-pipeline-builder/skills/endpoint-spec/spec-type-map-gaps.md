@@ -60,31 +60,31 @@ ones are the connector plugin's business too; the rest are yours, and the
 <!-- BEGIN GENERATED: advisory-type-map -->
 | Rule | Constraint |
 |---|---|
-| `ADV-TMAP-001` | A schemaless or structured native type must not resolve to a scalar canonical type. |
-| `ADV-TMAP-002` | A schemaless or structured native pattern must not resolve to a scalar canonical type. |
-| `ADV-TMAP-003` | Every ${name} in the canonical render must name a capture group in the native pattern. |
-| `ADV-TMAP-004` | A native pattern with named captures must not map to a canonical whose parenthesised parameters are all hardcoded, discarding them. The detector keys on the parentheses, so a capture dropped into a canonical carrying none is out of scope. |
-| `ADV-TMAP-005` | A regex read rule's native must compile as an ECMA-262 regex; Python-only (?P…) syntax and otherwise-invalid patterns are rejected. |
-| `ADV-TMAP-006` | A regex read rule's canonical must be a valid (optionally ${name}-templated) Arrow type matched full-string, so a trailing newline is rejected. |
-| `ADV-TMAP-007` | A ${...} placeholder in a canonical render must be well-formed: no empty ${} and no unclosed ${. |
-| `ADV-TMAP-008` | A write exact rule's canonical must satisfy the cross-parameter Arrow bounds (Decimal scale <= precision), and its native DDL render's ${...} placeholders must be well-formed. |
-| `ADV-TMAP-009` | A write regex rule's canonical must compile as an ECMA-262 regex, and its native DDL render's ${...} placeholders must be well-formed. |
-| `ADV-TMAP-010` | A ${name} capture feeding a canonical parameter position must be unable to match a value that position refuses — a byte width of 0, a unit only a sibling family admits — and where a cross-parameter bound applies (Decimal scale <= precision) that bound resolves against the literal sibling present; a literal in such a bounded position must in turn hold against every value the capture bounding it can match. Two things are left undecided: a position whose admissible values the grammar states as an open pattern rather than a member list (a timezone) is not interrogated, and where a bound carries a placeholder on each side every capture is judged against its own position, so the pair reachable from those captures together is not judged at all. |
+| `ADV-TMAP-001` | An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical.  |
+| `ADV-TMAP-002` | A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical.  |
+| `ADV-TMAP-003` | Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares.  |
+| `ADV-TMAP-004` | A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed.  |
+| `ADV-TMAP-010` | A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match.  |
+| `ADV-TMAP-016` | Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares.  |
 
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does reject it, and `nothing here` means the document validates and fails later.
+The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
 
-| Rule | Constraint | Rejected by |
-|---|---|---|
-| `ADV-TMAP-011` | A type map declares no wildcard or catch-all fallback rule, leaving an uncovered native or canonical to hard-error at runtime so the coverage gap stays visible. | nothing here (authoring-choice) |
-| `ADV-TMAP-012` | New rules on a connection-scoped type map are appended after the rules already present, and an existing rule is never removed, reordered, or edited. | nothing here (authoring-choice) |
-| `ADV-TMAP-013` | A type map's rules are authored in the order they must resolve — the reader stops at the first rule whose matcher hits — so a narrow rule is placed ahead of any broader rule that would also match its input. | nothing here (engine-runtime) |
-| `ADV-TMAP-014` | A read map's `regex` rule is matched against the probe after the engine's native-type normalization while the pattern itself is used exactly as authored, so a literal written in any other form yields a rule that validates and never fires. | nothing here (engine-runtime) |
-| `ADV-TMAP-015` | A write map's `canonical` matcher is authored in the exact casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not. | nothing here (engine-runtime) |
-| `ADV-TMAP-016` | Every `${name}` in a write rule's rendered native names a capture group declared by that same rule's `canonical` matcher. | nothing here (engine-runtime) |
-| `ADV-TMAP-017` | A connector's write map declares a rendering for every canonical type a source can hand its system, including the container markers an API source emits as literal canonicals, and a family is left uncovered only where the connector's dialect renders it in code. | nothing here (engine-runtime) |
-| `ADV-TMAP-018` | A connection-scoped type map declares a rule only for a native or canonical its connector's map leaves unresolved; a rule repeating one the connector already covers replaces the connector's rendering for every stream on that connection. | nothing here (engine-runtime) |
-| `ADV-TMAP-019` | A canonical family a connector's `type-map-write.json` leaves unrendered is one the connector's dialect renders itself through a `render_column_type` override, never one left out to cut scope. | nothing here (cross-artifact) |
-| `ADV-TMAP-021` | A connection-scoped read rule renders the same canonical type the endpoint document froze for the native it matches. | nothing here (cross-artifact) |
+| Rule | Constraint | Tier | Applied by |
+|---|---|---|---|
+| `ADV-TMAP-005` | A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-TMAP-006` | A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-TMAP-007` | A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-TMAP-008` | A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-TMAP-009` | A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders.  | structural | the published schema — the error names the field, not the rule |
+| `ADV-TMAP-011` | A type map MUST NOT carry a catch-all rule standing in for whatever the rules above it leave uncovered.  | structural | nothing here |
+| `ADV-TMAP-012` | New rules on a connection-scoped type map MUST be appended after the rules already present, and a rule already there MUST NOT be removed, reordered or rewritten.  | procedural | nothing here |
+| `ADV-TMAP-013` | A type map's rules MUST be authored in the order they are meant to resolve, with a narrow rule ahead of any broader rule that would also match its input.  | procedural | nothing here |
+| `ADV-TMAP-014` | A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored.  | procedural | nothing here |
+| `ADV-TMAP-015` | A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not.  | procedural | nothing here |
+| `ADV-TMAP-017` | A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals.  | structural | nothing here |
+| `ADV-TMAP-018` | A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved.  | referential | nothing here |
+| `ADV-TMAP-019` | A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope.  | referential | nothing here |
+| `ADV-TMAP-021` | A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches.  | referential | nothing here |
 <!-- END GENERATED: advisory-type-map -->
 
 ## Authoring rules

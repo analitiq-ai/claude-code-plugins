@@ -1,0 +1,22 @@
+id: ADV-PKG-018
+statement: >
+  `merge_statement_sql` MUST render a valid statement when every landed
+  column is a conflict key, degrading to its merge form's insert-only
+  variant rather than an empty update clause.
+tier: structural
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  An empty update clause is a syntax error in every merge grammar, so the
+  write fails outright — but only for a stream whose landed columns happen
+  to all be key columns, which is why a dialect written against the normal
+  case ships and works for months first. The correct degradation keeps
+  matched rows at their stored values instead of erroring. The rendered
+  statement is a string `connector.py` returns and nothing here executes or
+  reads it; the conformance kit tests this case explicitly, at registry CI.
+status: active
+superseded_by: null

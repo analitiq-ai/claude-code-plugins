@@ -1,0 +1,21 @@
+id: ADV-DSYNC-001
+statement: >
+  A run status MUST carry `error` when its `status` is one the contract gates
+  as a failure, and MUST NOT carry `error` under any other status.
+tier: advisory
+severity: error
+scope: data-sync-run-status
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PipelineRunStatusData._error_matches_status"
+owners: [engine]
+data:
+  targets: [PipelineRunStatusData]
+  kind: custom
+rationale: >
+  A failed run with no `error` hands an external consumer a terminal state and
+  nothing to act on, and an `error` riding a non-failure status invites that
+  consumer to alert on a run that worked. Both directions are gated on the
+  model because the payload is a projection of an internal run row: whatever
+  that row happens to hold, the public shape cannot come out incoherent.
+status: active
+superseded_by: null

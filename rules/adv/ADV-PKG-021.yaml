@@ -1,0 +1,24 @@
+id: ADV-PKG-021
+statement: >
+  A connector declaring a transport `tls` block MUST ship a package whose
+  dialect implements the TLS connect-argument hook and, with it, the
+  post-connect TLS-state verification hook, and a connector that ships no
+  package MUST NOT declare `tls` at all.
+tier: referential
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  The engine has no built-in TLS interpretation for any driver — the CDK
+  base dialect raises for every mode — so the declaration is inert on its
+  own and the connection fails at connect. The verification hook is the
+  other half of the pair because a driver that quietly negotiates a plain
+  session would otherwise satisfy a TLS-promising mode with no encryption
+  at all. The `tls` block is JSON this repo validates while the hooks are
+  dialect methods it never sees, so the mismatch is caught in the engine at
+  connect time rather than anywhere here.
+status: active
+superseded_by: null
