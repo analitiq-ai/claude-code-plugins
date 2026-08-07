@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin]
 data:
   targets: [ReadOperation, WriteOperation]
-  kind: custom
 rationale: >
   A declared param is a promise that the endpoint accepts that input; unbound,
   the promise is empty — a stream that filters on it issues a full unfiltered

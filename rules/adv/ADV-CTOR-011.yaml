@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::UrlTem
 owners: [engine, connector-plugin]
 data:
   targets: [UrlTemplateDsn]
-  kind: custom
 rationale: >
   Template and bindings are edited apart, and both directions of a mismatch are
   quiet. An unbound placeholder renders a DSN with a literal brace in it, which

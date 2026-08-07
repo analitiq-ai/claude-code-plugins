@@ -12,7 +12,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Respon
 owners: [connector-plugin, engine]
 data:
   targets: [ResponseExtraction, WriteInput]
-  kind: custom
 rationale: >
   Everything on the path that reads an embedded schema runs offline — the
   validator by design, the engine when it resolves an endpoint, the

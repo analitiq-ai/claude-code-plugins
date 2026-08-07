@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin, engine]
 data:
   targets: [ReadOperation, WriteOperation]
-  kind: custom
 rationale: >
   The resolver dispatches on the one key it recognises, in its own
   precedence order, and ignores whatever else the dict carries. So a dict

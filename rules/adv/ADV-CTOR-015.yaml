@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::SqlBul
 owners: [engine, connector-plugin]
 data:
   targets: [SqlBulkLoad]
-  kind: custom
 rationale: >
   Absence of a family key already means "this family lands via executemany", so
   a null mechanism is a second spelling of the same fact — and the engine's

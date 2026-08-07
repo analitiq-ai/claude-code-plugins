@@ -31,11 +31,11 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `data` carries the parameters. |
 | `tier` | yes | What *kind* of rule it is. See below. |
 | `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it. |
-| `scope` | yes | The artifact kind it binds: `connector`, `connector-package`, `api-endpoint`, `database-endpoint`, `type-map`, `stream`, `pipeline`, `connection`, or `any` for the rules that bind every authored document. |
+| `scope` | yes | The artifact kind it binds, from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — one member per published resource, plus `any` for the rules that bind every authored document. A scope decides which block of a plugin's generated reference the rule lands in; who the rule is rendered *to* is `owners`. |
 | `mechanized` | yes | Whether anything applies the rule without a human deciding to. Not the same question as whether `validator` is set — see below. |
 | `validator` | when mechanized | What applies it: `path/to/module.py::Symbol.attr` for code, or a `.claude/rules/*.md` path for an agent rule. Lint-resolved either way — a renamed validator or a deleted rules file fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
-| `data` | no | The rule's parameters as data rather than prose — the fields it relates, the model it binds, the mechanism carrying it. This is what keeps `statement` free of values the contract owns. |
+| `data` | no | The rule's parameters as data rather than prose — see below. This is what keeps `statement` free of values the contract owns. |
 | `rationale` | yes | Why the rule exists, and — when nothing mechanizes it — what would have to be read to catch a violation, and how far away that is. |
 | `status` | yes | `draft` \| `active` \| `deprecated` \| `retired`. The lifecycle, and the reason no record carries a boolean — `active` is not the opposite of any one thing. A `draft` is written down but not yet in force; a `deprecated` rule still binds while authors are moved off it, so prose citing it still resolves; a `retired` record stays on disk because the id must never be reused, and the record is the only thing that proves it was taken. |
 | `superseded_by` | no | The id that replaced this one. Required when `status: retired`. |
@@ -57,6 +57,20 @@ Recorded so nobody re-adds them thinking they were forgotten:
   example belongs.
 - **`applies_when`** — no consumer. A rule that binds conditionally says so in
   its statement.
+- **`kind`** — a name for which generic check to run, back when a closed
+  vocabulary of relational checks was dispatched from the record. Enforcement is
+  ordinary Python now, so a rule is applied by the symbol `validator` names or
+  by nothing; there is no third state for a key to select. A key naming a
+  dispatch target is a key a typo can silently disable.
+
+## `data` — the rule's parameters
+
+| Key | Read by | What it is |
+|---|---|---|
+| `targets` | the enforcer census, the reachability tests | model class names the rule binds, matched against the whole MRO. Every one must carry the member `validator` names. |
+| `fields` | the rendered structural table | the model fields a structural rule's `mechanism` rides on, so the reference can print the members off the live model instead of restating them. |
+| `mechanism` | the rendered structural table | which shape device carries the rule — `literal_enum`, `discriminated_union`, … |
+| `fixture_model` | the shared fixture corpus | the concrete model a fixture is validated against. Naming one is how a rule joins the corpus; absent means it ships no fixtures, and the tests assert both directions. |
 
 ## `tier` — what kind of rule
 
@@ -84,14 +98,14 @@ the file exists.
 
 | `mechanized` | `validator` | Means |
 |---|---|---|
-| `true` | a `.py::Symbol` | code rejects a violation — a model validator, a field annotation, one of the registry's own relational checks |
+| `true` | a `.py::Symbol` | code rejects a violation — a model validator, a field annotation, a class whose shape *is* the rule |
 | `true` | a `.claude/rules/*.md` | an agent rule applies it on every edit to the paths that file governs |
 | `false` | `null` | nothing here applies it; `rationale` says what would have to be read, and how far away that is |
 
 `validator` set with `mechanized: false` is refused: it claims an enforcement
 and denies it in the same record.
 
-A sixth word, **`descriptive`**, names prose that states no obligation an
+One further word, **`descriptive`**, names prose that states no obligation an
 instance could violate. It is not a tier a record may take — such a sentence
 has no rule to register and stays prose. The name exists so "this states
 nothing" is a verdict someone writes down rather than a silence nobody reviews;
@@ -111,7 +125,11 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
   resolves every `validator` binding (a code symbol against the live models, an
   agent rule against the filesystem), refuses a duplicate or reissued id, and
   fails when the compiled projection the wheel ships is stale.
-- `packages/contract-models/tests/unit/test_advisory_registry.py` — the same
-  predicates under pytest, plus the fixture corpus and the enforcer census.
+- `packages/contract-models/tests/unit/test_advisory_registry.py` — what
+  `render_rules.py` cannot see from a record alone: that every target carries
+  the member `validator` names, that every model validator on a contract model
+  is some rule's enforcer or carries a written exemption, that a retired id is
+  never reissued, and that each rule naming a `fixture_model` is rejected by its
+  own invalid fixtures and by no other constraint.
 - `tests/connector_builder/test_rule_reachability.py` — every id a plugin's
   prose cites is readable inside that plugin.

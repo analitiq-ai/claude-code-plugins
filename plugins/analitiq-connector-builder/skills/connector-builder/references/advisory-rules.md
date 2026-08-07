@@ -96,10 +96,10 @@ need to memorize them; you need to recognise the id.
 
 | ID | Rule | Grades | Severity | Applied by |
 |---|---|---|---|---|
-| ADV-CONN-001 | A connection-contract input's `ui.options` MUST offer exactly the value set its `enum` declares. | `connector` | error | the validator |
-| ADV-CONN-002 | An input's `default` MUST be a member of the `enum` declared beside it. | `connector` | error | the validator |
+| ADV-CONN-001 | A connection-contract input's `ui.options` MUST offer exactly the value set its `enum` declares. | `connector` | error | `ConnectionContractInput._options_offer_the_enum` |
+| ADV-CONN-002 | An input's `default` MUST be a member of the `enum` declared beside it. | `connector` | error | `ConnectionContractInput._default_is_an_enum_member` |
 | ADV-CONN-003 | An input MUST mark itself secret exactly when its declared `storage` routes the value into secret storage. | `connector` | error | `ConnectionContractInput._consistency` |
-| ADV-CTOR-001 | A connector's default_transport MUST name a transport the same document declares. | `connector` | error | the validator |
+| ADV-CTOR-001 | A connector's default_transport MUST name a transport the same document declares. | `connector` | error | `ConnectorBase._default_transport_declared` |
 | ADV-CTOR-002 | A post-auth output MUST declare the request its mode consumes, MUST omit the request and the response-extraction paths belonging to the other mode, and MUST take a storage its mode admits. | `connector` | error | `PostAuthOutput._mode_consistency` |
 | ADV-CTOR-003 | A resource-discovery implementation MUST declare an entrypoint exactly when the strategy code ships inside the connector package, and MUST omit one when the strategy is already shipped by the runtime. | `connector` | error | `ResourceDiscoveryImplementation._entrypoint_matches_type` |
 | ADV-CTOR-004 | An ADBC transport MUST carry connection state; a transport that declares none has nothing to open a connection with. | `connector` | error | `AdbcTransport._require_dsn_or_kwargs` |
@@ -151,7 +151,7 @@ need to memorize them; you need to recognise the id.
 | ADV-ENDP-033 | Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares. | `api-endpoint` | error | `ReadOperation._wiring` |
 | ADV-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | `ReadOperation._wiring` |
 | ADV-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | `WriteOperation._wiring` |
-| ADV-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | the validator |
+| ADV-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | `HeaderMergeRules._headers_not_both_set_and_removed` |
 | ADV-STRM-003 | A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces. | `stream` | error | `ConnectionEndpointRef._derive_or_verify_endpoint_id` |
 | ADV-TMAP-001 | An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | `TypeMapReadExactRule._check` |
 | ADV-TMAP-002 | A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | `TypeMapReadRegexRule._check` |

@@ -6,12 +6,10 @@ tier: advisory
 severity: error
 scope: connector
 mechanized: true
-validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_member_of"
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared"
 owners: [engine, connector-plugin]
 data:
   targets: [ConnectorBase]
-  fields: [default_transport, transports]
-  kind: member_of
   fixture_model: ApiConnector
 rationale: >
   The default transport is what every operation that declares no transport_ref

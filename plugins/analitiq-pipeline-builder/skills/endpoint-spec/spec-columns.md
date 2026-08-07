@@ -164,7 +164,7 @@ The registry's database-endpoint rules over this array:
 | Rule | Constraint |
 |---|---|
 | `ADV-DBEP-001` | Every column a database endpoint declares MUST carry a name no other column in that document repeats. |
-| `ADV-DBEP-002` | Where a database endpoint's columns carry an ordinal position, each column's MUST differ from every other's. |
+| `ADV-DBEP-002` | Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's. |
 | `ADV-DBEP-003` | Every name in a database endpoint's `primary_keys` MUST name a column the same document declares. |
 | `ADV-ENDP-020` | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
 | `ADV-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |

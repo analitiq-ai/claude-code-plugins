@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.
 owners: [engine]
 data:
   targets: [PublicRunError]
-  kind: custom
 rationale: >
   The obvious implementation copies the engine's stored failure detail into
   `message`, which puts a raw exception string — hostnames, credentials,

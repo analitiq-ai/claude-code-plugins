@@ -6,14 +6,10 @@ tier: advisory
 severity: error
 scope: stream
 mechanized: true
-validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by"
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique"
 owners: [pipeline-plugin]
 data:
   targets: [StreamAuthored]
-  fields: [destinations]
-  options:
-    key: [endpoint_ref.scope, endpoint_ref.connection_id, endpoint_ref.endpoint_id]
-  kind: unique_by
   fixture_model: StreamInput
 rationale: >
   A repeated destination writes the same records twice with nothing

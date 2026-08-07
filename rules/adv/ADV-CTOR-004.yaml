@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTr
 owners: [engine, connector-plugin]
 data:
   targets: [AdbcTransport]
-  kind: custom
 rationale: >
   ADBC drivers split connection state two ways — some take a DSN, some
   (Snowflake) take every coordinate as driver keyword arguments, and

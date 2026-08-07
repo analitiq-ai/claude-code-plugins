@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMap
 owners: [connector-plugin, pipeline-plugin, engine]
 data:
   targets: [TypeMapReadRegexRule]
-  kind: custom
 rationale: >
   The rendered canonical is what discovery freezes into the endpoint document,
   so a spelling outside the engine-published Arrow vocabulary would not fail

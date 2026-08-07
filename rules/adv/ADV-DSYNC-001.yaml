@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.
 owners: [engine]
 data:
   targets: [PipelineRunStatusData]
-  kind: custom
 rationale: >
   A failed run with no `error` hands an external consumer a terminal state and
   nothing to act on, and an `error` riding a non-failure status invites that

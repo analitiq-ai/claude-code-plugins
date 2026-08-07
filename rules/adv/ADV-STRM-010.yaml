@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::Assignmen
 owners: [pipeline-plugin]
 data:
   targets: [AssignmentTarget]
-  kind: custom
 rationale: >
   A target's path addresses the assignment root only, so the inner
   declaration is the sole way the document describes structure beneath it —

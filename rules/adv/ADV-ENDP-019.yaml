@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Operat
 owners: [connector-plugin]
 data:
   targets: [Operations]
-  kind: custom
 rationale: >
   An upsert matches existing rows against a provider-defined natural key; with
   none declared there is nothing to match on, so the operation degrades to an

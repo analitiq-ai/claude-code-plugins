@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMap
 owners: [connector-plugin, pipeline-plugin]
 data:
   targets: [TypeMapReadRegexRule]
-  kind: custom
 rationale: >
   A placeholder with no capture behind it has nothing to substitute, so the
   rule renders a canonical still carrying `${…}` — a string no Arrow type

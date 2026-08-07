@@ -6,12 +6,11 @@ tier: advisory
 severity: error
 scope: connector
 mechanized: true
-validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_set_equal"
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._options_offer_the_enum"
 owners: [connector-plugin]
 data:
   targets: [ConnectionContractInput]
-  fields: ["ui.options[].value", enum]
-  kind: set_equal
+  fixture_model: ConnectionContractInput
 rationale: >
   `enum` and `ui.options` are two hand-kept copies of one vocabulary: the enum
   decides what the contract accepts, the options decide what a user is ever

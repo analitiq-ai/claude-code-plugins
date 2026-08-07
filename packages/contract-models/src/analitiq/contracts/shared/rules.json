@@ -8,7 +8,7 @@
    "severity": "error",
    "scope": "connector",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_set_equal",
+   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._options_offer_the_enum",
    "owners": [
     "connector-plugin"
    ],
@@ -16,11 +16,7 @@
     "targets": [
      "ConnectionContractInput"
     ],
-    "fields": [
-     "ui.options[].value",
-     "enum"
-    ],
-    "kind": "set_equal"
+    "fixture_model": "ConnectionContractInput"
    },
    "rationale": "`enum` and `ui.options` are two hand-kept copies of one vocabulary: the enum decides what the contract accepts, the options decide what a user is ever shown. An option outside the enum is a value the picker offers and the contract then rejects; an enum member with no option is a legal configuration no user can reach. Neither failure is visible in the connector document a human reads, and both surface only when somebody configures a connection — so the pair is checked at the one place both are in view, the input declaration itself.\n",
    "status": "active",
@@ -33,7 +29,7 @@
    "severity": "error",
    "scope": "connector",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_member_of",
+   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member",
    "owners": [
     "engine",
     "connector-plugin"
@@ -42,11 +38,7 @@
     "targets": [
      "ConnectionContractInput"
     ],
-    "fields": [
-     "default",
-     "enum"
-    ],
-    "kind": "member_of"
+    "fixture_model": "ConnectionContractInput"
    },
    "rationale": "The default is the value the platform supplies whenever a user omits the input, so a default outside the enum makes the contract's own fallback illegal: connections are created carrying a value the same declaration rejects the moment anything re-validates them, and the user never chose it and cannot see where it came from. The usual cause is narrowing or respelling an enum and leaving the old default behind — a change that touches one field and breaks the other.\n",
    "status": "active",
@@ -67,8 +59,7 @@
    "data": {
     "targets": [
      "ConnectionContractInput"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "`secret` and `storage` encode one fact twice, and each drives something different: the flag decides whether a value is redacted in interfaces and logs, the storage target decides where the value is materialised and how it is reached. A secret-stored input left unmarked gets echoed back in plaintext; an input marked secret but stored with the ordinary parameters puts credential material into a document that is written to disk and returned by the API. Neither half is meaningful without the other, so the declaration refuses to be built with them apart.\n",
    "status": "active",
@@ -88,8 +79,7 @@
    "data": {
     "targets": [
      "ConnectionStoredMaps"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A connection document is committed beside the pipeline and returned in plaintext by the connections API, so a credential filed into a non-secret map is a credential in version control and in every response — and rotating it means rewriting history rather than replacing a secret. The check reads key names only: it catches the spellings an author reaches for by habit and cannot see a real secret filed under an innocuous key, which is the half `ADV-CONN-009` leaves with the author.\n",
    "status": "active",
@@ -234,7 +224,7 @@
    "severity": "error",
    "scope": "connector",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_member_of",
+   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared",
    "owners": [
     "engine",
     "connector-plugin"
@@ -243,11 +233,6 @@
     "targets": [
      "ConnectorBase"
     ],
-    "fields": [
-     "default_transport",
-     "transports"
-    ],
-    "kind": "member_of",
     "fixture_model": "ApiConnector"
    },
    "rationale": "The default transport is what every operation that declares no transport_ref runs on, so a name with nothing behind it fails at connect time on a document that read as complete. The usual cause is a transport renamed on one line and not the other: the two keys sit far apart in the file, and nothing about either one on its own looks wrong.\n",
@@ -269,8 +254,7 @@
    "data": {
     "targets": [
      "PostAuthOutput"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Mode decides whether the platform renders a picker for the user or reads a value silently after auth, and each mode drives a different request and lands the result in a different place. An output that pairs one mode's request with the other's storage describes a flow nothing can run, and it surfaces only when a real user reaches the post-auth step — long after the document validated. The pairing is all this rule can see: whether the value is genuinely secret, and so belongs in the secret store at all, stays the author's judgement.\n",
    "status": "active",
@@ -291,8 +275,7 @@
    "data": {
     "targets": [
      "ResourceDiscoveryImplementation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The two implementation kinds are loaded by different code paths: one imports the named entrypoint out of the connector's own package, the other looks the strategy up in the runtime's registry and never reads an entrypoint at all. A package-shipped strategy with no entrypoint leaves the loader nothing to import, and an entrypoint beside a runtime-provided strategy is dead configuration a later reader will trust — both fail at the first connection that discovers anything, not while authoring.\n",
    "status": "active",
@@ -313,8 +296,7 @@
    "data": {
     "targets": [
      "AdbcTransport"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "ADBC drivers split connection state two ways — some take a DSN, some (Snowflake) take every coordinate as driver keyword arguments, and Postgres-style drivers use both, keeping TLS and other extras in the kwargs — so the contract cannot make either field required on its own. That leaves the empty transport representable, and it validates cleanly right up to the moment the engine asks the driver to connect with nothing. Requiring some source of state is the only thing that catches it before then.\n",
    "status": "active",
@@ -335,8 +317,7 @@
    "data": {
     "targets": [
      "ConnectorBase"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A transport_ref is how an auth operation, a discovery run or a post-auth request picks something other than the default transport, and it is resolved by name at runtime. An unresolved one is indistinguishable from a correct document until the operation carrying it actually runs — which, for an auth or post-auth ref, means during a user's connection attempt rather than during authoring. Resolving every ref site at parse time is what turns that into an authoring-time failure.\n",
    "status": "active",
@@ -357,8 +338,7 @@
    "data": {
     "targets": [
      "ConnectorBase"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A storage path is derived from the storage kind plus the declaration key, and an input and a post-auth output are declared in different blocks — so two declarations can collide on a path that is written down nowhere a reader would compare them. When they do, one silently overwrites the other in the secret store and the connection authenticates with whichever was written last, which presents as a wrong credential and never as a contract defect.\n",
    "status": "active",
@@ -379,8 +359,7 @@
    "data": {
     "targets": [
      "ConnectorBase"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Activation waits for these paths to resolve. The path is derived — storage kind plus declaration key — and never written beside the declaration it comes from, so a typo or a renamed output produces a prerequisite nothing will ever materialize. The connection then stays permanently inactive with no diagnostic pointing back at the connector, which is the hardest failure in this block to attribute.\n",
    "status": "active",
@@ -400,8 +379,7 @@
    "data": {
     "targets": [
      "ConnectorBase"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A predicate over a field no input declares can never match, so the rule hanging off it never fires: the requirement the author wrote it to enforce is silently absent and the form accepts exactly the combination the rule existed to reject. Nothing at save time distinguishes a rule that did not match from one that cannot, which is why the reference has to be resolved when the connector is parsed.\n",
    "status": "active",
@@ -421,8 +399,7 @@
    "data": {
     "targets": [
      "ConnectorBase"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Save-time validation resolves these names against the submitted form. A name no input declares either passes vacuously — losing the requirement — or asks the user to fill a field the form never renders, which is an unfillable form with a message naming something that does not exist. Both read as the rule working until somebody hits the combination it was written for.\n",
    "status": "active",
@@ -444,8 +421,7 @@
      "FileConnector",
      "S3Connector",
      "StdoutConnector"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "These kinds authenticate with static credentials or not at all, so nothing ever executes an options or discovery request on their behalf. A post-auth output declared on one is not merely unused: an activation prerequisite pointing at it never resolves, and the connection cannot become active. The usual route in is copying a connection contract from an API connector, where the block is load-bearing, into one where the phase it belongs to does not exist.\n",
    "status": "active",
@@ -466,8 +442,7 @@
    "data": {
     "targets": [
      "UrlTemplateDsn"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Template and bindings are edited apart, and both directions of a mismatch are quiet. An unbound placeholder renders a DSN with a literal brace in it, which the driver rejects as an unparseable URL somewhere far from the connector. An unreferenced binding is a value the author believed was reaching the connection — very often a credential — that is resolved and then dropped. Correspondence in both directions is what makes the DSN readable as one thing.\n",
    "status": "active",
@@ -487,8 +462,7 @@
    "data": {
     "targets": [
      "ConnectionConditionPredicate"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The operator is the whole test. With none declared there is nothing to evaluate, and with several there is no defined precedence between them, so two evaluators can legitimately disagree about whether the same rule fired. Declared means carrying a usable value, not merely present: a serialized predicate round-trips the unused operators as explicit nulls, so counting keys rather than values would let a dump of a valid predicate read as a predicate with several operators.\n",
    "status": "active",
@@ -509,8 +483,7 @@
    "data": {
     "targets": [
      "SqlStageCapabilities"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The engine emits the staging schema as a SQL identifier when it creates and drops the stage relation around every write. A dedicated placement with no name leaves it nowhere to create the stage, and the write fails at handshake rather than in the document. A name carried alongside a co-located placement is worse than dead: it reads as though stages live somewhere they do not, which is exactly the misreading that makes a real-scope stage get addressed as a bare table name and land in whatever schema the session defaults to. This conditional pairing is also why the name is never in the block's required set.\n",
    "status": "active",
@@ -531,8 +504,7 @@
    "data": {
     "targets": [
      "WriteUnit"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "write_unit exists to tell the engine's batch coalescer what to aim for, and absence of the whole block already means \"no preference\". An empty block is therefore a second spelling of the default that reads like a declared one: nothing breaks, the coalescer behaves exactly as it would with no block at all, and only the bound the author meant to state is missing. That is why the cost here is a lost preference rather than a broken run — unlike the rest of the declared-capability rules, whose violations reach the write path.\n",
    "status": "active",
@@ -553,8 +525,7 @@
    "data": {
     "targets": [
      "SqlBulkLoad"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Absence of a family key already means \"this family lands via executemany\", so a null mechanism is a second spelling of the same fact — and the engine's typed parser refuses it, turning a connector that validated as complete into one refused at handshake. Keeping absence the only \"none\" also holds in the emit direction: a plain dump of a parsed connector would otherwise write back the explicit null the contract itself rejects.\n",
    "status": "active",
@@ -1381,7 +1352,7 @@
    "severity": "error",
    "scope": "database-endpoint",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by",
+   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._column_names_unique",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1390,15 +1361,7 @@
     "targets": [
      "DatabaseEndpointDoc"
     ],
-    "fields": [
-     "columns"
-    ],
-    "options": {
-     "key": [
-      "name"
-     ]
-    },
-    "kind": "unique_by"
+    "fixture_model": "DatabaseEndpointDoc"
    },
    "rationale": "The column name is the address everything downstream uses — a stream's field selections, the type maps that render DDL, the engine's match between source and destination — so a repeated name makes every one of those lookups resolve to whichever entry the reader happened to reach, and the endpoint's captured shape stops describing the object. Nobody types the same column twice; the duplicate arrives from mirroring a source whose columns were merged or renamed, which is why the document is checked rather than trusted.\n",
    "status": "active",
@@ -1406,12 +1369,12 @@
   },
   {
    "id": "ADV-DBEP-002",
-   "statement": "Where a database endpoint's columns carry an ordinal position, each column's MUST differ from every other's.\n",
+   "statement": "Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's.\n",
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by",
+   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._ordinal_positions_unique",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1420,16 +1383,7 @@
     "targets": [
      "DatabaseEndpointDoc"
     ],
-    "fields": [
-     "columns"
-    ],
-    "options": {
-     "key": [
-      "ordinal_position"
-     ],
-     "skip_null": true
-    },
-    "kind": "unique_by"
+    "fixture_model": "DatabaseEndpointDoc"
    },
    "rationale": "The ordinal is what canonicalises column order for the server-managed schema hash, so columns claiming the same position leave that order ambiguous and let the hash move for a document that did not change — which reads as schema drift on an object that never drifted, and drift is the signal a user is meant to act on. Schemaless sources expose no ordinal at all and simply omit the field, which is why the rule binds where the value is present instead of requiring one.\n",
    "status": "active",
@@ -1442,7 +1396,7 @@
    "severity": "error",
    "scope": "database-endpoint",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_subset_of",
+   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._primary_keys_name_columns",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1451,11 +1405,7 @@
     "targets": [
      "DatabaseEndpointDoc"
     ],
-    "fields": [
-     "primary_keys",
-     "columns[].name"
-    ],
-    "kind": "subset_of"
+    "fixture_model": "DatabaseEndpointDoc"
    },
    "rationale": "The key list is what an upsert stream draws its conflict keys from and what the engine emits into the table it creates, so a key naming a column that is not in the document fails at DDL render, or matches nothing at merge time and turns an upsert into unbounded inserts. The usual cause is carrying a source's key list onto a destination whose column set was narrowed — the keys are copied from one document and the columns from another, and only the endpoint holds both.\n",
    "status": "active",
@@ -1631,8 +1581,7 @@
    "data": {
     "targets": [
      "PipelineRunStatusData"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A failed run with no `error` hands an external consumer a terminal state and nothing to act on, and an `error` riding a non-failure status invites that consumer to alert on a run that worked. Both directions are gated on the model because the payload is a projection of an internal run row: whatever that row happens to hold, the public shape cannot come out incoherent.\n",
    "status": "active",
@@ -1652,8 +1601,7 @@
    "data": {
     "targets": [
      "PublicRunError"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The obvious implementation copies the engine's stored failure detail into `message`, which puts a raw exception string — hostnames, credentials, internal identifiers — on a surface any API-key holder can read. Binding the text to the code on the model makes that leak impossible rather than merely discouraged, and keeps the customer-facing wording changeable in one place instead of wherever an error is constructed.\n",
    "status": "active",
@@ -1674,7 +1622,6 @@
     "targets": [
      "_RequestBase"
     ],
-    "kind": "custom",
     "fixture_model": "WriteRequest"
    },
    "rationale": "A placeholder is filled from its path_params entry and from nothing else, so a placeholder with no entry sends a URL still carrying the literal braces and an entry with no placeholder is a binding nothing ever reads — neither is visible at authoring time, and both reach the provider as a wrong URL rather than as an error. The presence half is a conditional the published schema can state and does; the key-set equality is instance-relative set logic stock JSON Schema cannot express, which is why the model carries it.\n",
@@ -1696,8 +1643,7 @@
    "data": {
     "targets": [
      "Param"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The operator set is the endpoint's promise that a downstream stream may filter on that param; marking the param controlled hands its value to the paging or incremental machinery, which sets it on every request. Declaring both advertises a filter the runtime overwrites, so the stream's predicate vanishes from the request and the run reports success over unfiltered data. Rejudged structural: it is a conditional on the shape of one param object, mirrored declaratively into the published schema, not an instance-relative comparison.\n",
    "status": "active",
@@ -1718,8 +1664,7 @@
    "data": {
     "targets": [
      "Param"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A scalar has one spelling on the wire; a container has several — repeated key, delimiter-joined, bracketed — and a provider accepts one of them. Leaving the serialization undeclared makes the request a guess the engine has to resolve by default, and a wrong guess is accepted by the provider as a differently shaped filter rather than refused. Rejudged structural: a conditional requirement on one param object, mirrored into the published schema.\n",
    "status": "active",
@@ -1739,8 +1684,7 @@
    "data": {
     "targets": [
      "Replication"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The mapping forms describe incompatible provider filters — one an open-ended bound, the other a closed window — and the union discriminator picks a branch from whichever form's fields it sees. A mixed mapping is routed to one branch and reported as missing that branch's fields, which sends the author looking for a typo instead of at the real mistake, so the parent rejects it before a branch is chosen. Deliberately not mirrored into the published schema: a synthetic third branch would leak a permissive definition external validators would accept.\n",
    "status": "active",
@@ -1761,8 +1705,7 @@
    "data": {
     "targets": [
      "ResponseExtraction"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The two annotations are halves of one statement: the native token is what the connector's read type map matches on, the canonical type is what the engine builds the record batch from, and the validator's type-map coverage check compares them. A node carrying one leaves the other to be inferred, and an inferred canonical type is exactly the guess the type map exists to remove. The container half is what keeps a structured field traversable — a container head whose members are undeclared describes nothing anything downstream can address.\n",
    "status": "active",
@@ -1783,8 +1726,7 @@
    "data": {
     "targets": [
      "WriteInput"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The input schema is the only description of the record being written: the write type map is matched against its native tokens, and every record-addressed binding and conflict key is resolved against its declared fields. A half-typed node makes the engine infer the canonical type of a value it is about to send, and an untraversable container makes a per-field binding into that record unresolvable — both surface as a provider-side rejection or a silently wrong value, not as an authoring error.\n",
    "status": "active",
@@ -1804,8 +1746,7 @@
    "data": {
     "targets": [
      "ReadOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A GET carries no body, so a param declared to live there can never reach the provider: the request is built without it and the absence shows up as an unfiltered or unscoped call rather than an error. Authors reach for it when a provider documents a body-bearing search route — that route is a POST read, and declaring the request as one is the fix, not moving the param. Rejudged structural: a conditional on the shape of one operation block, mirrored into the published schema off the request's method constant.\n",
    "status": "active",
@@ -1826,8 +1767,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, the operators a stream may filter it with — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
    "status": "active",
@@ -1848,8 +1788,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A declared param is a promise that the endpoint accepts that input; unbound, the promise is empty — a stream that filters on it issues a full unfiltered pull that looks like a successful run, and paging or incremental wiring left half-done fails the same silent way. Bound twice, one declaration with one type and one default is serving two wire positions, so a provider wanting the same value in a header and a query string needs two params, not one bound twice. An unbound param is a deletion, never dead weight to leave in place.\n",
    "status": "active",
@@ -1870,8 +1809,7 @@
    "data": {
     "targets": [
      "ReadOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Naming a param in a pagination block creates no request binding on its own: the param still has to be declared, marked as pagination's, and bound into the request like any other, and this is the wiring authors most often leave half-done. The marker is what stops anything else claiming the same param, and a paging param the runtime cannot set means every run re-reads page one and reports success.\n",
    "status": "active",
@@ -1892,8 +1830,7 @@
    "data": {
     "targets": [
      "ReadOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A cursor mapping states how the stored watermark is sent, but the param carrying it is an ordinary declared param that still has to be bound into the request and marked as replication's — a window mapping wires both of its bounds that way. Unmarked, nothing reserves the param for the runtime to set; undeclared, the watermark never reaches the provider and every incremental run quietly pulls the full resource.\n",
    "status": "active",
@@ -1914,8 +1851,7 @@
    "data": {
     "targets": [
      "ReadOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The records reference is the anchor the engine iterates, and a read yields zero-to-many records, so it has to land on an array. The most common way to fail it is authoring the record's own fields at the top level of the response schema instead of describing the whole body, envelope included — the reference then resolves to an object or to nothing, extraction yields no rows, and the run reports success. Requiring the record shape to declare something is what separates \"the fields are unknown\" from \"nothing here says what a record is\", and only the latter leaves every downstream reader with nothing to resolve.\n",
    "status": "active",
@@ -1936,8 +1872,7 @@
    "data": {
     "targets": [
      "ReadOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The cursor field is read off each returned record to advance the watermark, so a field the record shape does not declare is read as nothing: the watermark never moves and every incremental run re-fetches the same window, or stores an empty watermark and starts over — with the run reporting success either way. It is the rule that stops an author declaring a cursor on a field the provider merely mentions in prose, and resolving it against the declared record shape is the only check available before the endpoint runs.\n",
    "status": "active",
@@ -1957,8 +1892,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Conflict keys are the provider-defined natural key an upsert matches existing rows on, and the provider can only match on values the request actually carries. A key naming a field the input schema never declares matches nothing, so every upsert inserts and the destination accumulates duplicates without a single failed run. Membership is resolved through composition, so a record assembled from shared definitions still enumerates the fields it declares.\n",
    "status": "active",
@@ -1979,8 +1913,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "An idempotency key identifies one record's write attempt, and a batched request carries many, so there is no value the key could take. Worse, a resumed run re-batches a different composition of rows, so a key attached to a batch does not survive an engine restart and the retry re-writes rows the provider already accepted. When a provider documents both a key and a batch cap, the key is the safer choice unless the operator is explicitly buying throughput. Rejudged structural: mutual presence exclusion on one write-mode object, mirrored declaratively into the published schema.\n",
    "status": "active",
@@ -2001,8 +1934,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The endpoint declares only where the key goes; the value is generated per record and owned by the engine. A header or body field authored under the same name puts a second writer on that slot, and whichever wins, the provider stops seeing a stable key across retries — it treats each attempt as new and writes the record twice, which is the exact failure the key was declared to prevent. The check is a name collision only: a hand-authored key under a different name is indistinguishable from an ordinary field and stays unmechanized.\n",
    "status": "active",
@@ -2023,8 +1955,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The batching declaration and the body's record scope are two statements about the same fact — how many records one request carries — and when they disagree the engine builds the request around the wrong shape: an array where the provider expects one object, or one record where it expects the batch. Neither is a schema error the provider reports usefully. The membership half is checked in the same pass because a mistyped field path resolves to nothing and sends a null the provider stores over real data.\n",
    "status": "active",
@@ -2044,8 +1975,7 @@
    "data": {
     "targets": [
      "Operations"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "An endpoint declaring neither operation is a document the engine can neither read from nor write to: it validates as configuration, attaches, and does nothing at run time, which reads as a silently unusable resource rather than a broken one. An empty write map is the same failure one level down. Omitting the operation a resource genuinely lacks is the intended authoring — the rule only refuses omitting both. Rejudged structural: a presence requirement on one block, mirrored into the published schema.\n",
    "status": "active",
@@ -2065,8 +1995,7 @@
    "data": {
     "targets": [
      "Operations"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "An upsert matches existing rows against a provider-defined natural key; with none declared there is nothing to match on, so the operation degrades to an insert and duplicates rows. On every other mode the concept does not apply, and a key declared there is an author's misunderstanding of what the mode does — it would be carried in the document and ignored at run time. Whether the key is required is a property of the mode, and the mode is the map key, so only the enclosing block can see both halves; that is why the rule lives one level above the write mode that carries the field.\n",
    "status": "active",
@@ -2088,8 +2017,7 @@
    "data": {
     "targets": [
      "ColumnFieldSpec"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The contract has no angle-bracket container canonicals, so a nested shape is declared by a bare container marker plus a sibling shape key — which makes the marker and the sibling two halves of one declaration that only mean something together. A container marker with no sibling declares a structure whose inner shape nobody stated, and a scalar carrying one declares a shape the engine will never look at; both read as complete to an author and lose the nesting silently downstream. The recursion is why this rule exists separately from the column-level one: every level of a nested container is a fresh chance to declare the marker and forget the sibling.\n",
    "status": "active",
@@ -2111,8 +2039,7 @@
    "data": {
     "targets": [
      "Column"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A discovered column is where a provider's nested type — a STRUCT, an array, a document — either survives into the transport contract or is thrown away. Declaring the container marker without its sibling shape key says \"there is structure here\" and then says nothing about it, which is indistinguishable downstream from an opaque JSON column except that the document claims otherwise; declaring a shape key beside a scalar marker is a mapping mistake the type map made and nothing else would surface. Holding the marker and the sibling together is what makes the opaque choice an explicit one rather than an omission.\n",
    "status": "active",
@@ -2134,8 +2061,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The resolver dispatches on the one key it recognises, in its own precedence order, and ignores whatever else the dict carries. So a dict declaring two of them resolves through one and silently discards the other — the author reads the ref they wrote, the wire carries the literal beside it — and a stray sibling is an author's edit that never took effect. Request slots are untyped, so nothing else in the contract sees these dicts; refusing the malformed shape at its own site is also what keeps the failure pointing at the bad fragment instead of surfacing later as a misleading \"param not referenced\" from the binding walk.\n",
    "status": "active",
@@ -2156,8 +2082,7 @@
    "data": {
     "targets": [
      "ReadOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A response path that resolves to nothing does not fail at run time: it yields an empty value, and every predicate built on it holds unconditionally. One mistyped segment in a pagination stop condition therefore stops after the first page on every run, and the run is green — the truncation is only visible by counting rows against the provider. A node that resolves but declares no type is the same failure one step later, because whatever plants the value gets to invent its type and an ordering comparison either works or raises depending on the page. The request-slot ban is a different fact: the request is built before any response exists, so a response reference there can never have a value at all. Refusing an unknown sub-scope rather than skipping it is what separates the engine-owned scopes this document does not describe from a typo wearing their shape.\n",
    "status": "active",
@@ -2179,8 +2104,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A URL segment holds one value, so the binding forms that address a structure or a batch have nothing to substitute — and the engine substitutes whatever it is handed, so a whole record reaches the provider stringified into the path and the request addresses a resource that does not exist. The membership half is the one that bites in practice: a renamed or mistyped record field leaves a placeholder bound to nothing, which is the same wrong URL with no error anywhere, so the binding is checked against the mode's own input schema at authoring time. On a read there is no record in scope when the request is built, which is why the binding is refused outright there rather than checked.\n",
    "status": "active",
@@ -2201,8 +2125,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A batched request carries many records and one URL, so there is no single record for the path segment to come from; whichever record the engine happened to pick would send every other record in the batch to the wrong resource. An update-by-id route is per-record by nature, and an author adding batching to it is usually reaching for throughput that route cannot give — the bulk route a provider offers alongside it is a separate mode with its own path. Batching is a property of the write mode rather than of the request, so this is the innermost scope that can see both halves.\n",
    "status": "active",
@@ -2224,8 +2147,7 @@
     "targets": [
      "ResponseExtraction",
      "WriteInput"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Everything on the path that reads an embedded schema runs offline — the validator by design, the engine when it resolves an endpoint, the conformance kit when it executes a read — so a reference out of the document is never followed by anything that could object to it. The subtree behind it is not annotation-checked, not covered by a type map, and not reported; the author is told nothing. A dangling local pointer fails the same way while looking safer, because a reference to nothing asserts nothing and every instance satisfies it. Closing all of those is also what makes it safe for declared-path resolution to follow a `$ref` at all: by the time a path is resolved, every reference it can meet is local, real, and lands on a node both structural walkers visited.\n",
    "status": "active",
@@ -2247,8 +2169,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Encoding a path segment is engine-owned and unconditional, so an author reaching for an encoder here is not adding safety, they are adding a second pass: an id containing a space or a slash goes on the wire double-escaped and the provider either 404s or matches a different resource. Nothing downstream can tell a double-escaped value from one that genuinely contained a percent sign, so the mistake cannot be detected after the fact and is refused at authoring time. The check reaches the whole binding subtree, extension keys included, because the resolver executes what it finds there too.\n",
    "status": "active",
@@ -2269,8 +2190,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The other things that fill a param are read-side: operators make it filterable from a stream, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. The shape used to be contract-valid, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
    "status": "active",
@@ -2291,8 +2211,7 @@
    "data": {
     "targets": [
      "WriteResponse"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A metadata key becomes an addressable name in the response scope, so one that collides with a scope the engine already owns creates two meanings for the same reference and the author's extraction is shadowed by an engine-supplied value with no diagnostic anywhere. The pattern is what keeps those names addressable at all. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
    "status": "active",
@@ -2313,8 +2232,7 @@
    "data": {
     "targets": [
      "WriteResponse"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The record count is a read-path quantity, so on a write the ref resolves to nothing rather than to zero — and a `success_when` predicate over a ref that resolves to nothing holds unconditionally, so every write reports success including the ones whose rejected rows the provider listed. The author is usually adapting a read response block to the write side, where the scope silently stops existing; refusing the ref at author time is what keeps that from becoming partial data loss under a green run.\n",
    "status": "active",
@@ -2335,8 +2253,7 @@
    "data": {
     "targets": [
      "DatabaseObject"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Identifiers here are stored verbatim from introspection, so the object's identity is exactly what the document says it is. Admitting both an omitted key and a null one would give \"this provider has no such level\" two spellings, and every consumer joining, comparing or rendering an object identity would have to handle both — the class of bug where the same table appears twice under two keys. Refusing the null also stops a discovery path that emitted one by accident from being read as a real, empty namespace.\n",
    "status": "active",
@@ -2358,8 +2275,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type, requiredness and operator set get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether it may filter on that value or with which operators, and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
    "status": "active",
@@ -2381,8 +2297,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The leading token is what selects the resolver that supplies the value, so an unscoped or misspelled one names no resolver at all — the value does not arrive late, it never arrives. Nothing about the failure points back at the typo: it surfaces as a header sent empty or a filter quietly dropped from the query, which reads as a provider quirk. Refusing the expression where it is written is the only place the cause and the symptom are still in the same file.\n",
    "status": "active",
@@ -2404,8 +2319,7 @@
     "targets": [
      "ReadOperation",
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "`from_input` addresses the record being written, so it means something only where the engine already has one. A read request has no record at all, and a param default and a write's header and query slots are assembled ahead of the body the record fills — the binding there has nothing to resolve against. It does not fail loudly at run time either: it produces a request with a hole in it, sent to the provider as though it were complete. Authors reach for it when a provider wants a per-record value in a header; that value has to be declared as a param and bound like any other.\n",
    "status": "active",
@@ -2426,8 +2340,7 @@
    "data": {
     "targets": [
      "WriteOperation"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A dotted path names one field of one record. Applied to the whole batch there is no single record to read it from, and no fan-out is defined — the author is imagining an array of that one field, a projection the binding grammar cannot express and the engine has no rule for. It comes up with providers that want a column-oriented payload; the shape for that is a literal envelope authored around the whole batch, not a path into it.\n",
    "status": "active",
@@ -2669,7 +2582,7 @@
    "severity": "error",
    "scope": "any",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_disjoint",
+   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::HeaderMergeRules._headers_not_both_set_and_removed",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2681,14 +2594,6 @@
      "HttpTransport",
      "TransportDefaults"
     ],
-    "fields": [
-     "headers",
-     "headers_remove"
-    ],
-    "options": {
-     "case_insensitive": true
-    },
-    "kind": "disjoint",
     "fixture_model": "AuthOperationTemplate"
    },
    "rationale": "Removal and merge are separate steps of header resolution, so a name on both sides is never reported as a conflict at run time — one step simply wins and the author goes on believing the request carries something it does not. The pairing usually appears when a block is edited to drop an inherited header and the local override that replaced it is left behind. Rejecting the pair forces the author to say which of the two they meant.\n",
@@ -2702,7 +2607,7 @@
    "severity": "error",
    "scope": "pipeline",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by",
+   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2710,10 +2615,7 @@
     "targets": [
      "PipelineConnections"
     ],
-    "fields": [
-     "destinations"
-    ],
-    "kind": "unique_by"
+    "fixture_model": "PipelineConnections"
    },
    "rationale": "A repeated entry reads as a second delivery target, so the run would write the same records into the same connection twice — duplicated rows a user will attribute to the source, not to the pipeline document. The entries are opaque UUIDs, so the repetition is invisible to anyone reading the file; that is why it is rejected outright rather than quietly de-duplicated, which would hide an authoring mistake the author still needs to see.\n",
    "status": "active",
@@ -2733,8 +2635,7 @@
    "data": {
     "targets": [
      "Schedule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The type is meant to be the single answer to when a pipeline runs. A field belonging to another type left beside it reads as a second, contradictory schedule, and nothing in the document says which one the scheduler will honour. Gating in both directions is what makes a type change safe: the field the previous type needed cannot survive the edit as a plausible- looking leftover, and an author cannot satisfy the new type by adding a field while leaving the old one in place.\n",
    "status": "active",
@@ -2754,8 +2655,7 @@
    "data": {
     "targets": [
      "PipelineAuthored"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Two versions of one stream inside a single pipeline replicate the same source into the same destinations twice, and the two versions will disagree about the shape of what they write. The literal ids differ, so plain string uniqueness passes and only the version-stripped comparison catches it. The way in is routine: a stream is edited to a new version and the new reference is appended beside the old one rather than replacing it.\n",
    "status": "active",
@@ -2775,8 +2675,7 @@
    "data": {
     "targets": [
      "PipelineAuthored"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Status is the only gate on execution, so a running pipeline with nothing to run is scheduled, wakes on its cadence, moves no data and reports success every time — the failure is a silence, and it looks healthy in every status view a user has. Requiring a stream turns that into a document the author has to finish before the pipeline can be switched on; the empty list stays legal while the pipeline is not yet scheduled, which is where drafts live.\n",
    "status": "active",
@@ -3335,8 +3234,7 @@
    "data": {
     "targets": [
      "RetryErrorHandlingBase"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A delay with no retries is incoherent: the document reads as though it waits before trying again when it never tries again at all, and an operator sizing a run from it plans for a wait that never happens. The pairing is the fingerprint of an author who set one field and forgot the other — which is the same coupling that keeps the opposite pairing honest, since retries with no wait is a hot loop against a system that has just failed.\n",
    "status": "active",
@@ -3540,7 +3438,7 @@
    "severity": "error",
    "scope": "stream",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by",
+   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3548,17 +3446,6 @@
     "targets": [
      "StreamAuthored"
     ],
-    "fields": [
-     "destinations"
-    ],
-    "options": {
-     "key": [
-      "endpoint_ref.scope",
-      "endpoint_ref.connection_id",
-      "endpoint_ref.endpoint_id"
-     ]
-    },
-    "kind": "unique_by",
     "fixture_model": "StreamInput"
    },
    "rationale": "A repeated destination writes the same records twice with nothing downstream able to tell the two entries apart. The key is the whole reference rather than the connection, because fanning one stream into several objects of the same warehouse is a normal shape and must stay authorable; narrowing the key to the connection would forbid it. The emitted JSON Schema carries no uniqueness keyword for the array, so a schema-only reading looks permissive and an author can believe duplicates are intended.\n",
@@ -3572,7 +3459,7 @@
    "severity": "error",
    "scope": "stream",
    "mechanized": true,
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by",
+   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._assignment_targets_unique",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3580,15 +3467,7 @@
     "targets": [
      "StreamMapping"
     ],
-    "fields": [
-     "assignments"
-    ],
-    "options": {
-     "key": [
-      "target.path"
-     ]
-    },
-    "kind": "unique_by"
+    "fixture_model": "StreamMapping"
    },
    "rationale": "Two assignments writing one destination field leave the value decided by array position rather than by anything the author declared, and the registry expands and hashes the assignment list, so the same document would hash to a mapping nobody chose. Authors reach for a second assignment on the same path when they want to reach inside a container target; the contract answers that with the target's own nested declaration, so the duplicate is always the wrong shape rather than a missing feature.\n",
    "status": "active",
@@ -3610,8 +3489,7 @@
    "data": {
     "targets": [
      "ConnectionEndpointRef"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The handle is derived, never chosen: the runtime discovery that mints database endpoints computes it from the same function, so a hand-written or tidied-up value names an endpoint that does not exist and the stream resolves to nothing. Because the contract derives the handle when it is omitted, verification of a supplied one is the only moment the divergence can surface at all — without it the document would validate and detach silently.\n",
    "status": "active",
@@ -3631,8 +3509,7 @@
    "data": {
     "targets": [
      "Filter"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A value beside an operand-free operator is dead weight the engine never reads, so the author believes a predicate is narrowing the read when nothing is; the reverse leaves a predicate with nothing to compare against. The operator alone decides this — there is no separate flag — which is why it is checked at the filter rather than left to the endpoint.\n",
    "status": "active",
@@ -3653,8 +3530,7 @@
    "data": {
     "targets": [
      "PipeExpression"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The node mirrors the engine's expression AST, where the seed is the value every later stage transforms; a pipe seeded by a conversion has nothing to convert and a conversion node standing alone has no input at all. Authors reach for the standalone conversion node because it reads like a function call, which is why the positional grammar is stated rather than left to the union of node types.\n",
    "status": "active",
@@ -3674,8 +3550,7 @@
    "data": {
     "targets": [
      "ArrowFieldSpec"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents and an inner declaration beside a scalar describes nesting the type cannot hold — both produce a schema the engine cannot build a record from. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
    "status": "active",
@@ -3695,8 +3570,7 @@
    "data": {
     "targets": [
      "ConstantValue"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A constant is the one place the document carries the payload as well as its type, so a mismatch between the two is visible here and nowhere else — left unchecked it reaches the destination cast as a value of the wrong kind and fails the run rather than the document. The null literal stays admissible under every type as the shared no-value sentinel, so declaring a type and omitting a payload is not what this rule catches.\n",
    "status": "active",
@@ -3716,8 +3590,7 @@
    "data": {
     "targets": [
      "ValidationRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A parameterised rule with no parameter has nothing to grade against and passes every record, which reads exactly like a rule that is working; a parameter beside a rule that takes none is a bound the author believes is applied and never is. The presence check is stricter here than for a filter — an explicit null is refused as well as an omission — because a validation rule is a defensive check, and one that silently grades nothing defeats the reason it was authored.\n",
    "status": "active",
@@ -3737,8 +3610,7 @@
    "data": {
     "targets": [
      "AssignmentTarget"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A target's path addresses the assignment root only, so the inner declaration is the sole way the document describes structure beneath it — a container marker without one leaves the nested destination field undeclared, and there is no second assignment that could declare it. Authors coming from dotted-path tooling expect to reach inside a container with another assignment; this rule is what makes the recursive declaration, rather than that missing feature, the answer.\n",
    "status": "active",
@@ -3759,8 +3631,7 @@
    "data": {
     "targets": [
      "StreamSource"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per parameter.\n",
    "status": "active",
@@ -3782,7 +3653,7 @@
     "targets": [
      "StreamSource"
     ],
-    "kind": "custom"
+    "fixture_model": "StreamSource"
    },
    "rationale": "Those features describe how a database read is shaped — which columns the query projects, how it pages, how it breaks cursor ties — and an API read has none of them to configure, so declaring one on an API source is an instruction nothing will ever act on. The structural types cannot see the scope; only the binding knows it, which is why the check lives on the source rather than on the fields themselves. Declaring an empty value counts as declaring the feature, because an author who writes one has formed the wrong model of the read.\n",
    "status": "active",
@@ -3802,8 +3673,7 @@
    "data": {
     "targets": [
      "StreamMapping"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Validation grades the mapped output, so a rule naming a source field — the mistake to expect wherever a source and destination name differ — or simply mistyping a token addresses nothing and grades no value, which is indistinguishable from a rule that passed. Only the mapping holds both the targets and the rules, so it is the one place resolution is possible. Any target in the mapping is addressable, not only the enclosing assignment's, because the rules grade the record the assignments build together.\n",
    "status": "active",
@@ -4165,8 +4035,7 @@
    "data": {
     "targets": [
      "TypeMapReadExactRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The canonical is a claim about the shape of the data, not about how the driver happens to hand it over: a container column often arrives as text on the wire, so a scalar canonical looks right at the connection and throws the structure away for every consumer downstream, which then sees an opaque string it cannot address. Only the syntactic half is reachable here — a native whose spelling is visibly a container is refused, while a bare vendor spelling validates clean, so the common case is still the author's to get right.\n",
    "status": "active",
@@ -4188,8 +4057,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The read side's container obligation follows the rule kind, not the author's intent: a pattern generalising a parameterized container family covers many more columns than the one literal an `exact` rule covers, so collapsing it to a scalar discards the structure of a whole family at once. The check reads the pattern's own container spelling, so a rule that reaches containers only through a vendor label it does not spell out still validates clean.\n",
    "status": "active",
@@ -4210,8 +4078,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A placeholder with no capture behind it has nothing to substitute, so the rule renders a canonical still carrying `${…}` — a string no Arrow type parser accepts — and the failure lands at discovery, far from the map that caused it. Typing the placeholder and the group with different spellings is the ordinary way to get here, which is why the correspondence is checked rather than assumed.\n",
    "status": "active",
@@ -4232,8 +4099,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the canonical's parentheses, so a capture dropped into a canonical that carries no parameters at all is out of its reach.\n",
    "status": "active",
@@ -4254,8 +4120,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The map is published under a JSON Schema whose pattern dialect is ECMA-262 and is read by more than one runtime, so a Python-only named-capture spelling compiles wherever the author tested it and fails wherever it ships. The authoring hazard is that both spellings look like ordinary regex, and the two directions rejected it at different layers before this rule existed.\n",
    "status": "active",
@@ -4277,8 +4142,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The rendered canonical is what discovery freezes into the endpoint document, so a spelling outside the engine-published Arrow vocabulary would not fail here but at schema construction, with the column already declared. Matching full-string is what makes that check mean anything — a partial match would accept trailing whitespace or a newline that no consumer parses — and it is also why a placeholder is legal only where the family declares a parameter.\n",
    "status": "active",
@@ -4299,8 +4163,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A malformed placeholder names no capture, so substitution leaves it in place and the rule renders a canonical carrying literal `${` text that no Arrow parser accepts. Nothing about the surrounding string looks wrong, and the well-formedness check is what lets the capture-backing check above it read the render at all.\n",
    "status": "active",
@@ -4322,8 +4185,7 @@
    "data": {
     "targets": [
      "TypeMapWriteExactRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A write rule's canonical is a matcher, so a canonical violating its own family's bounds is a rule that can never match anything the read side is allowed to produce — it reads as coverage and delivers none. The bounds themselves are the engine-published grammar's, not this rule's, so the check moves with the grammar pin. The placeholder half is folded in here because the DDL render is the one string in the rule that reaches the database.\n",
    "status": "active",
@@ -4344,8 +4206,7 @@
    "data": {
     "targets": [
      "TypeMapWriteRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `canonical` while the placeholder obligation moves onto `native` — an author carrying a read rule's habits across writes the right syntax in the wrong key. A pattern that does not compile is not a narrower match, it is a rule the engine cannot load at the moment it needs to render DDL.\n",
    "status": "active",
@@ -4367,8 +4228,7 @@
    "data": {
     "targets": [
      "TypeMapReadRegexRule"
-    ],
-    "kind": "custom"
+    ]
    },
    "rationale": "A capture written loosely — an unbounded digit run where the family admits a range — validates as a rule and then renders an out-of-vocabulary canonical the first time a real column falls outside the range, which is exactly the column the tiered rules were written to route. Bounding each capture to its own tier is the fix, and it is not obvious because the pattern already looks specific. Two things stay out of reach: a position the grammar states as an open pattern rather than a member list is not interrogated, and where a bound carries a placeholder on each side each capture is judged against its own position, so the pair jointly reachable from them is not judged at all.\n",
    "status": "active",

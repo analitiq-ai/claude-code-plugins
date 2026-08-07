@@ -6,14 +6,11 @@ tier: advisory
 severity: error
 scope: stream
 mechanized: true
-validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_unique_by"
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._assignment_targets_unique"
 owners: [pipeline-plugin]
 data:
   targets: [StreamMapping]
-  fields: [assignments]
-  options:
-    key: [target.path]
-  kind: unique_by
+  fixture_model: StreamMapping
 rationale: >
   Two assignments writing one destination field leave the value decided by
   array position rather than by anything the author declared, and the

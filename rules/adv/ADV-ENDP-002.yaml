@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Param.
 owners: [connector-plugin, engine]
 data:
   targets: [Param]
-  kind: custom
 rationale: >
   The operator set is the endpoint's promise that a downstream stream may filter
   on that param; marking the param controlled hands its value to the paging or

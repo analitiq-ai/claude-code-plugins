@@ -462,9 +462,9 @@ class TestPathParamBindingNotRegressed:
 
     def test_path_params_still_required_to_match_placeholders(self):
         # The presence correlation is upstream of the binding rules and untouched.
-        with pytest.raises(
-            ValidationError, match=r"request\.path_params keys must equal placeholders in path"
-        ):
+        # Matched on the rule id, which the registry mints and the diagnostic
+        # carries; the wording after it is the record's and moves with it.
+        with pytest.raises(ValidationError, match=r"ADV-ENDP-001"):
             parse_endpoint(_api_payload({"insert": _write_op(
                 path_params={"contact_id": {"from_input": "record.id"}},
             )}))

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteO
 owners: [connector-plugin]
 data:
   targets: [WriteOperation]
-  kind: custom
 rationale: >
   Conflict keys are the provider-defined natural key an upsert matches existing
   rows on, and the provider can only match on values the request actually

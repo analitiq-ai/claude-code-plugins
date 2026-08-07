@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::_Reque
 owners: [connector-plugin]
 data:
   targets: [_RequestBase]
-  kind: custom
   fixture_model: WriteRequest
 rationale: >
   A placeholder is filled from its path_params entry and from nothing else, so

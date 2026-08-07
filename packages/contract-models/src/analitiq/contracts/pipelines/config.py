@@ -24,7 +24,7 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.advisory import AdvisoryValidated
+from analitiq.contracts.shared.advisory import find_duplicates, violation
 from analitiq.contracts.shared.common import (
     CRON_PATTERN,
     DESCRIPTION_MAX,
@@ -54,7 +54,7 @@ PIPELINE_SCHEMA_URL = schema_url_for("pipeline")
 
 
 
-class PipelineConnections(AdvisoryValidated, StrictModel):
+class PipelineConnections(StrictModel):
     """Connection set available to every stream in the pipeline."""
 
     source: NonEmptyStr = Field(
@@ -78,6 +78,14 @@ class PipelineConnections(AdvisoryValidated, StrictModel):
         examples=[["00000000-0000-4000-8000-000000000002_v1"]],
         json_schema_extra={"uniqueItems": True},
     )
+
+    @model_validator(mode="after")
+    def _destinations_unique(self) -> "PipelineConnections":
+        """ADV-PIPE-001: a repeated reference would write the same records twice."""
+        dups = find_duplicates(self.destinations)
+        if dups:
+            raise violation("ADV-PIPE-001", f"duplicates={dups!r}")
+        return self
 
 
 _SCHEDULE_CONDITIONAL_RULES: dict[str, Any] = {

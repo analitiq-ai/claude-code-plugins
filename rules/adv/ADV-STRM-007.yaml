@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::ConstantV
 owners: [pipeline-plugin]
 data:
   targets: [ConstantValue]
-  kind: custom
 rationale: >
   A constant is the one place the document carries the payload as well as
   its type, so a mismatch between the two is visible here and nowhere else —

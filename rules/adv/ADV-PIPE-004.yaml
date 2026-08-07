@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py:
 owners: [pipeline-plugin]
 data:
   targets: [PipelineAuthored]
-  kind: custom
 rationale: >
   Status is the only gate on execution, so a running pipeline with nothing to
   run is scheduled, wakes on its cadence, moves no data and reports success

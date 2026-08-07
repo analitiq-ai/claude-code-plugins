@@ -10,8 +10,8 @@
 **Why a compiled copy exists.** The registry ships inside
 `analitiq-contract-models`, because the models enforce the advisory tier at
 `model_validate` time and the engine installs that wheel. Reading YAML there
-would put a YAML dependency in a package that has two, for data that never
-changes at run time. So the records compile to
+would add a parser dependency to a package deliberately kept to the minimum the
+models need at run time, for data that never changes. So the records compile to
 `analitiq/contracts/shared/rules.json`, read with the standard library. That
 file is a *pinned* copy, not a second source: `check` recompiles and diffs, the
 way `render_schemas.py` already guards `schemas/`.

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Connec
 owners: [engine, connector-plugin]
 data:
   targets: [ConnectorBase]
-  kind: custom
 rationale: >
   A transport_ref is how an auth operation, a discovery run or a post-auth
   request picks something other than the default transport, and it is resolved

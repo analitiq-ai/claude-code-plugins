@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::PipeExpre
 owners: [pipeline-plugin, engine]
 data:
   targets: [PipeExpression]
-  kind: custom
 rationale: >
   The node mirrors the engine's expression AST, where the seed is the value
   every later stage transforms; a pipe seeded by a conversion has nothing to

@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin]
 data:
   targets: [ReadOperation, WriteOperation]
-  kind: custom
 rationale: >
   A param declaration is the typed contract for one request input — its type,
   its requiredness, the operators a stream may filter it with — and the binding

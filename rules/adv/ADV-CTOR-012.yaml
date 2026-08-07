@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Connec
 owners: [connector-plugin]
 data:
   targets: [ConnectionConditionPredicate]
-  kind: custom
 rationale: >
   The operator is the whole test. With none declared there is nothing to
   evaluate, and with several there is no defined precedence between them, so

@@ -104,12 +104,6 @@ SCOPES = (
 #: into the registry, and the tier vocabulary has a name for that.
 RFC2119 = ("MUST NOT", "MUST", "SHOULD NOT", "SHOULD", "MAY NOT", "MAY")
 
-#: Where the registry's own generic validators live. A `validator` pointing here is
-#: dispatched by :func:`analitiq.contracts.shared.advisory.check_rule`; one
-#: pointing anywhere else is applied where it lives, and the binding is a
-#: declaration the lint resolves rather than a call site.
-ENGINE_MODULE = "packages/contract-models/src/analitiq/contracts/shared/advisory.py"
-
 
 # --- The record -------------------------------------------------------------
 
@@ -202,17 +196,6 @@ class RuleRecord:
     # --- Derived ------------------------------------------------------------
 
     @property
-    def engine_dispatched(self) -> bool:
-        """Whether the registry's own runner calls this rule's validator.
-
-        A generic relational validator lives in the registry engine and is
-        dispatched per instance; every other binding — a model validator, a
-        field annotation, an agent rule, a CI job — applies itself where it is,
-        and the `validator` string exists so a rename fails the build.
-        """
-        return bool(self.validator) and self.validator.startswith(ENGINE_MODULE + "::")
-
-    @property
     def validator_symbol(self) -> str | None:
         return self.validator.split("::", 1)[1] if self.validator else None
 
@@ -223,17 +206,8 @@ class RuleRecord:
 
     @property
     def fields(self) -> tuple[str, ...]:
-        """Field expressions the rule relates (see `advisory.resolve`)."""
+        """Model fields a structural rule's `mechanism` is declared on."""
         return tuple(self.data.get("fields", ()))
-
-    @property
-    def options(self) -> dict[str, Any]:
-        return dict(self.data.get("options", {}))
-
-    @property
-    def kind(self) -> str | None:
-        """Which generic relational check applies, for an engine-dispatched rule."""
-        return self.data.get("kind")
 
     @property
     def mechanism(self) -> str | None:
@@ -242,8 +216,15 @@ class RuleRecord:
 
     @property
     def fixture_model(self) -> str | None:
-        """Concrete model the shared fixture corpus validates against."""
-        return self.data.get("fixture_model") or (self.targets[0] if self.targets else None)
+        """Concrete model the shared fixture corpus validates against.
+
+        Naming one is how a rule joins the corpus, so membership is a thing the
+        record says rather than a thing derived from how the rule happens to be
+        written. Absent means the rule ships no fixtures — the tests assert both
+        directions, so a corpus directory without this key is an orphan and this
+        key without a corpus directory is a gap.
+        """
+        return self.data.get("fixture_model")
 
 
 # --- Loading ----------------------------------------------------------------

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py:
 owners: [pipeline-plugin]
 data:
   targets: [Schedule]
-  kind: custom
 rationale: >
   The type is meant to be the single answer to when a pipeline runs. A field
   belonging to another type left beside it reads as a second, contradictory

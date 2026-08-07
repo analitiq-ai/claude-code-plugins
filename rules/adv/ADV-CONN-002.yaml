@@ -5,12 +5,11 @@ tier: advisory
 severity: error
 scope: connector
 mechanized: true
-validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::_check_member_of"
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member"
 owners: [connector-plugin, engine]
 data:
   targets: [ConnectionContractInput]
-  fields: [default, enum]
-  kind: member_of
+  fixture_model: ConnectionContractInput
 rationale: >
   The default is the value the platform supplies whenever a user omits the
   input, so a default outside the enum makes the contract's own fallback

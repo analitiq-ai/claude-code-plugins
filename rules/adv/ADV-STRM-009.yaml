@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::Validatio
 owners: [pipeline-plugin]
 data:
   targets: [ValidationRule]
-  kind: custom
 rationale: >
   A parameterised rule with no parameter has nothing to grade against and
   passes every record, which reads exactly like a rule that is working; a

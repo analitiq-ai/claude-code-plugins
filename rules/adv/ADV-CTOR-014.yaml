@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::WriteU
 owners: [engine, connector-plugin]
 data:
   targets: [WriteUnit]
-  kind: custom
 rationale: >
   write_unit exists to tell the engine's batch coalescer what to aim for, and
   absence of the whole block already means "no preference". An empty block is

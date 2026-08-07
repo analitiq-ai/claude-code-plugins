@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py:
 owners: [pipeline-plugin]
 data:
   targets: [PipelineAuthored]
-  kind: custom
 rationale: >
   Two versions of one stream inside a single pipeline replicate the same
   source into the same destinations twice, and the two versions will disagree

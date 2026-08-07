@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Resour
 owners: [engine, connector-plugin]
 data:
   targets: [ResourceDiscoveryImplementation]
-  kind: custom
 rationale: >
   The two implementation kinds are loaded by different code paths: one imports
   the named entrypoint out of the connector's own package, the other looks the

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin]
 data:
   targets: [ReadOperation]
-  kind: custom
 rationale: >
   A GET carries no body, so a param declared to live there can never reach the
   provider: the request is built without it and the absence shows up as an

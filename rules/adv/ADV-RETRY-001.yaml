@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/shared/common.py::Re
 owners: [pipeline-plugin, engine]
 data:
   targets: [RetryErrorHandlingBase]
-  kind: custom
 rationale: >
   A delay with no retries is incoherent: the document reads as though it waits
   before trying again when it never tries again at all, and an operator sizing

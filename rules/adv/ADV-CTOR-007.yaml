@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Connec
 owners: [engine, connector-plugin]
 data:
   targets: [ConnectorBase]
-  kind: custom
 rationale: >
   Activation waits for these paths to resolve. The path is derived — storage
   kind plus declaration key — and never written beside the declaration it comes

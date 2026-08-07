@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Connec
 owners: [engine, connector-plugin]
 data:
   targets: [ConnectorBase]
-  kind: custom
 rationale: >
   A storage path is derived from the storage kind plus the declaration key, and
   an input and a post-auth output are declared in different blocks — so two

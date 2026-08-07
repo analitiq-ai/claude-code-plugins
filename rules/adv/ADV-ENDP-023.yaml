@@ -13,7 +13,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin, engine]
 data:
   targets: [ReadOperation]
-  kind: custom
 rationale: >
   A response path that resolves to nothing does not fail at run time: it
   yields an empty value, and every predicate built on it holds

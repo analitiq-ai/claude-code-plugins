@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin, engine]
 data:
   targets: [ReadOperation, WriteOperation]
-  kind: custom
 rationale: >
   `from_input` addresses the record being written, so it means something only
   where the engine already has one. A read request has no record at all, and a

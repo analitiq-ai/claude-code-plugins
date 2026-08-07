@@ -20,12 +20,7 @@ from analitiq.contracts import connection, connector, endpoints, stream, type_ma
 from analitiq.contracts.pipelines import config as pipeline_config
 from analitiq.contracts.pipelines import data_sync
 from analitiq.contracts.shared import common
-from analitiq.contracts.shared.advisory import (
-    CUSTOM_KIND,
-    GENERIC_KINDS,
-    AdvisoryValidated,
-    all_rules,
-)
+from analitiq.contracts.shared.advisory import all_rules
 from analitiq.contracts.shared.rule_record import (
     ADVISORY_TIER,
     DESCRIPTIVE_TIER,
@@ -61,7 +56,10 @@ def _model_index() -> dict[str, type[BaseModel]]:
 
 MODEL_INDEX = _model_index()
 RULES = {r.id: r for r in all_rules()}
-GENERIC_RULES = [r for r in all_rules() if r.kind in GENERIC_KINDS]
+#: The rules the shared fixture corpus covers — the ones whose record names the
+#: concrete model to validate a fixture against. A non-Python re-implementation
+#: reconciles against the same JSON.
+FIXTURED_RULES = [r for r in all_rules() if r.fixture_model]
 
 
 def _iter_fixtures():
@@ -116,34 +114,37 @@ def test_every_target_resolves_to_a_model():
             assert target in MODEL_INDEX, f"{rule.id}: unknown target class {target!r}"
 
 
-def test_generic_targets_use_the_mixin():
-    """A generic rule only fires if its models inherit the advisory mixin."""
-    for rule in GENERIC_RULES:
-        for target in rule.targets:
-            cls = MODEL_INDEX[target]
-            assert issubclass(cls, AdvisoryValidated), (
-                f"{rule.id}: {target} does not inherit AdvisoryValidated, so the rule never runs"
-            )
-
-
 def _enforcer_name(rule) -> str:
-    """The bare method name a custom rule's `validator` binding ends in."""
+    """The bare member name a rule's `validator` binding ends in."""
     return rule.validator_symbol.split(".")[-1]
 
 
-def test_custom_rules_name_a_real_enforcer():
-    """A custom rule's enforcer must exist on EVERY target — it runs on each.
+def _carries(cls, member: str) -> bool:
+    """Whether a model carries the member a binding names.
+
+    Either half counts, because both halves enforce: a model validator is a
+    class attribute, and the `Literal`/pattern/bound a structural rule rides on
+    is a pydantic field, which is not.
+    """
+    return hasattr(cls, member) or member in getattr(cls, "model_fields", {})
+
+
+def test_bound_rules_name_a_real_enforcer():
+    """A rule's enforcer must exist on EVERY target — it applies to each.
 
     `render_rules.py` resolves the `validator` binding, but only against the
-    one symbol it names. A rule bound to several targets runs on all of them,
-    so a method present on the named class and missing on a sibling is a rule
-    that silently does not fire for half its targets.
+    one symbol it names. A rule bound to several targets applies to all of
+    them, so a member present on the named class and missing on a sibling is a
+    rule that silently does not fire for half its targets.
     """
     for rule in all_rules():
-        if rule.kind != CUSTOM_KIND:
+        # A binding naming a bare class says the shape IS the class — a
+        # discriminated-union branch, say — so there is no member to find on
+        # its siblings. `render_rules.py` resolves that the class exists.
+        if not rule.validator_symbol or "." not in rule.validator_symbol:
             continue
         enforcer = _enforcer_name(rule)
-        missing = [t for t in rule.targets if not hasattr(MODEL_INDEX[t], enforcer)]
+        missing = [t for t in rule.targets if not _carries(MODEL_INDEX[t], enforcer)]
         assert not missing, f"{rule.id}: enforcer {enforcer!r} missing on {missing}"
 
 
@@ -159,7 +160,6 @@ EXEMPT_MODEL_VALIDATORS = {
     ("RetryErrorHandlingBase", "_default_retry_delay"): (
         "pure normalizer: injects the effective retry delay, never rejects"
     ),
-    ("AdvisoryValidated", "_run_advisory_rules"): "the registry runner itself",
     ("_EndpointModel", "_reject_reserved_fields"): (
         "message-quality duplicate: the closed model (extra='forbid') already "
         "rejects the reserved keys; this validator only names the spec section"
@@ -408,9 +408,9 @@ def test_mechanized_rules_name_what_applies_them():
 # --- Shared fixture corpus --------------------------------------------------
 
 
-def test_every_generic_rule_has_fixtures():
-    """Fail closed: each generic rule carries >=2 valid and >=2 invalid fixtures."""
-    for rule in GENERIC_RULES:
+def test_every_fixtured_rule_has_fixtures():
+    """Fail closed: a rule naming a fixture_model carries >=2 valid and >=2 invalid."""
+    for rule in FIXTURED_RULES:
         for group, minimum in (("valid", 2), ("invalid", 2)):
             found = list((FIXTURES_DIR / rule.id / group).glob("*.json"))
             assert len(found) >= minimum, (
@@ -419,9 +419,18 @@ def test_every_generic_rule_has_fixtures():
 
 
 def test_no_orphan_fixture_directories():
+    """The other direction: a corpus directory belongs to a rule that claims it.
+
+    Without this, dropping `fixture_model` from a record would quietly retire
+    its fixtures — the rule leaves the corpus and the files stay on disk
+    exercising nothing.
+    """
+    claimed = {r.id for r in FIXTURED_RULES}
     for rule_dir in FIXTURES_DIR.glob("*"):
         if rule_dir.is_dir():
-            assert rule_dir.name in RULES, f"fixtures for unknown rule {rule_dir.name!r}"
+            assert rule_dir.name in claimed, (
+                f"fixtures for {rule_dir.name!r}, which names no fixture_model"
+            )
 
 
 @pytest.mark.parametrize("rule_id, group, path", list(_iter_fixtures()))
@@ -434,7 +443,10 @@ def test_fixture_matches_enforcement(rule_id, group, path):
     else:
         with pytest.raises(ValidationError) as exc:
             model.model_validate(payload)
-        if rule.kind in GENERIC_KINDS:
-            assert rule_id in str(exc.value), (
-                f"{rule_id} invalid fixture rejected, but not by this rule"
-            )
+        # Unconditional: a fixture proves the rule only if this rule is what
+        # rejected it. Some other constraint failing first would pass a bare
+        # `raises`, and the corpus would certify a rule nothing enforces.
+        # `violation()` puts the id in the message, so every enforcer can.
+        assert rule_id in str(exc.value), (
+            f"{rule_id} invalid fixture rejected, but not by this rule"
+        )

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOp
 owners: [connector-plugin, engine]
 data:
   targets: [ReadOperation, WriteOperation]
-  kind: custom
 rationale: >
   Encoding a path segment is engine-owned and unconditional, so an author
   reaching for an encoder here is not adding safety, they are adding a

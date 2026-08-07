@@ -19,7 +19,7 @@ from analitiq.contracts.endpoints import (
     WriteMode,
 )
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-from analitiq.contracts.shared.advisory import AdvisoryValidated, find_duplicates
+from analitiq.contracts.shared.advisory import find_duplicates, violation
 from analitiq.contracts.shared.arrow_shape import (
     ARROW_CONTAINER_SCHEMA_RULES,
     enforce_container_shape,
@@ -60,10 +60,10 @@ def _check_unique_destinations(
 ) -> list["StreamDestination"]:
     """Reject duplicate destinations by `(scope, connection_id, endpoint_id)`.
 
-    The public authored contract (`StreamAuthored`) enforces this via the
-    advisory registry (ADV-STRM-001). This importable shim is retained for a
-    downstream caller that reuses it directly; both paths share the
-    `find_duplicates` primitive, so the algorithm is defined once.
+    ADV-STRM-001, applied to the authored contract by
+    `StreamAuthored._destinations_unique` and importable here for a downstream
+    caller that holds a destination list without the stream around it. One
+    definition, so the two callers cannot disagree about what a duplicate is.
     """
     dups = find_duplicates(
         destinations,
@@ -74,10 +74,7 @@ def _check_unique_destinations(
         ),
     )
     if dups:
-        raise ValueError(
-            "destinations[].endpoint_ref must be unique by "
-            f"(scope, connection_id, endpoint_id); duplicates: {dups!r}"
-        )
+        raise violation("ADV-STRM-001", f"duplicates={dups!r}")
     return destinations
 
 
@@ -486,14 +483,9 @@ class StreamSource(StrictModel):
             if value is not None
         ]
         if declared:
-            label = (
-                "a database-source feature"
-                if len(declared) == 1
-                else "database-source features"
-            )
-            raise ValueError(
-                f"a {self.endpoint_ref.scope} source must not declare "
-                f"{' or '.join(declared)} — {label}"
+            raise violation(
+                "ADV-STRM-014",
+                f"{self.endpoint_ref.scope} source declares {declared!r}",
             )
         return self
 
@@ -1286,13 +1278,21 @@ def _declared_child(
     return (node.properties or {}).get(token)
 
 
-class StreamMapping(AdvisoryValidated, StrictModel):
+class StreamMapping(StrictModel):
     """Source-to-destination assignment rules. Optional — omit for default mapping."""
 
     assignments: list[Assignment] = Field(
         default_factory=list,
         description="Ordered list of field assignments. Order is significant.",
     )
+
+    @model_validator(mode="after")
+    def _assignment_targets_unique(self) -> "StreamMapping":
+        """ADV-STRM-002: array position never decides a destination field's value."""
+        dups = find_duplicates(self.assignments, key=lambda a: a.target.path)
+        if dups:
+            raise violation("ADV-STRM-002", f"duplicates={dups!r}")
+        return self
 
     @model_validator(mode="after")
     def _validate_rule_fields_resolve(self) -> "StreamMapping":
@@ -1339,7 +1339,7 @@ class StreamMapping(AdvisoryValidated, StrictModel):
 # ---------------------------------------------------------------------------
 
 
-class StreamAuthored(AdvisoryValidated, StrictModel):
+class StreamAuthored(StrictModel):
     """Authored stream fields shared between input and persisted models."""
 
     schema_url: Literal[STREAM_SCHEMA_URL] | None = Field(
@@ -1402,6 +1402,13 @@ class StreamAuthored(AdvisoryValidated, StrictModel):
     @classmethod
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
         return validate_tags(v)
+
+    @model_validator(mode="after")
+    def _destinations_unique(self) -> "StreamAuthored":
+        """ADV-STRM-001: no endpoint receives the same records twice."""
+        _check_unique_destinations(self.destinations)
+        return self
+
 
 class StreamInput(StreamAuthored):
     """Strict API input variant — the source of truth for the `stream/latest.json` published JSON Schema.

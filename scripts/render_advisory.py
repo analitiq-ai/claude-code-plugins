@@ -177,17 +177,15 @@ def _live_values(rule, models: dict) -> str:
 def _applied_by(rule) -> str:
     """What rejects a violation, in the fewest words that stay true.
 
-    Read off `validator`, never asserted: the registry's own relational checks
-    are the validator itself, a model validator or a field is that symbol, and
-    an agent rule is the document an agent loads. Nothing set means nothing
-    applies it, which is the answer a reader most needs.
+    Read off `validator`, never asserted: a model validator or a field is that
+    symbol, an agent rule is the document an agent loads. Nothing set means
+    nothing applies it, which is the answer a reader most needs.
     """
     if not rule.validator:
         return "—"
     if rule.validator.endswith(".md"):
         return f"`{rule.validator}`"
-    symbol = rule.validator_symbol
-    return "the validator" if rule.engine_dispatched else f"`{symbol}`"
+    return f"`{rule.validator_symbol}`"
 
 
 def _cell(text: str) -> str:

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Connec
 owners: [connector-plugin]
 data:
   targets: [ConnectorBase]
-  kind: custom
 rationale: >
   Save-time validation resolves these names against the submitted form. A name
   no input declares either passes vacuously — losing the requirement — or asks

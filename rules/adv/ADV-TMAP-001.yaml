@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMap
 owners: [connector-plugin, pipeline-plugin, engine]
 data:
   targets: [TypeMapReadExactRule]
-  kind: custom
 rationale: >
   The canonical is a claim about the shape of the data, not about how the
   driver happens to hand it over: a container column often arrives as text on

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamSou
 owners: [pipeline-plugin, engine]
 data:
   targets: [StreamSource]
-  kind: custom
 rationale: >
   The operator field structurally admits the union of both vocabularies,
   because only the binding knows which read path a filter will be rendered

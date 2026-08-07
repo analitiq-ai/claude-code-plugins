@@ -42,7 +42,11 @@ from analitiq.contracts.arrow_grammar import (
     ARROW_TYPE_PATTERN,
     validate_cross_params,
 )
-from analitiq.contracts.shared.advisory import AdvisoryValidated
+from analitiq.contracts.shared.advisory import (
+    HeaderMergeRules,
+    find_duplicates,
+    violation,
+)
 from analitiq.contracts.shared.arrow_shape import (
     ARROW_CONTAINER_SCHEMA_RULES,
     enforce_container_shape,
@@ -956,7 +960,7 @@ _REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
 )
 
 
-class _RequestBase(AdvisoryValidated, _EndpointModel):
+class _RequestBase(HeaderMergeRules, _EndpointModel):
     """Common request fields shared by read and write operations."""
 
     model_config = ConfigDict(json_schema_extra=_REQUEST_SCHEMA_RULES)
@@ -1051,23 +1055,19 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
         # Use explicit `is None`: `path_params={}` is meaningfully different
         # from omitted, and the falsy-check version treats them the same.
         if placeholder_set and self.path_params is None:
-            raise ValueError(
-                f"request.path declares placeholders {sorted(placeholder_set)!r} but "
-                "request.path_params is missing (spec: §Request Parameter Binding)"
+            raise violation(
+                "ADV-ENDP-001",
+                f"path declares {sorted(placeholder_set)!r}; path_params missing",
             )
         if not placeholder_set and self.path_params is not None:
-            raise ValueError(
-                "request.path_params is present but request.path has no placeholders "
-                "(spec: §Request Parameter Binding)"
-            )
+            raise violation("ADV-ENDP-001", "path_params present; path declares none")
         if self.path_params is not None:
             extra = set(self.path_params) - placeholder_set
             missing = placeholder_set - set(self.path_params)
             if extra or missing:
-                raise ValueError(
-                    f"request.path_params keys must equal placeholders in path; "
-                    f"extra={sorted(extra)!r}, missing={sorted(missing)!r} "
-                    "(spec: §Request Parameter Binding)"
+                raise violation(
+                    "ADV-ENDP-001",
+                    f"extra={sorted(extra)!r}; missing={sorted(missing)!r}",
                 )
         return self
 
@@ -2510,7 +2510,7 @@ class Column(_EndpointModel):
         return self
 
 
-class DatabaseEndpointDoc(AdvisoryValidated, _EndpointBase):
+class DatabaseEndpointDoc(_EndpointBase):
     """Database endpoint schema document."""
 
     schema_url: Literal[DATABASE_ENDPOINT_SCHEMA_URL] = Field(
@@ -2524,6 +2524,38 @@ class DatabaseEndpointDoc(AdvisoryValidated, _EndpointBase):
     database_object: DatabaseObject = Field(...)
     columns: list[Column] = Field(..., min_length=1)
     primary_keys: list[str] | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _column_names_unique(self) -> "DatabaseEndpointDoc":
+        """ADV-DBEP-001: the name every downstream lookup addresses is one column."""
+        dups = find_duplicates(self.columns, key=lambda c: c.name)
+        if dups:
+            raise violation("ADV-DBEP-001", f"duplicates={dups!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _ordinal_positions_unique(self) -> "DatabaseEndpointDoc":
+        """ADV-DBEP-002: declared ordinals canonicalise column order unambiguously.
+
+        Schemaless sources expose no ordinal, so a column that omits one is not
+        competing for a position and is left out of the comparison.
+        """
+        declared = [c.ordinal_position for c in self.columns if c.ordinal_position is not None]
+        dups = find_duplicates(declared)
+        if dups:
+            raise violation("ADV-DBEP-002", f"duplicates={dups!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _primary_keys_name_columns(self) -> "DatabaseEndpointDoc":
+        """ADV-DBEP-003: every conflict key an upsert draws is a column here."""
+        if not self.primary_keys:
+            return self
+        declared = {c.name for c in self.columns}
+        extra = sorted(set(self.primary_keys) - declared)
+        if extra:
+            raise violation("ADV-DBEP-003", f"not declared: {extra!r}")
+        return self
 
 
 def parse_endpoint(payload: Any) -> "ApiEndpointDoc | DatabaseEndpointDoc":

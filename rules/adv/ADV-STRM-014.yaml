@@ -10,7 +10,7 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamSou
 owners: [pipeline-plugin, engine]
 data:
   targets: [StreamSource]
-  kind: custom
+  fixture_model: StreamSource
 rationale: >
   Those features describe how a database read is shaped — which columns the
   query projects, how it pages, how it breaks cursor ties — and an API read

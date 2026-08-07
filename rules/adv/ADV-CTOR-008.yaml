@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Connec
 owners: [connector-plugin]
 data:
   targets: [ConnectorBase]
-  kind: custom
 rationale: >
   A predicate over a field no input declares can never match, so the rule
   hanging off it never fires: the requirement the author wrote it to enforce is

@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Column
 owners: [connector-plugin, pipeline-plugin, engine]
 data:
   targets: [Column]
-  kind: custom
 rationale: >
   A discovered column is where a provider's nested type — a STRUCT, an
   array, a document — either survives into the transport contract or is

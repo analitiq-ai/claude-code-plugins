@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Replic
 owners: [connector-plugin]
 data:
   targets: [Replication]
-  kind: custom
 rationale: >
   The mapping forms describe incompatible provider filters — one an open-ended
   bound, the other a closed window — and the union discriminator picks a branch

@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteR
 owners: [connector-plugin, engine]
 data:
   targets: [WriteResponse]
-  kind: custom
 rationale: >
   The record count is a read-path quantity, so on a write the ref resolves to
   nothing rather than to zero — and a `success_when` predicate over a ref that

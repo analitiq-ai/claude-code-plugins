@@ -89,7 +89,7 @@ jobs:
       - name: Check the rule registry is valid and compiled
         # `rules/adv/*.yaml` is the source of truth for every ADV-* rule. This
         # validates each record against rules/SCHEMA.md, resolves every
-        # `checker` binding against the live models — a rule claiming an
+        # `validator` binding against the live models — a rule claiming an
         # enforcement it lost is what this catches — and fails when the
         # `rules.json` the wheel ships no longer matches the records.
         # Runs BEFORE the renderers below: they all read the compiled registry,

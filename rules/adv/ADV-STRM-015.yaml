@@ -11,7 +11,6 @@ validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamMap
 owners: [pipeline-plugin]
 data:
   targets: [StreamMapping]
-  kind: custom
 rationale: >
   Validation grades the mapped output, so a rule naming a source field —
   the mistake to expect wherever a source and destination name differ — or

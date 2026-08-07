@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Operat
 owners: [connector-plugin]
 data:
   targets: [Operations]
-  kind: custom
 rationale: >
   An endpoint declaring neither operation is a document the engine can neither
   read from nor write to: it validates as configuration, attaches, and does

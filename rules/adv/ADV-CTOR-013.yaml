@@ -10,7 +10,6 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::SqlSta
 owners: [engine, connector-plugin]
 data:
   targets: [SqlStageCapabilities]
-  kind: custom
 rationale: >
   The engine emits the staging schema as a SQL identifier when it creates and
   drops the stage relation around every write. A dedicated placement with no
