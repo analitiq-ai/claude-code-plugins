@@ -1,4 +1,4 @@
-"""Gate the prose *outside* generated blocks (issue #24).
+"""Gate the prose *outside* generated blocks.
 
 `test_generated_blocks_in_sync` verifies the contents of every marked region.
 Nothing verified a fact was **in** a region — delete a marker pair, hand-type a
@@ -7,10 +7,11 @@ wrong vocabulary in its place, and the suite stayed green.
 Two checks close that, and it is worth being precise about which does the work:
 
 1. `test_docs_carry_their_required_blocks` — the load-bearing one. Every doc must
-   still carry the blocks it is supposed to carry. Deleting a block from a doc is
-   the actual #24 scenario, and no content heuristic can catch it reliably,
-   because what replaces the block is by definition wrong in an unpredictable
-   way. Pinning the manifest catches it regardless of what the replacement says.
+   still carry the blocks it is supposed to carry. Deleting a block from a doc
+   is the headline drift stated above, and no content heuristic can catch it
+   reliably, because what replaces the block is by definition wrong in an
+   unpredictable way. Pinning the manifest catches it regardless of what the
+   replacement says.
 
 2. `test_no_undeclared_vocabulary_restatement` — the heuristic. It finds a doc
    that names a whole closed vocabulary outside a block, which must then be
@@ -70,7 +71,7 @@ re-baseline the hash without reading, which is worse than the hole. Eight
 sections are exposed; they are the eight in ALLOWED_RESTATEMENTS.
 
 A third gate, separate from the two above, covers PATTERNS rather than
-vocabularies (issue #50) — see
+vocabularies — see
 `test_shared_patterns_are_not_hand_typed_outside_generated_blocks`, which
 states its own coverage and limits.
 """
@@ -90,8 +91,9 @@ pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
 import gen_contract_docs as G  # noqa: E402
 
-# Which generated blocks each doc must carry. Deleting one is issue #24's exact
-# scenario, so this manifest — not a content heuristic — is what catches it.
+# Which generated blocks each doc must carry. A block deleted from the doc that
+# owns it is the drift no content heuristic can catch, so this manifest is what
+# catches it.
 # Plugin policy (which doc shows what), not a contract fact, and asserted against
 # reality in both directions so it cannot rot.
 REQUIRED_BLOCKS = {
@@ -236,7 +238,7 @@ def _restatements():
 
 
 def test_docs_carry_their_required_blocks():
-    """The #24 scenario: a block deleted from the doc that is supposed to carry it.
+    """Catch a block deleted from the doc that is supposed to carry it.
 
     No content check can catch this reliably — whatever replaces the block is
     wrong in an unpredictable way. Pinning which doc carries which block does.
@@ -442,13 +444,14 @@ def _published_shared_patterns() -> dict[str, str]:
 
 
 def test_shared_patterns_are_not_hand_typed_outside_generated_blocks():
-    """The pattern-flavored twin of the vocabulary gate (issue #50).
+    """The pattern-flavored twin of the vocabulary gate.
 
-    #24 gated closed vocabularies and deliberately left patterns alone; the slug
-    regex was then found hand-typed at six prose sites, every one describing a
-    directory name — plugin convention, not a contract field. The fix stated the
-    convention once (identity-and-versioning.md §Identifier shapes, pinned BY
-    REFERENCE to the published pattern) and replaced the copies with citations.
+    The gates above cover closed vocabularies and deliberately leave patterns
+    alone; the slug regex was then found hand-typed at six prose sites, every one
+    describing a directory name — plugin convention, not a contract field. The
+    fix stated the convention once (identity-and-versioning.md §Identifier
+    shapes, pinned BY REFERENCE to the published pattern) and replaced the copies
+    with citations.
 
     This keeps it that way, for every `*_PATTERN` constant the shared contract
     modules publish — not just the four the shared-vocabulary block emits: a

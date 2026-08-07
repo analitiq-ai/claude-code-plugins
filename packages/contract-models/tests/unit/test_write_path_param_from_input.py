@@ -1,4 +1,4 @@
-"""A write `path_params` binding may read the record being written (issue #125).
+"""A write `path_params` binding may read the record being written.
 
 `PUT /Contact/{id}` — where `{id}` is the id of the record being written — was
 contract-valid and unimplementable: `path_params` accepted only `{from_param}`
@@ -6,9 +6,8 @@ expressions, write params resolve through the connection/secrets/runtime scopes,
 and *no scope reaches the record*. The shipped `sevdesk` connector declares this
 shape in 21 of its 22 write endpoints; each one bound `{id}` to a param with no
 `default`, so the placeholder could never be substituted. Once the engine began
-honouring `path_params` (analitiq-engine#451) those 21 endpoints went from
-silently wrong to loudly blocked, with no fix available inside the engine or the
-connector.
+honouring `path_params`, those 21 endpoints went from silently wrong to loudly
+blocked, with no fix available inside the engine or the connector.
 
 The contract now permits `{"from_input": "record.<dotted>"}` in
 `request.path_params`, **on write operations only**, binding directly with no
@@ -110,14 +109,15 @@ def _write_op(
 
 
 # ---------------------------------------------------------------------------
-# The headline case: sevdesk's `PUT /Contact/{id}` (issue #125)
+# The headline case: sevdesk's `PUT /Contact/{id}`
 # ---------------------------------------------------------------------------
 
 
 class TestSevdeskPutContactById:
-    """The exact document issue #125 says is unimplementable. It now validates."""
+    """The exact document that was contract-valid and unimplementable. It now
+    validates."""
 
-    # Verbatim from the issue's "Ask", fleshed out only with the surrounding
+    # The binding sevdesk needs, fleshed out only with the surrounding
     # fields any write mode requires (a body that references the record, and the
     # `input.schema` that declares the record's fields).
     SEVDESK_UPDATE_CONTACT = {
@@ -155,12 +155,13 @@ class TestSevdeskPutContactById:
         assert isinstance(doc, ApiEndpointDoc)
         upsert = doc.operations.write["upsert"]
         # The placeholder is bound straight to the record field — this is the
-        # binding that had no expressible form before #125.
+        # binding that had no expressible form while `path_params` accepted
+        # `{from_param}` alone.
         assert upsert.request.path_params == {"id": {"from_input": "record.id"}}
 
     def test_the_binding_needs_no_declared_param(self):
-        # Point 3 of the issue: `from_input` binds directly, so `in: path` is not
-        # a required intermediary. `params` is empty and the document stands.
+        # `from_input` binds directly, so an `in: path` param is not a required
+        # intermediary. `params` is empty and the document stands.
         doc = parse_endpoint(self.SEVDESK_UPDATE_CONTACT)
         assert doc.operations.write["upsert"].params == {}
 
@@ -213,8 +214,8 @@ class TestFromInputInPathParamsRejected:
     """The fence: every shape the record scope must NOT reach."""
 
     def test_from_input_on_a_read_path_param_rejected(self):
-        # Point 4 of the issue: a read has no record, so there is nothing for
-        # `from_input` to resolve against. Unchanged ban, unchanged message.
+        # A read has no record, so there is nothing for `from_input` to resolve
+        # against. Unchanged ban, unchanged message.
         with pytest.raises(
             ValidationError, match=r"from_input is invalid in request\.path_params"
         ):
@@ -236,8 +237,8 @@ class TestFromInputInPathParamsRejected:
             })
 
     def test_from_input_path_param_with_batching_rejected(self):
-        # ADV-ENDP-025, point 1 of the issue. Same argument as idempotency ×
-        # batching: the value is per-record and one request carries many.
+        # ADV-ENDP-025. Same argument as idempotency × batching: the value is
+        # per-record and one request carries many.
         with pytest.raises(
             ValidationError,
             match=r"from_input in request\.path_params cannot be combined with batching",
@@ -344,7 +345,8 @@ class TestFromInputInPathParamsRejected:
 
 
 class TestPathParamBindingNotRegressed:
-    """Everything `path_params` did before #125 it must still do."""
+    """Everything `path_params` did before the record scope reached it, it must
+    still do."""
 
     def test_from_param_and_from_input_mix_in_one_path(self):
         # A path can need both: one segment from the record, one from a param
@@ -395,7 +397,7 @@ class TestPathParamBindingNotRegressed:
             )}))
 
     def test_path_param_that_is_neither_binding_still_rejected(self):
-        # A `${record.id}` template is not a binding expression; the pre-#125
+        # A `${record.id}` template is not a binding expression; the original
         # "must be a {from_param} expression" message is what an author sees.
         with pytest.raises(
             ValidationError,
@@ -406,8 +408,8 @@ class TestPathParamBindingNotRegressed:
             )}))
 
     def test_batching_arity_remains_a_statement_about_the_body(self):
-        # A batched write with no path placeholder is unaffected by #125: the
-        # body says `records`, and no path segment reads a record.
+        # A batched write with no path placeholder is unaffected by the record
+        # scope: the body says `records`, and no path segment reads a record.
         parse_endpoint(_api_payload({"insert": _write_op(
             method="POST",
             path="/Contact",
@@ -469,15 +471,16 @@ class TestPathParamBindingNotRegressed:
 
 
 # ---------------------------------------------------------------------------
-# The two things #125 asked to SETTLE, not just to permit
+# The two things admitting the record scope had to SETTLE, not just permit
 # ---------------------------------------------------------------------------
 
 
 class TestPathSegmentEncodingIsEngineOwned:
-    """ADV-ENDP-027. #125 point 2 asked for the encoding contract to be stated
-    "so an author does not double-encode by reaching for `url_encode` as well".
-    Stating it is not enough on its own — the author reaching for it was the
-    accepted, unflagged case — so the reach is refused where it would do harm.
+    """ADV-ENDP-027. Who percent-encodes a substituted path segment has to be
+    settled so an author does not double-encode by reaching for `url_encode` as
+    well. Stating it is not enough on its own — the author reaching for it was
+    the accepted, unflagged case — so the reach is refused where it would do
+    harm.
 
     The harm is silent and downstream: a record id containing `/` or a space
     goes on the wire as `a%2520b`, and the provider 404s or matches the wrong
@@ -587,9 +590,10 @@ class TestPathSegmentEncodingIsEngineOwned:
 
 
 class TestAWritePathParamMustBeAbleToResolve:
-    """ADV-ENDP-028. #125 opens with a document it calls "contract-valid and
-    unimplementable": a write binding `{id}` to an `in: path` param that carries
-    no `default`. On a write a param has exactly ONE source — its own `default`.
+    """ADV-ENDP-028. The shape this class refuses used to be contract-valid and
+    unimplementable: a write binding `{id}` to an `in: path`
+    param that carries no `default`. On a write a param has exactly ONE source —
+    its own `default`.
     `operators` makes a param stream-filterable and `controlled_by` hands it to
     pagination or replication; both are read-side and neither is reachable from
     a write. So the placeholder provably can never be substituted, and the
@@ -658,7 +662,7 @@ class TestAWritePathParamMustBeAbleToResolve:
 
 
 # ---------------------------------------------------------------------------
-# Review finding (PR #131): the membership rule no-opped on the very shape
+# Review finding: the membership rule no-opped on the very shape
 # ADV-ENDP-026's rejection message tells authors to write.
 # ---------------------------------------------------------------------------
 
@@ -668,11 +672,14 @@ class TestMembershipHoldsThroughRefsAndAllOf:
     `input.schema` written as `{"$ref": "#/$defs/Rec"}` — exactly what
     ADV-ENDP-026 instructs when it refuses a non-local ref — made
     ADV-ENDP-024's membership check, the body `from_input` check and
-    `conflict_keys` all silently pass. A `{id}` placeholder bound to a field
-    that does not exist then ships: the wrong-URL failure #125 was filed for.
+    `conflict_keys` all silently pass. A `{id}` placeholder bound to a field the
+    record does not declare then ships, and every write goes to a URL whose id
+    segment cannot be substituted from the record — the exact failure the record
+    binding exists to make expressible and checkable.
 
-    The read half of this PR had already been fixed this way; the write half
-    had not, and every existing test in this module used an inline schema.
+    The read half — `response_path` resolution — is already tested against a
+    `$ref`-and-`allOf` schema for exactly this reason; the write path was not,
+    and every other test in this module uses an inline schema.
     """
 
     REF_SCHEMA = {
@@ -799,7 +806,9 @@ class TestWriteBlocksAreSweptForScopeTypos:
 
     def test_a_response_ref_in_a_write_param_default_is_rejected(self):
         """The write side's `params[<n>].default` had a positive case and no
-        negative one — the read side's equivalent is what #123 was filed for."""
+        negative one — the read side's equivalent is the paging seed, where a
+        ref into a response that does not exist yet leaves paging starting from
+        an unresolved value and the run reporting success."""
         op = _write_op(
             params={"tok": {
                 "in": "query",

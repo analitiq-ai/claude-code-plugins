@@ -824,7 +824,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # release (the contract's shared-metadata rules). The
     # filename==id rule only makes IDENTICAL ids collide on the filesystem (and
     # then surfaces obliquely as a filename mismatch); enforce the invariant
-    # directly so a duplicate is reported as a duplicate. Issue #917 Gap 2(a).
+    # directly so a duplicate is reported as a duplicate.
     seen_ids: dict[str, str] = {}
     for ep_path in endpoint_files:
         rel = ep_path.relative_to(endpoint_dir).as_posix()

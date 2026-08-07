@@ -3,13 +3,13 @@ r"""Pin capability block v2: `error_map`, `concurrency`, `sql_capabilities.limit
 (Raw docstring: it quotes the published `(?![\s\S])` true-end regex, which a
 normal string literal would mangle into an invalid escape sequence.)
 
-Issue #89 (engine analitiq-engine#401/#407): the engine reads three additional
-driver-fact declarations from the connector definition. The contract models are
-`extra="forbid"`, so a connector cannot declare any of them until they ship
-here. All three are ADDITIVE — unlike the five required shape facts of
-`sql_capabilities` (and unlike `write_unit`'s at-least-one-bound rule), absence
-of a block, a family, or a single cap is legal and means "no declared mapping /
-no declared cap"; an EMPTY block (`{}`) is legal and equivalent to omission.
+The engine reads all three as driver facts declared on the connector itself.
+The contract models are `extra="forbid"`, so a connector cannot declare any of
+them until they ship here. All three are ADDITIVE — unlike the required shape
+facts of `sql_capabilities` (and unlike `write_unit`'s at-least-one-bound
+rule), absence of a block, a family, or a single cap is legal and means "no
+declared mapping / no declared cap"; an EMPTY block (`{}`) is legal and
+equivalent to omission.
 
 Facts that have to hold and stay held, so they are pinned here:
 
@@ -71,8 +71,8 @@ POSTGRES_EXAMPLE = (
     / "postgresql.example.json"
 )
 
-# The issue #89 grammar example (with `bulk_load` in its issue-#92
-# per-transport shape), reused as the accepted baseline that the negative
+# The settled capability-block grammar example (with `bulk_load` in its
+# per-transport map shape), reused as the accepted baseline that the negative
 # cases mutate.
 VALID_ERROR_MAP = {
     "sqlstate": {"08": "unreachable", "28000": "auth", "23": "write_rejected"},
@@ -152,9 +152,10 @@ def test_error_map_rejects(payload, why):
 
 # Hand-pinned expected member sets — a deliberate restatement so a future
 # NARROWING fails loudly (same rationale as EXPECTED_SQL_CAP_ENUMS in
-# test_sql_capabilities.py). The vocabulary and key grammars are settled in
-# issue #89 and mirrored by the engine's typed parser (`cdk/declarations.py`);
-# this is the sanctioned "test's assertion target" copy (no-drift rule #3).
+# test_sql_capabilities.py). The vocabulary and key grammars are settled and
+# mirrored by the engine's typed parser (`cdk/declarations.py`);
+# this is the sanctioned copy — a restatement that cannot be avoided, carrying
+# the test assertion that keeps it honest.
 EXPECTED_ERROR_CATEGORIES = {
     "transient",
     "config",
@@ -163,8 +164,8 @@ EXPECTED_ERROR_CATEGORIES = {
     "rate_limited",
     "write_rejected",
 }
-# The settled model-side grammar (issue #89; the engine's compiled patterns
-# and the StringConstraints on the family aliases are this, verbatim).
+# The settled model-side grammar (the engine's compiled patterns and the
+# StringConstraints on the family aliases are this, verbatim).
 EXPECTED_FAMILY_KEY_PATTERNS = {
     "sqlstate": r"^[0-9A-Z]{2}([0-9A-Z]{3})?$",
     "exception": r"^[A-Za-z_][A-Za-z0-9_]*$",
@@ -350,14 +351,14 @@ def test_sql_capabilities_accepts_limits_member():
 
 
 def test_sql_capabilities_limits_is_optional():
-    # A pre-#89 five-fact block stays valid — `limits` is the one additive
-    # member of an otherwise all-required block.
+    # A block carrying every required fact but omitting `limits` stays valid:
+    # `limits` is additive, and every other member is required.
     caps = SqlCapabilities.model_validate(copy.deepcopy(VALID_SQL_CAPS))
     assert caps.limits is None
 
 
 def test_sql_capabilities_shape_facts_stay_required_alongside_limits():
-    # Declaring `limits` does not relax the five-required-facts rule.
+    # Declaring `limits` does not relax the required-facts rule.
     payload = {"limits": dict(VALID_LIMITS), **copy.deepcopy(VALID_SQL_CAPS)}
     del payload["merge_form"]
     with pytest.raises(ValidationError):
@@ -421,7 +422,8 @@ def test_database_connector_carries_all_three_blocks(db_example):
 
 
 def test_all_three_blocks_are_optional(db_example):
-    # Omission is legal — every connector authored before #89 stays valid.
+    # Omission is legal — every connector authored before these three blocks
+    # existed stays valid.
     connector = parse_connector(copy.deepcopy(db_example))
     assert connector.error_map is None
     assert connector.concurrency is None

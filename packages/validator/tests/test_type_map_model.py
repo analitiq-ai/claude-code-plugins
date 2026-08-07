@@ -77,9 +77,10 @@ def test_exact_canonical_vocabulary():
 
 
 def test_canonical_rejects_bare_parameterized_types():
-    # Must match the endpoint arrow vocabulary: parameterized types carry params
-    # (issue #424), and the typed nested families are not executable vocabulary
-    # at all (issue #81) — only the authored-shape markers are.
+    # Must match the endpoint arrow vocabulary: a parameterized family must
+    # carry its params — a bare head like `Timestamp` names no type — and the
+    # typed nested families are not executable vocabulary at all; only the
+    # authored-shape markers are.
     for bad in ("Timestamp", "Decimal128", "Struct", "List(Int64)", "List<Int64>",
                 "Struct<id:Int64>", "Map<Utf8, Int64>", "Interval(YEAR_MONTH)"):
         _rejects(READ, [{"match": "exact", "native": "X", "canonical": bad}])
@@ -135,7 +136,8 @@ def test_exact_must_not_template():
 
 def test_exact_write_native_render_placeholders_validated():
     # A write exact `native` render may carry `${length}` hints, but malformed
-    # placeholders (empty / unclosed) must be rejected too — Codex round 5.
+    # placeholders (empty / unclosed) must be rejected too: they render into a
+    # DDL type the driver cannot parse, and nothing downstream re-checks them.
     _accepts(WRITE, [{"match": "exact", "canonical": "Utf8", "native": "VARCHAR(${length})"}])
     _rejects(WRITE, [{"match": "exact", "canonical": "Utf8", "native": "VARCHAR(${})"}])
     _rejects(WRITE, [{"match": "exact", "canonical": "Utf8", "native": "VARCHAR(${length)"}])
@@ -163,7 +165,7 @@ def test_placeholder_needs_matching_capture():
 
 
 def test_read_captured_native_must_not_discard_params_to_hardcoded_canonical():
-    # Issue #917 Gap 1: a native that NAMES captures but maps to a literal
+    # A native that NAMES captures but maps to a literal
     # parameterized canonical silently coerces every source precision/scale/unit
     # to a by-example constant. Flag it (reverse of the placeholder→capture check).
     _rejects(READ, [{"match": "regex", "native": r"NUMERIC\((?<p>\d+),(?<s>\d+)\)",
@@ -204,9 +206,9 @@ def test_schemaless_container_must_not_collapse_to_scalar():
 
 
 def test_schemaless_native_maps_to_container_canonicals_only():
-    # The typed nested families are rejected outright (issue #81 — outside the
-    # vocabulary). `Object`/`List` still VALIDATE as renders (a string rule
-    # can't carry the sibling sub-schemas they need, but the model can't know
+    # The typed nested families are rejected outright — they are outside the
+    # canonical vocabulary. `Object`/`List` still VALIDATE as renders (a string
+    # rule can't carry the sibling sub-schemas they need, but the model can't know
     # that) — Json-only for read renders is craft guidance in
     # spec-type-maps.md; the ENFORCED rule is "structured native must map to a
     # container canonical, never a scalar".

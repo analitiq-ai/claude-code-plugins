@@ -81,15 +81,25 @@ def test_database_endpoints_declare_no_support_set(name: str) -> None:
     )
 
 
-def test_the_claim_this_guards_is_still_made() -> None:
+def test_the_subject_of_the_claim_is_still_in_the_prose() -> None:
     """A guard for a claim nobody makes is worse than no guard.
 
-    If the sentence is reworded away, this fails loudly and points at the
-    guard, rather than sitting green forever protecting nothing.
+    Anchored on the contract-owned TOKEN, not on the sentence containing it.
+    Pinning the sentence — "carries no `replication` block" — pins English:
+    rewording it more clearly reddens the build on prose that improved, and the
+    remedy the failure asks for is to reword it back. It was brittle in a second
+    way too, since the phrase wraps a line in the file and only matched at all
+    because this test collapses whitespace first.
+
+    The token is what a mechanism can decide. If `enum-mappers.md` stops naming
+    `replication` altogether, the guard above is protecting a claim the document
+    no longer makes and should go with it. Whether a rewritten sentence still
+    *teaches* the absence is a judgment, and it belongs to
+    `.claude/rules/plugin-prose.md`.
     """
-    text = " ".join(ENUM_MAPPERS.read_text(encoding="utf-8").split())
-    assert "carries no `replication` block" in text, (
-        f"{ENUM_MAPPERS.relative_to(REPO_ROOT)} no longer states that a "
-        "database endpoint carries no `replication` block. Re-anchor this "
-        "module on the new wording, or delete it if the claim is gone."
+    assert "`replication`" in ENUM_MAPPERS.read_text(encoding="utf-8"), (
+        f"{ENUM_MAPPERS.relative_to(REPO_ROOT)} no longer names `replication`, "
+        "so the absence this module guards is not something the document "
+        "reasons from any more. Delete both, or re-anchor them on what replaced "
+        "the guidance."
     )

@@ -135,10 +135,9 @@ EXPECTED_SQL_BULK_MECHANISMS = {
     "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
-# WriteOperation.idempotency `in` targets (api-endpoint ≥ 9.1.0,
-# infrastructure#890) — restated in io-contracts.md EndpointFacts,
-# endpoint-creator.md, connector-provider-researcher.md, and
-# connector-spec-api/SKILL.md.
+# WriteOperation.idempotency `in` targets (api-endpoint ≥ 9.1.0) — restated in
+# io-contracts.md EndpointFacts, endpoint-creator.md,
+# connector-provider-researcher.md, and connector-spec-api/SKILL.md.
 EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
 # `Operations.write` keys — the destination write-mode vocabulary, shared with
 # database destinations. `endpoint-creator.md` restates the whole set as decision
@@ -198,7 +197,7 @@ EXPECTED_RESOLUTION_SCOPES = {
 }
 # Where the slug pattern — the `connector_id` / `endpoint_id` charset, owned by
 # `analitiq.contracts.shared.common.SLUG_PATTERN` — may appear hand-typed in the
-# plugin's prose, and how many times (issue #58). No other site restates the
+# plugin's prose, and how many times. No other site restates the
 # regex: the agent-consumed sites reference one of these, and the rest (README,
 # the orchestrator's hard rules, definition-of-done) say "the slug pattern"
 # without spelling it:
@@ -535,7 +534,12 @@ def _properties_at(schema: dict, def_name: str) -> set[str] | None:
     return set(node["properties"])
 
 
-def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str:
+def _set_diff_msg(
+    label: str,
+    found: set[str] | None,
+    expected: set[str],
+    fix: str = _WRITE_PATH_FIX,
+) -> str:
     """Diff message for a NAME set (required list or property keys).
 
     Separate from `_diff_msg` because these are not enums: reporting "enum not
@@ -544,14 +548,20 @@ def _set_diff_msg(label: str, found: set[str] | None, expected: set[str]) -> str
     generic ("not found at that $def") so the same helper can serve both a
     `required` list and a `properties` key set without lying about which it
     read.
+
+    `fix` names the documents whose prose goes false with this set. It defaults
+    to the write-path group because most callers here read a write-path
+    vocabulary; a caller reading a set some other document closes over passes
+    its own, so the failure sends the reader to the document that must change
+    rather than to the majority's.
     """
     if found is None:
         return (
             f"{label}: not found at that $def — the contract was "
-            f"restructured. {_WRITE_PATH_FIX}"
+            f"restructured. {fix}"
         )
     return (
-        f"{label} drift — {_WRITE_PATH_FIX} "
+        f"{label} drift — {fix} "
         f"schema-only={sorted(found - expected)} "
         f"plugin-only={sorted(expected - found)}"
     )
@@ -688,9 +698,9 @@ def test_sql_limit_caps_match_schema(connector_schema: dict) -> None:
 
 # --- the write-path pins, read from the PROSE side --------------------------
 # Every other pin in this file is one-sided: contract -> a constant here. That
-# leaves a hole exactly the shape of issue #95 — update the contract AND the
-# constant, forget the spec table, and the suite stays green while the document
-# an agent actually reads has gone stale. `test_slug_pattern_restatements_*`
+# leaves a hole: update the contract AND the constant, forget the spec table,
+# and the suite stays green while the document an agent actually reads has gone
+# stale. `test_slug_pattern_restatements_*`
 # already closes that loop for the slug charset by reading prose; these do the
 # same for the write-path vocabularies.
 
@@ -751,8 +761,8 @@ def _table_cells_containing(label: str, spec: Path | None = None) -> dict[str, s
     fails, and a prose row for a fact the contract dropped fails too. Without
     it the fact NAMES are pinned contract-side only — so making `limits`
     required would fail one test, the fixer would add it to the expected set,
-    and the prose claiming the block is complete would stay green. That is
-    issue #95's two-step, in miniature.
+    and the prose claiming the block is complete would stay green. That is the
+    contract-moves-prose-doesn't two-step, in miniature.
 
     None when no single table matches, so a restructure (or two tables both
     claiming the label) surfaces as an explicit failure rather than a pass
@@ -1069,10 +1079,13 @@ def test_write_path_table_parser_reads_the_real_tables() -> None:
 # --- closure claims, pinned to the shapes they close over -------------------
 # Prose that says "and nothing else" / "exactly these" is a claim about a
 # CLOSED member set. It is strictly more falsifiable than a count — a count goes
-# stale, a closure claim goes actively wrong — so each one below is read back
-# from the document and compared to the contract. Without these the sentence is
-# unowned: `Replication`, `ResourceDiscoveryTriggers` and the type-map rule keys
-# appear in no other guard in this suite.
+# stale, a closure claim goes actively wrong. The member set each one closes
+# over is compared to the contract below, and the failure names the document
+# whose sentence goes false with it; whether that sentence still closes the set
+# is a reader's call (`.claude/rules/no-cardinality-restatements.md` §Closure
+# claims). Without the comparisons the sets are unowned: `Replication`,
+# `ResourceDiscoveryTriggers` and the type-map rule keys appear in no other
+# guard in this suite.
 
 REPLICATION_SPEC = PLUGIN_ROOT / "skills" / "connector-spec-api" / "spec-replication.md"
 DISCOVERY_SPEC = (
@@ -1088,80 +1101,17 @@ EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
 EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 
 
-def _sentence(spec: Path, anchor: str) -> str | None:
-    """The text from `anchor` to the end of its sentence.
-
-    Prose wraps, so the text is flattened first and the span runs to the next
-    period — scoping to one line would silently read half a claim. None when
-    the anchor is absent or ambiguous, which the caller fails on rather than
-    comparing against an empty set.
-
-    Code spans are masked before the terminator is located: a cross-reference
-    like `spec-tls.md` or `type-map-read.json` carries a period that would cut
-    the claim mid-span, and the resulting token mismatch would read as contract
-    drift rather than as the parsing accident it is.
-    """
-    flat = " ".join(spec.read_text(encoding="utf-8").split())
-    if flat.count(anchor) != 1:
-        return None
-    tail = flat.split(anchor, 1)[1]
-    masked = _BACKTICKED.sub(lambda m: "`" + "_" * len(m.group(1)) + "`", tail)
-    end = masked.find(".")
-    return tail if end < 0 else tail[:end]
-
-
-@pytest.mark.parametrize(
-    "spec, anchor, closure, expected",
-    [
-        (
-            REPLICATION_SPEC,
-            "the block carries",
-            "nothing else",
-            EXPECTED_REPLICATION_KEYS,
-        ),
-        (
-            DISCOVERY_SPEC,
-            "the discovery contract",
-            "exactly these",
-            EXPECTED_DISCOVERY_ACTIONS,
-        ),
-    ],
+# Each of the three specs above closes its set with an exhaustive-enumeration
+# sentence, and `_CLOSURE_FIX` is what sends a failing comparison back to the
+# right one. Grading such a sentence stays with the reader: locating it takes an
+# English anchor, which stops matching when the sentence is reworded, and
+# grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
+# keeps out of tests. What a mechanism decides is the contract's own member
+# sets, asserted below, each failing with the document that must be re-read.
+_CLOSURE_FIX = (
+    "re-read the closure sentence in {spec} — it enumerates this set as "
+    "exhaustive, and an authoring agent reads it that way."
 )
-def test_prose_closure_claims_name_exactly_the_contract_members(
-    spec: Path, anchor: str, closure: str, expected: set[str]
-) -> None:
-    """A "nothing else" sentence must enumerate exactly what the model carries."""
-    # Meta-guard: a closure phrase living inside the anchor makes the closure
-    # assertion below unfailable, and the next case added that way would look
-    # graded without being graded.
-    assert closure not in anchor, (
-        f"the closure phrase {closure!r} is part of the anchor {anchor!r}, so "
-        "asserting it proves nothing. Shorten the anchor so the closure falls "
-        "inside the sentence span."
-    )
-    sentence = _sentence(spec, anchor)
-    assert sentence is not None, (
-        f"{spec.relative_to(REPO_ROOT)}: the phrase {anchor!r} is missing or "
-        "appears more than once — the claim was reworded, so this guard would "
-        "have passed vacuously. Re-anchor it on the new wording."
-    )
-    # Grade the closure, not just the enumeration. Dropping "and nothing else"
-    # leaves a weaker-but-true sentence and would otherwise pass here, quietly
-    # retiring the claim this guard exists to hold.
-    assert closure in anchor + sentence, (
-        f"{spec.relative_to(REPO_ROOT)}: the sentence after {anchor!r} no "
-        f"longer closes the set ({closure!r} is gone). Either restore the "
-        "closure or drop this case — a guard for a claim nobody makes is worse "
-        "than no guard."
-    )
-    named = set(_BACKTICKED.findall(sentence))
-    assert named == expected, (
-        f"{spec.relative_to(REPO_ROOT)}: the closure claim after {anchor!r} "
-        f"names different members than the contract — "
-        f"prose-only={sorted(named - expected)} "
-        f"contract-only={sorted(expected - named)}. A member landed (or left) "
-        "and the sentence now says something false; reword it in this change."
-    )
 
 
 def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
@@ -1173,13 +1123,14 @@ def test_replication_keys_match_schema(api_endpoint_schema: dict) -> None:
     same half-measure that left a new optional `SqlCapabilities` member
     invisible.
     """
+    fix = _CLOSURE_FIX.format(spec=REPLICATION_SPEC.relative_to(REPO_ROOT))
     props = _properties_at(api_endpoint_schema, "Replication")
     assert props == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
-        "Replication properties", props, EXPECTED_REPLICATION_KEYS
+        "Replication properties", props, EXPECTED_REPLICATION_KEYS, fix
     )
     required = _required_at(api_endpoint_schema, "Replication")
     assert required == EXPECTED_REPLICATION_KEYS, _set_diff_msg(
-        "Replication required", required, EXPECTED_REPLICATION_KEYS
+        "Replication required", required, EXPECTED_REPLICATION_KEYS, fix
     )
 
 
@@ -1187,7 +1138,10 @@ def test_discovery_actions_match_schema(connector_schema: dict) -> None:
     """The contract side of the `spec-resource-discovery.md` closure claim."""
     props = _properties_at(connector_schema, "ResourceDiscoveryTriggers")
     assert props == EXPECTED_DISCOVERY_ACTIONS, _set_diff_msg(
-        "ResourceDiscoveryTriggers properties", props, EXPECTED_DISCOVERY_ACTIONS
+        "ResourceDiscoveryTriggers properties",
+        props,
+        EXPECTED_DISCOVERY_ACTIONS,
+        _CLOSURE_FIX.format(spec=DISCOVERY_SPEC.relative_to(REPO_ROOT)),
     )
 
 
@@ -1305,17 +1259,14 @@ def test_type_map_rule_keys_match_schema_and_prose() -> None:
     ):
         contract_keys = set(TypeAdapter(rule).json_schema()["properties"])
         assert contract_keys == EXPECTED_TYPE_MAP_RULE_KEYS, _set_diff_msg(
-            f"{rule.__name__} keys", contract_keys, EXPECTED_TYPE_MAP_RULE_KEYS
+            f"{rule.__name__} keys",
+            contract_keys,
+            EXPECTED_TYPE_MAP_RULE_KEYS,
+            _CLOSURE_FIX.format(spec=TYPE_MAPS_SPEC.relative_to(REPO_ROOT)),
         )
-    # Grade the claim's existence, not only the table it defers to. Dropping
-    # "and no others" retires the closure while leaving the table intact, and
-    # this guard would have gone on passing for a sentence nobody makes.
-    claim = _sentence(TYPE_MAPS_SPEC, "carries exactly the keys named below")
-    assert claim is not None and "no others" in claim, (
-        f"{TYPE_MAPS_SPEC.relative_to(REPO_ROOT)}: the rule-shape closure claim "
-        '("carries exactly the keys named below and no others") was reworded or '
-        "removed. Re-anchor this guard, or drop it if the claim is gone."
-    )
+    # Whether the sentence above the table still CLOSES the set is a reader's
+    # call, per `.claude/rules/no-cardinality-restatements.md`. The table it
+    # defers to is structural, so that half is decidable and stays here.
     cells = _table_cells_containing("match", TYPE_MAPS_SPEC)
     assert cells is not None, (
         f"no single table in {TYPE_MAPS_SPEC.relative_to(REPO_ROOT)} has a "
@@ -1629,7 +1580,8 @@ def test_slug_pattern_restatements_match_contract() -> None:
 
     Catches the contract's pattern moving out from under a prose copy, and a
     loose paraphrase being reintroduced — `[a-z0-9_-]+` accepts a leading `_` /
-    `-` the contract rejects, which is how 5 of the pre-#58 copies were wrong.
+    `-` the contract rejects, which is how 5 of the hand-typed copies were
+    wrong before these sites were consolidated and pinned.
     """
     wrong = [
         (rel, lineno, literal)
@@ -1671,7 +1623,8 @@ def test_slug_literal_detector_recall() -> None:
 
     A later "simplification" (say, to `re.escape(SLUG_PATTERN)`) would keep both
     gates green on the exact-pattern sites while silently dropping paraphrase
-    coverage — the exact blind spot the 5 pre-#58 loose copies lived in.
+    coverage — the exact blind spot the 5 loose paraphrase copies that
+    predated this pin lived in.
     """
     assert _SLUG_LITERAL_RE.fullmatch(SLUG_PATTERN), (
         "_SLUG_LITERAL_RE no longer fully matches SLUG_PATTERN itself — the "

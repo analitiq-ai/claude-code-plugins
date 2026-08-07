@@ -37,7 +37,7 @@ from analitiq.contracts.shared.common import StrictModel
 # `arrow_type` does (`ARROW_TYPE_PATTERN`, incl. the `Json`/`Object`/`List`
 # markers): one source of truth, so a type map cannot render a canonical an
 # endpoint would reject. The pattern requires parameterized types to carry their
-# parameters (`Timestamp(MICROSECOND)`, not bare `Timestamp`) — issue #424.
+# parameters (`Timestamp(MICROSECOND)`, not bare `Timestamp`).
 _ARROW_TYPE_RE = re.compile(ARROW_TYPE_PATTERN)
 
 # `${name}` render-side substitution (empty `${}` captured too, flagged below).
@@ -310,7 +310,7 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
         # a FULLY hardcoded parameterized canonical that discards them (every match
         # would collapse to that one by-example constant). A literal parameterized
         # Arrow type carries `(...)`; match-and-discard is expressed with a
-        # non-capturing group `(?:…)`. Scope (issue #917): the detector keys on `(`
+        # non-capturing group `(?:…)`. Scope: the detector keys on `(`
         # — paren-parameterized scalars (`Decimal128(…)`, `Timestamp(…)`).
         # Deliberately out of scope: a partially-templated canonical
         # (`Decimal128(${p}, 9)`, guarded by `not placeholders`) and a capture

@@ -1,4 +1,4 @@
-"""Declared-path resolution and the pagination/metadata cross-block rule (#123).
+"""Declared-path resolution and the pagination/metadata cross-block rule.
 
 Two layers, tested separately because they fail differently:
 
@@ -10,7 +10,7 @@ Two layers, tested separately because they fail differently:
   WHOLE `pagination` block and every `response.metadata` value. The bug it
   exists to catch is a one-character typo in a ref: before it, such a document
   validated and paging silently stopped after one page. Those typo cases are
-  the point of the issue and are asserted per pagination strategy.
+  the whole point of the rule and are asserted per pagination strategy.
 
 The load-bearing property of the resolver is MONOTONICITY: the "not statically
 resolvable" diagnosis fires ONLY when the segment was not found, so a node
@@ -606,9 +606,10 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
 
 
 class TestPaginationRefsResolve:
-    """The bug #123 exists to catch: a one-character typo in a pagination ref
-    used to validate, then paged exactly once at run time and silently returned
-    a truncated dataset. It must now be rejected — for every strategy."""
+    """The bug ADV-ENDP-023 exists to catch: a one-character typo in a
+    pagination ref used to validate, then paged exactly once at run time and
+    silently returned a truncated dataset. It must now be rejected — for every
+    strategy."""
 
     @pytest.mark.parametrize("strategy", STRATEGIES)
     def test_good_document_validates(self, strategy):
@@ -918,7 +919,9 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
     document that is honest about its schema.
 
     These two tests make the omission fail the build and name the keyword. They
-    are the pin the no-drift rule requires of an unavoidable restatement.
+    are the pin an unavoidable restatement has to carry, per
+    `.claude/rules/no-drift-surfaces.md`, to be documentation rather than a
+    second copy free to drift.
     """
 
     #: Walker keywords that cannot conditionally declare a PROPERTY NAME, with
@@ -994,8 +997,10 @@ class TestConditionalKeywordPartitionIsPinnedToTheWalkerSets:
 
 
 # ---------------------------------------------------------------------------
-# Review findings (PR #131) — each of these shipped as an ACCEPTED document
-# until the review probed it. Every test here is a regression pin for one.
+# Documents that validated clean until someone probed them by hand — each
+# shipped as ACCEPTED, and each is a distinct way the declared-path rules were
+# satisfiable without being satisfied. Every test here is a regression pin for
+# one of them.
 # ---------------------------------------------------------------------------
 
 
@@ -1005,10 +1010,11 @@ class TestMisspelledResponseScopeIsRefused:
     `_response_body_segments` returns None for anything that is not
     `response.body[.…]`, on the stated grounds that every other `response.*`
     scope is reserved and engine-owned. Nothing checked that the token actually
-    NAMED one, so misspelling `body` bought the same silent truncation #123
-    exists to close — one segment to the left of where the rule was looking.
-    `_has_known_scope` cannot catch it either: it inspects only the leading
-    token, and `response` is real.
+    NAMED one, so misspelling `body` bought the same silent truncation this rule
+    exists to close — a paging ref resolving to nothing, paging stopping after
+    page one, the run reporting success — one segment to the left of where the
+    rule was looking. `_has_known_scope` cannot catch it either: it inspects
+    only the leading token, and `response` is real.
     """
 
     @pytest.mark.parametrize(
@@ -1035,7 +1041,8 @@ class TestKeysetOrderByFieldResolves:
     """`order_by_field` is a RECORD path, so the `response.body` sweep never saw
     it and its only guard was a shape regex. A seek order defined over a field
     the record shape does not declare advances from a value the engine cannot
-    read — truncating or repeating pages, the #123 failure by another route."""
+    read — truncating or repeating pages while the run reports success, the same
+    failure by another route."""
 
     def _payload(self, order_by_field):
         payload = _read_payload("keyset")
@@ -1202,7 +1209,8 @@ class TestRequestSlotsAreSweptToo:
     def test_the_slot_tuple_still_covers_every_expression_carrying_field(self):
         """`_REQUEST_EXPRESSION_SLOTS` drives both site tables. Adding an
         expression-carrying request field without adding it here would silently
-        leave it unswept — the defect class this PR closed four times."""
+        leave it unswept — the defect class the free-slot sweeps above pin, one
+        slot at a time."""
         assert set(_REQUEST_EXPRESSION_SLOTS) == set(self.FREE_SLOTS) | {"path_params"}
 
 
@@ -1213,8 +1221,8 @@ class TestMetadataSubKeysAreCheckedToo:
     `headers`/`status`/`record_count`/`records`, which genuinely are.
 
     `response.metadata.nope` resolves to nothing on every page, so paging stops
-    after page one and the run reports success: #123 verbatim, one segment to
-    the right of where it was fixed.
+    after page one and the run reports success: the `response.body` failure
+    verbatim, one segment to the right of where it was fixed.
     """
 
     def _payload(self, next_cursor_ref, metadata=None):
@@ -1262,8 +1270,8 @@ class TestARecordShapeMustDeclareSomething:
     that None as "the ref did not resolve, go fix the endpoint", but the ref
     resolved perfectly: a fix loop with no exit.
 
-    The self-`$ref` spelling is newly reachable because this PR made `$ref`
-    following legal in the record locator.
+    The self-`$ref` spelling is reachable at all only because `$ref` following
+    is legal in the record locator.
     """
 
     def _payload(self, items, defs=None):
@@ -1309,7 +1317,8 @@ class TestParamDefaultIsAnExpressionSlot:
     it was reached by no check at all — not the shape check, not the scope
     guards. On a `controlled_by: "pagination"` param it is the paging SEED, so a
     ref resolving to nothing starts paging from an unresolved value and the run
-    reports success: #123's failure on the one slot the sweep never enumerated."""
+    reports success: the same silent-truncation failure, on the one slot the
+    sweep never enumerated."""
 
     def _payload(self, default):
         payload = _read_payload("cursor")
@@ -1345,9 +1354,10 @@ class TestParamDefaultIsAnExpressionSlot:
         The path here DOES resolve, so only the scope flag can refuse it, and
         `match=` pins that: a param default feeds the REQUEST, which is built
         before the response exists. On a `controlled_by: "pagination"` param
-        this default is the paging SEED, so accepting it is #123 verbatim — and
-        the write side's counterpart already exists, with a docstring calling
-        this one "the read side's equivalent, which is what #123 was filed for".
+        this default is the paging SEED, so accepting it means paging starts
+        from an unresolved value and the run reports success — the silent
+        truncation this whole rule exists to close. The write side's counterpart
+        already exists and points back at this slot as the read-side case.
         """
         with pytest.raises(ValidationError, match="before the response exists"):
             parse_endpoint(self._payload(default))

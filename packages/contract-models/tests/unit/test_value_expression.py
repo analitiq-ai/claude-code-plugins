@@ -1,14 +1,14 @@
 """Unit tests for analitiq.contracts.value_expression.resolve_value_expression.
 
-Covers the warning logged when a dict value has none of the recognised keys
-(template, function, literal, ref) — issue #607 — and confirms that
+Covers the warning logged when a dict value carries none of the recognised
+expression keys (`_EXPRESSION_KEYS`), and confirms that
 recognised forms and non-dict passthrough values do not produce spurious warnings.
 
 Also covers base64_encode / url_encode dropping (returning None) on
-unresolved input instead of encoding an empty string — issue #627,
-lookup warning on unresolved input / key miss — issue #633, and
-resolve_template_deep dispatching expression-form nodes in bodies —
-issue #634.
+unresolved input instead of encoding an empty string; lookup warning
+distinguishably on unresolved input versus a key miss; and
+resolve_template_deep dispatching expression-form nodes in bodies rather than
+passing them through as structural JSON.
 """
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ class TestResolveValueExpressionUnrecognisedForm:
 
 class TestEncodeFunctionsUnresolvedInput:
     """base64_encode / url_encode must return None (drop the field) when their
-    input is absent or unresolvable, instead of silently encoding "" — #627.
+    input is absent or unresolvable, instead of silently encoding "".
     Mirrors the basic_auth behaviour pinned in
     test_connections_auth_request_headers.py.
     """
@@ -235,7 +235,8 @@ class TestEncodeFunctionsUnresolvedInput:
 
 class TestLookupFunction:
     """lookup must warn + return None on unresolved input and on a key miss,
-    instead of silently returning None for both — #633.
+    with a distinct message for each, instead of returning a silent None that
+    leaves the two causes indistinguishable.
     """
 
     CONTEXT = {"connection": {"parameters": {"environment": "sandbox"}}}
@@ -269,8 +270,9 @@ class TestLookupFunction:
         assert any("lookup dropped — unresolved input" in r.getMessage() for r in caplog.records)
 
     def test_unresolved_template_input_warns_as_unresolved_not_key_miss(self, caplog):
-        # A template input with a failed placeholder is an unresolved input
-        # (#627 semantics), not a lookup of the partial string against the map.
+        # A template input with a failed placeholder is an unresolved input —
+        # the same drop-on-unresolved reading the encode functions apply — not
+        # a lookup of the partial string against the map.
         with caplog.at_level("WARNING", logger="analitiq.contracts.value_expression"):
             result = resolve_value_expression(
                 {"function": "lookup", "input": "${secrets.missing}", "map": {"a": "b"}},
@@ -327,7 +329,7 @@ class TestLookupFunction:
 class TestResolveTemplateDeepExpressionNodes:
     """resolve_template_deep must dispatch expression-form dicts (template /
     function / literal / ref) through resolve_value_expression instead of
-    passing them through as raw structural JSON — #634.
+    passing them through as raw structural JSON.
     """
 
     def test_function_node_in_body_is_resolved(self):
@@ -457,7 +459,7 @@ class TestResolveValueExpressionPassthrough:
 
 
 class TestBuildResolutionContext:
-    """Scoped-context assembly from a connection record + secret blob (#643).
+    """Scoped-context assembly from a connection record + secret blob.
 
     The opaque OAuth token payload (reserved blob entry) is the `auth`
     scope: every field at `auth.<field>`, the whole payload nested at
@@ -671,7 +673,7 @@ class TestResolveOperationUrl:
             )
 
     def test_object_template_base_url_joined_and_resolved(self):
-        # #1006: a value-expression `{template}` base_url (per-tenant host) is
+        # A value-expression `{template}` base_url (a per-tenant host) is
         # joined with the path and resolved exactly like a bare-string template.
         url = resolve_operation_url(
             {"path": "/widgets"},
@@ -706,7 +708,7 @@ class TestResolveOperationUrl:
 class TestResolveTransportBaseUrl:
     """`resolve_transport_base_url` normalizes a transport's `base_url` — literal
     or value-expression object — to the string shape a URL builder joins with
-    the operation path (#1006)."""
+    the operation path."""
 
     def test_literal_string_unchanged(self):
         assert resolve_transport_base_url({"base_url": "https://api.wise.com"}) == "https://api.wise.com"

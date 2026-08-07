@@ -5,7 +5,6 @@ expressions, transports, capability blocks, and the connector documents."""
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
-    DESCRIPTIVE,
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -72,8 +71,19 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     # === connector: connection contract + discovery ==========================
     ProseObligation(
-        model="ConnectionContract", waiver=DESCRIPTIVE,
+        model="ConnectionContract",
         prose_hash="57d2c52ff1d9",
+        structural=(
+            "the absence of a standalone `version` field is enforced by "
+            "StrictModel: extra='forbid' rejects a document declaring one"
+        ),
+        waiver=(
+            "the semver discipline it states — patch = no shape change, minor "
+            "= additive, major = breaking — grades one revision of this "
+            "document against another, and a single document carries only its "
+            "own version, so a breaking `inputs` change under a patch bump is "
+            "accepted here"
+        ),
     ),
     ProseObligation(
         model="ConnectionContract", field="required_for_activation",

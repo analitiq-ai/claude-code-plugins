@@ -1,11 +1,11 @@
-"""Tests for analitiq.contracts.endpoints Pydantic models (PR #366 / issue #364).
+"""Tests for analitiq.contracts.endpoints Pydantic models.
 
 Covers the per-kind dispatch (api vs database, selected by the owning
 connector — the document carries no top-level `kind`), x-* extension policy,
-$schema-required rule, the four cross-field validators added in this PR
-(param-binding uniqueness, response.records ↔ response.schema traversal,
-replication cursor_field schema-presence, pagination expression shape), and
-the discriminated-union refactors of `Predicate` and `CursorMapping`.
+$schema-required rule, the four cross-field validators (param-binding
+uniqueness, response.records ↔ response.schema traversal, replication
+cursor_field schema-presence, pagination expression shape), and the
+discriminated-union refactors of `Predicate` and `CursorMapping`.
 """
 import json
 from pathlib import Path
@@ -412,7 +412,7 @@ class TestPaginationExpressions:
             parse_endpoint(self._cursor_pagination_payload({"response_path": "body.next_cursor"}))
 
     def test_pagination_without_type_rejected(self):
-        """Pagination `type` is the REQUIRED union discriminator (#712): a default
+        """Pagination `type` is the REQUIRED union discriminator: a default
         would render `{"const":X,"default":X}` and collapse the union's Zod
         routing. A pagination block omitting `type` must be rejected."""
         payload = self._cursor_pagination_payload({"ref": "response.body.next_cursor"})
@@ -663,7 +663,7 @@ class TestRequestBody:
 
 
 # ---------------------------------------------------------------------------
-# §Cross-Field Validation: from_input record.<field> field existence (#949)
+# §Cross-Field Validation: from_input record.<field> field existence
 # ---------------------------------------------------------------------------
 
 
@@ -779,7 +779,7 @@ class TestWriteFromInputFieldExistence:
 
 
 # ---------------------------------------------------------------------------
-# §Write Modes: upsert conflict_keys (endpoint-declared, #853)
+# §Write Modes: upsert conflict_keys (endpoint-declared)
 # ---------------------------------------------------------------------------
 
 
@@ -871,7 +871,7 @@ class TestPublishedSchemaConflictKeysRule:
     """The PUBLISHED api-endpoint JSON Schema (what external connector authors
     validate against) must enforce the same per-mode `conflict_keys` rule the
     Pydantic model does — including rejecting the field's nullable default
-    (`conflict_keys: null`), which `required` alone would let through (#853)."""
+    (`conflict_keys: null`), which `required` alone would let through."""
 
     @staticmethod
     def _validator():
@@ -917,7 +917,7 @@ class TestPublishedSchemaConflictKeysRule:
 
 
 # ---------------------------------------------------------------------------
-# §Write Modes: idempotency-key placement (#890)
+# §Write Modes: idempotency-key placement
 # ---------------------------------------------------------------------------
 
 
@@ -1048,9 +1048,9 @@ class TestWriteIdempotency:
     def test_body_idempotency_with_unknowable_record_field_body_accepted(self):
         # input.schema declares no `properties` map, so the addressed field's
         # resolved shape is unknowable — both the idempotency static rules and
-        # the record-field existence check (#949) defer to the engine's
-        # configure-time gate. (A field absent from a *declared* properties map
-        # is instead rejected up front; see TestWriteFromInputFieldExistence.)
+        # the record-field existence check defer to the engine's configure-time
+        # gate. (A field absent from a *declared* properties map is instead
+        # rejected up front; see TestWriteFromInputFieldExistence.)
         op = self._write_op(idempotency={"in": "body", "name": "idempotency_key"})
         op["request"]["body"] = {"from_input": "record.undeclared"}
         op["input"]["schema"] = {"type": "object"}
@@ -1080,8 +1080,8 @@ class TestWriteIdempotency:
 
 class TestPublishedSchemaIdempotencyRule:
     """The PUBLISHED api-endpoint JSON Schema must enforce the same
-    idempotency rules the Pydantic model does (#890) — the shape itself and
-    the idempotency×batching exclusion, including agreeing with the model on
+    idempotency rules the Pydantic model does — the shape itself and the
+    idempotency×batching exclusion, including agreeing with the model on
     the fields' nullable defaults (`idempotency: null` / `batching: null`)."""
 
     @staticmethod
@@ -1288,8 +1288,8 @@ class TestDatabaseCrossField:
         "decimal128(38, 9)",     # wrong case
         "Decimal128(1, -2)",     # negative scale (engine grammar: scale >= 0)
         "Decimal128(5, 6)",      # scale > precision (cross-parameter bound)
-        # Families outside the executable vocabulary (issue #81) — nested data
-        # is authored-shape (`Object`/`List`/`Json`) only.
+        # Families outside the executable vocabulary — nested data is
+        # authored-shape (`Object`/`List`/`Json`) only.
         "Interval(YEAR_MONTH)",
         "List<Int64>",
         "Struct<id:Int64,name:Utf8>",
@@ -1333,7 +1333,7 @@ class TestApiEndpointName:
 
 
 # ---------------------------------------------------------------------------
-# Issue #424 — canonical arrow_type inside API response.schema / input.schema
+# Canonical arrow_type inside API response.schema / input.schema
 # ---------------------------------------------------------------------------
 
 
@@ -2302,7 +2302,7 @@ class TestRecordsArrayItemsTupleForm:
 
 # ---------------------------------------------------------------------------
 # LinkPagination request-binding params (spec: §Pagination Strategies) — no
-# cursor param ever; `limit` is optional and first-request-only (issue #52)
+# cursor param ever; `limit` is optional and first-request-only
 # ---------------------------------------------------------------------------
 
 
@@ -2372,7 +2372,7 @@ class TestLinkPaginationLimit:
         )
 
     def test_link_with_first_request_limit_accepted(self):
-        # Issue #52: `limit` is wired like every other strategy — a declared
+        # `limit` is wired like every other strategy — a declared
         # `controlled_by='pagination'` param bound once in the request. The
         # first-request-only semantics are runtime behaviour, not wiring.
         payload = self._link_payload(
@@ -2404,8 +2404,8 @@ class TestPaginationLimitWiring:
     """The shared `limit` wiring check covers every strategy, not just link.
 
     `_validate_pagination_wiring` hoists one `limit.param` check over all
-    five strategies (issue #52); parametrizing pins that a future re-inline
-    cannot silently drop a strategy from it.
+    five strategies; parametrizing pins that a future re-inline cannot
+    silently drop a strategy from it.
     """
 
     STRATEGIES = ("offset", "page", "cursor", "keyset", "link")
@@ -3210,7 +3210,7 @@ class TestPublishedMetadataConstraints:
 
 
 # ---------------------------------------------------------------------------
-# §Native and Arrow Types: container-shape matrix (issue #977)
+# §Native and Arrow Types: container-shape matrix
 # ---------------------------------------------------------------------------
 #
 # The Object/List/plain sibling-key matrix is enforced at runtime by
@@ -3288,7 +3288,7 @@ def test_column_field_spec_container_matrix(node, accepted):
 
 
 # ---------------------------------------------------------------------------
-# Value-expression grammar migrated from prose residue (#994)
+# Value-expression grammar, enforced structurally rather than stated in prose
 # ---------------------------------------------------------------------------
 
 

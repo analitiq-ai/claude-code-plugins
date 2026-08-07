@@ -4,9 +4,9 @@ The plugin prose and the runtime validator pin release on independent trains
 (release-please for the plugins, hand-pushed tags for the packages). Nothing
 else mechanically ties them together: every in-repo drift test grades the
 in-repo contract SOURCE, while `connector-schema-validator` self-installs the
-PUBLISHED `VALIDATOR_PIN` wheel. Issue #71 is the failure this permits — prose
-instructing authors to write `redshift+redshift_connector` while the pinned
-wheel still carried the old async-only pattern that rejects it.
+PUBLISHED `VALIDATOR_PIN` wheel. The failure this permits, and has already
+produced: prose instructing authors to write `redshift+redshift_connector`
+while the pinned wheel still carried the old async-only pattern that rejects it.
 
 This script closes that gap. It installs the pin into an ISOLATED venv (never
 the current environment — an installed wheel is a regular package that shadows
@@ -318,7 +318,7 @@ def main() -> int:
         print(
             "Users install main HEAD, so this contradiction is (or is about to "
             "be) live inside one plugin flow — finish the package release and "
-            "bump VALIDATOR_PIN first (see root CLAUDE.md, issue #71).",
+            "bump VALIDATOR_PIN first (see root CLAUDE.md).",
             file=sys.stderr,
         )
         return 1

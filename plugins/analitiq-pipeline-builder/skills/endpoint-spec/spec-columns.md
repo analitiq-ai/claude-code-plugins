@@ -122,9 +122,9 @@ Json
 ### Nested data is authored-shape only
 
 There are **no angle-bracket container canonicals** (`Struct<…>`, `List<…>`,
-`Map<…>`): the engine does not execute them, and the contract rejects them
-(issue #81). Declare nested shape with the bare markers plus sibling keys on
-the **column itself**:
+`Map<…>`): the engine does not execute them, and the contract — generated
+from the engine's own grammar — rejects them. Declare nested shape with the
+bare markers plus sibling keys on the **column itself**:
 
 - `Object` — requires a non-empty sibling `properties` map of field specs
   (recursive: each child is `{arrow_type, …}` and may itself be `Object`/`List`).

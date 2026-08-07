@@ -4,7 +4,6 @@ classes. Part 1 is :mod:`.connector_auth_contract`."""
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
-    DESCRIPTIVE,
     ENGINE_CONDUCT,
     ProseObligation,
 )
@@ -29,8 +28,26 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="HttpTransport", field="base_url", waiver=DESCRIPTIVE,
+        model="HttpTransport", field="base_url",
         prose_hash="04961e5771bc",
+        structural=(
+            "the bare-string arm and the typed object arms named here carry "
+            "the non-empty constraint: the bare string is Annotated[str, "
+            "StringConstraints(min_length=1)] and TemplateExpression, "
+            "RefExpression and LiteralStringExpression each constrain their "
+            "own payload the same way"
+        ),
+        waiver=(
+            "the remainders. No DerivedValue arm constrains what its input "
+            "resolves to, so a function-form base_url resolving to an empty "
+            "string is accepted here and refused at engine transport build, "
+            "which this package's `resolve_transport_base_url` mirrors; "
+            "nothing anywhere constrains the value to be URL-SHAPED; and the "
+            "permission to omit the field — that this entry exists only to "
+            "extend `transport_defaults` — is authoring intent no document "
+            "states, so an entry omitting it for any other reason is accepted "
+            "here and fails at that same build"
+        ),
     ),
     ProseObligation(
         model="TransportDefaults", field="transport_type",
@@ -68,13 +85,24 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural="the `ConnectorKind` `Enum`'s own closed membership",
     ),
     ProseObligation(
-        model="ConnectorBase", waiver=DESCRIPTIVE,
+        model="ConnectorBase",
         prose_hash="a77be2f3abf3",
+        waiver=(
+            "the docstring states an identity, not a shape: that the id is the "
+            "connector's canonical identifier and its REGISTRY REPO NAME. The "
+            "registry is another repo, so no document here can carry the "
+            "correspondence"
+        ),
     ),
     ProseObligation(
         model="ConnectorBase", field="connector_id",
         prose_hash="5655a4364ea4",
         structural="Field(pattern=SLUG_PATTERN)",
+        waiver=(
+            "the same cross-repo remainder: the pattern grades the spelling, "
+            "and that the spelling equals the registry repo name is not "
+            "checkable from this document"
+        ),
     ),
     ProseObligation(
         model="ConnectorBase", field="documentation_url",
@@ -95,12 +123,13 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ConnectorBase", field="write_unit", waiver=DESCRIPTIVE,
-        prose_hash="d57272898923",
+        model="ConnectorBase", field="write_unit",
+        prose_hash="037b6892bfbe",
+        waiver=ENGINE_CONDUCT,
     ),
     ProseObligation(
         model="WriteUnit", rule_ids=("ADV-CTOR-014",),
-        prose_hash="16f3225af4bd",
+        prose_hash="78ad4437c5c6",
     ),
     ProseObligation(
         model="SqlStageCapabilities", rule_ids=("ADV-CTOR-013",),
@@ -117,7 +146,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlBulkLoad", rule_ids=("ADV-CTOR-015",),
-        prose_hash="dcb695405a0c",
+        prose_hash="4eff5e074de9",
         structural=(
             "per-family Literal types keep adbc_ingest out of the "
             "`sqlalchemy` family; the _undeclared_families_stay_absent "
@@ -126,7 +155,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ErrorMap", waiver=ENGINE_CONDUCT,
-        prose_hash="7ed27b68258e",
+        prose_hash="a15cfabb6c44",
     ),
     # === connector: remaining transport, capability + document sites =========
     ProseObligation(model="AdbcTransport", prose_hash="f6a5cb5e119c", descriptive=True),
@@ -152,7 +181,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="ApiConnector", field="kind", prose_hash="4d3ab3ae7c10", descriptive=True),
     ProseObligation(
         model="Concurrency",
-        prose_hash="99c6caf1a385",
+        prose_hash="978ee0a3b0fd",
         structural=(
             "`max_connections` is typed `StrictPositiveInt`, the strict "
             "lower-bounded integer annotation"
@@ -168,7 +197,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(model="ConnectorBase", field="auth", prose_hash="0e36e023b46c", descriptive=True),
-    ProseObligation(model="ConnectorBase", field="concurrency", prose_hash="d6c181bad27b", descriptive=True),
+    ProseObligation(model="ConnectorBase", field="concurrency", prose_hash="9f4b26f0cb75", descriptive=True),
     ProseObligation(model="ConnectorBase", field="connection_contract", prose_hash="350ca0dfeb9b", descriptive=True),
     ProseObligation(
         model="ConnectorBase", field="default_transport", rule_ids=("ADV-CTOR-001",),
@@ -189,7 +218,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ConnectorBase", field="error_map", waiver=ENGINE_CONDUCT,
-        prose_hash="584443c7c4f8",
+        prose_hash="9e28b733fc2c",
     ),
     ProseObligation(model="ConnectorBase", field="resource_discovery", prose_hash="847ff0961beb", descriptive=True),
     ProseObligation(
@@ -244,7 +273,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="DatabaseConnector", field="kind", prose_hash="4d3ab3ae7c10", descriptive=True),
     ProseObligation(
         model="DatabaseConnector", field="sql_capabilities",
-        prose_hash="68602251ca37",
+        prose_hash="49dfe00625c7",
         structural=(
             "the other kinds' closed models reject `sql_capabilities` as an "
             "unknown key; the required shape facts are `SqlCapabilities`'s "
@@ -466,7 +495,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities",
-        prose_hash="b76b800bdb08",
+        prose_hash="6b83bfc7f0a6",
         structural=(
             "the required shape facts are non-optional fields on the closed "
             "model; `limits` defaults"
@@ -475,7 +504,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities", field="bulk_load",
-        prose_hash="61e133fe8729",
+        prose_hash="0dc7daa93dcf",
         structural=(
             "a required (non-optional) `SqlBulkLoad` field whose members are "
             "individually defaulted"
@@ -488,7 +517,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="SqlCapabilities", field="limits",
-        prose_hash="60b37101106f",
+        prose_hash="e0c5f78fb10a",
         structural="a defaulted (optional) field on the otherwise-required `SqlCapabilities` shape",
     ),
     ProseObligation(
@@ -504,7 +533,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="SqlCapabilities", field="stage", prose_hash="31cbee74695d", descriptive=True),
     ProseObligation(
         model="SqlLimits",
-        prose_hash="7ac3e959fa9d",
+        prose_hash="5b0f29ace860",
         structural=(
             "the caps are typed `StrictPositiveInt`, the strict lower-bounded "
             "integer annotation"

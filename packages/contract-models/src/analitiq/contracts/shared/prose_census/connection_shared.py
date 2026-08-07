@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
-    DESCRIPTIVE,
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -191,7 +190,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     # === type-map ============================================================
     ProseObligation(
-        model="_TypeMapRuleBase", waiver=DESCRIPTIVE,
+        model="_TypeMapRuleBase", descriptive=True,
         prose_hash="3b29164f42c1",
     ),
     ProseObligation(

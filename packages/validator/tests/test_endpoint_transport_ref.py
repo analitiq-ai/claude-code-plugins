@@ -1,5 +1,5 @@
 """`endpoint-transport-ref` — an endpoint's `request.transport_ref` must name a
-transport the sibling connector.json declares (issue #124, repo half).
+transport the sibling connector.json declares.
 
 The connector model's `_transport_refs_resolvable` already gates every
 connector-INTERNAL ref site, but an endpoint is a separate document: no
@@ -10,6 +10,7 @@ on-disk connector package.
 """
 import json
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -21,6 +22,49 @@ JS = "https://json-schema.org/draft/2020-12/schema"
 # The transport the corpus connector declares (`valid_connector.json`), asserted
 # below so this constant cannot silently drift from it.
 DECLARED_TRANSPORT = "api"
+
+# The second transport the origin-containment record declares, and the origin
+# it puts it on.
+SECOND_TRANSPORT = "cdn"
+SECOND_ORIGIN = "https://cdn.example.test"
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _declare_second_origin(connector: dict) -> None:
+    """Add `SECOND_TRANSPORT` on an origin the default transport is not on.
+
+    Comparing the two transport NAMES would not establish a second origin: a
+    corpus whose default moved to this host would state one origin under two
+    names, and the record would pass while recording nothing. So the default's
+    own `base_url` is read, and it must carry a scheme and a host that are
+    knowable from the document — a scheme-less string has no origin to compare,
+    the object value-expression arms resolve at connection time, and a bare
+    string may still bear `${...}` placeholders that do the same.
+    """
+    default = connector["transports"][connector["default_transport"]]
+    base_url = default.get("base_url")
+    parts = urlsplit(base_url) if isinstance(base_url, str) else None
+    assert (
+        parts is not None
+        and parts.scheme
+        and parts.netloc
+        and "${" not in base_url
+        and _origin(base_url) != SECOND_ORIGIN
+    ), (
+        "the corpus default transport must declare a base_url whose origin is "
+        f"knowable here and is not {SECOND_ORIGIN}; it declares {base_url!r}, "
+        "so the transport added below states no second origin and the record "
+        "records nothing"
+    )
+    connector["transports"][SECOND_TRANSPORT] = {
+        "transport_type": "http",
+        "base_url": SECOND_ORIGIN + "/v1",
+        "timeout_seconds": 30,
+    }
 
 
 @pytest.fixture
@@ -195,8 +239,9 @@ def test_malformed_connector_transports_yields_no_fabricated_finding(
 
 
 class TestOriginContainmentGapIsRecorded:
-    """`CONTRIBUTING.md` clause 3: a PR that deliberately leaves a surface wide
-    records it, in the same PR, as a test or a follow-up issue.
+    """`CONTRIBUTING.md` → "A fix that narrows a rule records what it
+    deliberately left wide": the record ships with the narrowing, as a test or
+    a follow-up issue.
 
     `transport_ref`'s containment rule has two halves. The NAME half is enforced
     here. The ORIGIN half — every URL a request produces landing on a declared
@@ -205,69 +250,96 @@ class TestOriginContainmentGapIsRecorded:
     `default_transport`, pins the read path to that single origin and has no
     write-path origin guard at all.
 
-    This is that record. It pins the disclaimer so it cannot be quietly softened
-    back into an implied guarantee, and it pins the behaviour so the day origin
-    containment lands, this test goes red and points at the prose that must
-    change with it.
+    Each test below asserts the CURRENT behaviour, not the desired one: a
+    document the ORIGIN half would refuse, accepted. They run through the
+    connector-anchored walk, which is where an origin check would have to live
+    for the same reason the NAME half does — origins are declared on the
+    connector and consumed by the endpoint. Three documents, because they reach
+    the walk by different legs and a check need not cover all three: a read
+    request, a write request, and a next-page URL the document takes from the
+    response body.
+
+    Each asserts on EVERY error the walk emits, not on `endpoint-transport-ref`
+    alone: the NAME half already owns that id, so an origin rule arriving under
+    an id of its own — the likelier shape, since each check registers one —
+    would pass a scoped assertion unnoticed.
+
+    That the field description still declares the half unenforced is a reader's
+    check, not this module's: deciding it means reading what a description
+    means, which `.claude/rules/validator-claims.md` keeps out of tests and
+    `.claude/rules/contract-prose.md` states as an authoring obligation. The
+    description lives on `_RequestBase.transport_ref`, which every
+    endpoint-operation request model — read and write alike — inherits, and its
+    census entry records the ORIGIN half as its waiver, so softening the
+    disclaimer is a hash mismatch a reviewer must re-affirm. The connector
+    document declares its own `transport_ref` sites — the auth operation
+    template, the post-auth operation request, resource discovery — whose
+    descriptions state no origin half at all and whose waivers record
+    engine-owned defaulting instead.
     """
 
-    @pytest.mark.parametrize(
-        "model_name", ["GetReadRequest", "PostReadRequest", "WriteRequest"]
-    )
-    def test_the_unenforced_half_is_declared_unenforced(self, model_name):
-        from analitiq.contracts import endpoints
-
-        description = getattr(endpoints, model_name).model_fields[
-            "transport_ref"
-        ].description
-        assert "enforced by nothing today" in description, (
-            f"{model_name}.transport_ref no longer states that origin containment "
-            "is unenforced. Either it became enforced — in which case this test "
-            "and the description must both change — or the contract has started "
-            "promising a guarantee it does not provide."
+    def test_a_second_origin_is_accepted_because_nothing_checks_origins(
+        self, tmp_path, connector_base, validator
+    ):
+        # The connector declares a second transport on its own origin, and the
+        # endpoint DECLARES dispatch through it rather than through
+        # `default_transport`. The NAME half is satisfied — the transport is
+        # declared — so the document states an origin nothing can currently
+        # reach, and it validates clean: the engine opens one session from
+        # `default_transport` and no production call site selects a transport
+        # per operation. The ref is read here only to grade the name.
+        _declare_second_origin(connector_base)
+        findings = _run(
+            tmp_path,
+            connector_base,
+            {"widgets.json": _read_endpoint(SECOND_TRANSPORT)},
+            validator,
         )
-        assert "454" in description, (
-            f"{model_name}.transport_ref no longer names the issue tracking the "
-            "unenforced half; the gap would become undiscoverable."
+        assert not _errors(findings), findings
+
+    def test_a_second_origin_on_the_write_path_is_accepted_too(
+        self, tmp_path, connector_base, validator
+    ):
+        # The read path's single-origin pinning does not extend to the write
+        # path, which has no origin guard of its own, so recording only the
+        # read one would leave half the gap unrecorded.
+        _declare_second_origin(connector_base)
+        findings = _run(
+            tmp_path,
+            connector_base,
+            {"widgets.json": _write_endpoint(SECOND_TRANSPORT)},
+            validator,
         )
+        assert not _errors(findings), findings
 
-    def test_a_second_origin_is_accepted_because_nothing_checks_origins(self):
-        # Records the CURRENT behaviour, not the desired one: a next-page link on
-        # a second declared transport's origin validates clean. When origin
-        # containment is implemented this assertion is what fails first.
-        from analitiq.contracts.endpoints import parse_endpoint
-
-        doc = {
-            "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
-            "endpoint_id": "files",
-            "operations": {
-                "read": {
-                    "request": {"method": "GET", "path": "/v1/files",
-                                "transport_ref": "api"},
-                    "params": {},
-                    "pagination": {
-                        "type": "link",
-                        "link": {"next_url": {"ref": "response.body.next"}},
-                        "stop_when": {"missing": {"ref": "response.body.next"}},
-                    },
-                    "response": {
-                        "records": {"ref": "response.body.data"},
-                        "schema": {
-                            "type": "object",
-                            "properties": {
-                                "next": {"type": "string"},
-                                "data": {
-                                    "type": "array",
-                                    "items": {"type": "object",
-                                              "properties": {"id": {"type": "string"}}},
-                                },
-                            },
-                        },
-                    },
-                }
+    def test_a_response_driven_next_url_is_accepted_because_nothing_checks_origins(
+        self, tmp_path, connector_base, validator
+    ):
+        # The next-page URL is read out of the response body, so the document
+        # bounds it by no origin at all — which is why
+        # `pagination.link.next_url` is named in the description's ORIGIN half.
+        endpoint = _read_endpoint(DECLARED_TRANSPORT)
+        read = endpoint["operations"]["read"]
+        read["pagination"] = {
+            "type": "link",
+            "link": {"next_url": {"ref": "response.body.next"}},
+            "stop_when": {"missing": {"ref": "response.body.next"}},
+        }
+        read["response"] = {
+            "records": {"ref": "response.body.data"},
+            "schema": {
+                "$schema": JS, "type": "object",
+                "properties": {
+                    "next": {"type": "string"},
+                    "data": {"type": "array", "items": {
+                        "type": "object", "properties": {"a": {
+                            "type": "string", "native_type": "STRING",
+                            "arrow_type": "Utf8"}}}},
+                },
             },
         }
-        parse_endpoint(doc)  # must not raise: no origin rule exists to violate
+        findings = _run(tmp_path, connector_base, {"widgets.json": endpoint}, validator)
+        assert not _errors(findings), findings
 
 
 class TestStandaloneEndpointValidation:

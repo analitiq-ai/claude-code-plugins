@@ -248,7 +248,8 @@ class TestAssignmentValueKind:
         assert isinstance(value, ConstantAssignmentValue)
 
     def test_missing_kind_rejected(self):
-        # The pre-#108 shape. It used to be the ONLY shape, so this reject is
+        # The undiscriminated shape this replaced. It used to be the ONLY
+        # shape, so this reject is
         # what proves the discriminator is actually required rather than
         # defaulted from whichever payload key happens to be present.
         with pytest.raises(ValidationError, match="kind"):
@@ -330,7 +331,7 @@ class TestAssignmentValueKind:
         validator = Draft202012Validator(schema)
         for payload in (
             {},
-            {"expression": {"op": "get", "path": ["id"]}},  # the pre-#108 shape
+            {"expression": {"op": "get", "path": ["id"]}},  # undiscriminated
             {"kind": "constant", "expression": {"op": "get", "path": ["id"]}},
             {"kind": "template", "expression": {"op": "get", "path": ["id"]}},
             {

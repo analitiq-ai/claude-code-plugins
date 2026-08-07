@@ -160,7 +160,7 @@ def test_single_pipeline_not_confused_with_bundle(validator):
 
 
 def test_active_pipeline_without_streams_flagged(validator):
-    """#963: an `active` pipeline with no stream references violates the
+    """An `active` pipeline with no stream references violates the
     single-document half of the activation gate — a contract-model error, not a
     passing document. (The API previously rejected such a document that this
     single-doc path accepted.)"""

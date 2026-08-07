@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Guard: the vendored engine grammar must equal the published pinned object.
 
-The canonical Arrow type vocabulary is a capability surface the ENGINE owns
-(issue #81): analitiq-core publishes it as generated, versioned artifacts —
+The canonical Arrow type vocabulary is a capability surface the ENGINE owns:
+analitiq-core publishes it as generated, versioned artifacts —
 `arrow-type-grammar` (family + parameter grammar) and `conversion-matrix`
 (family x family convertibility grid) — and this repo consumes a pinned,
 vendored copy of the grammar (`analitiq.contracts.arrow_grammar`) to build
@@ -150,7 +150,8 @@ def _parse_version(value: str, *, context: str) -> tuple[int, ...]:
 
 
 def _declared_version(obj: dict, *, context: str) -> str:
-    """The version an artifact stamps on ITSELF (engine#413).
+    """The version an artifact stamps on ITSELF, under the key
+    `arrow_grammar.ARTIFACT_VERSION_KEY` names.
 
     Reading this is strictly better than deriving the version from the URL
     path: a mislabeled publish — right path, wrong contents — is invisible to

@@ -9,7 +9,8 @@ run time), and the `DriftVerdict` envelope (`references/io-contracts.md`),
 whose `bump` and `category` enums are the verdict's output vocabulary. All
 three are projections of one vocabulary — which change categories exist, which
 semver tier each triggers, and what each means — and hand-maintaining three
-copies is the drift surface `.claude/rules/no-drift-surfaces.md` forbids.
+copies opens three ways for them to disagree, which is the surface
+`.claude/rules/no-drift-surfaces.md` exists to keep closed.
 
 This module is the one owner. The policy is the plugin's own — no contract
 model or engine artifact defines it, and `metadata-and-versioning.md`'s intro

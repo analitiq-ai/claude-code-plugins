@@ -40,7 +40,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="PipeExpression", rule_ids=("ADV-STRM-005",),
-        prose_hash="350cd139752e",
+        prose_hash="eaa9d838057e",
         structural=(
             "`args` carries a `Field` length floor, and "
             "`_pipe_args_positional_grammar` publishes the same positional "
@@ -188,7 +188,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="FnExpression",
-        prose_hash="568a8892f2a7",
+        prose_hash="d0b4746c49c4",
         structural=(
             "`name` is a closed `Literal` tracking the engine-published "
             "conversion matrix; `StrictModel` extra='forbid' keeps the "

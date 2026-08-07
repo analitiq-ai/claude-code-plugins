@@ -281,7 +281,7 @@ why the two are authored together here.
 it.** The `sql_capabilities` vocabularies above are pinned to the contract
 models by `tests/connector_builder/test_schema_drift.py`, but the hook
 names and signatures are engine-owned and nothing here can pin them —
-they describe the engine's **SQL write path v2** surface (its ADR,
-`docs/sql-write-path-v2.md`, is the source of record). Where the
+they describe the engine's **SQL write path v2** surface (the ADR of that
+name, in analitiq-core, is the source of record). Where the
 conformance kit and this document disagree, the kit wins, and the
 disagreement is a bug to report against this spec.

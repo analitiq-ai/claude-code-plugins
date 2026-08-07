@@ -96,7 +96,6 @@ def test_restamp_reports_a_block_it_cannot_rewrite(tmp_path, monkeypatch, capsys
         missing=(),
         stale=(),
         hash_mismatches=(HashMismatch(site=site, recorded="0" * 12),),
-        tripwires=(),
     )
     assert module.write(report) == 1
     out = capsys.readouterr().out
@@ -104,28 +103,22 @@ def test_restamp_reports_a_block_it_cannot_rewrite(tmp_path, monkeypatch, capsys
     assert "->" not in out  # the per-entry success line
 
 
-def test_write_reports_a_tripwire_only_state(tmp_path, monkeypatch, capsys):
-    """A tripwire is manual work `write` cannot do itself; a tripwire-only
+def test_write_reports_a_stale_only_state(tmp_path, monkeypatch, capsys):
+    """A stale entry is manual work `write` cannot do itself; a stale-only
     report must surface the findings and exit non-zero — never print nothing
     and exit 0 while ``report.clean`` is False."""
     module = _load_script()
     area = _tmp_census(tmp_path, monkeypatch, module)
     before = area.read_bytes()
 
-    site = ProseSite(
-        key=SiteKey(model="A", field="x"),
-        module="synthetic",
-        text="authors must do a thing",
-    )
     report = CensusReport(
-        missing=(), stale=(), hash_mismatches=(), tripwires=(site,)
+        missing=(), stale=(SiteKey(model="A", field="x"),), hash_mismatches=()
     )
     assert module.write(report) == 1
-    assert area.read_bytes() == before  # tripwires are never auto-edited
+    assert area.read_bytes() == before  # only restamps are ever auto-edited
 
     out = capsys.readouterr().out
-    assert "tripwire" in out
-    assert "waiver=DESCRIPTIVE" in out
+    assert "stale entries" in out
     assert "A.x" in out
     assert "nothing to do" not in out
 

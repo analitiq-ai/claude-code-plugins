@@ -1,4 +1,4 @@
-"""`$ref` in an embedded response/input schema (issue #123, ADV-ENDP-026).
+"""`$ref` in an embedded response/input schema (ADV-ENDP-026).
 
 Two halves, tested together because each only makes sense given the other:
 
@@ -1226,8 +1226,8 @@ class TestKeywordVocabularyHasOneOwner:
     was missed, so the shipped contract constrained a keyword while its prose
     said it did not recurse there.
 
-    Per `.claude/rules/no-drift-surfaces.md` an unavoidable restatement must be
-    pinned by a test. These are the four comparisons that catch it: per bucket
+    `.claude/rules/no-drift-surfaces.md` requires an unavoidable restatement to
+    be pinned by a test. These are the comparisons that catch it: per bucket
     (the bucket decides HOW the walker recurses), the rendered constraint map,
     and the rendered sentence.
     """

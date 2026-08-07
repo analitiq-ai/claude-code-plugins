@@ -43,8 +43,8 @@ def test_vendored_grammar_hashes_to_the_pin():
 
 
 def test_vendored_grammar_self_declares_the_pinned_version():
-    """From v1.1.0 the manifest carries its own `version` (engine#413). The pin
-    must agree with it: `scripts/render_schemas.py` stamps `pinned at v{...}`
+    """From v1.1.0 the manifest carries its own `version`. The pin must agree
+    with it: `scripts/render_schemas.py` stamps `pinned at v{...}`
     into published prose from the PIN, so a pin that disagrees with the file it
     describes publishes a false provenance claim."""
     declared = arrow_grammar.GRAMMAR.get(arrow_grammar.ARTIFACT_VERSION_KEY)
@@ -135,9 +135,10 @@ def test_pattern_is_a_pure_derivation_of_the_manifest():
 
 
 def test_no_dead_families_in_the_manifest():
-    """The issue #81 trim: none of the families the engine cannot execute may
-    reappear in the vendored manifest without the engine shipping them first —
-    at which point this list is consciously edited, which is the point."""
+    """The executable-vocabulary trim: none of the families the engine cannot
+    execute may reappear in the vendored manifest without the engine shipping
+    them first — at which point this list is consciously edited, which is the
+    point."""
     # Bare `List`/`Object` are the authored-shape structural markers and are
     # NOT in this set — the trimmed families are the typed/encoded ones.
     dead = {
@@ -415,7 +416,7 @@ def test_unsupported_manifest_shapes_fail_loudly():
         {"kind": "int", "min": 1, "max": None, "name": "b"},
     ],
     # ALL-optional multi-param list: `\((?:A)?(?:\s*,\s*B)?\)` would accept
-    # the malformed `(,B)` — must refuse too (round-2 review finding)
+    # the malformed `(,B)`, since both groups may be skipped — must refuse too
     [
         {"kind": "int", "min": 1, "max": None, "name": "a", "optional": True},
         {"kind": "int", "min": 1, "max": None, "name": "b", "optional": True},
@@ -519,7 +520,8 @@ def test_cross_params_checks_literals_only():
 
 def test_timestamp_offset_uses_the_manifest_pattern_verbatim():
     """The fixed-offset grammar is manifest-owned; the derived pattern must
-    embed it unchanged (no hand-tightened hour range — issue #81's deltas)."""
+    embed it unchanged — no hand-edited hour range, which would accept or reject
+    offsets the engine does not."""
     # StopIteration here is the failure signal working, not a case to guard.
     tz_param = next(  # skipcq: PTC-W0063
         p

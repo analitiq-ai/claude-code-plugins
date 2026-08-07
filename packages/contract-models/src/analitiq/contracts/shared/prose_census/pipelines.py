@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from analitiq.contracts.shared.advisory_prose import (
-    DESCRIPTIVE,
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -12,7 +11,7 @@ from analitiq.contracts.shared.advisory_prose import (
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === pipeline ============================================================
     ProseObligation(
-        model="PipelineConnections", waiver=DESCRIPTIVE,
+        model="PipelineConnections", descriptive=True,
         prose_hash="3dcc139cd95f",
     ),
     ProseObligation(

@@ -82,8 +82,8 @@ generator) — never by hand-editing the vocabulary.
 The publish is additive — pinned `X.Y.Z.json` objects are first-write-wins
 (byte-compared on re-runs; divergence fails the publish) and never overwritten,
 nothing is ever deleted — and mutable pointers (`latest.json`, `index.json`,
-the two versionless hand-authored files) rely on a 5-minute TTL, not CloudFront
-invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
+and `data-sync-api/openapi.json`, the one hand-authored file with no version
+triple) rely on a 5-minute TTL, not CloudFront invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
 
 Only the 13 public resources render here. The ~40 internal-audience schemas stay
 in the infra repo with the private half of the renderer;
@@ -186,6 +186,64 @@ is engine-owned" above). Craft the schema never defined (the `ssl_mode`
 vocabulary, the driver-selection decision order, datetime naive/tz judgment) is
 not drift-exposed and stays.
 
+## Authoring rules
+
+**Never name a ticket or a pull request in anything this repo tracks** —
+comments, docstrings, field descriptions, prose. Not a bare number, not a
+keyword-prefixed one, not the cross-repo `org/repo` form, not a tracker URL, and
+not "the pull request you are in", "this commit", or a review round.
+
+The exception is a surface that IS a tracker surface: commit message bodies, PR
+descriptions and issue threads, plus four tracked files whose subject is the
+tracker itself — `CONTRIBUTING.md`, which teaches the consolidation rule by
+walking real issues; the two release-please changelogs, whose entries link into
+the tracker and which are machine-written anyway; and
+`.github/pull_request_template.md`, where "this PR" is the runtime subject
+rather than a referent that expires. `.claude/rules/resolvable-referents.md`
+names the forbidden shapes in the course of forbidding them, which is the same
+exception one level up.
+
+The file outlives the change that wrote it, and the reader has the file, not the
+change. So state what is true, never when it became true — "creators are routed
+to their spec skill", not "the wiring this change extended".
+`.claude/rules/resolvable-referents.md` is the checklist for both halves.
+
+**A check may match text to LOCATE something. It may never match text to DECIDE
+something.** Locating is lexical — a backticked identifier, a fenced block, a
+named heading, a generated-block marker, a name the contract owns, a probe id
+resolved against its registry. Deciding is semantic: does this sentence assert
+that the validator checks X, does this paragraph still teach the rule. If the verdict needs to know
+what the English means, it belongs in `.claude/rules/`, applied by a reader, not
+in a test. `.claude/rules/validator-claims.md` owns this rule and the worked
+cases; the short version is that hand-curated English regexes and phrase lists
+are banned outright, whatever property they claim to measure.
+
+Two reasons observed here rather than predicted, and one that follows from
+them. A phrase pin reddens the build when prose is *improved*, and the failure
+it prints asks the author to reword it back. It cannot read polarity: a document
+saying a shape is fine satisfies a substring check exactly as well as one
+forbidding it. Between them those make its coverage undecidable — the rule file
+carries that argument and the waiver-registry one in full.
+
+`.claude/rules/` holds the how-to-behave checklists this policy implies, tracked
+so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
+state and stays ignored). Read the one that matches what you are editing:
+
+- `no-drift-surfaces.md` — before hardcoding a value another source owns.
+- `no-cardinality-restatements.md` — before writing how many members a shape
+  has. Counts are the one restatement class every guard here is blind to. Also
+  owns closure claims — the "and nothing else" a set's enumeration ends with.
+- `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships
+  verbatim to users and is executed by agents.
+- `contract-prose.md` — before writing a field description or docstring under
+  `analitiq.contracts`. It renders into a published schema, and a published
+  `X.Y.Z.json` is immutable. Choosing its census disposition is the judgment
+  the census itself cannot make.
+- `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
+  count, "the rule above". The PR template asks you to attest you applied it.
+- `validator-claims.md` — before writing a sentence about what a tool checks or
+  refuses, and before writing any check that reads prose.
+
 ## Conventions
 
 - JSON Schema Draft 2020-12 throughout.
@@ -208,7 +266,10 @@ only — never add a static credential as a repo or environment secret, and neve
 use `pull_request_target` with a checkout of PR code.
 
 Full procedure, commit-type rules, and the `pypi` / `schemas` environment
-settings: see the `releasing` skill (`.claude/skills/releasing/SKILL.md`).
+settings live in the `releasing` skill — Claude Code tooling under an ignored
+directory, so it ships with the maintainer's checkout and not with a clone. If
+you have it, invoke it by name; if you do not, the environment settings are on
+the GitHub settings pages and the rest is the four rules above.
 
 ## PR Review Process
 

@@ -53,9 +53,9 @@ def test_reads_the_shipped_version(guard):
 
 def test_extracts_the_canonical_drivers_from_prose(guard):
     drivers = guard.read_canonical_drivers()
-    # Extraction is all-or-error by design; also require the driver this guard
-    # exists for (the sync canonical path, issue #71) so a prose restructure
-    # cannot silently drop it from coverage.
+    # Extraction is all-or-error by design; also require the canonical
+    # sync-driver path this guard exists for, so a prose restructure cannot
+    # silently drop it from coverage.
     assert "redshift+redshift_connector" in drivers
 
 
@@ -214,9 +214,11 @@ def test_guard_error_exits_2_never_a_verdict(guard, monkeypatch):
 
 
 def test_ci_job_runs_the_guard_with_the_strictness_key(guard):
-    # The guard only closes issue #71's gap if CI actually runs it with the
-    # documented strictness policy. Presence-first, same convention as the
-    # CLAUDE.md pin assertions in test_contract_enforcement.py.
+    # The gap this guard exists to close — a pinned release whose published
+    # wheel rejects the canonical drivers the prose teaches — stays open unless
+    # CI actually runs it with the documented strictness policy. Presence-first,
+    # same convention as the CLAUDE.md pin assertions in
+    # test_contract_enforcement.py.
     workflow = _WORKFLOW.read_text(encoding="utf-8")
     assert "scripts/check_validator_pin_contract.py" in workflow
     assert "VALIDATOR_PIN_GUARD_STRICT" in workflow

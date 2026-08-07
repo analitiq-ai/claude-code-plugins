@@ -5,8 +5,8 @@ deleted file leaves the reference dangling — and an agent that cannot read its
 spec does not fail loudly, it authors without the rules. Nothing else in the
 suite notices: these are strings in markdown.
 
-This is the same failure shape as issue #95 (prose describing something that no
-longer exists, with no check), narrowed to the part this repo actually owns. It
+It is one instance of a recurring shape — prose describing something that no
+longer exists, with nothing checking — narrowed to the part this repo owns. It
 cannot pin the CDK's hook surface — that lives in the engine — but it can
 guarantee that a spec this plugin points at is a spec that exists.
 
@@ -16,8 +16,8 @@ Three reference forms, all checked:
   frontmatter uses for required reading.
 - `` `spec-x.md` `` / `` `references/io-contracts.md` `` — the bare backticked
   form used for cross-references between sibling specs. This is the dominant
-  form by an order of magnitude, and it is the form the round-1 review found a
-  stale reference in, so leaving it unchecked would miss the very case that
+  form by an order of magnitude, and it is the form a stale reference was
+  actually found in, so leaving it unchecked would miss the very case that
   motivated this file.
 - Unbackticked bare paths with a directory segment, on every line — the
   `description:` citations the orchestrator reads to route work (frontmatter
@@ -71,9 +71,6 @@ _EXTERNAL_REFS = {
     "spec-file-transport.md",
     "spec-stdout-transport.md",
     "spec-s3-transport.md",
-    # The engine's own ADR, cited as the source of record for the write path.
-    # It lives in analitiq-core; the citation says so.
-    "docs/sql-write-path-v2.md",
 }
 
 
@@ -183,7 +180,7 @@ def test_reference_detector_finds_all_forms() -> None:
         f"only {len(targets)} doc references found across the three forms — "
         "the bare-filename sweep is not reaching the sibling cross-references."
     )
-    # The wiring this PR extended: creators are routed to their spec skill.
+    # The routing that has to survive: creators reach their spec skill.
     assert any(t.startswith("skills/connector-spec-db/") for t in targets)
     assert "spec-sql-write-path.md" in targets
     # The unbackticked bucket on its own: 9 citations exist today (3 in

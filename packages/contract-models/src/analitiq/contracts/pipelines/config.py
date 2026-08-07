@@ -219,7 +219,7 @@ class ErrorHandling(RetryErrorHandlingBase):
     # Field bounds, defaulting, the cross-field rule, and the JSON-Schema
     # conditional rules are inherited from `RetryErrorHandlingBase`, shared with
     # the stream-level `StreamValidationErrorHandling` block so the two cannot
-    # drift (#938). The fields below are re-declared only to attach public
+    # drift. The fields below are re-declared only to attach public
     # descriptions (the stream block inherits them without descriptions); kept
     # out of the class docstring so the added prose stays out of the schema.
 

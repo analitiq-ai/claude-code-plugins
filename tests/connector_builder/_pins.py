@@ -1,7 +1,8 @@
 """The single place the suite states which contract it exercises.
 
-Introduced on main (#45/#46) to stop the pin being restated across the drift
-modules. The monorepo move changes *what* it asserts, not the principle:
+It exists so the pin is stated once instead of restated in every drift module,
+which is what `.claude/rules/no-drift-surfaces.md` asks for.
+The monorepo move changes *what* it asserts, not the principle:
 
   * Before, the contract arrived as a published wheel, so "am I running the
     right contract?" meant comparing `importlib.metadata` against a pinned
@@ -93,9 +94,9 @@ def assert_pinned_versions() -> None:
 def assert_pinned_version_matches_pyproject() -> None:
     """`PINNED_VERSION` restates a value pyproject.toml owns — pin the copy.
 
-    Per `.claude/rules/no-drift-surfaces.md` an unavoidable restatement of a
-    contract value must be pinned by a test, or it is a defect rather than
-    documentation.
+    A second copy of a value drifts from the first; the repo's rule is that a
+    restatement which cannot be avoided must be pinned by a test, or it is a
+    defect rather than documentation.
     """
     import re
 

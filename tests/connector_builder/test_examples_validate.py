@@ -246,7 +246,7 @@ def test_example_write_maps_render_bare_container_markers(
 
     The engine probes the write map with a destination column's `arrow_type`
     verbatim, and API-sourced documents carry the bare markers — a map without
-    rules for them hard-errors the stream at configuration (issue #75). The
+    rules for them hard-errors the stream at configuration. The
     coverage finding is warning-severity, so the error-only checks above would
     stay green if the rules were dropped; assert on the warning *naming* the
     markers instead of on warning absence, because an abbreviated example

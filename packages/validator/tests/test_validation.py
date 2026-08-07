@@ -67,9 +67,11 @@ def test_from_input_defect_is_caught(validator):
 
 
 def test_bare_sqlalchemy_driver_is_a_contract_model_finding(validator):
-    """The sync-driver boundary #70 opened, exercised end-to-end (issue #72):
-    the valid corpus twin (`valid_connector_sync_driver.json`, driver
-    `redshift+redshift_connector`) passes in DOC_CASES above; here the bare
+    """The sync-driver boundary — the driver pattern was async-only and now
+    accepts a sync DBAPI too, so long as the value stays a full `dialect+driver`
+    pair — exercised end-to-end: the valid corpus twin
+    (`valid_connector_sync_driver.json`, driver `redshift+redshift_connector`)
+    passes in DOC_CASES above; here the bare
     variant (no `dialect+` segment) must surface as a contract-model finding
     on the transport's driver field — the model rejection reaching a consumer
     of validate_document, not just the pydantic layer."""
@@ -169,7 +171,7 @@ def test_coverage_passes_when_map_covers_endpoints(tmp_path, connector_base, val
 
 
 def test_coverage_passes_with_lowercase_exact_matcher(tmp_path, connector_base, validator):
-    # #1007: a lowercase `exact` native the runtime resolves fine must not be
+    # A lowercase `exact` native the runtime resolves fine must not be
     # reported as uncovered. The endpoint declares `varchar`; the runtime
     # normalizes both sides and matches, so coverage must too.
     _write_tree(tmp_path, connector_base,
@@ -250,7 +252,7 @@ def test_coverage_checks_field_named_like_a_keyword(tmp_path, connector_base, va
 
 
 def test_coverage_exact_match_normalizes_both_sides(validator):
-    # Mirrors the runtime reader (#1007): an `exact` rule's `native` is
+    # Mirrors the runtime reader: an `exact` rule's `native` is
     # normalized the same way as the probe — trim, collapse internal whitespace
     # runs, uppercase — on BOTH sides. So a lowercase or extra-spaced matcher
     # covers the (normalized) endpoint native, exactly as the runtime resolves
@@ -302,7 +304,7 @@ def test_coverage_regex_rule_with_capture(tmp_path, connector_base, validator):
 
 
 def test_coverage_flags_duplicate_endpoint_id(tmp_path, connector_base, validator):
-    # Issue #917 Gap 2(a): two endpoint files sharing an endpoint_id are flagged
+    # Two endpoint files sharing an endpoint_id are flagged
     # as a duplicate (spec: endpoint_id unique within the connector release),
     # not only obliquely as a filename mismatch.
     ep = _endpoint("STRING", "Utf8", endpoint_id="dup", path="/dup")
@@ -323,7 +325,7 @@ def test_coverage_distinct_endpoint_ids_pass(tmp_path, connector_base, validator
     assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
 
 
-# --- Gap 2(b): endpoint_id must be the derived path locator (io-contracts resources[].key) ---
+# --- endpoint_id must be the derived path locator (io-contracts resources[].key) ---
 
 def test_flatten_api_locator(validator):
     f = validator._flatten_api_locator
@@ -535,7 +537,7 @@ def test_database_endpoint_filename_checked_in_bundle_layout(validator, tmp_path
 
 def test_database_endpoint_filename_not_checked_when_unanchored(validator, tmp_path):
     # A staged single-doc path not yet at its final `definition/endpoints/` home
-    # carries no stem contract, so the gate stays silent (per the issue's nuance).
+    # carries no stem contract, so the gate stays silent.
     eid = derive_db_endpoint_id(None, "public", "orders")
     db = _db_endpoint(eid)
     p = tmp_path / "orders.json"  # bare staged file, wrong stem, no endpoints/ parent
@@ -545,7 +547,7 @@ def test_database_endpoint_filename_not_checked_when_unanchored(validator, tmp_p
 
 
 def test_endpoint_filename_findings_public_helper(validator):
-    # Issue #971: the filename gate is exported so a bundle-assembling consumer —
+    # The filename gate is exported so a bundle-assembling consumer —
     # which validates filename-less in-memory docs via validate_pipeline_bundle and
     # so cannot reach the gate there — calls ONE shared implementation instead of
     # reimplementing the ~4-line check, keeping the invariant define-once.
@@ -562,7 +564,7 @@ def test_endpoint_filename_findings_public_helper(validator):
 
 
 def test_is_stem_addressed_endpoint_path_public_helper(validator):
-    # Issue #971: consumers apply the gate on the SAME layout condition the
+    # Consumers apply the gate on the SAME layout condition the
     # validator uses — true only for the authored `definition/endpoints/{id}.json`
     # the engine resolves by stem, false for the hash-addressed snapshot and any
     # bare/staged path.
@@ -679,20 +681,28 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     # The engine probes the write map with a destination column's `arrow_type`
     # verbatim, and API-sourced documents carry the bare `Object`/`List` shape
     # markers — a map without rules for them hard-errors the stream at
-    # configuration (issue #75). The coverage warning must name both.
+    # configuration. The coverage warning must name both.
     p = tmp_path / "type-map-write.json"
     findings = validator.validate_document([{"match": "exact", "canonical": "Utf8", "native": "TEXT"}],
                                            doc_path=p)
-    # StopIteration here is the failure signal working, not a case to guard.
-    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")  # skipcq: PTC-W0063
+    # StopIteration here is the failure signal working, not a case to guard:
+    # no coverage warning at all means the probe stopped running.
+    gap = next(  # skipcq: PTC-W0063
+        w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage"
+    )
     assert "'Object'" in gap["message"] and "'List'" in gap["message"]
 
     covered = [{"match": "exact", "canonical": "Utf8", "native": "TEXT"},
                {"match": "exact", "canonical": "Object", "native": "JSONB"},
                {"match": "exact", "canonical": "List", "native": "JSONB"}]
     findings = validator.validate_document(covered, doc_path=p)
-    # StopIteration here is the failure signal working, not a case to guard.
-    gap = next(w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage")  # skipcq: PTC-W0063
+    # Covering the two markers must narrow the warning, not silence it — the map
+    # still lacks rules for other probes. So StopIteration here is the failure
+    # signal working: it means the warning vanished entirely, which would make
+    # the assertion below pass for the wrong reason.
+    gap = next(  # skipcq: PTC-W0063
+        w for w in _warnings(findings) if w["validator"] == "type-map-write-coverage"
+    )
     assert "'Object'" not in gap["message"] and "'List'" not in gap["message"]
 
 

@@ -372,14 +372,14 @@ def test_bundle_non_dict_sibling(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Connection-scoped type maps (issue #49): the two type_map_* entities plus the
-# bundle's file-level checks. Rule *content* findings come from the published
-# validator; the adapter owns only the filename gates.
+# Connection-scoped type maps: the two type_map_* entities plus the bundle's
+# file-level checks. Rule *content* findings come from the published validator;
+# the adapter owns only the filename gates.
 # ---------------------------------------------------------------------------
 
 TYPE_MAP_READ = [
     {"match": "exact", "native": "CITEXT", "canonical": "Utf8"},
-    # `Json` is the only container canonical a read rule can render (issue #81);
+    # `Json` is the only container canonical a read rule can render;
     # the dimension capture is intentionally discarded (no `(` in the render).
     {"match": "regex", "native": "^VECTOR\\((?<n>[0-9]+)\\)$", "canonical": "Json"},
 ]
