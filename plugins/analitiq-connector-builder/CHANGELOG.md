@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.2.1](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.2.0...analitiq-connector-builder-v0.2.1) (2026-08-07)
+
+
+### Features
+
+* **analitiq-connector-builder:** author the rc17 SQL write path, not the removed rc13 hooks ([#96](https://github.com/analitiq-ai/claude-code-plugins/issues/96)) ([e629717](https://github.com/analitiq-ai/claude-code-plugins/commit/e629717ea8e76c158b551131e68161d15cf5c5fa))
+* bump the runtime validator to rc20 and teach the write path_param record binding ([e18d5e8](https://github.com/analitiq-ai/claude-code-plugins/commit/e18d5e861bc3035d750c1e6e239a717fc46aa7c8))
+* bump the runtime validator to rc20 and teach the write path_param record binding ([71cbb09](https://github.com/analitiq-ai/claude-code-plugins/commit/71cbb09b9e3944e3b4aebedd2ea8dc193705a2ba))
+* **contract-models:** enforce database-only read features, catalogue three unregistered enforcers ([d3abea5](https://github.com/analitiq-ai/claude-code-plugins/commit/d3abea5c03541630f309987c43c02cada15759fa))
+* **contract-models:** resolve response.body paths, let a write path_param read the record, gate endpoint transport_ref ([5d7f6a5](https://github.com/analitiq-ai/claude-code-plugins/commit/5d7f6a5e23971a5e9ca465de6370443394799602))
+* pin every validator-behavior claim in plugin prose to an executable probe ([5607766](https://github.com/analitiq-ai/claude-code-plugins/commit/560776636dd532709fbef535d8113883df8a5d00))
+* pin every validator-behavior claim in plugin prose to an executable probe ([261a361](https://github.com/analitiq-ai/claude-code-plugins/commit/261a36190d6c0198f90d9874b45af7904073615a))
+
+
+### Bug Fixes
+
+* **analitiq-connector-builder:** add keyset to the spec-api index's pagination list ([583013d](https://github.com/analitiq-ai/claude-code-plugins/commit/583013d48a9b9cc587884e9b7a4487718711981f))
+* **analitiq-connector-builder:** collapse the runtime validator pin to one owner ([#122](https://github.com/analitiq-ai/claude-code-plugins/issues/122)) ([cccc8ae](https://github.com/analitiq-ai/claude-code-plugins/commit/cccc8ae0ef30649b2382646a10d5be6d9053a439))
+* **analitiq-connector-builder:** register endpoint-transport-ref and regenerate the advisory reference ([378c8e1](https://github.com/analitiq-ai/claude-code-plugins/commit/378c8e12b4dfa39033e93d2c7f99240e6e58be92))
+* **analitiq-connector-builder:** say which response sub-scopes are proved, not "response.*" ([2d03a3a](https://github.com/analitiq-ai/claude-code-plugins/commit/2d03a3a321d5bc39d5fd1bc63c43df3f3435f1ad))
+* **analitiq-connector-builder:** state the response-scope guarantees from the measured table ([0a21b1d](https://github.com/analitiq-ai/claude-code-plugins/commit/0a21b1dd84adbb227aa844389259be611e88d81c))
+* **analitiq-connector-builder:** teach the write path_param binding where the endpoint agent reads ([547d732](https://github.com/analitiq-ai/claude-code-plugins/commit/547d7322e41a17ed5b600acbd21b5a2bdbba8a8b))
+* apply the round-1 review — guard the ungated projections, gate the exemption ([d8c12ea](https://github.com/analitiq-ai/claude-code-plugins/commit/d8c12eabd91d74301d1fbd7a4985d78aff2fea2b))
+* apply the round-1 review — pin the census's own texts, widen ADV-STRM-014, guard the enforcer direction ([ad2c0a3](https://github.com/analitiq-ai/claude-code-plugins/commit/ad2c0a3dd19ae92c9a69e30a6708963ff4296cd9))
+* apply the round-1 review — pin the closure claims, close the optional-member gap ([cf5ae7d](https://github.com/analitiq-ai/claude-code-plugins/commit/cf5ae7d0d8ccd3e97b887100de6f845608703ab8))
+* apply the round-1 review — restore the orchestrator's enum copy, pin the predicate keys, correct four citations ([bb9f542](https://github.com/analitiq-ai/claude-code-plugins/commit/bb9f54294748ea166c76a1c194ec3d0626685f8a))
+* apply the round-2 review — one no-token-split policy for every fill ([51332c9](https://github.com/analitiq-ai/claude-code-plugins/commit/51332c9b1de2e08e8f70d0e5e2e2529e76515e43))
+* apply the round-2 review — one table parser, and own the claims nobody read ([06f0042](https://github.com/analitiq-ai/claude-code-plugins/commit/06f0042ad6291947f39e618c71ba00cc67c8b84e))
+* apply the round-2 review — the write side compiles ECMA-262 matchers too ([c5954e8](https://github.com/analitiq-ai/claude-code-plugins/commit/c5954e8c92222cf1107ef1b3a1437bd374b4e6e4))
+* apply the round-3 review — one properties helper, and stop claiming a derivation ([a654446](https://github.com/analitiq-ai/claude-code-plugins/commit/a654446883645bdfed8d5a8b2638ab045a91fce4))
+* apply the round-8 review — an identity axis for the fixture, and a gate for every ignored tree ([cc8bc5d](https://github.com/analitiq-ai/claude-code-plugins/commit/cc8bc5df258b7cba070853e46ea8952225882ec3))
+* bound every numeric contract field in every spelling it has ([f5af9a5](https://github.com/analitiq-ai/claude-code-plugins/commit/f5af9a551d56daf160f913d0c8eab539e6188dd5))
+* bound every numeric contract field in every spelling it has ([77c17e0](https://github.com/analitiq-ai/claude-code-plugins/commit/77c17e0061bc1147fa393cf84ee3bfc26411ff9b)), closes [#116](https://github.com/analitiq-ai/claude-code-plugins/issues/116) [#111](https://github.com/analitiq-ai/claude-code-plugins/issues/111)
+* bump the runtime validator pin to 1.0.0rc19 ([#119](https://github.com/analitiq-ai/claude-code-plugins/issues/119)) ([d92705e](https://github.com/analitiq-ai/claude-code-plugins/commit/d92705e70d59e18c81cc99f59dc5de0c69a602f3))
+* close the gate's own blind spots the review hunt proved reachable ([72924bd](https://github.com/analitiq-ai/claude-code-plugins/commit/72924bdb90b9ae0a6e78fade10c35871194119f8))
+* **connector-builder:** cite the release-version heading exactly ([3575b95](https://github.com/analitiq-ai/claude-code-plugins/commit/3575b95bf96008ec9478ff976346c76e068b65b3))
+* **connector-builder:** close the reference guard's frontmatter blind spot and the dangling citation hiding in it ([0697a30](https://github.com/analitiq-ai/claude-code-plugins/commit/0697a303b7c706f5eabb5e43a24ea5bd5c0031a0))
+* **connector-builder:** render the release policy from one structured source ([9ef8565](https://github.com/analitiq-ai/claude-code-plugins/commit/9ef8565e3fae584c798dff85ddf8a718cf93c97e))
+* **connector-builder:** render the release policy from one structured source ([a198ad3](https://github.com/analitiq-ai/claude-code-plugins/commit/a198ad3e09181573f2b23bda5246bf94a721f4d5))
+* **connector-builder:** repoint the drift-classifier description citation to the real owner of the release table ([983dfbc](https://github.com/analitiq-ai/claude-code-plugins/commit/983dfbc00d2389584ae8fd8a269fdf5d21d7f05a))
+* **connector-builder:** say "bare integer" where "literal" now names a refused form ([666a2ae](https://github.com/analitiq-ai/claude-code-plugins/commit/666a2ae6908815b5dd5a31b94ed026aa2a9a2452))
+* **contract-models:** close the holes the PR [#131](https://github.com/analitiq-ai/claude-code-plugins/issues/131) review found in declared-path resolution ([0508fe5](https://github.com/analitiq-ai/claude-code-plugins/commit/0508fe547de2c7ac1b1749b09a94d9323e9db4b0))
+* **contract-models:** one batch-size bound, and a probe per slot the prose names ([f16fc18](https://github.com/analitiq-ai/claude-code-plugins/commit/f16fc189250944f3b6d24aea3d295cccee8d5ed2))
+* decide templated Decimal bounds against the matcher, and derive the write probes ([aab9ac4](https://github.com/analitiq-ai/claude-code-plugins/commit/aab9ac4868a8611110b6c32f64b40838c945dc0c))
+* decide templated Decimal bounds against the matcher, and derive the write probes ([ab8845c](https://github.com/analitiq-ai/claude-code-plugins/commit/ab8845c4dc04f371336596432b87086d67fbab29)), closes [#103](https://github.com/analitiq-ai/claude-code-plugins/issues/103)
+* judge every templated position against what it admits, and grade prose examples ([2fb8b34](https://github.com/analitiq-ai/claude-code-plugins/commit/2fb8b34c2190155cfe72f23f5ce1e3ce4ee452f9))
+* **prose:** state the mechanism, not the cardinality ([bf6a0a3](https://github.com/analitiq-ai/claude-code-plugins/commit/bf6a0a39c5282c834cb0ec695d2bd03bddd051be))
+* **prose:** state the mechanism, not the cardinality ([00c7595](https://github.com/analitiq-ai/claude-code-plugins/commit/00c7595143e5909a0c4cc57bb0a441973105dbd5))
+* restore the value-expressions conversion the mutation self-check reverted ([e70a8dc](https://github.com/analitiq-ai/claude-code-plugins/commit/e70a8dcdfa851f3587ac961cb740c9d5e838e686))
+* state the metadata write-side check in the generated intro, pin the waiver location condition ([4d243c1](https://github.com/analitiq-ai/claude-code-plugins/commit/4d243c12cc636c1d31b661ea37e90923c70353f5))
+
 ## [0.2.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.1.8...analitiq-connector-builder-v0.2.0) (2026-07-31)
 
 
