@@ -188,14 +188,14 @@ _BARE_ASSET_REF = re.compile(
 # captured, not discarded: it is the same claim a `§` citation makes, and
 # leaving it unread would close the section-citation hole in one form while
 # leaving it open in the other.
-# The scheme lookahead drops anything with a URL scheme: an engine ADR linked
-# as `https://…/docs/sql-write-path-v2.md` is a file this repo cannot open, and
-# resolving it relative to the citing document would report every such link
-# dangling. It sits *after* the optional `<`, not before it: CommonMark's
-# angle-bracket spelling is a form this file deliberately reads, and with the
-# lookahead in front the `<` satisfied it — `](<https://…/adr.md>)` was
-# captured whole and reported as a broken link to a file in another repo, the
-# one outcome the exclusion exists to prevent.
+# The scheme lookahead drops anything with a URL scheme. Both READMEs link out
+# by URL, and a URL is not a path this repo can open; resolving one relative to
+# the citing document would report every such link dangling. It sits *after*
+# the optional `<`, not before it: CommonMark's angle-bracket spelling is a
+# form this file deliberately reads, and with the lookahead in front the `<`
+# satisfied it — `](<https://…/adr.md>)` was captured whole and reported as a
+# broken link to a file in another repo, the one outcome the exclusion exists
+# to prevent.
 # The target is a path, of any extension or none. `.md` was the original rule
 # and it left `](../../LICENSE)` — a link a reader clicks, in both READMEs —
 # read by nobody: the link pass declined it for want of an extension and the
@@ -287,9 +287,6 @@ _EXTERNAL_REFS: dict[str, set[str]] = {
         "spec-file-transport.md",
         "spec-stdout-transport.md",
         "spec-s3-transport.md",
-        # An ADR owned by the engine, cited as the source of record for the
-        # write path. The citing prose attributes it to the engine.
-        "docs/sql-write-path-v2.md",
     },
     # Empty, and correctly so: this plugin's one out-of-plugin citation is a
     # repo-root script, and `_addresses_the_repo` now resolves those against
@@ -1319,8 +1316,8 @@ def test_every_plugin_is_covered() -> None:
     # A waiver says the form routes nobody. That claim is checkable: a citation
     # of the form outside the plugin's reader-facing README routes an agent,
     # and the waiver has stopped being true. Without this the reason is prose
-    # nobody grades — the failure the census pattern in `.claude/CLAUDE.md`
-    # exists to prevent.
+    # nobody grades: a recorded justification that outlives the fact it
+    # records, and reads as checked because it is written down.
     falsified = {
         plugin: forms
         for plugin in _plugin_names()
@@ -1449,7 +1446,7 @@ def _mention_disposition(
     mention = line[start:end]
     before, after = line[:start], line[end:]
     if mention.startswith("//") or _SCHEME_BEFORE.search(before):
-        # `https://…/docs/sql-write-path-v2.md`: a file in another repo, which
+        # A URL whose path ends in `.md` names a file in another repo, which
         # this one cannot open. `_LINK_REF` drops scheme targets for that
         # reason, so without this the census would fail on the very link the
         # link pass deliberately declines to grade.
@@ -2660,10 +2657,9 @@ def test_only_this_plugins_files_are_read_as_asset_citations(plugin: str) -> Non
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_a_generated_changelog_is_not_graded_as_prose(plugin: str) -> None:
     """release-please writes `CHANGELOG.md` from commit subjects, and this
-    repo's subjects carry `§` and `.md` paths — this PR's own does. Grading it
-    would fail the build on text the author cannot fix: hand-editing a
-    generated file is undone by the next release. It is also not prose any
-    agent reads."""
+    repo's subjects carry `§` and `.md` paths. Grading it would fail the build
+    on text the author cannot fix: hand-editing a generated file is undone by
+    the next release. It is also not prose any agent reads."""
     # Not "the changelog exists" — release-please writes it at a plugin's
     # first release, so a plugin can legitimately be here without one, and a
     # guard about citations must not demand a release train.
@@ -2673,7 +2669,7 @@ def test_a_generated_changelog_is_not_graded_as_prose(plugin: str) -> None:
     # naming a since-renamed spec, and one quoting a `§` from a commit subject.
     entry = (
         "* guard every plugin's citations — the section a § names "
-        "([#151](https://github.com/analitiq-ai/x/issues/151))\n"
+        "([0000000](https://github.com/analitiq-ai/x/commit/0000000))\n"
         "* fix drift in skills/stream-spec/spec-renamed-away.md\n"
     )
     assert _dangling_in(entry, plugin) == ["skills/stream-spec/spec-renamed-away.md"]
@@ -2706,13 +2702,12 @@ def test_the_two_taught_forms_combine_into_one_citation(plugin: str) -> None:
 
 
 def test_a_link_to_another_repo_is_not_a_broken_link() -> None:
-    """An engine ADR linked by URL is a file this repo cannot open. Resolving
-    it relative to the citing document would report every such link dangling —
-    and the one ADR already allow-listed for the file pass is exactly the link
-    someone would write."""
+    """A URL whose path ends in `.md` names a file in another repo, which this
+    one cannot open. Resolving it relative to the citing document would report
+    every such link dangling, and both READMEs link out by URL today."""
     doc = (
         "See [the ADR](https://github.com/analitiq-ai/analitiq-engine/blob/"
-        "main/docs/sql-write-path-v2.md).\n"
+        "main/docs/write-path.md).\n"
     )
     assert [m.group(1) for m in _LINK_REF.finditer(doc)] == []
     # A repo-relative link on the same line is still read.
