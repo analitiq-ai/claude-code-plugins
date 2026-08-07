@@ -31,8 +31,8 @@ entries in the three per-plugin registries below, this suite is red.
      since that is what a link means. A link may leave the plugin only from
      the plugin's own README, a page a reader browses in the repo; from a
      skill or agent document, read out of an installed plugin cache where repo
-     files do not exist, a link out of the tree dangles. A link's `#fragment`
-     is checked as a section, below.
+     files do not exist, a link out of the tree dangles. The file only — see
+     the fragment entry below.
 
    - Paths with any other extension, wherever prose puts them — filling a code
      span (`` `examples/api-key/api-key.example.json` ``), sharing one with the
@@ -55,6 +55,12 @@ entries in the three per-plugin registries below, this suite is red.
    - A same-document link, `](#a-heading)`. No plugin writes one; adding an
      extractor for a form with no sites would be a pattern nothing can floor,
      which is the shape of a guard that dies without anyone noticing.
+   - A link's `#fragment`. Same reason, one step further along: no link in
+     either plugin carries one, and grading it means a GitHub-compatible
+     heading-to-anchor slug rule — a mapping written for zero sites, wrong in
+     ways nothing here would reveal. The fragment is still captured, and
+     `test_no_link_names_a_section` fails on the first one written, which is
+     when the slug rule becomes worth getting right.
    - A link whose target carries a URL scheme. `](https://…/docs/adr.md)`
      names a file in another repo, which this one cannot open — resolving it
      relative to the citing document would report every such link dangling.
@@ -65,15 +71,15 @@ entries in the three per-plugin registries below, this suite is red.
      prose any agent reads. A citation *of* the changelog still resolves — it
      is excluded as a source of citations, not from the path universe.
 
-2. **The section exists.** A `path.md §Heading` citation, and a link's
-   `#fragment`, make a second claim the file check never opens: that the
-   heading is still there. A heading rename leaves the citation
-   half-dangling — the file opens, the section the agent was sent to read is
-   gone. `§` with no file in front of it cites a section of the citing
-   document itself, and is resolved against it. The two forms differ in how
-   exactly they name the heading: prose abbreviates and runs on, so `§` is
-   matched by opening words; a fragment is generated from the whole heading,
-   so it is matched by slug. Fences are not an exemption. Real *path*
+2. **The section exists.** A `path.md §Heading` citation makes a second claim
+   the file check never opens: that the heading is still there. A heading
+   rename leaves the citation half-dangling — the file opens, the section the
+   agent was sent to read is gone. `§` with no file in front of it cites a
+   section of the citing document itself, and is resolved against it. Prose
+   abbreviates the heading and runs on past it, so the match is by opening
+   words rather than equality — except for a quoted anchor, where the author
+   claimed the heading verbatim and only equality passes. Fences are not an
+   exemption. Real *path*
    citations do sit inside fenced examples — a mission spec quoting the paths
    its researcher must read, an agent's command line naming the script it
    runs — so the file pass reads fenced lines. No `§` is fenced today;
@@ -185,9 +191,10 @@ _BARE_ASSET_REF = re.compile(
 # `](../endpoint-spec/x.md)`, `](x.md#uniqueness)`. Kept apart from the
 # patterns above because it resolves differently — relative to the citing file,
 # and it may point outside the plugin, which the READMEs do. The fragment is
-# captured, not discarded: it is the same claim a `§` citation makes, and
-# leaving it unread would close the section-citation hole in one form while
-# leaving it open in the other.
+# captured but not graded. Capturing it is what keeps `](x.md#frag)` a link at
+# all — `#` is outside the target charset, so without the group the pattern
+# runs off the end and the whole citation goes unread. Grading it is
+# `test_no_link_names_a_section`'s subject: no link carries one today.
 # The scheme lookahead drops anything with a URL scheme. Both READMEs link out
 # by URL, and a URL is not a path this repo can open; resolving one relative to
 # the citing document would report every such link dangling. It sits *after*
@@ -207,13 +214,6 @@ _LINK_REF = re.compile(
     r"\]\(<?(?!\w+:)([A-Za-z0-9_./-]+)>?(#[^)\s]*)?(?:\s+[\"'(][^)]*)?\)"
 )
 
-# What GitHub keeps when it slugs a heading into a fragment: case folded,
-# spaces to hyphens, everything else that is not a word character or hyphen
-# dropped — including the period real headings carry
-#, since GitHub slugs `### 1. Research (domain)`
-# to `1-research-domain`. Enough to resolve `#derived-endpoint_id` against
-# ``## Derived `endpoint_id` ``.
-_SLUG_DROP = re.compile(r"[^\w\- ]")
 
 # The file a `§` binds to: the last `.md` path before it, separated by nothing
 # but glue — a closing backtick, whitespace (the citation often wraps a line),
@@ -974,8 +974,8 @@ def _links_in(text: str) -> list[tuple[int, str, str]]:
     """Every (lineno, target, fragment) markdown link in one document's text.
     The fragment is `""` when the link names no section — a text-level helper,
     like `_scan_text`, so a synthetic document can drive the extraction end to
-    end. No link in either plugin carries a fragment today, so this is the
-    only place the capture is exercised at all."""
+    end. Nothing grades the fragment; `test_no_link_names_a_section` is what
+    reads it, and fails if a link ever names a section."""
     return [
         (lineno, match.group(1), (match.group(2) or "").lstrip("#"))
         for lineno, line in enumerate(text.splitlines(), 1)
@@ -1016,13 +1016,7 @@ def _is_dangling(target: str, plugin: str, citing: str | None = None) -> bool:
     )
 
 
-def _slug(heading: str) -> str:
-    """A heading as the fragment that links to it — case folded, punctuation
-    dropped, spaces hyphenated."""
-    return _SLUG_DROP.sub("", heading.lower()).strip().replace(" ", "-")
-
-
-def _link_dangles(target: str, fragment: str, citing: str, plugin: str) -> bool:
+def _link_dangles(target: str, citing: str, plugin: str) -> bool:
     """Does a markdown link point at something that is not there?
 
     The file resolves relative to the document the link is written in — that is
@@ -1039,20 +1033,14 @@ def _link_dangles(target: str, fragment: str, citing: str, plugin: str) -> bool:
     legitimate there. From a skill or agent document, read out of an installed
     plugin cache where repo files do not exist, the same link dangles.
 
-    A fragment is the same claim a `§` citation makes, so it is held to the
-    same standard: the heading it slugs to must exist in the file the link
-    opens.
+    The file only. A `#fragment` makes a second claim, and no link in either
+    plugin makes it — `test_no_link_names_a_section` is what keeps that true,
+    and is where the check goes if one ever does.
     """
     path = _relative_target(citing, target, plugin)
     if path is None or not path.is_file():
         return True
-    if not _inside_plugin(path, plugin) and citing != "README.md":
-        return True
-    if not fragment:
-        return False
-    return fragment.lower() not in {
-        _slug(heading) for heading in _headings(path.read_text(encoding="utf-8"))
-    }
+    return not _inside_plugin(path, plugin) and citing != "README.md"
 
 
 def _anchor_checks(
@@ -1116,24 +1104,49 @@ def test_doc_references_resolve(plugin: str) -> None:
 
 @pytest.mark.parametrize("plugin", _plugin_names())
 def test_markdown_links_resolve(plugin: str) -> None:
-    """A link is a citation a reader clicks — file and, when it names one,
-    section. A link's `#fragment` is the same claim `§Heading` makes, and is
-    held to the same standard."""
+    """A link is a citation a reader clicks."""
     dangling = [
-        (rel, lineno, target, fragment)
-        for rel, lineno, target, fragment in _link_references(plugin)
-        if _link_dangles(target, fragment, rel, plugin)
+        (rel, lineno, target)
+        for rel, lineno, target, _fragment in _link_references(plugin)
+        if _link_dangles(target, rel, plugin)
     ]
     assert not dangling, (
-        "markdown links point at something that does not exist:\n"
+        "markdown links point at a file that does not exist:\n"
         + "\n".join(
             f"  plugins/{plugin}/{rel}:{lineno} -> {target}"
-            + (f"#{fragment}" if fragment else "")
-            for rel, lineno, target, fragment in dangling
+            for rel, lineno, target in dangling
         )
         + "\nLink targets are resolved relative to the file they are written "
         "in — check the number of `../` segments before assuming the target "
-        "moved. A `#fragment` must slug to a heading the target still carries."
+        "moved."
+    )
+
+
+@pytest.mark.parametrize("plugin", _plugin_names())
+def test_no_link_names_a_section(plugin: str) -> None:
+    """No link carries a `#fragment`, so nothing grades one.
+
+    A fragment claims a section exists, the way `§Heading` does, and the link
+    pass deliberately does not check it: writing the slug rule meant writing a
+    GitHub-compatible heading-to-anchor mapping for zero sites, and a mapping
+    nothing exercises is wrong in ways nothing reveals. This fails the moment
+    that stops being hypothetical, which is the point at which the check is
+    worth writing.
+    """
+    fragments = [
+        (rel, lineno, f"{target}#{fragment}")
+        for rel, lineno, target, fragment in _link_references(plugin)
+        if fragment
+    ]
+    assert not fragments, (
+        "markdown links name a section, which nothing grades:\n"
+        + "\n".join(
+            f"  plugins/{plugin}/{rel}:{lineno} -> {ref}" for rel, lineno, ref in fragments
+        )
+        + "\nEither drop the fragment and let the link name the file, or cite "
+        "the section with `§Heading`, which `test_section_anchors_resolve` "
+        "grades. Adding the fragment check back means a heading-to-anchor slug "
+        "rule pinned against real headings, not a round-trip through itself."
     )
 
 
@@ -2179,10 +2192,10 @@ def test_the_link_pass_refuses_what_the_file_pass_refuses(probe_plugin: str) -> 
     assert (_plugin_root(plugin) / "__pycache__" / "probe.md").is_file()
     assert _inside_plugin(_plugin_root(plugin) / "__pycache__" / "probe.md", plugin)
     assert _relative_target("README.md", "__pycache__/probe.md", plugin) is None
-    assert _link_dangles("__pycache__/probe.md", "", "README.md", plugin)
+    assert _link_dangles("__pycache__/probe.md", "README.md", plugin)
     # The twin, on the same tree: a file the plugin ships is reached by both.
     assert _relative_target("README.md", "scripts/validate.py", plugin) is not None
-    assert not _link_dangles("scripts/validate.py", "", "README.md", plugin)
+    assert not _link_dangles("scripts/validate.py", "README.md", plugin)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -2347,10 +2360,10 @@ def test_a_starved_form_trips_its_floor() -> None:
 
 
 def test_a_link_fragment_is_read_out_of_the_prose() -> None:
-    """The join from prose to `_link_dangles`' fragment check. No link in
-    either plugin carries a fragment today, so nothing on the real tree
-    exercises the capture — and a fragment silently lost reads as "the section
-    is fine", while a `#` silently kept reads as a broken link that is not."""
+    """The capture `test_no_link_names_a_section` reads. Nothing on the real
+    tree exercises it, so it is pinned here: a fragment silently lost lets the
+    ungraded form in without tripping that test, and a `#` silently kept in the
+    target reads as a broken link that is not."""
     assert _links_in("See [t](spec-envelope.md#type-fidelity).") == [
         (1, "spec-envelope.md", "type-fidelity")
     ]
@@ -2739,14 +2752,14 @@ def test_a_link_out_of_the_plugin_is_a_readme_privilege(plugin: str) -> None:
     browses in the repo, which is the only place either plugin links out
     today."""
     assert (REPO_ROOT / "README.md").is_file()
-    assert not _link_dangles("../../README.md", "", "README.md", plugin)
+    assert not _link_dangles("../../README.md", "README.md", plugin)
     # The same target, from a document an agent reads out of the plugin cache.
     deep, _heading = _fixture(plugin)  # skills/<skill>/references/<file>.md
     hops = "../" * 5  # references -> skill -> skills -> plugin -> plugins -> repo
     assert (_plugin_root(plugin) / deep).parent.joinpath(
         f"{hops}README.md"
     ).is_file(), "the link resolves — it is the plugin boundary that rejects it"
-    assert _link_dangles(f"{hops}README.md", "", deep, plugin)
+    assert _link_dangles(f"{hops}README.md", deep, plugin)
     # The privilege belongs to the plugin-root README, not to any file named
     # README.md. Relaxing the test to `endswith` stayed green, and a skill
     # growing its own README would then get permission to link at repo files
@@ -2754,7 +2767,7 @@ def test_a_link_out_of_the_plugin_is_a_readme_privilege(plugin: str) -> None:
     assert (_plugin_root(plugin) / "skills" / "../../../README.md").is_file(), (
         "again the target resolves; the boundary is what must reject it"
     )
-    assert _link_dangles("../../../README.md", "", "skills/README.md", plugin)
+    assert _link_dangles("../../../README.md", "skills/README.md", plugin)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -2763,48 +2776,13 @@ def test_dangling_markdown_link_is_flagged(plugin: str) -> None:
     so a `../` hop that lands nowhere fails while the same hop that lands on a
     real file passes. Written from a real document, since a relative path is
     only resolvable from a directory that exists."""
-    citing, heading = _fixture(plugin)  # skills/<skill>/references/x.md
-    assert _link_dangles("../nowhere/spec-z.md", "", citing, plugin)
-    assert not _link_dangles("../../../CLAUDE.md", "", citing, plugin)
-    # The fragment is held to the same standard as a `§` citation: the file
-    # opens either way, the section is what the link claims. A fragment names
-    # the whole heading, slugged — unlike `§`, which may abbreviate — so this
-    # reads the heading off the file rather than using the fixture's short
-    # citation form.
+    citing, _heading = _fixture(plugin)  # skills/<skill>/references/x.md
+    assert _link_dangles("../nowhere/spec-z.md", citing, plugin)
+    assert not _link_dangles("../../../CLAUDE.md", citing, plugin)
+    # A fragment does not change the verdict on the file, which is the only
+    # claim this pass makes: the target still has to open.
     own = Path(citing).name
-    full = _headings((_plugin_root(plugin) / citing).read_text(encoding="utf-8"))[0]
-    assert heading  # the fixture's own citation form, exercised by the `§` tests
-    assert not _link_dangles(own, _slug(full), citing, plugin)
-    assert _link_dangles(own, "section-that-was-renamed", citing, plugin)
-
-
-def test_a_heading_slugs_the_way_a_link_writes_it() -> None:
-    """Stated as literals, not round-tripped through `_slug` on both sides —
-    comparing the function to itself would accept any slug rule at all, and
-    the fragment check is only as good as this mapping. These are the shapes
-    plugin headings actually take: backticked identifiers, parenthesised
-    qualifiers, an em-dash."""
-    assert _slug("Derived `endpoint_id`") == "derived-endpoint_id"
-    assert _slug("Release version (`version`)") == "release-version-version"
-    assert _slug("Cross-field rules the contract enforces") == (
-        "cross-field-rules-the-contract-enforces"
-    )
-    assert _slug("Fenced JSON examples — the annotation convention") == (
-        "fenced-json-examples--the-annotation-convention"
-    )
-    # A numbered heading, the punctuation eight real headings carry and the
-    # four cases above did not: keeping the period in `_SLUG_DROP` survived
-    # the whole suite, and would report a correct `#1-research-domain`
-    # fragment as a dangling section.
-    assert _slug("1. Research (domain)") == "1-research-domain"
-    assert _slug("0. Pre-flight") == "0-pre-flight"
-    # A fragment is compared case-insensitively: a link may spell it either
-    # way and lands on the same anchor in a browser.
-    citing, _heading = _fixture("analitiq-connector-builder")
-    own = Path(citing).name
-    assert not _link_dangles(
-        own, "RELEASE-VERSION-VERSION", citing, "analitiq-connector-builder"
-    )
+    assert not _link_dangles(own, citing, plugin)
 
 
 @pytest.mark.parametrize("plugin", _plugin_names())
@@ -3278,4 +3256,4 @@ def test_a_link_to_a_file_with_no_extension_is_read(plugin: str) -> None:
     ]
     assert extensionless, "no extensionless link target found at all"
     for rel, target in extensionless:
-        assert not _link_dangles(target, "", rel, plugin), (rel, target)
+        assert not _link_dangles(target, rel, plugin), (rel, target)
