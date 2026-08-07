@@ -89,8 +89,8 @@ that side — `pipeline.connections.source` for the stream source, and one of
 
 ## Uniqueness
 
-Destination `endpoint_ref`s must be unique within a single stream — see
-`ADV-STRM-001` in `SKILL.md` § Cross-field rules for the exact tuple.
+Destination `endpoint_ref`s must be unique within a single stream — for the
+exact tuple see `ADV-STRM-001` in `SKILL.md` §Cross-field rules.
 
 ## Cross-document consistency
 

@@ -100,8 +100,8 @@ Two things specific to this plugin:
 ## Fenced JSON examples
 
 Inline `jsonc` fences in this plugin's prose follow the annotation convention
-in the connector plugin's `CLAUDE.md` § "Fenced JSON examples — the annotation
-convention".
+in `plugins/analitiq-connector-builder/CLAUDE.md` § "Fenced JSON examples — the
+annotation convention".
 
 ## Where the authoring rules live
 
