@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.2.1](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.2.0...analitiq-pipeline-builder-v0.2.1) (2026-08-07)
+
+
+### Features
+
+* bump the runtime validator to rc20 and teach the write path_param record binding ([e18d5e8](https://github.com/analitiq-ai/claude-code-plugins/commit/e18d5e861bc3035d750c1e6e239a717fc46aa7c8))
+* bump the runtime validator to rc20 and teach the write path_param record binding ([71cbb09](https://github.com/analitiq-ai/claude-code-plugins/commit/71cbb09b9e3944e3b4aebedd2ea8dc193705a2ba))
+* **contract-models:** enforce database-only read features, catalogue three unregistered enforcers ([d3abea5](https://github.com/analitiq-ai/claude-code-plugins/commit/d3abea5c03541630f309987c43c02cada15759fa))
+* **contract-models:** resolve response.body paths, let a write path_param read the record, gate endpoint transport_ref ([5d7f6a5](https://github.com/analitiq-ai/claude-code-plugins/commit/5d7f6a5e23971a5e9ca465de6370443394799602))
+* pin every validator-behavior claim in plugin prose to an executable probe ([5607766](https://github.com/analitiq-ai/claude-code-plugins/commit/560776636dd532709fbef535d8113883df8a5d00))
+* pin every validator-behavior claim in plugin prose to an executable probe ([261a361](https://github.com/analitiq-ai/claude-code-plugins/commit/261a36190d6c0198f90d9874b45af7904073615a))
+
+
+### Bug Fixes
+
+* **analitiq-connector-builder:** collapse the runtime validator pin to one owner ([#122](https://github.com/analitiq-ai/claude-code-plugins/issues/122)) ([cccc8ae](https://github.com/analitiq-ai/claude-code-plugins/commit/cccc8ae0ef30649b2382646a10d5be6d9053a439))
+* **analitiq-connector-builder:** register endpoint-transport-ref and regenerate the advisory reference ([378c8e1](https://github.com/analitiq-ai/claude-code-plugins/commit/378c8e12b4dfa39033e93d2c7f99240e6e58be92))
+* **analitiq-pipeline-builder:** retire the last "no enum can enumerate it" claims ([acf1976](https://github.com/analitiq-ai/claude-code-plugins/commit/acf1976fcf2fb3d01b05ed26301fcd831876d7da))
+* apply the round-1 review — pin the census's own texts, widen ADV-STRM-014, guard the enforcer direction ([ad2c0a3](https://github.com/analitiq-ai/claude-code-plugins/commit/ad2c0a3dd19ae92c9a69e30a6708963ff4296cd9))
+* apply the round-1 review — pin the closure claims, close the optional-member gap ([cf5ae7d](https://github.com/analitiq-ai/claude-code-plugins/commit/cf5ae7d0d8ccd3e97b887100de6f845608703ab8))
+* apply the round-2 review — one table parser, and own the claims nobody read ([06f0042](https://github.com/analitiq-ai/claude-code-plugins/commit/06f0042ad6291947f39e618c71ba00cc67c8b84e))
+* apply the round-2 review — the write side compiles ECMA-262 matchers too ([c5954e8](https://github.com/analitiq-ai/claude-code-plugins/commit/c5954e8c92222cf1107ef1b3a1437bd374b4e6e4))
+* apply the round-3 review — one properties helper, and stop claiming a derivation ([a654446](https://github.com/analitiq-ai/claude-code-plugins/commit/a654446883645bdfed8d5a8b2638ab045a91fce4))
+* bump the runtime validator pin to 1.0.0rc19 ([#119](https://github.com/analitiq-ai/claude-code-plugins/issues/119)) ([d92705e](https://github.com/analitiq-ai/claude-code-plugins/commit/d92705e70d59e18c81cc99f59dc5de0c69a602f3))
+* close the gate's own blind spots the review hunt proved reachable ([72924bd](https://github.com/analitiq-ai/claude-code-plugins/commit/72924bdb90b9ae0a6e78fade10c35871194119f8))
+* **contract-models:** close the API write-mode hole, and address every declarable field ([60a5005](https://github.com/analitiq-ai/claude-code-plugins/commit/60a500572a75c15da5649ebd820fa5d4dd0ed8ee))
+* **contract-models:** make the illegal destination and validation-rule shapes unrepresentable ([45c7c2c](https://github.com/analitiq-ai/claude-code-plugins/commit/45c7c2caf66c76e7eb0b5eea00f6c3ce7799dcfd))
+* **contract-models:** make the illegal destination and validation-rule shapes unrepresentable ([faf8434](https://github.com/analitiq-ai/claude-code-plugins/commit/faf843484d2e2f45f00a51d6f64104c3eeaf6708)), closes [#112](https://github.com/analitiq-ai/claude-code-plugins/issues/112) [#113](https://github.com/analitiq-ai/claude-code-plugins/issues/113)
+* **contract-models:** materialize by memoized fold, and pin it against a naive one ([da1172d](https://github.com/analitiq-ai/claude-code-plugins/commit/da1172d558da5f2e035a6f1777a9203ac5248217))
+* **pipeline-builder:** mark the destination and source sketches as validating fragments ([ffd7ff4](https://github.com/analitiq-ai/claude-code-plugins/commit/ffd7ff4a8668bd2fd6445b11d30e5941da42dbd5))
+* **pipeline-builder:** retag the four pseudo-JSON agent fences ([16510bf](https://github.com/analitiq-ai/claude-code-plugins/commit/16510bf6c1e256808e769d0281859b29aaa628ca))
+* **prose:** state the mechanism, not the cardinality ([bf6a0a3](https://github.com/analitiq-ai/claude-code-plugins/commit/bf6a0a39c5282c834cb0ec695d2bd03bddd051be))
+* **prose:** state the mechanism, not the cardinality ([00c7595](https://github.com/analitiq-ai/claude-code-plugins/commit/00c7595143e5909a0c4cc57bb0a441973105dbd5))
+
 ## [0.2.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.1.3...analitiq-pipeline-builder-v0.2.0) (2026-07-31)
 
 
