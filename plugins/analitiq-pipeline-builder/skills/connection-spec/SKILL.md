@@ -69,18 +69,18 @@ that validates here and fails at connect.
 <!-- BEGIN GENERATED: advisory-connection -->
 | Rule | Constraint |
 |---|---|
-| `ADV-CONN-004` | A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`.  |
+| `ADV-CONN-004` | A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`. |
 
 The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
 
 | Rule | Constraint | Tier | Applied by |
 |---|---|---|---|
-| `ADV-CONN-005` | A connection MUST NOT author a value into its `discovered` map, which the connections service owns and fills from the connector's post-auth discovery.  | procedural | nothing here |
-| `ADV-CONN-006` | Every connection-contract input and post-auth output MUST be authored into the connection map its own declaration's `storage` names.  | referential | nothing here |
-| `ADV-CONN-007` | A connection MUST author each value in the JSON type its connection-contract input declares, uncoerced, and within that input's declared allowed-value list where it declares one.  | referential | nothing here |
-| `ADV-CONN-008` | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for.  | referential | nothing here |
-| `ADV-CONN-009` | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`.  | referential | nothing here |
-| `ADV-CONN-010` | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits.  | referential | nothing here |
+| `ADV-CONN-005` | A connection MUST NOT author a value into its `discovered` map, which the connections service owns and fills from the connector's post-auth discovery. | procedural | nothing here |
+| `ADV-CONN-006` | Every connection-contract input and post-auth output MUST be authored into the connection map its own declaration's `storage` names. | referential | nothing here |
+| `ADV-CONN-007` | A connection MUST author each value in the JSON type its connection-contract input declares, uncoerced, and within that input's declared allowed-value list where it declares one. | referential | nothing here |
+| `ADV-CONN-008` | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. | referential | nothing here |
+| `ADV-CONN-009` | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. | referential | nothing here |
+| `ADV-CONN-010` | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. | referential | nothing here |
 <!-- END GENERATED: advisory-connection -->
 
 ## What this skill does NOT cover

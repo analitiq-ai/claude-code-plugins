@@ -1493,7 +1493,8 @@
    "validator": null,
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "data": {
     "targets": [
@@ -1514,7 +1515,8 @@
    "validator": null,
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "data": {
     "targets": [
@@ -1535,6 +1537,7 @@
    "validator": null,
    "owners": [
     "engine",
+    "connector-plugin",
     "pipeline-plugin"
    ],
    "data": {
@@ -3516,7 +3519,8 @@
    "validator": null,
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "data": {
     "targets": [
@@ -3600,6 +3604,7 @@
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ConnectionEndpointRef._derive_or_verify_endpoint_id",
    "owners": [
     "engine",
+    "connector-plugin",
     "pipeline-plugin"
    ],
    "data": {
@@ -4498,7 +4503,8 @@
    "validator": null,
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "data": {},
    "rationale": "The write map is the connector's whole DDL vocabulary and is consulted on every run — stream configuration renders each destination column's frozen canonical through it even when the table already exists — so an uncovered family fails the stream at configuration rather than at first write. The container markers are the ones authors miss, because a database-sourced test never produces them: they arrive only when an API source's struct or array field lands in a database destination. A gap is legitimate only where the dialect renders that family in code (`ADV-TMAP-019`). Nothing here can prove the map complete — completeness is observable only against a real column's canonical at stream configuration, and the validator's coverage check sends one probe per family and one parameter value per probe, so a clean run says only that the probed spellings resolved.\n",
@@ -4515,6 +4521,7 @@
    "validator": null,
    "owners": [
     "engine",
+    "connector-plugin",
     "pipeline-plugin"
    ],
    "data": {},
@@ -4532,7 +4539,8 @@
    "validator": null,
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "data": {},
    "rationale": "A dialect that overrides the column-type renderer takes the family off the map path entirely, so a rule for it would be dead weight and its absence is correct — some families genuinely need arithmetic no rule can express, such as choosing between a system's narrow and wide numeric on a precision range. That makes an absent family ambiguous in exactly the way a coverage report cannot resolve: the same hole means \"handed to the dialect\" or \"not done yet\", and only the connector package's dialect says which. No validator opens those files, so the write-coverage probe can report the gap but only as a warning, and reconciling each family it names against the dialect is the author's step.\n",

@@ -7,7 +7,7 @@ severity: error
 scope: database-endpoint
 mechanized: false
 validator: null
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 data:
   targets: [DatabaseObject]
 rationale: >

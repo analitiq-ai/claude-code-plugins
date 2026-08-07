@@ -8,16 +8,16 @@ Rendered from the rule registry (`rules/adv/*.yaml`) as the pinned
 (`ADV-ENDP-009`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: the artifacts this plugin authors (`connector`, `connector-package`, `api-endpoint`, `type-map`, `any`). Pipeline, stream,
-connection and database-endpoint rules are excluded — they belong to other
-tools, and database endpoints are generated at runtime by the connector's
-`resource_discovery`, never authored here.
+Scope: every rule this plugin owns. A rule is here because its record names
+`connector-plugin` as an owner, so any id you meet in this plugin's prose is a row
+below — including rules on documents authored elsewhere that an author here
+still has to satisfy, like the endpoints `resource_discovery` produces.
 
 Every rule carries three independent facts. **Tier** is what kind of rule it
 is; **Severity** is what a violation costs; **Applied by** is what rejects one,
 and `—` there means nothing here does — you find out later, or never.
 
-In scope: **51** structural · **63** advisory · **21** referential · **16** procedural · **7** judgment.
+Owned here: **51** structural · **63** advisory · **21** referential · **17** procedural · **8** judgment.
 
 
 ## Structural
@@ -32,59 +32,59 @@ sentence that stops moving when the model does.
 current answer, not a promise, and it is why this file is regenerated rather
 than edited.
 
-| ID | Rule | Severity | Applied by | Values |
-|---|---|---|---|---|
-| ADV-CTOR-016 | An ADBC transport's `driver` MUST name a member of the closed vocabulary the contract declares for it; a driver the vocabulary does not name cannot be declared at all. | error | `AdbcTransport.driver` | `postgresql`, `snowflake`, `bigquery` |
-| ADV-CTOR-017 | A bulk-load family key MUST name a mechanism the contract admits under that family — the families' vocabularies differ, so a mechanism is declarable only under the family whose field carries it — and a mechanism outside them is not declarable at all. | error | `SqlBulkLoad.sqlalchemy` | `copy_from`, `load_data_local_infile`, `load_job`, `adbc_ingest` |
-| ADV-CTOR-018 | Every binding in a `url_template` DSN MUST declare an `encoding` from the closed vocabulary the contract carries, selected for the URL position the value is substituted into. | error | `DsnBinding.encoding` | `raw`, `host`, `url_userinfo`, `url_path_segment`, `url_query_key`, `url_query_value` |
-| ADV-CTOR-019 | A `resource_discovery.produces` entry MUST name an artifact kind the contract's vocabulary admits, and discovery MUST write nothing outside it. | error | `ResourceDiscovery.produces` | `connection.endpoints`, `connection.type_map` |
-| ADV-CTOR-020 | Each discovery action a connector configures on `ResourceDiscoveryTriggers` MUST name its trigger from the closed vocabulary that model's matching field declares. | error | `ResourceDiscoveryTriggers.list_resources` | `on_activation`, `on_connection_selected`, `on_resource_selected`, `on_demand`, `scheduled` |
-| ADV-CTOR-021 | A connection-contract input MUST state how it is provisioned, when in the connection lifecycle it is provisioned, where its resolved value is durably stored and what value type it carries using only the vocabulary `ConnectionContractInput` declares for each. | error | `ConnectionContractInput.source` | `connection.parameters`, `secrets`, `string`, `integer`, `number`, `boolean`, `array`, `object` |
-| ADV-CTOR-022 | A post-auth output MUST state how its value is produced and where it is durably stored using only the vocabulary `PostAuthOutput` declares for each; which pairings of those values are legal is ADV-CTOR-002. | error | `PostAuthOutput.mode` | `connection.selections`, `connection.discovered`, `secrets` |
-| ADV-CTOR-023 | A connector document's `connector_id` MUST match the slug pattern `ConnectorBase.connector_id` declares. | error | `ConnectorBase.connector_id` | — |
-| ADV-CTOR-024 | A connector's `auth` block MUST carry only the children declared by the union branch its `type` selects, so a child belonging to a different auth type is rejected rather than ignored. | error | `ApiKeyAuth` | — |
-| ADV-CTOR-025 | An auth operation slot MUST hold an `AuthOperationTemplate`, which admits only the request fields that model names and rejects any other key. | error | `AuthOperationTemplate` | — |
-| ADV-CTOR-035 | A DSN binding's `value` MUST take one of the forms the value-expression grammar defines, since the runtime resolves it at connection time. | error | — | — |
-| ADV-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode. | error | — | — |
-| ADV-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | error | `Param._validate` | — |
-| ADV-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | error | `Param._validate` | — |
-| ADV-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | error | `ReadOperation._wiring` | — |
-| ADV-ENDP-015 | A write mode MUST NOT declare both an idempotency key placement and batching. | error | `WriteOperation._wiring` | — |
-| ADV-ENDP-018 | An operations block MUST declare at least one operation, and any write map it declares MUST carry at least one mode. | error | `Operations._at_least_one` | — |
-| ADV-ENDP-022 | An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys. | error | `ReadOperation._wiring` | — |
-| ADV-ENDP-027 | A request.path_params binding MUST NOT apply a wire-encoding function, because the engine percent-encodes every substituted path segment. | error | `ReadOperation._wiring` | — |
-| ADV-ENDP-029 | A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | error | `WriteResponse._metadata_keys` | — |
-| ADV-ENDP-031 | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. | error | `DatabaseObject._reject_explicit_null_namespaces` | — |
-| ADV-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | error | `_EndpointBase.endpoint_id` | — |
-| ADV-ENDP-037 | A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags. | error | `PredicateEq` | — |
-| ADV-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | error | `Replication.supported_methods` | `full_refresh`, `incremental` |
-| ADV-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries, and MUST NOT carry anything that produces the key's value. | error | `Idempotency.location` | `header`, `body` |
-| ADV-ENDP-044 | A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null. | warning | — | — |
-| ADV-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | error | — | — |
-| ADV-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | warning | — | — |
-| ADV-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | error | — | — |
-| ADV-PKG-009 | A database connector's `__init__.py` MUST re-export the package's connector class and its dialect class. | info | — | — |
-| ADV-PKG-010 | `connector.py` MUST define the connector's dialect class on the CDK `SqlDialect` base and its connector class on `GenericSQLConnector`, and that connector class MUST carry `dialect_class` and no other member, not even an `__init__`. | error | — | — |
-| ADV-PKG-011 | A connector's `connector.py` MUST import only the CDK, the standard library, its own driver, and — inside an async `bulk_land` — `sqlalchemy.util.await_only`, and MUST NOT import another connector, any other third-party package, or an engine or runtime. | error | — | — |
-| ADV-PKG-012 | A connector's dialect MUST override only the public hooks `SqlDialect` itself declares — never a private CDK member, and never the framework-owned `table_address` factory or `capabilities` attribute — and MUST add no public attribute of its own, giving each helper it needs a leading underscore and a name the base does not use. | error | — | — |
-| ADV-PKG-013 | A dialect override MUST accept every call shape the base admits — the same parameter names, the same keyword-only markers, and the same synchronous form, since the engine calls every dialect hook synchronously. | error | — | — |
-| ADV-PKG-015 | A connector's `empty_table_sql` MUST NOT render `TRUNCATE`, whose implicit commit breaks the staged write cycle. | error | — | — |
-| ADV-PKG-017 | Every write-capable database connector MUST implement `stage_table_sql`, whatever the rest of its `sql_capabilities` declare. | error | — | — |
-| ADV-PKG-018 | `merge_statement_sql` MUST render a valid statement when every landed column is a conflict key, degrading to its merge form's insert-only variant rather than an empty update clause. | error | — | — |
-| ADV-PKG-019 | A `bulk_land` implementation MUST target the stage's full address rather than its bare table name, so a real-scope stage lands in the schema the engine qualified it with. | error | — | — |
-| ADV-PKG-022 | A dialect's TLS hook MUST raise rather than connect when a certificate-verification mode resolves with an empty CA certificate. | error | — | — |
-| ADV-PKG-023 | A connector's write direction MUST live in `type-map-write.json`: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map. | warning | — | — |
-| ADV-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | error | — | — |
-| ADV-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | warning | — | — |
-| ADV-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | error | — | — |
-| ADV-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | error | — | — |
-| ADV-TMAP-005 | A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect. | error | `TypeMapReadRegexRule._check` | — |
-| ADV-TMAP-006 | A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | error | `TypeMapReadRegexRule._check` | — |
-| ADV-TMAP-007 | A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name. | error | `TypeMapReadRegexRule._check` | — |
-| ADV-TMAP-008 | A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders. | error | `TypeMapWriteExactRule._check` | — |
-| ADV-TMAP-009 | A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders. | error | `TypeMapWriteRegexRule._check` | — |
-| ADV-TMAP-011 | A type map MUST NOT carry a catch-all rule standing in for whatever the rules above it leave uncovered. | error | — | — |
-| ADV-TMAP-017 | A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals. | warning | — | — |
+| ID | Rule | Grades | Severity | Applied by | Values |
+|---|---|---|---|---|---|
+| ADV-CTOR-016 | An ADBC transport's `driver` MUST name a member of the closed vocabulary the contract declares for it; a driver the vocabulary does not name cannot be declared at all. | `connector` | error | `AdbcTransport.driver` | `postgresql`, `snowflake`, `bigquery` |
+| ADV-CTOR-017 | A bulk-load family key MUST name a mechanism the contract admits under that family — the families' vocabularies differ, so a mechanism is declarable only under the family whose field carries it — and a mechanism outside them is not declarable at all. | `connector` | error | `SqlBulkLoad.sqlalchemy` | `copy_from`, `load_data_local_infile`, `load_job`, `adbc_ingest` |
+| ADV-CTOR-018 | Every binding in a `url_template` DSN MUST declare an `encoding` from the closed vocabulary the contract carries, selected for the URL position the value is substituted into. | `connector` | error | `DsnBinding.encoding` | `raw`, `host`, `url_userinfo`, `url_path_segment`, `url_query_key`, `url_query_value` |
+| ADV-CTOR-019 | A `resource_discovery.produces` entry MUST name an artifact kind the contract's vocabulary admits, and discovery MUST write nothing outside it. | `connector` | error | `ResourceDiscovery.produces` | `connection.endpoints`, `connection.type_map` |
+| ADV-CTOR-020 | Each discovery action a connector configures on `ResourceDiscoveryTriggers` MUST name its trigger from the closed vocabulary that model's matching field declares. | `connector` | error | `ResourceDiscoveryTriggers.list_resources` | `on_activation`, `on_connection_selected`, `on_resource_selected`, `on_demand`, `scheduled` |
+| ADV-CTOR-021 | A connection-contract input MUST state how it is provisioned, when in the connection lifecycle it is provisioned, where its resolved value is durably stored and what value type it carries using only the vocabulary `ConnectionContractInput` declares for each. | `connector` | error | `ConnectionContractInput.source` | `connection.parameters`, `secrets`, `string`, `integer`, `number`, `boolean`, `array`, `object` |
+| ADV-CTOR-022 | A post-auth output MUST state how its value is produced and where it is durably stored using only the vocabulary `PostAuthOutput` declares for each; which pairings of those values are legal is ADV-CTOR-002. | `connector` | error | `PostAuthOutput.mode` | `connection.selections`, `connection.discovered`, `secrets` |
+| ADV-CTOR-023 | A connector document's `connector_id` MUST match the slug pattern `ConnectorBase.connector_id` declares. | `connector` | error | `ConnectorBase.connector_id` | — |
+| ADV-CTOR-024 | A connector's `auth` block MUST carry only the children declared by the union branch its `type` selects, so a child belonging to a different auth type is rejected rather than ignored. | `connector` | error | `ApiKeyAuth` | — |
+| ADV-CTOR-025 | An auth operation slot MUST hold an `AuthOperationTemplate`, which admits only the request fields that model names and rejects any other key. | `connector` | error | `AuthOperationTemplate` | — |
+| ADV-CTOR-035 | A DSN binding's `value` MUST take one of the forms the value-expression grammar defines, since the runtime resolves it at connection time. | `connector` | error | — | — |
+| ADV-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode. | `connector` | error | — | — |
+| ADV-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | `api-endpoint` | error | `Param._validate` | — |
+| ADV-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | `api-endpoint` | error | `Param._validate` | — |
+| ADV-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | `api-endpoint` | error | `ReadOperation._wiring` | — |
+| ADV-ENDP-015 | A write mode MUST NOT declare both an idempotency key placement and batching. | `api-endpoint` | error | `WriteOperation._wiring` | — |
+| ADV-ENDP-018 | An operations block MUST declare at least one operation, and any write map it declares MUST carry at least one mode. | `api-endpoint` | error | `Operations._at_least_one` | — |
+| ADV-ENDP-022 | An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys. | `api-endpoint` | error | `ReadOperation._wiring` | — |
+| ADV-ENDP-027 | A request.path_params binding MUST NOT apply a wire-encoding function, because the engine percent-encodes every substituted path segment. | `api-endpoint` | error | `ReadOperation._wiring` | — |
+| ADV-ENDP-029 | A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | `WriteResponse._metadata_keys` | — |
+| ADV-ENDP-031 | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. | `api-endpoint` | error | `DatabaseObject._reject_explicit_null_namespaces` | — |
+| ADV-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` | error | `_EndpointBase.endpoint_id` | — |
+| ADV-ENDP-037 | A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags. | `api-endpoint` | error | `PredicateEq` | — |
+| ADV-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | `api-endpoint` | error | `Replication.supported_methods` | `full_refresh`, `incremental` |
+| ADV-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries, and MUST NOT carry anything that produces the key's value. | `api-endpoint` | error | `Idempotency.location` | `header`, `body` |
+| ADV-ENDP-044 | A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null. | `api-endpoint` | warning | — | — |
+| ADV-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — | — |
+| ADV-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — | — |
+| ADV-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — | — |
+| ADV-PKG-009 | A database connector's `__init__.py` MUST re-export the package's connector class and its dialect class. | `connector-package` | info | — | — |
+| ADV-PKG-010 | `connector.py` MUST define the connector's dialect class on the CDK `SqlDialect` base and its connector class on `GenericSQLConnector`, and that connector class MUST carry `dialect_class` and no other member, not even an `__init__`. | `connector-package` | error | — | — |
+| ADV-PKG-011 | A connector's `connector.py` MUST import only the CDK, the standard library, its own driver, and — inside an async `bulk_land` — `sqlalchemy.util.await_only`, and MUST NOT import another connector, any other third-party package, or an engine or runtime. | `connector-package` | error | — | — |
+| ADV-PKG-012 | A connector's dialect MUST override only the public hooks `SqlDialect` itself declares — never a private CDK member, and never the framework-owned `table_address` factory or `capabilities` attribute — and MUST add no public attribute of its own, giving each helper it needs a leading underscore and a name the base does not use. | `connector-package` | error | — | — |
+| ADV-PKG-013 | A dialect override MUST accept every call shape the base admits — the same parameter names, the same keyword-only markers, and the same synchronous form, since the engine calls every dialect hook synchronously. | `connector-package` | error | — | — |
+| ADV-PKG-015 | A connector's `empty_table_sql` MUST NOT render `TRUNCATE`, whose implicit commit breaks the staged write cycle. | `connector-package` | error | — | — |
+| ADV-PKG-017 | Every write-capable database connector MUST implement `stage_table_sql`, whatever the rest of its `sql_capabilities` declare. | `connector-package` | error | — | — |
+| ADV-PKG-018 | `merge_statement_sql` MUST render a valid statement when every landed column is a conflict key, degrading to its merge form's insert-only variant rather than an empty update clause. | `connector-package` | error | — | — |
+| ADV-PKG-019 | A `bulk_land` implementation MUST target the stage's full address rather than its bare table name, so a real-scope stage lands in the schema the engine qualified it with. | `connector-package` | error | — | — |
+| ADV-PKG-022 | A dialect's TLS hook MUST raise rather than connect when a certificate-verification mode resolves with an empty CA certificate. | `connector-package` | error | — | — |
+| ADV-PKG-023 | A connector's write direction MUST live in `type-map-write.json`: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map. | `connector-package` | warning | — | — |
+| ADV-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
+| ADV-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
+| ADV-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
+| ADV-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | — | — |
+| ADV-TMAP-005 | A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect. | `type-map` | error | `TypeMapReadRegexRule._check` | — |
+| ADV-TMAP-006 | A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | `type-map` | error | `TypeMapReadRegexRule._check` | — |
+| ADV-TMAP-007 | A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name. | `type-map` | error | `TypeMapReadRegexRule._check` | — |
+| ADV-TMAP-008 | A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | `TypeMapWriteExactRule._check` | — |
+| ADV-TMAP-009 | A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | `TypeMapWriteRegexRule._check` | — |
+| ADV-TMAP-011 | A type map MUST NOT carry a catch-all rule standing in for whatever the rules above it leave uncovered. | `type-map` | error | — | — |
+| ADV-TMAP-017 | A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals. | `type-map` | warning | — | — |
 
 ## Advisory
 
@@ -94,71 +94,71 @@ validator enforces them in-process and the finding arrives under
 `validator: "contract-model"` with the id already in the message. You do not
 need to memorize them; you need to recognise the id.
 
-| ID | Rule | Severity | Applied by |
-|---|---|---|---|
-| ADV-CONN-001 | A connection-contract input's `ui.options` MUST offer exactly the value set its `enum` declares. | error | the validator |
-| ADV-CONN-002 | An input's `default` MUST be a member of the `enum` declared beside it. | error | the validator |
-| ADV-CONN-003 | An input MUST mark itself secret exactly when its declared `storage` routes the value into secret storage. | error | `ConnectionContractInput._consistency` |
-| ADV-CTOR-001 | A connector's default_transport MUST name a transport the same document declares. | error | the validator |
-| ADV-CTOR-002 | A post-auth output MUST declare the request its mode consumes, MUST omit the request and the response-extraction paths belonging to the other mode, and MUST take a storage its mode admits. | error | `PostAuthOutput._mode_consistency` |
-| ADV-CTOR-003 | A resource-discovery implementation MUST declare an entrypoint exactly when the strategy code ships inside the connector package, and MUST omit one when the strategy is already shipped by the runtime. | error | `ResourceDiscoveryImplementation._entrypoint_matches_type` |
-| ADV-CTOR-004 | An ADBC transport MUST carry connection state; a transport that declares none has nothing to open a connection with. | error | `AdbcTransport._require_dsn_or_kwargs` |
-| ADV-CTOR-005 | Every transport_ref a connector declares MUST resolve to a transport declared in the same document. | error | `ConnectorBase._transport_refs_resolvable` |
-| ADV-CTOR-006 | Two declarations in one connection contract MUST NOT resolve to the same secret storage path. | error | `ConnectorBase._connection_contract_internal_refs` |
-| ADV-CTOR-007 | Every path in required_for_activation MUST resolve to a storage path that some declared input or post-auth output materializes. | error | `ConnectorBase._connection_contract_internal_refs` |
-| ADV-CTOR-008 | A cross-input validation rule's predicate MUST test an input the same connection contract declares. | error | `ConnectorBase._connection_contract_internal_refs` |
-| ADV-CTOR-009 | The fields a cross-input validation rule requires or forbids MUST be inputs the same connection contract declares. | error | `ConnectorBase._connection_contract_internal_refs` |
-| ADV-CTOR-010 | A connector whose kind runs no post-authentication phase MUST NOT declare post-auth outputs, nor the activation prerequisites that would resolve from them. | error | `FileConnector._validate_no_post_auth_contract` |
-| ADV-CTOR-011 | Every placeholder in a url_template DSN MUST have a binding, and every binding MUST be referenced by the template. | error | `UrlTemplateDsn._validate_placeholder_bindings` |
-| ADV-CTOR-012 | A connection condition predicate MUST name the input it tests and MUST declare exactly one operator key per predicate. | error | `ConnectionConditionPredicate._exactly_one_operator` |
-| ADV-CTOR-013 | A stage placed in a schema of its own MUST name that schema, and a stage co-located with the target MUST NOT name one. | error | `SqlStageCapabilities._dedicated_schema_matches_scope` |
-| ADV-CTOR-014 | A write_unit MUST declare at least one bound; a block declaring none states no preference and MUST be omitted instead. | warning | `WriteUnit._at_least_one_bound` |
-| ADV-CTOR-015 | A transport family that lands through the default path MUST be omitted from the bulk-load declaration rather than declared with a null mechanism. | error | `SqlBulkLoad._null_is_not_a_mechanism` |
-| ADV-CTOR-029 | A connector whose `ssl_mode` input enum admits a mode that verifies the server certificate MUST also declare a CA-certificate input in the same connection contract. | error | — |
-| ADV-CTOR-034 | A DSN binding's `value` MUST resolve to the unencoded value, because the binding's declared `encoding` is applied once, by the runtime, when the DSN is rendered. | error | — |
-| ADV-CTOR-038 | Each `post_auth_outputs` entry MUST resolve on its own, referencing no value another entry produces. | error | — |
-| ADV-CTOR-046 | A connector document MUST reach credential material only through the `secrets` scope: a DSN binding's `value` refs a secret rather than a connection parameter, and a discovery `options` block carries no secret-shaped key. | error | — |
-| ADV-CTOR-047 | A transport's `tls.mode` MUST resolve to a value the same connector's ssl-mode connection-contract input admits, and that input MUST declare the `enum` the mode is drawn from. | error | — |
-| ADV-CTOR-048 | Every transport family keyed in `sql_capabilities.bulk_load` MUST name a transport family the same connector declares in `transports`. | error | — |
-| ADV-CTOR-050 | A transport MUST be invoked no earlier than the phase at which every scope its expressions reference becomes available, and an input a transport references MUST declare a phase no later than that transport's first use. | error | — |
-| ADV-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | error | — |
-| ADV-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | error | — |
-| ADV-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | warning | — |
-| ADV-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | error | — |
-| ADV-ENDP-001 | A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares. | error | `_RequestBase._validate` |
-| ADV-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | error | `Replication._reject_mixed_cursor_forms` |
-| ADV-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | error | `ResponseExtraction._validate` |
-| ADV-ENDP-006 | Every node of a write mode's input schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | error | `WriteInput._validate` |
-| ADV-ENDP-008 | Every binding that names a declared parameter MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in. | error | `ReadOperation._wiring` |
-| ADV-ENDP-009 | Every parameter an operation declares MUST be referenced by exactly one request binding. | error | `ReadOperation._wiring` |
-| ADV-ENDP-010 | Every parameter a pagination block names MUST be declared by the same operation and MUST declare itself controlled by pagination. | error | `ReadOperation._wiring` |
-| ADV-ENDP-011 | Every parameter a replication cursor mapping names MUST be declared by the same operation and MUST declare itself controlled by replication. | error | `ReadOperation._wiring` |
-| ADV-ENDP-012 | A read operation's records reference MUST resolve, against that operation's declared response schema, to an array node whose record shape declares something. | error | `ReadOperation._wiring` |
-| ADV-ENDP-013 | Every replication cursor field MUST resolve to a field declared in the record shape the operation's response schema describes. | error | `ReadOperation._wiring` |
-| ADV-ENDP-014 | Every conflict key a write mode declares MUST name a top-level field of that mode's input schema. | error | `WriteOperation._wiring` |
-| ADV-ENDP-016 | An idempotency key's name MUST NOT collide with any header the same write request declares, nor with any field of the body it resolves to. | error | `WriteOperation._wiring` |
-| ADV-ENDP-017 | A write mode's request body MUST address the record scope its batching declaration implies — the whole batch when batching is declared, a single record or one of its fields otherwise — and any field path it addresses MUST be declared in that mode's input schema. | error | `WriteOperation._wiring` |
-| ADV-ENDP-019 | The upsert write mode MUST declare conflict keys, and every other write mode MUST NOT declare them. | error | `Operations._conflict_keys_by_mode` |
-| ADV-ENDP-020 | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | error | `ColumnFieldSpec._validate_container_shape` |
-| ADV-ENDP-021 | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | error | `Column._validate_container_shape` |
-| ADV-ENDP-023 | Every response reference a read operation makes MUST resolve by declared-path resolution against that operation's response schema onto a node declaring a type — the field a keyset strategy orders by included — and MUST NOT sit in a request slot, name an unrecognised response sub-scope, or name a metadata key the operation does not declare. | error | `ReadOperation._wiring` |
-| ADV-ENDP-024 | A `from_input` path_params binding MUST NOT appear on a read operation, and on a write MUST address one dotted record field that the mode's input schema declares, never the whole record and never the batch. | error | `ReadOperation._wiring` |
-| ADV-ENDP-025 | A write mode MUST NOT declare both a `from_input` path_params binding and `batching`. | error | `WriteOperation._wiring` |
-| ADV-ENDP-026 | Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time. | error | `ResponseExtraction._validate` |
-| ADV-ENDP-028 | A `from_param` path_params binding on a write operation MUST name a param that declares a default. | error | `WriteOperation._wiring` |
-| ADV-ENDP-030 | A write operation's response expressions MUST NOT reference `response.record_count`, a scope only a read response carries. | error | `WriteResponse._reject_record_count` |
-| ADV-ENDP-032 | A request slot MUST NOT ref a per-run scope directly; a per-run value MUST reach the request through a declared param. | error | `ReadOperation._wiring` |
-| ADV-ENDP-033 | Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares. | error | `ReadOperation._wiring` |
-| ADV-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | error | `ReadOperation._wiring` |
-| ADV-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | error | `WriteOperation._wiring` |
-| ADV-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | error | the validator |
-| ADV-RETRY-001 | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. | error | `RetryErrorHandlingBase._validate_retry_fields` |
-| ADV-TMAP-001 | An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical. | error | `TypeMapReadExactRule._check` |
-| ADV-TMAP-002 | A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical. | error | `TypeMapReadRegexRule._check` |
-| ADV-TMAP-003 | Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares. | error | `TypeMapReadRegexRule._check` |
-| ADV-TMAP-004 | A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed. | error | `TypeMapReadRegexRule._check` |
-| ADV-TMAP-010 | A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match. | error | `TypeMapReadRegexRule._check` |
-| ADV-TMAP-016 | Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares. | error | — |
+| ID | Rule | Grades | Severity | Applied by |
+|---|---|---|---|---|
+| ADV-CONN-001 | A connection-contract input's `ui.options` MUST offer exactly the value set its `enum` declares. | `connector` | error | the validator |
+| ADV-CONN-002 | An input's `default` MUST be a member of the `enum` declared beside it. | `connector` | error | the validator |
+| ADV-CONN-003 | An input MUST mark itself secret exactly when its declared `storage` routes the value into secret storage. | `connector` | error | `ConnectionContractInput._consistency` |
+| ADV-CTOR-001 | A connector's default_transport MUST name a transport the same document declares. | `connector` | error | the validator |
+| ADV-CTOR-002 | A post-auth output MUST declare the request its mode consumes, MUST omit the request and the response-extraction paths belonging to the other mode, and MUST take a storage its mode admits. | `connector` | error | `PostAuthOutput._mode_consistency` |
+| ADV-CTOR-003 | A resource-discovery implementation MUST declare an entrypoint exactly when the strategy code ships inside the connector package, and MUST omit one when the strategy is already shipped by the runtime. | `connector` | error | `ResourceDiscoveryImplementation._entrypoint_matches_type` |
+| ADV-CTOR-004 | An ADBC transport MUST carry connection state; a transport that declares none has nothing to open a connection with. | `connector` | error | `AdbcTransport._require_dsn_or_kwargs` |
+| ADV-CTOR-005 | Every transport_ref a connector declares MUST resolve to a transport declared in the same document. | `connector` | error | `ConnectorBase._transport_refs_resolvable` |
+| ADV-CTOR-006 | Two declarations in one connection contract MUST NOT resolve to the same secret storage path. | `connector` | error | `ConnectorBase._connection_contract_internal_refs` |
+| ADV-CTOR-007 | Every path in required_for_activation MUST resolve to a storage path that some declared input or post-auth output materializes. | `connector` | error | `ConnectorBase._connection_contract_internal_refs` |
+| ADV-CTOR-008 | A cross-input validation rule's predicate MUST test an input the same connection contract declares. | `connector` | error | `ConnectorBase._connection_contract_internal_refs` |
+| ADV-CTOR-009 | The fields a cross-input validation rule requires or forbids MUST be inputs the same connection contract declares. | `connector` | error | `ConnectorBase._connection_contract_internal_refs` |
+| ADV-CTOR-010 | A connector whose kind runs no post-authentication phase MUST NOT declare post-auth outputs, nor the activation prerequisites that would resolve from them. | `connector` | error | `FileConnector._validate_no_post_auth_contract` |
+| ADV-CTOR-011 | Every placeholder in a url_template DSN MUST have a binding, and every binding MUST be referenced by the template. | `connector` | error | `UrlTemplateDsn._validate_placeholder_bindings` |
+| ADV-CTOR-012 | A connection condition predicate MUST name the input it tests and MUST declare exactly one operator key per predicate. | `connector` | error | `ConnectionConditionPredicate._exactly_one_operator` |
+| ADV-CTOR-013 | A stage placed in a schema of its own MUST name that schema, and a stage co-located with the target MUST NOT name one. | `connector` | error | `SqlStageCapabilities._dedicated_schema_matches_scope` |
+| ADV-CTOR-014 | A write_unit MUST declare at least one bound; a block declaring none states no preference and MUST be omitted instead. | `connector` | warning | `WriteUnit._at_least_one_bound` |
+| ADV-CTOR-015 | A transport family that lands through the default path MUST be omitted from the bulk-load declaration rather than declared with a null mechanism. | `connector` | error | `SqlBulkLoad._null_is_not_a_mechanism` |
+| ADV-CTOR-029 | A connector whose `ssl_mode` input enum admits a mode that verifies the server certificate MUST also declare a CA-certificate input in the same connection contract. | `connector` | error | — |
+| ADV-CTOR-034 | A DSN binding's `value` MUST resolve to the unencoded value, because the binding's declared `encoding` is applied once, by the runtime, when the DSN is rendered. | `connector` | error | — |
+| ADV-CTOR-038 | Each `post_auth_outputs` entry MUST resolve on its own, referencing no value another entry produces. | `connector` | error | — |
+| ADV-CTOR-046 | A connector document MUST reach credential material only through the `secrets` scope: a DSN binding's `value` refs a secret rather than a connection parameter, and a discovery `options` block carries no secret-shaped key. | `connector` | error | — |
+| ADV-CTOR-047 | A transport's `tls.mode` MUST resolve to a value the same connector's ssl-mode connection-contract input admits, and that input MUST declare the `enum` the mode is drawn from. | `connector` | error | — |
+| ADV-CTOR-048 | Every transport family keyed in `sql_capabilities.bulk_load` MUST name a transport family the same connector declares in `transports`. | `connector` | error | — |
+| ADV-CTOR-050 | A transport MUST be invoked no earlier than the phase at which every scope its expressions reference becomes available, and an input a transport references MUST declare a phase no later than that transport's first use. | `connector` | error | — |
+| ADV-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
+| ADV-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |
+| ADV-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` | warning | — |
+| ADV-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | `connector` | error | — |
+| ADV-ENDP-001 | A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares. | `api-endpoint` | error | `_RequestBase._validate` |
+| ADV-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | `api-endpoint` | error | `Replication._reject_mixed_cursor_forms` |
+| ADV-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | `ResponseExtraction._validate` |
+| ADV-ENDP-006 | Every node of a write mode's input schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | `WriteInput._validate` |
+| ADV-ENDP-008 | Every binding that names a declared parameter MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-009 | Every parameter an operation declares MUST be referenced by exactly one request binding. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-010 | Every parameter a pagination block names MUST be declared by the same operation and MUST declare itself controlled by pagination. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-011 | Every parameter a replication cursor mapping names MUST be declared by the same operation and MUST declare itself controlled by replication. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-012 | A read operation's records reference MUST resolve, against that operation's declared response schema, to an array node whose record shape declares something. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-013 | Every replication cursor field MUST resolve to a field declared in the record shape the operation's response schema describes. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-014 | Every conflict key a write mode declares MUST name a top-level field of that mode's input schema. | `api-endpoint` | error | `WriteOperation._wiring` |
+| ADV-ENDP-016 | An idempotency key's name MUST NOT collide with any header the same write request declares, nor with any field of the body it resolves to. | `api-endpoint` | error | `WriteOperation._wiring` |
+| ADV-ENDP-017 | A write mode's request body MUST address the record scope its batching declaration implies — the whole batch when batching is declared, a single record or one of its fields otherwise — and any field path it addresses MUST be declared in that mode's input schema. | `api-endpoint` | error | `WriteOperation._wiring` |
+| ADV-ENDP-019 | The upsert write mode MUST declare conflict keys, and every other write mode MUST NOT declare them. | `api-endpoint` | error | `Operations._conflict_keys_by_mode` |
+| ADV-ENDP-020 | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `api-endpoint` | error | `ColumnFieldSpec._validate_container_shape` |
+| ADV-ENDP-021 | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `api-endpoint` | error | `Column._validate_container_shape` |
+| ADV-ENDP-023 | Every response reference a read operation makes MUST resolve by declared-path resolution against that operation's response schema onto a node declaring a type — the field a keyset strategy orders by included — and MUST NOT sit in a request slot, name an unrecognised response sub-scope, or name a metadata key the operation does not declare. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-024 | A `from_input` path_params binding MUST NOT appear on a read operation, and on a write MUST address one dotted record field that the mode's input schema declares, never the whole record and never the batch. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-025 | A write mode MUST NOT declare both a `from_input` path_params binding and `batching`. | `api-endpoint` | error | `WriteOperation._wiring` |
+| ADV-ENDP-026 | Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time. | `api-endpoint` | error | `ResponseExtraction._validate` |
+| ADV-ENDP-028 | A `from_param` path_params binding on a write operation MUST name a param that declares a default. | `api-endpoint` | error | `WriteOperation._wiring` |
+| ADV-ENDP-030 | A write operation's response expressions MUST NOT reference `response.record_count`, a scope only a read response carries. | `api-endpoint` | error | `WriteResponse._reject_record_count` |
+| ADV-ENDP-032 | A request slot MUST NOT ref a per-run scope directly; a per-run value MUST reach the request through a declared param. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-033 | Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | `ReadOperation._wiring` |
+| ADV-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | `WriteOperation._wiring` |
+| ADV-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | the validator |
+| ADV-STRM-003 | A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces. | `stream` | error | `ConnectionEndpointRef._derive_or_verify_endpoint_id` |
+| ADV-TMAP-001 | An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | `TypeMapReadExactRule._check` |
+| ADV-TMAP-002 | A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | `TypeMapReadRegexRule._check` |
+| ADV-TMAP-003 | Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares. | `type-map` | error | `TypeMapReadRegexRule._check` |
+| ADV-TMAP-004 | A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed. | `type-map` | error | `TypeMapReadRegexRule._check` |
+| ADV-TMAP-010 | A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match. | `type-map` | error | `TypeMapReadRegexRule._check` |
+| ADV-TMAP-016 | Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares. | `type-map` | error | — |
 
 ## Referential
 
@@ -168,29 +168,29 @@ an endpoint against the connector declaring it. Most are applied by nothing
 here: a single-document validation run has only one of the two artifacts in
 hand, so the disagreement surfaces at connect or run time.
 
-| ID | Rule | Severity | Applied by |
-|---|---|---|---|
-| ADV-CTOR-036 | A `resource_discovery.strategy` MUST name a strategy the engine has registered, unless the connector ships that strategy itself through its own `connector_plugin` implementation. | error | — |
-| ADV-CTOR-039 | A connector's declared SQLAlchemy `driver` MUST name a dialect-and-driver registration that actually exists for the driver package the connector's `requirements.txt` ships. | error | — |
-| ADV-CTOR-042 | The directory a connector release ships as MUST be named for the `connector_id` its `connector.json` declares. | error | — |
-| ADV-CTOR-043 | An `api` connector's release MUST ship definition documents only and MUST NOT carry connector-package Python files. | warning | — |
-| ADV-CTOR-044 | A `database` connector's release MUST NOT ship endpoint documents, because a database endpoint is produced from resource-discovery output rather than authored. | warning | — |
-| ADV-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | error | — |
-| ADV-CTOR-049 | A database connector whose class satisfies a write capability MUST declare `sql_capabilities`. | error | — |
-| ADV-ENDP-041 | Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names. | error | — |
-| ADV-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | error | — |
-| ADV-ENDP-045 | An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL. | error | — |
-| ADV-PKG-003 | A connector's dialect MUST implement every hook the transports and `sql_capabilities` its `connector.json` declares require, in the form the CDK's hook surface defines. | error | — |
-| ADV-PKG-007 | Every name in a database connector's `pyproject.toml` MUST derive from its `connector_id`: the distribution `analitiq-connector-{connector_id}`, the importable package `analitiq_connector_{connector_id}` mapped to the repository root, and the entry-point name `{connector_id}` the engine resolves. | error | — |
-| ADV-PKG-016 | A database connector's dialect MUST implement exactly the hooks its `sql_capabilities` declaration obliges, so a declared fact with no hook behind it and a hook nothing routes to are both violations. | error | — |
-| ADV-PKG-021 | A connector declaring a transport `tls` block MUST ship a package whose dialect implements the TLS connect-argument hook and, with it, the post-connect TLS-state verification hook, and a connector that ships no package MUST NOT declare `tls` at all. | error | — |
-| ADV-PKG-027 | A connector package's `requirements.txt` MUST pin the driver distribution each transport its `connector.json` declares needs — the DBAPI named by a SQLAlchemy transport's `dialect+driver`, and the `adbc-driver-{driver}` wheel plus `adbc-driver-manager` for an ADBC transport's `driver` — and nothing else, neither an engine pin nor the CDK the engine environment provides. | error | — |
-| ADV-PKG-029 | The mode vocabulary a connector's `ssl_mode` input declares and the vocabulary its dialect's TLS hook interprets MUST be the same set: every declared mode is one the dialect handles, and the dialect handles no mode the input does not declare. | error | — |
-| ADV-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | error | — |
-| ADV-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | error | — |
-| ADV-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved. | error | — |
-| ADV-TMAP-019 | A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. | warning | — |
-| ADV-TMAP-021 | A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches. | error | — |
+| ID | Rule | Grades | Severity | Applied by |
+|---|---|---|---|---|
+| ADV-CONN-008 | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. | `connection` | error | — |
+| ADV-CTOR-036 | A `resource_discovery.strategy` MUST name a strategy the engine has registered, unless the connector ships that strategy itself through its own `connector_plugin` implementation. | `connector` | error | — |
+| ADV-CTOR-039 | A connector's declared SQLAlchemy `driver` MUST name a dialect-and-driver registration that actually exists for the driver package the connector's `requirements.txt` ships. | `connector` | error | — |
+| ADV-CTOR-042 | The directory a connector release ships as MUST be named for the `connector_id` its `connector.json` declares. | `connector` | error | — |
+| ADV-CTOR-043 | An `api` connector's release MUST ship definition documents only and MUST NOT carry connector-package Python files. | `connector` | warning | — |
+| ADV-CTOR-044 | A `database` connector's release MUST NOT ship endpoint documents, because a database endpoint is produced from resource-discovery output rather than authored. | `connector` | warning | — |
+| ADV-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | `connector` | error | — |
+| ADV-CTOR-049 | A database connector whose class satisfies a write capability MUST declare `sql_capabilities`. | `connector` | error | — |
+| ADV-ENDP-041 | Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names. | `api-endpoint` | error | — |
+| ADV-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` | error | — |
+| ADV-ENDP-045 | An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL. | `api-endpoint` | error | — |
+| ADV-PKG-003 | A connector's dialect MUST implement every hook the transports and `sql_capabilities` its `connector.json` declares require, in the form the CDK's hook surface defines. | `connector-package` | error | — |
+| ADV-PKG-007 | Every name in a database connector's `pyproject.toml` MUST derive from its `connector_id`: the distribution `analitiq-connector-{connector_id}`, the importable package `analitiq_connector_{connector_id}` mapped to the repository root, and the entry-point name `{connector_id}` the engine resolves. | `connector-package` | error | — |
+| ADV-PKG-016 | A database connector's dialect MUST implement exactly the hooks its `sql_capabilities` declaration obliges, so a declared fact with no hook behind it and a hook nothing routes to are both violations. | `connector-package` | error | — |
+| ADV-PKG-021 | A connector declaring a transport `tls` block MUST ship a package whose dialect implements the TLS connect-argument hook and, with it, the post-connect TLS-state verification hook, and a connector that ships no package MUST NOT declare `tls` at all. | `connector-package` | error | — |
+| ADV-PKG-027 | A connector package's `requirements.txt` MUST pin the driver distribution each transport its `connector.json` declares needs — the DBAPI named by a SQLAlchemy transport's `dialect+driver`, and the `adbc-driver-{driver}` wheel plus `adbc-driver-manager` for an ADBC transport's `driver` — and nothing else, neither an engine pin nor the CDK the engine environment provides. | `connector-package` | error | — |
+| ADV-PKG-029 | The mode vocabulary a connector's `ssl_mode` input declares and the vocabulary its dialect's TLS hook interprets MUST be the same set: every declared mode is one the dialect handles, and the dialect handles no mode the input does not declare. | `connector-package` | error | — |
+| ADV-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
+| ADV-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
+| ADV-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved. | `type-map` | error | — |
+| ADV-TMAP-019 | A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. | `type-map` | warning | — |
 
 ## Procedural
 
@@ -198,24 +198,25 @@ Do it this way, or in this order. What is regenerated after what, what is never
 hand-edited, what the engine owns and is therefore never authored. Violating
 one usually produces a document that validates and then behaves unexpectedly.
 
-| ID | Rule | Severity | Applied by |
-|---|---|---|---|
-| ADV-CTOR-026 | Every provider fact a connector declares MUST be grounded in the target system's own documentation, a wire-compatible system's documentation MUST NOT be taken as evidence for it, and a fact those documents do not establish MUST be reported as a gap rather than inferred. | error | — |
-| ADV-CTOR-032 | A connector's first release MUST declare `version` as `1.0.0`. | info | — |
-| ADV-CTOR-033 | A document-store or NoSQL provider MUST be authored as a `database` connector, and this plugin MUST NOT author a connector under the contract's separate document-store kinds even though the contract models them. | error | — |
-| ADV-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | error | — |
-| ADV-CTOR-041 | A capability fact the provider's own documentation does not establish MUST be left undeclared and reported as a research gap, and MUST NOT be inferred from a similar or wire-compatible system. | error | — |
-| ADV-ENDP-040 | An endpoint MUST declare only where the idempotency key goes; the key's value is engine-owned and MUST NOT appear in a value expression, an input schema, or a request slot. | error | — |
-| ADV-ENDP-042 | An endpoint MUST declare only how a watermark is sent, and MUST NOT bake sync policy — a lookback, an overlap, a backfill depth — into a cursor mapping. | error | — |
-| ADV-PKG-002 | A database connector's repository root MUST be its importable Python package: the definition documents sit under `definition/`, and `__init__.py`, `connector.py`, `requirements.txt` and `pyproject.toml` sit at the root beside it. | error | — |
-| ADV-PKG-020 | A connector MUST NOT invent a stage name; stage naming is engine-owned and deterministic, and a name the connector chose breaks the idempotency a retried batch depends on. | error | — |
-| ADV-PKG-025 | A connector package MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run. | warning | — |
-| ADV-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | error | — |
-| ADV-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | error | — |
-| ADV-TMAP-012 | New rules on a connection-scoped type map MUST be appended after the rules already present, and a rule already there MUST NOT be removed, reordered or rewritten. | error | — |
-| ADV-TMAP-013 | A type map's rules MUST be authored in the order they are meant to resolve, with a narrow rule ahead of any broader rule that would also match its input. | error | — |
-| ADV-TMAP-014 | A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored. | warning | — |
-| ADV-TMAP-015 | A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not. | warning | — |
+| ID | Rule | Grades | Severity | Applied by |
+|---|---|---|---|---|
+| ADV-CTOR-026 | Every provider fact a connector declares MUST be grounded in the target system's own documentation, a wire-compatible system's documentation MUST NOT be taken as evidence for it, and a fact those documents do not establish MUST be reported as a gap rather than inferred. | `connector` | error | — |
+| ADV-CTOR-032 | A connector's first release MUST declare `version` as `1.0.0`. | `connector` | info | — |
+| ADV-CTOR-033 | A document-store or NoSQL provider MUST be authored as a `database` connector, and this plugin MUST NOT author a connector under the contract's separate document-store kinds even though the contract models them. | `connector` | error | — |
+| ADV-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` | error | — |
+| ADV-CTOR-041 | A capability fact the provider's own documentation does not establish MUST be left undeclared and reported as a research gap, and MUST NOT be inferred from a similar or wire-compatible system. | `connector` | error | — |
+| ADV-DBEP-006 | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. | `database-endpoint` | error | — |
+| ADV-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` | error | — |
+| ADV-ENDP-040 | An endpoint MUST declare only where the idempotency key goes; the key's value is engine-owned and MUST NOT appear in a value expression, an input schema, or a request slot. | `api-endpoint` | error | — |
+| ADV-ENDP-042 | An endpoint MUST declare only how a watermark is sent, and MUST NOT bake sync policy — a lookback, an overlap, a backfill depth — into a cursor mapping. | `api-endpoint` | error | — |
+| ADV-PKG-002 | A database connector's repository root MUST be its importable Python package: the definition documents sit under `definition/`, and `__init__.py`, `connector.py`, `requirements.txt` and `pyproject.toml` sit at the root beside it. | `connector-package` | error | — |
+| ADV-PKG-020 | A connector MUST NOT invent a stage name; stage naming is engine-owned and deterministic, and a name the connector chose breaks the idempotency a retried batch depends on. | `connector-package` | error | — |
+| ADV-PKG-025 | A connector package MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run. | `connector-package` | warning | — |
+| ADV-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |
+| ADV-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
+| ADV-TMAP-013 | A type map's rules MUST be authored in the order they are meant to resolve, with a narrow rule ahead of any broader rule that would also match its input. | `type-map` | error | — |
+| ADV-TMAP-014 | A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored. | `type-map` | warning | — |
+| ADV-TMAP-015 | A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not. | `type-map` | warning | — |
 
 ## Judgment
 
@@ -223,27 +224,13 @@ Several authorings all validate and one is right. No validator can flag a
 legal-but-wrong choice, so these are the rules an agent gets wrong while
 passing every check — read the prose that cites them, not just the statement.
 
-| ID | Rule | Severity | Applied by |
-|---|---|---|---|
-| ADV-CTOR-027 | A database connector's transport and driver MUST be chosen by applying the decision order in `spec-driver-selection.md` and stopping at the first tier the target system satisfies. | warning | — |
-| ADV-CTOR-028 | A connector document MUST declare the shape of an input and MUST NOT carry a value that belongs to one customer or tenant, which the connection instantiating the connector supplies instead. | error | — |
-| ADV-CTOR-030 | A database connector's `resource_discovery` strategy MUST enumerate every namespace level the target system actually has, because a strategy that folds a level away leaves every object outside that level's default unreachable. | error | — |
-| ADV-CTOR-031 | A connector's `sql_capabilities` catalog level MUST state whether one connection can address across the target system's catalogs rather than how deep that system's object hierarchy is, and a system whose statements can name a catalog MUST expose that level in `resource_discovery` too. | error | — |
-| ADV-PKG-001 | A connector's dialect MUST override a structural default only where the CDK's portable form is genuinely invalid on the target system, and MUST override type rendering only for logic the write map's rules cannot express. | warning | — |
-| ADV-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | error | — |
-| ADV-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | warning | — |
-
-## Borrowed — other documents' rules
-
-Rules on documents this plugin does not author — a database endpoint the
-connector's `resource_discovery` produces at run time, a stream that will
-reference its endpoints. They are here because prose cites them to mark a
-boundary, and an id you cannot look up marks nothing. **Do not author against
-these**: they grade a document somebody else writes.
-
-| ID | Rule | Constrains |
-|---|---|---|
-| ADV-DBEP-005 | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks. | `database-endpoint` |
-| ADV-DBEP-006 | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. | `database-endpoint` |
-| ADV-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` |
-| ADV-STRM-003 | A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces. | `stream` |
+| ID | Rule | Grades | Severity | Applied by |
+|---|---|---|---|---|
+| ADV-CTOR-027 | A database connector's transport and driver MUST be chosen by applying the decision order in `spec-driver-selection.md` and stopping at the first tier the target system satisfies. | `connector` | warning | — |
+| ADV-CTOR-028 | A connector document MUST declare the shape of an input and MUST NOT carry a value that belongs to one customer or tenant, which the connection instantiating the connector supplies instead. | `connector` | error | — |
+| ADV-CTOR-030 | A database connector's `resource_discovery` strategy MUST enumerate every namespace level the target system actually has, because a strategy that folds a level away leaves every object outside that level's default unreachable. | `connector` | error | — |
+| ADV-CTOR-031 | A connector's `sql_capabilities` catalog level MUST state whether one connection can address across the target system's catalogs rather than how deep that system's object hierarchy is, and a system whose statements can name a catalog MUST expose that level in `resource_discovery` too. | `connector` | error | — |
+| ADV-DBEP-005 | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks. | `database-endpoint` | error | — |
+| ADV-PKG-001 | A connector's dialect MUST override a structural default only where the CDK's portable form is genuinely invalid on the target system, and MUST override type rendering only for logic the write map's rules cannot express. | `connector-package` | warning | — |
+| ADV-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
+| ADV-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |

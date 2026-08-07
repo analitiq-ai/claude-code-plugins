@@ -7,7 +7,7 @@ severity: warning
 scope: type-map
 mechanized: false
 validator: null
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 data: {}
 rationale: >
   A dialect that overrides the column-type renderer takes the family off the

@@ -7,7 +7,7 @@ severity: error
 scope: type-map
 mechanized: false
 validator: null
-owners: [pipeline-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 data: {}
 rationale: >
   The engine composes the connection map as primary over the connector map by

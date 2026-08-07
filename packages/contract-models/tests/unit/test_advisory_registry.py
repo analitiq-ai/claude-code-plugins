@@ -205,9 +205,10 @@ def test_every_model_validator_is_registered_or_exempt():
         if not registered:
             unaccounted.append(f"{owner}.{name}")
     assert not unaccounted, (
-        "model validators that are no rule's enforcer and not exempt — "
-        "register each in advisory_rules.py or add an explicit exemption "
-        f"with its reason: {unaccounted}"
+        "model validators that are no rule's enforcer and not exempt — give "
+        "each a record in rules/adv/ naming it as the `validator` (then run "
+        "`python3 scripts/render_rules.py write`), or add an explicit "
+        f"exemption with its reason: {unaccounted}"
     )
 
 

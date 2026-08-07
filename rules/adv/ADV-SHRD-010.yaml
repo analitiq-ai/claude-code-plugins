@@ -7,7 +7,7 @@ severity: error
 scope: any
 mechanized: false
 validator: null
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 data:
   targets: [HttpTransport, TransportDefaults, _RequestBase]
 rationale: >
