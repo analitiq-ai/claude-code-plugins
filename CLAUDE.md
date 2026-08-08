@@ -173,8 +173,8 @@ defines — reference or load it.** Carry only craft the schema can't express
   It lives in `rules/records/*.yaml`, one file per rule, schema in
   `rules/SCHEMA.md`. A record answers each of these independently — `tier`
   (what kind of rule: structural, advisory, referential, procedural, judgment),
-  `mechanized`/`validator` (whether anything here rejects a violation, and
-  what), and `severity` (what a violation costs) — plus the keys binding it to
+  `validator` (what here rejects a violation, absent when nothing does),
+  and `severity` (what a violation costs) — plus the keys binding it to
   the models and fields it governs, so the statement never restates a value the
   contract owns.
   Enforcement itself is ordinary Python: a rule a model rejects in-process is a

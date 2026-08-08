@@ -6,7 +6,6 @@ statement: >
 tier: procedural
 severity: warning
 scope: type-map
-mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]

@@ -6,7 +6,6 @@ statement: >
 tier: referential
 severity: warning
 scope: pipeline
-mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [Execution]

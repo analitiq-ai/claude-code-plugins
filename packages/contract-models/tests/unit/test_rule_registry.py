@@ -372,36 +372,6 @@ def test_structural_rules_do_not_restate_the_values_they_point_at():
     assert not leaked, leaked
 
 
-def test_unmechanized_rules_say_what_would_catch_them():
-    """An unmechanized record's rationale is the only thing a reader gets.
-
-    When nothing applies a rule, the record has to say what would have to be
-    read to catch a violation and how far away that is — that distance is the
-    whole point of recording the rule instead of enforcing it. A one-clause
-    rationale cannot carry that, and leaves "unmechanized" as a bare claim.
-    """
-    thin = [
-        f"{r.id}: {r.rationale!r}"
-        for r in all_rules()
-        if not r.mechanized and len(r.rationale.split()) < 12
-    ]
-    assert not thin, thin
-
-
-def test_mechanized_rules_name_what_applies_them():
-    """`mechanized` is a claim; `validator` is what makes it checkable.
-
-    `RuleRecord` allows the two to disagree in only one direction, so this
-    catches the other: a record claiming automation while naming none, which
-    would sail past the lint that resolves bindings — there would be nothing to
-    resolve.
-    """
-    unnamed = [r.id for r in all_rules() if r.mechanized and not r.validator]
-    assert not unnamed, (
-        f"records claiming mechanization with no validator named: {unnamed}"
-    )
-
-
 # --- Shared fixture corpus --------------------------------------------------
 
 

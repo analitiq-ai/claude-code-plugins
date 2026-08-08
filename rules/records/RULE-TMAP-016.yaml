@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: type-map
-mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapWriteRegexRule]

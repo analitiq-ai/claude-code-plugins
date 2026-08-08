@@ -6,7 +6,6 @@ statement: >
 tier: structural
 severity: error
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport.driver"
 owners: [engine, connector-plugin]
 targets: [AdbcTransport]

@@ -7,7 +7,6 @@ statement: >
 tier: advisory
 severity: error
 scope: api-endpoint
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [WriteOperation]

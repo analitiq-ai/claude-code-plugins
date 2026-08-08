@@ -6,7 +6,6 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-mechanized: false
 validator: null
 owners: [connector-plugin]
 targets: [DatabaseTls, ConnectionContractInput]

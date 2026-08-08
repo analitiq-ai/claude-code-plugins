@@ -6,7 +6,6 @@ statement: >
 tier: procedural
 severity: error
 scope: database-endpoint
-mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

@@ -6,7 +6,6 @@ statement: >
 tier: judgment
 severity: warning
 scope: stream
-mechanized: false
 validator: null
 owners: [pipeline-plugin]
 rationale: >

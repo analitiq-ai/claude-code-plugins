@@ -312,7 +312,7 @@ def _rule_block(block_id: str) -> str:
     enforcement decides is whether a clean validation run finishes the job, and
     that is about the whole set, so the prose above says it once.
 
-    The record still carries `mechanized`/`validator`; they are resolved by
+    The record still carries `validator`; it is resolved by
     `render_rules.py` and read by the enforcer census. They just do not ship.
     """
     rules = _block_rules(block_id)

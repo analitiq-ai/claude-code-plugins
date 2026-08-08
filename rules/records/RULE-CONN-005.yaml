@@ -5,7 +5,6 @@ statement: >
 tier: procedural
 severity: error
 scope: connection
-mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ConnectionStoredMaps, ConnectionInput]

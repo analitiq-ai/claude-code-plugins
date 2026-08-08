@@ -4,7 +4,6 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member"
 owners: [connector-plugin, engine]
 targets: [ConnectionContractInput]

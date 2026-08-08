@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique"
 owners: [pipeline-plugin]
 targets: [StreamAuthored]

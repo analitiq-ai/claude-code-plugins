@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: any
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/shared/common.py::RetryErrorHandlingBase._validate_retry_fields"
 owners: [pipeline-plugin, engine]
 targets: [RetryErrorHandlingBase]

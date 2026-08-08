@@ -7,7 +7,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._options_offer_the_enum",
    "owners": [
     "connector-plugin"
@@ -28,7 +27,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member",
    "owners": [
     "engine",
@@ -50,7 +48,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._consistency",
    "owners": [
     "engine",
@@ -72,7 +69,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connection",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connection.py::ConnectionStoredMaps._validate_no_secret_keys",
    "owners": [
     "pipeline-plugin"
@@ -93,7 +89,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connection",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -116,7 +111,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connection",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -139,7 +133,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connection",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -162,7 +155,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connection",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -185,7 +177,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connection",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -208,7 +199,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connection",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -231,7 +221,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared",
    "owners": [
     "engine",
@@ -253,7 +242,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput._mode_consistency",
    "owners": [
     "engine",
@@ -275,7 +263,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryImplementation._entrypoint_matches_type",
    "owners": [
     "engine",
@@ -297,7 +284,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport._require_dsn_or_kwargs",
    "owners": [
     "engine",
@@ -319,7 +305,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._transport_refs_resolvable",
    "owners": [
     "engine",
@@ -341,7 +326,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "engine",
@@ -363,7 +347,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "engine",
@@ -385,7 +368,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "connector-plugin"
@@ -406,7 +388,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "connector-plugin"
@@ -427,7 +408,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::FileConnector._validate_no_post_auth_contract",
    "owners": [
     "connector-plugin"
@@ -450,7 +430,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::UrlTemplateDsn._validate_placeholder_bindings",
    "owners": [
     "engine",
@@ -472,7 +451,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionConditionPredicate._exactly_one_operator",
    "owners": [
     "connector-plugin"
@@ -493,7 +471,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::SqlStageCapabilities._dedicated_schema_matches_scope",
    "owners": [
     "engine",
@@ -515,7 +492,6 @@
    "tier": "advisory",
    "severity": "warning",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::WriteUnit._at_least_one_bound",
    "owners": [
     "engine",
@@ -537,7 +513,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::SqlBulkLoad._null_is_not_a_mechanism",
    "owners": [
     "engine",
@@ -559,7 +534,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport.driver",
    "owners": [
     "engine",
@@ -583,7 +557,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::SqlBulkLoad.sqlalchemy",
    "owners": [
     "engine",
@@ -608,7 +581,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::DsnBinding.encoding",
    "owners": [
     "engine",
@@ -632,7 +604,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscovery.produces",
    "owners": [
     "engine",
@@ -656,7 +627,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryTriggers.list_resources",
    "owners": [
     "engine",
@@ -681,7 +651,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput.source",
    "owners": [
     "engine",
@@ -708,7 +677,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput.mode",
    "owners": [
     "engine",
@@ -733,7 +701,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase.connector_id",
    "owners": [
     "engine",
@@ -757,7 +724,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ApiKeyAuth",
    "owners": [
     "engine",
@@ -787,7 +753,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/connector.py::AuthOperationTemplate",
    "owners": [
     "engine",
@@ -809,7 +774,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -828,7 +792,6 @@
    "tier": "judgment",
    "severity": "warning",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -847,7 +810,6 @@
    "tier": "judgment",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -866,7 +828,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -885,7 +846,6 @@
    "tier": "judgment",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -905,7 +865,6 @@
    "tier": "judgment",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -925,7 +884,6 @@
    "tier": "procedural",
    "severity": "info",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -944,7 +902,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -963,7 +920,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -985,7 +941,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1007,7 +962,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1029,7 +983,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1050,7 +1003,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1073,7 +1025,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1095,7 +1046,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1117,7 +1067,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1139,7 +1088,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1159,7 +1107,6 @@
    "tier": "referential",
    "severity": "warning",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1179,7 +1126,6 @@
    "tier": "referential",
    "severity": "warning",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1199,7 +1145,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1220,7 +1165,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1243,7 +1187,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -1265,7 +1208,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1288,7 +1230,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1310,7 +1251,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1332,7 +1272,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1354,7 +1293,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1376,7 +1314,6 @@
    "tier": "advisory",
    "severity": "warning",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -1398,7 +1335,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1420,7 +1356,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._column_names_unique",
    "owners": [
     "engine",
@@ -1442,7 +1377,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._ordinal_positions_unique",
    "owners": [
     "engine",
@@ -1464,7 +1398,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._primary_keys_name_columns",
    "owners": [
     "engine",
@@ -1486,7 +1419,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1509,7 +1441,6 @@
    "tier": "judgment",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1532,7 +1463,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1555,7 +1485,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1580,7 +1509,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1603,7 +1531,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1626,7 +1553,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "database-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -1649,7 +1575,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "data-sync-run-status",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PipelineRunStatusData._error_matches_status",
    "owners": [
     "engine"
@@ -1670,7 +1595,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "data-sync-run-status",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PublicRunError._message_matches_code",
    "owners": [
     "engine"
@@ -1691,7 +1615,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::_RequestBase._validate",
    "owners": [
     "connector-plugin"
@@ -1712,7 +1635,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Param._validate",
    "owners": [
     "engine",
@@ -1734,7 +1656,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Param._validate",
    "owners": [
     "engine",
@@ -1756,7 +1677,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication._reject_mixed_cursor_forms",
    "owners": [
     "connector-plugin"
@@ -1777,7 +1697,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate",
    "owners": [
     "engine",
@@ -1799,7 +1718,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteInput._validate",
    "owners": [
     "engine",
@@ -1821,7 +1739,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -1842,7 +1759,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -1864,7 +1780,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -1886,7 +1801,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -1908,7 +1822,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -1930,7 +1843,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -1952,7 +1864,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -1974,7 +1885,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -1995,7 +1905,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2017,7 +1926,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2039,7 +1947,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2061,7 +1968,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._at_least_one",
    "owners": [
     "connector-plugin"
@@ -2082,7 +1988,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._conflict_keys_by_mode",
    "owners": [
     "connector-plugin"
@@ -2103,7 +2008,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ColumnFieldSpec._validate_container_shape",
    "owners": [
     "engine",
@@ -2126,7 +2030,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Column._validate_container_shape",
    "owners": [
     "engine",
@@ -2149,7 +2052,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2172,7 +2074,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2194,7 +2095,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2217,7 +2117,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2239,7 +2138,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate",
    "owners": [
     "engine",
@@ -2262,7 +2160,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2285,7 +2182,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2307,7 +2203,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._metadata_keys",
    "owners": [
     "engine",
@@ -2329,7 +2224,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._reject_record_count",
    "owners": [
     "engine",
@@ -2351,7 +2245,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseObject._reject_explicit_null_namespaces",
    "owners": [
     "engine",
@@ -2373,7 +2266,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2396,7 +2288,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2419,7 +2310,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2442,7 +2332,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2464,7 +2353,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::_EndpointBase.endpoint_id",
    "owners": [
     "connector-plugin"
@@ -2487,7 +2375,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::PredicateEq",
    "owners": [
     "connector-plugin"
@@ -2520,7 +2407,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication.supported_methods",
    "owners": [
     "engine",
@@ -2544,7 +2430,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Idempotency.location",
    "owners": [
     "engine",
@@ -2568,7 +2453,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2591,7 +2475,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2613,7 +2496,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2635,7 +2517,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -2655,7 +2536,6 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "api-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -2676,7 +2556,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "api-endpoint",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2698,7 +2577,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "any",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/shared/rules.py::HeaderMergeRules._headers_not_both_set_and_removed",
    "owners": [
     "engine",
@@ -2723,7 +2601,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique",
    "owners": [
     "pipeline-plugin"
@@ -2744,7 +2621,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule._validate_schedule_fields",
    "owners": [
     "pipeline-plugin"
@@ -2765,7 +2641,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._validate_streams_unique_base",
    "owners": [
     "pipeline-plugin"
@@ -2786,7 +2661,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._check_active_requires_streams",
    "owners": [
     "pipeline-plugin"
@@ -2807,7 +2681,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type",
    "owners": [
     "pipeline-plugin"
@@ -2830,7 +2703,6 @@
    "tier": "structural",
    "severity": "info",
    "scope": "pipeline",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type",
    "owners": [
     "pipeline-plugin"
@@ -2854,7 +2726,6 @@
    "tier": "referential",
    "severity": "warning",
    "scope": "pipeline",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2876,7 +2747,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2898,7 +2768,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2920,7 +2789,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "pipeline",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2942,7 +2810,6 @@
    "tier": "judgment",
    "severity": "warning",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2962,7 +2829,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -2982,7 +2848,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3002,7 +2867,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3022,7 +2886,6 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3041,7 +2904,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3061,7 +2923,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3081,7 +2942,6 @@
    "tier": "structural",
    "severity": "info",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3100,7 +2960,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3120,7 +2979,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3140,7 +2998,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3160,7 +3017,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3180,7 +3036,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3200,7 +3055,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3220,7 +3074,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3240,7 +3093,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3260,7 +3112,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3280,7 +3131,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3300,7 +3150,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3320,7 +3169,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3340,7 +3188,6 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3360,7 +3207,6 @@
    "tier": "procedural",
    "severity": "warning",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3379,7 +3225,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3399,7 +3244,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3419,7 +3263,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "any",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/shared/common.py::RetryErrorHandlingBase._validate_retry_fields",
    "owners": [
     "engine",
@@ -3441,7 +3284,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3462,7 +3304,6 @@
    "tier": "judgment",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -3482,7 +3323,6 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -3502,7 +3342,6 @@
    "tier": "judgment",
    "severity": "warning",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -3522,7 +3361,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -3542,7 +3380,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3566,7 +3403,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3587,7 +3423,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3608,7 +3443,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3631,7 +3465,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "any",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3656,7 +3489,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique",
    "owners": [
     "pipeline-plugin"
@@ -3677,7 +3509,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._assignment_targets_unique",
    "owners": [
     "pipeline-plugin"
@@ -3698,7 +3529,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ConnectionEndpointRef._derive_or_verify_endpoint_id",
    "owners": [
     "engine",
@@ -3721,7 +3551,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::Filter._validate_value_presence",
    "owners": [
     "pipeline-plugin"
@@ -3742,7 +3571,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::PipeExpression._validate_positional_grammar",
    "owners": [
     "engine",
@@ -3764,7 +3592,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ArrowFieldSpec._validate_container_shape",
    "owners": [
     "pipeline-plugin"
@@ -3785,7 +3612,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ConstantValue._validate_container_shape",
    "owners": [
     "pipeline-plugin"
@@ -3806,7 +3632,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ValidationRule._validate_value_for_rule",
    "owners": [
     "pipeline-plugin"
@@ -3827,7 +3652,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::AssignmentTarget._validate_container_shape",
    "owners": [
     "pipeline-plugin"
@@ -3848,7 +3672,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_filter_operator_scope",
    "owners": [
     "engine",
@@ -3870,7 +3693,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_database_only_read_features",
    "owners": [
     "engine",
@@ -3892,7 +3714,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._validate_rule_fields_resolve",
    "owners": [
     "pipeline-plugin"
@@ -3913,7 +3734,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::DatabaseKeylessWrite",
    "owners": [
     "pipeline-plugin"
@@ -3936,7 +3756,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "stream",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/stream.py::FullRefreshReplication",
    "owners": [
     "pipeline-plugin"
@@ -3958,7 +3777,6 @@
    "tier": "judgment",
    "severity": "warning",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "pipeline-plugin"
@@ -3977,7 +3795,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -3999,7 +3816,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4022,7 +3838,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4044,7 +3859,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4069,7 +3883,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4091,7 +3904,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4113,7 +3925,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4136,7 +3947,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4158,7 +3968,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4180,7 +3989,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4202,7 +4010,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4224,7 +4031,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4246,7 +4052,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4269,7 +4074,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadExactRule._check",
    "owners": [
     "engine",
@@ -4292,7 +4096,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
@@ -4315,7 +4118,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -4337,7 +4139,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -4359,7 +4160,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -4381,7 +4181,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
@@ -4404,7 +4203,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -4426,7 +4224,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteExactRule._check",
    "owners": [
     "engine",
@@ -4449,7 +4246,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -4471,7 +4267,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": true,
    "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
@@ -4494,7 +4289,6 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4515,7 +4309,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "pipeline-plugin"
@@ -4534,7 +4327,6 @@
    "tier": "procedural",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4555,7 +4347,6 @@
    "tier": "procedural",
    "severity": "warning",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4578,7 +4369,6 @@
    "tier": "procedural",
    "severity": "warning",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4602,7 +4392,6 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4625,7 +4414,6 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4646,7 +4434,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4667,7 +4454,6 @@
    "tier": "referential",
    "severity": "warning",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",
@@ -4688,7 +4474,6 @@
    "tier": "referential",
    "severity": "error",
    "scope": "type-map",
-   "mechanized": false,
    "validator": null,
    "owners": [
     "engine",

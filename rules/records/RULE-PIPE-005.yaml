@@ -6,7 +6,6 @@ statement: >
 tier: structural
 severity: error
 scope: pipeline
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type"
 owners: [pipeline-plugin]
 targets: [Schedule]

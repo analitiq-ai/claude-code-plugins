@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: database-endpoint
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._primary_keys_name_columns"
 owners: [pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

@@ -19,12 +19,12 @@ single-tier registry unable to describe most of its own rules:
 ``tier``
     What kind of rule it is: a shape, an agreement between fields, an agreement
     between artifacts, a procedure, a judgment.
-``mechanized`` / ``validator``
-    Whether anything applies the rule without a human deciding to, and what
-    does. Two fields rather than one because the mechanism is not always code:
-    an agent rule under ``.claude/rules/`` binds every edit an agent makes and
-    has no symbol to point at. A rule is not a lesser rule for being
-    unmechanized — it is one whose enforcement lives where this repo cannot
+``validator``
+    What applies the rule without a human deciding to — a code symbol, or a
+    ``.claude/rules/*.md`` document an agent loads, since the mechanism is not
+    always code. Absent means nothing here applies it, which is what
+    :attr:`RuleRecord.mechanized` reads. A rule is not a lesser rule for having
+    no validator — it is one whose enforcement lives where this repo cannot
     reach.
 ``severity``
     What a violation costs.
@@ -141,11 +141,6 @@ class RuleRecord:
     severity: str
     scope: str
     rationale: str
-    #: Whether anything applies this rule without a human deciding to. Not the
-    #: same question as whether `validator` is set: a rule can be mechanized by
-    #: an agent rule under `.claude/rules/`, which binds every edit an agent
-    #: makes and has no Python behind it.
-    mechanized: bool = False
     #: What applies it — `path/to/module.py::Symbol.attr` for code, or a
     #: `.claude/rules/*.md` path for an agent rule. Lint-resolved either way, so
     #: a renamed validator or a deleted rules file fails the build instead of
@@ -155,8 +150,8 @@ class RuleRecord:
     status: str = "active"
     #: Every model class the rule binds, matched against the whole MRO. Wider
     #: than `validator`, which names one representative symbol: a rule over a
-    #: discriminated union lists every branch, and an unmechanized rule still
-    #: names the models it governs.
+    #: discriminated union lists every branch, and a rule naming no validator
+    #: still names the models it governs.
     targets: tuple[str, ...] = ()
     #: Fields on those classes that carry the rule, for a structural rule whose
     #: `mechanism` the rendered reference reads members off.
@@ -230,11 +225,6 @@ class RuleRecord:
         unknown = [o for o in self.owners if o not in OWNERS]
         if unknown:
             self._fail(f"unknown owner(s) {unknown}; expected from {OWNERS}")
-        if self.validator and not self.mechanized:
-            self._fail(
-                "validator names what applies this rule, so mechanized cannot "
-                "be false"
-            )
         if self.validator and not (
             self.validator.endswith(".md") or "::" in self.validator
         ):
@@ -252,6 +242,19 @@ class RuleRecord:
             self._fail("a rule cannot supersede itself")
 
     # --- Derived ------------------------------------------------------------
+
+    @property
+    def mechanized(self) -> bool:
+        """Whether anything applies this rule without a human deciding to.
+
+        Derived, because it was never a second fact: `validator` names what
+        applies the rule, in either form the binding takes — a code symbol, or
+        a `.claude/rules/*.md` document an agent loads — so "is it applied" is
+        "is that named". Authored, the two could only ever agree, which made
+        the field 215 chances to state the same thing twice and a lint whose
+        whole job was catching one of them typed wrong.
+        """
+        return bool(self.validator)
 
     @property
     def validator_symbol(self) -> str | None:

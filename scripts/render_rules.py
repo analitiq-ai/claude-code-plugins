@@ -203,7 +203,6 @@ def compile_registry(records: list[RuleRecord]) -> str:
                 "tier": r.tier,
                 "severity": r.severity,
                 "scope": r.scope,
-                "mechanized": r.mechanized,
                 "validator": r.validator,
                 # Canonical order, so the compiled copy does not churn on the
                 # order somebody happened to type into the YAML.

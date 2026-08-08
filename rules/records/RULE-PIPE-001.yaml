@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: pipeline
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique"
 owners: [pipeline-plugin]
 targets: [PipelineConnections]

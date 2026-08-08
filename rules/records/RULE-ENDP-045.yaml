@@ -5,7 +5,6 @@ statement: >
 tier: referential
 severity: error
 scope: api-endpoint
-mechanized: false
 validator: null
 owners: [connector-plugin, engine]
 targets: [_RequestBase]

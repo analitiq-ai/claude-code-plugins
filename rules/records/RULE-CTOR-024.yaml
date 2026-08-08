@@ -6,7 +6,6 @@ statement: >
 tier: structural
 severity: error
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ApiKeyAuth"
 owners: [connector-plugin, engine]
 targets: [ApiKeyAuth, BasicAuth, OAuth2AuthorizationCodeAuth, OAuth2ClientCredentialsAuth, JwtAuth, DbAuth, CredentialsAuth, AwsIamAuth, NoneAuth]

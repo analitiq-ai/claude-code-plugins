@@ -34,9 +34,9 @@ bump.
 
    The registry carries a rule whether or not anything applies it, so "no rule
    enforces this" is not a reason to restate a fact. Each record answers these
-   separately: `tier` says what kind of rule it is, `mechanized` and
-   `validator` say whether anything applies it and what, and `severity` says
-   what a violation costs. Tier is the rule's nature, not its enforcement — an
+   separately: `tier` says what kind of rule it is, `validator` names what
+   applies it and is absent when nothing does, and `severity` says what a
+   violation costs. Tier is the rule's nature, not its enforcement — an
    `advisory` rule states that fields within one document must agree, a
    `structural` one that an artifact has a given shape, and either may be
    applied by something or by nothing. Those ids exist so prose stops copying

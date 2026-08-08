@@ -6,7 +6,6 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::AssignmentTarget._validate_container_shape"
 owners: [pipeline-plugin]
 targets: [AssignmentTarget]

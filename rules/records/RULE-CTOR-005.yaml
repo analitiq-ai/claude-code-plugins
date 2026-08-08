@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._transport_refs_resolvable"
 owners: [engine, connector-plugin]
 targets: [ConnectorBase]

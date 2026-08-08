@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::Filter._validate_value_presence"
 owners: [pipeline-plugin]
 targets: [Filter]

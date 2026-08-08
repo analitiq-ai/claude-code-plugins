@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: pipeline
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._validate_streams_unique_base"
 owners: [pipeline-plugin]
 targets: [PipelineAuthored]

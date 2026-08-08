@@ -5,7 +5,6 @@ statement: >
 tier: structural
 severity: error
 scope: api-endpoint
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._metadata_keys"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]

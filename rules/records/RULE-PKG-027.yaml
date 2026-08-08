@@ -9,7 +9,6 @@ statement: >
 tier: referential
 severity: error
 scope: connector-package
-mechanized: false
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

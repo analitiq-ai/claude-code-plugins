@@ -6,7 +6,6 @@ statement: >
 tier: procedural
 severity: warning
 scope: connector-package
-mechanized: false
 validator: null
 owners: [connector-plugin]
 rationale: >

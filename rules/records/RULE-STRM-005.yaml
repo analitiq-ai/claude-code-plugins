@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::PipeExpression._validate_positional_grammar"
 owners: [pipeline-plugin, engine]
 targets: [PipeExpression]

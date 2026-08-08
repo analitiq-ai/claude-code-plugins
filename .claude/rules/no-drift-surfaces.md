@@ -33,7 +33,7 @@ A "value some other source owns" includes at least:
 
    "Nothing enforces it, so I have to write it down" is **not** one of the
    three. The rule registry carries unenforced rules too: a record with
-   `mechanized: false` and no `validator`, whose `rationale` says what would
+   no `validator`, whose `rationale` says what would
    have to be read to catch a violation. Give the obligation an id in
    `rules/records/` and cite it; keep in prose only the craft the record does not
    carry.

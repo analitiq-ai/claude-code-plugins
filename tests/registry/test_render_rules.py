@@ -53,7 +53,6 @@ BASELINE = {
     "tier": "structural",
     "severity": "error",
     "scope": "connector",
-    "mechanized": "false",
     "validator": "null",
     "owners": "[connector-plugin]",
     "rationale": "Stated here because the corpus needs a record to mutate.",
@@ -161,15 +160,8 @@ def test_an_unknown_owner_is_refused(registry):
     assert "marketing" in _refusal(registry)
 
 
-def test_a_validator_on_an_unmechanized_record_is_refused(registry):
-    """The pair states one fact twice, so they cannot disagree."""
-    _write(registry, mechanized="false",
-           validator=f'"{CONTRACTS}/connector.py::ConnectorBase"')
-    assert "mechanized" in _refusal(registry)
-
-
 def test_a_validator_in_neither_binding_form_is_refused(registry):
-    _write(registry, mechanized="true", validator='"ConnectorBase._validate"')
+    _write(registry, validator='"ConnectorBase._validate"')
     assert "validator" in _refusal(registry)
 
 
@@ -232,31 +224,28 @@ def test_reissuing_an_id_retired_before_the_registry_is_refused(registry):
 
 
 def test_an_agent_rule_naming_a_missing_file_is_refused(registry):
-    _write(registry, mechanized="true", validator='".claude/rules/no-such.md"')
+    _write(registry, validator='".claude/rules/no-such.md"')
     assert "no-such.md" in _refusal(registry)
 
 
 def test_a_validator_path_outside_a_source_tree_is_refused(registry):
     """Only a `…/src/…` path maps onto an importable module name."""
-    _write(registry, mechanized="true", validator='"scripts/render_rules.py::main"')
+    _write(registry, validator='"scripts/render_rules.py::main"')
     assert "not importable" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_module_is_refused(registry):
-    _write(registry, mechanized="true",
-           validator=f'"{CONTRACTS}/no_such_module.py::Thing"')
+    _write(registry, validator=f'"{CONTRACTS}/no_such_module.py::Thing"')
     assert "no_such_module" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_class_is_refused(registry):
-    _write(registry, mechanized="true",
-           validator=f'"{CONTRACTS}/connector.py::NoSuchModel"')
+    _write(registry, validator=f'"{CONTRACTS}/connector.py::NoSuchModel"')
     assert "NoSuchModel" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_member_is_refused(registry):
-    _write(registry, mechanized="true",
-           validator=f'"{CONTRACTS}/connector.py::ConnectorBase._no_such_method"')
+    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase._no_such_method"')
     assert "_no_such_method" in _refusal(registry)
 
 
@@ -267,8 +256,7 @@ def test_a_validator_naming_an_inherited_member_is_refused(registry):
     an enforcer it certainly does not, so the lint would report a live rule for
     one nothing applies.
     """
-    _write(registry, mechanized="true",
-           validator=f'"{CONTRACTS}/connector.py::ConnectorBase.dict"')
+    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase.dict"')
     assert "dict" in _refusal(registry)
 
 
@@ -280,7 +268,6 @@ def test_a_validator_naming_a_real_enforcer_is_accepted(registry):
     """
     _write(
         registry,
-        mechanized="true",
         validator=f'"{CONTRACTS}/connector.py::ConnectorBase._default_transport_declared"',
     )
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
@@ -288,8 +275,7 @@ def test_a_validator_naming_a_real_enforcer_is_accepted(registry):
 
 def test_a_validator_naming_a_model_field_is_accepted(registry):
     """A structural rule binds the field carrying its `Literal` or pattern."""
-    _write(registry, mechanized="true",
-           validator=f'"{CONTRACTS}/connector.py::SqlBulkLoad.sqlalchemy"')
+    _write(registry, validator=f'"{CONTRACTS}/connector.py::SqlBulkLoad.sqlalchemy"')
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 

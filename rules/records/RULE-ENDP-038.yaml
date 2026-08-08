@@ -6,7 +6,6 @@ statement: >
 tier: structural
 severity: error
 scope: api-endpoint
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication.supported_methods"
 owners: [connector-plugin, engine]
 targets: [Replication]

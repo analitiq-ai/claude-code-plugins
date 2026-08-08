@@ -10,8 +10,8 @@ Tiers render as separate sections because a tier says what kind of obligation a
 rule is, which is what tells an agent how to go about satisfying it. What
 applies a rule is deliberately absent: an agent must satisfy every rule either
 way, so the answer changes nothing it does, and a row saying nothing applies one
-invites skipping it. The record still carries `mechanized`/`validator` for the
-lint and the enforcer census; they do not ship.
+invites skipping it. The record still carries `validator` for the lint and the
+enforcer census; it does not ship.
 
 The structural table's member lists are read off the **live models** rather
 than typed here: the point of that tier is to end the copy, so the renderer

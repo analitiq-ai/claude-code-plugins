@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: any
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/shared/rules.py::HeaderMergeRules._headers_not_both_set_and_removed"
 owners: [connector-plugin, engine]
 targets: [_RequestBase, AuthOperationTemplate, HttpTransport, TransportDefaults]

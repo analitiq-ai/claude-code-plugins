@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: warning
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::WriteUnit._at_least_one_bound"
 owners: [engine, connector-plugin]
 targets: [WriteUnit]

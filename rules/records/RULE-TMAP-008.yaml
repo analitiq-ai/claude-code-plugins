@@ -6,7 +6,6 @@ statement: >
 tier: structural
 severity: error
 scope: type-map
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteExactRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapWriteExactRule]

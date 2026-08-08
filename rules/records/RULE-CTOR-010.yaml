@@ -6,7 +6,6 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::FileConnector._validate_no_post_auth_contract"
 owners: [connector-plugin]
 targets: [FileConnector, S3Connector, StdoutConnector]

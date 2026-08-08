@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: api-endpoint
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._conflict_keys_by_mode"
 owners: [connector-plugin]
 targets: [Operations]

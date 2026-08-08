@@ -5,7 +5,6 @@ statement: >
 tier: structural
 severity: error
 scope: api-endpoint
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseObject._reject_explicit_null_namespaces"
 owners: [connector-plugin, engine]
 targets: [DatabaseObject]

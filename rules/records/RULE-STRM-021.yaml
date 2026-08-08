@@ -4,7 +4,6 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ValidationRule]

@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: data-sync-run-status
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PipelineRunStatusData._error_matches_status"
 owners: [engine]
 targets: [PipelineRunStatusData]

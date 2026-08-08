@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._consistency"
 owners: [connector-plugin, engine]
 targets: [ConnectionContractInput]

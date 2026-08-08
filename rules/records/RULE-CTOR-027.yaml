@@ -6,7 +6,6 @@ statement: >
 tier: judgment
 severity: warning
 scope: connector
-mechanized: false
 validator: null
 owners: [connector-plugin]
 rationale: >

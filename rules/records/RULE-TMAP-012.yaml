@@ -6,7 +6,6 @@ statement: >
 tier: procedural
 severity: error
 scope: type-map
-mechanized: false
 validator: null
 owners: [pipeline-plugin]
 rationale: >

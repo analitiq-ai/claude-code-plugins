@@ -4,7 +4,6 @@ statement: >
 tier: procedural
 severity: info
 scope: connector
-mechanized: false
 validator: null
 owners: [connector-plugin]
 rationale: >

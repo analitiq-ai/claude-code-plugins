@@ -5,7 +5,6 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_database_only_read_features"
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

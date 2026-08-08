@@ -6,7 +6,6 @@ statement: >
 tier: procedural
 severity: error
 scope: connector
-mechanized: false
 validator: null
 owners: [connector-plugin, engine]
 targets: [SqlCapabilities]

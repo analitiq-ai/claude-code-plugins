@@ -6,7 +6,6 @@ statement: >
 tier: procedural
 severity: error
 scope: api-endpoint
-mechanized: false
 validator: null
 owners: [connector-plugin, engine]
 targets: [Idempotency, WriteOperation]
