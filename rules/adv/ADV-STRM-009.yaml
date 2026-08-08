@@ -1,0 +1,22 @@
+id: ADV-STRM-009
+statement: >
+  A validation rule MUST carry a value when its type takes a parameter, and
+  MUST omit one when its type takes none.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::ValidationRule._validate_value_for_rule"
+owners: [pipeline-plugin]
+data:
+  targets: [ValidationRule]
+rationale: >
+  A parameterised rule with no parameter has nothing to grade against and
+  passes every record, which reads exactly like a rule that is working; a
+  parameter beside a rule that takes none is a bound the author believes is
+  applied and never is. The presence check is stricter here than for a
+  filter — an explicit null is refused as well as an omission — because a
+  validation rule is a defensive check, and one that silently grades nothing
+  defeats the reason it was authored.
+status: active
+superseded_by: null

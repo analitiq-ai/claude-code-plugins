@@ -1,0 +1,20 @@
+id: ADV-CTOR-009
+statement: >
+  The fields a cross-input validation rule requires or forbids MUST be inputs
+  the same connection contract declares.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs"
+owners: [connector-plugin]
+data:
+  targets: [ConnectorBase]
+rationale: >
+  Save-time validation resolves these names against the submitted form. A name
+  no input declares either passes vacuously — losing the requirement — or asks
+  the user to fill a field the form never renders, which is an unfillable form
+  with a message naming something that does not exist. Both read as the rule
+  working until somebody hits the combination it was written for.
+status: active
+superseded_by: null

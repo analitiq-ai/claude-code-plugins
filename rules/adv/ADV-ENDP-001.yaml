@@ -1,0 +1,24 @@
+id: ADV-ENDP-001
+statement: >
+  A request's path_params block MUST be present exactly when the path declares
+  placeholders, and its keys MUST be exactly the placeholder names that path
+  declares.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::_RequestBase._validate"
+owners: [connector-plugin]
+data:
+  targets: [_RequestBase]
+  fixture_model: WriteRequest
+rationale: >
+  A placeholder is filled from its path_params entry and from nothing else, so
+  a placeholder with no entry sends a URL still carrying the literal braces and
+  an entry with no placeholder is a binding nothing ever reads — neither is
+  visible at authoring time, and both reach the provider as a wrong URL rather
+  than as an error. The presence half is a conditional the published schema can
+  state and does; the key-set equality is instance-relative set logic stock JSON
+  Schema cannot express, which is why the model carries it.
+status: active
+superseded_by: null

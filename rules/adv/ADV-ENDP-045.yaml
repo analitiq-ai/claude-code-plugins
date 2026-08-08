@@ -1,0 +1,26 @@
+id: ADV-ENDP-045
+statement: >
+  An operation's `request.path` MUST be a path resolved against the selected
+  transport's origin, and MUST NOT be authored as an absolute URL.
+tier: referential
+severity: error
+scope: api-endpoint
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [_RequestBase]
+rationale: >
+  The transport owns the origin, the auth bound to it and the session opened on
+  it, and the path is resolved against that origin — so a host written into the
+  path bypasses the transport that owns all three and sends the request
+  somewhere the connection never declared. Authors do it when a provider's docs
+  quote full URLs, or when a region or tenant varies; the region belongs in the
+  transport's own base URL template instead. Known enforcement gap:
+  `_RequestBase.path` constrains only placeholder syntax and emptiness, and the
+  validator's `endpoint-id-locator` check compares the derived handle rather
+  than the form of the path, so an absolute URL whose `endpoint_id` was derived
+  consistently passes. Catching it means reading each operation's path and
+  asking whether it starts where the transport's base URL ends.
+status: active
+superseded_by: null

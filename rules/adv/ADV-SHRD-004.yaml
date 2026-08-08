@@ -1,0 +1,23 @@
+id: ADV-SHRD-004
+statement: >
+  A default the contract or the connector already declares MUST NOT be copied
+  into an authored document; a value is authored only where the user asked for
+  one.
+tier: judgment
+severity: warning
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin]
+data: {}
+rationale: >
+  A copied default validates identically to an omission, so nothing
+  distinguishes a value the user actually chose from a value written out to
+  look thorough — and the whole point of the distinction is that the first must
+  be preserved and the second must not. The copy also pins today's value: when
+  the contract moves its default, every document that restated it keeps the old
+  behaviour while reading as if it were current. Catching one means holding the
+  document beside the model that declares the defaults and asking, field by
+  field, whether the user named that value.
+status: active
+superseded_by: null

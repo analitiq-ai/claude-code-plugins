@@ -29,9 +29,10 @@ This skill is loaded by `pipeline-creator` when authoring a pipeline document.
 
 ## What this skill covers
 
-A pipeline document owns exactly six areas — identity and metadata, the
-connection set, the stream set, the schedule, engine resources, and runtime
-defaults. Everything else a pipeline needs is **referenced**, never inlined.
+A pipeline document owns exactly these areas and no others — identity and
+metadata, the connection set, the stream set, the schedule, engine resources,
+and runtime defaults. Everything else a pipeline needs is **referenced**, never
+inlined.
 
 <!-- BEGIN GENERATED: fields-pipeline -->
 `analitiq.contracts.pipelines.config.PipelineInput` — closed (`additionalProperties: false`); required: `connections`
@@ -53,8 +54,7 @@ defaults. Everything else a pipeline needs is **referenced**, never inlined.
 Carries 1 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
 <!-- END GENERATED: fields-pipeline -->
 
-Every field above with a default may be omitted; omitting it and authoring the
-default are equivalent. Author a value only when the user asked for one.
+Every field above with a default may be omitted (`ADV-SHRD-004`).
 
 ## What this skill does NOT cover
 
@@ -68,28 +68,32 @@ packaging that ships a pipeline together with stream or connection fixtures, so
 never nest another entity's body inside `pipeline.json` to make it
 self-contained — author each document as its own file and reference it by id.
 
-## Cross-field rules the contract enforces
+## Registered rules for a pipeline
 
-These are the relational constraints no single field can express. The validator
-emits each one's stable id in the finding message, so a failure like
-`[ADV-PIPE-002] …` points straight at the rule below.
+Satisfy every rule below, and cite one by id rather than restating it. A clean
+validation run is not proof they all hold — some are applied only at connect or
+run time.
 
 <!-- BEGIN GENERATED: advisory-pipeline -->
 | Rule | Constraint |
 |---|---|
-| `ADV-PIPE-001` | connections.destinations must not contain duplicate connection IDs. |
-| `ADV-PIPE-002` | schedule.type gates its fields: manual forbids interval/cron, interval requires interval_minutes, cron requires cron_expression. |
-| `ADV-PIPE-003` | streams must be unique by version-stripped base id. |
-| `ADV-PIPE-004` | An active pipeline must reference at least one stream. |
-| `ADV-RETRY-001` | retry_delay_seconds must be omitted or 0 when max_retries is 0. |
+| `ADV-PIPE-001` | A pipeline's destination list MUST NOT name the same connection more than once. |
+| `ADV-PIPE-002` | A pipeline's schedule MUST author exactly the fields its chosen `type` calls for, and MUST omit the fields belonging to the types it did not choose. |
+| `ADV-PIPE-003` | A pipeline MUST NOT list two streams that reduce to the same version-stripped base id. |
+| `ADV-PIPE-004` | A pipeline in the status that schedules it MUST reference at least one stream. |
+| `ADV-PIPE-005` | A pipeline's `schedule.type` MUST be a member of the vocabulary `Schedule.type` declares; the member chosen then gates which schedule fields are legal (ADV-PIPE-002). |
+| `ADV-PIPE-006` | A pipeline MAY omit any schedule field `Schedule` declares a default for, and a document that omits one takes that default. |
+| `ADV-PIPE-007` | A stream's per-destination batching override MAY lower the batch size resolved from the pipeline default, but MUST NOT raise it above the capacity the destination endpoint declares. |
+| `ADV-PIPE-008` | Every connection a pipeline references MUST belong to the same organization as the pipeline. |
+| `ADV-PIPE-009` | A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone. |
+| `ADV-PIPE-010` | The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one. |
 <!-- END GENERATED: advisory-pipeline -->
 
 ## Output rules
 
 Every authored document must:
 
-1. Declare `$schema` with the pipeline URL above. The contract makes it
-   optional; the plugin always writes it so the file is self-describing.
+1. Declare `$schema` with the pipeline URL above (`ADV-SHRD-003`).
 2. Include a non-empty `connections` object — see `spec-connections.md`.
    Author `pipeline_id` as a UUID the plugin generates (plugin convention; the
    contract permits omission and the service assigns one on ingest). The

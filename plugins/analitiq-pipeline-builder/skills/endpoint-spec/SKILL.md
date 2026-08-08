@@ -35,8 +35,7 @@ Database endpoints use `scope: connection` and live under
 ## What this skill covers
 
 - The structural identity of a database object: catalog, schema, name,
-  object_type. Identifier strings stored **verbatim** from
-  introspection — no case-folding, quoting, or normalization.
+  object_type.
 - The column shape per table/view/collection.
 - Primary keys: optional declared list, must reference existing columns.
 - Connection-scoped type maps
@@ -79,13 +78,13 @@ the published model is the **authored** shape, not the persisted one.
 
 Every authored document must:
 
-1. Declare `$schema` with the database-endpoint URL from the table below (the
-   schema marks it a `const`-required field).
+1. Declare `$schema` with the database-endpoint URL from the table below
+   (`ADV-SHRD-003`; the schema marks it a `const`-required field).
 2. Carry every required field from the top-level shape table above.
    `endpoint_id` is the **derived** handle computed by `scripts/endpoint_id.py`,
    never a hand-authored slug — see `spec-database-object.md`
    §Derived `endpoint_id`.
-3. Preserve identifier strings verbatim from introspection.
+3. Preserve identifier strings verbatim from introspection (`ADV-DBEP-009`).
 4. Pass validation (the `pipeline-schema-validator`, entity `database_endpoint`)
    with zero error findings — the validator recomputes and enforces the derived
    `endpoint_id`.

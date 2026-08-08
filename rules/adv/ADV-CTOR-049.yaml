@@ -1,0 +1,22 @@
+id: ADV-CTOR-049
+statement: >
+  A database connector whose class satisfies a write capability MUST declare
+  `sql_capabilities`.
+tier: referential
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [DatabaseConnector]
+rationale: >
+  Capability comes from the protocol the class in `connector.py` satisfies
+  rather than from a flag in the document, so the two artifacts can disagree
+  without either looking wrong on its own: the class advertises writes, the
+  engine finds no declaration, and every write mode is refused at handshake
+  long after the connector was signed off. Known enforcement gap: no contract
+  model sees `connector.py`, so nothing here can tell a write-capable
+  connector from a discovery-only one and the field stays optional.
+status: active
+superseded_by: null

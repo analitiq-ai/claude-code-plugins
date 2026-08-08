@@ -1,0 +1,21 @@
+id: ADV-DSYNC-002
+statement: >
+  A run error's `message` MUST be exactly the canonical customer-safe text the
+  contract maps to its `code`, never text derived from the failure itself.
+tier: advisory
+severity: error
+scope: data-sync-run-status
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PublicRunError._message_matches_code"
+owners: [engine]
+data:
+  targets: [PublicRunError]
+rationale: >
+  The obvious implementation copies the engine's stored failure detail into
+  `message`, which puts a raw exception string — hostnames, credentials,
+  internal identifiers — on a surface any API-key holder can read. Binding the
+  text to the code on the model makes that leak impossible rather than merely
+  discouraged, and keeps the customer-facing wording changeable in one place
+  instead of wherever an error is constructed.
+status: active
+superseded_by: null

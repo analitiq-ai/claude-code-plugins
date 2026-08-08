@@ -25,10 +25,7 @@ Rules:
 - Each referenced stream's `pipeline_id` must equal this pipeline's
   `pipeline_id`. The bundle referential checks enforce this when
   `--bundle-root` is supplied.
-- Array order is **display-only**. The runtime treats `streams` as an unordered
-  set and the contract defines no inter-stream dependencies, so never encode
-  "run A before B" by ordering the array and never tell the user that ordering
-  will be honored.
+- Array order is **display-only** (`ADV-PIPE-010`).
 - An empty `streams` array is permitted in `draft` or `inactive`
   status. Only `status: active` requires non-empty `streams` (see the
   status rules below).

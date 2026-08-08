@@ -32,8 +32,8 @@ for file organization, not for cross-document identity. See
 - The contract defines **no upper bound** on `destinations`. A deployment may
   impose one, so treat a very wide fan-out as a question for the user rather
   than as something the contract has blessed.
-- Every reference must resolve to a connection owned by the same org. The
-  plugin does not enforce ownership; the registry does at save time.
+- Connection ownership (`ADV-PIPE-008`): the plugin does not enforce it; the
+  registry does at save time.
 
 ## What is NOT in this block
 

@@ -90,10 +90,10 @@ simpler and spares the runtime from computing an upper bound.
 ## Wiring (same three places as pagination)
 
 A cursor mapping's `param` must be declared in `params` with
-`controlled_by: "replication"` and bound into the request with
-`{"from_param": …}` (ADV-ENDP-011). Window mappings wire **both**
-`start_param` and `end_param` that way. A `controlled_by` param must not
-declare `operators`.
+`controlled_by: "replication"`, bound into the request with
+`{"from_param": …}`, and must not declare `operators` (ADV-ENDP-011,
+ADV-ENDP-009, ADV-ENDP-002). Window mappings wire **both** `start_param` and
+`end_param` that way.
 
 Each `cursor_field` must resolve to a field in the record shape of
 `response.schema` (ADV-ENDP-013) — so a cursor on `updated_at` requires

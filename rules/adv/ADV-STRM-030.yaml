@@ -1,0 +1,26 @@
+id: ADV-STRM-030
+statement: >
+  A stream MUST declare source primary keys when the transfer needs record
+  identity and the source endpoint carries no primary-key metadata of its
+  own, and MUST NOT declare keys that contradict the endpoint's.
+tier: referential
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [StreamSource]
+rationale: >
+  The field is a fallback identity hint, and both halves of the condition
+  are outside the stream: the endpoint's own primary-key metadata sits in a
+  document the stream only references, and whether identity is needed at all
+  is decided by the destination's write mode in a third one. Declared
+  against an endpoint that already carries keys, it is a second source of
+  truth for record identity that can disagree; omitted where an API source
+  feeds a conflict-resolving write, it leaves the transfer with no identity
+  at all, since an API endpoint document has none to inherit. Catching
+  either means reading the source endpoint and the destination's write mode
+  together.
+status: active
+superseded_by: null

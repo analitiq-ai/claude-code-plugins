@@ -62,7 +62,10 @@ class UnknownBlock(KeyError):
 def _md_escape(text: str) -> str:
     """Make a value safe for a markdown table cell.
 
-    Escapes `|` (which would end the cell) and flattens newlines. Deliberately
+    Escapes `|` (which would end the cell) and flattens every run of
+    whitespace, newlines included — a markdown row is one line, so a cell
+    carrying a newline ends the row early and orphans every later column onto a
+    line that renders as body text. Deliberately
     does NOT escape backslashes: the values that reach here are either wrapped in
     a code span by `_code()`, where a backslash is literal, or are published rule
     prose. Escaping would corrupt the very regexes this generator exists to
@@ -73,7 +76,7 @@ def _md_escape(text: str) -> str:
     if a future rule's prose contains markdown metacharacters, escape at that
     call site rather than here.
     """
-    return text.replace("|", "\\|").replace("\n", " ")
+    return " ".join(text.replace("|", "\\|").split())
 
 
 def _code(value: object) -> str:
@@ -263,64 +266,122 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-# Advisory families this plugin is in the lane of — every one is rendered into
-# the prose by a renderer below.
-IN_SCOPE_ADVISORY_FAMILIES = ("ADV-DBEP-", "ADV-PIPE-", "ADV-RETRY-", "ADV-STRM-")
-
-# Families deliberately NOT rendered: they govern connector / api-endpoint
-# documents or server-side run records, none of which this plugin authors.
-# Recorded rather than merely omitted so the judgment is reviewable, and so a
-# family the contract adds later matches neither list and fails the test that
-# pins these two — forcing a decision instead of a silent omission.
-OUT_OF_SCOPE_ADVISORY_FAMILIES = (
-    "ADV-CONN-", "ADV-CTOR-", "ADV-DSYNC-", "ADV-ENDP-", "ADV-HTTP-", "ADV-TMAP-",
-)
+# Which plugin this generator renders for. A rule belongs in this plugin's
+# prose when its record names this owner — the registry's own answer to "who
+# has to know this", decided once per rule where the rule is authored.
+#
+# `scope` decides only WHERE it lands (see `_ADVISORY_BLOCKS`), never whether
+# it appears. The two are different questions and used to be conflated: a rule
+# grading a document this plugin does not author can still bind an author here,
+# which is why an id-prefix allowlist needed a hand-kept list of exceptions
+# beside it. Ownership answers it directly, so both lists are gone.
+PLUGIN_OWNER = "pipeline-plugin"
 
 
-def _advisory_block(prefixes: tuple[str, ...]) -> str:
+def _owned() -> list:
+    """Every rule this plugin owns — the whole of what its prose may cite."""
     from analitiq.contracts.shared.advisory import all_rules
 
-    rules = sorted(
-        (r for r in all_rules() if r.id.startswith(prefixes)),
-        key=lambda r: r.id,
-    )
-    # Per-prefix, not just overall: a sibling family still matching would
-    # otherwise mask one that vanished (dropping ADV-RETRY-* still leaves the
-    # four ADV-PIPE-* rules, and the block would render as if nothing were lost).
-    for prefix in prefixes:
-        if not any(r.id.startswith(prefix) for r in rules):
-            raise RuntimeError(f"no advisory rules matched {prefix!r}")
+    return [r for r in all_rules() if PLUGIN_OWNER in r.owners]
+
+
+def _block_rules(block_id: str) -> list:
+    """The owned rules that land in one block, ordered by id.
+
+    Placement is by `scope`, the document a rule grades, because that is what
+    decides which spec a reader is holding when they need it. The block claiming
+    no scopes takes the remainder, so the blocks partition the owned set by
+    construction: every rule lands exactly once, and a rule whose scope is new
+    to this plugin surfaces in the shared block instead of vanishing.
+    """
+    scopes = _ADVISORY_BLOCKS[block_id]
+    claimed = {s for spec in _ADVISORY_BLOCKS.values() for s in spec}
+    rules = [
+        r for r in _owned()
+        if (r.scope in scopes if scopes else r.scope not in claimed)
+    ]
+    return sorted(rules, key=lambda r: r.id)
+
+
+def _advisory_block(block_id: str) -> str:
+    """The registry's rules for one block: id and obligation, nothing else.
+
+    No column says whether anything applies a rule, because that changes
+    nothing an agent does — every rule here has to be satisfied either way,
+    and a row reading "nothing here" invites skipping one. The single fact
+    enforcement decides is whether a clean validation run finishes the job, and
+    that is about the whole set, so the prose above says it once.
+
+    The record still carries `mechanized`/`validator`; they are resolved by
+    `render_rules.py` and read by the enforcer census. They just do not ship.
+    """
+    rules = _block_rules(block_id)
+    if not rules:
+        raise RuntimeError(
+            f"{block_id} renders no rules — its scopes match nothing this "
+            "plugin owns, so the heading above it now introduces an empty table"
+        )
+
     out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.prose)} |" for r in rules]
+    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in rules]
     return "\n".join(out) + "\n"
 
 
-# Which families each advisory block emits. Single-sourced: the renderers read
-# from here and `advisory_families_rendered()` derives its answer from the same
-# map, so the two cannot drift — a second hardcoded tuple would reintroduce
-# exactly the dead-constant defect this map exists to remove.
-_ADVISORY_BLOCK_FAMILIES: dict[str, tuple[str, ...]] = {
-    "advisory-pipeline": ("ADV-PIPE-", "ADV-RETRY-"),
-    "advisory-stream": ("ADV-STRM-",),
-    "advisory-endpoint": ("ADV-DBEP-",),
+# Where each owned rule lands, keyed by the document it grades. Placement only
+# — membership is `owners`, decided in the record. An endpoint block claims both
+# endpoint scopes because the two documents share the `Column` model, so a rule
+# filed against one grades the other.
+#
+# The empty tuple is the remainder: whatever this plugin owns that no block
+# above claims renders once in the orchestrator skill rather than being copied
+# into each spec. That is what makes the map a partition instead of a filter —
+# a scope nobody claims cannot fall out of the prose unnoticed.
+_ADVISORY_BLOCKS: dict[str, tuple[str, ...]] = {
+    "advisory-pipeline": ("pipeline",),
+    "advisory-stream": ("stream",),
+    "advisory-endpoint": ("database-endpoint", "api-endpoint"),
+    "advisory-connection": ("connection",),
+    "advisory-type-map": ("type-map",),
+    "advisory-shared": (),
 }
 
 
-def advisory_families_rendered() -> tuple[str, ...]:
-    """Every family the advisory renderers actually emit, derived not restated."""
-    return tuple(sorted({f for fams in _ADVISORY_BLOCK_FAMILIES.values() for f in fams}))
+def rendered_ids() -> set[str]:
+    """Every id this plugin's prose makes readable, as the generator knows it.
+
+    The generator is the authority on what it rendered. Asking it beats
+    searching its output for row-shaped text, which can only find the malformed
+    rows somebody already thought of.
+    """
+    return {r.id for b in _ADVISORY_BLOCKS for r in _block_rules(b)}
+
+
+def _render_block(block_id: str) -> str:
+    return _advisory_block(block_id)
 
 
 def render_advisory_pipeline() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-pipeline"])
+    return _render_block("advisory-pipeline")
 
 
 def render_advisory_stream() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-stream"])
+    return _render_block("advisory-stream")
 
 
 def render_advisory_endpoint() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-endpoint"])
+    return _render_block("advisory-endpoint")
+
+
+def render_advisory_connection() -> str:
+    return _render_block("advisory-connection")
+
+
+def render_advisory_type_map() -> str:
+    return _render_block("advisory-type-map")
+
+
+def render_advisory_shared() -> str:
+    return _render_block("advisory-shared")
 
 
 def render_validator_ids() -> str:
@@ -794,6 +855,9 @@ RENDERERS = {
     "advisory-pipeline": render_advisory_pipeline,
     "advisory-stream": render_advisory_stream,
     "advisory-endpoint": render_advisory_endpoint,
+    "advisory-connection": render_advisory_connection,
+    "advisory-type-map": render_advisory_type_map,
+    "advisory-shared": render_advisory_shared,
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,

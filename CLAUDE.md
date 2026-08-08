@@ -164,6 +164,29 @@ defines — reference or load it.** Carry only craft the schema can't express
   validation agree on one contract. Where a plugin must restate a schema-owned
   enum as decision logic (e.g. the DSN-binding `encoding` set), the drift-check
   CI below pins it to the pinned contract models.
+- **The rule registry is the source of truth.** The registry contains one
+  machine-readable record per rule, with an immutable ID, where everything else
+  (docs, rendered references, prose citations) is generated from or validated
+  against that record. The registry is the source of truth; prose is commentary
+  that cites it, never the reverse.
+
+  It lives in `rules/adv/*.yaml`, one file per rule, schema in
+  `rules/SCHEMA.md`. A record answers three questions independently — `tier`
+  (what kind of rule: structural, advisory, referential, procedural, judgment),
+  `mechanized`/`validator` (whether anything here rejects a violation, and
+  what), and `severity` (what a violation costs) — plus `data` for its
+  parameters, so the statement never restates a value the contract owns.
+  Enforcement itself is ordinary Python: a rule a model rejects in-process is a
+  `@model_validator` on that model, raising through `advisory.violation` so the
+  finding names the rule its prose cites. Nothing is dispatched from the
+  record, so a rule is applied by a symbol that exists or by nothing at all.
+
+  `scripts/render_rules.py` validates every record, resolves every `validator`
+  against the live models, and compiles `analitiq/contracts/shared/rules.json`,
+  the copy the wheel ships. `render_advisory.py` and the pipeline plugin's
+  `gen_contract_docs.py` render the registry into each plugin's prose. An
+  obligation with no record is a missing record, not a sentence to hand-write;
+  a citation that stops resolving fails the build.
 - **Fetch-once, pass-down** — an orchestrator hands the live contract schema URLs
   to its researcher (the mission spec) and the creators read the same schemas as
   vocabulary, so authoring and validation agree on one contract.

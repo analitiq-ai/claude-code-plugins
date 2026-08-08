@@ -23,13 +23,12 @@ that can actually resolve at the point it runs.
 
 A later phase may use any earlier phase's scopes.
 
-## Resolvability rule
+## Resolvability rule (`ADV-CTOR-050`)
 
-For every transport's references, compute the union of scopes used. The
-transport must be invokable in a phase where every used scope is
-available. If a transport references `connection.discovered.api_domain`,
-it cannot be the `default_transport` for an operation that runs in
-`auth` or earlier.
+For every transport's references, compute the union of scopes used and
+resolve it against the table above. If a transport references
+`connection.discovered.api_domain`, it cannot be the `default_transport`
+for an operation that runs in `auth` or earlier.
 
 ## Example: a value that arrives after auth
 
@@ -54,8 +53,8 @@ shape for a per-tenant host.
 The common error is a transport referencing `connection.discovered.*` with no
 post-auth output that produces it — the value is simply absent at connect. The
 mirror image is declaring an input's `phase` too late for the transport that
-needs it (a `base_url` component declared `phase: "auth"` cannot serve a
-pre-auth request).
+needs it (`ADV-CTOR-050` again, from the declaration side: a `base_url`
+component declared `phase: "auth"` cannot serve a pre-auth request).
 
 <!-- PROBE: connector-refs-unchecked -->
 Neither is caught by validation. Before returning a connector, trace each
@@ -64,9 +63,10 @@ producing phase is no later than the consuming one.
 
 ## Runtime OAuth scope
 
-For `auth.type: "oauth2_authorization_code"` only, the closed
-`runtime.oauth.*` set is `code`, `state`, `redirect_uri`, `pkce_verifier`,
-`code_challenge`, and `code_challenge_method`. Per-operation availability:
+For `auth.type: "oauth2_authorization_code"` only. The `runtime.oauth.*`
+scope is closed to the fields in the table below and nothing else — a path
+outside it validates and resolves to nothing (`ADV-SHRD-008`).
+Per-operation availability:
 
 | Field(s) | Available in |
 |---|---|
@@ -74,10 +74,9 @@ For `auth.type: "oauth2_authorization_code"` only, the closed
 | `code_challenge`, `code_challenge_method` | `auth.authorize` only |
 | `code`, `pkce_verifier` | `auth.token_exchange` only |
 
-The PKCE **verifier must never appear in the authorize request** — only the
+Reference each field only where the table places it (`ADV-CTOR-051`). The
+PKCE **verifier must never appear in the authorize request** — only the
 derived `code_challenge` rides the browser-facing authorize — or it leaks
 through redirect/provider logs and defeats PKCE. `auth.refresh` must not
 reference `runtime.oauth.*` (refresh runs after the in-flight
-authorization-code workflow completes). Any `runtime.oauth.*` reference on a
-non-`oauth2_authorization_code` connector is an error. These values are
-never persisted.
+authorization-code workflow completes). These values are never persisted.

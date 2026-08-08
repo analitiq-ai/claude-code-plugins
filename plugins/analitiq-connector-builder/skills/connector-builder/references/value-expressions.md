@@ -43,7 +43,7 @@ connector or endpoint actually writes.
 | `connection.selections.*` | `post_auth` and later | Durable user choices declared as `post_auth_outputs` with `storage: "connection.selections"`. |
 | `connection.discovered.*` | `post_auth` and later | Auto-discovered non-secret context (e.g. `api_domain`) declared as `post_auth_outputs` with `storage: "connection.discovered"`. |
 | `auth.*` | `auth` and later | Auth tokens (access_token, refresh_token, expiry). |
-| `runtime.*` | varies by ref | Per-run values. Only two families are actually supplied: `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set in `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`) validates clean and fails at resolution — don't guess names. |
+| `runtime.*` | varies by ref | Per-run values (`ADV-SHRD-008`): `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set in `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`) validates clean and fails at resolution — don't guess names. |
 | `response.*` | endpoint response handling | The response being processed — `response.body.*`, `response.headers.*`. This is what pagination `stop_when` / `next_cursor` and `response.metadata` refs target. |
 | `request.*` | endpoint request handling | The request being built. |
 | `stream.*` | per stream | Stream-owned routing, tenant context, stream-specific auth context. |
@@ -103,20 +103,17 @@ read, and on a write also `{from_input: "record.<dotted>"}` — see
 `connector-spec-api/spec-request-binding.md`.)
 
 <!-- PROBE: request-slot-direct-runtime-ref -->
-> **`stream.*`, `state.*`, and `runtime.*` are barred from endpoint request
-> slots.** They may not appear as direct refs in `request.headers` / `query` /
-> `body` / `path_params`; route them through a declared param instead. See
-> `connector-spec-api/spec-request-binding.md`.
+> **`stream.*`, `state.*` and `runtime.*` are barred from endpoint request
+> slots** (`ADV-ENDP-040`) — see `connector-spec-api/spec-request-binding.md`.
 
 <!-- PROBE: auth-state-tail-unchecked -->
-Two paths that *look* like scopes but are not, and so fail at runtime after
-passing validation (the leading token `connection` is legal, the rest is not):
-`connection.auth_state.*` and `connection.secret_refs.*`.
+Paths that *look* like scopes but are not, and so fail at runtime after passing
+validation (`ADV-SHRD-008`; the leading token `connection` is legal, the rest is
+not): `connection.auth_state.*` and `connection.secret_refs.*`.
 
-## Function catalog (registered)
+## Function catalog (`ADV-SHRD-007`)
 
-Inline function expressions may only call **registered** functions — the
-engine's `DEFAULT_FUNCTIONS` registry. Current catalog:
+The engine's `DEFAULT_FUNCTIONS` registry:
 
 - `basic_auth` — build a Basic credential/header from `username` + `password` (or client-credentials) inputs.
 - `base64_encode` — base64-encode a string/bytes value for provider auth formats.
@@ -124,22 +121,21 @@ engine's `DEFAULT_FUNCTIONS` registry. Current catalog:
 - `url_encode` — percent-encode a scalar for a URL component. Escapes every reserved character by default (`safe: ""`); pass a `safe` field to widen the unescaped set.
 
 <!-- PROBE: connector-lookup-map-unvalidated -->
-**`lookup` maps must be total.** The inline `map` has to cover every value of
-the input's declared `enum`, and add no keys outside it. Nothing validates this
+**`lookup` maps must be total** (`ADV-CTOR-053`). Nothing validates this
 — a value with no entry resolves to nothing and the request goes out missing
 that field, so an uncovered enum member fails silently at connect time rather
 than loudly at authoring time.
 
-**Never call `url_encode` inside a DSN binding.** The binding's declared
-`encoding` already owns percent-encoding; wrapping the value encodes it twice.
+**Never call `url_encode` inside a DSN binding** (`ADV-CTOR-054`). The
+binding's declared `encoding` already owns percent-encoding; wrapping the value
+encodes it twice.
 `url_encode` is for URL components you build yourself in a `template`.
 
 <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
 **Planned — NOT yet registered; do not reference:** `jwt_sign` (sign a JWT from
 key/algorithm/claims) and `pkce_challenge_s256` (derive a PKCE S256 challenge
 from a runtime verifier). Nothing rejects them at authoring time (see below),
-so calling one ships a connector that fails at connect. Until the engine
-registers a function, connectors must not call it — this includes the
+so calling one ships a connector that fails at connect. This includes the
 inline-signing path for `jwt` auth.
 
 <!-- BEGIN GENERATED: claim:function-names-unchecked -->

@@ -1,0 +1,22 @@
+id: ADV-CONN-002
+statement: >
+  An input's `default` MUST be a member of the `enum` declared beside it.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member"
+owners: [connector-plugin, engine]
+data:
+  targets: [ConnectionContractInput]
+  fixture_model: ConnectionContractInput
+rationale: >
+  The default is the value the platform supplies whenever a user omits the
+  input, so a default outside the enum makes the contract's own fallback
+  illegal: connections are created carrying a value the same declaration
+  rejects the moment anything re-validates them, and the user never chose it
+  and cannot see where it came from. The usual cause is narrowing or respelling
+  an enum and leaving the old default behind — a change that touches one field
+  and breaks the other.
+status: active
+superseded_by: null

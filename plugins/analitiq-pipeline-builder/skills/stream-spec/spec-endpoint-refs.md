@@ -52,8 +52,8 @@ always agree.
 
 Omit `endpoint_id` and the contract derives it; supply it and the contract
 verifies it against the derivation (`ADV-STRM-003`). Author it when the plugin
-can compute it, so the cross-document bundle check can resolve the reference by
-`(connection_id, endpoint_id)`.
+can compute it (`ADV-STRM-018`), so the cross-document bundle check can resolve
+the reference by `(connection_id, endpoint_id)`.
 
 <!-- BEGIN GENERATED: endpoint-id-derivation -->
 A database `endpoint_id` is **derived**, not chosen: it is a deterministic handle over the endpoint's verbatim locator, computed by `analitiq.contracts.endpoint_identity.derive_db_endpoint_id(catalog, schema, name)`.
@@ -66,20 +66,19 @@ A database `endpoint_id` is **derived**, not chosen: it is a deterministic handl
 Derivation must stay deterministic: a handle that changes for an unchanged resource mints a new endpoint and breaks every stream pinned to the old one. Never hand-write one — call the helper (`scripts/endpoint_id.py` wraps it).
 <!-- END GENERATED: endpoint-id-derivation -->
 
-That derived handle is an **Analitiq slug, not a database object name**. It is
-opaque: no consumer may parse schema, table or catalog identity back out of it,
-and the presence of recognizable-looking segments is an artifact of the
-derivation, not an interface. When something needs the database's own identity —
-displaying it, comparing it, driving DDL — read `database_object`, which is why
-the ref carries it.
+That derived handle is an **Analitiq slug, not a database object name**
+(`ADV-DBEP-007`, `ADV-SHRD-005`): the presence of recognizable-looking segments
+is an artifact of the derivation, not an interface. When something needs the
+database's own identity — displaying it, comparing it, driving DDL — read
+`database_object`, which is why the ref carries it.
 
 Database endpoints may be referenced by **either side**: a `scope: "connection"`
 ref is equally valid on a stream's `source` and on a `destinations[]` entry.
 Nothing about a private endpoint restricts it to reading.
 
-`scope: "connection"` is valid only for **database** endpoints. Connection-scoped
-API endpoints await an API-endpoint snapshot-hashing spec; `stream-creator`
-refuses that combination.
+`scope: "connection"` is valid only for **database** endpoints (`ADV-STRM-031`).
+Connection-scoped API endpoints await an API-endpoint snapshot-hashing spec;
+`stream-creator` refuses that combination.
 
 ## `connection_id`
 
@@ -90,7 +89,7 @@ that side — `pipeline.connections.source` for the stream source, and one of
 ## Uniqueness
 
 Destination `endpoint_ref`s must be unique within a single stream — see
-`ADV-STRM-001` in `SKILL.md` § Cross-field rules for the exact tuple.
+`ADV-STRM-001` for the exact tuple.
 
 ## Cross-document consistency
 

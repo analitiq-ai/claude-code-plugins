@@ -24,10 +24,10 @@ carrying a `tls` block (`mode` + `ca_certificate` as `ref` expressions).
 
 ## Rules
 
-- `tls.mode` is a value expression that resolves to one of the values
-  in the connector's declared `ssl_mode` enum (see below — the
-  vocabulary is connector-defined). In practice it should `ref` the
-  canonical input `connection.parameters.ssl_mode`.
+- `tls.mode` is a value expression drawn from the connector's own
+  ssl-mode vocabulary (`ADV-CTOR-047`; see below — the vocabulary is
+  connector-defined). In practice it should `ref` the canonical input
+  `connection.parameters.ssl_mode`.
 - `tls.ca_certificate` is a value expression that resolves to a
   PEM-encoded CA bundle. It should `ref` the canonical secret
   `secrets.ssl_ca_certificate`.
@@ -35,18 +35,18 @@ carrying a `tls` block (`mode` + `ca_certificate` as `ref` expressions).
   If the `ssl_mode` enum allows any certificate-verification mode (a
   mode that verifies the server certificate against a CA, whatever the
   driver names it), the connection contract **must** declare
-  `ssl_ca_certificate` as an input. Nothing checks this — verify it yourself.
+  `ssl_ca_certificate` as an input (`ADV-CTOR-029`). Nothing checks
+  this — verify it yourself.
 - Connector authors must NOT embed driver-specific TLS objects, file
   paths, or executable code in connector JSON. The runtime resolves the
   generic declaration and hands it to the connector package's dialect,
   which converts it into driver-specific connect arguments.
-- A `tls` block obligates the connector package to ship a dialect
-  implementing the TLS hook (see `spec-connector-package.md` §Dialect
-  hooks). The engine has no built-in TLS interpretation for any driver —
-  the CDK base dialect raises `UnsupportedDialectOperationError` for
-  every mode — so a connector that declares `tls` without a dialect TLS
-  hook fails loudly at connect, and a package-less (thin) connector
-  cannot declare `tls` at all.
+- A `tls` block obligates the connector package's dialect
+  (`ADV-PKG-021`; see `spec-connector-package.md` §Dialect hooks). The
+  engine has no built-in TLS interpretation for any driver — the CDK
+  base dialect raises `UnsupportedDialectOperationError` for every
+  mode — so a connector that declares `tls` without a dialect TLS hook
+  fails loudly at connect.
 
 ## SSL mode vocabulary is connector-defined — researched, never copied
 
@@ -58,8 +58,7 @@ their database's own docs use; no translation table ships anywhere.
 
 The vocabulary is established at author time from the researcher's
 grounded facts (`ProviderFacts.tls.supported_modes` — the mode values
-the driver's official docs name, verbatim), never copied from another
-connector and never assumed from wire-protocol family. Even
+the driver's official docs name, verbatim; `ADV-CTOR-026`). Even
 wire-compatible systems ship drivers with different TLS surfaces: one
 driver may take a many-mode libpq-style string, another only a boolean
 toggle plus a narrow set of certificate-verification modes, spread
@@ -75,14 +74,11 @@ CA bundle is supplied. A driver that takes TLS through a single
 connect argument implements `build_tls_connect_arg(mode, ca_pem)`; a
 driver that spreads TLS across several connect parameters overrides
 `build_tls_connect_args(mode, ca_pem)` and returns the full mapping
-(see `spec-connector-package.md` §Dialect hooks).
-Certificate-verification modes must raise when `tls.ca_certificate`
-resolves empty.
+(see `spec-connector-package.md` §Dialect hooks). Either form must
+satisfy `ADV-PKG-022`.
 
 ## Authoring checklist
 
 <!-- PROBE: tls-coherence-unchecked -->
-Re-verify each rule above before returning — especially that the
-`ssl_mode` enum and the dialect's TLS hook handle exactly the same
-vocabulary: the dialect owns interpretation, and no validator will tell
-you the two disagree.
+Re-verify each rule above before returning — especially `ADV-PKG-029`,
+which the dialect owns and no validator checks.

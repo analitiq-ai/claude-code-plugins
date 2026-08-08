@@ -1,0 +1,23 @@
+id: ADV-STRM-006
+statement: >
+  An arrow field spec MUST declare the inner shape its arrow_type calls for
+  and no other: a container marker carries its own inner declaration, and
+  any other type carries none.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::ArrowFieldSpec._validate_container_shape"
+owners: [pipeline-plugin]
+data:
+  targets: [ArrowFieldSpec]
+rationale: >
+  The container markers are the only place the authored shape says anything
+  about nested data, so a marker without its inner declaration describes a
+  container with unknown contents and an inner declaration beside a scalar
+  describes nesting the type cannot hold — both produce a schema the engine
+  cannot build a record from. The same chokepoint serves endpoint columns
+  and stream mapping alike, so a shape accepted here would have to be
+  accepted there too.
+status: active
+superseded_by: null

@@ -8,14 +8,14 @@ release table is the plugin's own policy.
 
 | Field | Required | Notes |
 |---|---|---|
-| `$schema` | Yes (for standalone files) | `https://schemas.analitiq.ai/connector/latest.json`. Always author this canonical URL. The connector contract accepts the published URL on any environment host (`schemas.analitiq.<tld>`), so a document authored against `.ai` still validates where the engine serves a per-environment schema. The validator matches on this URL offline; it does not fetch it. |
+| `$schema` | Yes (for standalone files) | `https://schemas.analitiq.ai/connector/latest.json`. The connector contract accepts the published URL on any environment host (`schemas.analitiq.<tld>`), so a document authored against `.ai` still validates where the engine serves a per-environment schema. The validator matches on this URL offline; it does not fetch it. |
 | `kind` | Yes | The connector family — a schema-owned `kind` enum (validator-enforced); routing per value: `enum-mappers.md` §KindMapper. |
-| `connector_id` | Yes | Stable connector slug matching `^[a-z0-9][a-z0-9_-]*$` (lowercase). Names the on-disk `{connector_id}/` directory so the identifier and directory stay in sync. The connector contract **requires** `connector_id` in every authored definition — the "service-assigns-when-omitted" rule is `connection_id`'s on *connection* documents, not `connector_id`'s. |
+| `connector_id` | Yes | Stable connector slug matching `^[a-z0-9][a-z0-9_-]*$` (lowercase). The connector contract **requires** `connector_id` in every authored definition — the "service-assigns-when-omitted" rule is `connection_id`'s on *connection* documents, not `connector_id`'s. |
 | `display_name` | No | User-facing label. |
 | `description` | No | Human-readable summary. |
 | `tags` | No | Search/grouping labels. |
 | `documentation_url` | No | Provider docs URL. |
-| `version` | Yes | Semantic version string. Start at `1.0.0` for first release. |
+| `version` | Yes | Semantic version string (`ADV-CTOR-032`). |
 | `default_transport` | Yes | Name of an entry in `transports`. |
 | `transports` | Yes | Map of named transport contracts. |
 | `transport_defaults` | No | Defaults merged into named transports. |
@@ -33,10 +33,10 @@ as separate sibling artifacts — `{connector_id}/definition/type-map-read.json`
 
 ## Authoring `connector_id`
 
-The plugin authors `connector_id` on every connector document. The same
-value names the on-disk directory (`{connector_id}/`), so the contract
-path `connectors/{connector_id}/definition/connector.json` and the
-plugin's output path align without a rewrite layer.
+The plugin authors `connector_id` on every connector document
+(`ADV-CTOR-042`), so the contract path
+`connectors/{connector_id}/definition/connector.json` and the plugin's
+output path align without a rewrite layer.
 
 The connector contract requires `connector_id` to match the slug pattern
 in the field table above; this plugin authors that slug directly, so
@@ -81,15 +81,16 @@ the previous release and the new draft.
 
 ## First release
 
-If no `previous_release_path` is supplied, set `version: "1.0.0"`.
+If no `previous_release_path` is supplied, set `version: "1.0.0"`
+(`ADV-CTOR-032`).
 
 ## Schema URL declaration
 
-Authored connector files declare `$schema` with the canonical `.ai` URL stated
-in the field table above — always. The validator matches on it offline; it
-does not fetch it.
+Authored connector files declare `$schema` (`ADV-SHRD-003`) with the canonical
+`.ai` URL stated in the field table above. The validator matches on it offline;
+it does not fetch it.
 
-The three document families differ, so don't generalize from one to another:
+The document families differ, so don't generalize from one to another:
 
 <!-- PROBE: connector-schema-optional, endpoint-schema-host-locked -->
 | Document | `$schema` | Enforced? |

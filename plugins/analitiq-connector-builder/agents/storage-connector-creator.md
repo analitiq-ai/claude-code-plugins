@@ -8,11 +8,8 @@ color: blue
 # storage-connector-creator (stub)
 
 This agent is a placeholder for storage-style connector kinds (`file`,
-`s3`, `stdout`). The connector schema published at
-`https://schemas.analitiq.ai/connector/latest.json` accepts these kinds,
-but the Analitiq engine does not yet execute them. Until engine support
-lands, this agent should return a structured refusal — the orchestrator
-will surface that to the user.
+`s3`, `stdout`). Return the structured refusal below (`ADV-CTOR-037`) — the
+orchestrator surfaces it to the user.
 
 ## Output (always)
 

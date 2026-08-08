@@ -45,19 +45,14 @@ statement of what the contract requires.
 
 ## Field references are verbatim
 
-`selected_columns`, `filters[].field`, `replication.cursor_field`,
-`replication.tie_breaker_fields`, `database_pagination.order_by_field` and
-`primary_keys` all reference **source-endpoint field names as discovered**.
-Preserve the spelling and casing the endpoint document records — never
-case-fold, trim, quote, unquote or otherwise normalize a field reference on the
-way into a stream. `Order_ID` and `order_id` are different fields; the contract
-compares them literally and so does the engine.
+Every field in the `source` block that names a source-endpoint field carries it
+**as discovered** (`ADV-STRM-023`). `Order_ID` and `order_id` are different
+fields; the contract compares them literally and so does the engine.
 
-## `selected_columns` (database only)
+## `selected_columns` (database only, `ADV-STRM-014`)
 
-A field projection. Omit for "all columns from the endpoint schema."
-Every entry must reference an existing column in the source endpoint's
-`columns[]`.
+A field projection over source-endpoint field names (`ADV-STRM-022`). Omit for
+"all columns from the endpoint schema."
 <!-- PROBE: stream-selected-columns-unresolved-locally -->
 The local validator does **not** resolve column names
 against endpoint files — this check happens server-side at save time;
@@ -89,16 +84,15 @@ Ownership across the system:
 | Late-arrival safety window | stream-authored, runtime-applied |
 | Tie-breaking when cursor values collide | contract-specific (`tie_breaker_fields`, database sources only) |
 
-Omitting `replication` is allowed **only when the source endpoint supports full
-refresh**. Nothing local can check that — the plugin has no endpoint-capability
-view at authoring time — so when the source's full-refresh support is not
-established, author an explicit `replication` policy rather than relying on the
-omission default. A source that cannot full-refresh and carries no policy is
-rejected server-side.
+Omitting `replication` is bounded by `ADV-STRM-029`. Nothing local can check it —
+the plugin has no endpoint-capability view at authoring time — so when the
+source's full-refresh support is not established, author an explicit
+`replication` policy rather than relying on the omission default. A source that
+cannot full-refresh and carries no policy is rejected server-side.
 
 `cursor_field` is the **source record field** used as the watermark. It is not a
-provider request parameter and not a page-ordering key. Two consequences the
-local validator cannot enforce:
+provider request parameter and not a page-ordering key. Consequences of
+`ADV-STRM-022` the local validator cannot enforce:
 
 - For a database source, `cursor_field` must name a column that exists in the
   source endpoint's schema.
@@ -123,18 +117,16 @@ pages, the other watermarks progress. Never author one expecting it to imply the
 other.
 
 `order_by_field` is required for keyset paging (it defines the seek order) and
-optional for offset paging. Whichever form is used, it must reference an
-existing source column — resolved server-side, not locally.
+optional for offset paging. Whichever form is used, it names a source-endpoint
+field (`ADV-STRM-022`) — resolved server-side, not locally.
 
 When `database_pagination` is omitted for a database source, the runtime pages
 with offset pagination sized from `pipeline.runtime.batching.batch_size`.
 
 ## `primary_keys`
 
-A **fallback** identity hint, for endpoints that carry no primary-key metadata of
-their own. When the source endpoint declares primary keys, omit it — declaring
-conflicting keys is an error.
+A **fallback** identity hint (`ADV-STRM-030`).
 
 For API endpoints this is the only source identity hint there is: an API endpoint
-document has no primary-key metadata to inherit, so if the stream needs record
-identity (an upsert destination, for example), the stream must supply it here.
+document has no primary-key metadata to inherit, so record identity for an upsert
+destination has no other source.

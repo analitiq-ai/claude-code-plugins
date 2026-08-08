@@ -15,8 +15,7 @@ Omitting `schedule` is equivalent to authoring its defaults.
 Carries 3 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
 <!-- END GENERATED: fields-schedule -->
 
-Which fields each `type` admits is a cross-field rule — `ADV-PIPE-002` in the
-table in `SKILL.md`. Author only the fields the chosen type calls for; leave the
+Author only the fields the chosen type calls for (`ADV-PIPE-002`); leave the
 other type's field out entirely rather than setting it to `null`.
 
 ## `type: manual`
@@ -49,11 +48,9 @@ contract accepts.
 {"type": "cron", "timezone": "Europe/Berlin", "cron_expression": "cron(0 2 * * ? *)"}
 ```
 
-Fires on an AWS EventBridge cron expression, interpreted in `timezone`. The
-contract's pattern check is deliberately coarse — it verifies the `cron(…)`
-wrapper, not the inner spec. Full validity of the inner spec is the scheduler's
-responsibility, not the plugin's, so a syntactically accepted expression can
-still be rejected downstream.
+Fires on an AWS EventBridge cron expression, interpreted in `timezone`
+(`ADV-PIPE-009`) — an expression the contract accepts can still be rejected by
+the scheduler.
 
 ## `timezone`
 

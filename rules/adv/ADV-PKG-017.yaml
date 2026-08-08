@@ -1,0 +1,21 @@
+id: ADV-PKG-017
+statement: >
+  Every write-capable database connector MUST implement `stage_table_sql`,
+  whatever the rest of its `sql_capabilities` declare.
+tier: structural
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  Every SQL write is stage-then-merge, on either transport and in every
+  write mode, so the stage relation is created unconditionally and no
+  declaration can make the hook unnecessary. That is precisely why it is
+  missed: an author working down the declaration-to-hook mapping looks for
+  the fact that obliges this one and finds none. The conformance kit at
+  registry CI is the only thing that notices the omission, and until then
+  the connector's JSON validates clean.
+status: active
+superseded_by: null

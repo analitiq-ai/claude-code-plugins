@@ -15,11 +15,11 @@ Analitiq contract at `schemas.analitiq.ai`. Connectors may be published to the
 - **`connection` and `pipeline` documents** — runtime credentials for a connector
   instance, and the full integration definition. Owned by the sibling
   `analitiq-pipeline-builder` plugin.
-- **Database endpoints** — connection-scoped, produced by the connector's
-  `resource_discovery` workflow at runtime, never authored here.
-- **Storage kinds** (`file`, `s3`, `stdout`) — accepted by the schema, but the
-  engine does not execute them, so `storage-connector-creator` returns a
-  structured refusal until support lands.
+- **Database endpoints** (`ADV-DBEP-006`) — connection-scoped, produced by the
+  connector's `resource_discovery` workflow at runtime.
+- **Storage kinds** (`file`, `s3`, `stdout`) (`ADV-CTOR-037`) — accepted by the
+  schema, but the engine does not execute them, so `storage-connector-creator`
+  returns a structured refusal until support lands.
 
 Agents must never author JSON that belongs to another agent's responsibility.
 

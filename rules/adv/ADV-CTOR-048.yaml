@@ -1,0 +1,23 @@
+id: ADV-CTOR-048
+statement: >
+  Every transport family keyed in `sql_capabilities.bulk_load` MUST name a
+  transport family the same connector declares in `transports`.
+tier: advisory
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [SqlBulkLoad, DatabaseConnector]
+rationale: >
+  A bulk mechanism is a fact about a transport rather than about the
+  connector — it needs that transport's own wire connection or cursor — so a
+  key naming a family the connector does not ship declares a landing path
+  that can never be taken, and the write either falls back silently or fails
+  in the stage where it is least legible. Known enforcement gap: `SqlBulkLoad`
+  validates each family key against the bulk-load vocabulary in isolation,
+  and nothing at connector level relates those keys to the declared
+  transports.
+status: active
+superseded_by: null

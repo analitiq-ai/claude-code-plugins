@@ -1,0 +1,23 @@
+id: ADV-PKG-002
+statement: >
+  A database connector's repository root MUST be its importable Python
+  package: the definition documents sit under `definition/`, and
+  `__init__.py`, `connector.py`, `requirements.txt` and `pyproject.toml`
+  sit at the root beside it.
+tier: procedural
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  The engine imports a connector through a package name mapped onto that
+  root, so a nested source directory, or a definition document loose at the
+  root, produces a wheel whose module path the entry point cannot resolve —
+  the connector is installed and unreachable. The layout is a directory
+  tree on disk, not a document any contract model parses; registry CI's
+  `pip wheel --no-deps .` build is the first thing that sees whether the
+  root is actually the package, well after the connector was authored.
+status: active
+superseded_by: null

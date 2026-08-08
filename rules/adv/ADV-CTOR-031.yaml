@@ -1,0 +1,25 @@
+id: ADV-CTOR-031
+statement: >
+  A connector's `sql_capabilities` catalog level MUST state whether one
+  connection can address across the target system's catalogs rather than how
+  deep that system's object hierarchy is, and a system whose statements can
+  name a catalog MUST expose that level in `resource_discovery` too.
+tier: judgment
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  Depth is the intuitive reading and the wrong one: a system with a database
+  sitting above the schema still has no addressable catalog when one
+  connection cannot reach across it, and declaring one anyway makes the
+  engine qualify statements the system will not accept — while
+  under-declaring a genuinely addressable catalog strands every object
+  outside the connection's default. Whether one connection reaches across
+  catalogs is an external fact no document declares, and the discovery half
+  the rule obliges is only a strategy id, so nothing here can tell a wrong
+  level from a right one.
+status: active
+superseded_by: null

@@ -1,0 +1,23 @@
+id: ADV-CONN-004
+statement: >
+  A connection's non-secret maps MUST NOT carry a key that names credential
+  material; such a value lives in secret storage and is reached through
+  `secret_refs`.
+tier: advisory
+severity: error
+scope: connection
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connection.py::ConnectionStoredMaps._validate_no_secret_keys"
+owners: [pipeline-plugin]
+data:
+  targets: [ConnectionStoredMaps]
+rationale: >
+  A connection document is committed beside the pipeline and returned in
+  plaintext by the connections API, so a credential filed into a non-secret map
+  is a credential in version control and in every response — and rotating it
+  means rewriting history rather than replacing a secret. The check reads key
+  names only: it catches the spellings an author reaches for by habit and
+  cannot see a real secret filed under an innocuous key, which is the half
+  `ADV-CONN-009` leaves with the author.
+status: active
+superseded_by: null

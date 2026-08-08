@@ -12,7 +12,8 @@ those, so state an obligation in the enum's CLASS docstring, which the census
 covers, and keep the member line descriptive
 (``.claude/rules/contract-prose.md``).
 
-:mod:`advisory_rules` is the census of relational rules; this module is its
+The rule registry (``rules/adv/*.yaml``) is the census of rules about a
+document's shape and its cross-field agreements; this module is its
 missing other half. The registry's tests verify the integrity of rules that
 EXIST — every check starts from a registered rule, so an obligation stated in a
 field description or model docstring and never registered was invisible (that

@@ -1,0 +1,21 @@
+id: ADV-STRM-005
+statement: >
+  A pipe expression's arguments MUST begin with the source-read node that
+  seeds it and continue only with conversion stages applied left to right.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::PipeExpression._validate_positional_grammar"
+owners: [pipeline-plugin, engine]
+data:
+  targets: [PipeExpression]
+rationale: >
+  The node mirrors the engine's expression AST, where the seed is the value
+  every later stage transforms; a pipe seeded by a conversion has nothing to
+  convert and a conversion node standing alone has no input at all. Authors
+  reach for the standalone conversion node because it reads like a function
+  call, which is why the positional grammar is stated rather than left to
+  the union of node types.
+status: active
+superseded_by: null

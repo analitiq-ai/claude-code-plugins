@@ -58,60 +58,6 @@ def test_advisory_reference_is_in_sync() -> None:
     )
 
 
-def test_reference_covers_only_authored_resources() -> None:
-    """The reference must not leak rules for documents this plugin never authors.
-
-    Pipelines, streams, connection documents, and database endpoints belong to
-    other tools; carrying their rules here would invite agents to enforce rules
-    against documents they do not own.
-    """
-    from analitiq.contracts.shared.advisory import all_rules
-
-    renderer = _load_renderer()
-    rendered = renderer.OUTPUT_PATH.read_text(encoding="utf-8")
-
-    foreign = [
-        rule
-        for rule in all_rules()
-        if rule.resource not in renderer.PLUGIN_RESOURCES
-    ]
-    assert foreign, "expected the registry to carry rules outside the plugin's scope"
-
-    leaked = sorted(rule.id for rule in foreign if rule.id in rendered)
-    assert not leaked, f"reference leaked out-of-scope rule ids: {leaked}"
-
-
-def test_scope_covers_every_authored_resource() -> None:
-    """A newly-added in-scope resource must not slip past the renderer.
-
-    `PLUGIN_RESOURCES` is an allowlist, so adding a resource to the contract
-    leaves the rendered output byte-identical and the sync test green while its
-    rules go missing. Pin the complement instead: everything excluded must be a
-    resource this plugin genuinely does not author.
-    """
-    from analitiq.contracts.shared.advisory import all_rules
-
-    renderer = _load_renderer()
-    # Documents owned by other tools: pipelines, streams, connection documents,
-    # run status, and database endpoints (generated at runtime by the
-    # connector's `resource_discovery`, never authored here).
-    known_foreign = {
-        "pipeline",
-        "stream",
-        "connection",
-        "data-sync-run-status",
-        "database-endpoint",
-    }
-    resources = {rule.resource for rule in all_rules()}
-    unclassified = resources - set(renderer.PLUGIN_RESOURCES) - known_foreign
-
-    assert not unclassified, (
-        f"contract added resource(s) {sorted(unclassified)} — decide whether this "
-        "plugin authors them. If yes, add to PLUGIN_RESOURCES in "
-        "scripts/render_advisory.py and regenerate; if no, add to known_foreign here."
-    )
-
-
 # Prose abbreviates groups of ids two ways: `ADV-TMAP-001/002` for a handful and
 # `ADV-TMAP-001…007` for a run. Both tails must be expanded — a guard that saw
 # only the leading id would miss exactly the dangling citation it exists to

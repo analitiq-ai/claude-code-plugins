@@ -1,0 +1,24 @@
+id: ADV-ENDP-005
+statement: >
+  Every node of a read operation's response schema that declares either the
+  native type or the canonical Arrow type MUST declare both, and MUST carry the
+  sibling declarations its container form requires.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate"
+owners: [connector-plugin, engine]
+data:
+  targets: [ResponseExtraction]
+rationale: >
+  The two annotations are halves of one statement: the native token is what the
+  connector's read type map matches on, the canonical type is what the engine
+  builds the record batch from, and the validator's type-map coverage check
+  compares them. A node carrying one leaves the other to be inferred, and an
+  inferred canonical type is exactly the guess the type map exists to remove.
+  The container half is what keeps a structured field traversable — a container
+  head whose members are undeclared describes nothing anything downstream can
+  address.
+status: active
+superseded_by: null

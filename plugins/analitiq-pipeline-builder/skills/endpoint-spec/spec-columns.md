@@ -69,7 +69,7 @@ admits only the units its alternative above lists — `Time32(MICROSECOND)` and
 
 ### `Timestamp` timezone
 
-Optional second argument. Three valid forms:
+Optional second argument. Valid forms:
 
 - **Omit the slot** — naive timestamp, no implied zone: `Timestamp(MICROSECOND)`.
 - **Literal `null`** — explicit naive marker: `Timestamp(MICROSECOND, null)`
@@ -124,13 +124,12 @@ Json
 There are **no angle-bracket container canonicals** (`Struct<…>`, `List<…>`,
 `Map<…>`): the engine does not execute them, and the contract — generated
 from the engine's own grammar — rejects them. Declare nested shape with the
-bare markers plus sibling keys on the **column itself**:
+bare markers plus sibling keys on the **column itself** (`ADV-ENDP-021`):
 
-- `Object` — requires a non-empty sibling `properties` map of field specs
-  (recursive: each child is `{arrow_type, …}` and may itself be `Object`/`List`).
-- `List` — requires a sibling `items` field spec for the element.
-- `Json` — opaque; no `properties` or `items` permitted. Use it when you do
-  not introspect the inner shape.
+- `Object` — the sibling `properties` map is recursive: each child is
+  `{arrow_type, …}` and may itself be `Object`/`List`.
+- `List` — the sibling `items` field spec describes the element.
+- `Json` — opaque. Use it when you do not introspect the inner shape.
 
 See `examples/bigquery-struct-table.example.json` for a BigQuery `STRUCT`
 column declared as `Object` + `properties`. For schemaless or opaque container
@@ -159,12 +158,22 @@ Canonicalizes column order for hashing. Omit for schemaless engines (MongoDB).
 
 ## Uniqueness
 
-The contract model enforces three advisory rules over this array:
+The registry's database-endpoint rules over this array:
 
 <!-- BEGIN GENERATED: advisory-endpoint -->
 | Rule | Constraint |
 |---|---|
-| `ADV-DBEP-001` | columns[].name must be unique. |
-| `ADV-DBEP-002` | columns[].ordinal_position must be unique where present. |
-| `ADV-DBEP-003` | primary_keys must reference declared columns[].name. |
+| `ADV-DBEP-001` | Every column a database endpoint declares MUST carry a name no other column in that document repeats. |
+| `ADV-DBEP-002` | Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's. |
+| `ADV-DBEP-003` | Every name in a database endpoint's `primary_keys` MUST name a column the same document declares. |
+| `ADV-DBEP-004` | A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical. |
+| `ADV-DBEP-005` | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks. |
+| `ADV-DBEP-006` | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. |
+| `ADV-DBEP-007` | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. |
+| `ADV-DBEP-008` | An authored endpoint MUST NOT declare a column the engine synthesises when it creates a table, and MUST drop such a column from a mirrored source's column list. |
+| `ADV-DBEP-009` | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation. |
+| `ADV-DBEP-010` | A database endpoint for a table that does not exist yet MUST target a namespace discovery returned. |
+| `ADV-ENDP-020` | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
+| `ADV-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
+| `ADV-ENDP-043` | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. |
 <!-- END GENERATED: advisory-endpoint -->

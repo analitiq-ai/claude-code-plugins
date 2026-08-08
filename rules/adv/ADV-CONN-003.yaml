@@ -1,0 +1,23 @@
+id: ADV-CONN-003
+statement: >
+  An input MUST mark itself secret exactly when its declared `storage` routes
+  the value into secret storage.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._consistency"
+owners: [connector-plugin, engine]
+data:
+  targets: [ConnectionContractInput]
+rationale: >
+  `secret` and `storage` encode one fact twice, and each drives something
+  different: the flag decides whether a value is redacted in interfaces and
+  logs, the storage target decides where the value is materialised and how it
+  is reached. A secret-stored input left unmarked gets echoed back in
+  plaintext; an input marked secret but stored with the ordinary parameters
+  puts credential material into a document that is written to disk and
+  returned by the API. Neither half is meaningful without the other, so the
+  declaration refuses to be built with them apart.
+status: active
+superseded_by: null

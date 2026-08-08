@@ -1,0 +1,31 @@
+id: ADV-ENDP-023
+statement: >
+  Every response reference a read operation makes MUST resolve by
+  declared-path resolution against that operation's response schema onto a
+  node declaring a type — the field a keyset strategy orders by included —
+  and MUST NOT sit in a request slot, name an unrecognised response
+  sub-scope, or name a metadata key the operation does not declare.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+data:
+  targets: [ReadOperation]
+rationale: >
+  A response path that resolves to nothing does not fail at run time: it
+  yields an empty value, and every predicate built on it holds
+  unconditionally. One mistyped segment in a pagination stop condition
+  therefore stops after the first page on every run, and the run is green —
+  the truncation is only visible by counting rows against the provider. A
+  node that resolves but declares no type is the same failure one step
+  later, because whatever plants the value gets to invent its type and an
+  ordering comparison either works or raises depending on the page. The
+  request-slot ban is a different fact: the request is built before any
+  response exists, so a response reference there can never have a value at
+  all. Refusing an unknown sub-scope rather than skipping it is what
+  separates the engine-owned scopes this document does not describe from a
+  typo wearing their shape.
+status: active
+superseded_by: null

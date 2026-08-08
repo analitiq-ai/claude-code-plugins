@@ -1,0 +1,25 @@
+id: ADV-CONN-007
+statement: >
+  A connection MUST author each value in the JSON type its connection-contract
+  input declares, uncoerced, and within that input's declared allowed-value
+  list where it declares one.
+tier: referential
+severity: error
+scope: connection
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [ConnectionAuthored, ConnectionInput]
+rationale: >
+  The map holding these values is untyped, so a port written as a string is as
+  valid a document as a port written as a number, and the vocabulary an input
+  accepts is declared on the connector rather than on the connection. The
+  driver that finally receives the value is not so forgiving, and the mismatch
+  is only caught server-side when the connection is saved — as the connection
+  model's own non-secret-map validator says of itself. The plugin never coerces
+  on the author's behalf, precisely so the wrong type stays visible instead of
+  being papered over: the local defence is reading the declaring input before
+  writing the value, or asking the user.
+status: active
+superseded_by: null

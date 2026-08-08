@@ -1,228 +1,72 @@
-"""Advisory (relational) rule engine — the single source for the cross-field tier.
+"""How the contract models reach the rule registry, and how they cite it.
 
-Structural rules (types, enums, patterns, closed objects, discriminated unions)
-are model fields and render into the published JSON Schema. The *relational*
-rules — set-equality, disjointness, membership, cross-key uniqueness between
-sibling instance values — cannot be expressed in stock JSON Schema. Rather than
-scatter them across opaque `@model_validator` bodies (and hand-copy them into a
-non-Python engine), they are authored ONCE as structured data in
-``advisory_rules.py`` and enforced HERE by one generic validator.
+The rules live in ``rules/adv/*.yaml``, one record per rule (schema:
+``rules/SCHEMA.md``), compiled by ``scripts/render_rules.py`` into the JSON this
+package ships and loaded by :mod:`rule_record`. This module exposes them —
+:func:`all_rules` for the renderers, the census and the tests — and gives an
+enforcer :func:`violation`, so a rejection arrives naming the rule its prose
+cites.
 
-The same registry drives two outputs, in sync by construction:
+**Enforcement is ordinary Python.** A rule a model rejects in-process is a
+``@model_validator`` on that model, named by the record's ``validator`` and
+resolved against the live class by ``render_rules.py``. There is no data-driven
+dispatch: a rule is applied by a symbol that exists or by nothing at all, and
+the record cannot claim a third thing. Every other tier is enforced somewhere
+else entirely, or nowhere, and the record says which.
 
-1. runtime enforcement — the :class:`AdvisoryValidated` mixin runs a model's
-   registered rules on every ``model_validate``;
-2. a stable ``id`` per rule keys, for the **generic** kinds, a valid/invalid
-   instance fixture corpus (``contract-models/tests/fixtures/advisory``) a
-   non-Python second system can re-implement the fixed rule *kinds* against and
-   reconcile. ``kind="custom"`` rules are enforced only in-process by their
-   named validator (they may carry no fixtures), so their logic is not portable
-   to a non-Python engine — the registry entry keeps the census complete, not
-   re-implementable.
-
-A rule whose logic is irreducibly bespoke (recursive schema walks, hash
-equality, path resolution) is still *catalogued* here with ``kind="custom"`` and
-an ``enforcer`` naming the method that keeps enforcing it — so the census stays
-complete without faking generality.
-
-This module imports no contract models: rules bind to their target classes by
-*name*, so the data can be imported by tooling without pulling in pydantic.
+A rule binding several models that share a shape is a mixin here, so the check
+is written once and every target inherits it.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from functools import cache
 from typing import Any, Callable
 
 from pydantic import model_validator
 
-# --- Rule kinds -------------------------------------------------------------
-
-#: The fixed, generically-checkable relational vocabulary. Each maps to exactly
-#: one checker in ``_CHECKERS``. ``custom`` is the escape hatch: catalogued only,
-#: enforced by the method named in ``AdvisoryRule.enforcer``.
-GENERIC_KINDS = (
-    "disjoint",
-    "set_equal",
-    "member_of",
-    "subset_of",
-    "unique_by",
-)
-CUSTOM_KIND = "custom"
+from .rule_record import RuleRecord, load_records
 
 
-# --- Rule datum -------------------------------------------------------------
+# --- The registry -----------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class AdvisoryRule:
-    """One relational contract rule, authored as data.
+@cache
+def _load() -> tuple[list[RuleRecord], dict[str, RuleRecord]]:
+    """Read the compiled registry once, indexed by id.
 
-    ``fields`` are *field expressions* (see :func:`resolve`); their meaning is
-    kind-specific and documented on each checker. ``targets`` are the model
-    class names the rule binds to (matched against the whole MRO, so a rule on a
-    base class covers its subclasses). ``options`` carries kind-specific knobs
-    (e.g. ``case_insensitive``, ``key``). ``enforcer`` is set only for
-    ``kind="custom"`` and names the bespoke method that enforces it.
+    ``functools.cache`` makes this run-once without a module-global flag.
     """
-
-    id: str
-    kind: str
-    resource: str
-    prose: str
-    targets: tuple[str, ...] = ()
-    fields: tuple[str, ...] = ()
-    options: dict[str, Any] = field(default_factory=dict)
-    enforcer: str | None = None
-    #: Concrete model class the shared fixtures validate against (defaults to the
-    #: first target; set explicitly when the first target is an abstract base).
-    fixture_model: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.kind == CUSTOM_KIND:
-            if not self.enforcer:
-                raise ValueError(f"{self.id}: custom rule must name an enforcer")
-        elif self.kind not in GENERIC_KINDS:
-            raise ValueError(f"{self.id}: unknown rule kind {self.kind!r}")
-        if not self.targets:
-            raise ValueError(f"{self.id}: rule must bind at least one target")
-
-    @property
-    def fixture_target(self) -> str:
-        """The concrete model name the fixture corpus validates against."""
-        return self.fixture_model or self.targets[0]
+    records = load_records()
+    return records, {record.id: record for record in records}
 
 
-# --- Field-expression resolver ---------------------------------------------
-#
-# A deliberately small, closed grammar — enough for every relational rule, and
-# no arbitrary code:
-#   "enum"                        attribute (scalar or collection)
-#   "ui.options"                  dotted attribute chain, None-safe
-#   "destinations[]"             a list attribute (the elements)
-#   "ui.options[].value"         project ``.value`` over each list element
-# Exactly one ``[]`` segment is supported (all rules need at most one level).
+def all_rules() -> list[RuleRecord]:
+    """The whole registry — every tier, every scope, ordered by id."""
+    return list(_load()[0])
 
 
-def _get_path(obj: Any, path: str) -> Any:
-    """Follow a dotted attribute chain, short-circuiting to None on any gap."""
-    cur = obj
-    for seg in path.split("."):
-        if cur is None:
-            return None
-        cur = getattr(cur, seg, None)
-    return cur
+def violation(rule_id: str, detail: str) -> ValueError:
+    """The error an enforcer raises, with the rule it applies already named.
 
-
-def resolve(model: Any, expr: str) -> Any:
-    """Resolve a field expression against a model instance.
-
-    Returns the attribute value, or — for a projection (``a[].b``) — a list of
-    the projected values. Any missing/None link yields None so relational rules
-    can uniformly skip absent operands.
+    A finding is actionable when it carries the id, because the id is what the
+    plugin prose cites, and the statement, because the id alone says nothing to
+    a reader without the reference open. Both are read from the record, so a
+    reworded rule rewords its own diagnostic. An id no record defines raises
+    ``KeyError`` here rather than emitting a citation that resolves to nothing.
     """
-    if "[]" in expr:
-        head, _, tail = expr.partition("[]")
-        seq = _get_path(model, head.rstrip(".")) if head.strip(".") else model
-        if seq is None:
-            return None
-        tail = tail.lstrip(".")
-        return list(seq) if not tail else [_get_path(el, tail) for el in seq]
-    return _get_path(model, expr)
+    rule = _load()[1][rule_id]
+    return ValueError(f"[{rule.id}] {' '.join(rule.statement.split())} ({detail})")
 
 
-def _as_set(value: Any, *, case_insensitive: bool = False) -> set | None:
-    """Coerce an operand to a set of comparable members, or None to skip.
-
-    A dict contributes its keys; a list/tuple its items. Empty and None both
-    mean "operand absent" — every relational rule below relates two operands
-    only when both are actually present, matching the imperative validators.
-    """
-    if not value:
-        return None
-    items = list(value.keys()) if isinstance(value, dict) else list(value)
-    if case_insensitive:
-        items = [m.lower() if isinstance(m, str) else m for m in items]
-    return set(items)
-
-
-# --- Generic checkers -------------------------------------------------------
-#
-# Each raises ValueError (pydantic wraps it) on violation, or returns quietly.
-# The message always leads with the rule id so failures are greppable and the
-# fixture corpus can assert on a stable token.
-
-
-def _msg(rule: AdvisoryRule, detail: str) -> str:
-    return f"[{rule.id}] {rule.prose} ({detail})"
-
-
-def _check_disjoint(rule: AdvisoryRule, model: Any) -> None:
-    """``fields = (a, b)``: the members of a and b must not overlap.
-
-    Dict operands contribute keys. ``options.case_insensitive`` casefolds.
-    """
-    ci = rule.options.get("case_insensitive", False)
-    a = _as_set(resolve(model, rule.fields[0]), case_insensitive=ci)
-    b = _as_set(resolve(model, rule.fields[1]), case_insensitive=ci)
-    if a is None or b is None:
-        return
-    overlap = sorted(a & b)
-    if overlap:
-        raise ValueError(_msg(rule, f"overlap={overlap!r}"))
-
-
-def _check_set_equal(rule: AdvisoryRule, model: Any) -> None:
-    """``fields = (a, b)``: a and b must contain exactly the same members.
-
-    Compared element-wise (not via ``set``) so unhashable members — an ``enum``
-    of objects/arrays, say — are tolerated exactly as the imperative validators
-    were. Absent/empty operands skip; ``a`` is resolved first so ``b`` is never
-    coerced when ``a`` is absent.
-    """
-    a = resolve(model, rule.fields[0])
-    if not a:
-        return
-    b = resolve(model, rule.fields[1])
-    if not b:
-        return
-    extra = [x for x in a if x not in b]
-    missing = [x for x in b if x not in a]
-    if extra or missing:
-        raise ValueError(_msg(rule, f"extra={extra!r}; missing={missing!r}"))
-
-
-def _check_member_of(rule: AdvisoryRule, model: Any) -> None:
-    """``fields = (needle, haystack)``: needle must be a member of haystack.
-
-    Membership is element-wise (``in`` over the collection), tolerating an
-    unhashable needle or member as the imperative validator did.
-    """
-    needle = resolve(model, rule.fields[0])
-    haystack = resolve(model, rule.fields[1])
-    if needle is None or not haystack:
-        return
-    if needle not in haystack:
-        raise ValueError(_msg(rule, f"value={needle!r} not in {list(haystack)!r}"))
-
-
-def _check_subset_of(rule: AdvisoryRule, model: Any) -> None:
-    """``fields = (sub, sup)``: every member of sub must appear in sup."""
-    sub = _as_set(resolve(model, rule.fields[0]))
-    sup = _as_set(resolve(model, rule.fields[1]))
-    if sub is None or sup is None:
-        return
-    extra = sorted(sub - sup)
-    if extra:
-        raise ValueError(_msg(rule, f"not declared: {extra!r}"))
+# --- Shared primitives ------------------------------------------------------
 
 
 def find_duplicates(seq: Any, key: Callable[[Any], Any] | None = None) -> list:
     """Return the sorted, de-duplicated keys that appear more than once in seq.
 
-    The one uniqueness primitive: the generic ``unique_by`` checker and the thin
-    ``_check_unique_destinations`` shim both call it, so the algorithm is defined
-    exactly once.
+    The one uniqueness primitive — every rule about a list holding no repeats
+    calls it, so the algorithm is defined exactly once and the several rules
+    cannot disagree about what "the same" means.
     """
     seen: set = set()
     dups: set = set()
@@ -235,98 +79,28 @@ def find_duplicates(seq: Any, key: Callable[[Any], Any] | None = None) -> list:
     return sorted(dups)
 
 
-def _check_unique_by(rule: AdvisoryRule, model: Any) -> None:
-    """``fields = (seq,)``: elements of seq must be unique.
-
-    ``options.key`` (list of dotted subpaths) projects each element to a tuple
-    for the comparison; omit it to compare whole elements (scalar lists).
-    ``options.skip_null`` drops elements whose key is (or contains) None from the
-    comparison — for uniqueness over an optional field, where absent is not a
-    collision.
-    """
-    seq = resolve(model, rule.fields[0])
-    if not seq:
-        return
-    key_paths = rule.options.get("key")
-    key_fn = (lambda el: tuple(_get_path(el, kp) for kp in key_paths)) if key_paths else None
-    if rule.options.get("skip_null"):
-        keys = [key_fn(el) if key_fn else el for el in seq]
-        keys = [k for k in keys if k is not None and not (isinstance(k, tuple) and None in k)]
-        dups = find_duplicates(keys)
-    else:
-        dups = find_duplicates(seq, key_fn)
-    if dups:
-        raise ValueError(_msg(rule, f"duplicates={dups!r}"))
+# --- Rules binding several models -------------------------------------------
 
 
-_CHECKERS: dict[str, Callable[[AdvisoryRule, Any], None]] = {
-    "disjoint": _check_disjoint,
-    "set_equal": _check_set_equal,
-    "member_of": _check_member_of,
-    "subset_of": _check_subset_of,
-    "unique_by": _check_unique_by,
-}
+class HeaderMergeRules:
+    """A block that both declares HTTP headers and names headers to remove.
 
-
-def check_rule(rule: AdvisoryRule, model: Any) -> None:
-    """Enforce one rule against a model instance (no-op for custom rules)."""
-    checker = _CHECKERS.get(rule.kind)
-    if checker is not None:
-        checker(rule, model)
-
-
-# --- Registry + mixin -------------------------------------------------------
-
-_RULES_BY_TARGET: dict[str, list[AdvisoryRule]] = {}
-_ALL_RULES: list[AdvisoryRule] = []
-
-
-def register(rules: list[AdvisoryRule]) -> None:
-    """Index a batch of rules by every target class they bind to."""
-    for rule in rules:
-        _ALL_RULES.append(rule)
-        for target in rule.targets:
-            _RULES_BY_TARGET.setdefault(target, []).append(rule)
-
-
-@cache
-def _ensure_loaded() -> None:
-    """Import the rule data on first use (decoupled from import order).
-
-    ``advisory_rules`` references targets by name only, so importing it never
-    constructs a contract model and cannot deadlock model definition.
-    ``functools.cache`` makes this a run-once without a module-global flag.
-    """
-    from . import advisory_rules  # noqa: F401  (import for side-effect: register)
-
-
-def rules_for(cls: type) -> list[AdvisoryRule]:
-    """All rules bound to a class or any of its ancestors, de-duplicated by id."""
-    _ensure_loaded()
-    out: dict[str, AdvisoryRule] = {}
-    for ancestor in cls.__mro__:
-        for rule in _RULES_BY_TARGET.get(ancestor.__name__, ()):
-            out.setdefault(rule.id, rule)
-    return list(out.values())
-
-
-def all_rules() -> list[AdvisoryRule]:
-    """The whole registry (for the JSON export, checklist, and doc generation)."""
-    _ensure_loaded()
-    return list(_ALL_RULES)
-
-
-class AdvisoryValidated:
-    """Mixin: run this model's registered advisory rules after construction.
-
-    Inheriting classes get relational enforcement for free; a class with no
-    registered rules pays only one dict lookup. Bespoke ``@model_validator``s on
-    the same class continue to run — they own the ``custom`` rules the registry
-    only catalogues.
+    Enforces ADV-HTTP-001 for every such block — a request, an auth operation
+    template, a transport, and the transport defaults all resolve headers the
+    same way, so they can all contradict themselves the same way. Mixed in
+    rather than repeated: one check, and a model gains it by inheriting.
     """
 
     @model_validator(mode="after")
-    def _run_advisory_rules(self):
-        for rule in rules_for(type(self)):
-            check_rule(rule, self)
+    def _headers_not_both_set_and_removed(self):
+        # Direct attribute access, so a class mixing this in without the fields
+        # fails at construction rather than silently enforcing nothing.
+        headers, removals = self.headers, self.headers_remove
+        if not headers or not removals:
+            return self
+        # Header names are case-insensitive on the wire, so `Accept` in one list
+        # and `accept` in the other is the same contradiction.
+        overlap = sorted({h.lower() for h in headers} & {h.lower() for h in removals})
+        if overlap:
+            raise violation("ADV-HTTP-001", f"overlap={overlap!r}")
         return self

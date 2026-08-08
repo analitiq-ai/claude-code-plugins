@@ -2,7 +2,8 @@
 
 All Analitiq schemas are served from a single host:
 `https://schemas.analitiq.ai/`. Each authored document declares `$schema`
-against it, and the value is locked to a `const` inside the published schema.
+against it (`ADV-SHRD-003`), and the value is locked to a `const` inside the
+published schema.
 
 <!-- BEGIN GENERATED: schema-urls -->
 | Entity | Authored file | `$schema` value |
@@ -12,9 +13,6 @@ against it, and the value is locked to a `const` inside the published schema.
 | Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
 | Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
 <!-- END GENERATED: schema-urls -->
-
-`$schema` is **optional** on every authored entity — omitting it is valid. The
-plugin sets it anyway so each file stays self-describing on disk.
 
 There is no authorable pinned form. Only the `latest.json` URL above validates;
 a version-pinned `…/<X.Y.Z>.json` variant is rejected outright. Which contract

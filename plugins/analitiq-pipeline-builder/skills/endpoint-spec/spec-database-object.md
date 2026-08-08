@@ -14,13 +14,11 @@
 Which provider concept lands in `catalog` and `schema` is dialect-specific — see
 the tables below.
 
-## Identifier preservation
+## Identifier preservation (`ADV-DBEP-009`)
 
-**All identifier strings are stored verbatim from introspection** — no
-case-folding, quoting, or normalization. PostgreSQL is case-sensitive
-when quoted, BigQuery names are case-sensitive in the catalog API,
-and MongoDB collection names are case-sensitive throughout. Whatever
-the source database reports, that's what goes here.
+PostgreSQL is case-sensitive when quoted, BigQuery names are case-sensitive in
+the catalog API, and MongoDB collection names are case-sensitive throughout.
+Whatever the source database reports, that's what goes here.
 
 The hashing layer (`schema_hash`, server-managed) relies on this
 verbatim preservation. Normalizing breaks the hash and triggers false
@@ -45,12 +43,11 @@ The hash is taken over the **verbatim** identifiers, so compute both together
 with `scripts/endpoint_id.py` (see `private-endpoint-creator`) and they always
 agree with what the validator recomputes.
 
-`endpoint_id` is an Analitiq **slug**, not a database object name. Nothing may
-parse database identity back out of it: the segments are slugified (lossy) and
-the trailing hash is not reversible, so a consumer that splits the handle to
-recover a schema or table name will be wrong the moment an identifier contains a
-character slugging folds away. Anything needing the catalog / schema / name
-reads `database_object` — that is what the block is for.
+`endpoint_id` is an Analitiq **slug**, not a database object name
+(`ADV-DBEP-007`): the segments are slugified (lossy) and the trailing hash is
+not reversible, so a consumer that splits the handle to recover a schema or
+table name will be wrong the moment an identifier contains a character slugging
+folds away.
 
 The trailing `<hash8>` is **not** `schema_hash`, and the two must never be
 substituted for one another. `<hash8>` identifies the *object*: it is taken over
@@ -61,8 +58,8 @@ snapshot* of that object's shape and changes whenever a column does. One answers
 
 ## `name`
 
-The provider-native object identifier. No quoting or escaping — the value is the
-raw identifier as it appears in the catalog.
+The provider-native object identifier, as it appears in the catalog
+(`ADV-DBEP-009`).
 
 ## `catalog`
 

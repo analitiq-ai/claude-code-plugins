@@ -30,6 +30,13 @@ A "value some other source owns" includes at least:
    decision/mapping logic (e.g. `enum-mappers.md`), a test's assertion target,
    or a curated human-facing summary (e.g. the README support matrix). If it's
    none of those, you're making a drift surface — reference instead.
+
+   "Nothing enforces it, so I have to write it down" is **not** one of the
+   three. The rule registry carries unenforced rules too: a record with
+   `mechanized: false` and no `validator`, whose `rationale` says what would
+   have to be read to catch a violation. Give the obligation an id in
+   `rules/adv/` and cite it; keep in prose only the craft the record does not
+   carry.
 3. **If the copy is unavoidable, is it pinned?** An unavoidable restatement of a
    contract-owned value **must** be pinned by a drift test that reads the
    contract package — `tests/connector_builder/test_schema_drift.py` is the

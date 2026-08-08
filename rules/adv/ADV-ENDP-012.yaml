@@ -1,0 +1,24 @@
+id: ADV-ENDP-012
+statement: >
+  A read operation's records reference MUST resolve, against that operation's
+  declared response schema, to an array node whose record shape declares
+  something.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+data:
+  targets: [ReadOperation]
+rationale: >
+  The records reference is the anchor the engine iterates, and a read yields
+  zero-to-many records, so it has to land on an array. The most common way to
+  fail it is authoring the record's own fields at the top level of the response
+  schema instead of describing the whole body, envelope included — the reference
+  then resolves to an object or to nothing, extraction yields no rows, and the
+  run reports success. Requiring the record shape to declare something is what
+  separates "the fields are unknown" from "nothing here says what a record is",
+  and only the latter leaves every downstream reader with nothing to resolve.
+status: active
+superseded_by: null

@@ -56,3 +56,8 @@ packages = [
 # must ship in the wheel or the installed package cannot import.
 [tool.setuptools.package-data]
 "analitiq.contracts" = ["arrow_type_grammar.json"]
+# The compiled rule registry, rendered from `rules/adv/*.yaml` by
+# `scripts/render_rules.py`. The models enforce the advisory tier at
+# `model_validate` time, so this must ship or an installed package validates
+# against no rules at all — silently, since a missing rule rejects nothing.
+"analitiq.contracts.shared" = ["rules.json"]

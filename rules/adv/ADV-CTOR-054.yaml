@@ -1,0 +1,23 @@
+id: ADV-CTOR-054
+statement: >
+  A DSN binding's `value` MUST NOT apply a wire-encoding function, because
+  the binding's declared `encoding` already owns that encoding.
+tier: advisory
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data:
+  targets: [DsnBinding]
+rationale: >
+  The same encoding function is the right answer for URL components an author
+  builds by hand in a template, so reaching for it inside a binding feels
+  consistent and doubles the encoding — the DSN stays well-formed and carries
+  a credential the server rejects, which reads as a bad secret rather than a
+  bad binding. Known enforcement gap: `DsnBinding.value` is an untyped
+  expression that nothing walks for function calls, so the double encoding is
+  invisible until the DSN is built — unlike the equivalent path_params rule
+  (ADV-ENDP-027), which has an enforcer.
+status: active
+superseded_by: null

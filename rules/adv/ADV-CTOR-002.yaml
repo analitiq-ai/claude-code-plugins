@@ -1,0 +1,24 @@
+id: ADV-CTOR-002
+statement: >
+  A post-auth output MUST declare the request its mode consumes, MUST omit the
+  request and the response-extraction paths belonging to the other mode, and
+  MUST take a storage its mode admits.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput._mode_consistency"
+owners: [engine, connector-plugin]
+data:
+  targets: [PostAuthOutput]
+rationale: >
+  Mode decides whether the platform renders a picker for the user or reads a
+  value silently after auth, and each mode drives a different request and lands
+  the result in a different place. An output that pairs one mode's request with
+  the other's storage describes a flow nothing can run, and it surfaces only
+  when a real user reaches the post-auth step — long after the document
+  validated. The pairing is all this rule can see: whether the value is
+  genuinely secret, and so belongs in the secret store at all, stays the
+  author's judgement.
+status: active
+superseded_by: null

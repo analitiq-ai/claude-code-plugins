@@ -31,6 +31,24 @@ bump.
 1. **Cite, don't state.** An `ADV-*` id, the generated advisory reference, a
    schema URL, a path to a validated `examples/` file. Citation is the pinned
    form of repetition — a dangling `ADV-*` id already fails the build.
+
+   The registry carries a rule whether or not anything applies it, so "no rule
+   enforces this" is not a reason to restate a fact. Each record answers three
+   questions separately: `tier` says what kind of rule it is, `mechanized` and
+   `validator` say whether anything applies it and what, and `severity` says
+   what a violation costs. An `advisory` rule is one the validator rejects and
+   names; a `structural` one the published schema rejects, naming the field —
+   those ids exist so prose stops copying enum members and patterns, and the
+   rendered reference prints the members off the live model. A rule with no
+   validator is applied by nobody here, and its `rationale` says what would
+   have to be read to catch a violation.
+
+   So an obligation with no id is a **missing registry entry**, not a licence
+   to hand-write it. Add `rules/adv/<id>.yaml` (schema: `rules/SCHEMA.md`), name
+   this plugin in its `owners` so the reference renders it here, run
+   `python3 scripts/render_rules.py write`, then cite it. What stays in prose
+   beside the citation is the craft the record deliberately does not carry: the
+   worked example, the consequence of getting it wrong, the decision procedure.
 2. **A "validates clean but breaks" warning is a validator gap.** Raise the
    contract gap; when the rule lands, its `ADV-*` entry carries the fact and
    the warning is deleted. Only a refused gap drops to rung 3.

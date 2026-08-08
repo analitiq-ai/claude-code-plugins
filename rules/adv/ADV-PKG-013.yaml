@@ -1,0 +1,25 @@
+id: ADV-PKG-013
+statement: >
+  A dialect override MUST accept every call shape the base admits — the
+  same parameter names, the same keyword-only markers, and the same
+  synchronous form, since the engine calls every dialect hook
+  synchronously.
+tier: structural
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+data: {}
+rationale: >
+  The engine calls hooks through the base's signature and passes the
+  keyword-only arguments by name, so a renamed parameter imports fine and
+  raises at the first write. The `async def` case is the one authors reach
+  for: an async driver's bulk API returns a coroutine, and making the hook
+  async looks like the fix — it instead hands the engine a coroutine where
+  statement text or a bool was expected, because the bridge belongs inside
+  the synchronous hook. Nothing in this repo reads a dialect's signatures;
+  the conformance kit compares shapes against the base at registry CI,
+  which is the first moment either is refused.
+status: active
+superseded_by: null

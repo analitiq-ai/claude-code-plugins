@@ -1,0 +1,23 @@
+id: ADV-STRM-019
+statement: >
+  A mapping's assignments MUST be kept in the order they were authored and
+  MUST NOT be re-sorted, because the engine applies them in that order.
+tier: procedural
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [StreamMapping]
+rationale: >
+  Application order is execution behaviour, so every permutation of the same
+  assignments is the same document to any validator — there is nothing to
+  reject and nothing to warn about. The temptation is specific and
+  recurring: an agent editing a mapping tidies the array alphabetically or
+  groups it by type, which in edit mode also hands the user a diff they did
+  not ask for over a change they did not request. Catching a violation means
+  reading the authored order against the previous revision of the same
+  document, which only review or a diff can do.
+status: active
+superseded_by: null

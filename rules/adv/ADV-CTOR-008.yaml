@@ -1,0 +1,21 @@
+id: ADV-CTOR-008
+statement: >
+  A cross-input validation rule's predicate MUST test an input the same
+  connection contract declares.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs"
+owners: [connector-plugin]
+data:
+  targets: [ConnectorBase]
+rationale: >
+  A predicate over a field no input declares can never match, so the rule
+  hanging off it never fires: the requirement the author wrote it to enforce is
+  silently absent and the form accepts exactly the combination the rule existed
+  to reject. Nothing at save time distinguishes a rule that did not match from
+  one that cannot, which is why the reference has to be resolved when the
+  connector is parsed.
+status: active
+superseded_by: null

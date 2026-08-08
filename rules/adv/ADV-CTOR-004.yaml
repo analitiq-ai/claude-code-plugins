@@ -1,0 +1,22 @@
+id: ADV-CTOR-004
+statement: >
+  An ADBC transport MUST carry connection state; a transport that declares none
+  has nothing to open a connection with.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport._require_dsn_or_kwargs"
+owners: [engine, connector-plugin]
+data:
+  targets: [AdbcTransport]
+rationale: >
+  ADBC drivers split connection state two ways — some take a DSN, some
+  (Snowflake) take every coordinate as driver keyword arguments, and
+  Postgres-style drivers use both, keeping TLS and other extras in the kwargs
+  — so the contract cannot make either field required on its own. That leaves
+  the empty transport representable, and it validates cleanly right up to the
+  moment the engine asks the driver to connect with nothing. Requiring some
+  source of state is the only thing that catches it before then.
+status: active
+superseded_by: null

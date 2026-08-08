@@ -1,0 +1,25 @@
+id: ADV-TMAP-014
+statement: >
+  A `regex` read rule MUST spell the literals in its native pattern the way the
+  engine's native-type normalization spells the probe, because the probe is
+  normalized before matching and the pattern is used exactly as authored.
+tier: procedural
+severity: warning
+scope: type-map
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+data:
+  targets: [TypeMapReadRegexRule]
+rationale: >
+  Normalization is deliberately one-sided: applying it to the pattern too would
+  corrupt character classes into their negations, so the asymmetry is a
+  correctness choice, not an oversight — but it makes `exact` and `regex` rules
+  behave differently on a page where they sit side by side, and `exact` rules
+  are the forgiving ones. A mis-spelled literal is a perfectly well-formed
+  pattern that can never match, so the family falls through to the runtime
+  hard error as though no rule had been written. Nothing rejects it; the
+  validator can only warn, because it cannot tell a deliberately narrow
+  pattern from a mis-cased one.
+status: active
+superseded_by: null

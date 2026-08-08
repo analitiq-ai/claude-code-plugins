@@ -29,7 +29,7 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.advisory import AdvisoryValidated
+from analitiq.contracts.shared.advisory import HeaderMergeRules, violation
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
     DISPLAY_NAME_MAX,
@@ -82,7 +82,7 @@ class FormFieldOption(StrictModel):
 # --- Auth Models (discriminated union) ---
 
 
-class AuthOperationTemplate(AdvisoryValidated, StrictModel):
+class AuthOperationTemplate(HeaderMergeRules, StrictModel):
     """Operation template for auth `authorize` / `token_exchange` / `refresh` / `test`.
 
     The HTTP `base_url` lives on the named transport; this template selects the
@@ -287,7 +287,7 @@ class ConnectionContractInputUI(StrictModel):
     )
 
 
-class ConnectionContractInput(AdvisoryValidated, StrictModel):
+class ConnectionContractInput(StrictModel):
     """One submitted/provisioned value declared by the connection contract.
 
     Spec: §Connection Inputs. The combination of `name` and `storage` determines
@@ -351,13 +351,36 @@ class ConnectionContractInput(AdvisoryValidated, StrictModel):
                 "secret=true requires storage='secrets' "
                 "(spec: §Connection Inputs — secret iff storage='secrets')"
             )
-        # ui.options ≡ enum (ADV-CONN-001) and default ∈ enum (ADV-CONN-002) are
-        # relational rules enforced by the advisory registry, not here.
         if self.enum is not None and len(self.enum) == 0:
             raise ValueError(
                 "enum must be non-empty when present "
                 "(spec: §Connection Inputs — enum is the authoritative "
                 "allowed-value list)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _options_offer_the_enum(self) -> "ConnectionContractInput":
+        """ADV-CONN-001: the picker offers exactly what the contract accepts."""
+        offered = [o.value for o in (self.ui.options if self.ui else None) or ()]
+        if not offered or not self.enum:
+            return self
+        # Compared element-wise rather than as sets: an enum member may be an
+        # object or an array, which a set cannot hold.
+        extra = [v for v in offered if v not in self.enum]
+        missing = [v for v in self.enum if v not in offered]
+        if extra or missing:
+            raise violation("ADV-CONN-001", f"extra={extra!r}; missing={missing!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _default_is_an_enum_member(self) -> "ConnectionContractInput":
+        """ADV-CONN-002: the fallback the platform supplies is a legal value."""
+        if self.default is None or not self.enum:
+            return self
+        if self.default not in self.enum:
+            raise violation(
+                "ADV-CONN-002", f"value={self.default!r} not in {self.enum!r}"
             )
         return self
 
@@ -856,7 +879,7 @@ class TransportRateLimit(StrictModel):
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
-class HttpTransport(AdvisoryValidated, StrictModel):
+class HttpTransport(HeaderMergeRules, StrictModel):
     """HTTP transport contract. Spec: §Transport Contracts."""
 
     transport_type: Literal["http"] = Field(description="Transport type discriminator")
@@ -1199,7 +1222,7 @@ Transport = Annotated[
 """Named transport contract entry. Spec: §Transport Contracts."""
 
 
-class TransportDefaults(AdvisoryValidated, StrictModel):
+class TransportDefaults(HeaderMergeRules, StrictModel):
     """Defaults merged into every entry of `transports`. Spec: §Transport Contracts."""
 
     transport_type: Literal["http", "sqlalchemy", "adbc", "s3", "file", "stdout"] | None = Field(
@@ -1761,7 +1784,7 @@ class WriteUnit(StrictModel):
         return self
 
 
-class ConnectorBase(AdvisoryValidated, StrictModel):
+class ConnectorBase(StrictModel):
     """Base connector model — fields shared by every connector kind.
 
     `connector_id` is the connector's canonical identifier and its registry
@@ -1937,6 +1960,17 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
             if isinstance(entry, dict) and "transport_type" not in entry:
                 entry["transport_type"] = default_kind
         return data
+
+    @model_validator(mode="after")
+    def _default_transport_declared(self) -> "ConnectorBase":
+        """ADV-CTOR-001: the transport every operation falls back to exists."""
+        if self.default_transport not in self.transports:
+            raise violation(
+                "ADV-CTOR-001",
+                f"value={self.default_transport!r} "
+                f"not in {sorted(self.transports)!r}",
+            )
+        return self
 
     @model_validator(mode="after")
     def _transport_refs_resolvable(self) -> "ConnectorBase":

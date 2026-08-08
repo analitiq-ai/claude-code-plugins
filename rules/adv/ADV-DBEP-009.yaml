@@ -1,0 +1,25 @@
+id: ADV-DBEP-009
+statement: >
+  A database endpoint MUST record every provider identifier exactly as its
+  source reports it, with no case-folding, quoting or other normalisation.
+tier: referential
+severity: error
+scope: database-endpoint
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+data:
+  targets: [DatabaseObject, DatabaseEndpointDoc]
+rationale: >
+  Quoted PostgreSQL names, BigQuery catalog names and MongoDB collections are
+  all case-sensitive, and the engine dialect-quotes whatever it is handed
+  rather than repairing it, so a folded identifier addresses a different object
+  or none. The derived values assume verbatim input and cannot detect anything
+  else: the server-managed schema hash reports drift on an object that never
+  changed, and the endpoint handle is computed from the same strings, so a
+  normalised identifier mints a different handle and orphans every stream
+  pinned to the old one. Correctness here is judged against the live database,
+  which no document records — and for a table that does not exist yet the
+  user's own spelling is the source and binds the same way.
+status: active
+superseded_by: null

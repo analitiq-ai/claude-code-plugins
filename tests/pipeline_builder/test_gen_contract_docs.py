@@ -187,44 +187,42 @@ def test_filter_operator_scopes_are_disjoint_and_complete():
         "common operators are no longer accepted in both scopes")
 
 
-def test_advisory_family_scope_is_pinned():
-    """Every published advisory family is a deliberate in- or out-of-scope call.
+def test_every_owned_rule_lands_in_exactly_one_block():
+    """The block map partitions what this plugin owns — no gaps, no doubles.
 
-    The renderers only emit the in-scope families. A family the contract adds
-    later would otherwise render nowhere and fail nothing — the rule would simply
-    be missing from every agent's instructions. Matching neither list fails here
-    instead, forcing a decision.
+    Placement is by `scope`, so a rule whose scope no block claims would render
+    nowhere and fail nothing: the rule would simply be missing from every
+    agent's instructions. The remainder block is what makes that impossible, and
+    this is what proves the remainder is still wired to a document.
+
+    The double-render half matters as much: an id in two blocks is one rule an
+    agent meets twice with two surrounding explanations, which is how a spec
+    starts contradicting itself.
     """
-    from analitiq.contracts.shared.advisory import all_rules
+    owned = {r.id for r in G._owned()}
+    placed = [rule.id for block in G._ADVISORY_BLOCKS for rule in G._block_rules(block)]
 
-    known = set(G.IN_SCOPE_ADVISORY_FAMILIES) | set(G.OUT_OF_SCOPE_ADVISORY_FAMILIES)
-    families = {r.id.rsplit("-", 1)[0] + "-" for r in all_rules()}
-    unclassified = sorted(families - known)
-    assert not unclassified, (
-        f"advisory families classified as neither in- nor out-of-scope: {unclassified}. "
-        "Decide: render them (add to IN_SCOPE_ADVISORY_FAMILIES and a renderer) or "
-        "record why not (OUT_OF_SCOPE_ADVISORY_FAMILIES).")
-    # Both lists must describe reality, not aspiration.
-    assert set(G.IN_SCOPE_ADVISORY_FAMILIES) <= families
-    assert set(G.OUT_OF_SCOPE_ADVISORY_FAMILIES) <= families
-
-
-def test_in_scope_advisory_families_are_all_rendered():
-    """The in-scope list and what the renderers emit must not drift apart."""
-    assert set(G.advisory_families_rendered()) == set(G.IN_SCOPE_ADVISORY_FAMILIES)
+    assert sorted(placed) == sorted(owned), (
+        "the blocks no longer partition what this plugin owns: "
+        f"unplaced={sorted(owned - set(placed))}, "
+        f"unknown={sorted(set(placed) - owned)}"
+    )
+    duplicated = sorted({i for i in placed if placed.count(i) > 1})
+    assert not duplicated, (
+        f"these rules render in more than one block: {duplicated}. Two scopes "
+        "claim the same rule, so an agent meets it twice."
+    )
 
 
 def test_advisory_map_keys_are_real_renderer_blocks():
-    """Each advisory family must be claimed by a block that actually reaches a doc.
+    """Each block must be claimed by a renderer that actually reaches a doc.
 
-    Closes the loop the other two advisory tests leave open. Without this, the
-    path of least resistance for a future maintainer is: contract adds a family ->
-    scope test fails -> add it to IN_SCOPE -> rendered test fails -> add a map
-    entry -> green, with the rule rendering nowhere. Keying the map to RENDERERS
-    means test_every_renderer_is_referenced_by_a_doc carries it the rest of the
-    way to an actual document.
+    Without this, a block can hold rules while reaching no agent — which reads
+    as coverage in the partition test above and is not.
+    `test_every_renderer_is_referenced_by_a_doc` carries it the rest of the way
+    to an actual document.
     """
-    orphans = sorted(set(G._ADVISORY_BLOCK_FAMILIES) - set(G.RENDERERS))
+    orphans = sorted(set(G._ADVISORY_BLOCKS) - set(G.RENDERERS))
     assert not orphans, (
         f"advisory map claims block ids with no renderer: {orphans}; "
-        "their families would count as rendered while reaching no agent")
+        "their rules would count as rendered while reaching no agent")

@@ -34,9 +34,8 @@ Pick the mode from the user's intent:
   when the method is `incremental`.
 - `write_mode` (optional, default per destination capability) — for a database
   destination, a member of the write-mode vocabulary in §Closed vocabularies
-  (`upsert` additionally requires `conflict_keys`); for an API destination, one of
-  the endpoint's `operations.write` keys — drawn from the same vocabulary, but
-  which of them that endpoint declares only its own document says.
+  (`upsert` additionally requires `conflict_keys`); for an API destination, one
+  the referenced endpoint declares (`ADV-STRM-024`).
 - `schedule_type` (optional) — a member of the schedule vocabulary in
   §Closed vocabularies. Omit it and the contract's own default applies.
 - `previous_release_path` (optional) — path to the prior released directory
@@ -69,6 +68,31 @@ carries the phrasing tables — and halt rather than inventing a member:
 | `…endpoint_ref.scope` | `connector`, `connection` | discriminated union `analitiq.contracts.stream.EndpointRef` |
 | `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | discriminated union `analitiq.contracts.stream.DatabaseWrite` (an API destination's mode is bounded by the endpoint write-key universe instead) |
 <!-- END GENERATED: enum-vocabulary -->
+
+## Registered rules for every document
+
+These bind whatever you are authoring — pipeline, stream, connection or
+database endpoint — so they are not repeated in the per-document specs. Satisfy
+every one; a clean validation run is not proof they all hold, and most of these
+are things an agent gets wrong by writing a plausible value that validates.
+
+<!-- BEGIN GENERATED: advisory-shared -->
+| Rule | Constraint |
+|---|---|
+| `ADV-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. |
+| `ADV-CTOR-045` | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. |
+| `ADV-RETRY-001` | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. |
+| `ADV-SHRD-001` | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. |
+| `ADV-SHRD-002` | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. |
+| `ADV-SHRD-003` | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. |
+| `ADV-SHRD-004` | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. |
+| `ADV-SHRD-005` | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. |
+| `ADV-SHRD-006` | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. |
+| `ADV-SHRD-007` | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. |
+| `ADV-SHRD-008` | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. |
+| `ADV-SHRD-009` | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. |
+| `ADV-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. |
+<!-- END GENERATED: advisory-shared -->
 
 ## Required reading
 
@@ -240,12 +264,10 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    - Collect the full target identity: `{schema}.{table}`, plus
      `catalog` where the dialect uses one (for schemaless dialects
      the database travels as `catalog` and `schema` is omitted —
-     same identity rules as discovery). The target namespace must be
-     one discovery returned — whether the engine creates a missing
-     schema is dialect-owned, so a discovered namespace is the only
-     target that succeeds everywhere; halt and ask for a discovered
-     one (or a different target) instead of authoring a first run
-     that may fail.
+     same identity rules as discovery). If the target namespace is not
+     one discovery returned (`ADV-DBEP-010`), halt and ask for a
+     discovered one (or a different target) instead of authoring a
+     first run that may fail.
    - Collect the new table's `primary_keys`, suggesting the source
      endpoint's own primary keys as the default. An `upsert` write
      mode needs them as the stream's `conflict_keys`.
@@ -428,9 +450,9 @@ Report to the user:
   enforce this; pass `bundle_root: .` when validating the stitched
   pipeline.
 - Authored documents declare `$schema` with the published host
-  (the per-entity URLs are tabulated in `references/schema-hosts.md`).
-  Validation is offline and
-  model-driven — no schema is fetched. See `references/schema-hosts.md`.
+  (`ADV-SHRD-003`); the per-entity URLs are tabulated in
+  `references/schema-hosts.md`. Validation is offline and model-driven —
+  no schema is fetched.
 - The published schemas are **closed** (`additionalProperties: false`).
   Do not author unknown fields, including `x-*` extension keys.
 - Never infer undeclared behavior. If the contract does not declare a

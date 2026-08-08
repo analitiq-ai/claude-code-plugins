@@ -11,9 +11,8 @@ them, so cite them rather than re-deriving them.
 
 ## The model: declare the input, then bind it
 
-A dynamic request value is declared **once** as a param (the typed contract —
-name, location, type, requiredness, filterability) and **referenced** from the
-request slot with a binding expression:
+A dynamic request value is declared **once** as a param — the typed contract for
+that input — and **referenced** from the request slot with a binding expression:
 
 <!-- validate: api-endpoint#/operations/read -->
 ```json
@@ -41,18 +40,16 @@ request slot with a binding expression:
 its rules live in `endpoint-creator.md`; this page is about the binding.)
 
 `{"from_param": "<name>"}` is the only way to route a declared param into a
-request. A bare `{"ref": "..."}` in a request slot is **not** an alternative
-spelling — see the prohibitions below.
+request — a bare `{"ref": "..."}` is not an alternative spelling (see the
+prohibitions below).
 
 ## Binding rules
 
-- **`path_params` values are bindings, never free expressions.** On a read,
-  exactly `{"from_param": <name>}`, and the bound param must declare
+- **`path_params` values are bindings, never free expressions**, and the block
+  is present exactly when `request.path` declares placeholders (ADV-ENDP-001).
+  On a read, exactly `{"from_param": <name>}`, and the bound param must declare
   `in: "path"`. On a write, `{"from_input": "record.<dotted>"}` is also legal —
-  the record itself supplies the segment; see "Write path segments" below. The
-  `path_params` keys must equal the `{placeholder}` names in `request.path`,
-  and the block is present exactly when the path declares placeholders
-  (ADV-ENDP-001).
+  the record itself supplies the segment; see "Write path segments" below.
 - **A binding's location must match the site it appears in** (ADV-ENDP-008):
   `request.headers` binds only `in: "header"` params, `request.query` only
   `in: "query"`, `request.body` only `in: "body"`.
@@ -68,20 +65,20 @@ spelling — see the prohibitions below.
 
 - <!-- PROBE: request-slot-direct-runtime-ref -->
   **No direct `stream.*`, `state.*`, or `runtime.*` ref** in `headers`,
-  `query`, or `body` — the contract rejects it and tells you to route the value
-  through a declared param. These are the per-run values (filters, cursors,
-  batch sizing), and routing them through a param is what gives them a declared
-  type, requiredness, and operator set. Without that, nothing downstream knows
-  whether a stream may filter on the value or what it may filter with.
+  `query`, or `body` (ADV-ENDP-032). These are the per-run values (filters,
+  cursors, batch sizing), and routing them through a param is what gives them a
+  declared type, requiredness, and operator set. Without that, nothing
+  downstream knows whether a stream may filter on the value or what it may
+  filter with.
 
   <!-- PROBE: request-slot-template-smuggle -->
   The check catches `{"ref": …}` specifically; smuggling the same value in as
   `{"template": "${runtime.…}"}` slips past it. Don't — the reason to route
   through a param is the declared contract, not the validator.
 - <!-- PROBE: read-leading-scope-typo -->
-  **No unscoped ref or `${...}` placeholder.** The leading token of every ref
-  and every template placeholder must be one of the contract's resolution
-  scopes (see `connector-builder/references/value-expressions.md`).
+  **No unscoped ref or `${...}` placeholder** (ADV-ENDP-033) — the resolution
+  scopes a leading token may name are in
+  `connector-builder/references/value-expressions.md`.
 
 ## What legitimately stays direct
 
@@ -126,8 +123,9 @@ satisfy two bindings (ADV-ENDP-009 counts bindings per param).
 
 `{"from_input": ...}` addresses the record being written. Author it inside
 `operations.write.<mode>.request.body`, or as a write `path_params` binding
-(below). It is never legal in `headers`, `query`, anywhere on a read, or a
-param `default` — those sites exist before any record is in scope.
+(below). It is never legal in `headers`, `query`, or anywhere on a read
+(ADV-ENDP-034), nor in a param `default` — those sites exist before any record
+is in scope.
 
 | Value | Means |
 |---|---|
@@ -138,12 +136,10 @@ param `default` — those sites exist before any record is in scope.
 - **A write request body must reference `from_input`.** Batching selects the
   arity: a batched write must use `records`, a non-batched write must use
   `record` / `record.<field>` (ADV-ENDP-017).
-- **`records.<dotted>` is not supported** — dotted paths through the batch
-  array are rejected.
+- **`records.<dotted>` is not supported** (ADV-ENDP-035).
 
 Provider envelopes are authored literally around the binding; no wrapper key is
-special. This example is a **batched** write (`records`), so it is only legal
-alongside a `batching` block — an unbatched write wraps `record` instead:
+special. This example is a **batched** write:
 
 <!-- validate: api-endpoint#/operations/write/insert/request/body -->
 ```json

@@ -42,12 +42,12 @@ The orchestrator passes:
 ## Process
 
 1. Route every `connection_contract` entry by the last segment of its `storage`
-   (this is the whole rule — no auth-type branches; see `spec-envelope.md`):
-   - `connection.parameters` → `parameters.<key>` = the user's value, preserving
-     the declared JSON type (`port: 5432` integer, not `"5432"`).
+   (`ADV-CONN-006`; see `spec-envelope.md`):
+   - `connection.parameters` → `parameters.<key>` = the user's value
+     (`ADV-CONN-007`; `port: 5432` integer, not `"5432"`).
    - `secrets` → `secret_refs.<key>` = `"env:ANALITIQ_<connection_slug>_<key>"`
      (upper-cased, non-alphanumerics → `_`), and add that env-var name to the
-     `.secrets/credentials.json` template. Never write the secret value.
+     `.secrets/credentials.json` template (`ADV-CONN-009`).
    - `connection.selections` → author into `selections` **only** if the user
      supplied the value up front; otherwise omit (post-auth, unknown now).
    - `connection.discovered` → **never author** (server-managed).
@@ -93,17 +93,12 @@ The orchestrator passes:
 - The connection document has **no `values` envelope**. Route into the storage
   maps (`parameters` / `selections` / `discovered` / `secret_refs`); the closed
   schema rejects any other top-level key.
-- Never embed a real secret. For every `storage: "secrets"` entry, author only an
-  `env:` (or user-specified) pointer in `secret_refs` and emit the matching
-  `.secrets/credentials.json` entry.
-- Never author the `discovered` map — the auto-discovery pipeline owns it and the
-  connections API rejects a client-supplied value.
+- Never embed a real secret (`ADV-SHRD-001`).
+- Never author the `discovered` map (`ADV-CONN-005`).
 - `secret_refs` pointer values must match one of the schemes the contract
   accepts — the authoritative grammar is
   `analitiq.contracts.connection.SECRET_REF_VALUE_PATTERN`, listed in
   `connection-spec/spec-envelope.md`. Default to `env:`. A bare token with no
   scheme is rejected, which is what stops a pasted secret landing here.
-- Routing is by the contract's `storage`, not by `auth.type` — this holds for
-  every connector and auth type, so it needs no change when a new connector
-  ships. If the connector has no `connection_contract`, return a structured
-  refusal.
+- Routing is driven by `storage`, never by `auth.type`. If the connector has no
+  `connection_contract`, return a structured refusal.

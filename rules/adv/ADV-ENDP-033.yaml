@@ -1,0 +1,22 @@
+id: ADV-ENDP-033
+statement: >
+  Every ref and every `${...}` template placeholder in a request slot MUST lead
+  with one of the resolution scopes the contract declares.
+tier: advisory
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+data:
+  targets: [ReadOperation, WriteOperation]
+rationale: >
+  The leading token is what selects the resolver that supplies the value, so an
+  unscoped or misspelled one names no resolver at all — the value does not
+  arrive late, it never arrives. Nothing about the failure points back at the
+  typo: it surfaces as a header sent empty or a filter quietly dropped from the
+  query, which reads as a provider quirk. Refusing the expression where it is
+  written is the only place the cause and the symptom are still in the same
+  file.
+status: active
+superseded_by: null

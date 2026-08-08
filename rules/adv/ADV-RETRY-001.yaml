@@ -1,0 +1,21 @@
+id: ADV-RETRY-001
+statement: >
+  A block that allows no retry attempts MUST NOT declare a non-zero retry
+  delay.
+tier: advisory
+severity: error
+scope: any
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/shared/common.py::RetryErrorHandlingBase._validate_retry_fields"
+owners: [pipeline-plugin, engine]
+data:
+  targets: [RetryErrorHandlingBase]
+rationale: >
+  A delay with no retries is incoherent: the document reads as though it waits
+  before trying again when it never tries again at all, and an operator sizing
+  a run from it plans for a wait that never happens. The pairing is the
+  fingerprint of an author who set one field and forgot the other — which is
+  the same coupling that keeps the opposite pairing honest, since retries with
+  no wait is a hot loop against a system that has just failed.
+status: active
+superseded_by: null

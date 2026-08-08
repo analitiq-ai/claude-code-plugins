@@ -1,0 +1,21 @@
+id: ADV-CTOR-007
+statement: >
+  Every path in required_for_activation MUST resolve to a storage path that
+  some declared input or post-auth output materializes.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs"
+owners: [engine, connector-plugin]
+data:
+  targets: [ConnectorBase]
+rationale: >
+  Activation waits for these paths to resolve. The path is derived — storage
+  kind plus declaration key — and never written beside the declaration it comes
+  from, so a typo or a renamed output produces a prerequisite nothing will ever
+  materialize. The connection then stays permanently inactive with no
+  diagnostic pointing back at the connector, which is the hardest failure in
+  this block to attribute.
+status: active
+superseded_by: null

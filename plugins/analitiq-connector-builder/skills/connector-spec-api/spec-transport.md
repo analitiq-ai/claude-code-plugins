@@ -35,7 +35,7 @@ A region or subdomain the user supplies before auth:
 ```
 
 The matching `region` input must be declared in `connection_contract.inputs`
-with `phase: "pre_auth"` so the template resolves before auth.
+with `phase: "pre_auth"` (`ADV-CTOR-050`), so the template resolves before auth.
 
 A per-tenant host discovered *after* auth: see the `api` transport in
 `examples/oauth2-authorization-code/oauth2-authorization-code.example.json`,
@@ -43,11 +43,12 @@ whose `base_url` templates `${connection.discovered.api_domain}` into the host.
 
 That value comes from a `post_auth_outputs` entry, so the transport is only
 usable once post-auth discovery has run — it cannot serve an `auth`-phase
-operation. Declare a separate transport for the discovery request itself (see
-`connector-builder/references/lifecycle-phases.md`).
+operation (`ADV-CTOR-050`). Declare a separate transport for the discovery
+request itself (see `connector-builder/references/lifecycle-phases.md`).
 
-Do not put the host in an operation's `request.path` as an absolute URL:
-`endpoint_id` is derived from that path, so `endpoint-id-locator` rejects it.
+Do not put the host in an operation's `request.path` (`ADV-ENDP-045`) — the
+path is resolved against the selected transport's `base_url`, and a host baked
+into the path bypasses the transport that owns it.
 
 ## Header resolution order
 
@@ -60,12 +61,8 @@ Effective headers per request are built as:
 
 Header names match case-insensitively for override and removal.
 
-**Declare a deletion with `headers_remove`, not with `null`.** A block must not
-both set and remove the same header name (ADV-HTTP-001). `headers_remove` is
-available on endpoint operation requests too, not just connector transports —
-that is how one endpoint drops an inherited default (e.g. an auth header a
-public sub-resource rejects).
-
-Don't lean on a header resolving to nothing as an implicit delete; express the
-intent with `headers_remove` so it survives regardless of how empty values are
-treated.
+**Declare a deletion with `headers_remove`, not with `null`** (`ADV-SHRD-010`).
+A block must not both set and remove the same header name (ADV-HTTP-001).
+`headers_remove` is available on endpoint operation requests too, not just
+connector transports — that is how one endpoint drops an inherited default
+(e.g. an auth header a public sub-resource rejects).

@@ -1,0 +1,22 @@
+id: ADV-PIPE-001
+statement: >
+  A pipeline's destination list MUST NOT name the same connection more than
+  once.
+tier: advisory
+severity: error
+scope: pipeline
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique"
+owners: [pipeline-plugin]
+data:
+  targets: [PipelineConnections]
+  fixture_model: PipelineConnections
+rationale: >
+  A repeated entry reads as a second delivery target, so the run would write
+  the same records into the same connection twice — duplicated rows a user
+  will attribute to the source, not to the pipeline document. The entries are
+  opaque UUIDs, so the repetition is invisible to anyone reading the file;
+  that is why it is rejected outright rather than quietly de-duplicated, which
+  would hide an authoring mistake the author still needs to see.
+status: active
+superseded_by: null

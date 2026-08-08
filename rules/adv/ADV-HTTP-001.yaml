@@ -1,0 +1,22 @@
+id: ADV-HTTP-001
+statement: >
+  A block MUST NOT both declare a header and list that same header name for
+  removal, matched case-insensitively.
+tier: advisory
+severity: error
+scope: any
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::HeaderMergeRules._headers_not_both_set_and_removed"
+owners: [connector-plugin, engine]
+data:
+  targets: [_RequestBase, AuthOperationTemplate, HttpTransport, TransportDefaults]
+  fixture_model: AuthOperationTemplate
+rationale: >
+  Removal and merge are separate steps of header resolution, so a name on both
+  sides is never reported as a conflict at run time — one step simply wins and
+  the author goes on believing the request carries something it does not. The
+  pairing usually appears when a block is edited to drop an inherited header
+  and the local override that replaced it is left behind. Rejecting the pair
+  forces the author to say which of the two they meant.
+status: active
+superseded_by: null
