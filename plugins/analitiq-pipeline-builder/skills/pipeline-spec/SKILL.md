@@ -70,9 +70,9 @@ self-contained — author each document as its own file and reference it by id.
 
 ## Registered rules for a pipeline
 
-The relational constraints no single field can express. The validator emits
-each one's stable id in the finding message, so a failure like
-`[ADV-PIPE-002] …` points straight at the rule below.
+Satisfy every rule below, and cite one by id rather than restating it. A clean
+validation run is not proof they all hold — some are applied only at connect or
+run time.
 
 <!-- BEGIN GENERATED: advisory-pipeline -->
 | Rule | Constraint |
@@ -81,17 +81,12 @@ each one's stable id in the finding message, so a failure like
 | `ADV-PIPE-002` | A pipeline's schedule MUST author exactly the fields its chosen `type` calls for, and MUST omit the fields belonging to the types it did not choose. |
 | `ADV-PIPE-003` | A pipeline MUST NOT list two streams that reduce to the same version-stripped base id. |
 | `ADV-PIPE-004` | A pipeline in the status that schedules it MUST reference at least one stream. |
-
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
-
-| Rule | Constraint | Tier | Applied by |
-|---|---|---|---|
-| `ADV-PIPE-005` | A pipeline's `schedule.type` MUST be a member of the vocabulary `Schedule.type` declares; the member chosen then gates which schedule fields are legal (ADV-PIPE-002). | structural | the published schema — the error names the field, not the rule |
-| `ADV-PIPE-006` | A pipeline MAY omit any schedule field `Schedule` declares a default for, and a document that omits one takes that default. | structural | the published schema — the error names the field, not the rule |
-| `ADV-PIPE-007` | A stream's per-destination batching override MAY lower the batch size resolved from the pipeline default, but MUST NOT raise it above the capacity the destination endpoint declares. | referential | nothing here |
-| `ADV-PIPE-008` | Every connection a pipeline references MUST belong to the same organization as the pipeline. | referential | nothing here |
-| `ADV-PIPE-009` | A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone. | structural | nothing here |
-| `ADV-PIPE-010` | The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one. | procedural | nothing here |
+| `ADV-PIPE-005` | A pipeline's `schedule.type` MUST be a member of the vocabulary `Schedule.type` declares; the member chosen then gates which schedule fields are legal (ADV-PIPE-002). |
+| `ADV-PIPE-006` | A pipeline MAY omit any schedule field `Schedule` declares a default for, and a document that omits one takes that default. |
+| `ADV-PIPE-007` | A stream's per-destination batching override MAY lower the batch size resolved from the pipeline default, but MUST NOT raise it above the capacity the destination endpoint declares. |
+| `ADV-PIPE-008` | Every connection a pipeline references MUST belong to the same organization as the pipeline. |
+| `ADV-PIPE-009` | A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone. |
+| `ADV-PIPE-010` | The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one. |
 <!-- END GENERATED: advisory-pipeline -->
 
 ## Output rules

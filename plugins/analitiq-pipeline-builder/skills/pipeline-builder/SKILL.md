@@ -72,31 +72,26 @@ carries the phrasing tables — and halt rather than inventing a member:
 ## Registered rules for every document
 
 These bind whatever you are authoring — pipeline, stream, connection or
-database endpoint — so they are not repeated in the per-document specs. Read
-the `Applied by` column before relying on a finding to catch you: most of these
+database endpoint — so they are not repeated in the per-document specs. Satisfy
+every one; a clean validation run is not proof they all hold, and most of these
 are things an agent gets wrong by writing a plausible value that validates.
 
 <!-- BEGIN GENERATED: advisory-shared -->
 | Rule | Constraint |
 |---|---|
+| `ADV-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. |
+| `ADV-CTOR-045` | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. |
 | `ADV-RETRY-001` | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. |
-
-The registry carries these under the same ids, and they are worth citing, but a violation does not come back as a finding — the last column says what does apply it, and `nothing here` means the document validates and fails later.
-
-| Rule | Constraint | Tier | Applied by |
-|---|---|---|---|
-| `ADV-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | procedural | nothing here |
-| `ADV-CTOR-045` | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | referential | nothing here |
-| `ADV-SHRD-001` | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | structural | nothing here |
-| `ADV-SHRD-002` | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | judgment | nothing here |
-| `ADV-SHRD-003` | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | structural | nothing here |
-| `ADV-SHRD-004` | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | judgment | nothing here |
-| `ADV-SHRD-005` | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | procedural | nothing here |
-| `ADV-SHRD-006` | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | structural | nothing here |
-| `ADV-SHRD-007` | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | referential | nothing here |
-| `ADV-SHRD-008` | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | referential | nothing here |
-| `ADV-SHRD-009` | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | procedural | nothing here |
-| `ADV-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | structural | nothing here |
+| `ADV-SHRD-001` | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. |
+| `ADV-SHRD-002` | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. |
+| `ADV-SHRD-003` | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. |
+| `ADV-SHRD-004` | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. |
+| `ADV-SHRD-005` | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. |
+| `ADV-SHRD-006` | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. |
+| `ADV-SHRD-007` | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. |
+| `ADV-SHRD-008` | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. |
+| `ADV-SHRD-009` | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. |
+| `ADV-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. |
 <!-- END GENERATED: advisory-shared -->
 
 ## Required reading

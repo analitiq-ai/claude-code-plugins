@@ -278,21 +278,6 @@ def render_filter_operators() -> str:
 PLUGIN_OWNER = "pipeline-plugin"
 
 
-#: What applies a rule, for the second table's last column — the thing that
-#: keeps it honest. The heading above each block says the validator enforces
-#: these, which is true only of the `advisory` tier; every other tier rendered
-#: under it needs to say what does, and `nothing here` is the answer a reader
-#: most needs.
-def _applied_by(rule) -> str:
-    if not rule.validator:
-        return "nothing here"
-    if rule.validator.endswith(".md"):
-        return f"the agent rule `{rule.validator}`"
-    if rule.tier == "structural":
-        return "the published schema — the error names the field, not the rule"
-    return f"`{rule.validator_symbol}`"
-
-
 def _owned() -> list:
     """Every rule this plugin owns — the whole of what its prose may cite."""
     from analitiq.contracts.shared.advisory import all_rules
@@ -319,9 +304,17 @@ def _block_rules(block_id: str) -> list:
 
 
 def _advisory_block(block_id: str) -> str:
-    """The registry's rules for one block, all tiers."""
-    from analitiq.contracts.shared.rule_record import ADVISORY_TIER
+    """The registry's rules for one block: id and obligation, nothing else.
 
+    No column says whether anything applies a rule, because that changes
+    nothing an agent does — every rule here has to be satisfied either way,
+    and a row reading "nothing here" invites skipping one. The single fact
+    enforcement decides is whether a clean validation run finishes the job, and
+    that is about the whole set, so the prose above says it once.
+
+    The record still carries `mechanized`/`validator`; they are resolved by
+    `render_rules.py` and read by the enforcer census. They just do not ship.
+    """
     rules = _block_rules(block_id)
     if not rules:
         raise RuntimeError(
@@ -329,27 +322,8 @@ def _advisory_block(block_id: str) -> str:
             "plugin owns, so the heading above it now introduces an empty table"
         )
 
-    enforced = [r for r in rules if r.tier == ADVISORY_TIER]
-    catalogued = [r for r in rules if r.tier != ADVISORY_TIER]
-
     out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in enforced]
-    if catalogued:
-        out += [
-            "",
-            "The registry carries these under the same ids, and they are worth "
-            "citing, but a violation does not come back as a finding — the "
-            "last column says what does apply it, and `nothing here` means "
-            "the document validates and fails later.",
-            "",
-            "| Rule | Constraint | Tier | Applied by |",
-            "|---|---|---|---|",
-        ]
-        out += [
-            f"| {_code(r.id)} | {_md_escape(r.statement)} | {r.tier} | "
-            f"{_md_escape(_applied_by(r))} |"
-            for r in catalogued
-        ]
+    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in rules]
     return "\n".join(out) + "\n"
 
 

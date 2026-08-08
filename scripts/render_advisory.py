@@ -6,11 +6,12 @@ read here through `all_rules()`. That registry is the source of truth; this
 script only *renders* it, so agents have an offline-readable file to cite
 instead of hand-restating rules in prose.
 
-Tiers render as separate sections because an agent needs different things from
-each — an `advisory` failure arrives with the id already in the message, a
-`structural` one names only the field, and a `judgment` rule will never arrive
-at all. The `Applied by` column says which of those a reader is looking at,
-derived from the record rather than asserted here.
+Tiers render as separate sections because a tier says what kind of obligation a
+rule is, which is what tells an agent how to go about satisfying it. What
+applies a rule is deliberately absent: an agent must satisfy every rule either
+way, so the answer changes nothing it does, and a row saying nothing applies one
+invites skipping it. The record still carries `mechanized`/`validator` for the
+lint and the enforcer census; they do not ship.
 
 The structural table's member lists are read off the **live models** rather
 than typed here: the point of that tier is to end the copy, so the renderer
@@ -71,20 +72,19 @@ Scope: every rule this plugin owns. A rule is here because its record names
 below — including rules on documents authored elsewhere that an author here
 still has to satisfy, like the endpoints `resource_discovery` produces.
 
-Every rule carries three independent facts. **Tier** is what kind of rule it
-is; **Severity** is what a violation costs; **Applied by** is what rejects one,
-and `—` there means nothing here does — you find out later, or never.
+Satisfy every rule here. A clean validation run is not proof they all hold —
+some are applied only at connect or run time. **Tier** is what kind of
+obligation a rule is, **Grades** the document it binds, **Severity** what a
+violation costs.
 
 {counts}
 """
 
 TIER_INTRO = {
     "structural": """
-One artifact has this shape. Usually a `Literal`, a pattern, a bound or a
-closed object rendered into the published JSON Schema — so anyone holding the
-schema rejects a violation, but the error names the field and never a rule.
-These ids exist for prose: cite one instead of copying the shape into a
-sentence that stops moving when the model does.
+One artifact has this shape — usually a `Literal`, a pattern, a bound or a
+closed object. These ids exist for prose: cite one instead of copying the shape
+into a sentence that stops moving when the model does.
 
 **The Values column is read off the live model at render time.** It is the
 current answer, not a promise, and it is why this file is regenerated rather
@@ -92,17 +92,15 @@ than edited.
 """,
     "advisory": """
 Fields *within* one document that must agree — set-equality, disjointness,
-membership, cross-key uniqueness. Stock JSON Schema cannot state these, so the
-validator enforces them in-process and the finding arrives under
-`validator: "contract-model"` with the id already in the message. You do not
-need to memorize them; you need to recognise the id.
+membership, cross-key uniqueness. Stock JSON Schema cannot state these, so
+satisfying one means checking the document against itself: nothing about any
+single field looks wrong.
 """,
     "referential": """
 This artifact must agree with **another** one — a `connector_id` against the
 directory it ships in, a declared capability against the hook implementing it,
-an endpoint against the connector declaring it. Most are applied by nothing
-here: a single-document validation run has only one of the two artifacts in
-hand, so the disagreement surfaces at connect or run time.
+an endpoint against the connector declaring it. Satisfying one means holding
+both artifacts, which is more than you are authoring at the moment.
 """,
     "procedural": """
 Do it this way, or in this order. What is regenerated after what, what is never
@@ -110,9 +108,10 @@ hand-edited, what the engine owns and is therefore never authored. Violating
 one usually produces a document that validates and then behaves unexpectedly.
 """,
     "judgment": """
-Several authorings all validate and one is right. No validator can flag a
-legal-but-wrong choice, so these are the rules an agent gets wrong while
-passing every check — read the prose that cites them, not just the statement.
+Several authorings all validate and one is right. A legal-but-wrong choice
+looks exactly like a correct one from the outside, so these are the rules an
+agent gets wrong while passing every check — read the prose that cites them,
+not just the statement.
 """,
 }
 
@@ -174,20 +173,6 @@ def _live_values(rule, models: dict) -> str:
     return ", ".join(f"`{m}`" for m in members) if members else "—"
 
 
-def _applied_by(rule) -> str:
-    """What rejects a violation, in the fewest words that stay true.
-
-    Read off `validator`, never asserted: a model validator or a field is that
-    symbol, an agent rule is the document an agent loads. Nothing set means
-    nothing applies it, which is the answer a reader most needs.
-    """
-    if not rule.validator:
-        return "—"
-    if rule.validator.endswith(".md"):
-        return f"`{rule.validator}`"
-    return f"`{rule.validator_symbol}`"
-
-
 def _cell(text: str) -> str:
     """Flatten a value into something a markdown table cell can hold.
 
@@ -229,7 +214,7 @@ def _table(header: list[str], rows: list[str]) -> list[str]:
 
 def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
     structural = tier == "structural"
-    header = ["ID", "Rule", "Grades", "Severity", "Applied by"]
+    header = ["ID", "Rule", "Grades", "Severity"]
     if structural:
         header.append("Values")
     rows = []
@@ -239,7 +224,6 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
             _cell(r.statement),
             f"`{r.scope}`",
             r.severity,
-            _cell(_applied_by(r)),
         ]
         if structural:
             cells.append(_cell(_live_values(r, models)))
