@@ -9,8 +9,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapReadRegexRule]
+targets: [TypeMapReadRegexRule]
 rationale: >
   A capture written loosely — an unbounded digit run where the family admits a
   range — validates as a rule and then renders an out-of-vocabulary canonical

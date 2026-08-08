@@ -8,7 +8,6 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   An unmapped native or canonical is meant to stop the stream loudly, so the
   gap is visible and gets closed in whichever map owns it; a catch-all converts

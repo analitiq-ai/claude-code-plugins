@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::UrlTemplateDsn._validate_placeholder_bindings"
 owners: [engine, connector-plugin]
-data:
-  targets: [UrlTemplateDsn]
+targets: [UrlTemplateDsn]
 rationale: >
   Template and bindings are edited apart, and both directions of a mismatch are
   quiet. An unbound placeholder renders a DSN with a literal brace in it, which

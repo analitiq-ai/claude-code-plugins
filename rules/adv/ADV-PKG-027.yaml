@@ -12,7 +12,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The engine image ships no database drivers, so this file is the only
   place a connector's driver is pinned and a missing or wrong distribution

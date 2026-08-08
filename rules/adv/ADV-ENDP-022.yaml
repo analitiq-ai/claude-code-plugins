@@ -9,8 +9,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [ReadOperation, WriteOperation]
+targets: [ReadOperation, WriteOperation]
 rationale: >
   The resolver dispatches on the one key it recognises, in its own
   precedence order, and ignores whatever else the dict carries. So a dict

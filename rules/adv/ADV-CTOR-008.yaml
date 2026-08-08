@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs"
 owners: [connector-plugin]
-data:
-  targets: [ConnectorBase]
+targets: [ConnectorBase]
 rationale: >
   A predicate over a field no input declares can never match, so the rule
   hanging off it never fires: the requirement the author wrote it to enforce is

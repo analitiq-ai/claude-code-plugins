@@ -9,7 +9,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   A declaration with no hook behind it is inert: the CDK base raises for
   every unimplemented hook, so the connector validates clean here and dies

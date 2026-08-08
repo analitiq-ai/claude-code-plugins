@@ -8,7 +8,6 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin]
-data: {}
 rationale: >
   Handles are derived, and a derivation that happens to leave recognizable
   segments in the result has produced an artifact of how it works today, not an

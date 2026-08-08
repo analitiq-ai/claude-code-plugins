@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [ConnectorBase]
+targets: [ConnectorBase]
 rationale: >
   Availability is per operation for a reason: the PKCE verifier exists for
   the token exchange alone, and referencing it from the browser-facing

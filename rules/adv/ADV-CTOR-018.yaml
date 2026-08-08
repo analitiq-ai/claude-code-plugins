@@ -9,10 +9,9 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::DsnBinding.encoding"
 owners: [engine, connector-plugin]
-data:
-  targets: [DsnBinding]
-  fields: [encoding]
-  mechanism: literal_enum
+targets: [DsnBinding]
+fields: [encoding]
+mechanism: literal_enum
 rationale: >
   Encoding is applied when the DSN is rendered, and the correct one depends
   entirely on where the value lands: a password in userinfo, a database name in

@@ -9,7 +9,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   A hand-restated dependency list is a drift surface: it builds a perfectly
   valid wheel, so registry CI passes it, and the divergence appears only

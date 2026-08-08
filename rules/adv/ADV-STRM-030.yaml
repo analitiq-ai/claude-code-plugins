@@ -9,8 +9,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamSource]
+targets: [StreamSource]
 rationale: >
   The field is a fallback identity hint, and both halves of the condition
   are outside the stream: the endpoint's own primary-key metadata sits in a

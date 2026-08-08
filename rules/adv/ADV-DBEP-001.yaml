@@ -8,9 +8,8 @@ scope: database-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._column_names_unique"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [DatabaseEndpointDoc]
-  fixture_model: DatabaseEndpointDoc
+targets: [DatabaseEndpointDoc]
+fixture_model: DatabaseEndpointDoc
 rationale: >
   The column name is the address everything downstream uses — a stream's field
   selections, the type maps that render DDL, the engine's match between source

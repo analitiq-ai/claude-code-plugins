@@ -8,9 +8,8 @@ scope: pipeline
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique"
 owners: [pipeline-plugin]
-data:
-  targets: [PipelineConnections]
-  fixture_model: PipelineConnections
+targets: [PipelineConnections]
+fixture_model: PipelineConnections
 rationale: >
   A repeated entry reads as a second delivery target, so the run would write
   the same records into the same connection twice — duplicated rows a user

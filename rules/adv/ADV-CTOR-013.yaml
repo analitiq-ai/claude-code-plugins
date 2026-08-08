@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::SqlStageCapabilities._dedicated_schema_matches_scope"
 owners: [engine, connector-plugin]
-data:
-  targets: [SqlStageCapabilities]
+targets: [SqlStageCapabilities]
 rationale: >
   The engine emits the staging schema as a SQL identifier when it creates and
   drops the stage relation around every write. A dedicated placement with no

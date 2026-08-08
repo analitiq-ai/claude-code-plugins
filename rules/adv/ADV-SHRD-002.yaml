@@ -9,7 +9,6 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin]
-data: {}
 rationale: >
   Both the bare and the zoned spelling are canonical Arrow types the engine
   grammar admits, so both validate and only the provider's actual wire value

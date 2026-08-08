@@ -9,7 +9,6 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   The write map is the connector's whole DDL vocabulary and is consulted on
   every run — stream configuration renders each destination column's frozen

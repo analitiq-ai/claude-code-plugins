@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [AssignmentTarget]
+targets: [AssignmentTarget]
 rationale: >
   The destination column's declared type sits in the endpoint document the
   stream references, so a target that agrees on the family and differs in

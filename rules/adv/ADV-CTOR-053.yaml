@@ -8,8 +8,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data:
-  targets: [FunctionExpression, ConnectionContractInput]
+targets: [FunctionExpression, ConnectionContractInput]
 rationale: >
   The map is how a user-facing vocabulary reaches the wire, and a missing key
   is not a fallback: the value resolves to nothing and the request goes out

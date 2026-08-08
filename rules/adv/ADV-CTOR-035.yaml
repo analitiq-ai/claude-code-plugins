@@ -8,8 +8,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [DsnBinding]
+targets: [DsnBinding]
 rationale: >
   The binding is the only path by which connection state reaches the DSN, so
   a shape outside the grammar does not degrade into a literal — it resolves

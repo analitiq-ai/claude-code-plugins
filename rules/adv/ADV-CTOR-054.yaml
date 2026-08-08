@@ -8,8 +8,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [DsnBinding]
+targets: [DsnBinding]
 rationale: >
   The same encoding function is the right answer for URL components an author
   builds by hand in a template, so reaching for it inside a binding feels

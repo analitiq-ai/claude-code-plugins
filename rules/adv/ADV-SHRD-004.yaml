@@ -9,7 +9,6 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin]
-data: {}
 rationale: >
   A copied default validates identically to an omission, so nothing
   distinguishes a value the user actually chose from a value written out to

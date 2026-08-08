@@ -9,7 +9,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   Determinism is what makes a retry self-healing: the same batch reuses the
   same stage relation and cleans up whatever the previous attempt left

@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._conflict_keys_by_mode"
 owners: [connector-plugin]
-data:
-  targets: [Operations]
+targets: [Operations]
 rationale: >
   An upsert matches existing rows against a provider-defined natural key; with
   none declared there is nothing to match on, so the operation degrades to an

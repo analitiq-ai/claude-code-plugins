@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The engine discovers each direction by looking the connector up in that
   direction's group, so registering one leaves the connector simply absent

@@ -8,8 +8,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [SqlBulkLoad, DatabaseConnector]
+targets: [SqlBulkLoad, DatabaseConnector]
 rationale: >
   A bulk mechanism is a fact about a transport rather than about the
   connector — it needs that transport's own wire connection or cursor — so a

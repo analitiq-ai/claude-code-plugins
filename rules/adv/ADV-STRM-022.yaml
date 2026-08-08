@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamSource, Filter, AssignmentTarget, DatabaseConflictKeyedWrite]
+targets: [StreamSource, Filter, AssignmentTarget, DatabaseConflictKeyedWrite]
 rationale: >
   The declaring endpoint document is not part of the stream, so no
   in-process check can resolve a name — the local validator proves only that

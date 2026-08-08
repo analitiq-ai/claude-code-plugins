@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._consistency"
 owners: [connector-plugin, engine]
-data:
-  targets: [ConnectionContractInput]
+targets: [ConnectionContractInput]
 rationale: >
   `secret` and `storage` encode one fact twice, and each drives something
   different: the flag decides whether a value is redacted in interfaces and

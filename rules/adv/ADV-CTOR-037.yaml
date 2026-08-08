@@ -9,7 +9,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   Authoring one produces an artifact that passes every check here and can
   never run, and the refusal is what tells the user the gap is platform

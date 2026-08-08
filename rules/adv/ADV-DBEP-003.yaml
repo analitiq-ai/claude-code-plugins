@@ -8,9 +8,8 @@ scope: database-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._primary_keys_name_columns"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [DatabaseEndpointDoc]
-  fixture_model: DatabaseEndpointDoc
+targets: [DatabaseEndpointDoc]
+fixture_model: DatabaseEndpointDoc
 rationale: >
   The key list is what an upsert stream draws its conflict keys from and what
   the engine emits into the table it creates, so a key naming a column that is

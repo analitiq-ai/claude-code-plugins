@@ -8,8 +8,7 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [_RequestBase, UrlTemplateDsn]
+targets: [_RequestBase, UrlTemplateDsn]
 rationale: >
   The resolver substitutes into the strings it is handed and nothing else, so
   outside the fields that refuse a placeholder structurally an out-of-place

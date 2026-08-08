@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data:
-  targets: [DatabaseTls, ConnectionContractInput]
+targets: [DatabaseTls, ConnectionContractInput]
 rationale: >
   The mode vocabulary belongs to the connector — it is the driver's own
   documented mode names, researched and never borrowed — so an ssl-mode input

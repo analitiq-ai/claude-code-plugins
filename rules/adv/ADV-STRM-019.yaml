@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamMapping]
+targets: [StreamMapping]
 rationale: >
   Application order is execution behaviour, so every permutation of the same
   assignments is the same document to any validator — there is nothing to

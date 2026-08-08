@@ -8,8 +8,7 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [HttpTransport, TransportDefaults, _RequestBase]
+targets: [HttpTransport, TransportDefaults, _RequestBase]
 rationale: >
   The headers map is typed open and what the runtime does with an
   empty resolved value is deliberately left undecided by the contract, so an

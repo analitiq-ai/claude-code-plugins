@@ -8,9 +8,8 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_database_only_read_features"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamSource]
-  fixture_model: StreamSource
+targets: [StreamSource]
+fixture_model: StreamSource
 rationale: >
   Those features describe how a database read is shaped — which columns the
   query projects, how it pages, how it breaks cursor ties — and an API read

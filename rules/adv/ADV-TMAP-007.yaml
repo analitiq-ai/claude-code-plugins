@@ -8,8 +8,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin]
-data:
-  targets: [TypeMapReadRegexRule]
+targets: [TypeMapReadRegexRule]
 rationale: >
   A malformed placeholder names no capture, so substitution leaves it in place
   and the rule renders a canonical carrying literal `${` text that no Arrow

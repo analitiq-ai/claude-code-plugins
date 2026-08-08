@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The engine imports a connector through a package name mapped onto that
   root, so a nested source directory, or a definition document loose at the

@@ -9,8 +9,7 @@ scope: api-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [Idempotency, WriteOperation]
+targets: [Idempotency, WriteOperation]
 rationale: >
   The engine derives the key from the record so that a replayed request carries
   the one the provider already saw. Any author-supplied key breaks that in one

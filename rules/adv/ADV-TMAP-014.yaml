@@ -9,8 +9,7 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapReadRegexRule]
+targets: [TypeMapReadRegexRule]
 rationale: >
   Normalization is deliberately one-sided: applying it to the pattern too would
   corrupt character classes into their negations, so the asymmetry is a

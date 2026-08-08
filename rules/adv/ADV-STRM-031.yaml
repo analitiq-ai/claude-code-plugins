@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ConnectionEndpointRef, ConnectorEndpointRef]
+targets: [ConnectionEndpointRef, ConnectorEndpointRef]
 rationale: >
   Whether the referenced endpoint is an API or a database one is a fact in
   that endpoint's own document, and the ref model can only require that a

@@ -8,8 +8,7 @@ scope: connection
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ConnectionAuthored, ConnectionInput]
+targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
   The document is committed alongside the pipeline, so an embedded credential
   is a leaked credential and replacing it means rewriting history rather than

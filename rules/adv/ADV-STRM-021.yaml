@@ -7,8 +7,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ValidationRule]
+targets: [ValidationRule]
 rationale: >
   The value field is deliberately typed open so each rule type can carry its
   own payload — a bound, a regex, a range object, a list of admitted values

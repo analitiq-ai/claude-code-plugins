@@ -88,8 +88,6 @@ def load_registry() -> list[RuleRecord]:
         if not isinstance(payload, dict):
             problems.append(f"{path.name}: not a mapping")
             continue
-        payload["data"] = payload.get("data") or {}
-        payload["owners"] = tuple(payload.get("owners") or ())
         try:
             record = RuleRecord(**payload)
         except TypeError as exc:
@@ -192,7 +190,10 @@ def compile_registry(records: list[RuleRecord]) -> str:
                 # Canonical order, so the compiled copy does not churn on the
                 # order somebody happened to type into the YAML.
                 "owners": [o for o in OWNERS if o in r.owners],
-                "data": r.data,
+                "targets": list(r.targets),
+                "fields": list(r.fields),
+                "mechanism": r.mechanism,
+                "fixture_model": r.fixture_model,
                 "rationale": r.rationale,
                 "status": r.status,
                 "superseded_by": r.superseded_by,

@@ -8,7 +8,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   Nothing at run time depends on it — the engine resolves the class through
   the entry point's own module path — so the re-export exists to make the

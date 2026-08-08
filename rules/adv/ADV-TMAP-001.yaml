@@ -8,8 +8,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadExactRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapReadExactRule]
+targets: [TypeMapReadExactRule]
 rationale: >
   The canonical is a claim about the shape of the data, not about how the
   driver happens to hand it over: a container column often arrives as text on

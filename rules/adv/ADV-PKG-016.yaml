@@ -9,7 +9,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The engine refuses rather than guesses: it reads the declaration instead
   of probing the live database, and refuses a write mode at handshake when

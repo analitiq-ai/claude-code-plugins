@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [_RequestBase]
+targets: [_RequestBase]
 rationale: >
   The transport owns the origin, the auth bound to it and the session opened on
   it, and the path is resolved against that origin — so a host written into the

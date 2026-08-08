@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionConditionPredicate._exactly_one_operator"
 owners: [connector-plugin]
-data:
-  targets: [ConnectionConditionPredicate]
+targets: [ConnectionConditionPredicate]
 rationale: >
   The operator is the whole test. With none declared there is nothing to
   evaluate, and with several there is no defined precedence between them, so

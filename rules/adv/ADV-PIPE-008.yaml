@@ -8,8 +8,7 @@ scope: pipeline
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [PipelineConnections]
+targets: [PipelineConnections]
 rationale: >
   Ownership is registry state and no authored document carries an org id, so a
   cross-org reference is a well-formed UUID here and is refused only when the

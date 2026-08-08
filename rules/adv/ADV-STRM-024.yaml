@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ApiWrite]
+targets: [ApiWrite]
 rationale: >
   The model bounds the mode to the contract's write vocabulary, but which of
   those an endpoint actually implements is a fact in the endpoint document

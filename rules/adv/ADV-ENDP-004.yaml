@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication._reject_mixed_cursor_forms"
 owners: [connector-plugin]
-data:
-  targets: [Replication]
+targets: [Replication]
 rationale: >
   The mapping forms describe incompatible provider filters — one an open-ended
   bound, the other a closed window — and the union discriminator picks a branch

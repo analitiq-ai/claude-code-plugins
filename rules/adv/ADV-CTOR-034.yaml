@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [DsnBinding]
+targets: [DsnBinding]
 rationale: >
   Pre-encoding is the instinct of anyone who has hand-built a DSN, and it
   fails in the most expensive way: the double-encoded DSN is still

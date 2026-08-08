@@ -8,9 +8,8 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._assignment_targets_unique"
 owners: [pipeline-plugin]
-data:
-  targets: [StreamMapping]
-  fixture_model: StreamMapping
+targets: [StreamMapping]
+fixture_model: StreamMapping
 rationale: >
   Two assignments writing one destination field leave the value decided by
   array position rather than by anything the author declared, and the

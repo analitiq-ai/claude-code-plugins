@@ -9,8 +9,7 @@ scope: connection
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ConnectionAuthored, ConnectionInput]
+targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
   The map holding these values is untyped, so a port written as a string is as
   valid a document as a port written as a number, and the vocabulary an input

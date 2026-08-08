@@ -9,10 +9,9 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication.supported_methods"
 owners: [connector-plugin, engine]
-data:
-  targets: [Replication]
-  fields: [supported_methods]
-  mechanism: literal_enum
+targets: [Replication]
+fields: [supported_methods]
+mechanism: literal_enum
 rationale: >
   This list is a capability claim the engine acts on: it says which syncs the
   runtime actually has a path for on this endpoint. An invented name advertises

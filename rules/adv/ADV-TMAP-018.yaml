@@ -8,7 +8,6 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   The engine composes the connection map as primary over the connector map by
   concatenating the two rule lists into one first-match list, so a connection

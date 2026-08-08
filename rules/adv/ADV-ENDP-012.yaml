@@ -9,8 +9,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [ReadOperation]
+targets: [ReadOperation]
 rationale: >
   The records reference is the anchor the engine iterates, and a read yields
   zero-to-many records, so it has to land on an array. The most common way to

@@ -10,7 +10,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   The contract ships fully-shaped models for the document-store kinds, so an
   author reading the schema alone reaches the opposite conclusion and

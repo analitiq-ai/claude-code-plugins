@@ -9,8 +9,7 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::ConnectionEndpointRef._derive_or_verify_endpoint_id"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [ConnectionEndpointRef]
+targets: [ConnectionEndpointRef]
 rationale: >
   The handle is derived, never chosen: the runtime discovery that mints
   database endpoints computes it from the same function, so a hand-written

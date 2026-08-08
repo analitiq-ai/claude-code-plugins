@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::WriteUnit._at_least_one_bound"
 owners: [engine, connector-plugin]
-data:
-  targets: [WriteUnit]
+targets: [WriteUnit]
 rationale: >
   write_unit exists to tell the engine's batch coalescer what to aim for, and
   absence of the whole block already means "no preference". An empty block is

@@ -7,7 +7,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   Every later version is computed as a bump from the previous release by the
   drift classifier, so the first one is the only version anybody picks

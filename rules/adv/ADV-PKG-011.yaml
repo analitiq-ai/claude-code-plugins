@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   Depending only on the CDK is what keeps connectors independently
   releasable: importing another connector couples two release trains, and

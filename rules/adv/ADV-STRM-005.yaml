@@ -8,8 +8,7 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::PipeExpression._validate_positional_grammar"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [PipeExpression]
+targets: [PipeExpression]
 rationale: >
   The node mirrors the engine's expression AST, where the seed is the value
   every later stage transforms; a pipe seeded by a conversion has nothing to

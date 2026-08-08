@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [IncrementalReplication, FullRefreshReplication]
+targets: [IncrementalReplication, FullRefreshReplication]
 rationale: >
   The declared support set lives in the connector's api-endpoint document,
   which the stream model cannot read, so the stream-side vocabulary check

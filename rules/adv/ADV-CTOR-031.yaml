@@ -10,7 +10,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   Depth is the intuitive reading and the wrong one: a system with a database
   sitting above the schema still has no addressable catalog when one

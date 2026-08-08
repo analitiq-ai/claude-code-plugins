@@ -8,9 +8,8 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::AuthOperationTemplate"
 owners: [connector-plugin, engine]
-data:
-  targets: [AuthOperationTemplate]
-  mechanism: closed_object
+targets: [AuthOperationTemplate]
+mechanism: closed_object
 rationale: >
   Every auth operation is described the same declarative way so the engine can
   dispatch it through a named transport rather than through per-auth-type code,

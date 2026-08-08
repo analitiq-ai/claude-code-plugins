@@ -8,8 +8,7 @@ scope: connection
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ConnectionStoredMaps, ConnectionInput]
+targets: [ConnectionStoredMaps, ConnectionInput]
 rationale: >
   `discovered` holds what the provider itself returned after authentication, so
   a hand-written value is a claim about the provider that nobody asked the

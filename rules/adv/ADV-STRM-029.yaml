@@ -8,8 +8,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamSource]
+targets: [StreamSource]
 rationale: >
   Omitting the block is a policy choice, not an absence: it falls back to
   reading everything each run, which only a source that supports full

@@ -35,9 +35,8 @@ This module imports no contract models: records bind to their target classes by
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 #: The compiled registry this package ships. Written by `scripts/render_rules.py`.
 RULES_PATH = Path(__file__).with_name("rules.json")
@@ -135,10 +134,40 @@ class RuleRecord:
     validator: str | None = None
     owners: tuple[str, ...] = ()
     status: str = "active"
-    data: dict[str, Any] = field(default_factory=dict)
+    #: Every model class the rule binds, matched against the whole MRO. Wider
+    #: than `validator`, which names one representative symbol: a rule over a
+    #: discriminated union lists every branch, and an unmechanized rule still
+    #: names the models it governs.
+    targets: tuple[str, ...] = ()
+    #: Fields on those classes that carry the rule, for a structural rule whose
+    #: `mechanism` the rendered reference reads members off.
+    fields: tuple[str, ...] = ()
+    #: Which shape device carries a structural rule — `literal_enum`,
+    #: `discriminated_union`, `pattern`, `closed_object`, `default`.
+    mechanism: str | None = None
+    #: The concrete model the shared fixture corpus validates against. Naming
+    #: one is how a rule joins the corpus, so membership is a thing the record
+    #: says rather than a thing derived from how the rule happens to be
+    #: written. Absent means the rule ships no fixtures — the tests assert both
+    #: directions, so a corpus directory without this key is an orphan and this
+    #: key without a corpus directory is a gap.
+    fixture_model: str | None = None
     superseded_by: str | None = None
 
+    #: The fields a record authors as a YAML list and this class holds as a
+    #: tuple. Normalized here rather than by each loader, so a caller that
+    #: hands over a list gets a record that is still frozen and comparable.
+    _SEQUENCES = ("owners", "targets", "fields")
+
     def __post_init__(self) -> None:
+        for name in self._SEQUENCES:
+            value = getattr(self, name)
+            if isinstance(value, str):
+                # `tuple("Foo")` is `('F', 'o', 'o')` — a YAML scalar where a
+                # list belongs would bind the rule to three one-letter model
+                # names and match nothing, silently.
+                self._fail(f"{name} is a list of names, not the string {value!r}")
+            object.__setattr__(self, name, tuple(value) if value else ())
         self._validate()
 
     def _fail(self, message: str) -> None:
@@ -167,6 +196,16 @@ class RuleRecord:
                 "statement carries no RFC 2119 keyword in caps. A rule states an "
                 f"obligation; if this one does not, it is not a rule. ({RFC2119})"
             )
+        for name in self._SEQUENCES:
+            bad = [v for v in getattr(self, name) if not isinstance(v, str)]
+            if bad:
+                self._fail(f"{name} carries non-name entries {bad!r}")
+        for value, label in (
+            (self.mechanism, "mechanism"),
+            (self.fixture_model, "fixture_model"),
+        ):
+            if value is not None and not isinstance(value, str):
+                self._fail(f"{label} is one name or absent, not {value!r}")
         if not self.owners:
             self._fail(f"name who applies this rule — one or more of {OWNERS}")
         unknown = [o for o in self.owners if o not in OWNERS]
@@ -199,33 +238,6 @@ class RuleRecord:
     def validator_symbol(self) -> str | None:
         return self.validator.split("::", 1)[1] if self.validator else None
 
-    @property
-    def targets(self) -> tuple[str, ...]:
-        """Model class names the rule binds to, matched against the whole MRO."""
-        return tuple(self.data.get("targets", ()))
-
-    @property
-    def fields(self) -> tuple[str, ...]:
-        """Model fields a structural rule's `mechanism` is declared on."""
-        return tuple(self.data.get("fields", ()))
-
-    @property
-    def mechanism(self) -> str | None:
-        """Which shape device carries a structural rule (`literal_enum`, …)."""
-        return self.data.get("mechanism")
-
-    @property
-    def fixture_model(self) -> str | None:
-        """Concrete model the shared fixture corpus validates against.
-
-        Naming one is how a rule joins the corpus, so membership is a thing the
-        record says rather than a thing derived from how the rule happens to be
-        written. Absent means the rule ships no fixtures — the tests assert both
-        directions, so a corpus directory without this key is an orphan and this
-        key without a corpus directory is a gap.
-        """
-        return self.data.get("fixture_model")
-
 
 # --- Loading ----------------------------------------------------------------
 
@@ -234,10 +246,7 @@ def load_records(path: Path | None = None) -> list[RuleRecord]:
     """Read the compiled registry. Every record is validated on construction."""
     source = path or RULES_PATH
     payload = json.loads(source.read_text(encoding="utf-8"))
-    records = [
-        RuleRecord(**{**r, "owners": tuple(r.get("owners", ()))})
-        for r in payload["rules"]
-    ]
+    records = [RuleRecord(**r) for r in payload["rules"]]
     seen: dict[str, RuleRecord] = {}
     for record in records:
         if record.id in seen:

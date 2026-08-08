@@ -10,7 +10,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   Provenance is research conduct, and no authored artifact records where a fact
   came from: a TLS mode list or a bulk-load protocol borrowed from a

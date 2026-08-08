@@ -9,8 +9,7 @@ scope: connection
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ConnectionAuthored, ConnectionInput]
+targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
   The plugin's credentials template and a sidecar credentials file look alike
   and resolve nothing alike. The template is keyed by env-var name and is read

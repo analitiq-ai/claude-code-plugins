@@ -10,7 +10,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   Every stored reference to a connector is that slug — connections,
   pipelines and the streams bound to its endpoints all hold it — so an edit

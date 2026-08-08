@@ -9,8 +9,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteRegexRule._check"
 owners: [connector-plugin, pipeline-plugin]
-data:
-  targets: [TypeMapWriteRegexRule]
+targets: [TypeMapWriteRegexRule]
 rationale: >
   The write direction inverts which key is the matcher, so the regex dialect
   obligation moves onto `canonical` while the placeholder obligation moves onto

@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [ConnectorBase]
+targets: [ConnectorBase]
 rationale: >
   A ref is the connector's entire coupling to the values a user supplies, so
   a name that drifts from the input declaring it — a rename on one side, a

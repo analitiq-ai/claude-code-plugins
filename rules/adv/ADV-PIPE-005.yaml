@@ -9,10 +9,9 @@ scope: pipeline
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type"
 owners: [pipeline-plugin]
-data:
-  targets: [Schedule]
-  fields: [type]
-  mechanism: literal_enum
+targets: [Schedule]
+fields: [type]
+mechanism: literal_enum
 rationale: >
   The type is not a label; it selects the machinery that runs the pipeline, so
   a plausible-sounding word the vocabulary does not carry has no runner behind

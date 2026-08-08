@@ -9,8 +9,7 @@ scope: connection
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connection.py::ConnectionStoredMaps._validate_no_secret_keys"
 owners: [pipeline-plugin]
-data:
-  targets: [ConnectionStoredMaps]
+targets: [ConnectionStoredMaps]
 rationale: >
   A connection document is committed beside the pipeline and returned in
   plaintext by the connections API, so a credential filed into a non-secret map

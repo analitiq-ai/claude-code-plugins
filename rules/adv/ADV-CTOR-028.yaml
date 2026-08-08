@@ -9,7 +9,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   Reusability across connections is the entire point of splitting connector
   from connection, and a baked value defeats it quietly: a real customer host

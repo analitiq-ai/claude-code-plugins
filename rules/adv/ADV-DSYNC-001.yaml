@@ -8,8 +8,7 @@ scope: data-sync-run-status
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PipelineRunStatusData._error_matches_status"
 owners: [engine]
-data:
-  targets: [PipelineRunStatusData]
+targets: [PipelineRunStatusData]
 rationale: >
   A failed run with no `error` hands an external consumer a terminal state and
   nothing to act on, and an `error` riding a non-failure status invites that

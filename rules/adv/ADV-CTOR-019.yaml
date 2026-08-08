@@ -8,10 +8,9 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscovery.produces"
 owners: [engine, connector-plugin]
-data:
-  targets: [ResourceDiscovery]
-  fields: [produces]
-  mechanism: literal_enum
+targets: [ResourceDiscovery]
+fields: [produces]
+mechanism: literal_enum
 rationale: >
   `produces` is the declared blast radius of a discovery run: the runtime
   writes the artifact kinds it names and nothing else, so a kind outside the

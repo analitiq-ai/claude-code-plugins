@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [Replication]
+targets: [Replication]
 rationale: >
   A cursor mapping decides how a watermark is written into the request; which
   watermark to send is a different decision, made per run by the engine from the

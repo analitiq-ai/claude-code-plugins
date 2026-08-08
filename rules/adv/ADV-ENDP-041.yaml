@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [_RequestBase]
+targets: [_RequestBase]
 rationale: >
   The transport is where the connection's origin, its auth and its TLS settings
   are declared, so a URL that leaves that origin either arrives without the

@@ -9,7 +9,6 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [pipeline-plugin]
-data: {}
 rationale: >
   The rules already in a connection map are prior authored judgment about this
   deployment's own types, and rule order is semantic, so a regenerated map that

@@ -8,8 +8,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapReadRegexRule]
+targets: [TypeMapReadRegexRule]
 rationale: >
   The rendered canonical is what discovery freezes into the endpoint document,
   so a spelling outside the engine-published Arrow vocabulary would not fail

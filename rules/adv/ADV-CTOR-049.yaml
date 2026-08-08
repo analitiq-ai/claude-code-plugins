@@ -8,8 +8,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [DatabaseConnector]
+targets: [DatabaseConnector]
 rationale: >
   Capability comes from the protocol the class in `connector.py` satisfies
   rather than from a flag in the document, so the two artifacts can disagree

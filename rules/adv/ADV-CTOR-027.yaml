@@ -9,7 +9,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   The order ranks write paths, not connectivity: every tier yields a
   `transports` block the contract accepts and a connector that connects and

@@ -9,8 +9,7 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::AssignmentTarget._validate_container_shape"
 owners: [pipeline-plugin]
-data:
-  targets: [AssignmentTarget]
+targets: [AssignmentTarget]
 rationale: >
   A target's path addresses the assignment root only, so the inner
   declaration is the sole way the document describes structure beneath it —

@@ -8,9 +8,8 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::FullRefreshReplication"
 owners: [pipeline-plugin]
-data:
-  targets: [FullRefreshReplication, IncrementalReplication]
-  mechanism: discriminated_union
+targets: [FullRefreshReplication, IncrementalReplication]
+mechanism: discriminated_union
 rationale: >
   A watermark is meaningful only where the read resumes, so binding those
   fields to the branch that resumes stops an author declaring a cursor a

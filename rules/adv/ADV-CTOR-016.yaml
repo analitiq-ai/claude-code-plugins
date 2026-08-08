@@ -9,10 +9,9 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport.driver"
 owners: [engine, connector-plugin]
-data:
-  targets: [AdbcTransport]
-  fields: [driver]
-  mechanism: literal_enum
+targets: [AdbcTransport]
+fields: [driver]
+mechanism: literal_enum
 rationale: >
   The driver name selects the ADBC backend the runtime loads, so it is not free
   text the way a SQLAlchemy `dialect+driver` string is — an unrecognised name

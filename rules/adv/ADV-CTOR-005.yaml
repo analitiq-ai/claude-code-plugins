@@ -8,8 +8,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._transport_refs_resolvable"
 owners: [engine, connector-plugin]
-data:
-  targets: [ConnectorBase]
+targets: [ConnectorBase]
 rationale: >
   A transport_ref is how an auth operation, a discovery run or a post-auth
   request picks something other than the default transport, and it is resolved

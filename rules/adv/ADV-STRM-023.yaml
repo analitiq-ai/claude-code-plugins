@@ -9,8 +9,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamSource]
+targets: [StreamSource]
 rationale: >
   The authoritative spelling lives in the source endpoint document, which
   the stream model never sees, and both the contract and the engine compare

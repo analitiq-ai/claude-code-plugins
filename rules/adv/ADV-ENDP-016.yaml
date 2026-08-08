@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [WriteOperation]
+targets: [WriteOperation]
 rationale: >
   The endpoint declares only where the key goes; the value is generated per
   record and owned by the engine. A header or body field authored under the same

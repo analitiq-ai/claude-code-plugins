@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The engine owns the staged write plan and executes the text the renderers
   return, inside the transaction it is managing; a renderer that opens its

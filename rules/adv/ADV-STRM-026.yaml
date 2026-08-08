@@ -9,8 +9,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [Filter]
+targets: [Filter]
 rationale: >
   Filterability is declared per parameter in the api-endpoint document and
   the stream carries no view of it, so the local check can prove only that

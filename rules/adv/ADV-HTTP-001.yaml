@@ -8,9 +8,8 @@ scope: any
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/shared/advisory.py::HeaderMergeRules._headers_not_both_set_and_removed"
 owners: [connector-plugin, engine]
-data:
-  targets: [_RequestBase, AuthOperationTemplate, HttpTransport, TransportDefaults]
-  fixture_model: AuthOperationTemplate
+targets: [_RequestBase, AuthOperationTemplate, HttpTransport, TransportDefaults]
+fixture_model: AuthOperationTemplate
 rationale: >
   Removal and merge are separate steps of header resolution, so a name on both
   sides is never reported as a conflict at run time — one step simply wins and

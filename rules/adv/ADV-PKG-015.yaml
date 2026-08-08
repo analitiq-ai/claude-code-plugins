@@ -8,7 +8,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   On most engines `TRUNCATE` commits the open transaction, so the
   stage-then-merge cycle loses its atomicity and a failure after the

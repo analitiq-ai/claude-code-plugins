@@ -11,8 +11,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [ReadOperation]
+targets: [ReadOperation]
 rationale: >
   A response path that resolves to nothing does not fail at run time: it
   yields an empty value, and every predicate built on it holds

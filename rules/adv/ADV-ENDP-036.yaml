@@ -8,10 +8,9 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::_EndpointBase.endpoint_id"
 owners: [connector-plugin]
-data:
-  targets: [_EndpointBase]
-  fields: [endpoint_id]
-  mechanism: pattern
+targets: [_EndpointBase]
+fields: [endpoint_id]
+mechanism: pattern
 rationale: >
   The id is the endpoint's handle everywhere outside the document: the filename
   it ships under, the key it is looked up by, and the value a stream pins. It

@@ -8,8 +8,7 @@ scope: any
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/shared/common.py::RetryErrorHandlingBase._validate_retry_fields"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [RetryErrorHandlingBase]
+targets: [RetryErrorHandlingBase]
 rationale: >
   A delay with no retries is incoherent: the document reads as though it waits
   before trying again when it never tries again at all, and an operator sizing

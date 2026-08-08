@@ -10,7 +10,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   Discovery output is what the runtime turns into addressable endpoints, so a
   folded level does not degrade discovery visibly — it makes every object

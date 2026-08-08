@@ -8,8 +8,7 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_filter_operator_scope"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [StreamSource]
+targets: [StreamSource]
 rationale: >
   The operator field structurally admits the union of both vocabularies,
   because only the binding knows which read path a filter will be rendered

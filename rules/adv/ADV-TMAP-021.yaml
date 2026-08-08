@@ -8,8 +8,7 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [TypeMapReadExactRule, TypeMapReadRegexRule]
+targets: [TypeMapReadExactRule, TypeMapReadRegexRule]
 rationale: >
   Discovery resolves each native through the read map once and freezes the
   result into the endpoint document; from then on the frozen value is what runs

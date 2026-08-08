@@ -9,10 +9,9 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryTriggers.list_resources"
 owners: [connector-plugin, engine]
-data:
-  targets: [ResourceDiscoveryTriggers]
-  fields: [list_resources, describe_resource]
-  mechanism: literal_enum
+targets: [ResourceDiscoveryTriggers]
+fields: [list_resources, describe_resource]
+mechanism: literal_enum
 rationale: >
   A trigger names a moment in the connection lifecycle that the engine raises,
   not a label the connector invents: an unrecognised trigger is never raised,

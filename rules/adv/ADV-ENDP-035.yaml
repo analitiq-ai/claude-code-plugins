@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [WriteOperation]
+targets: [WriteOperation]
 rationale: >
   A dotted path names one field of one record. Applied to the whole batch there
   is no single record to read it from, and no fan-out is defined — the author is

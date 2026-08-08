@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [SqlCapabilities]
+targets: [SqlCapabilities]
 rationale: >
   Wire compatibility invites the inference and does not support it: a system
   reachable over another system's protocol routinely differs in exactly the

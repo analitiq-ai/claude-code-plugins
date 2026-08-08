@@ -9,8 +9,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryImplementation._entrypoint_matches_type"
 owners: [engine, connector-plugin]
-data:
-  targets: [ResourceDiscoveryImplementation]
+targets: [ResourceDiscoveryImplementation]
 rationale: >
   The two implementation kinds are loaded by different code paths: one imports
   the named entrypoint out of the connector's own package, the other looks the

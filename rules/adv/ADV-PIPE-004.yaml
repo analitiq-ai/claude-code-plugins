@@ -8,8 +8,7 @@ scope: pipeline
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._check_active_requires_streams"
 owners: [pipeline-plugin]
-data:
-  targets: [PipelineAuthored]
+targets: [PipelineAuthored]
 rationale: >
   Status is the only gate on execution, so a running pipeline with nothing to
   run is scheduled, wakes on its cadence, moves no data and reports success

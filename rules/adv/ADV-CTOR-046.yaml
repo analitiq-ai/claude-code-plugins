@@ -10,8 +10,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [DsnBinding, ResourceDiscovery]
+targets: [DsnBinding, ResourceDiscovery]
 rationale: >
   The scope a value is read from is what decides whether it is stored
   encrypted and kept out of logs, so routing a password through

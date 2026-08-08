@@ -8,8 +8,7 @@ scope: pipeline
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [PipelineAuthored]
+targets: [PipelineAuthored]
 rationale: >
   Every permutation validates identically and the runtime is free to ignore
   the order entirely, so an array arranged to mean "load the dimensions before

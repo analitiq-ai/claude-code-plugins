@@ -8,8 +8,7 @@ scope: pipeline
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [Schedule]
+targets: [Schedule]
 rationale: >
   The pattern reaches the wrapper and no further, so any text inside it
   validates here and the pipeline is accepted carrying a schedule that never

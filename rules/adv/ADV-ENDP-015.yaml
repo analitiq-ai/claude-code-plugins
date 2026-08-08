@@ -7,8 +7,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [WriteOperation]
+targets: [WriteOperation]
 rationale: >
   An idempotency key identifies one record's write attempt, and a batched
   request carries many, so there is no value the key could take. Worse, a

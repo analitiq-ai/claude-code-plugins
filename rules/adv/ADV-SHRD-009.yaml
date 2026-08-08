@@ -8,8 +8,7 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [ConnectorBase]
+targets: [ConnectorBase]
 rationale: >
   A pre-computed literal is a perfectly valid literal expression, so nothing
   rejects it; only resolution at connection time reveals that it has expired,

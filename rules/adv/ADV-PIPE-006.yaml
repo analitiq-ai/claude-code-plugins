@@ -8,10 +8,9 @@ scope: pipeline
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type"
 owners: [pipeline-plugin]
-data:
-  targets: [Schedule]
-  fields: [type, timezone]
-  mechanism: default
+targets: [Schedule]
+fields: [type, timezone]
+mechanism: default
 rationale: >
   Authors read an absent schedule block as "this pipeline has no schedule at
   all" and defensively write the default values out to be explicit. That is

@@ -28,14 +28,17 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | Field | Required | What it is |
 |---|---|---|
 | `id` | yes | `ADV-<AREA>-NNN`. Immutable, never reused — it appears in validator findings and archived diagnostics, so reissuing one silently re-points every stored occurrence. The filename must match it. |
-| `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `data` carries the parameters. |
+| `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `targets` and `fields` point at what does. |
 | `tier` | yes | What *kind* of rule it is. See below. |
 | `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it. |
 | `scope` | yes | The artifact kind it binds, from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — one member per published resource, plus `any` for the rules that bind every authored document. A scope decides which block of a plugin's generated reference the rule lands in; who the rule is rendered *to* is `owners`. |
 | `mechanized` | yes | Whether anything applies the rule without a human deciding to. Not the same question as whether `validator` is set — see below. |
 | `validator` | when mechanized | What applies it: `path/to/module.py::Symbol.attr` for code, or a `.claude/rules/*.md` path for an agent rule. Lint-resolved either way — a renamed validator or a deleted rules file fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
-| `data` | no | The rule's parameters as data rather than prose — see below. This is what keeps `statement` free of values the contract owns. |
+| `targets` | no | Every model class the rule binds, matched against the whole MRO. Wider than `validator`, which names one representative symbol: a rule over a discriminated union lists every branch, and an unmechanized rule still names the models it governs. Read by the enforcer census and the reachability tests, which require every one to carry the member `validator` names. |
+| `fields` | no | The model fields a structural rule's `mechanism` rides on, so the rendered reference can print the members off the live model instead of restating them. |
+| `mechanism` | no | Which shape device carries a structural rule — `literal_enum`, `discriminated_union`, `pattern`, `closed_object`, `default`. |
+| `fixture_model` | no | The concrete model the shared fixture corpus validates against. Naming one is how a rule joins the corpus; absent means it ships no fixtures, and the tests assert both directions. |
 | `rationale` | yes | Why the rule exists, and — when nothing mechanizes it — what would have to be read to catch a violation, and how far away that is. |
 | `status` | yes | `draft` \| `active` \| `deprecated` \| `retired`. The lifecycle, and the reason no record carries a boolean — `active` is not the opposite of any one thing. A `draft` is written down but not yet in force; a `deprecated` rule still binds while authors are moved off it, so prose citing it still resolves; a `retired` record stays on disk because the id must never be reused, and the record is the only thing that proves it was taken. |
 | `superseded_by` | no | The id that replaced this one. Required when `status: retired`. |
@@ -57,20 +60,17 @@ Recorded so nobody re-adds them thinking they were forgotten:
   example belongs.
 - **`applies_when`** — no consumer. A rule that binds conditionally says so in
   its statement.
+- **`data`** — a nested bag the four binding keys above once sat in. A free
+  mapping is a key nothing checks: a misspelled `fixture_models` read as "ships
+  no fixtures" and a scalar where a list belongs bound the rule to one-letter
+  model names, both silently. Flat, every key is a declared field, so the
+  dataclass refuses an unknown one the way it already refuses a misspelled
+  `severity`.
 - **`kind`** — a name for which generic check to run, back when a closed
   vocabulary of relational checks was dispatched from the record. Enforcement is
   ordinary Python now, so a rule is applied by the symbol `validator` names or
   by nothing; there is no third state for a key to select. A key naming a
   dispatch target is a key a typo can silently disable.
-
-## `data` — the rule's parameters
-
-| Key | Read by | What it is |
-|---|---|---|
-| `targets` | the enforcer census, the reachability tests | model class names the rule binds, matched against the whole MRO. Every one must carry the member `validator` names. |
-| `fields` | the rendered structural table | the model fields a structural rule's `mechanism` rides on, so the reference can print the members off the live model instead of restating them. |
-| `mechanism` | the rendered structural table | which shape device carries the rule — `literal_enum`, `discriminated_union`, … |
-| `fixture_model` | the shared fixture corpus | the concrete model a fixture is validated against. Naming one is how a rule joins the corpus; absent means it ships no fixtures, and the tests assert both directions. |
 
 ## `tier` — what kind of rule
 

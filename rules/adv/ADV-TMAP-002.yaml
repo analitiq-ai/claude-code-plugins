@@ -8,8 +8,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapReadRegexRule]
+targets: [TypeMapReadRegexRule]
 rationale: >
   The read side's container obligation follows the rule kind, not the author's
   intent: a pattern generalising a parameterized container family covers many

@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._at_least_one"
 owners: [connector-plugin]
-data:
-  targets: [Operations]
+targets: [Operations]
 rationale: >
   An endpoint declaring neither operation is a document the engine can neither
   read from nor write to: it validates as configuration, attaches, and does

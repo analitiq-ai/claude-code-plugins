@@ -8,7 +8,6 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   Resolution stops at the first matching rule in both directions, and for a
   connection-scoped endpoint the two scopes' rule lists are concatenated into

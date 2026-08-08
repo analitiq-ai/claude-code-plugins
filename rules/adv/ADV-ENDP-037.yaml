@@ -8,9 +8,8 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::PredicateEq"
 owners: [connector-plugin]
-data:
-  targets: [PredicateEq, PredicateNeq, PredicateLt, PredicateLte, PredicateGt, PredicateGte, PredicateExists, PredicateMissing, PredicateEmpty, PredicateNotEmpty, PredicateAnd, PredicateOr, PredicateNot]
-  mechanism: discriminated_union
+targets: [PredicateEq, PredicateNeq, PredicateLt, PredicateLte, PredicateGt, PredicateGte, PredicateExists, PredicateMissing, PredicateEmpty, PredicateNotEmpty, PredicateAnd, PredicateOr, PredicateNot]
+mechanism: discriminated_union
 rationale: >
   The operator key is the discriminator: it selects the branch that says what
   operands the predicate takes, so an object carrying two of them, or one the

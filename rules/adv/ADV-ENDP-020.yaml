@@ -9,8 +9,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ColumnFieldSpec._validate_container_shape"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [ColumnFieldSpec]
+targets: [ColumnFieldSpec]
 rationale: >
   The contract has no angle-bracket container canonicals, so a nested shape
   is declared by a bare container marker plus a sibling shape key — which

@@ -9,7 +9,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   Discovery output is connection-scoped, so a hand-authored endpoint in the
   release describes whichever database the author happened to look at and no

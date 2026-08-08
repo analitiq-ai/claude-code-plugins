@@ -9,7 +9,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   Every other file in the package tells a machine how to run the connector;
   none of them tells a human which credentials to obtain or what has to be

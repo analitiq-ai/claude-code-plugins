@@ -9,9 +9,8 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::_RequestBase._validate"
 owners: [connector-plugin]
-data:
-  targets: [_RequestBase]
-  fixture_model: WriteRequest
+targets: [_RequestBase]
+fixture_model: WriteRequest
 rationale: >
   A placeholder is filled from its path_params entry and from nothing else, so
   a placeholder with no entry sends a URL still carrying the literal braces and

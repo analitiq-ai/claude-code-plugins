@@ -9,8 +9,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteInput._validate"
 owners: [connector-plugin, engine]
-data:
-  targets: [WriteInput]
+targets: [WriteInput]
 rationale: >
   The input schema is the only description of the record being written: the
   write type map is matched against its native tokens, and every record-addressed

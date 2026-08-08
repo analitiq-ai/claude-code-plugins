@@ -9,9 +9,8 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ApiKeyAuth"
 owners: [connector-plugin, engine]
-data:
-  targets: [ApiKeyAuth, BasicAuth, OAuth2AuthorizationCodeAuth, OAuth2ClientCredentialsAuth, JwtAuth, DbAuth, CredentialsAuth, AwsIamAuth, NoneAuth]
-  mechanism: discriminated_union
+targets: [ApiKeyAuth, BasicAuth, OAuth2AuthorizationCodeAuth, OAuth2ClientCredentialsAuth, JwtAuth, DbAuth, CredentialsAuth, AwsIamAuth, NoneAuth]
+mechanism: discriminated_union
 rationale: >
   The engine dispatches auth entirely by the selected branch, so a template
   parked on a branch that has no such flow is never read: without the union it

@@ -8,8 +8,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin]
-data:
-  targets: [TypeMapReadRegexRule]
+targets: [TypeMapReadRegexRule]
 rationale: >
   The map is published under a JSON Schema whose pattern dialect is ECMA-262
   and is read by more than one runtime, so a Python-only named-capture spelling

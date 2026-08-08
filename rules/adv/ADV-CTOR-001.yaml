@@ -8,9 +8,8 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared"
 owners: [engine, connector-plugin]
-data:
-  targets: [ConnectorBase]
-  fixture_model: ApiConnector
+targets: [ConnectorBase]
+fixture_model: ApiConnector
 rationale: >
   The default transport is what every operation that declares no transport_ref
   runs on, so a name with nothing behind it fails at connect time on a document

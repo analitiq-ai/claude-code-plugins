@@ -8,9 +8,8 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::DatabaseKeylessWrite"
 owners: [pipeline-plugin]
-data:
-  targets: [DatabaseKeylessWrite, DatabaseConflictKeyedWrite, ApiWrite]
-  mechanism: discriminated_union
+targets: [DatabaseKeylessWrite, DatabaseConflictKeyedWrite, ApiWrite]
+mechanism: discriminated_union
 rationale: >
   The conflict target is only meaningful where the write resolves a
   conflict, so making it a field of that one shape means an author cannot

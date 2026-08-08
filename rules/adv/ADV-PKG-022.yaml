@@ -8,7 +8,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The mode promises the server certificate is checked against a CA; with no
   CA to check against, the only alternative to raising is an unverified

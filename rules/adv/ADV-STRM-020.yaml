@@ -9,8 +9,7 @@ scope: stream
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [Assignment, StreamMapping]
+targets: [Assignment, StreamMapping]
 rationale: >
   Whether a pair needs a named conversion is decided by the engine-published
   conversion matrix, and the source type it is keyed on lives in the source

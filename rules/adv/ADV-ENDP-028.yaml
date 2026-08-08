@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [WriteOperation]
+targets: [WriteOperation]
 rationale: >
   The other things that fill a param are read-side: operators make it
   filterable from a stream, and controlled_by hands it to pagination or

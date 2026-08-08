@@ -9,7 +9,6 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin]
-data: {}
 rationale: >
   Where the contract leaves the field optional an omission validates cleanly,
   so requiring it everywhere is a plugin house rule no validator expresses. It

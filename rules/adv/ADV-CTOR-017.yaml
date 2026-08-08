@@ -10,10 +10,9 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::SqlBulkLoad.sqlalchemy"
 owners: [engine, connector-plugin]
-data:
-  targets: [SqlBulkLoad]
-  fields: [sqlalchemy, adbc]
-  mechanism: literal_enum
+targets: [SqlBulkLoad]
+fields: [sqlalchemy, adbc]
+mechanism: literal_enum
 rationale: >
   A bulk mechanism is a fact about a transport, not about the connector: one
   needs the driver's raw wire connection, another an ADBC cursor. Pairing a

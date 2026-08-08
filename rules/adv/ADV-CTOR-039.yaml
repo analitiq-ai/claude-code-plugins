@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [SqlAlchemyTransport]
+targets: [SqlAlchemyTransport]
 rationale: >
   A driver package does not always register under the dialect its system is
   wire-compatible with — Redshift's driver registers under its own dialect,

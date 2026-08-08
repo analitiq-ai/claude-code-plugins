@@ -8,7 +8,6 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   A dialect that overrides the column-type renderer takes the family off the
   map path entirely, so a rule for it would be dead weight and its absence is

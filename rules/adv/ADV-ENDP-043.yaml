@@ -8,7 +8,6 @@ scope: api-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin]
-data: {}
 rationale: >
   Streams pin endpoints by id, so a rename detaches every stream that referenced
   it — and it does not detach loudly, the pin simply resolves to nothing.

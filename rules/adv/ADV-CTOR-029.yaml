@@ -9,7 +9,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data: {}
 rationale: >
   The mode enum and the CA-certificate input sit in the same document and have
   to agree: offering

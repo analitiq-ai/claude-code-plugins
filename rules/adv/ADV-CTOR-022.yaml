@@ -9,10 +9,9 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput.mode"
 owners: [connector-plugin, engine]
-data:
-  targets: [PostAuthOutput]
-  fields: [mode, storage]
-  mechanism: literal_enum
+targets: [PostAuthOutput]
+fields: [mode, storage]
+mechanism: literal_enum
 rationale: >
   The mode selects which post-auth flow the engine runs to produce the value
   and the storage selects the durable store it lands in — and because the

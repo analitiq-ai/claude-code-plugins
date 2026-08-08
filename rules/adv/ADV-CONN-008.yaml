@@ -8,8 +8,7 @@ scope: connection
 mechanized: false
 validator: null
 owners: [pipeline-plugin, connector-plugin]
-data:
-  targets: [ConnectionAuthored, ConnectionInput]
+targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
   The mode vocabulary and the CA input are both declared on the connector, and
   the pairing spans separate keys of an untyped map, so the connection on its

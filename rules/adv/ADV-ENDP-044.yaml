@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin]
-data:
-  targets: [Keyset]
+targets: [Keyset]
 rationale: >
   Omission is how the block says "send no keyset on the first request"; a null
   is a value, so a document writing one is claiming a first-page key that

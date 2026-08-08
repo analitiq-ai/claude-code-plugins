@@ -8,8 +8,7 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::ValidationRule._validate_value_for_rule"
 owners: [pipeline-plugin]
-data:
-  targets: [ValidationRule]
+targets: [ValidationRule]
 rationale: >
   A parameterised rule with no parameter has nothing to grade against and
   passes every record, which reads exactly like a rule that is working; a

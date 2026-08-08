@@ -8,7 +8,6 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   That slug is the connector's identity in three places at once — the
   registry path the contract builds, the entry-point name the engine resolves

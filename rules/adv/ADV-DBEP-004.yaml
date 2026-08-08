@@ -9,8 +9,7 @@ scope: database-endpoint
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [Column, DatabaseEndpointDoc]
+targets: [Column, DatabaseEndpointDoc]
 rationale: >
   The type maps are separate documents the engine resolves against twice — once
   when discovery types a column, once when it renders the DDL for a table it

@@ -8,8 +8,7 @@ scope: database-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [DatabaseObject]
+targets: [DatabaseObject]
 rationale: >
   How many levels sit above a table is a property of the system, not a fact any
   document states, and the discovery strategy the connector declares is what

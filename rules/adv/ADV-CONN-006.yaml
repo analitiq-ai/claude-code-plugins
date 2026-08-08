@@ -8,8 +8,7 @@ scope: connection
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [ConnectionAuthored, ConnectionInput]
+targets: [ConnectionAuthored, ConnectionInput]
 rationale: >
   One routing rule covers every connector and every auth type, and the routing
   target is declared in the connector document rather than in the connection —

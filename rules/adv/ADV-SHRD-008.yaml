@@ -9,7 +9,6 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   What a scope actually holds is the engine's resolution context at run time,
   which no authored document records — so a path naming a sub-scope or a field

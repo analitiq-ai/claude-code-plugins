@@ -8,8 +8,7 @@ scope: database-endpoint
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [DatabaseObject, DatabaseEndpointDoc]
+targets: [DatabaseObject, DatabaseEndpointDoc]
 rationale: >
   Quoted PostgreSQL names, BigQuery catalog names and MongoDB collections are
   all case-sensitive, and the engine dialect-quotes whatever it is handed

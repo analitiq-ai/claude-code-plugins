@@ -9,7 +9,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   An empty update clause is a syntax error in every merge grammar, so the
   write fails outright — but only for a stream whose landed columns happen

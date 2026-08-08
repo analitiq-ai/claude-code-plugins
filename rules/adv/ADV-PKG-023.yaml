@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   Every transport renders column types through that one hook, whose default
   is the write map, so a rendering table transcribed into Python quietly

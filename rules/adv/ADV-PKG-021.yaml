@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The engine has no built-in TLS interpretation for any driver — the CDK
   base dialect raises for every mode — so the declaration is inert on its

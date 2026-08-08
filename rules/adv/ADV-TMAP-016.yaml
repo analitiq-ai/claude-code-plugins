@@ -8,8 +8,7 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapWriteRegexRule]
+targets: [TypeMapWriteRegexRule]
 rationale: >
   This is the read side's capture-backing obligation with the keys swapped, and
   the swap is the trap — the placeholders move to `native` and the captures to

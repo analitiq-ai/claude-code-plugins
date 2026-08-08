@@ -9,8 +9,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
 owners: [connector-plugin]
-data:
-  targets: [ReadOperation, WriteOperation]
+targets: [ReadOperation, WriteOperation]
 rationale: >
   A param declaration is the typed contract for one request input — its type,
   its requiredness, the operators a stream may filter it with — and the binding

@@ -9,8 +9,7 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput._mode_consistency"
 owners: [engine, connector-plugin]
-data:
-  targets: [PostAuthOutput]
+targets: [PostAuthOutput]
 rationale: >
   Mode decides whether the platform renders a picker for the user or reads a
   value silently after auth, and each mode drives a different request and lands

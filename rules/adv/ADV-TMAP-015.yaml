@@ -9,8 +9,7 @@ scope: type-map
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapWriteExactRule, TypeMapWriteRegexRule]
+targets: [TypeMapWriteExactRule, TypeMapWriteRegexRule]
 rationale: >
   Case handling belongs to the reader, and the reader normalizes only on the
   read side — so an author who learned that casing does not matter learns it

@@ -9,8 +9,7 @@ scope: database-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [DatabaseObject, ConnectionEndpointRef, DatabaseEndpointDoc]
+targets: [DatabaseObject, ConnectionEndpointRef, DatabaseEndpointDoc]
 rationale: >
   The handle is built by slugging the verbatim identifiers and appending a
   truncated hash, and it is lossy in both halves: slugging folds away case and

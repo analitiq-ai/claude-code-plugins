@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [ConnectorBase]
+targets: [ConnectorBase]
 rationale: >
   Phases are the only thing in the document that says when a value exists,
   and both directions of the mistake fail the same silent way — a transport

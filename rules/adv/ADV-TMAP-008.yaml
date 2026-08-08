@@ -9,8 +9,7 @@ scope: type-map
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteExactRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [TypeMapWriteExactRule]
+targets: [TypeMapWriteExactRule]
 rationale: >
   A write rule's canonical is a matcher, so a canonical violating its own
   family's bounds is a rule that can never match anything the read side is

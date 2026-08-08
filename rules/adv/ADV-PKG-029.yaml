@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The vocabulary is the system's own, researched from the driver's docs and
   never translated, so nothing derives one half from the other — the author

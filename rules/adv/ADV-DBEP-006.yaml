@@ -9,8 +9,7 @@ scope: database-endpoint
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data:
-  targets: [DatabaseEndpointDoc]
+targets: [DatabaseEndpointDoc]
 rationale: >
   A database endpoint describes one customer's objects, enumerated with that
   customer's credentials, so shipping one in the connector makes a customer's

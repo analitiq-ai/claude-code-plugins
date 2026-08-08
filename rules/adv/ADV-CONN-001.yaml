@@ -8,9 +8,8 @@ scope: connector
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._options_offer_the_enum"
 owners: [connector-plugin]
-data:
-  targets: [ConnectionContractInput]
-  fixture_model: ConnectionContractInput
+targets: [ConnectionContractInput]
+fixture_model: ConnectionContractInput
 rationale: >
   `enum` and `ui.options` are two hand-kept copies of one vocabulary: the enum
   decides what the contract accepts, the options decide what a user is ever

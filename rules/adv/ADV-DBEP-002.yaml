@@ -8,9 +8,8 @@ scope: database-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._ordinal_positions_unique"
 owners: [pipeline-plugin, engine]
-data:
-  targets: [DatabaseEndpointDoc]
-  fixture_model: DatabaseEndpointDoc
+targets: [DatabaseEndpointDoc]
+fixture_model: DatabaseEndpointDoc
 rationale: >
   The ordinal is what canonicalises column order for the server-managed schema
   hash, so columns claiming the same position leave that order ambiguous and

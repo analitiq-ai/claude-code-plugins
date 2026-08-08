@@ -8,8 +8,7 @@ scope: stream
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/stream.py::Filter._validate_value_presence"
 owners: [pipeline-plugin]
-data:
-  targets: [Filter]
+targets: [Filter]
 rationale: >
   A value beside an operand-free operator is dead weight the engine never
   reads, so the author believes a predicate is narrowing the read when

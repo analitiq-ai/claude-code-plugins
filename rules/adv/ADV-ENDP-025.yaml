@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [WriteOperation]
+targets: [WriteOperation]
 rationale: >
   A batched request carries many records and one URL, so there is no single
   record for the path segment to come from; whichever record the engine

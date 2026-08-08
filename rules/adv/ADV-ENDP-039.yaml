@@ -9,10 +9,9 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Idempotency.location"
 owners: [connector-plugin, engine]
-data:
-  targets: [Idempotency]
-  fields: [location]
-  mechanism: literal_enum
+targets: [Idempotency]
+fields: [location]
+mechanism: literal_enum
 rationale: >
   An idempotency key only works if a retry of the same record carries the same
   value, and only the engine is positioned to guarantee that — it derives the

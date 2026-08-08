@@ -9,8 +9,7 @@ scope: pipeline
 mechanized: false
 validator: null
 owners: [pipeline-plugin, engine]
-data:
-  targets: [Execution]
+targets: [Execution]
 rationale: >
   The pipeline default, the stream override and the endpoint's declared
   capacity are three documents composed only at run time, and the capacity is

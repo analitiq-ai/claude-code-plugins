@@ -9,8 +9,7 @@ scope: connector
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data:
-  targets: [DatabaseConnector]
+targets: [DatabaseConnector]
 rationale: >
   The engine reads the declaration instead of probing the live database, so
   an absent block is not a request for defaults — every write mode is refused

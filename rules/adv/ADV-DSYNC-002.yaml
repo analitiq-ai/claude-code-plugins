@@ -8,8 +8,7 @@ scope: data-sync-run-status
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PublicRunError._message_matches_code"
 owners: [engine]
-data:
-  targets: [PublicRunError]
+targets: [PublicRunError]
 rationale: >
   The obvious implementation copies the engine's stored failure detail into
   `message`, which puts a raw exception string — hostnames, credentials,

@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseObject._reject_explicit_null_namespaces"
 owners: [connector-plugin, engine]
-data:
-  targets: [DatabaseObject]
+targets: [DatabaseObject]
 rationale: >
   Identifiers here are stored verbatim from introspection, so the object's
   identity is exactly what the document says it is. Admitting both an omitted

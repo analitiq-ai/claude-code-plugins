@@ -11,7 +11,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   `connector_id` is the connector's identity, and the engine reaches the
   class by looking that exact name up among the installed entry points, so

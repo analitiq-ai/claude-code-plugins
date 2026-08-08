@@ -8,8 +8,7 @@ scope: pipeline
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule._validate_schedule_fields"
 owners: [pipeline-plugin]
-data:
-  targets: [Schedule]
+targets: [Schedule]
 rationale: >
   The type is meant to be the single answer to when a pipeline runs. A field
   belonging to another type left beside it reads as a second, contradictory

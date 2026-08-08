@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
 owners: [connector-plugin]
-data:
-  targets: [ReadOperation, WriteOperation]
+targets: [ReadOperation, WriteOperation]
 rationale: >
   A declared param is a promise that the endpoint accepts that input; unbound,
   the promise is empty — a stream that filters on it issues a full unfiltered

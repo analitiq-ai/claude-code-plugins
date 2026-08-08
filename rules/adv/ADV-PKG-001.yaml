@@ -10,7 +10,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   An override freezes a copy of behaviour the CDK base owns, so an
   unnecessary one stops tracking the base as it improves and, for type

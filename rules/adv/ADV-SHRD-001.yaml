@@ -8,7 +8,6 @@ scope: any
 mechanized: false
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
-data: {}
 rationale: >
   A leaked secret and a benign literal default are the same string to any
   model, so nothing rejects one — the probe

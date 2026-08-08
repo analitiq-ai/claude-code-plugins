@@ -11,7 +11,6 @@ scope: connector-package
 mechanized: false
 validator: null
 owners: [connector-plugin, engine]
-data: {}
 rationale: >
   The public hook surface is the CDK's compatibility promise; an override
   reaching under it binds the connector to an internal that may change in

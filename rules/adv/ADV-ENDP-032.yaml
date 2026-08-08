@@ -8,8 +8,7 @@ scope: api-endpoint
 mechanized: true
 validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
 owners: [connector-plugin, engine]
-data:
-  targets: [ReadOperation, WriteOperation]
+targets: [ReadOperation, WriteOperation]
 rationale: >
   Per-run values are the ones something upstream supplies — the filters, the
   cursor, the batch sizing — and the param is the only place their type,
