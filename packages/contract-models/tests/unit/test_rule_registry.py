@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from analitiq.contracts.shared.introspect import contract_classes
+from analitiq.contracts.shared.introspect import closed_members, contract_classes
 
 from analitiq.contracts import connection, connector, endpoints, stream, type_map
 from analitiq.contracts.pipelines import config as pipeline_config
@@ -309,19 +309,35 @@ def test_structural_fields_resolve_on_their_model():
     assert not unresolved, unresolved
 
 
-def _literal_members(annotation) -> list[str]:
-    """Every string Literal member reachable in a field annotation, flattened."""
-    import typing
+def test_every_bound_vocabulary_field_yields_its_members():
+    """A field a `literal_enum` rule binds must read back a non-empty set.
 
-    found: list[str] = []
-    stack = [annotation]
-    while stack:
-        current = stack.pop()
-        if typing.get_origin(current) is typing.Literal:
-            found += [a for a in typing.get_args(current) if isinstance(a, str)]
-        else:
-            stack += list(typing.get_args(current))
-    return found
+    Both consumers of `closed_members` fail *quietly* on a field it cannot
+    read: the rendered reference prints no members for it, and the
+    no-restatement check below compares a statement against an empty set and
+    passes. Reading only `Literal` did exactly that to every `Enum`-typed
+    field, so a rule could name four vocabularies and publish two.
+
+    An empty read is therefore a defect whichever way it happens — a new way of
+    spelling a closed set, or a rule pointing at a field that carries none.
+    """
+    silent = []
+    for rule in all_rules():
+        if rule.mechanism != "literal_enum":
+            continue
+        for target in rule.targets:
+            model = MODEL_INDEX[target]
+            for expr in rule.fields:
+                info = model.model_fields.get(_field_head(expr))
+                if info is None:
+                    continue  # test_structural_fields_resolve_on_their_model owns this
+                if not closed_members(info.annotation):
+                    silent.append(f"{rule.id}: {target}.{_field_head(expr)}")
+    assert not silent, (
+        f"bound as a closed vocabulary but reading back empty: {silent}. Either "
+        "the field does not carry one, or `closed_members` cannot see how it is "
+        "spelled — both publish a rule with a vocabulary missing."
+    )
 
 
 def test_structural_rules_do_not_restate_the_values_they_point_at():
@@ -347,7 +363,7 @@ def test_structural_rules_do_not_restate_the_values_they_point_at():
                     continue  # test_structural_fields_resolve_on_their_model owns this
                 hits = sorted(
                     m
-                    for m in set(_literal_members(info.annotation))
+                    for m in set(closed_members(info.annotation))
                     if re.search(rf"\b{re.escape(m)}\b", rule.statement)
                 )
                 if len(hits) >= 2:

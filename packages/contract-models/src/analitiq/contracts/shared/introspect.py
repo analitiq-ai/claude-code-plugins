@@ -101,6 +101,38 @@ def _is_contract_enum(obj: object) -> bool:
     )
 
 
+def closed_members(annotation) -> list[str]:
+    """Every member of a closed vocabulary reachable in a field annotation.
+
+    Both spellings count. A closed set is a ``Literal`` in most of the contract
+    and an ``Enum`` where its members carry their own docstrings, and which one
+    a field uses is a decision about that field, not about the rules over it.
+    Reading only ``Literal`` yields nothing for an ``Enum``-typed field — no
+    members and no error, so the field's vocabulary is simply absent from
+    whatever the caller renders or checks.
+
+    Here rather than beside either caller because both the rendered reference
+    and the no-restatement census read the same vocabularies, and a second copy
+    of this walk is a second set of fields one of them silently cannot see.
+
+    Declaration order, no repeats: a set would reorder the rendered reference
+    on every run and make its drift check flap.
+    """
+    import typing
+
+    found: list[str] = []
+    stack = [annotation]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, type) and issubclass(current, Enum):
+            found += [m.value for m in current if isinstance(m.value, str)]
+        elif typing.get_origin(current) is typing.Literal:
+            found += [a for a in typing.get_args(current) if isinstance(a, str)]
+        else:
+            stack += list(typing.get_args(current))
+    return list(dict.fromkeys(found))
+
+
 def prose_fingerprint(text: str) -> str:
     """sha256 of the whitespace-normalized prose, first 12 hex chars.
 

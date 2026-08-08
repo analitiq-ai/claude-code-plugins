@@ -139,38 +139,36 @@ def _model_index() -> dict:
     return {cls.__name__: cls for cls in contract_classes()}
 
 
-def _literal_members(annotation) -> list[str]:
-    """Every string ``Literal`` member reachable in a field annotation."""
-    import typing
-
-    found: list[str] = []
-    stack = [annotation]
-    while stack:
-        current = stack.pop()
-        if typing.get_origin(current) is typing.Literal:
-            found += [a for a in typing.get_args(current) if isinstance(a, str)]
-        else:
-            stack += list(typing.get_args(current))
-    # Preserve declaration order without repeats; a set here would reorder the
-    # rendered file on every Python run and make the drift check flap.
-    return list(dict.fromkeys(found))
-
-
 def _live_values(rule, models: dict) -> str:
-    """The member list a structural rule points at, read from the model."""
+    """The vocabularies a structural rule points at, read from the models.
+
+    Kept per field. A rule binding several fields binds several *separate*
+    closed sets — `ConnectionContractInput` states where a value is stored and
+    what type it carries, and those share no members — so pouring them into one
+    list renders a vocabulary that does not exist and reads as though any
+    member were legal in any of the fields.
+    """
+    from analitiq.contracts.shared.introspect import closed_members
+
     if rule.mechanism != "literal_enum":
         return "—"
-    members: list[str] = []
+    by_field: dict[str, list[str]] = {}
     for target in rule.targets:
         model = models.get(target)
         if model is None:
             continue
         for expr in rule.fields:
             info = model.model_fields.get(expr.split("[]")[0].split(".")[0])
-            if info is not None:
-                members += _literal_members(info.annotation)
-    members = list(dict.fromkeys(members))
-    return ", ".join(f"`{m}`" for m in members) if members else "—"
+            if info is None:
+                continue
+            members = by_field.setdefault(expr, [])
+            members += [m for m in closed_members(info.annotation) if m not in members]
+    rendered = [
+        f"`{field}`: " + ", ".join(f"`{m}`" for m in members)
+        for field, members in by_field.items()
+        if members
+    ]
+    return " · ".join(rendered) if rendered else "—"
 
 
 def _cell(text: str) -> str:
