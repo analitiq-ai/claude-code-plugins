@@ -37,11 +37,11 @@ service assigns it on ingest. The plugin authors them anyway so that sibling
 documents written in the same run can cross-reference each other; the
 orchestrator keeps the minted UUIDs in memory for exactly that reason.
 
-`connector_id` and `endpoint_id` are **immutable** (`ADV-CTOR-045`). In edit
+`connector_id` and `endpoint_id` are **immutable** (`RULE-CTOR-045`). In edit
 mode, never rewrite an existing identifier in place; author a new artifact and
 let the user retire the old one.
 
-Do not read meaning out of a UUID (`ADV-SHRD-005`). In particular the pipeline's
+Do not read meaning out of a UUID (`RULE-SHRD-005`). In particular the pipeline's
 server-managed integer `version` is a separate field and must never be encoded
 into `pipeline_id`.
 

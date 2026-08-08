@@ -1,0 +1,21 @@
+id: RULE-TMAP-009
+statement: >
+  A write `regex` rule's canonical matcher MUST compile under the ECMA-262
+  regex dialect, and the native DDL it renders MUST carry only well-formed
+  placeholders.
+tier: structural
+severity: error
+scope: type-map
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteRegexRule._check"
+owners: [connector-plugin, pipeline-plugin]
+targets: [TypeMapWriteRegexRule]
+rationale: >
+  The write direction inverts which key is the matcher, so the regex dialect
+  obligation moves onto `canonical` while the placeholder obligation moves onto
+  `native` — an author carrying a read rule's habits across writes the right
+  syntax in the wrong key. A pattern that does not compile is not a narrower
+  match, it is a rule the engine cannot load at the moment it needs to render
+  DDL.
+status: active
+superseded_by: null

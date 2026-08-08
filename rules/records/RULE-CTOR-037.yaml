@@ -1,0 +1,21 @@
+id: RULE-CTOR-037
+statement: >
+  A connector, or a stream binding, for a connector kind the engine does not
+  execute MUST be declined with a structured refusal rather than authored,
+  even though the contract accepts the kind.
+tier: procedural
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  Authoring one produces an artifact that passes every check here and can
+  never run, and the refusal is what tells the user the gap is platform
+  support rather than something they can fix in their document — a
+  half-authored connector left in the registry says the opposite. Which
+  kinds the engine executes is engine state no artifact here tracks: the
+  contract models accept every declared kind, so this is plugin policy that
+  an engine release retires with nobody editing the prose.
+status: active
+superseded_by: null

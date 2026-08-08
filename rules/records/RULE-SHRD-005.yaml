@@ -1,0 +1,21 @@
+id: RULE-SHRD-005
+statement: >
+  An identity handle MUST be treated as opaque: no version, tenant or object
+  identity is encoded into one, and none is parsed back out of one.
+tier: procedural
+severity: error
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin]
+rationale: >
+  Handles are derived, and a derivation that happens to leave recognizable
+  segments in the result has produced an artifact of how it works today, not an
+  interface. Any handle matching its field's pattern validates whatever meaning
+  an author read into it, so a document built by parsing one — or by
+  reassembling one from parts — stays correct only until the derivation
+  changes, and then references something that does not exist. A handle is
+  obtained by reading the document that declares it, and where the underlying
+  identity is what is wanted, the document carries it in a field of its own.
+status: active
+superseded_by: null

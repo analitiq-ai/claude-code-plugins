@@ -16,7 +16,7 @@ Systems differ in how many namespace levels sit above a table:
 This shape is **not** something the connector declares — there is no catalog
 trigger to configure, and the discovery contract exposes exactly these
 actions: `list_resources` and `describe_resource`. What the shape affects is the
-`strategy` you pick and what the generated endpoints carry (`ADV-DBEP-005`).
+`strategy` you pick and what the generated endpoints carry (`RULE-DBEP-005`).
 
 ## Shape
 
@@ -29,7 +29,7 @@ per the field notes below.
 
 ## Required fields
 
-- `strategy` — registered strategy ID (`ADV-CTOR-036`). Common values:
+- `strategy` — registered strategy ID (`RULE-CTOR-036`). Common values:
   - `information_schema` for ANSI-SQL databases that expose
     `information_schema`.
   - `snowflake_account_usage` for Snowflake.
@@ -42,12 +42,12 @@ per the field notes below.
 - `implementation` — `{ "type": "builtin" }` for engine-shipped
   strategies (the common case), or
   `{ "type": "connector_plugin", "entrypoint": "module.path:ClassName" }`
-  to ship strategy code with the connector package (`ADV-CTOR-003`).
+  to ship strategy code with the connector package (`RULE-CTOR-003`).
 - `options` — strategy-specific declarative options (e.g.
   `exclude_schemas`).
-- `produces` — the artifact kinds discovery writes (`ADV-CTOR-019`). Most
+- `produces` — the artifact kinds discovery writes (`RULE-CTOR-019`). Most
   database connectors produce endpoints and a type map.
-- `triggers` — when each discovery action runs (`ADV-CTOR-020`).
+- `triggers` — when each discovery action runs (`RULE-CTOR-020`).
 
 ## Rules
 
@@ -78,12 +78,12 @@ declare determines whether they come out addressable:
 
 ## Common pitfalls
 
-- Don't ship database endpoints in the connector release (`ADV-CTOR-044`,
-  `ADV-DBEP-006`).
-- Don't embed credentials in `options` (`ADV-CTOR-046`). Auth runs separately.
+- Don't ship database endpoints in the connector release (`RULE-CTOR-044`,
+  `RULE-DBEP-006`).
+- Don't embed credentials in `options` (`RULE-CTOR-046`). Auth runs separately.
 - Don't author a custom strategy in `implementation` unless one of the
   builtin IDs doesn't fit. Most connectors should use builtin
   strategies.
 - Don't pick a strategy that flattens away a level the system actually has
-  (`ADV-CTOR-030`) — on a three-level system that hides everything outside the
+  (`RULE-CTOR-030`) — on a three-level system that hides everything outside the
   default catalog.

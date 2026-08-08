@@ -1,0 +1,24 @@
+id: RULE-ENDP-038
+statement: >
+  An endpoint's `replication.supported_methods` MUST name only methods the
+  vocabulary `Replication.supported_methods` declares, and the block MUST NOT
+  carry a separate default-method key.
+tier: structural
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication.supported_methods"
+owners: [connector-plugin, engine]
+targets: [Replication]
+fields: [supported_methods]
+mechanism: literal_enum
+rationale: >
+  This list is a capability claim the engine acts on: it says which syncs the
+  runtime actually has a path for on this endpoint. An invented name advertises
+  a sync nothing implements, and the stream that selects it fails during a run
+  rather than while it is being authored. There is no default-method key because
+  which method to run is the stream's decision per run; an endpoint naming one
+  would be settling a policy it does not own, and the stream that meant to
+  override it would have no way to tell whether it had.
+status: active
+superseded_by: null

@@ -1,0 +1,26 @@
+id: RULE-TMAP-017
+statement: >
+  A connector's write map MUST render every canonical type a source can hand
+  its system, including the bare container markers an API source emits as
+  literal canonicals.
+tier: structural
+severity: warning
+scope: type-map
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  The write map is the connector's whole DDL vocabulary and is consulted on
+  every run — stream configuration renders each destination column's frozen
+  canonical through it even when the table already exists — so an uncovered
+  family fails the stream at configuration rather than at first write. The
+  container markers are the ones authors miss, because a database-sourced test
+  never produces them: they arrive only when an API source's struct or array
+  field lands in a database destination. A gap is legitimate only where the
+  dialect renders that family in code (`RULE-TMAP-019`). Nothing here can prove
+  the map complete — completeness is observable only against a real column's
+  canonical at stream configuration, and the validator's coverage check sends
+  one probe per family and one parameter value per probe, so a clean run says
+  only that the probed spellings resolved.
+status: active
+superseded_by: null

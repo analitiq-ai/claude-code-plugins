@@ -1,0 +1,22 @@
+id: RULE-STRM-003
+statement: >
+  A connection-scoped endpoint reference that supplies an endpoint_id MUST
+  supply the handle the contract's derivation over its verbatim database
+  object produces.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::ConnectionEndpointRef._derive_or_verify_endpoint_id"
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [ConnectionEndpointRef]
+rationale: >
+  The handle is derived, never chosen: the runtime discovery that mints
+  database endpoints computes it from the same function, so a hand-written
+  or tidied-up value names an endpoint that does not exist and the stream
+  resolves to nothing. Because the contract derives the handle when it is
+  omitted, verification of a supplied one is the only moment the divergence
+  can surface at all — without it the document would validate and detach
+  silently.
+status: active
+superseded_by: null

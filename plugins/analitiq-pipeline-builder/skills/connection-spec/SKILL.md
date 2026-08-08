@@ -31,12 +31,12 @@ A connection owns exactly this much, and nothing else:
   connection-scoped type maps.
 
 Plus the authoring jobs those imply: routing each `connection_contract` input /
-post-auth output into its map (`ADV-CONN-006`; see `spec-envelope.md`), and
+post-auth output into its map (`RULE-CONN-006`; see `spec-envelope.md`), and
 scaffolding `secret_refs` as `env:` pointers with the matching
 `.secrets/credentials.json` template.
 
 Only what the field table below declares is authorable here. The server-managed
-parts of that list — `discovered` (`ADV-CONN-005`) and auth lifecycle metadata —
+parts of that list — `discovered` (`RULE-CONN-005`) and auth lifecycle metadata —
 belong to the service, and the endpoint / discovery / type-map artifacts are
 separate documents that merely hang off this connection — endpoints and
 connection-scoped type maps are authored by `private-endpoint-creator`
@@ -66,17 +66,17 @@ validation run is especially weak proof here: a connection is judged against the
 *connector's* `connection_contract`, which a single-document run never opens, so
 most of these surface at connect rather than at authoring time.
 
-<!-- BEGIN GENERATED: advisory-connection -->
+<!-- BEGIN GENERATED: rules-connection -->
 | Rule | Constraint |
 |---|---|
-| `ADV-CONN-004` | A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`. |
-| `ADV-CONN-005` | A connection MUST NOT author a value into its `discovered` map, which the connections service owns and fills from the connector's post-auth discovery. |
-| `ADV-CONN-006` | Every connection-contract input and post-auth output MUST be authored into the connection map its own declaration's `storage` names. |
-| `ADV-CONN-007` | A connection MUST author each value in the JSON type its connection-contract input declares, uncoerced, and within that input's declared allowed-value list where it declares one. |
-| `ADV-CONN-008` | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. |
-| `ADV-CONN-009` | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. |
-| `ADV-CONN-010` | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. |
-<!-- END GENERATED: advisory-connection -->
+| `RULE-CONN-004` | A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`. |
+| `RULE-CONN-005` | A connection MUST NOT author a value into its `discovered` map, which the connections service owns and fills from the connector's post-auth discovery. |
+| `RULE-CONN-006` | Every connection-contract input and post-auth output MUST be authored into the connection map its own declaration's `storage` names. |
+| `RULE-CONN-007` | A connection MUST author each value in the JSON type its connection-contract input declares, uncoerced, and within that input's declared allowed-value list where it declares one. |
+| `RULE-CONN-008` | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. |
+| `RULE-CONN-009` | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. |
+| `RULE-CONN-010` | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. |
+<!-- END GENERATED: rules-connection -->
 
 ## What this skill does NOT cover
 
@@ -108,13 +108,13 @@ structurally valid, never as "working" or "tested".
 Every authored document must:
 
 1. Declare `$schema` with the connection URL from the table below
-   (`ADV-SHRD-003`).
+   (`RULE-SHRD-003`).
 2. Author `connector_id` (the connector slug being instantiated; required).
    `connection_id` is an RFC-4122 UUID — author one the plugin generates, or
    omit it and let the service assign one on ingest.
 3. Route every contract input/output into `parameters` / `selections` /
    `secret_refs` by its `storage` (never author `discovered` —
-   `ADV-CONN-005`). For each `storage: "secrets"` key, write an `env:` pointer
+   `RULE-CONN-005`). For each `storage: "secrets"` key, write an `env:` pointer
    into `secret_refs` and add the env-var name to `.secrets/credentials.json`.
 4. Pass the validator (`pipeline-schema-validator`, entity `connection`) with
    zero error findings.

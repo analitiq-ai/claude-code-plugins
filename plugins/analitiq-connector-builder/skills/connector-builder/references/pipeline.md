@@ -99,7 +99,7 @@ Run the closed-enum mappers inline (see `enum-mappers.md`):
 
 Storage kinds (`file`, `s3`, `stdout`) route to
 `storage-connector-creator`, which returns a structured refusal
-(`ADV-CTOR-037`). Dispatch there only if the user explicitly asked for
+(`RULE-CTOR-037`). Dispatch there only if the user explicitly asked for
 one; otherwise fail closed and ask.
 
 ### 3. Dispatch creator (domain body + type maps)
@@ -233,7 +233,7 @@ to diff, so stage the freshly-authored draft to a temporary path first.
 - **`build`** — if `previous_release_path` was supplied, invoke
   `connector-drift-classifier` the same way (staged draft as
   `current_path`) and apply `next_version`; otherwise this is a first
-  release (`ADV-CTOR-032`).
+  release (`RULE-CTOR-032`).
 
 ### 7. Write
 
@@ -253,11 +253,11 @@ the Python package for database connectors:
 │   ├── type-map-write.json         # database only; Arrow → native DDL render rules
 │   └── endpoints/
 │       └── {endpoint_id}.json      # api connectors only — one file per endpoint; filename = document.endpoint_id
-├── __init__.py                     # database only — see ADV-PKG-009
+├── __init__.py                     # database only — see RULE-PKG-009
 ├── connector.py                    # database only — {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
 ├── requirements.txt                # database only — THIS connector's driver(s) only
-├── pyproject.toml                  # database only — see ADV-PKG-007
-└── README.md                       # see ADV-PKG-025
+├── pyproject.toml                  # database only — see RULE-PKG-007
+└── README.md                       # see RULE-PKG-025
 ```
 
 **Reproducibility (update mode).** An update fully regenerates the tree

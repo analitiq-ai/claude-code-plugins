@@ -67,7 +67,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
   (the `connector` + `type-map` sections — the cross-field rules your
   artifacts must satisfy)
 
@@ -77,11 +77,11 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    (the stable connector slug — pattern in `metadata-and-versioning.md`;
    this also names the on-disk `{connector_id}/` directory AND the
    package entry points), `display_name`, `description`, `tags`,
-   `version` (`ADV-CTOR-032`).
+   `version` (`RULE-CTOR-032`).
 2. **Transports** — populate `transports` with one entry per logical
    transport. Set `default_transport`. Pick the transport and driver per
    the **decision order** in `spec-driver-selection.md`
-   (`ADV-CTOR-027`); never the JDBC bridge.
+   (`RULE-CTOR-027`); never the JDBC bridge.
    - **`adbc`** — required field `driver` from the schema's closed enum
      (the sole validator — `spec-driver-selection.md` §1). Provide `dsn`
      (the `url_template` shape) when the driver accepts a URI
@@ -91,7 +91,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      key/value object of driver-specific options; values may be literals
      or value expressions, resolved by the runtime before invoking the
      driver. **The AdbcTransport contract requires at least one of
-     `dsn` / `db_kwargs`** (ADV-CTOR-004). TLS for ADBC transports is
+     `dsn` / `db_kwargs`** (RULE-CTOR-004). TLS for ADBC transports is
      expressed via `db_kwargs` entries — the generic `tls` block is
      SQLAlchemy-only.
    - **`sqlalchemy`** — carry `driver` in `dialect+driver` form, sync or
@@ -99,7 +99,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      §Constraints), and `dsn`. Author `tls.mode` (referencing
      `connection.parameters.ssl_mode`) and `tls.ca_certificate`
      (referencing `secrets.ssl_ca_certificate`). Declaring `tls`
-     obligates the package dialect's TLS hooks (`ADV-PKG-021`) — the
+     obligates the package dialect's TLS hooks (`RULE-PKG-021`) — the
      engine has no built-in TLS interpretation for any driver
      (`spec-tls.md`).
 
@@ -113,7 +113,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    `port`, `database`, `username`, `password`, `ssl_mode`,
    `ssl_ca_certificate`. Each with the right `source` / `phase` /
    `storage` / `type` / `secret` / `enum` / `default`. Declare the
-   `ssl_mode` input's `enum` (`ADV-CTOR-047`) — the dialect and any
+   `ssl_mode` input's `enum` (`RULE-CTOR-047`) — the dialect and any
    lookup-based mappings need a closed vocabulary to interpret. The mode
    vocabulary is connector-defined, taken from the researcher's grounded
    TLS facts
@@ -123,13 +123,13 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 5. **Resource discovery** — populate `resource_discovery` with the
    provider's discovery strategy for enumerating the system's objects.
    This is central for DB connectors. Pick a strategy that exposes every
-   level of the system's real object hierarchy (`ADV-CTOR-030`) — on
+   level of the system's real object hierarchy (`RULE-CTOR-030`) — on
    Snowflake / BigQuery that is catalog → schema → table, never folded
    into schema → table. See `spec-resource-discovery.md`.
 6. **SQL write-path capabilities** — author the top-level
    `sql_capabilities` block per `spec-sql-write-path.md`. The contract
    makes it optional; a database connector always declares it
-   (`ADV-CTOR-040`). Its declaration table states which facts a block
+   (`RULE-CTOR-040`). Its declaration table states which facts a block
    must carry and which are optional; a partial block is a config error,
    not a request for defaults. Never carry a value over from another connector. The
    `stage.*` sub-bullets below author one nested `stage` object, not
@@ -142,7 +142,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
      test is cross-catalog **addressability**, not depth: Postgres and
      MySQL are `none` despite having a database above the schema, because
      one connection cannot reach across it. This binds step 5's
-     discovery strategy too (`ADV-CTOR-031`).
+     discovery strategy too (`RULE-CTOR-031`).
    - `session_targeting` — from
      `provider_facts.sql_write_path.qualified_statement_targeting`.
    - `merge_form` — from
@@ -175,7 +175,7 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
    covering the documented native vocabulary. For OLTP databases,
    expand from your knowledge of the documented native vocabulary; for
    warehouses and NoSQL stores, restrict to the researched list.
-   **Author read-side regex literals uppercase** (`ADV-TMAP-014`); exact
+   **Author read-side regex literals uppercase** (`RULE-TMAP-014`); exact
    rules are normalized for you. Parameterized natives use regex rules
    with named capture groups; see the spec for substitution rules. The
    orchestrator writes this array to
@@ -183,39 +183,39 @@ The `connector-spec-db` skill is preloaded. Beyond that, read:
 8. **Write map** — author `type_map_write` (same rule shape, inverted
    direction: `canonical` is the matcher — regex with named captures
    for parameterized types — and `native` is the rendered DDL, with
-   `${name}` substitutions backed by those captures — `ADV-TMAP-016`).
-   Cover the full canonical vocabulary (`ADV-TMAP-017`). Reconcile the
+   `${name}` substitutions backed by those captures — `RULE-TMAP-016`).
+   Cover the full canonical vocabulary (`RULE-TMAP-017`). Reconcile the
    validator's `type-map-write-coverage` warning, but do not treat a
    clean run as coverage — it probes only a sample. `spec-type-maps.md`
    lists which families go unprobed; check those by hand. A family goes
-   unmapped only under `ADV-TMAP-019` — BigQuery's NUMERIC/BIGNUMERIC
+   unmapped only under `RULE-TMAP-019` — BigQuery's NUMERIC/BIGNUMERIC
    precision ranges are the case. See `spec-type-maps.md`. Written to
    `{connector_id}/definition/type-map-write.json`.
 9. **Package files** — author every file per
    `spec-connector-package.md`:
    - `connector_py` — `{Name}Dialect(SqlDialect)` +
-     `{Name}Connector(GenericSQLConnector)` (`ADV-PKG-010`). The dialect
+     `{Name}Connector(GenericSQLConnector)` (`RULE-PKG-010`). The dialect
      implements every hook its transports require: SQLAlchemy + TLS → the
      connect-arg hook (`build_tls_connect_arg`, or
      `build_tls_connect_args` for drivers that take TLS through several
      connect parameters) **and** `verify_tls_state`, the post-connect
      probe that rejects a session which promised TLS and landed
-     unencrypted (`ADV-PKG-021`); the write path →
-     `stage_table_sql` **always** (`ADV-PKG-017`), plus exactly what
+     unencrypted (`RULE-PKG-021`); the write path →
+     `stage_table_sql` **always** (`RULE-PKG-017`), plus exactly what
      step 6's declaration obliges: `merge_statement_sql` when
      `merge_form != "none"` (rendering the all-keys no-op degradation),
      `bulk_land` when `bulk_load` names a dialect-implemented mechanism
      (`spec-sql-write-path.md`). Override a structural default
      (`current_timestamp_default`, `empty_table_sql`) or
-     `render_column_type` only under `ADV-PKG-001`. Imports:
-     `ADV-PKG-011`.
-   - `init_py` — re-export per `ADV-PKG-009`.
+     `render_column_type` only under `RULE-PKG-001`. Imports:
+     `RULE-PKG-011`.
+   - `init_py` — re-export per `RULE-PKG-009`.
    - `requirements_txt` — ship the driver every declared transport needs
-     (`ADV-PKG-027`).
+     (`RULE-PKG-027`).
    - `pyproject_toml` — derive every name from `connector_id`
-     (`ADV-PKG-007`), source dependencies dynamically from
-     `requirements.txt` (`ADV-PKG-006`), and register the entry-point
-     groups `ADV-PKG-008` names.
+     (`RULE-PKG-007`), source dependencies dynamically from
+     `requirements.txt` (`RULE-PKG-006`), and register the entry-point
+     groups `RULE-PKG-008` names.
 
 ## Definition of Done
 
@@ -226,7 +226,7 @@ package files it never sees (registry CI owns the wheel build), driver
 discipline, and dialect behavior. Do not restate validator rules.
 
 - [ ] **Driver chosen strictly per the decision order**
-  (`ADV-CTOR-027`), and a one-line rationale holds for why
+  (`RULE-CTOR-027`), and a one-line rationale holds for why
   earlier tiers were skipped. (The validator accepts any well-formed
   `dialect+driver`; it cannot check the *order* was followed.)
 - [ ] **Every SQLAlchemy `driver` is in `dialect+driver` form** and
@@ -235,14 +235,14 @@ discipline, and dialect behavior. Do not restate validator rules.
 - [ ] **`requirements.txt` lists only this connector's driver(s)** — no
   engine pins, no stray dependencies.
 - [ ] **`pyproject.toml` registers the connector under every entry-point
-  group `ADV-PKG-008` names.** (Registry CI checks entry points; the
+  group `RULE-PKG-008` names.** (Registry CI checks entry points; the
   in-plugin validator never sees `pyproject.toml`. This is where the
   both-directions principle becomes concrete for a DB connector.)
 - [ ] **`connector.py` imports only the sanctioned set**
-  (`ADV-PKG-011`) — never another connector, never the engine/runtime.
+  (`RULE-PKG-011`) — never another connector, never the engine/runtime.
 - [ ] **The dialect implements exactly the hooks its transports require**
   (the step-9 hook mapping, TLS hooks included) and ships no Python
-  type-rendering table (`ADV-PKG-023`).
+  type-rendering table (`RULE-PKG-023`).
 - [ ] **`sql_capabilities` is declared and complete.** Every required
   shape fact present, each traced to its source per step 6 — a
   researched `provider_facts` field, or an authoring decision
@@ -255,34 +255,34 @@ discipline, and dialect behavior. Do not restate validator rules.
   refuses every write mode at handshake if the block is missing
   entirely.)
 - [ ] **Declaration and dialect agree, both directions**
-  (`ADV-PKG-016`) — exactly the hooks step 9's mapping obliges,
-  `stage_table_sql` unconditionally (`ADV-PKG-017`), and every family
+  (`RULE-PKG-016`) — exactly the hooks step 9's mapping obliges,
+  `stage_table_sql` unconditionally (`RULE-PKG-017`), and every family
   keyed in `bulk_load` is a transport this connector ships
-  (`ADV-CTOR-048`). (The in-plugin validator never sees `connector.py`;
+  (`RULE-CTOR-048`). (The in-plugin validator never sees `connector.py`;
   the CDK conformance kit fails a mismatch in either direction at
   registry CI.)
 - [ ] **`merge_statement_sql` renders the all-conflict-key no-op**
-  (`ADV-PKG-018`) — never an empty `SET` clause, which is invalid SQL.
+  (`RULE-PKG-018`) — never an empty `SET` clause, which is invalid SQL.
   (A hard conformance test.)
-- [ ] **The override surface is sanctioned** (`ADV-PKG-012`), the
-  connector class carries only `dialect_class` (`ADV-PKG-010`), and
-  every override keeps the base signature's shape (`ADV-PKG-013`).
+- [ ] **The override surface is sanctioned** (`RULE-PKG-012`), the
+  connector class carries only `dialect_class` (`RULE-PKG-010`), and
+  every override keeps the base signature's shape (`RULE-PKG-013`).
 - [ ] **Structural overrides exist only where the portable form is
-  genuinely invalid** (`ADV-PKG-001`) — `current_timestamp_default`,
+  genuinely invalid** (`RULE-PKG-001`) — `current_timestamp_default`,
   `empty_table_sql`.
 - [ ] **Every `type-map-write-coverage` warning is reconciled** — each
-  unmapped canonical family is intentional under `ADV-TMAP-019`, not an
+  unmapped canonical family is intentional under `RULE-TMAP-019`, not an
   accidental gap. (The validator only *warns* and cannot tell
   intentional from accidental.)
 - [ ] **`resource_discovery` declares a strategy that matches this system's
-  object hierarchy** (`ADV-CTOR-030`) and reaches columns. (Nothing
+  object hierarchy** (`RULE-CTOR-030`) and reaches columns. (Nothing
   validates the match; a strategy that flattens a level just hides
   objects.)
 - [ ] <!-- PROBE: tls-coherence-unchecked -->
   **TLS is declared in the right place for the transport**:
   SQLAlchemy → the generic `tls` block; ADBC → driver-namespaced
   `db_kwargs` entries with no `tls` block. **And** the
-  `ssl_mode`/CA-certificate pairing holds (`ADV-CTOR-029`). (Nothing
+  `ssl_mode`/CA-certificate pairing holds (`RULE-CTOR-029`). (Nothing
   validates either half — the TLS block is vocabulary-agnostic by
   design.)
 
@@ -299,11 +299,11 @@ disk.
 - Never author `created_at` / `updated_at` — those are registry-stamped.
   `connector_id` is author-supplied and matches the on-disk directory name.
 - Never pre-encode binding values — no pre-percent-encoded usernames,
-  database names, passwords (`ADV-CTOR-034`).
+  database names, passwords (`RULE-CTOR-034`).
 - Never embed driver-specific TLS objects, paths, or executable code in
   connector JSON — declare generic intent only via `tls.mode` and
   `tls.ca_certificate`.
-- Never author endpoint files (`ADV-DBEP-006`) — DB endpoints are
+- Never author endpoint files (`RULE-DBEP-006`) — DB endpoints are
   produced at runtime by the connector's `resource_discovery`.
 - Never author OAuth flows or HTTP transports. If the provider needs one,
   the classification was wrong — report and stop rather than authoring
@@ -311,12 +311,12 @@ disk.
 - Never embed type-map rules inside `connector.json` — the connector
   schema rejects unknown fields. Emit them as the standalone
   `type_map_read` / `type_map_write` outputs instead.
-- **Type vocabulary is declarative-only** (`ADV-PKG-023`). The write
+- **Type vocabulary is declarative-only** (`RULE-PKG-023`). The write
   direction lives in `type-map-write.json` and nowhere else; dialect
   code exists only for the structural hooks and rule-inexpressible
   logic.
 - Drivers are a real SQLAlchemy `dialect+driver` registration
-  (`ADV-CTOR-039`), sync or async, or ADBC. Never select the JDBC
+  (`RULE-CTOR-039`), sync or async, or ADBC. Never select the JDBC
   bridge.
 
 ## Output format

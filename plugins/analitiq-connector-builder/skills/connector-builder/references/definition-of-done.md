@@ -25,7 +25,7 @@ shared core.
   `transport_type` match the provider's *actual* documented behavior —
   not merely a schema-valid value. (The validator checks the value is
   in-enum; it cannot check it is the right one.)
-- [ ] **`connector_id` is the intended stable slug** (`ADV-CTOR-042`). (The
+- [ ] **`connector_id` is the intended stable slug** (`RULE-CTOR-042`). (The
   schema checks the slug pattern, not that it is the slug the
   user/provider actually means.)
 - [ ] **`display_name`, `description`, and `tags` are meaningful**, not
@@ -38,13 +38,13 @@ shared core.
   reference.)
 - [ ] <!-- PROBE: connector-secret-literal-undetected -->
   **No secret value is embedded as a literal** anywhere (passwords,
-  tokens, keys) — `ADV-SHRD-001`. (Nothing can tell a literal default from
+  tokens, keys) — `RULE-SHRD-001`. (Nothing can tell a literal default from
   a leaked secret.)
 - [ ] **No customer-specific value is baked into the connector**
-  (`ADV-CTOR-028`) — no real host, tenant id, account id, or database
+  (`RULE-CTOR-028`) — no real host, tenant id, account id, or database
   name.
 - [ ] <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
-  **Every `function` name is in the registered catalog** (`ADV-SHRD-007`;
+  **Every `function` name is in the registered catalog** (`RULE-SHRD-007`;
   the catalog is `value-expressions.md` §Function catalog). Nothing
   validates function names, so a typo or a planned-but-unregistered
   function ships silently and fails at connect.
@@ -59,7 +59,7 @@ shared core.
 - [ ] **`default_transport` is the right default**, and any
   multi-transport split (auth / discovery / api origins) reflects the
   provider's real topology.
-- [ ] **README is present** (`ADV-PKG-025`). (The in-plugin validator
+- [ ] **README is present** (`RULE-PKG-025`). (The in-plugin validator
   ignores README entirely.)
 - [ ] **Both read and write land as a working unit for this system**
   (the both-directions-first-class *capability* principle) — scope was
@@ -67,6 +67,6 @@ shared core.
   read/write capability, not a write *type-map* file: an API connector
   realizes the write direction through endpoints/operations (and ships
   no write map), a database connector through its `pyproject.toml`
-  entry-point registrations (`ADV-PKG-008`).
-- [ ] **Version is consistent**: first release → `ADV-CTOR-032`; otherwise
+  entry-point registrations (`RULE-PKG-008`).
+- [ ] **Version is consistent**: first release → `RULE-CTOR-032`; otherwise
   the drift verdict the orchestrator computed was applied.

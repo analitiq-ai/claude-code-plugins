@@ -18,7 +18,7 @@ A value expression is one of:
 Anywhere the schema accepts a value expression, exactly one of the shapes
 above is allowed. (Endpoint request slots additionally admit the binding
 forms `from_param` / `from_input`; the exactly-one-key rule there is
-ADV-ENDP-022 — see `connector-spec-api/spec-request-binding.md`.)
+RULE-ENDP-022 — see `connector-spec-api/spec-request-binding.md`.)
 
 <!-- PROBE: pagination-limit-literal-rejected, pagination-offset-step-literal-rejected, pagination-offset-step-bare-accepted, pagination-page-step-literal-rejected -->
 A slot may admit a narrower set. A numeric pagination slot (`limit.default`,
@@ -43,7 +43,7 @@ connector or endpoint actually writes.
 | `connection.selections.*` | `post_auth` and later | Durable user choices declared as `post_auth_outputs` with `storage: "connection.selections"`. |
 | `connection.discovered.*` | `post_auth` and later | Auto-discovered non-secret context (e.g. `api_domain`) declared as `post_auth_outputs` with `storage: "connection.discovered"`. |
 | `auth.*` | `auth` and later | Auth tokens (access_token, refresh_token, expiry). |
-| `runtime.*` | varies by ref | Per-run values (`ADV-SHRD-008`): `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set in `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`) validates clean and fails at resolution — don't guess names. |
+| `runtime.*` | varies by ref | Per-run values (`RULE-SHRD-008`): `runtime.batch_size` (the run's configured page size — use it for a pagination `limit.default`) and the OAuth set in `lifecycle-phases.md`. The scope accepts any path, so an invented one (`runtime.run_id`) validates clean and fails at resolution — don't guess names. |
 | `response.*` | endpoint response handling | The response being processed — `response.body.*`, `response.headers.*`. This is what pagination `stop_when` / `next_cursor` and `response.metadata` refs target. |
 | `request.*` | endpoint request handling | The request being built. |
 | `stream.*` | per stream | Stream-owned routing, tenant context, stream-specific auth context. |
@@ -64,7 +64,7 @@ read, `response.metadata` keys on either operation:
 
 | Ref | Read op | Write op |
 |---|---|---|
-| `response.body.<path>` | resolved against `response.schema`, must declare a type (ADV-ENDP-023) | **not resolved** — see below |
+| `response.body.<path>` | resolved against `response.schema`, must declare a type (RULE-ENDP-023) | **not resolved** — see below |
 | `response.metadata.<key>` | must name a declared key | must name a declared key |
 | `response.records.<path>` | spelling only | spelling only |
 | `response.headers.<name>` | spelling only | spelling only |
@@ -77,7 +77,7 @@ silent one-page sync — but `response.records.next_cursor` and
 record counts are runtime values this document declares nothing about, and the
 `response.records` **scope** is not the `response.records` **field**. (That
 field — the `{ref: response.body.<path>}` selecting the record collection — IS
-resolved, and must land on an array node, ADV-ENDP-012. Referencing
+resolved, and must land on an array node, RULE-ENDP-012. Referencing
 `response.records.<something>` from a pagination or metadata expression is a
 different thing and is unchecked.)
 
@@ -104,14 +104,14 @@ read, and on a write also `{from_input: "record.<dotted>"}` — see
 
 <!-- PROBE: request-slot-direct-runtime-ref -->
 > **`stream.*`, `state.*` and `runtime.*` are barred from endpoint request
-> slots** (`ADV-ENDP-040`) — see `connector-spec-api/spec-request-binding.md`.
+> slots** (`RULE-ENDP-040`) — see `connector-spec-api/spec-request-binding.md`.
 
 <!-- PROBE: auth-state-tail-unchecked -->
 Paths that *look* like scopes but are not, and so fail at runtime after passing
-validation (`ADV-SHRD-008`; the leading token `connection` is legal, the rest is
+validation (`RULE-SHRD-008`; the leading token `connection` is legal, the rest is
 not): `connection.auth_state.*` and `connection.secret_refs.*`.
 
-## Function catalog (`ADV-SHRD-007`)
+## Function catalog (`RULE-SHRD-007`)
 
 The engine's `DEFAULT_FUNCTIONS` registry:
 
@@ -121,12 +121,12 @@ The engine's `DEFAULT_FUNCTIONS` registry:
 - `url_encode` — percent-encode a scalar for a URL component. Escapes every reserved character by default (`safe: ""`); pass a `safe` field to widen the unescaped set.
 
 <!-- PROBE: connector-lookup-map-unvalidated -->
-**`lookup` maps must be total** (`ADV-CTOR-053`). Nothing validates this
+**`lookup` maps must be total** (`RULE-CTOR-053`). Nothing validates this
 — a value with no entry resolves to nothing and the request goes out missing
 that field, so an uncovered enum member fails silently at connect time rather
 than loudly at authoring time.
 
-**Never call `url_encode` inside a DSN binding** (`ADV-CTOR-054`). The
+**Never call `url_encode` inside a DSN binding** (`RULE-CTOR-054`). The
 binding's declared `encoding` already owns percent-encoding; wrapping the value
 encodes it twice.
 `url_encode` is for URL components you build yourself in a `template`.

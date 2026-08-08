@@ -1,0 +1,22 @@
+id: RULE-TMAP-004
+statement: >
+  A read rule whose native pattern captures a declared parameter MUST carry
+  that capture into its canonical render rather than rendering a canonical
+  whose parameters are all fixed.
+tier: advisory
+severity: error
+scope: type-map
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
+owners: [connector-plugin, pipeline-plugin]
+targets: [TypeMapReadRegexRule]
+rationale: >
+  Capturing a column's declared precision and then discarding it collapses
+  every column in the family onto one width, so a narrow column is widened and
+  a wide one silently loses digits at the destination — and the map still reads
+  as if it handled the family. A fixed default is legitimate only on the
+  unparameterized fallback rule, where nothing was declared to preserve. The
+  detector keys on the canonical's parentheses, so a capture dropped into a
+  canonical that carries no parameters at all is out of its reach.
+status: active
+superseded_by: null

@@ -1,0 +1,23 @@
+id: RULE-STRM-001
+statement: >
+  Each entry in a stream's destinations MUST address an endpoint no other
+  entry addresses.
+tier: advisory
+severity: error
+scope: stream
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique"
+owners: [pipeline-plugin]
+targets: [StreamAuthored]
+fixture_model: StreamInput
+rationale: >
+  A repeated destination writes the same records twice with nothing
+  downstream able to tell the two entries apart. The key is the whole
+  reference rather than the connection, because fanning one stream into
+  several objects of the same warehouse is a normal shape and must stay
+  authorable; narrowing the key to the connection would forbid it. The
+  emitted JSON Schema carries no uniqueness keyword for the array, so a
+  schema-only reading looks permissive and an author can believe duplicates
+  are intended.
+status: active
+superseded_by: null

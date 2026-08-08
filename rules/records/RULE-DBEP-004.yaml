@@ -1,0 +1,25 @@
+id: RULE-DBEP-004
+statement: >
+  A column's frozen `arrow_type` and `native_type` MUST be the values the
+  applicable type maps render for it; judgment supplies a value only where no
+  map covers the native or the canonical.
+tier: referential
+severity: error
+scope: database-endpoint
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Column, DatabaseEndpointDoc]
+rationale: >
+  The type maps are separate documents the engine resolves against twice — once
+  when discovery types a column, once when it renders the DDL for a table it
+  creates — so a value frozen into the endpoint by hand is a second answer to a
+  question the maps already answer. Nothing in the endpoint records where its
+  types came from, so a re-derived value validates here and diverges silently
+  at run time: the column is created as one type and read back as another.
+  Catching it means resolving each canonical through the connection map and
+  then the connector map and comparing, which is also why the uncovered case is
+  carved out — there the author is not disagreeing with a map, there is no map,
+  and the missing rule has to be authored too.
+status: active
+superseded_by: null

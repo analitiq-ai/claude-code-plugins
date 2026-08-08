@@ -1,0 +1,25 @@
+id: RULE-ENDP-042
+statement: >
+  An endpoint MUST declare only how a watermark is sent, and MUST NOT bake sync
+  policy — a lookback, an overlap, a backfill depth — into a cursor mapping.
+tier: procedural
+severity: error
+scope: api-endpoint
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+targets: [Replication]
+rationale: >
+  A cursor mapping decides how a watermark is written into the request; which
+  watermark to send is a different decision, made per run by the engine from the
+  stream's stored state. An endpoint that subtracts an interval or shifts an
+  operator applies that to every run of every stream on it, permanently and
+  invisibly — re-reading data nobody asked for, or, if the fudge goes the other
+  way, skipping rows while the run still reports success. The author is usually
+  compensating for a provider with clock skew or late-arriving rows, which is a
+  real problem the operator should be solving with sync policy. Nothing catches
+  it: in the document a fudge factor is indistinguishable from a legitimate
+  operator or format choice, so seeing one means knowing the provider's
+  semantics well enough to ask why the mapping is not simply the cursor.
+status: active
+superseded_by: null

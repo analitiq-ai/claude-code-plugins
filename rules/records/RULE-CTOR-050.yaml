@@ -1,0 +1,24 @@
+id: RULE-CTOR-050
+statement: >
+  A transport MUST be invoked no earlier than the phase at which every scope
+  its expressions reference becomes available, and an input a transport
+  references MUST declare a phase no later than that transport's first use.
+tier: advisory
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+targets: [ConnectorBase]
+rationale: >
+  Phases are the only thing in the document that says when a value exists,
+  and both directions of the mistake fail the same silent way — a transport
+  reading a post-auth discovered host during auth, or an input declared too
+  late for the transport that needs it, resolves to nothing and the request
+  goes out malformed rather than raising. Known enforcement gap:
+  resolvability is a property of the whole connector document read as an
+  ordered workflow — no model sees a transport, the operations that invoke it
+  and the inputs it consumes together — and connector-document refs are not
+  resolved at all, so even a nonsense scope passes.
+status: active
+superseded_by: null

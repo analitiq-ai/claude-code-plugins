@@ -56,7 +56,7 @@ Each `assignments[]` entry (`analitiq.contracts.stream.Assignment`) pairs a
 }
 ```
 
-## `assignments` order is significant (`ADV-STRM-019`)
+## `assignments` order is significant (`RULE-STRM-019`)
 
 Preserve the order a caller gave you and never re-sort the array for tidiness —
 a reordering is a semantic change, and in edit mode it is a diff the user did
@@ -89,7 +89,7 @@ If you get it wrong, the error tells you where to look: a missing or unknown
   it covers almost every mapping.
 - `{"op": "pipe", "args": [{"op": "get", "path": [...]}, {"op": "fn", "name": "<conversion>"}, …]}` —
   a `get` seed passed through one or more `fn` conversion stages
-  (`ADV-STRM-005`). An `fn` node is valid **only** inside `pipe.args`, never
+  (`RULE-STRM-005`). An `fn` node is valid **only** inside `pipe.args`, never
   standalone. Author `pipe` only when a conversion is genuinely required;
   otherwise prefer `get`.
 
@@ -121,7 +121,7 @@ array makes that failure unrepresentable.
 `constant` is
 `{"arrow_type": "<fully-qualified Arrow type>", "value": <JSON value>}`.
 
-### When a bare `get` is not enough (`ADV-STRM-020`)
+### When a bare `get` is not enough (`RULE-STRM-020`)
 
 The engine's conversion matrix classifies each `(source type, target type)` pair;
 `Int64 → Utf8` is the canonical **`explicit`** one. So when source and target
@@ -146,18 +146,18 @@ never author them.
 | `properties` | no | map of ArrowFieldSpec \| null | `None` | — |
 | `items` | no | ArrowFieldSpec \| null | `None` | — |
 
-Carries 3 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 3 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-assignment-target -->
 
 ### `target.path`
 
-Must be unique within `assignments` (`ADV-STRM-002`).
+Must be unique within `assignments` (`RULE-STRM-002`).
 
 `target.path` addresses the **assignment root only** — the destination field this
 assignment writes — so it is a **single segment** and the contract rejects any
 value containing a `.`. Inner structure is declared recursively by `properties`
 (for an `Object` target) and `items` (for a `List` target), governed by
-`ADV-STRM-010`. Child field specs are **not** separately addressable from
+`RULE-STRM-010`. Child field specs are **not** separately addressable from
 `assignments`: you cannot write a second assignment at `address.city` to reach
 inside an `address` Object target. One assignment owns one root and declares
 everything beneath it.
@@ -170,7 +170,7 @@ dotted target, was the defect — two spellings of one thing, one of which the
 engine rejected after splitting it.
 
 <!-- PROBE: stream-mapping-target-unresolved-locally -->
-Cross-document (`ADV-STRM-022`): endpoint resolution is server-side at save
+Cross-document (`RULE-STRM-022`): endpoint resolution is server-side at save
 time; the local validator does **not** check this.
 
 ## `arrow_type` vocabulary
@@ -185,10 +185,10 @@ so bare parameterized forms (`Timestamp`, `Decimal128`, `Time64`, `Duration`,
 canonical walkthrough: the shapes (bare / `( )`), the authored-shape
 container markers, unit identifiers and timezone forms apply identically here.
 
-Container shape is not free-form either: `ADV-STRM-006`, `ADV-STRM-007` and
-`ADV-STRM-010` tie `arrow_type` to whether the field declares `properties`,
+Container shape is not free-form either: `RULE-STRM-006`, `RULE-STRM-007` and
+`RULE-STRM-010` tie `arrow_type` to whether the field declares `properties`,
 `items`, or neither, and tie a constant's JSON kind to its declared type.
 
 The destination endpoint's `columns[]` decides `target.arrow_type`
-(`ADV-STRM-028`) — a `Decimal128(12, 2)` column gives a `Decimal128(12, 2)`
+(`RULE-STRM-028`) — a `Decimal128(12, 2)` column gives a `Decimal128(12, 2)`
 target, precision and scale included.

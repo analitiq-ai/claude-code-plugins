@@ -19,7 +19,7 @@ they are checked **against each other**:
 The engine **refuses, it does not guess**: it reads the declaration
 instead of probing the live database, and refuses at handshake time when
 a needed fact was not declared. Declaration and dialect must agree both
-ways (`ADV-PKG-016`), checked by the CDK conformance kit
+ways (`RULE-PKG-016`), checked by the CDK conformance kit
 at registry CI. Author them together, never one alone.
 
 ## `sql_capabilities` — the declaration
@@ -28,7 +28,7 @@ Top-level in `connector.json`, beside `transports`. The contract makes it
 **optional**; the engine makes it **functionally mandatory for any
 write-capable connector** — omit it and every write mode is refused at
 handshake. A database connector is write-capable by definition (read and
-write are both first-class), so declare it (`ADV-CTOR-049`).
+write are both first-class), so declare it (`RULE-CTOR-049`).
 
 A declared block is **complete**: every fact in the declaration table below
 that is not marked optional is required. A partial declaration is a config
@@ -36,7 +36,7 @@ error, not a request for defaults.
 
 | Fact | Values | How to choose |
 |---|---|---|
-| `catalog` | `none` / `read` / `full` | The system's multi-database reality. `none` — no catalog concept, or catalogs exist but a connection cannot address across them (Postgres, MySQL). `read` — the catalog is addressable but the engine may not create it. `full` — the engine may create and drop catalogs. The test is **cross-catalog addressability, not depth**: Postgres and MySQL are `none` even though a database sits above the schema, because one connection cannot reach across it. A system whose statements *can* name `catalog.schema.table` (Snowflake, BigQuery) is `read` or `full`, never `none` (`ADV-CTOR-031`; the discovery side is `spec-resource-discovery.md`). |
+| `catalog` | `none` / `read` / `full` | The system's multi-database reality. `none` — no catalog concept, or catalogs exist but a connection cannot address across them (Postgres, MySQL). `read` — the catalog is addressable but the engine may not create it. `full` — the engine may create and drop catalogs. The test is **cross-catalog addressability, not depth**: Postgres and MySQL are `none` even though a database sits above the schema, because one connection cannot reach across it. A system whose statements *can* name `catalog.schema.table` (Snowflake, BigQuery) is `read` or `full`, never `none` (`RULE-CTOR-031`; the discovery side is `spec-resource-discovery.md`). |
 | `session_targeting` | `per_statement` / `session_default` | How the write target is selected. `per_statement` — every statement is fully qualified; the portable choice, correct wherever statements can name `schema.table`. `session_default` — the target is established once as session state (`search_path`, `USE`) and inherited; declare it only when the system genuinely requires it. |
 | `merge_form` | `merge` / `insert_on_conflict` / `insert_on_duplicate_key` / `none` | The upsert grammar the system actually supports: SQL-standard `MERGE`; Postgres-style `INSERT … ON CONFLICT`; MySQL-style `INSERT … ON DUPLICATE KEY`; or `none` when the system has no native upsert. Anything other than `none` obliges `merge_statement_sql`. |
 | `bulk_load` | per-transport object | Which bulk mechanism each SQL transport family lands with — see below. Required as an object; `{}` is a complete, valid declaration meaning "no bulk mechanism anywhere, land via executemany". |
@@ -48,14 +48,14 @@ error, not a request for defaults.
 A bulk mechanism is a fact about a **transport**, not the connector:
 `copy_from` needs the driver's wire connection, `adbc_ingest` an ADBC
 cursor. So `bulk_load` maps each SQL transport family it applies to its
-mechanism (`ADV-CTOR-048`).
+mechanism (`RULE-CTOR-048`).
 
 | Family | Mechanisms |
 |---|---|
 | `sqlalchemy` | `copy_from` / `load_data_local_infile` / `load_job` |
 | `adbc` | `adbc_ingest` / `copy_from` / `load_data_local_infile` / `load_job` |
 
-- **Absence of a key is the only "none"** (`ADV-CTOR-015`) — omit the
+- **Absence of a key is the only "none"** (`RULE-CTOR-015`) — omit the
   key, and that family lands via executemany.
 - `copy_from`, `load_data_local_infile`, `load_job` are
   **dialect-implemented** — declaring one on either family obliges the
@@ -72,13 +72,13 @@ mechanism (`ADV-CTOR-048`).
 | `scope` | `temp` / `real` | `temp` — a session/transaction-scoped temporary table. `real` — an ordinary table the engine creates and drops around the write, for systems with no usable temp relation. The engine passes this through to `stage_table_sql`'s `temp` argument. |
 | `schema` | `target` / `dedicated` | `target` co-locates the stage in the target's own schema. `dedicated` places it in a separate schema, named by `dedicated_schema` below. |
 | `transactional_ddl` | `true` / `false` | Whether the system runs `CREATE`/`DROP` **inside** the write transaction. `false` for engines that auto-commit DDL (MySQL), which forces the engine onto a per-step staging strategy. A guess here is a correctness bug, not a tuning knob — take it from the system's documented DDL behaviour. |
-| `dedicated_schema` | string, conditional | The schema name the stage goes in (`ADV-CTOR-013`) — which is why it is never in the block's required set. |
+| `dedicated_schema` | string, conditional | The schema name the stage goes in (`RULE-CTOR-013`) — which is why it is never in the block's required set. |
 
 ## The dialect renderers
 
 The write-path hooks are plain methods on `cdk.sql.dialects.SqlDialect`,
 overridden in the connector package's own dialect subclass
-(`ADV-PKG-005`). `bulk_land` is the one exception that performs I/O,
+(`RULE-PKG-005`). `bulk_land` is the one exception that performs I/O,
 because a bulk mechanism *is* the act of landing data.
 
 ```python
@@ -87,13 +87,13 @@ from collections.abc import Sequence
 from cdk.sql.dialects import SqlDialect, TableAddress
 ```
 
-The hooks, and the declared fact obliging each (`ADV-PKG-016`):
+The hooks, and the declared fact obliging each (`RULE-PKG-016`):
 
 | Hook | Required when | Signature |
 |---|---|---|
-| `stage_table_sql` | **always** (`ADV-PKG-017`) | `(self, stage: TableAddress, target: TableAddress, *, temp: bool) -> str` |
+| `stage_table_sql` | **always** (`RULE-PKG-017`) | `(self, stage: TableAddress, target: TableAddress, *, temp: bool) -> str` |
 | `merge_statement_sql` | `merge_form != "none"` — and **forbidden** when it is `none` | `(self, stage: TableAddress, target: TableAddress, conflict_keys: Sequence[str], columns: Sequence[str]) -> str` |
-| `bulk_land` | a `bulk_load` entry names a dialect-implemented mechanism — and **forbidden** otherwise | `(self, conn, stage: TableAddress, batch, *, runtime) -> bool` — a plain `def`, never `async` (`ADV-PKG-013`) |
+| `bulk_land` | a `bulk_load` entry names a dialect-implemented mechanism — and **forbidden** otherwise | `(self, conn, stage: TableAddress, batch, *, runtime) -> bool` — a plain `def`, never `async` (`RULE-PKG-013`) |
 
 `temp` is keyword-only and derives from `stage.scope`; do not re-derive
 it. `stage_table_sql` renders `CREATE [TEMPORARY] TABLE <stage>` shaped
@@ -106,7 +106,7 @@ landed row count either way.
 
 ### `bulk_land` on an async driver
 
-Every dialect hook is called synchronously (`ADV-PKG-013`), but an async
+Every dialect hook is called synchronously (`RULE-PKG-013`), but an async
 driver's bulk API returns a coroutine. The two are bridged, not
 reconciled:
 
@@ -140,17 +140,17 @@ class {Name}Dialect(SqlDialect):
 ```
 
 The CDK exposes **no wrapper of its own** for this, so the import comes
-straight from SQLAlchemy (`ADV-PKG-011`).
+straight from SQLAlchemy (`RULE-PKG-011`).
 
 The engine leaves a `temp`-scope stage unqualified, but a `real`-scope
 one carries a schema — the target's, or the dedicated one
-(`ADV-PKG-019`). A bulk mechanism that passes only the bare table name
+(`RULE-PKG-019`). A bulk mechanism that passes only the bare table name
 resolves it against whatever the session's default happens to be, so it
 works on temp scope and silently lands in the wrong schema on real
 scope. Nothing catches this: the engine verifies the landed **row
 count**, not where the rows landed.
 
-### The no-op degradation is a hard requirement (`ADV-PKG-018`)
+### The no-op degradation is a hard requirement (`RULE-PKG-018`)
 
 When every landed column is a conflict key there is nothing to update.
 Render the form's insert-only degradation (Postgres `ON CONFLICT DO
@@ -169,22 +169,22 @@ the system-schema rules apply. A catalog without a schema is refused at
 construction.
 
 Build addresses by calling the framework-owned `table_address()` factory
-(`ADV-PKG-012`).
+(`RULE-PKG-012`).
 
 ## What the connector must not do
 
-- **No stage naming** (`ADV-PKG-020`) — a retry of the same batch reuses
+- **No stage naming** (`RULE-PKG-020`) — a retry of the same batch reuses
   the engine's deterministic name and self-heals leftovers.
 - **No side ledger.** Idempotency is content-derived (the contract primary
   key, or the engine's synthetic record-hash identity) plus the
   deterministic stage name. There is no batch-commit table and no key-type
   hook for one.
-- **No private overrides** (`ADV-PKG-012`) — the conformance kit's
+- **No private overrides** (`RULE-PKG-012`) — the conformance kit's
   surface check rejects the package.
 - **Nothing on the connector class but `dialect_class`**
-  (`ADV-PKG-010`) — all system-specific behaviour lives in the dialect,
+  (`RULE-PKG-010`) — all system-specific behaviour lives in the dialect,
   reached through the sanctioned hooks.
-- **No changed signatures** (`ADV-PKG-013`) — the conformance kit
+- **No changed signatures** (`RULE-PKG-013`) — the conformance kit
   compares shapes, not just names.
 
 ## Worked example — MySQL
@@ -270,7 +270,7 @@ a connector that validates cleanly and is refused at handshake — which is
 why the two are authored together here.
 
 **The CDK is the authority on the hook surface; this document restates
-it** (`ADV-PKG-003`). The `sql_capabilities` vocabularies above are
+it** (`RULE-PKG-003`). The `sql_capabilities` vocabularies above are
 pinned to the contract models by
 `tests/connector_builder/test_schema_drift.py`, but the hook
 names and signatures are engine-owned and nothing here can pin them —

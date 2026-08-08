@@ -19,7 +19,7 @@ tzdata
 # analitiq-validator runtime deps
 jsonschema>=4.18,<5
 
-# Reads the authored rule registry (`rules/adv/*.yaml`). Deliberately NOT a
+# Reads the authored rule registry (`rules/records/*.yaml`). Deliberately NOT a
 # runtime dependency of analitiq-contract-models: the wheel ships the compiled
 # `rules.json` instead, so an engine installing the contract package does not
 # inherit a YAML parser for data that never changes at run time.

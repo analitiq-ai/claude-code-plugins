@@ -2,7 +2,7 @@
 
 All Analitiq schemas are served from a single host:
 `https://schemas.analitiq.ai/`. Each authored document declares `$schema`
-against it (`ADV-SHRD-003`), and the value is locked to a `const` inside the
+against it (`RULE-SHRD-003`), and the value is locked to a `const` inside the
 published schema.
 
 <!-- BEGIN GENERATED: schema-urls -->

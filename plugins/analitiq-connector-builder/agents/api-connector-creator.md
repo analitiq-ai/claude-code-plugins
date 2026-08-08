@@ -60,7 +60,7 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
   (the `connector` + `type-map` sections — the cross-field rules your
   artifacts must satisfy)
 
@@ -68,8 +68,8 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 
 1. **Top-level metadata** — `$schema` (`https://schemas.analitiq.ai/connector/latest.json`),
    `kind: "api"`, `connector_id` (the stable connector slug — pattern in
-   `metadata-and-versioning.md`; `ADV-CTOR-042`), `display_name`,
-   `description`, `tags`, `version` (`ADV-CTOR-032`).
+   `metadata-and-versioning.md`; `RULE-CTOR-042`), `display_name`,
+   `description`, `tags`, `version` (`RULE-CTOR-032`).
 2. **Transports** — populate `transports` map, `default_transport`, and
    `transport_defaults`. Use `transport_type: "http"`. For multi-origin
    providers (e.g. separate `auth` / `discovery` / `api` origins), define
@@ -80,7 +80,7 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    the planned-but-unregistered names are
    `references/value-expressions.md` §Function catalog.
    `transport_ref` on auth ops must point at a defined transport
-   (ADV-CTOR-005).
+   (RULE-CTOR-005).
 4. **Connection contract** — populate `connection_contract.inputs`,
    `post_auth_outputs`, `required_for_activation`, and `validation` per
    `references/connection-contract.md`. For OAuth2, declare `client_id` and
@@ -93,15 +93,15 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    `{match, native, canonical}` rules) covering every `(native_type,
    arrow_type)` pair the endpoint-creator emits on typed field schemas.
    Schemaless natives (e.g. `jsonb`, `VARIANT`, MongoDB documents) map
-   to `"Json"` (`ADV-TMAP-001`); endpoint authors may narrow these to
+   to `"Json"` (`RULE-TMAP-001`); endpoint authors may narrow these to
    `Object` / `List` inline. The validator walks endpoint files and asserts every
    `native_type` resolves through this array with a rendered canonical
    equal to the endpoint's declared `arrow_type` (`Object` / `List` are
    accepted narrowings of `Json`). The orchestrator writes this array
    to `{connector_id}/definition/type-map-read.json` and validates it
    against `https://schemas.analitiq.ai/type-map-read/latest.json`. Author
-   read-side regex `native` literals uppercase (`ADV-TMAP-014`). API
-   connectors ship no write map and no package files (`ADV-CTOR-043`):
+   read-side regex `native` literals uppercase (`RULE-TMAP-014`). API
+   connectors ship no write map and no package files (`RULE-CTOR-043`):
    return `type_map_write: null` and `package_files: null`.
 
 ## Definition of Done
@@ -142,9 +142,9 @@ connector body) and `type_map_read` (the top-level rules array), with
 - Never author `created_at` / `updated_at` — those are registry-stamped.
   `connector_id` is author-supplied.
 - Never use `${...}` interpolation outside a `template` value expression
-  (`ADV-SHRD-006`).
+  (`RULE-SHRD-006`).
 - Never pre-compute base64 / SHA / signature values — use `function`
-  expressions (`ADV-SHRD-009`). A baked-in signature works in your testing
+  expressions (`RULE-SHRD-009`). A baked-in signature works in your testing
   and breaks for every other tenant.
 - Never embed DSN templates. If you find yourself reaching for one, the
   classification was wrong; report and stop.

@@ -12,10 +12,10 @@ Omitting `schedule` is equivalent to authoring its defaults.
 | `interval_minutes` | no | integer \| null | `None` | `min=1` |
 | `cron_expression` | no | string \| null | `None` | `pattern=^cron\(.+\)$` |
 
-Carries 3 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 3 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-schedule -->
 
-Author only the fields the chosen type calls for (`ADV-PIPE-002`); leave the
+Author only the fields the chosen type calls for (`RULE-PIPE-002`); leave the
 other type's field out entirely rather than setting it to `null`.
 
 ## `type: manual`
@@ -49,7 +49,7 @@ contract accepts.
 ```
 
 Fires on an AWS EventBridge cron expression, interpreted in `timezone`
-(`ADV-PIPE-009`) — an expression the contract accepts can still be rejected by
+(`RULE-PIPE-009`) — an expression the contract accepts can still be rejected by
 the scheduler.
 
 ## `timezone`

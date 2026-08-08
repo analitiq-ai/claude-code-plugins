@@ -1,0 +1,24 @@
+id: RULE-STRM-029
+statement: >
+  A stream source MUST declare a replication policy unless the referenced
+  source endpoint supports full refresh.
+tier: referential
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [StreamSource]
+rationale: >
+  Omitting the block is a policy choice, not an absence: it falls back to
+  reading everything each run, which only a source that supports full
+  refresh can do. Endpoint capability is invisible to the stream document,
+  so the correctness of the default is decided by an artifact the model
+  cannot read and the rejection lands server-side. That makes the omission
+  the most attractive wrong answer — it is shorter, it validates, and it
+  requires the author to know nothing. Where full-refresh support is not
+  established, authoring an explicit policy is what removes the guess;
+  catching a violation otherwise means reading the endpoint's declared read
+  capability.
+status: active
+superseded_by: null

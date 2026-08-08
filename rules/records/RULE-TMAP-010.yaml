@@ -1,0 +1,24 @@
+id: RULE-TMAP-010
+statement: >
+  A capture feeding a canonical parameter position MUST NOT be able to match a
+  value that position refuses, and a literal sharing a bounded position with
+  such a capture MUST hold against every value that capture can match.
+tier: advisory
+severity: error
+scope: type-map
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [TypeMapReadRegexRule]
+rationale: >
+  A capture written loosely — an unbounded digit run where the family admits a
+  range — validates as a rule and then renders an out-of-vocabulary canonical
+  the first time a real column falls outside the range, which is exactly the
+  column the tiered rules were written to route. Bounding each capture to its
+  own tier is the fix, and it is not obvious because the pattern already looks
+  specific. Two things stay out of reach: a position the grammar states as an
+  open pattern rather than a member list is not interrogated, and where a bound
+  carries a placeholder on each side each capture is judged against its own
+  position, so the pair jointly reachable from them is not judged at all.
+status: active
+superseded_by: null

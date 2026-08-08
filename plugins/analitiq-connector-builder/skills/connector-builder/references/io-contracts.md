@@ -266,7 +266,7 @@ access and may not guess field types).
         "properties": {
           "name": { "type": "string" },
           "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`)." },
-          "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness (`ADV-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`." },
+          "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness (`RULE-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`." },
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },
           "format": { "type": "string", "description": "Documented string format (e.g. `email`, `uri`, `uuid`, `date`)." },
@@ -298,7 +298,7 @@ access and may not guess field types).
         "properties": {
           "validator": {
             "type": "string",
-            "description": "Validator id. Owned by `analitiq.validator.VALIDATOR_IDS` and pinned by tests/connector_builder/. Most rules — including every ADV-* cross-field rule — report under `contract-model`; the rest cover cross-file relationships the contract models cannot see.",
+            "description": "Validator id. Owned by `analitiq.validator.VALIDATOR_IDS` and pinned by tests/connector_builder/. Most rules — including every RULE-* cross-field rule — report under `contract-model`; the rest cover cross-file relationships the contract models cannot see.",
             "enum": [
               "contract-model",
               "document",
@@ -407,7 +407,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
         {
           "type": "array",
           "minItems": 1,
-          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). REQUIRED for kind=database; MUST be null for kind=api. Same rule shape but the direction inverts: `canonical` is the matcher (regex with ECMA named captures for parameterized types) and `native` is the rendered DDL (may carry ${name} substitutions backed by captures in `canonical`). Canonical-vocabulary coverage, and when a family may be left unrendered: `ADV-TMAP-019`. Written to {connector_id}/definition/type-map-write.json and validated against https://schemas.analitiq.ai/type-map-write/latest.json (full contract-model + semantic pass; direction derived from the filename).",
+          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). REQUIRED for kind=database; MUST be null for kind=api. Same rule shape but the direction inverts: `canonical` is the matcher (regex with ECMA named captures for parameterized types) and `native` is the rendered DDL (may carry ${name} substitutions backed by captures in `canonical`). Canonical-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json and validated against https://schemas.analitiq.ai/type-map-write/latest.json (full contract-model + semantic pass; direction derived from the filename).",
           "items": {
             "type": "object",
             "required": ["match", "native", "canonical"],
@@ -430,10 +430,10 @@ Returned by `api-connector-creator` and `db-connector-creator`.
           "additionalProperties": false,
           "description": "Python package files for kind=database connectors (the connector root IS the package). MUST be null for kind=api. Written by the orchestrator to {connector_id}/connector.py, __init__.py, requirements.txt, pyproject.toml. Contents follow the connector-package contract in connector-spec-db/spec-connector-package.md; enforcement (wheel build, entry points) is registry CI's job, not the schema validator's.",
           "properties": {
-            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector) — `ADV-PKG-010`; imports per connector-spec-db/spec-connector-package.md section Import rules." },
-            "init_py":          { "type": "string", "minLength": 1, "description": "See `ADV-PKG-009`." },
+            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector) — `RULE-PKG-010`; imports per connector-spec-db/spec-connector-package.md section Import rules." },
+            "init_py":          { "type": "string", "minLength": 1, "description": "See `RULE-PKG-009`." },
             "requirements_txt": { "type": "string", "minLength": 1, "description": "THIS connector's driver(s) only — the SQLAlchemy DBAPI (sync or async) and/or adbc-driver-{driver} wheel." },
-            "pyproject_toml":   { "type": "string", "minLength": 1, "description": "Names derived from connector_id: `ADV-PKG-007`. Dependencies: `ADV-PKG-006`. Entry-point groups: `ADV-PKG-008`. Copy the template in connector-spec-db/spec-connector-package.md." }
+            "pyproject_toml":   { "type": "string", "minLength": 1, "description": "Names derived from connector_id: `RULE-PKG-007`. Dependencies: `RULE-PKG-006`. Entry-point groups: `RULE-PKG-008`. Copy the template in connector-spec-db/spec-connector-package.md." }
           }
         },
         { "type": "null", "description": "kind=api connectors and stub agents return null — API connectors carry only the definition." }

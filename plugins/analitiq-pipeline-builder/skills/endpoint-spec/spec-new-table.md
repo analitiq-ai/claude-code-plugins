@@ -12,11 +12,11 @@ introspection; the mode contract lives in `private-endpoint-creator`
 
 ## Identity
 
-- `schema` / `name` are the user's spelling (`ADV-DBEP-009`) — for a new table
+- `schema` / `name` are the user's spelling (`RULE-DBEP-009`) — for a new table
   the user's spelling *is* the canonical identifier; it determines what the
   engine creates. Pass it to `endpoint_id.py` unchanged, `--object-type table`.
 - The target namespace is `schema`, or the database-as-`catalog` for schemaless
-  dialects (`ADV-DBEP-010`). Whether the engine creates a missing schema is
+  dialects (`RULE-DBEP-010`). Whether the engine creates a missing schema is
   dialect-owned (a connector pre-DDL hook; not every dialect declares one), so a
   discovered namespace is the only target that succeeds everywhere.
 
@@ -47,13 +47,13 @@ Columns mirror the source that will feed the table:
   JSON-Schema shape with `spec-columns.md` judgment.
 - Never author `_synced_at` or `_record_hash`, and drop them from the mirror
   when the source carries them — an engine-created source table does
-  (`ADV-DBEP-008`).
+  (`RULE-DBEP-008`).
 
 ## `native_type` for a table that does not exist
 
 Resolve each distinct `arrow_type` through the write maps (invocation and
 precedence per `spec-type-map-gaps.md`) and freeze the rendered native
-(`ADV-DBEP-004`).
+(`RULE-DBEP-004`).
 
 For an uncovered canonical:
 
@@ -70,6 +70,6 @@ For an uncovered canonical:
 ## `primary_keys`
 
 User-confirmed (the orchestrator interviews; the source's `primary_keys` are
-the suggested default). Must reference derived columns (`ADV-DBEP-003`). Omit
+the suggested default). Must reference derived columns (`RULE-DBEP-003`). Omit
 when the user declines keys — but an `upsert` stream then has no destination
 key columns to name as `conflict_keys`.

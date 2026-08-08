@@ -1,0 +1,20 @@
+id: RULE-SHRD-007
+statement: >
+  A `function` expression MUST name a function the engine's registry declares,
+  including where documentation describes an unregistered one as planned.
+tier: referential
+severity: error
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  The registry belongs to the engine and is consulted at connect time; no
+  contract model checks a function name, so a typo — or a function some
+  document promises is coming — validates clean and fails on the first
+  connection attempt, after the connector has shipped. "Planned" is the trap
+  worth naming: prose describing a function reads exactly like prose
+  describing one that exists. Catching it means reading the engine's
+  registered catalog, which moves on another repository's release schedule.
+status: active
+superseded_by: null

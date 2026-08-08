@@ -42,12 +42,12 @@ The orchestrator passes:
 ## Process
 
 1. Route every `connection_contract` entry by the last segment of its `storage`
-   (`ADV-CONN-006`; see `spec-envelope.md`):
+   (`RULE-CONN-006`; see `spec-envelope.md`):
    - `connection.parameters` → `parameters.<key>` = the user's value
-     (`ADV-CONN-007`; `port: 5432` integer, not `"5432"`).
+     (`RULE-CONN-007`; `port: 5432` integer, not `"5432"`).
    - `secrets` → `secret_refs.<key>` = `"env:ANALITIQ_<connection_slug>_<key>"`
      (upper-cased, non-alphanumerics → `_`), and add that env-var name to the
-     `.secrets/credentials.json` template (`ADV-CONN-009`).
+     `.secrets/credentials.json` template (`RULE-CONN-009`).
    - `connection.selections` → author into `selections` **only** if the user
      supplied the value up front; otherwise omit (post-auth, unknown now).
    - `connection.discovered` → **never author** (server-managed).
@@ -93,8 +93,8 @@ The orchestrator passes:
 - The connection document has **no `values` envelope**. Route into the storage
   maps (`parameters` / `selections` / `discovered` / `secret_refs`); the closed
   schema rejects any other top-level key.
-- Never embed a real secret (`ADV-SHRD-001`).
-- Never author the `discovered` map (`ADV-CONN-005`).
+- Never embed a real secret (`RULE-SHRD-001`).
+- Never author the `discovered` map (`RULE-CONN-005`).
 - `secret_refs` pointer values must match one of the schemes the contract
   accepts — the authoritative grammar is
   `analitiq.contracts.connection.SECRET_REF_VALUE_PATTERN`, listed in

@@ -2,7 +2,7 @@
 ``data_sync``)."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.advisory_prose import (
+from analitiq.contracts.shared.prose_obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -17,17 +17,17 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="Schedule", field="interval_minutes",
         prose_hash="e2b3b4f1946e",
-        rule_ids=("ADV-PIPE-002",), structural="a Field ge lower bound",
+        rule_ids=("RULE-PIPE-002",), structural="a Field ge lower bound",
     ),
     ProseObligation(
         model="Schedule", field="cron_expression",
         prose_hash="d4f394338c5b",
-        rule_ids=("ADV-PIPE-002",), structural="Field(pattern=CRON_PATTERN)",
+        rule_ids=("RULE-PIPE-002",), structural="Field(pattern=CRON_PATTERN)",
     ),
     ProseObligation(
         model="ErrorHandling", field="retry_delay_seconds",
         prose_hash="b3dadb69ebd7",
-        rule_ids=("ADV-RETRY-001",),
+        rule_ids=("RULE-RETRY-001",),
         structural="the effective-delay defaulting is _default_retry_delay's",
     ),
     # === data-sync ===========================================================
@@ -56,11 +56,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="PipelineRunStatusData", field="error", rule_ids=("ADV-DSYNC-001",),
+        model="PipelineRunStatusData", field="error", rule_ids=("RULE-DSYNC-001",),
         prose_hash="80a5b57a4a94",
     ),
     ProseObligation(
-        model="PublicRunError", rule_ids=("ADV-DSYNC-001",),
+        model="PublicRunError", rule_ids=("RULE-DSYNC-001",),
         prose_hash="743cc6a95785",
     ),
     ProseObligation(
@@ -115,7 +115,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="PipelineAuthored", field="streams",
         prose_hash="9be6c94e9555",
         structural="typed as a list of `NonEmptyStr`",
-        rule_ids=("ADV-PIPE-010",),
+        rule_ids=("RULE-PIPE-010",),
     ),
     ProseObligation(
         model="PipelineAuthored", field="tags",
@@ -128,7 +128,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="PipelineConnections", field="destinations",
         prose_hash="2b8f07e52c07",
-        rule_ids=("ADV-PIPE-001",),
+        rule_ids=("RULE-PIPE-001",),
         structural="a Field lower bound keeps the list non-empty; items are `NonEmptyStr`",
     ),
     ProseObligation(
@@ -139,7 +139,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="PipelineInput",
         prose_hash="b2dd3a26b063",
-        rule_ids=("ADV-PIPE-004",),
+        rule_ids=("RULE-PIPE-004",),
         structural=(
             "the extra-forbid `model_config` closes the shape; "
             "`_ACTIVE_REQUIRES_STREAMS_RULE` projects "
@@ -266,7 +266,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="PublicRunError", field="message",
         prose_hash="d486e13aef87",
-        rule_ids=("ADV-DSYNC-002",),
+        rule_ids=("RULE-DSYNC-002",),
         structural="`NonEmptyStr` requiredness",
     ),
 )

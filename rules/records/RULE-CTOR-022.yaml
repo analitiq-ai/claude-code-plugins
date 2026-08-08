@@ -1,0 +1,24 @@
+id: RULE-CTOR-022
+statement: >
+  A post-auth output MUST state how its value is produced and where it is
+  durably stored using only the vocabulary `PostAuthOutput` declares for each;
+  which pairings of those values are legal is RULE-CTOR-002.
+tier: structural
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput.mode"
+owners: [connector-plugin, engine]
+targets: [PostAuthOutput]
+fields: [mode, storage]
+mechanism: literal_enum
+rationale: >
+  The mode selects which post-auth flow the engine runs to produce the value
+  and the storage selects the durable store it lands in — and because the
+  reference path an output materialises at is derived from its storage name
+  plus its key, an unrecognised storage value silently invalidates every ref
+  and `required_for_activation` entry aimed at it. Each field is checked alone
+  here because each is independently legal; the pairing they must respect is a
+  separate rule, which is why this one does not mention it beyond the pointer.
+status: active
+superseded_by: null

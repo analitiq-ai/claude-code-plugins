@@ -1,0 +1,22 @@
+id: RULE-CTOR-003
+statement: >
+  A resource-discovery implementation MUST declare an entrypoint exactly when
+  the strategy code ships inside the connector package, and MUST omit one when
+  the strategy is already shipped by the runtime.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryImplementation._entrypoint_matches_type"
+owners: [engine, connector-plugin]
+targets: [ResourceDiscoveryImplementation]
+rationale: >
+  The two implementation kinds are loaded by different code paths: one imports
+  the named entrypoint out of the connector's own package, the other looks the
+  strategy up in the runtime's registry and never reads an entrypoint at all.
+  A package-shipped strategy with no entrypoint leaves the loader nothing to
+  import, and an entrypoint beside a runtime-provided strategy is dead
+  configuration a later reader will trust — both fail at the first connection
+  that discovers anything, not while authoring.
+status: active
+superseded_by: null

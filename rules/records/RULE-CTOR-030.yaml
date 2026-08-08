@@ -1,0 +1,23 @@
+id: RULE-CTOR-030
+statement: >
+  A database connector's `resource_discovery` strategy MUST enumerate every
+  namespace level the target system actually has, because a strategy that
+  folds a level away leaves every object outside that level's default
+  unreachable.
+tier: judgment
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  Discovery output is what the runtime turns into addressable endpoints, so a
+  folded level does not degrade discovery visibly — it makes every object
+  under a non-default parent look as though it does not exist, and the
+  connector reads as working. Catching that means knowing the system's real
+  hierarchy and comparing it to what the strategy returns:
+  `resource_discovery.strategy` is a registered strategy id and `options` is
+  an open map, so the document encodes no depth for anything here to check
+  against.
+status: active
+superseded_by: null

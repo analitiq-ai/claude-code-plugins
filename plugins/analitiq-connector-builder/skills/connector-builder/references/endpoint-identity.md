@@ -5,7 +5,7 @@ and database connectors.
 
 ## The rule
 
-`endpoint_id` is a **lookup handle, not the target** (`ADV-DBEP-007`). The
+`endpoint_id` is a **lookup handle, not the target** (`RULE-DBEP-007`). The
 engine uses it only to resolve the on-disk file (`endpoints/{endpoint_id}.json`)
 and to namespace checkpoint / state. The **verbatim locator** lives in a
 separate field the engine reads:
@@ -39,7 +39,7 @@ on every re-author / re-discovery (idempotent).
 
   The database derivation ships in the contract package as
   `analitiq.contracts.endpoint_identity.derive_db_endpoint_id`, and a supplied
-  id is checked against it (`ADV-STRM-003`), so it is never
+  id is checked against it (`RULE-STRM-003`), so it is never
   reimplemented — this plugin authors no database endpoints, and the runtime
   discovery that does produce them derives the id from that function. (The API
   flatten lives in the validator, which recomputes it to enforce
@@ -51,9 +51,9 @@ on every re-author / re-discovery (idempotent).
 - `filename == endpoint_id`.
 - Unique within the owner (connector for API, connection for DB).
 - The verbatim locator field is the **sole** source for building the query /
-  request (`ADV-DBEP-007`).
+  request (`RULE-DBEP-007`).
 
-## Immutability (`ADV-ENDP-043`)
+## Immutability (`RULE-ENDP-043`)
 
 Streams pin endpoints by id, so renaming one silently detaches every stream
 that referenced it — the pin does not fail loudly, it resolves to nothing.

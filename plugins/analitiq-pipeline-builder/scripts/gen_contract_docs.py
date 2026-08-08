@@ -71,7 +71,7 @@ def _md_escape(text: str) -> str:
     prose. Escaping would corrupt the very regexes this generator exists to
     reproduce faithfully.
 
-    The plain-cell callers (advisory prose, type summaries) are therefore only as
+    The plain-cell callers (rule statements, type summaries) are therefore only as
     safe as the pinned contract's own text. That holds for every rule rc10 ships;
     if a future rule's prose contains markdown metacharacters, escape at that
     call site rather than here.
@@ -270,7 +270,7 @@ def render_filter_operators() -> str:
 # prose when its record names this owner — the registry's own answer to "who
 # has to know this", decided once per rule where the rule is authored.
 #
-# `scope` decides only WHERE it lands (see `_ADVISORY_BLOCKS`), never whether
+# `scope` decides only WHERE it lands (see `_RULE_BLOCKS`), never whether
 # it appears. The two are different questions and used to be conflated: a rule
 # grading a document this plugin does not author can still bind an author here,
 # which is why an id-prefix allowlist needed a hand-kept list of exceptions
@@ -280,7 +280,7 @@ PLUGIN_OWNER = "pipeline-plugin"
 
 def _owned() -> list:
     """Every rule this plugin owns — the whole of what its prose may cite."""
-    from analitiq.contracts.shared.advisory import all_rules
+    from analitiq.contracts.shared.rules import all_rules
 
     return [r for r in all_rules() if PLUGIN_OWNER in r.owners]
 
@@ -294,8 +294,8 @@ def _block_rules(block_id: str) -> list:
     construction: every rule lands exactly once, and a rule whose scope is new
     to this plugin surfaces in the shared block instead of vanishing.
     """
-    scopes = _ADVISORY_BLOCKS[block_id]
-    claimed = {s for spec in _ADVISORY_BLOCKS.values() for s in spec}
+    scopes = _RULE_BLOCKS[block_id]
+    claimed = {s for spec in _RULE_BLOCKS.values() for s in spec}
     rules = [
         r for r in _owned()
         if (r.scope in scopes if scopes else r.scope not in claimed)
@@ -303,7 +303,7 @@ def _block_rules(block_id: str) -> list:
     return sorted(rules, key=lambda r: r.id)
 
 
-def _advisory_block(block_id: str) -> str:
+def _rule_block(block_id: str) -> str:
     """The registry's rules for one block: id and obligation, nothing else.
 
     No column says whether anything applies a rule, because that changes
@@ -336,13 +336,13 @@ def _advisory_block(block_id: str) -> str:
 # above claims renders once in the orchestrator skill rather than being copied
 # into each spec. That is what makes the map a partition instead of a filter —
 # a scope nobody claims cannot fall out of the prose unnoticed.
-_ADVISORY_BLOCKS: dict[str, tuple[str, ...]] = {
-    "advisory-pipeline": ("pipeline",),
-    "advisory-stream": ("stream",),
-    "advisory-endpoint": ("database-endpoint", "api-endpoint"),
-    "advisory-connection": ("connection",),
-    "advisory-type-map": ("type-map",),
-    "advisory-shared": (),
+_RULE_BLOCKS: dict[str, tuple[str, ...]] = {
+    "rules-pipeline": ("pipeline",),
+    "rules-stream": ("stream",),
+    "rules-endpoint": ("database-endpoint", "api-endpoint"),
+    "rules-connection": ("connection",),
+    "rules-type-map": ("type-map",),
+    "rules-shared": (),
 }
 
 
@@ -353,35 +353,35 @@ def rendered_ids() -> set[str]:
     searching its output for row-shaped text, which can only find the malformed
     rows somebody already thought of.
     """
-    return {r.id for b in _ADVISORY_BLOCKS for r in _block_rules(b)}
+    return {r.id for b in _RULE_BLOCKS for r in _block_rules(b)}
 
 
 def _render_block(block_id: str) -> str:
-    return _advisory_block(block_id)
+    return _rule_block(block_id)
 
 
-def render_advisory_pipeline() -> str:
-    return _render_block("advisory-pipeline")
+def render_rule_reference_pipeline() -> str:
+    return _render_block("rules-pipeline")
 
 
-def render_advisory_stream() -> str:
-    return _render_block("advisory-stream")
+def render_rule_reference_stream() -> str:
+    return _render_block("rules-stream")
 
 
-def render_advisory_endpoint() -> str:
-    return _render_block("advisory-endpoint")
+def render_rule_reference_endpoint() -> str:
+    return _render_block("rules-endpoint")
 
 
-def render_advisory_connection() -> str:
-    return _render_block("advisory-connection")
+def render_rule_reference_connection() -> str:
+    return _render_block("rules-connection")
 
 
-def render_advisory_type_map() -> str:
-    return _render_block("advisory-type-map")
+def render_rule_reference_type_map() -> str:
+    return _render_block("rules-type-map")
 
 
-def render_advisory_shared() -> str:
-    return _render_block("advisory-shared")
+def render_rule_reference_shared() -> str:
+    return _render_block("rules-shared")
 
 
 def render_validator_ids() -> str:
@@ -663,7 +663,7 @@ def _field_table(model) -> str:
         )
     if schema.get("allOf"):
         out += ["", f"Carries {len(schema['allOf'])} declarative cross-field "
-                    "`if`/`then` rule(s) — see the advisory rules for their prose."]
+                    "`if`/`then` rule(s) — see the registered rules for their prose."]
     return "\n".join(out) + "\n"
 
 
@@ -852,12 +852,12 @@ RENDERERS = {
     "shared-vocabulary": render_shared_vocabulary,
     "secret-ref-grammar": render_secret_ref_grammar,
     "filter-operators": render_filter_operators,
-    "advisory-pipeline": render_advisory_pipeline,
-    "advisory-stream": render_advisory_stream,
-    "advisory-endpoint": render_advisory_endpoint,
-    "advisory-connection": render_advisory_connection,
-    "advisory-type-map": render_advisory_type_map,
-    "advisory-shared": render_advisory_shared,
+    "rules-pipeline": render_rule_reference_pipeline,
+    "rules-stream": render_rule_reference_stream,
+    "rules-endpoint": render_rule_reference_endpoint,
+    "rules-connection": render_rule_reference_connection,
+    "rules-type-map": render_rule_reference_type_map,
+    "rules-shared": render_rule_reference_shared,
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,

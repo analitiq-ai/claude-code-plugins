@@ -1,7 +1,7 @@
 """Census entries for ``analitiq.contracts.stream``."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.advisory_prose import (
+from analitiq.contracts.shared.prose_obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -12,16 +12,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectionEndpointRef", field="endpoint_id",
         prose_hash="e5cb382c9319",
-        rule_ids=("ADV-STRM-003",),
+        rule_ids=("RULE-STRM-003",),
     ),
     ProseObligation(
-        model="StreamSource", field="selected_columns", rule_ids=("ADV-STRM-014",),
+        model="StreamSource", field="selected_columns", rule_ids=("RULE-STRM-014",),
         prose_hash="7e3a158455ee",
     ),
     ProseObligation(
         model="_ReplicationBase", field="tie_breaker_fields",
         prose_hash="975844e642e8",
-        rule_ids=("ADV-STRM-014",),
+        rule_ids=("RULE-STRM-014",),
     ),
     ProseObligation(
         model="StreamSource", field="replication",
@@ -35,11 +35,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="StreamSource", field="database_pagination",
         prose_hash="c34682321b09",
-        rule_ids=("ADV-STRM-014",),
+        rule_ids=("RULE-STRM-014",),
         waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(
-        model="PipeExpression", rule_ids=("ADV-STRM-005",),
+        model="PipeExpression", rule_ids=("RULE-STRM-005",),
         prose_hash="eaa9d838057e",
         structural=(
             "`args` carries a `Field` length floor, and "
@@ -72,11 +72,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ValidationRule", field="value", rule_ids=("ADV-STRM-009",),
+        model="ValidationRule", field="value", rule_ids=("RULE-STRM-009",),
         prose_hash="3503a143ee9e",
     ),
     ProseObligation(
-        model="ArrowFieldSpec", rule_ids=("ADV-STRM-006",),
+        model="ArrowFieldSpec", rule_ids=("RULE-STRM-006",),
         prose_hash="69d61d5979b3",
     ),
     ProseObligation(model="Assignment", prose_hash="37a26808a1c9", descriptive=True),
@@ -92,7 +92,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ConnectionEndpointRef", rule_ids=("ADV-STRM-003",),
+        model="ConnectionEndpointRef", rule_ids=("RULE-STRM-003",),
         prose_hash="6c05e00e6d61",
         structural=(
             "`database_object` is a required non-optional field on this "
@@ -147,7 +147,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(model="ConstantValue", prose_hash="5086a7098a50", descriptive=True),
     ProseObligation(
-        model="ConstantValue", field="value", rule_ids=("ADV-STRM-007",),
+        model="ConstantValue", field="value", rule_ids=("RULE-STRM-007",),
         prose_hash="a2b5c9af0d6d",
     ),
     ProseObligation(model="Execution", prose_hash="7ecf26dedde2", descriptive=True),
@@ -162,7 +162,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="Filter", rule_ids=("ADV-STRM-004",),
+        model="Filter", rule_ids=("RULE-STRM-004",),
         prose_hash="60735ecfb653",
         waiver=(
             "cross-document: which fields/params are filterable and which "
@@ -174,7 +174,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(model="Filter", field="field", prose_hash="9fb3e42418e3", descriptive=True),
     ProseObligation(
-        model="Filter", field="operator", rule_ids=("ADV-STRM-012",),
+        model="Filter", field="operator", rule_ids=("RULE-STRM-012",),
         prose_hash="6382c8ad9ce6",
         structural="the `FilterOperator` `Literal` is the structural floor",
         waiver=(
@@ -183,7 +183,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="Filter", field="value", rule_ids=("ADV-STRM-004",),
+        model="Filter", field="value", rule_ids=("RULE-STRM-004",),
         prose_hash="bf827fea3cd0",
     ),
     ProseObligation(
@@ -250,7 +250,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="OffsetDatabasePagination", field="order_by_field", prose_hash="f0584d1307f0", descriptive=True),
     ProseObligation(model="OffsetDatabasePagination", field="type", prose_hash="1443d503a370", descriptive=True),
     ProseObligation(
-        model="PipeExpression", field="args", rule_ids=("ADV-STRM-005",),
+        model="PipeExpression", field="args", rule_ids=("RULE-STRM-005",),
         prose_hash="8941ee97faed",
         structural=(
             "a `Field` length floor, and `_pipe_args_positional_grammar` "
@@ -335,7 +335,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="ValidationRule", prose_hash="abaa76935a9d", descriptive=True),
     ProseObligation(
         model="ValidationRule", field="field", prose_hash="0e4f13107d1d",
-        rule_ids=("ADV-STRM-015",),
+        rule_ids=("RULE-STRM-015",),
         structural=(
             "`NonEmptyStr` items and a list length floor carry the token-array "
             "shape — one token is one field name, matching a source `get` "
@@ -401,7 +401,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(
-        model="_EndpointRefBase", rule_ids=("ADV-STRM-003",),
+        model="_EndpointRefBase", rule_ids=("RULE-STRM-003",),
         prose_hash="c7da82042663",
     ),
     ProseObligation(

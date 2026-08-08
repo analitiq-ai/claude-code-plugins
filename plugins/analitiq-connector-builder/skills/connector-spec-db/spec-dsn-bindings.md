@@ -8,10 +8,10 @@ fields are:
 | `transport_type` | Identity field | Extras |
 |---|---|---|
 | `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). Optional in the contract, since SQLAlchemy can derive it from the DSN's scheme — but **declare it anyway**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
-| `adbc` | `driver` — a closed enum owned by the contract's `AdbcTransport` (see `spec-driver-selection.md` §1) | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`** (ADV-CTOR-004). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
+| `adbc` | `driver` — a closed enum owned by the contract's `AdbcTransport` (see `spec-driver-selection.md` §1) | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`** (RULE-CTOR-004). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
 
 Transport choice follows the decision order in `spec-driver-selection.md`
-(`ADV-CTOR-027`). The chosen driver ships ONLY in the connector's
+(`RULE-CTOR-027`). The chosen driver ships ONLY in the connector's
 `requirements.txt` (the engine pins no database drivers). ADBC drivers that accept all connection
 state via `db_kwargs` (e.g. Snowflake) may omit `dsn` entirely.
 
@@ -24,17 +24,17 @@ See the `transports.database.dsn` block in
 ## Rules
 
 - `template` is a connector-authored string with `{placeholder}` markers.
-  A `${...}` context reference never appears in the template (`ADV-SHRD-006`) —
+  A `${...}` context reference never appears in the template (`RULE-SHRD-006`) —
   those go inside binding `value` expressions.
 - Every placeholder in the template must have a matching binding key, and
-  every binding key must be referenced by the template (ADV-CTOR-011).
+  every binding key must be referenced by the template (RULE-CTOR-011).
 - Each binding declares:
   - `value` — a value expression the runtime resolves at connection time
-    (`ADV-CTOR-035`); the grammar is in
+    (`RULE-CTOR-035`); the grammar is in
     `connector-builder/references/value-expressions.md`.
   - `encoding` — see "Choosing an encoding" below.
 
-## Choosing an encoding (`ADV-CTOR-018`)
+## Choosing an encoding (`RULE-CTOR-018`)
 
 The vocabulary is closed and the registry prints its members; what it cannot
 tell you is which member a binding takes. That is decided by the URL position
@@ -56,8 +56,8 @@ the value is substituted into:
 2. Write the template with one `{placeholder}` per logical field.
 3. For each placeholder, declare the binding's `value` and `encoding`.
 4. Resolve a credential from the `secrets` scope (`secrets.password`), never
-   from `connection.parameters` (`ADV-CTOR-046`).
-5. Never pre-encode any value (`ADV-CTOR-034`) — a pre-encoded password renders
+   from `connection.parameters` (`RULE-CTOR-046`).
+5. Never pre-encode any value (`RULE-CTOR-034`) — a pre-encoded password renders
    a DSN that looks correct and carries the wrong credential.
 
 ## Driver examples

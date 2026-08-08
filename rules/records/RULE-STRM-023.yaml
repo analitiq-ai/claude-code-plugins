@@ -1,0 +1,23 @@
+id: RULE-STRM-023
+statement: >
+  A stream MUST reproduce every source-endpoint field name exactly as the
+  endpoint document records it, with no case-folding, trimming, quoting or
+  other normalization.
+tier: referential
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [StreamSource]
+rationale: >
+  The authoritative spelling lives in the source endpoint document, which
+  the stream model never sees, and both the contract and the engine compare
+  the strings literally — so a name that differs only in case or whitespace
+  is a perfectly valid document naming nothing. Normalizing is the natural
+  reflex, because the identifiers that arrive from introspection often look
+  untidy and because most tooling folds case for the author; here folding it
+  is what breaks the reference. Catching a violation means comparing the
+  string byte for byte against the endpoint document.
+status: active
+superseded_by: null

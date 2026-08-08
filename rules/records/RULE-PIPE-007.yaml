@@ -1,0 +1,23 @@
+id: RULE-PIPE-007
+statement: >
+  A stream's per-destination batching override MAY lower the batch size
+  resolved from the pipeline default, but MUST NOT raise it above the capacity
+  the destination endpoint declares.
+tier: referential
+severity: warning
+scope: pipeline
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Execution]
+rationale: >
+  The pipeline default, the stream override and the endpoint's declared
+  capacity are three documents composed only at run time, and the capacity is
+  a ceiling applied by capping rather than by rejection. So an override above
+  it validates everywhere, is silently reduced, and the user is told a write
+  size the run never uses — the pipeline still works, which is why this costs
+  a wrong expectation rather than a failure. Catching it means reading the
+  destination endpoint the stream binds to, which the pipeline plugin holds
+  only while the connector it came from is on disk.
+status: active
+superseded_by: null

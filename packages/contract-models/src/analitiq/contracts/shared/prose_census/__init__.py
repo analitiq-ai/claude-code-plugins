@@ -2,9 +2,9 @@
 here into :data:`PROSE_OBLIGATIONS`.
 
 This is the canonical home of the census entries;
-:mod:`analitiq.contracts.shared.advisory_prose` keeps the datum
+:mod:`analitiq.contracts.shared.prose_obligation` keeps the datum
 (:class:`ProseObligation`) and the shared waiver reasons. Area modules import only
-``advisory_prose`` — never a contract model — so the census stays readable
+``prose_obligation`` — never a contract model — so the census stays readable
 without pydantic. The live-vs-census diff both consumers assert on is
 :func:`analitiq.contracts.shared.introspect.census_report`.
 
@@ -25,7 +25,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 
-from analitiq.contracts.shared.advisory_prose import ProseObligation
+from analitiq.contracts.shared.prose_obligation import ProseObligation
 
 
 def _aggregate() -> tuple[ProseObligation, ...]:

@@ -1,0 +1,23 @@
+id: RULE-PIPE-005
+statement: >
+  A pipeline's `schedule.type` MUST be a member of the vocabulary
+  `Schedule.type` declares; the member chosen then gates which schedule fields
+  are legal (RULE-PIPE-002).
+tier: structural
+severity: error
+scope: pipeline
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type"
+owners: [pipeline-plugin]
+targets: [Schedule]
+fields: [type]
+mechanism: literal_enum
+rationale: >
+  The type is not a label; it selects the machinery that runs the pipeline, so
+  a plausible-sounding word the vocabulary does not carry has no runner behind
+  it. The model's own shape rejects it and the published JSON Schema carries
+  the same closed set, which means the diagnostic names the field rather than
+  this rule — the id exists so prose can cite it instead of copying the
+  members into a sentence that stops moving when the model does.
+status: active
+superseded_by: null

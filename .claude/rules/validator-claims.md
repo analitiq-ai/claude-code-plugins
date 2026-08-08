@@ -80,7 +80,7 @@ sentence in plugin prose stating what the validator **does or does not** check:
    `<!-- PROBE: <id> -->` fence above the sentence. The fence is still gated —
    naming an id no probe defines fails the build, and a probe nothing references
    fails the build.
-3. **Or cite the `ADV-*` rule** that enforces the behaviour.
+3. **Or cite the `RULE-*` rule** that enforces the behaviour.
 4. **Or do not make the claim.** "The validator does not check this" is rarely
    load-bearing guidance; state what the author must do instead.
 

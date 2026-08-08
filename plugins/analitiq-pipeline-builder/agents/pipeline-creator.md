@@ -72,12 +72,12 @@ stitches in `stream_id` UUIDs in phase 8.
   sibling docs can cross-reference).
 - Always emit `streams: []` — stitching happens later.
 - Author only the schedule fields the chosen `type` calls for
-  (`ADV-PIPE-002`); leave the other type's field out entirely rather
+  (`RULE-PIPE-002`); leave the other type's field out entirely rather
   than setting it to `null`. See `pipeline-spec/spec-schedule.md` for
   the generated shape.
 - Omit `schedule.type` and `schedule.timezone` when no schedule facts
   are supplied, rather than authoring the values they default to
-  (`ADV-PIPE-006`).
+  (`RULE-PIPE-006`).
 - Use the engine / runtime defaults from the published schema unless
   the orchestrator explicitly passed overrides.
 - Do **not** author `version`, `org_id`, `created_at`, `updated_at` —

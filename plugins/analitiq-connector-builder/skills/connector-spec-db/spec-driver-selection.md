@@ -10,7 +10,7 @@ connector for a new system.
 supports is a researched fact — `provider_facts.adbc_driver_package`,
 `.flight_sql_endpoint`, `.bulk_load_protocol`, `.sqlalchemy_driver`,
 grounded from the vendor's own documentation at author time
-(`ADV-CTOR-026`). This file supplies the *order* and the *closed
+(`RULE-CTOR-026`). This file supplies the *order* and the *closed
 vocabularies* the contract owns; it deliberately does not carry a
 per-system capability table, because a frozen copy of researched facts
 rots silently and biases authoring toward whichever systems happen to be
@@ -59,7 +59,7 @@ That enum is the **sole validator** for ADBC driver values.
 The engine derives the dbapi module from the `driver` value by the
 upstream packaging convention `adbc_driver_{driver}.dbapi`; the wheels
 the connector's `requirements.txt` must carry follow from that same
-convention (`ADV-PKG-027`).
+convention (`RULE-PKG-027`).
 
 If the system's driver is not yet in the enum, that is a **contract gap to
 raise, not a freeform workaround** — and it is not a one-line change. Adding a
@@ -104,7 +104,7 @@ SQLAlchemy transport instead, at tier 3 or 4.
 The connect/DDL layer stays on the SQLAlchemy transport; the bulk write
 goes through the **declared** mechanism — the connector names it under
 `sql_capabilities.bulk_load.sqlalchemy` and implements the dialect's
-`bulk_land` hook (`ADV-PKG-016`).
+`bulk_land` hook (`RULE-PKG-016`).
 
 The mechanism vocabulary is **closed and contract-owned**, so this tier
 is reachable only when the system's documented protocol maps onto one of:
@@ -146,7 +146,7 @@ from this file — see the note at the top.
   a working async driver; use a sync driver when that is the system's
   viable path (Redshift's `redshift_connector` is the canonical sync
   case). The declared `driver` must name a registration that actually
-  exists (`ADV-CTOR-039`) — e.g. `redshift_connector` registers under
+  exists (`RULE-CTOR-039`) — e.g. `redshift_connector` registers under
   the `redshift` dialect, so `postgresql+redshift_connector` is invalid
   and fails at transport build.
 - The driver lives ONLY in the connector's `requirements.txt`. The

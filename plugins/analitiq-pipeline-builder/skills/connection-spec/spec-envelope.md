@@ -18,7 +18,7 @@ Omit any map that would be empty — the required set is the field table in
 ## Routing rule (the whole thing)
 
 Read the downloaded connector's `connection_contract` and route each
-`inputs.<key>` and `post_auth_outputs.<key>` by its `storage` (`ADV-CONN-006`).
+`inputs.<key>` and `post_auth_outputs.<key>` by its `storage` (`RULE-CONN-006`).
 One rule covers every connector and auth type — there are no auth-type branches,
 and nothing here changes when a new connector ships:
 
@@ -27,7 +27,7 @@ and nothing here changes when a new connector ships:
   goes in `.secrets/`, never the document.
 - `connection.selections` → `selections.<key>` **only if** the user supplies it
   up front; usually omit (a post-auth selection isn't known at authoring time).
-- `connection.discovered` → **never author** (`ADV-CONN-005`); the connections
+- `connection.discovered` → **never author** (`RULE-CONN-005`); the connections
   API rejects a client-supplied value.
 
 ### `selections` vs. `discovered`
@@ -43,12 +43,12 @@ not a selection.
 
 ## Type fidelity
 
-Each contract input declares a JSON `type` (`ADV-CONN-007`) — `port: 5432`
+Each contract input declares a JSON `type` (`RULE-CONN-007`) — `port: 5432`
 (integer), not `"5432"`. The plugin does not coerce; read the type from the
 connector or ask the user. Optional inputs (`required: false`) may be omitted
-(`ADV-SHRD-004`).
+(`RULE-SHRD-004`).
 
-## TLS verification needs its CA material (`ADV-CONN-008`)
+## TLS verification needs its CA material (`RULE-CONN-008`)
 
 A certificate-verification mode is one from the connector's declared `ssl_mode`
 enum that verifies the server certificate against a CA, whatever the connector's
@@ -65,7 +65,7 @@ certificate, ask for it rather than authoring the mode alone. The CA input
 routes like any other input — by its declared `storage`, which is normally
 `secrets`, so it becomes a pointer in `secret_refs`.
 
-## Secrets — reference, never embed (`ADV-CONN-009`)
+## Secrets — reference, never embed (`RULE-CONN-009`)
 
 The real value goes in a gitignored `.secrets/credentials.json` the user
 provisions; the plugin never holds or logs one.
@@ -126,7 +126,7 @@ The two look alike and resolve completely differently. Do not conflate them:
   cleanly and fails only at resolution time.
 
 So a `sidecar:` pointer against the env-keyed template is never right
-(`ADV-CONN-010`): it would look up `password` in a file whose only key is
+(`RULE-CONN-010`): it would look up `password` in a file whose only key is
 `ANALITIQ_…_PASSWORD`. Emit `sidecar:` pointers only when the user asks for that
 store, and then key the file by the contract input names.
 

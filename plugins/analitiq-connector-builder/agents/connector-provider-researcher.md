@@ -41,15 +41,15 @@ You run at one of two scopes per invocation:
   field-level category `ProviderFacts` deliberately omits.
 
 Both object shapes are pinned in
-`connector-builder/references/io-contracts.md`. Cited `ADV-*` ids resolve in
-`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`.
+`connector-builder/references/io-contracts.md`. Cited `RULE-*` ids resolve in
+`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`.
 
 ## Process
 
 1. **Determine kind** (domain scope) from the `kind_hint` if present, else
    infer from the provider (databases like `postgresql`, `mysql`,
    `snowflake`, `mongodb` → `database`; SaaS → `api`). The supported set is
-   `api` and `database` (`ADV-CTOR-033`). Other connector kinds are out of
+   `api` and `database` (`RULE-CTOR-033`). Other connector kinds are out of
    scope for this researcher.
 2. **Read the contract schema(s)** the orchestrator passed for this scope.
    Walk them to build your checklist of facts to find — every property is a
@@ -76,7 +76,7 @@ For each field of the resource's response:
   reported; if the resource exposes a genuinely new native, flag it in `notes`
   so the orchestrator folds it into the domain type map.
 - `arrow_type` — the canonical Arrow type (PascalCase) the field resolves to.
-- **Temporal fields are decided on evidence, never default** (`ADV-SHRD-002`).
+- **Temporal fields are decided on evidence, never default** (`RULE-SHRD-002`).
   Capture a real `sample_value` from the docs and set `tz_aware` from it:
   - a **zoneless** wire value (e.g. `2016-12-13 22:57:03`, `2024-01-02`) →
     `arrow_type` is **bare** `Timestamp(<unit>)` / `Date32` with no zone, and
@@ -119,7 +119,7 @@ When the resource is writable, also ground:
   which connect parameter(s) the driver takes TLS through (a single mode
   argument vs. several, e.g. a boolean toggle plus a mode string) as a
   `notes` line, because the creator's dialect must interpret declared
-  modes into exactly those parameters (`ADV-CTOR-026`). Do NOT speculate: if
+  modes into exactly those parameters (`RULE-CTOR-026`). Do NOT speculate: if
   the driver's docs are ambiguous about TLS support, set `tls` to null and
   report the gap.
 - For databases: report the driver-selection facts the creator needs —
@@ -143,7 +143,7 @@ When the resource is writable, also ground:
   `sql_write_path.identifier_limits.max_bind_params`, which is a
   statement cap rather than an identifier one and is easy to overlook.
   Leave undeclared what the docs do not establish, and report it as a gap
-  (`ADV-CTOR-041`). Omitting a field and setting it null are different
+  (`RULE-CTOR-041`). Omitting a field and setting it null are different
   signals: use null only where the field allows it to record a *documented*
   absence (`upsert_grammar: null` = "this system documents no native
   upsert").

@@ -1,0 +1,25 @@
+id: RULE-CTOR-029
+statement: >
+  A connector whose `ssl_mode` input enum admits a mode that verifies the
+  server certificate MUST also declare a CA-certificate input in the same
+  connection contract.
+tier: advisory
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin]
+rationale: >
+  The mode enum and the CA-certificate input sit in the same document and have
+  to agree: offering
+  a verifying mode with nowhere to supply the bundle gives a user a choice that
+  cannot succeed, and the connection fails at connect with a certificate error
+  that reads as an infrastructure problem rather than a missing input. Nothing
+  here can check it, because the mode vocabulary is the connector's own
+  researched set — the system's native mode names, verbatim — and the
+  contract's TLS block is deliberately vocabulary-agnostic so no model can
+  classify a mode string as verifying. Catching a violation means reading each
+  declared mode against the driver's own documentation and asking whether it
+  validates the server certificate against a CA.
+status: active
+superseded_by: null

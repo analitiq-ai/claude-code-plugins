@@ -1,0 +1,22 @@
+id: RULE-TMAP-012
+statement: >
+  New rules on a connection-scoped type map MUST be appended after the rules
+  already present, and a rule already there MUST NOT be removed, reordered or
+  rewritten.
+tier: procedural
+severity: error
+scope: type-map
+mechanized: false
+validator: null
+owners: [pipeline-plugin]
+rationale: >
+  The rules already in a connection map are prior authored judgment about this
+  deployment's own types, and rule order is semantic, so a regenerated map that
+  happens to sort differently silently changes resolution for every stream
+  already running on that connection. A re-authoring agent has every reason to
+  rewrite the file — it is producing the same artifact from the same
+  discovery — and the result validates exactly like an appended one. Catching a
+  violation means diffing against the file's previous revision, which nothing
+  at validation time holds.
+status: active
+superseded_by: null

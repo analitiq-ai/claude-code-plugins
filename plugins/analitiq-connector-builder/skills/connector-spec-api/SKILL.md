@@ -11,7 +11,7 @@ connector. It carries the API-specific vocabulary and examples needed to
 populate `transports`, `auth`, `connection_contract`, and
 `resource_discovery` for `kind: "api"`, plus the standalone
 `type-map-read.json` shipped alongside the connector — an API connector's
-release carries nothing else (`ADV-CTOR-043`).
+release carries nothing else (`RULE-CTOR-043`).
 
 ## Required reading (load on demand)
 
@@ -57,7 +57,7 @@ What to read instead:
   likely to fail validation).
 - `spec-pagination.md` / `spec-replication.md` — choosing and wiring those
   blocks.
-- `connector-builder/references/advisory-rules.md` — the `api-endpoint`
+- `connector-builder/references/rules.md` — the `api-endpoint`
   cross-field rules, by id.
 
 ## What this skill does NOT cover

@@ -1,0 +1,21 @@
+id: RULE-PIPE-002
+statement: >
+  A pipeline's schedule MUST author exactly the fields its chosen `type` calls
+  for, and MUST omit the fields belonging to the types it did not choose.
+tier: advisory
+severity: error
+scope: pipeline
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule._validate_schedule_fields"
+owners: [pipeline-plugin]
+targets: [Schedule]
+rationale: >
+  The type is meant to be the single answer to when a pipeline runs. A field
+  belonging to another type left beside it reads as a second, contradictory
+  schedule, and nothing in the document says which one the scheduler will
+  honour. Gating in both directions is what makes a type change safe: the
+  field the previous type needed cannot survive the edit as a plausible-
+  looking leftover, and an author cannot satisfy the new type by adding a
+  field while leaving the old one in place.
+status: active
+superseded_by: null

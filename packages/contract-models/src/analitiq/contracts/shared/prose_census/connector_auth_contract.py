@@ -4,7 +4,7 @@ expressions. Part 2 (:mod:`.connector_transports_document`) carries the value
 expressions, transports, capability blocks, and the connector documents."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.advisory_prose import (
+from analitiq.contracts.shared.prose_obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -88,9 +88,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectionContract", field="required_for_activation",
         prose_hash="d5dfaf2609fc",
-        rule_ids=("ADV-CTOR-007",),
+        rule_ids=("RULE-CTOR-007",),
         waiver=(
-            "reference validity is ADV-CTOR-007's; whether the paths RESOLVE "
+            "reference validity is RULE-CTOR-007's; whether the paths RESOLVE "
             "before activation is engine-owned runtime state"
         ),
     ),
@@ -99,30 +99,30 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="1f94778249d6",
     ),
     ProseObligation(
-        model="ConnectionContractInput", field="secret", rule_ids=("ADV-CONN-003",),
+        model="ConnectionContractInput", field="secret", rule_ids=("RULE-CONN-003",),
         prose_hash="b0f22af872f1",
     ),
     ProseObligation(
-        model="ConnectionContractInputUI", field="options", rule_ids=("ADV-CONN-001",),
+        model="ConnectionContractInputUI", field="options", rule_ids=("RULE-CONN-001",),
         prose_hash="39b147fbbb23",
     ),
     ProseObligation(
-        model="PostAuthOutput", field="storage", rule_ids=("ADV-CTOR-002",),
+        model="PostAuthOutput", field="storage", rule_ids=("RULE-CTOR-002",),
         prose_hash="43a3d8c6a0bb",
     ),
     ProseObligation(
         model="PostAuthOutput", field="options_path",
         prose_hash="08d497ff5a6a",
-        rule_ids=("ADV-CTOR-002",),
+        rule_ids=("RULE-CTOR-002",),
         waiver=(
-            "the user_selection/auto_discovery gating is ADV-CTOR-002's; the "
+            "the user_selection/auto_discovery gating is RULE-CTOR-002's; the "
             "response-body-root default is engine-owned at request execution"
         ),
     ),
     ProseObligation(
         model="ResourceDiscoveryImplementation", field="entrypoint",
         prose_hash="3aa9daed5d4d",
-        rule_ids=("ADV-CTOR-003",),
+        rule_ids=("RULE-CTOR-003",),
     ),
     ProseObligation(
         model="ConnectionConditionPredicate", field="eq", waiver=ENGINE_CONDUCT,
@@ -187,13 +187,13 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="BasicAuthDerivedInput", field="password", prose_hash="f8edca37d48c", descriptive=True),
     ProseObligation(model="BasicAuthDerivedInput", field="username", prose_hash="800111632685", descriptive=True),
     ProseObligation(
-        model="ConnectionConditionPredicate", rule_ids=("ADV-CTOR-012",),
+        model="ConnectionConditionPredicate", rule_ids=("RULE-CTOR-012",),
         prose_hash="bc558a07976a",
     ),
     ProseObligation(
         model="ConnectionConditionPredicate", field="field",
         prose_hash="af6ae1c32ae9",
-        rule_ids=("ADV-CTOR-008",),
+        rule_ids=("RULE-CTOR-008",),
     ),
     ProseObligation(
         model="ConnectionConditionPredicate", field="in_",
@@ -388,12 +388,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="PostAuthOutput", field="discovery_request", rule_ids=("ADV-CTOR-002",),
+        model="PostAuthOutput", field="discovery_request", rule_ids=("RULE-CTOR-002",),
         prose_hash="3a626720c1d7",
     ),
     ProseObligation(model="PostAuthOutput", field="format", prose_hash="1ec26cc4d171", descriptive=True),
     ProseObligation(
-        model="PostAuthOutput", field="label_path", rule_ids=("ADV-CTOR-002",),
+        model="PostAuthOutput", field="label_path", rule_ids=("RULE-CTOR-002",),
         prose_hash="115720589be7",
     ),
     ProseObligation(
@@ -402,7 +402,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural="the `PostAuthOutputMode` enum type closes the value set",
     ),
     ProseObligation(
-        model="PostAuthOutput", field="options_request", rule_ids=("ADV-CTOR-002",),
+        model="PostAuthOutput", field="options_request", rule_ids=("RULE-CTOR-002",),
         prose_hash="faf2df8e26a8",
     ),
     ProseObligation(

@@ -1,0 +1,23 @@
+id: RULE-STRM-031
+statement: >
+  A stream's reference to an API endpoint MUST use connector scope;
+  connection scope refers to a database endpoint only.
+tier: referential
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [ConnectionEndpointRef, ConnectorEndpointRef]
+rationale: >
+  Whether the referenced endpoint is an API or a database one is a fact in
+  that endpoint's own document, and the ref model can only require that a
+  connection-scoped ref carry a database object — which an author can invent
+  for an API endpoint and satisfy. The scopes differ in how the endpoint is
+  pinned, the connector version for one and a per-connection snapshot for
+  the other, and no snapshot-hashing spec exists for API endpoints yet, so
+  the combination names a pinning mechanism that has not been defined.
+  Refusing to author it is the only check there is; catching a violation
+  afterwards means reading the referenced endpoint's kind.
+status: active
+superseded_by: null

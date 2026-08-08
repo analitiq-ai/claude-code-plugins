@@ -42,7 +42,7 @@ from analitiq.contracts.arrow_grammar import (
     ARROW_TYPE_PATTERN,
     validate_cross_params,
 )
-from analitiq.contracts.shared.advisory import (
+from analitiq.contracts.shared.rules import (
     HeaderMergeRules,
     find_duplicates,
     violation,
@@ -931,7 +931,7 @@ class Replication(_EndpointModel):
 # `path` with none forbids `path_params` (absent or null). The exact key-set
 # equality (path_params keys == placeholder names) is instance-relative set
 # logic that stock JSON Schema cannot express — it is enforced by
-# `_RequestBase._validate` and catalogued in the advisory registry (ADV-ENDP-001).
+# `_RequestBase._validate` and catalogued in the rule registry (RULE-ENDP-001).
 _REQUEST_SCHEMA_RULES: dict[str, Any] = {
     "allOf": [
         {
@@ -1056,17 +1056,17 @@ class _RequestBase(HeaderMergeRules, _EndpointModel):
         # from omitted, and the falsy-check version treats them the same.
         if placeholder_set and self.path_params is None:
             raise violation(
-                "ADV-ENDP-001",
+                "RULE-ENDP-001",
                 f"path declares {sorted(placeholder_set)!r}; path_params missing",
             )
         if not placeholder_set and self.path_params is not None:
-            raise violation("ADV-ENDP-001", "path_params present; path declares none")
+            raise violation("RULE-ENDP-001", "path_params present; path declares none")
         if self.path_params is not None:
             extra = set(self.path_params) - placeholder_set
             missing = placeholder_set - set(self.path_params)
             if extra or missing:
                 raise violation(
-                    "ADV-ENDP-001",
+                    "RULE-ENDP-001",
                     f"extra={sorted(extra)!r}; missing={sorted(missing)!r}",
                 )
         return self
@@ -1340,7 +1340,7 @@ def _validate_arrow_type_in_json_schema(
 
 #: Reference keywords the contract does not author, and why each is refused
 #: rather than tolerated. Every one of them would let a subtree escape both
-#: structural walkers, which is the single harm ADV-ENDP-026 exists to close.
+#: structural walkers, which is the single harm RULE-ENDP-026 exists to close.
 _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
     "$id": (
         "declares a new base URI, which under 2020-12 retargets every `#`-leading "
@@ -1381,7 +1381,7 @@ def _validate_schema_refs(
     """Every reference in an embedded schema must be IN-DOCUMENT, must resolve,
     and must land on a schema.
 
-    ADV-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
+    RULE-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
     `$defs` as a recursive position and the arrow_type walker below descends
     into it, so a `#/$defs/...` target is annotation-checked like any other
     Several spellings are not, and each fails silently (a count here would rot —
@@ -1698,8 +1698,8 @@ class WriteInput(_EndpointModel):
     )
 
     # Named `_validate` (not `_validate_arrow_types`) because it now enforces two
-    # rules — ADV-ENDP-006's arrow_type walk and ADV-ENDP-026's `$ref` walk — and
-    # the advisory registry needs ONE enforcer name that exists on both this model
+    # rules — RULE-ENDP-006's arrow_type walk and RULE-ENDP-026's `$ref` walk — and
+    # the rule registry needs ONE enforcer name that exists on both this model
     # and `ResponseExtraction` for the pair of rules they share.
     @model_validator(mode="after")
     def _validate(self) -> "WriteInput":
@@ -1938,8 +1938,8 @@ def _json_schema_top_level_fields(
     `input.schema`), so a record assembled from `allOf` branches or reached
     through an in-document `$ref` enumerates the fields it actually declares.
     Reading `properties` raw made this return `None` for exactly the
-    `$defs` + `$ref` shape ADV-ENDP-026's rejection message tells authors to
-    write — silently disabling both this check and ADV-ENDP-024's membership
+    `$defs` + `$ref` shape RULE-ENDP-026's rejection message tells authors to
+    write — silently disabling both this check and RULE-ENDP-024's membership
     rule for every document that followed the advice.
     """
     materialized = materialize_node(schema, root if root is not None else schema)
@@ -2098,7 +2098,7 @@ class WriteOperation(_EndpointModel):
         _validate_param_wiring(self.request, self.params, allow_from_input=True)
         _validate_param_binding_uniqueness(self.request, self.params)
 
-        # ADV-ENDP-025. Held here rather than in `_validate_param_wiring`
+        # RULE-ENDP-025. Held here rather than in `_validate_param_wiring`
         # because `batching` is a property of the write MODE, not of the request,
         # so this is the innermost scope that can see both.
         # A write has no `response.schema`, so declared-path resolution has
@@ -2272,7 +2272,7 @@ class WriteOperation(_EndpointModel):
                     f"{missing!r} (spec: §Cross-Field Validation)"
                 )
 
-        # ADV-ENDP-024: the same membership rule for path_params, reported
+        # RULE-ENDP-024: the same membership rule for path_params, reported
         # against its own site so the author is sent to the binding that is
         # actually wrong rather than to the body.
         for fi in path_from_inputs:
@@ -2527,15 +2527,15 @@ class DatabaseEndpointDoc(_EndpointBase):
 
     @model_validator(mode="after")
     def _column_names_unique(self) -> "DatabaseEndpointDoc":
-        """ADV-DBEP-001: the name every downstream lookup addresses is one column."""
+        """RULE-DBEP-001: the name every downstream lookup addresses is one column."""
         dups = find_duplicates(self.columns, key=lambda c: c.name)
         if dups:
-            raise violation("ADV-DBEP-001", f"duplicates={dups!r}")
+            raise violation("RULE-DBEP-001", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
     def _ordinal_positions_unique(self) -> "DatabaseEndpointDoc":
-        """ADV-DBEP-002: declared ordinals canonicalise column order unambiguously.
+        """RULE-DBEP-002: declared ordinals canonicalise column order unambiguously.
 
         Schemaless sources expose no ordinal, so a column that omits one is not
         competing for a position and is left out of the comparison.
@@ -2543,18 +2543,18 @@ class DatabaseEndpointDoc(_EndpointBase):
         declared = [c.ordinal_position for c in self.columns if c.ordinal_position is not None]
         dups = find_duplicates(declared)
         if dups:
-            raise violation("ADV-DBEP-002", f"duplicates={dups!r}")
+            raise violation("RULE-DBEP-002", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
     def _primary_keys_name_columns(self) -> "DatabaseEndpointDoc":
-        """ADV-DBEP-003: every conflict key an upsert draws is a column here."""
+        """RULE-DBEP-003: every conflict key an upsert draws is a column here."""
         if not self.primary_keys:
             return self
         declared = {c.name for c in self.columns}
         extra = sorted(set(self.primary_keys) - declared)
         if extra:
-            raise violation("ADV-DBEP-003", f"not declared: {extra!r}")
+            raise violation("RULE-DBEP-003", f"not declared: {extra!r}")
         return self
 
 
@@ -2633,7 +2633,7 @@ _FUNCTION_EXPRESSION_FIELDS: frozenset[str] = frozenset(FunctionExpression.model
 
 # Callable functions whose whole job is to escape a value for the wire. Naming
 # one inside a `path_params` binding double-encodes, because the engine already
-# percent-encodes each substituted path segment (ADV-ENDP-027). This is a
+# percent-encodes each substituted path segment (RULE-ENDP-027). This is a
 # judgement about what each function DOES, not a mechanical subset of the
 # callable catalog — `basic_auth` and `lookup` are equally callable and neither
 # escapes anything — so it is stated here and pinned against the catalog by
@@ -2881,7 +2881,7 @@ def _validate_param_wiring(
             )
 
     for placeholder, expr in (request.path_params or {}).items():
-        # ADV-ENDP-027. Percent-encoding a path segment is the ENGINE's job, and
+        # RULE-ENDP-027. Percent-encoding a path segment is the ENGINE's job, and
         # it does it unconditionally. An author reaching for `url_encode` here
         # is not adding safety, they are adding a second pass: a record id
         # containing `/` or a space goes on the wire as `a%2520b`, and the
@@ -2959,7 +2959,7 @@ def _validate_param_wiring(
                     f"request.path_params[{placeholder!r}] binds to param {name!r} which has "
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
-            # ADV-ENDP-028, on WRITES only. A write param has exactly one
+            # RULE-ENDP-028, on WRITES only. A write param has exactly one
             # source: its own `default`. `operators` makes a param
             # stream-filterable and `controlled_by` hands it to
             # pagination/replication — both read-side, neither reachable from a
@@ -3110,7 +3110,7 @@ def _declares_a_type(node: Any) -> bool:
     """Whether a resolved node says what kind of value lives there.
 
     `type` is the JSON Schema statement; the `native_type`/`arrow_type` pair is
-    the contract's own, and either answers the question ADV-ENDP-023 asks.
+    the contract's own, and either answers the question RULE-ENDP-023 asks.
     """
     if not isinstance(node, dict):
         return False
@@ -3125,7 +3125,7 @@ def _validate_response_body_paths(
     request: Any = None,
     params: dict[str, "Param"] | None = None,
 ) -> None:
-    """ADV-ENDP-023: every `response.body[.<path>]` a read operation reads
+    """RULE-ENDP-023: every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
 
     `response.records` was already anchored to the declared schema; pagination
@@ -3272,7 +3272,7 @@ def _validate_param_binding_uniqueness(
 #
 # ONE algorithm answers "does this dotted path address something the document
 # declares?" for every site that asks: `response.records`, replication
-# `cursor_field`, and (since ADV-ENDP-023) every `response.body` path
+# `cursor_field`, and (since RULE-ENDP-023) every `response.body` path
 # pagination and `response.metadata` read. Before this there were two
 # half-answers — a `properties`-only walk for records/cursor_field and nothing
 # at all for pagination — which is why a typo in a pagination ref could ship.
@@ -3866,7 +3866,7 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     "what does this node say about `type` / `items` / `properties`?" when the
     answer is spread across a `$ref` target and `allOf` branches. Without it a
     consumer reading `node["type"]` off a `{"$ref": "#/$defs/Coll"}` sees
-    nothing — which is how a document following ADV-ENDP-026's own advice
+    nothing — which is how a document following RULE-ENDP-026's own advice
     ("put it in this document's `$defs`") could validate and then yield zero
     record fields.
 
@@ -4247,7 +4247,7 @@ def _sweep_expression_sites(
                 # lumping `metadata` in with them let `response.metadata.nope`
                 # through — which resolves to nothing on every page, so paging
                 # stops after page one and the run reports success. That is the
-                # ADV-ENDP-023 failure verbatim, one segment to the right of
+                # RULE-ENDP-023 failure verbatim, one segment to the right of
                 # where it was fixed.
                 key = token.split(".", 2)[2].split(".")[0]
                 if key not in metadata_keys:
@@ -4348,7 +4348,7 @@ def _reject_unknown_response_scope(
 ) -> None:
     """A `response.*` token must name a real response sub-scope.
 
-    The hole this closes is the one ADV-ENDP-023 exists to close, one segment
+    The hole this closes is the one RULE-ENDP-023 exists to close, one segment
     to the left. `_response_body_segments` returns ``None`` for anything that is
     not `response.body[.…]`, and the caller skips it — on the stated grounds
     that every OTHER `response.*` scope is reserved and engine-owned. Nothing
@@ -4356,7 +4356,7 @@ def _reject_unknown_response_scope(
     `response.bodyy.next_cursor` was not "a reserved scope this rule leaves
     alone", it was a typo that resolved to nothing at run time. Paging stopped
     after page one and the sync reported success — the identical silent
-    truncation ADV-ENDP-023 exists to catch, reachable by misspelling `body`
+    truncation RULE-ENDP-023 exists to catch, reachable by misspelling `body`
     instead of the field after it.
 
     `_has_known_scope` cannot catch it: it inspects only the LEADING token, and
@@ -4448,7 +4448,7 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     # Materialize before reading `type`/`items`, and again on the record shape:
     # the collection may be reached through a `$ref` (`{"$ref": "#/$defs/Coll"}`)
     # and the record shape is very often `items: {"$ref": "#/$defs/Record"}` —
-    # the exact shape ADV-ENDP-026's rejection message tells authors to write.
+    # the exact shape RULE-ENDP-026's rejection message tells authors to write.
     # Reading the raw node there would return a bare `{"$ref": …}` and every
     # consumer would enumerate zero fields.
     node = materialize_node(node, response_schema)
@@ -4656,7 +4656,7 @@ def _validate_record_field_path(
     defined over it, so a path the record shape does not declare means pages
     advance from a value the engine cannot read — silently truncating or
     repeating, which is the same wrong-data-on-a-green-run failure
-    ADV-ENDP-023 catches on the response-body side, with a different cause.
+    RULE-ENDP-023 catches on the response-body side, with a different cause.
 
     Unknowable shapes are reported, not skipped: this is `response.schema`,
     which the contract holds to the strict standard (see

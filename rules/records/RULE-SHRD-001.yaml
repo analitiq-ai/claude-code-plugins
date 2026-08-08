@@ -1,0 +1,22 @@
+id: RULE-SHRD-001
+statement: >
+  A credential MUST appear in an authored document only as a reference
+  expression into the secret scope, never as a literal value.
+tier: structural
+severity: error
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  A leaked secret and a benign literal default are the same string to any
+  model, so nothing rejects one — the probe
+  `connector-secret-literal-undetected` records exactly that gap. The only
+  thing that would catch a violation is a human reading the document before it
+  is committed, and by the time anyone reads it the value is in git history and
+  has to be rotated rather than deleted. The reference expression exists so the
+  document never has to hold the value at all: the engine resolves it at
+  connection time, which also makes the same document safe to share, diff and
+  publish.
+status: active
+superseded_by: null

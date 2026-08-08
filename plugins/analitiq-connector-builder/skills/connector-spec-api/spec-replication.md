@@ -91,12 +91,12 @@ simpler and spares the runtime from computing an upper bound.
 
 A cursor mapping's `param` must be declared in `params` with
 `controlled_by: "replication"`, bound into the request with
-`{"from_param": …}`, and must not declare `operators` (ADV-ENDP-011,
-ADV-ENDP-009, ADV-ENDP-002). Window mappings wire **both** `start_param` and
+`{"from_param": …}`, and must not declare `operators` (RULE-ENDP-011,
+RULE-ENDP-009, RULE-ENDP-002). Window mappings wire **both** `start_param` and
 `end_param` that way.
 
 Each `cursor_field` must resolve to a field in the record shape of
-`response.schema` (ADV-ENDP-013) — so a cursor on `updated_at` requires
+`response.schema` (RULE-ENDP-013) — so a cursor on `updated_at` requires
 `updated_at` to be a declared field of the record, not merely something the
 provider mentions.
 

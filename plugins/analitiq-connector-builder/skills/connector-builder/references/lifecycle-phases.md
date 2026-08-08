@@ -23,7 +23,7 @@ that can actually resolve at the point it runs.
 
 A later phase may use any earlier phase's scopes.
 
-## Resolvability rule (`ADV-CTOR-050`)
+## Resolvability rule (`RULE-CTOR-050`)
 
 For every transport's references, compute the union of scopes used and
 resolve it against the table above. If a transport references
@@ -53,7 +53,7 @@ shape for a per-tenant host.
 The common error is a transport referencing `connection.discovered.*` with no
 post-auth output that produces it — the value is simply absent at connect. The
 mirror image is declaring an input's `phase` too late for the transport that
-needs it (`ADV-CTOR-050` again, from the declaration side: a `base_url`
+needs it (`RULE-CTOR-050` again, from the declaration side: a `base_url`
 component declared `phase: "auth"` cannot serve a pre-auth request).
 
 <!-- PROBE: connector-refs-unchecked -->
@@ -65,7 +65,7 @@ producing phase is no later than the consuming one.
 
 For `auth.type: "oauth2_authorization_code"` only. The `runtime.oauth.*`
 scope is closed to the fields in the table below and nothing else — a path
-outside it validates and resolves to nothing (`ADV-SHRD-008`).
+outside it validates and resolves to nothing (`RULE-SHRD-008`).
 Per-operation availability:
 
 | Field(s) | Available in |
@@ -74,7 +74,7 @@ Per-operation availability:
 | `code_challenge`, `code_challenge_method` | `auth.authorize` only |
 | `code`, `pkce_verifier` | `auth.token_exchange` only |
 
-Reference each field only where the table places it (`ADV-CTOR-051`). The
+Reference each field only where the table places it (`RULE-CTOR-051`). The
 PKCE **verifier must never appear in the authorize request** — only the
 derived `code_challenge` rides the browser-facing authorize — or it leaks
 through redirect/provider logs and defeats PKCE. `auth.refresh` must not

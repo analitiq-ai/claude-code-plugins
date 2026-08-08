@@ -23,19 +23,19 @@ Both scopes share one rule shape and one published schema pair
 For a `scope: "connection"` endpoint, the engine composes the connection map
 as **primary** over the connector map as **fallback** — the two rule lists are
 concatenated, connection rules first, into one first-match-wins list
-(`ADV-TMAP-013`). This holds in **both directions**: native → Arrow (read) and
+(`RULE-TMAP-013`). This holds in **both directions**: native → Arrow (read) and
 Arrow → native DDL (write). With no connection map present, the connector map
 resolves alone.
 
 A probe neither map matches is a **hard error** at runtime (an unmapped-type
 failure that stops the stream). Deliberate: no map at either scope declares a
-wildcard fallback (`ADV-TMAP-011`), so a coverage gap stays visible instead of
+wildcard fallback (`RULE-TMAP-011`), so a coverage gap stays visible instead of
 silently corrupting types — the fix is a rule in the right map, never a
 catch-all.
 
 Because composition is first-match over the concatenation, a connection rule
 for a native/canonical the connector already covers **overrides** the
-connector's rendering for every stream on that connection (`ADV-TMAP-018`).
+connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 
 ## When each direction is consulted
 

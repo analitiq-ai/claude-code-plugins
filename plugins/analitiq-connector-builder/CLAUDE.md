@@ -15,9 +15,9 @@ Analitiq contract at `schemas.analitiq.ai`. Connectors may be published to the
 - **`connection` and `pipeline` documents** — runtime credentials for a connector
   instance, and the full integration definition. Owned by the sibling
   `analitiq-pipeline-builder` plugin.
-- **Database endpoints** (`ADV-DBEP-006`) — connection-scoped, produced by the
+- **Database endpoints** (`RULE-DBEP-006`) — connection-scoped, produced by the
   connector's `resource_discovery` workflow at runtime.
-- **Storage kinds** (`file`, `s3`, `stdout`) (`ADV-CTOR-037`) — accepted by the
+- **Storage kinds** (`file`, `s3`, `stdout`) (`RULE-CTOR-037`) — accepted by the
   schema, but the engine does not execute them, so `storage-connector-creator`
   returns a structured refusal until support lands.
 
@@ -84,7 +84,7 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   pair** — the script overwrites it and CI fails.
 - A sentence asserting validator behavior outside a generated block must have
   a `PROBE:` fence comment naming the probe(s) that prove it placed directly
-  above it, or cite the `ADV-*` rule that enforces it in the same sentence.
+  above it, or cite the `RULE-*` rule that enforces it in the same sentence.
   Recognising that a sentence makes a claim is the author's job, and
   `.claude/rules/validator-claims.md` says why: deciding it from the wording
   took a list of hand-curated English regexes, which is banned. Pin the claim
@@ -119,7 +119,7 @@ review-enforced here until a matching gate lands):
   key for context (`"replication": { … }`, wrapped or not) — the pointer
   names the deepest shown node, and a gate unwraps the key before
   validating.
-- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail validation
+- `<!-- invalid: <rule id> -->` — deliberately wrong; must fail validation
   (that half is what a gate asserts — a "don't do this" example that rots
   into valid is the most misleading rot there is). That the failure is the
   named rule's diagnostic stays review-enforced: the validator reports

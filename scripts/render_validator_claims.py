@@ -73,7 +73,7 @@ from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Same bootstrap as render_advisory.py: this repo is the contract's source, so
+# Same bootstrap as render_rule_reference.py: this repo is the contract's source, so
 # put the in-repo trees on the path rather than relying on an installed wheel.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
@@ -819,7 +819,7 @@ assert len(CLAIMS_BY_ID) == len(CLAIMS), "duplicate claim id"
 #: cell kind -> (expectation class every backing probe must land in, cell text).
 #: The class is binary: "error", or "clean" (a `silent` probe counts as clean).
 _CELL_KINDS: dict[str, tuple[str, str]] = {
-    "path-resolved": ("error", "resolved against `response.schema`, must declare a type (ADV-ENDP-023)"),
+    "path-resolved": ("error", "resolved against `response.schema`, must declare a type (RULE-ENDP-023)"),
     "declared-key": ("error", "must name a declared key"),
     "spelling-only": ("clean", "spelling only"),
     "not-resolved": ("clean", "**not resolved** — see below"),
@@ -905,7 +905,7 @@ def render_scope_guarantees() -> str:
         "record counts are runtime values this document declares nothing about, and the",
         "`response.records` **scope** is not the `response.records` **field**. (That",
         "field — the `{ref: response.body.<path>}` selecting the record collection — IS",
-        "resolved, and must land on an array node, ADV-ENDP-012. Referencing",
+        "resolved, and must land on an array node, RULE-ENDP-012. Referencing",
         "`response.records.<something>` from a pagination or metadata expression is a",
         "different thing and is unchecked.)",
         "",
@@ -1160,7 +1160,7 @@ def _fence_docs() -> list[Path]:
     """Every markdown document a probe fence could appear in.
 
     No exemptions. The old prose scan had two — a plugin's release-please
-    `CHANGELOG.md`, and `advisory-rules.md` while its first line still declared
+    `CHANGELOG.md`, and `rules.md` while its first line still declared
     itself generated — because both are prose nobody hand-writes claims into.
     Fence bookkeeping asks a different question, and for it those exemptions
     are not a narrowing but a blind spot: a fence naming a deleted probe goes

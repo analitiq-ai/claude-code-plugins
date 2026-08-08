@@ -29,7 +29,7 @@ and you do not author anything.
    `analitiq-dip-registry` GitHub org, named after the connector slug (its
    `connector_id`). That slug is one identity wearing three hats — the
    connector's canonical identifier, its registry repository name, and its
-   on-disk directory name (`ADV-CTOR-045`). A connector's endpoints (and its type-maps / manifest)
+   on-disk directory name (`RULE-CTOR-045`). A connector's endpoints (and its type-maps / manifest)
    are published **alongside** `connector.json` under `definition/`, so
    download that directory **wholesale** — do not enumerate endpoints from
    a manifest and do not walk the repo file-by-file. Fetch the repo's
@@ -171,7 +171,7 @@ the orchestrator surfaces `detail` verbatim to the user.
   no such field.
 - Storage kinds (`file`, `s3`, `stdout`) are downloaded normally —
   the downstream `stream-creator` will issue a structured refusal
-  for them (`ADV-CTOR-037`).
+  for them (`RULE-CTOR-037`).
 - This plugin does **not** publish connectors to the registry. That
   belongs to the `analitiq-connector-builder` plugin's submission
   workflow.

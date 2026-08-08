@@ -1,0 +1,25 @@
+id: RULE-PKG-011
+statement: >
+  A connector's `connector.py` MUST import only the CDK, the standard
+  library, its own driver, and — inside an async `bulk_land` —
+  `sqlalchemy.util.await_only`, and MUST NOT import another connector, any
+  other third-party package, or an engine or runtime.
+tier: structural
+severity: error
+scope: connector-package
+mechanized: false
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  Depending only on the CDK is what keeps connectors independently
+  releasable: importing another connector couples two release trains, and
+  importing an engine inverts the dependency the whole architecture rests
+  on. Either import also drags a package the engine environment does not
+  install into a wheel that installs cleanly. The temptation is real — a
+  wire-compatible system looks like a one-line import away, which is why
+  MariaDB ships its own copy of the mysql-shaped dialect instead. Imports
+  live in Python no contract model parses; the CDK conformance kit is what
+  would catch the reach, and only after the package is pushed to registry
+  CI.
+status: active
+superseded_by: null

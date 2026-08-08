@@ -1,0 +1,24 @@
+id: RULE-DBEP-005
+statement: >
+  A discovered object MUST record every namespace level the system it came from
+  actually has, and MUST invent none the system lacks.
+tier: judgment
+severity: error
+scope: database-endpoint
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [DatabaseObject]
+rationale: >
+  How many levels sit above a table is a property of the system, not a fact any
+  document states, and the discovery strategy the connector declares is what
+  decides whether they all survive: a strategy that flattens a level hides every
+  object outside the default one, and a strategy that pads a level invents a
+  namespace that resolves to nothing. Several strategies fit a given system and
+  only one is faithful to it, so this is a choice made when the connector is
+  authored and paid for at every connection afterwards. The namespace fields
+  are optional on the model, so a flattened or padded result validates as
+  readily as a faithful one; the gap shows up as objects the user can see in
+  their database and not in Analitiq.
+status: active
+superseded_by: null

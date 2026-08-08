@@ -47,13 +47,13 @@ from — where the two differ, naming the source is the mistake to watch for.
 | `value` | no | any | `None` | — |
 | `message` | no | string \| null | `None` | — |
 
-Carries 1 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 1 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-validation-rule -->
 
 ### `rules[].type`
 
-`ADV-STRM-009` settles which members take a `value` and which must omit it, and
-`ADV-STRM-021` the shape that `value` takes. What neither those nor the table
+`RULE-STRM-009` settles which members take a `value` and which must omit it, and
+`RULE-STRM-021` the shape that `value` takes. What neither those nor the table
 state is what each member *means*:
 
 - `required` — the field must be present.
@@ -65,7 +65,7 @@ state is what each member *means*:
 
 ### `rules[].field`
 
-`ADV-STRM-015` settles how a `field` resolves: token array, first token a target
+`RULE-STRM-015` settles how a `field` resolves: token array, first token a target
 declared anywhere in the same mapping, later tokens the nesting under it. Reach
 into an `Object` target with a further token (`["address", "city"]`), never a
 dotted string — the destination declares nesting with `arrow_type` + `properties`.
@@ -76,7 +76,7 @@ a source `get` path.
 
 `StreamValidationErrorHandling` is a mirror of `pipeline.runtime.error_handling`
 (`analitiq.contracts.pipelines.config.ErrorHandling`) — the same strategy
-vocabulary, the same retry fields, the same gating (`ADV-RETRY-001`). Read the
+vocabulary, the same retry fields, the same gating (`RULE-RETRY-001`). Read the
 members and bounds off those models.
 
 Its scope, however, is narrow, and that is the whole point of the block: **it

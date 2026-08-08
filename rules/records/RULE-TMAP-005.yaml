@@ -1,0 +1,19 @@
+id: RULE-TMAP-005
+statement: >
+  A `regex` read rule's native pattern MUST compile under the ECMA-262 regex
+  dialect.
+tier: structural
+severity: error
+scope: type-map
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
+owners: [connector-plugin, pipeline-plugin]
+targets: [TypeMapReadRegexRule]
+rationale: >
+  The map is published under a JSON Schema whose pattern dialect is ECMA-262
+  and is read by more than one runtime, so a Python-only named-capture spelling
+  compiles wherever the author tested it and fails wherever it ships. The
+  authoring hazard is that both spellings look like ordinary regex, and without
+  a compile check the two directions reject it at different layers.
+status: active
+superseded_by: null

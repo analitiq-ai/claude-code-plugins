@@ -17,7 +17,7 @@ containing one endpoint document body.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-pagination.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/advisory-rules.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
   (the `api-endpoint` section — the cross-field rules your document must satisfy)
 
 ## Inputs
@@ -95,7 +95,7 @@ was raised.
      a direct `stream.*` / `state.*` / `runtime.*` ref anywhere in a request slot is
      rejected. Fixed protocol values stay direct (`{"literal": …}`, or a
      `connection.parameters.*` / `secrets.*` ref). Every declared param must
-     be bound by exactly one binding (ADV-ENDP-009). Full rules:
+     be bound by exactly one binding (RULE-ENDP-009). Full rules:
      `spec-request-binding.md`.
    - `pagination` — when `endpoint_facts.paginated` is true, populate per
      `endpoint_facts.pagination` (the connector-wide `style` + `params`,
@@ -107,7 +107,7 @@ was raised.
      selecting the iterable record collection (use `endpoint_facts.record_path`).
    - `response.schema` — JSON Schema describing the **entire response body**,
      envelope included — not just the record. `response.records` must resolve
-     to an **array** node inside it (ADV-ENDP-012), so a `record_path` of
+     to an **array** node inside it (RULE-ENDP-012), so a `record_path` of
      `response.body.data` requires a `data` property typed as an array whose
      `items` carry the record's fields. Authoring only the record's fields at
      the top level is the most common way to fail validation.
@@ -124,7 +124,7 @@ was raised.
      domain), not the endpoint. Do not invent or guess field types — every
      type comes from the researched facts.
      - **Temporal fields follow the sample value, never a default**
-       (`ADV-SHRD-002`). Use the field's
+       (`RULE-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
        offset/`Z` → `Timestamp(<unit>, UTC)`. When two fields share a native
@@ -149,18 +149,18 @@ was raised.
      / `transport_ref` keys as the read request — except that `path_params`
      diverges here (below). The **body must reference the record being
      written** via `{"from_input": …}` — `record` (or `record.<field>`)
-     when unbatched, `records` when `batching` is declared (ADV-ENDP-017).
+     when unbatched, `records` when `batching` is declared (RULE-ENDP-017).
      Author the provider's envelope literally around it
      (`{"data": {"from_input": "records"}}`); no wrapper key is special.
      A write **`path_params`** may also bind `from_input`, as
      `{"from_input": "record.<dotted>"}` — this is how `PUT /Contact/{id}`
      takes its segment from the record, declaring no param at all. Only
-     `record.<dotted>` (a segment carries one value, ADV-ENDP-024), never
-     alongside `batching` (ADV-ENDP-025), and never wrapped in
+     `record.<dotted>` (a segment carries one value, RULE-ENDP-024), never
+     alongside `batching` (RULE-ENDP-025), and never wrapped in
      `url_encode` / `base64_encode` — the engine encodes each segment
-     (ADV-ENDP-027). Use `{"from_param"}` instead when the segment comes
+     (RULE-ENDP-027). Use `{"from_param"}` instead when the segment comes
      from configuration rather than the record; a write param bound that way
-     must carry a `default` (ADV-ENDP-028). Outside the write body and write
+     must carry a `default` (RULE-ENDP-028). Outside the write body and write
      `path_params`, `from_input` is illegal: never in a read request, a
      header, a query, or a param default. Full rules:
      `spec-request-binding.md`.
@@ -168,13 +168,13 @@ was raised.
      describing one provider-facing destination record. Every field a
      `from_input` path addresses must be declared here.
    - `conflict_keys` — **required for `upsert`, forbidden for every other
-     mode** (ADV-ENDP-019): an array of top-level field names declared in
+     mode** (RULE-ENDP-019): an array of top-level field names declared in
      this mode's `input.schema` — together the provider-defined natural
      key the upsert matches on. Use `endpoint_facts.conflict_keys`;
      never invent one.
    - `batching` (optional) — `{"max_records": <int ≥ 2>}` when the
      provider documents a per-request cap. Mutually exclusive with
-     `idempotency` (ADV-ENDP-015).
+     `idempotency` (RULE-ENDP-015).
    - `idempotency` (optional) — `{"in": "header" | "body", "name":
      "<non-empty>"}`: where the provider's idempotency key goes on each
      write request (`header`: Stripe `Idempotency-Key`; `body`: Square's
@@ -200,7 +200,7 @@ was raised.
        operator vocabulary is the schema's predicate grammar — the same
        `$defs` the pagination `stop_when` uses (`spec-pagination.md`).
 5. At least one of `operations.read` or `operations.write` must be
-   present (ADV-ENDP-018) — omit the other when the resource is
+   present (RULE-ENDP-018) — omit the other when the resource is
    read-only or write-only.
 
 ## Hard rules
@@ -217,7 +217,7 @@ was raised.
   application/json` in `request.headers` unless the selected transport
   already provides an equivalent default. Provider-specific JSON media types
   (e.g. `application/vnd.api+json`) are allowed when the provider requires them.
-- Do not author database endpoints (`ADV-DBEP-006`) — not by this sub-agent.
+- Do not author database endpoints (`RULE-DBEP-006`) — not by this sub-agent.
 
 ## Output format
 

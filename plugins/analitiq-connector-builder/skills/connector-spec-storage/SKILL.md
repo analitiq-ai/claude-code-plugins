@@ -7,7 +7,7 @@ disable-model-invocation: true
 # connector-spec-storage (stub)
 
 This skill is a placeholder for `kind ∈ {file, s3, stdout}`
-(`ADV-CTOR-037`). Until engine support lands:
+(`RULE-CTOR-037`). Until engine support lands:
 
 - The orchestrator should route `kind = file | s3 | stdout` to the
   `storage-connector-creator` agent.

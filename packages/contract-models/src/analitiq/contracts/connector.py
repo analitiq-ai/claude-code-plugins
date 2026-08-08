@@ -29,7 +29,7 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.advisory import HeaderMergeRules, violation
+from analitiq.contracts.shared.rules import HeaderMergeRules, violation
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
     DISPLAY_NAME_MAX,
@@ -361,7 +361,7 @@ class ConnectionContractInput(StrictModel):
 
     @model_validator(mode="after")
     def _options_offer_the_enum(self) -> "ConnectionContractInput":
-        """ADV-CONN-001: the picker offers exactly what the contract accepts."""
+        """RULE-CONN-001: the picker offers exactly what the contract accepts."""
         offered = [o.value for o in (self.ui.options if self.ui else None) or ()]
         if not offered or not self.enum:
             return self
@@ -370,17 +370,17 @@ class ConnectionContractInput(StrictModel):
         extra = [v for v in offered if v not in self.enum]
         missing = [v for v in self.enum if v not in offered]
         if extra or missing:
-            raise violation("ADV-CONN-001", f"extra={extra!r}; missing={missing!r}")
+            raise violation("RULE-CONN-001", f"extra={extra!r}; missing={missing!r}")
         return self
 
     @model_validator(mode="after")
     def _default_is_an_enum_member(self) -> "ConnectionContractInput":
-        """ADV-CONN-002: the fallback the platform supplies is a legal value."""
+        """RULE-CONN-002: the fallback the platform supplies is a legal value."""
         if self.default is None or not self.enum:
             return self
         if self.default not in self.enum:
             raise violation(
-                "ADV-CONN-002", f"value={self.default!r} not in {self.enum!r}"
+                "RULE-CONN-002", f"value={self.default!r} not in {self.enum!r}"
             )
         return self
 
@@ -1963,10 +1963,10 @@ class ConnectorBase(StrictModel):
 
     @model_validator(mode="after")
     def _default_transport_declared(self) -> "ConnectorBase":
-        """ADV-CTOR-001: the transport every operation falls back to exists."""
+        """RULE-CTOR-001: the transport every operation falls back to exists."""
         if self.default_transport not in self.transports:
             raise violation(
-                "ADV-CTOR-001",
+                "RULE-CTOR-001",
                 f"value={self.default_transport!r} "
                 f"not in {sorted(self.transports)!r}",
             )

@@ -1,0 +1,20 @@
+id: RULE-CTOR-001
+statement: >
+  A connector's default_transport MUST name a transport the same document
+  declares.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared"
+owners: [engine, connector-plugin]
+targets: [ConnectorBase]
+fixture_model: ApiConnector
+rationale: >
+  The default transport is what every operation that declares no transport_ref
+  runs on, so a name with nothing behind it fails at connect time on a document
+  that read as complete. The usual cause is a transport renamed on one line and
+  not the other: the two keys sit far apart in the file, and nothing about
+  either one on its own looks wrong.
+status: active
+superseded_by: null

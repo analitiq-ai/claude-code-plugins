@@ -21,11 +21,11 @@ defined in a sibling `streams/<stream-slug>.json` file.
 Rules:
 
 - Uniqueness is checked on the **version-stripped base id**, not merely on the
-  literal string — `ADV-PIPE-003` in the cross-field rule table in `SKILL.md`.
+  literal string — `RULE-PIPE-003` in the cross-field rule table in `SKILL.md`.
 - Each referenced stream's `pipeline_id` must equal this pipeline's
   `pipeline_id`. The bundle referential checks enforce this when
   `--bundle-root` is supplied.
-- Array order is **display-only** (`ADV-PIPE-010`).
+- Array order is **display-only** (`RULE-PIPE-010`).
 - An empty `streams` array is permitted in `draft` or `inactive`
   status. Only `status: active` requires non-empty `streams` (see the
   status rules below).

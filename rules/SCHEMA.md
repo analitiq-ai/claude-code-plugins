@@ -1,6 +1,6 @@
 # The rule registry — record schema
 
-One YAML file per rule under `rules/adv/`, named for its id. The record is the
+One YAML file per rule under `rules/records/`, named for its id. The record is the
 source of truth: the published references, the plugin prose, the validator
 bindings and this repo's runtime enforcement are all generated from it or
 validated against it, never the reverse.
@@ -10,8 +10,8 @@ A rule is added by writing a file here. Nothing else is edited by hand.
 ```
 rules/
   SCHEMA.md            this file — the record schema
-  adv/
-    ADV-CTOR-004.yaml  one file per rule, named for its id
+  records/
+    RULE-CTOR-004.yaml  one file per rule, named for its id
     …
 ```
 
@@ -27,7 +27,7 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 
 | Field | Required | What it is |
 |---|---|---|
-| `id` | yes | `ADV-<AREA>-NNN`. Immutable, never reused — it appears in validator findings and archived diagnostics, so reissuing one silently re-points every stored occurrence. The filename must match it. |
+| `id` | yes | `RULE-<AREA>-NNN`. Immutable, never reused — it appears in validator findings and archived diagnostics, so reissuing one silently re-points every stored occurrence. The filename must match it. |
 | `statement` | yes | The normative sentence, RFC 2119 keywords in caps. Self-contained: someone reading only this understands the obligation. Never restates a value the contract owns — `targets` and `fields` point at what does. |
 | `tier` | yes | What *kind* of rule it is. See below. |
 | `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it. |
@@ -125,7 +125,7 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
   resolves every `validator` binding (a code symbol against the live models, an
   agent rule against the filesystem), refuses a duplicate or reissued id, and
   fails when the compiled projection the wheel ships is stale.
-- `packages/contract-models/tests/unit/test_advisory_registry.py` — what
+- `packages/contract-models/tests/unit/test_rule_registry.py` — what
   `render_rules.py` cannot see from a record alone: that every target carries
   the member `validator` names, that every model validator on a contract model
   is some rule's enforcer or carries a written exemption, that a retired id is

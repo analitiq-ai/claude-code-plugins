@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile the rule registry, and refuse to compile a broken one.
 
-`rules/adv/*.yaml` is the source of truth — one record per rule, schema in
+`rules/records/*.yaml` is the source of truth — one record per rule, schema in
 `rules/SCHEMA.md`. This script is the only thing that reads it:
 
     render_rules.py write    # validate every record, compile rules.json
@@ -38,7 +38,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RULES_DIR = REPO_ROOT / "rules" / "adv"
+RULES_DIR = REPO_ROOT / "rules" / "records"
 
 # Same bootstrap as render_schemas.py: this repo is the contract's SOURCE, and
 # `requirements-dev.txt` deliberately installs no wheel of it.
@@ -58,13 +58,13 @@ from analitiq.contracts.shared.rule_record import (  # noqa: E402
 RETIRED_BEFORE_THE_REGISTRY = {
     # `exactly one of expression or constant`, retired in 1.0.0rc19 when
     # `AssignmentValue` became a `kind`-discriminated union.
-    "ADV-STRM-008",
+    "RULE-STRM-008",
     # `conflict_keys required for a connection-scope upsert` and `a database
     # destination's write.mode belongs to the closed database vocabulary`: the
     # destination became an `endpoint_ref.scope`-tagged union whose database
     # branch is itself `mode`-discriminated, so both are now the shape.
-    "ADV-STRM-011",
-    "ADV-STRM-013",
+    "RULE-STRM-011",
+    "RULE-STRM-013",
 }
 
 
@@ -100,6 +100,16 @@ def load_registry() -> list[RuleRecord]:
             problems.append(f"{path.name}: filename does not match id {record.id!r}")
         records.append(record)
 
+    if not records and not problems:
+        # A registry that globs nothing compiles to a valid, empty document and
+        # every consumer reads it as "no rules exist" — a moved directory or a
+        # renamed extension would land as a green build with the whole registry
+        # switched off.
+        problems.append(
+            f"{RULES_DIR.relative_to(REPO_ROOT)} holds no *.yaml records — "
+            "the registry is never empty, so this is a path or extension that "
+            "stopped matching, not a registry with nothing in it"
+        )
     seen: dict[str, str] = {}
     for record in records:
         if record.id in seen:
@@ -174,7 +184,7 @@ def _has_member(owner: object, attr: str) -> bool:
 def compile_registry(records: list[RuleRecord]) -> str:
     payload = {
         "$comment": (
-            "GENERATED from rules/adv/*.yaml by scripts/render_rules.py — do not "
+            "GENERATED from rules/records/*.yaml by scripts/render_rules.py — do not "
             "edit. The YAML records are the source of truth; this file is the "
             "copy the wheel ships so the package needs no YAML parser."
         ),

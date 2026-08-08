@@ -19,7 +19,7 @@ installable Python package.
 ## Required reading (load on demand)
 
 - This skill's `spec-driver-selection.md` — the transport/driver
-  decision order (`ADV-CTOR-027`) and the sync/async dispatch
+  decision order (`RULE-CTOR-027`) and the sync/async dispatch
   constraints.
 - This skill's `spec-dsn-bindings.md` — DSN URL templates and bindings.
 - This skill's `spec-tls.md` — TLS declaration mechanics.
@@ -60,7 +60,7 @@ installable Python package.
   `bulk_land`) — see `spec-sql-write-path.md`.
 - Transport types, chosen per the `spec-driver-selection.md` decision
   order: `adbc` (closed `driver` enum; `dsn` and/or `db_kwargs`,
-  ADV-CTOR-004) and `sqlalchemy` (a `dialect+driver`, sync or async;
+  RULE-CTOR-004) and `sqlalchemy` (a `dialect+driver`, sync or async;
   generic `tls` block). Each takes the same `dsn.kind: "url_template"`
   shape — `spec-dsn-bindings.md`.
 - `auth.type: "db"` — credentials live in `connection_contract.inputs`;
@@ -71,4 +71,4 @@ installable Python package.
 - HTTP transport idioms (that's `connector-spec-api`).
 - OAuth flows or other API auth types.
 - API endpoint authoring (database connectors do not ship endpoint files —
-  `ADV-CTOR-044`).
+  `RULE-CTOR-044`).

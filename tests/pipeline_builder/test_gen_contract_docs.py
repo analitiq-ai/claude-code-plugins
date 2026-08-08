@@ -200,7 +200,7 @@ def test_every_owned_rule_lands_in_exactly_one_block():
     starts contradicting itself.
     """
     owned = {r.id for r in G._owned()}
-    placed = [rule.id for block in G._ADVISORY_BLOCKS for rule in G._block_rules(block)]
+    placed = [rule.id for block in G._RULE_BLOCKS for rule in G._block_rules(block)]
 
     assert sorted(placed) == sorted(owned), (
         "the blocks no longer partition what this plugin owns: "
@@ -214,7 +214,7 @@ def test_every_owned_rule_lands_in_exactly_one_block():
     )
 
 
-def test_advisory_map_keys_are_real_renderer_blocks():
+def test_rule_block_keys_are_real_renderer_blocks():
     """Each block must be claimed by a renderer that actually reaches a doc.
 
     Without this, a block can hold rules while reaching no agent — which reads
@@ -222,7 +222,7 @@ def test_advisory_map_keys_are_real_renderer_blocks():
     `test_every_renderer_is_referenced_by_a_doc` carries it the rest of the way
     to an actual document.
     """
-    orphans = sorted(set(G._ADVISORY_BLOCKS) - set(G.RENDERERS))
+    orphans = sorted(set(G._RULE_BLOCKS) - set(G.RENDERERS))
     assert not orphans, (
         f"advisory map claims block ids with no renderer: {orphans}; "
         "their rules would count as rendered while reaching no agent")

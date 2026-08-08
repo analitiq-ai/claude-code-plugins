@@ -4,7 +4,7 @@
 package rather than a hand-kept module list, so a new contract module is
 scanned the moment it exists, and a subpackage that fails to import fails the
 census instead of being skipped. Both census directions — prose→registry
-(``test_advisory_prose``) and enforcer→registry (``test_advisory_registry``) —
+(``test_prose_census``) and enforcer→registry (``test_rule_registry``) —
 walk the tree through it, so neither can develop a blind spot the other lacks.
 The prose scan covers ALL pydantic models and ALL ``Enum`` classes defined
 under ``analitiq.contracts`` — membership by category, mechanical and
@@ -17,12 +17,12 @@ pydantic does not publish those, so an obligation belongs in the enum's
 CLASS docstring (``.claude/rules/contract-prose.md``).
 
 :func:`census_report` computes the full live-prose vs census diff in ONE
-place, consumed by both ``tests/unit/test_advisory_prose.py`` and
+place, consumed by both ``tests/unit/test_prose_census.py`` and
 ``scripts/render_prose_census.py`` — the lint and the maintenance tool can
 never disagree about what is missing, stale, or re-worded.
 
 This module's top-level imports are stdlib-only (pydantic is imported lazily,
-inside the functions that need it): ``advisory_prose`` imports
+inside the functions that need it): ``prose_obligation`` imports
 :class:`SiteKey` from here at module import time, and the census must stay
 readable without pulling in pydantic.
 """
@@ -182,7 +182,7 @@ def _scan() -> dict[SiteKey, ProseSite]:
     are not published by pydantic, so an obligation stated on a member is
     censused by nothing and belongs in the class docstring instead.
 
-    The census binds sites by class name (the advisory registry's own
+    The census binds sites by class name (the rule registry's own
     convention), so two distinct prose-carrying classes sharing a bare name
     would silently share one entry. Such a name is therefore module-qualified
     for EVERY class carrying it (``connector.RefExpression`` /

@@ -21,7 +21,7 @@ org, downloaded read-only by `registry-browser`.
   plugin. This plugin consumes connectors; it never authors them.
 - **API endpoints** — they come from the connector document.
 - **Any registration API call.** Authoring is entirely local.
-- **Writing a secret value into a document** (`ADV-SHRD-001`). Secrets are
+- **Writing a secret value into a document** (`RULE-SHRD-001`). Secrets are
   authored as `secret_refs` pointers and templated into a gitignored
   `.secrets/credentials.json` the user fills in.
 - **Deleting or overwriting user files** — especially a connection's

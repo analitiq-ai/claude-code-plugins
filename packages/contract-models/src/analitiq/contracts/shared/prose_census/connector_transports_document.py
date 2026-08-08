@@ -3,7 +3,7 @@ expressions, transports, capability blocks, and the connector document
 classes. Part 1 is :mod:`.connector_auth_contract`."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.advisory_prose import (
+from analitiq.contracts.shared.prose_obligation import (
     ENGINE_CONDUCT,
     ProseObligation,
 )
@@ -11,11 +11,11 @@ from analitiq.contracts.shared.advisory_prose import (
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === connector: transports + expressions =================================
     ProseObligation(
-        model="AdbcTransport", field="dsn", rule_ids=("ADV-CTOR-004",),
+        model="AdbcTransport", field="dsn", rule_ids=("RULE-CTOR-004",),
         prose_hash="4f35f3c711a1",
     ),
     ProseObligation(
-        model="AdbcTransport", field="db_kwargs", rule_ids=("ADV-CTOR-004",),
+        model="AdbcTransport", field="db_kwargs", rule_ids=("RULE-CTOR-004",),
         prose_hash="161a0fcb9905",
     ),
     ProseObligation(
@@ -128,24 +128,24 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         waiver=ENGINE_CONDUCT,
     ),
     ProseObligation(
-        model="WriteUnit", rule_ids=("ADV-CTOR-014",),
+        model="WriteUnit", rule_ids=("RULE-CTOR-014",),
         prose_hash="78ad4437c5c6",
     ),
     ProseObligation(
-        model="SqlStageCapabilities", rule_ids=("ADV-CTOR-013",),
+        model="SqlStageCapabilities", rule_ids=("RULE-CTOR-013",),
         prose_hash="332e2d32b12a",
     ),
     ProseObligation(
         model="SqlStageCapabilities", field="dedicated_schema",
         prose_hash="6bf44305b2e9",
-        rule_ids=("ADV-CTOR-013",),
+        rule_ids=("RULE-CTOR-013",),
         structural=(
             "the non-blank shape is a Field length floor plus "
             "NO_EDGE_WHITESPACE_PATTERN"
         ),
     ),
     ProseObligation(
-        model="SqlBulkLoad", rule_ids=("ADV-CTOR-015",),
+        model="SqlBulkLoad", rule_ids=("RULE-CTOR-015",),
         prose_hash="4eff5e074de9",
         structural=(
             "per-family Literal types keep adbc_ingest out of the "
@@ -200,7 +200,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="ConnectorBase", field="concurrency", prose_hash="9f4b26f0cb75", descriptive=True),
     ProseObligation(model="ConnectorBase", field="connection_contract", prose_hash="350ca0dfeb9b", descriptive=True),
     ProseObligation(
-        model="ConnectorBase", field="default_transport", rule_ids=("ADV-CTOR-001",),
+        model="ConnectorBase", field="default_transport", rule_ids=("RULE-CTOR-001",),
         prose_hash="94e91832aeaf",
     ),
     ProseObligation(
@@ -478,7 +478,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="SqlBulkLoad", field="adbc",
         prose_hash="39076a71bb13",
-        rule_ids=("ADV-CTOR-015",),
+        rule_ids=("RULE-CTOR-015",),
         structural=(
             "the `_AdbcBulkMechanism` Literal closes this family's mechanism "
             "vocabulary"
@@ -487,7 +487,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="SqlBulkLoad", field="sqlalchemy",
         prose_hash="ad78664bc797",
-        rule_ids=("ADV-CTOR-015",),
+        rule_ids=("RULE-CTOR-015",),
         structural=(
             "the `_DialectBulkMechanism` Literal closes this family's "
             "mechanism vocabulary"
@@ -557,7 +557,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="SqlStageCapabilities", field="schema_", rule_ids=("ADV-CTOR-013",),
+        model="SqlStageCapabilities", field="schema_", rule_ids=("RULE-CTOR-013",),
         prose_hash="880f4dc8f45a",
     ),
     ProseObligation(
@@ -608,12 +608,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="TransportRateLimit", field="time_window_seconds", prose_hash="8b74b8aa24ff", descriptive=True),
     ProseObligation(model="UrlTemplateDsn", prose_hash="6157c864874b", descriptive=True),
     ProseObligation(
-        model="UrlTemplateDsn", field="bindings", rule_ids=("ADV-CTOR-011",),
+        model="UrlTemplateDsn", field="bindings", rule_ids=("RULE-CTOR-011",),
         prose_hash="30908833846f",
     ),
     ProseObligation(model="UrlTemplateDsn", field="kind", prose_hash="b6d76f4de216", descriptive=True),
     ProseObligation(
-        model="UrlTemplateDsn", field="template", rule_ids=("ADV-CTOR-011",),
+        model="UrlTemplateDsn", field="template", rule_ids=("RULE-CTOR-011",),
         prose_hash="17e78642d3da",
     ),
     ProseObligation(

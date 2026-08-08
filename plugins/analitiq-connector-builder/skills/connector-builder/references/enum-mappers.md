@@ -27,7 +27,7 @@ and ask the user.
 For storage kinds the orchestrator dispatches to the stub agent which
 declines until engine support lands. The contract also defines distinct
 `nosql` / `document` kinds; this plugin recognizes them but authors none — a
-document or NoSQL provider is authored as `database` (`ADV-CTOR-033`, routed
+document or NoSQL provider is authored as `database` (`RULE-CTOR-033`, routed
 above).
 
 ## AuthTypeMapper
@@ -55,7 +55,7 @@ above).
 | Provider is stdout sink | `stdout` |
 
 For databases, apply the driver-selection decision order — in this
-order, stopping at the first match (`ADV-CTOR-027`; full guide:
+order, stopping at the first match (`RULE-CTOR-027`; full guide:
 `connector-spec-db/spec-driver-selection.md`):
 
 1. **A first-class ADBC driver exists and is in the schema's
@@ -70,7 +70,7 @@ order, stopping at the first match (`ADV-CTOR-027`; full guide:
 3. **Neither, but the system has a native bulk-load protocol** →
    `sqlalchemy` for connect/DDL, with the mechanism declared in
    `sql_capabilities.bulk_load` and implemented in the dialect's
-   `bulk_land` hook (`ADV-PKG-016`; the thick path).
+   `bulk_land` hook (`RULE-PKG-016`; the thick path).
 4. **None of the above** → `sqlalchemy` landing via executemany. This is
    the fallback, not the default — pick it last.
 

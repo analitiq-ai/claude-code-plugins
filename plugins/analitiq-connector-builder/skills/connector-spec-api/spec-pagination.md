@@ -27,9 +27,9 @@ request binding on its own**. Every param it names must be:
 2. **`controlled_by: "pagination"`** on that param, and
 3. **bound** into the request with `{"from_param": …}`.
 
-Miss any one and validation fails (ADV-ENDP-009, ADV-ENDP-010). A
+Miss any one and validation fails (RULE-ENDP-009, RULE-ENDP-010). A
 `controlled_by` param must **not** declare `operators`: pagination owns it, so a
-stream may not also filter on it (ADV-ENDP-002).
+stream may not also filter on it (RULE-ENDP-002).
 
 See `examples/api-key/endpoints/v1__items.json` for the full three-place
 wiring — every endpoint example (api-key, jwt, oauth2-authorization-code)
@@ -65,7 +65,7 @@ wraps a single key over a value expression:
   cursor / no next link in the response).
 
 > The predicate **wrappers** are contract-checked, and so is every
-> `response.body` path an operand resolves (ADV-ENDP-023). What an operand
+> `response.body` path an operand resolves (RULE-ENDP-023). What an operand
 > *means* — that this `ref` is the page's record array, that one the next-page
 > token — is yours: match it to the actual response shape of the endpoint
 > you're authoring.
@@ -169,7 +169,7 @@ things — declaring one does not imply the other. Dotted paths preserve the
 response's casing, and a literal dot in a field name cannot be addressed.
 
 Omit `initial` entirely for the first page — never write `null`
-(ADV-ENDP-044).
+(RULE-ENDP-044).
 
 <!-- validate: api-endpoint#/operations/read/pagination -->
 ```json

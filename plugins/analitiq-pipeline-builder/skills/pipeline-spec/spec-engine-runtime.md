@@ -72,10 +72,10 @@ terms — how the runtime divides them is not a contract fact.
 | `max_retries` | no | integer | `3` | `min=0`, `max=5` |
 | `retry_delay_seconds` | no | integer \| null | `None` | `min=0` |
 
-Carries 1 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 1 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-error-handling -->
 
-`max_retries` and `retry_delay_seconds` are coupled — `ADV-RETRY-001` in the
+`max_retries` and `retry_delay_seconds` are coupled — `RULE-RETRY-001` in the
 table in `SKILL.md`. The coupling exists because a delay with no retries is
 incoherent, and a retry loop with no wait is a hot loop against a system that
 just failed.
@@ -97,7 +97,7 @@ Three documents have a say, and they are not alternatives:
   owned by the connector and never authored here.
 
 Pipeline-level values are defaults; stream-level overrides win within the
-endpoint's declared caps (`ADV-PIPE-007`). When a user asks for a specific
+endpoint's declared caps (`RULE-PIPE-007`). When a user asks for a specific
 write size on one destination, change the stream, not the pipeline.
 
 Batch **concurrency** is not authorable at all. `max_concurrent_batches` used

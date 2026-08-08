@@ -24,7 +24,7 @@ Required: `source`, `phase`, `storage`, `type`, `required`.
 | `storage` | Closed enum for inputs: `"connection.parameters"` (non-secret, durable) or `"secrets"` (secret, durable, materialized via secret refs). Inputs **cannot** target `"connection.selections"` / `"connection.discovered"` — those are produced by `post_auth_outputs` (below), never collected as inputs. |
 | `type` | JSON Schema type: `string`, `integer`, `boolean`, `number`. |
 | `required` | Boolean. |
-| `secret` | Boolean (default false). True if and only if storage is `secrets` (ADV-CONN-003). |
+| `secret` | Boolean (default false). True if and only if storage is `secrets` (RULE-CONN-003). |
 | `enum` | Array of allowed values (closed enum). |
 | `default` | Default value (for non-required inputs). |
 | `format` / `pattern` | Optional string validation — `format: "uri"` or a regex `pattern`. The published schema names this field `pattern`; the input field set is closed (`additionalProperties: false`). |
@@ -39,7 +39,7 @@ Both kinds emit the same outer shape. Concrete inputs differ:
 
 ## What belongs in the contract at all
 
-**A connector must not own customer-specific values** (`ADV-CTOR-028`). A host,
+**A connector must not own customer-specific values** (`RULE-CTOR-028`). A host,
 tenant id, account id, database name, profile, credential, or token belongs to
 a *connection*, not to the connector — the connector declares the *shape* of
 the input, and the connection supplies the value. A connector carrying a real
@@ -64,7 +64,7 @@ is never "where is this interpolated from?" but "whose value is this?":
 context. Required fields per output:
 
 - `mode` — closed enum: `user_selection` (a value the user picks from an `options_request`) or `auto_discovery` (a value read from a `discovery_request`).
-- `storage` — closed enum `"connection.selections"` (user choices, `user_selection`), `"connection.discovered"` (auto-discovered values, `auto_discovery`), or `"secrets"` (secret-valued outputs). The mode↔storage pairing and each mode's required/forbidden request fields are ADV-CTOR-002.
+- `storage` — closed enum `"connection.selections"` (user choices, `user_selection`), `"connection.discovered"` (auto-discovered values, `auto_discovery`), or `"secrets"` (secret-valued outputs). The mode↔storage pairing and each mode's required/forbidden request fields are RULE-CTOR-002.
 - `type` — the value's type.
 - `value_path` — the **response-extraction path**: the field read out of the
   `options_request` / `discovery_request` response (e.g. `"id"` for a
@@ -74,7 +74,7 @@ context. Required fields per output:
 The durable reference path is **derived** as `storage` + `"."` + the output
 key — e.g. an output keyed `api_domain` with `storage: "connection.discovered"`
 materializes at `connection.discovered.api_domain`, which is what refs and
-`required_for_activation` target (`ADV-CTOR-007`). For `user_selection`
+`required_for_activation` target (`RULE-CTOR-007`). For `user_selection`
 outputs, `label_path` / `options_path` are response-extraction paths too.
 
 Discovery mechanics (`options_request` / `discovery_request`) are
@@ -85,10 +85,10 @@ reflect what the value *is*: `connection.discovered` for auto-discovered
 context, `connection.selections` for user choices, `secrets` only for genuinely
 secret values. Routing a tenant domain or account id through `secrets` because
 it "feels safer" makes it unreadable to the refs that need it and misreports the
-connector's secret surface. (ADV-CTOR-002 enforces the mode↔storage pairing;
+connector's secret surface. (RULE-CTOR-002 enforces the mode↔storage pairing;
 it cannot tell whether a value is truly secret.)
 
-**Don't rely on output ordering** (`ADV-CTOR-038`). Author each output so it
+**Don't rely on output ordering** (`RULE-CTOR-038`). Author each output so it
 stands on its own: never write one that quietly depends on another having
 already run, and don't build a chain of outputs referencing each other's
 values.
@@ -99,7 +99,7 @@ values.
 the user picked X, then Y is required and Z is meaningless". Each rule is a
 `when` predicate plus `require` / `forbid` lists and an operator-authored
 `message`. The shape and the predicate operator set are contract-owned
-(ADV-CTOR-012, plus ADV-CTOR-008/009 requiring every referenced field to be a
+(RULE-CTOR-012, plus RULE-CTOR-008/009 requiring every referenced field to be a
 declared input); what the contract can't tell you is what the operators *mean*
 and where the boundary sits.
 
@@ -111,7 +111,7 @@ and where the boundary sits.
 | `present` | has any value at all (use for "the user filled this in") |
 | `regex` | matches the pattern |
 
-Exactly one operator key per predicate (ADV-CTOR-012). Write the `message`
+Exactly one operator key per predicate (RULE-CTOR-012). Write the `message`
 for the person filling in the form, naming the field they must fix.
 
 **Scope boundary.** These predicates are for *cross-input* validation only —

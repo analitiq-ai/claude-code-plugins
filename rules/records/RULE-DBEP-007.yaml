@@ -1,0 +1,24 @@
+id: RULE-DBEP-007
+statement: >
+  Database identity MUST be read from an endpoint's `database_object`; the
+  derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into
+  the identifiers it was derived from.
+tier: procedural
+severity: error
+scope: database-endpoint
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [DatabaseObject, ConnectionEndpointRef, DatabaseEndpointDoc]
+rationale: >
+  The handle is built by slugging the verbatim identifiers and appending a
+  truncated hash, and it is lossy in both halves: slugging folds away case and
+  punctuation that cannot be reconstructed, and the hash is not reversible at
+  all. It looks decodable, which is the trap — the segments read as a schema
+  and a table, so a consumer that splits the handle is right for every plain
+  lowercase identifier it was tested against and wrong for the first quoted or
+  punctuated one, and the symptom is a run reading or writing a table nobody
+  named. The decoding happens in whatever consumer reads the id rather than in
+  any document, so nothing that validates a document can see it.
+status: active
+superseded_by: null

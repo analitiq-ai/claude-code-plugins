@@ -1,0 +1,25 @@
+id: RULE-CTOR-018
+statement: >
+  Every binding in a `url_template` DSN MUST declare an `encoding` from the
+  closed vocabulary the contract carries, selected for the URL position the
+  value is substituted into.
+tier: structural
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::DsnBinding.encoding"
+owners: [engine, connector-plugin]
+targets: [DsnBinding]
+fields: [encoding]
+mechanism: literal_enum
+rationale: >
+  Encoding is applied when the DSN is rendered, and the correct one depends
+  entirely on where the value lands: a password in userinfo, a database name in
+  a path segment and a hostname all escape by different rules. Membership in
+  the vocabulary is the half the contract can decide — and it rejects an
+  unknown encoding by naming the field, not this rule. Which member a binding
+  takes is authoring judgement the contract cannot make, and getting it wrong
+  renders a DSN that looks right and carries a mangled credential or an
+  unreachable host.
+status: active
+superseded_by: null

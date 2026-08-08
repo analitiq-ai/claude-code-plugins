@@ -4,7 +4,7 @@ Filters declared in `source.filters[]` draw from a closed, per-scope operator
 vocabulary. The contract enforces it: `operator` is a closed Literal
 (`analitiq.contracts.stream.FilterOperator`), and the operator must belong to the
 **source scope's** vocabulary — a database operator on an API source, or the
-reverse, fails local validation with `[ADV-STRM-012]`.
+reverse, fails local validation with `[RULE-STRM-012]`.
 
 <!-- BEGIN GENERATED: filter-operators -->
 | Availability | Operators |
@@ -34,8 +34,8 @@ downstream, or ask the connector to expose a suitable parameter.
   the inclusive operator.
 - `like` / `ilike` accept SQL wildcard syntax in `value` (`%`, `_`). The engine
   routes these to the dialect's pattern operator.
-- `value` typing follows the referenced field (`ADV-STRM-027`).
-- `field` names a column (database) or a parameter key (API) — `ADV-STRM-022`.
+- `value` typing follows the referenced field (`RULE-STRM-027`).
+- `field` names a column (database) or a parameter key (API) — `RULE-STRM-022`.
 
 ## What the local validator still cannot check
 
@@ -51,7 +51,7 @@ column or type, even though the operator is in the set above. Local validation
 proves the operator is *authorable*, never that the target database will run it.
 
 For an API source, the endpoint document narrows the vocabulary further
-(`ADV-STRM-026`):
+(`RULE-STRM-026`):
 
 - `operators` present, no `controlled_by` → filterable; the declared list is the
   subset that parameter accepts.

@@ -14,7 +14,7 @@
 Which provider concept lands in `catalog` and `schema` is dialect-specific — see
 the tables below.
 
-## Identifier preservation (`ADV-DBEP-009`)
+## Identifier preservation (`RULE-DBEP-009`)
 
 PostgreSQL is case-sensitive when quoted, BigQuery names are case-sensitive in
 the catalog API, and MongoDB collection names are case-sensitive throughout.
@@ -44,7 +44,7 @@ with `scripts/endpoint_id.py` (see `private-endpoint-creator`) and they always
 agree with what the validator recomputes.
 
 `endpoint_id` is an Analitiq **slug**, not a database object name
-(`ADV-DBEP-007`): the segments are slugified (lossy) and the trailing hash is
+(`RULE-DBEP-007`): the segments are slugified (lossy) and the trailing hash is
 not reversible, so a consumer that splits the handle to recover a schema or
 table name will be wrong the moment an identifier contains a character slugging
 folds away.
@@ -59,7 +59,7 @@ snapshot* of that object's shape and changes whenever a column does. One answers
 ## `name`
 
 The provider-native object identifier, as it appears in the catalog
-(`ADV-DBEP-009`).
+(`RULE-DBEP-009`).
 
 ## `catalog`
 

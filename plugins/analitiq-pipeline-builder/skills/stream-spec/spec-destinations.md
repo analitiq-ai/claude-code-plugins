@@ -42,7 +42,7 @@ The sketch below illustrates a filled-in destination.
 
 ## Uniqueness and repeated connections
 
-Destinations must be distinct by their endpoint ref — `ADV-STRM-001` states the
+Destinations must be distinct by their endpoint ref — `RULE-STRM-001` states the
 tuple and the contract model enforces it. The emitted JSON Schema carries no
 `uniqueItems` keyword for `destinations`, so a schema-only reading looks
 permissive; it is not. Duplicates fail validation.
@@ -78,7 +78,7 @@ warehouse is a normal shape, not a duplicate.
 The destination's `endpoint_ref.scope` picks the whole shape, write block
 included — pick the endpoint first, then author the write block its variant
 declares. Each variant's `mode` vocabulary is in the tables above; an API
-destination's mode is bounded further by `ADV-STRM-024`. The orchestrator's
+destination's mode is bounded further by `RULE-STRM-024`. The orchestrator's
 `WriteModeMapper` (see
 `../pipeline-builder/references/enum-mappers.md`) classifies the user's intent
 to one of the database modes.
@@ -95,7 +95,7 @@ of destination field names, not a list of alternative key sets:
 ["id"]                       // or ["org_id", "external_id"] for a composite key
 ```
 
-Every key field names a destination-endpoint field (`ADV-STRM-022`); that is
+Every key field names a destination-endpoint field (`RULE-STRM-022`); that is
 resolved server-side at save time, not by the local validator.
 
 ## `execution` (per-destination override)
@@ -117,7 +117,7 @@ owner:
 | Stream override | destination `execution` | this stream | overrides the default for *this* `(stream, destination)` binding only |
 | Provider capacity | destination endpoint `operations.write.batching` | the endpoint | how much the provider will accept in one request |
 
-The layers resolve under `ADV-PIPE-007`. The endpoint's `batching` is not a
+The layers resolve under `RULE-PIPE-007`. The endpoint's `batching` is not a
 default and not an override: it is a ceiling describing the provider.
 
 Use `execution` sparingly — pipeline defaults exist for a reason. Typical use: a

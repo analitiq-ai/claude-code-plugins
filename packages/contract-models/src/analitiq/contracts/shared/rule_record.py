@@ -1,6 +1,6 @@
 """The rule record — one datum, loaded from the registry, never hand-written here.
 
-The registry is ``rules/adv/*.yaml`` at the repo root: one YAML file per rule,
+The registry is ``rules/records/*.yaml`` at the repo root: one YAML file per rule,
 schema in ``rules/SCHEMA.md``. That record is the source of truth. Everything
 else — the published references, the plugin prose, the checker bindings, this
 package's runtime enforcement — is generated from it or validated against it.
@@ -109,7 +109,7 @@ RFC2119 = ("MUST NOT", "MUST", "SHOULD NOT", "SHOULD", "MAY NOT", "MAY")
 
 @dataclass(frozen=True)
 class RuleRecord:
-    """One rule, as authored in `rules/adv/<id>.yaml`.
+    """One rule, as authored in `rules/records/<id>.yaml`.
 
     Field meanings are `rules/SCHEMA.md`; this class is where they are
     enforced. Construction is the only gate — a record that reaches tooling has

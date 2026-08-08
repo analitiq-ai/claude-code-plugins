@@ -67,7 +67,7 @@ agent owns the authoring vocabulary for its kind via a dedicated spec skill
 |---|---|---|---|
 | `api` | shipped | `api_key`, `basic_auth`, `oauth2_authorization_code`, `oauth2_client_credentials`, `jwt`, `credentials`, `aws_iam`, `none` | Stripe, Pipedrive, Wise, Xero |
 | `database` | shipped | `db` | PostgreSQL, MySQL, Snowflake |
-| `nosql` / `document` | not authored | n/a | Recognized by schema; a document/NoSQL provider is authored as `database` (`ADV-CTOR-033`). |
+| `nosql` / `document` | not authored | n/a | Recognized by schema; a document/NoSQL provider is authored as `database` (`RULE-CTOR-033`). |
 | `file` / `s3` / `stdout` | stubbed | n/a | Recognized by schema; engine support pending. |
 
 ## Validation
@@ -89,7 +89,7 @@ Schemas are generated from — so there is no schema fetch. It runs:
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
    Cross-field rules are part of this pass and report under `contract-model`;
    they are catalogued by id in
-   `skills/connector-builder/references/advisory-rules.md`.
+   `skills/connector-builder/references/rules.md`.
 2. **Checks the contract models can't express** — cross-file relationships
    (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
    `endpoint-id-locator`, `endpoint-transport-ref`), embedded-schema validity
@@ -151,7 +151,7 @@ For each successfully built connector:
 ```
 
 `connector_id` is the stable connector slug; the plugin authors it into
-`connector.json` (`ADV-CTOR-042`). Registry-stamped fields (`created_at`,
+`connector.json` (`RULE-CTOR-042`). Registry-stamped fields (`created_at`,
 `updated_at`) are NEVER written to disk.
 
 ### Existing directories (build vs. update)

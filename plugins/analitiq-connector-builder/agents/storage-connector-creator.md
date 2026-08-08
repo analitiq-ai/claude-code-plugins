@@ -8,7 +8,7 @@ color: blue
 # storage-connector-creator (stub)
 
 This agent is a placeholder for storage-style connector kinds (`file`,
-`s3`, `stdout`). Return the structured refusal below (`ADV-CTOR-037`) — the
+`s3`, `stdout`). Return the structured refusal below (`RULE-CTOR-037`) — the
 orchestrator surfaces it to the user.
 
 ## Output (always)

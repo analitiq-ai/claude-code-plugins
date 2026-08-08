@@ -35,7 +35,7 @@ A "value some other source owns" includes at least:
    three. The rule registry carries unenforced rules too: a record with
    `mechanized: false` and no `validator`, whose `rationale` says what would
    have to be read to catch a violation. Give the obligation an id in
-   `rules/adv/` and cite it; keep in prose only the craft the record does not
+   `rules/records/` and cite it; keep in prose only the craft the record does not
    carry.
 3. **If the copy is unavoidable, is it pinned?** An unavoidable restatement of a
    contract-owned value **must** be pinned by a drift test that reads the

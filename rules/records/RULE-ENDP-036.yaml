@@ -1,0 +1,23 @@
+id: RULE-ENDP-036
+statement: >
+  An endpoint document's `endpoint_id` MUST match the slug pattern
+  `_EndpointBase.endpoint_id` declares.
+tier: structural
+severity: error
+scope: api-endpoint
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::_EndpointBase.endpoint_id"
+owners: [connector-plugin]
+targets: [_EndpointBase]
+fields: [endpoint_id]
+mechanism: pattern
+rationale: >
+  The id is the endpoint's handle everywhere outside the document: the filename
+  it ships under, the key it is looked up by, and the value a stream pins. It
+  therefore has to survive a filesystem, a URL and a JSON key untouched.
+  Constraining the charset once, in the contract, is what lets every other
+  surface treat the id as a literal token instead of something each consumer
+  quotes or escapes its own way — and quoting rules that differ per consumer are
+  how the same endpoint ends up addressed two ways.
+status: active
+superseded_by: null

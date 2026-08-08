@@ -24,7 +24,7 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.advisory import find_duplicates, violation
+from analitiq.contracts.shared.rules import find_duplicates, violation
 from analitiq.contracts.shared.common import (
     CRON_PATTERN,
     DESCRIPTION_MAX,
@@ -81,10 +81,10 @@ class PipelineConnections(StrictModel):
 
     @model_validator(mode="after")
     def _destinations_unique(self) -> "PipelineConnections":
-        """ADV-PIPE-001: a repeated reference would write the same records twice."""
+        """RULE-PIPE-001: a repeated reference would write the same records twice."""
         dups = find_duplicates(self.destinations)
         if dups:
-            raise violation("ADV-PIPE-001", f"duplicates={dups!r}")
+            raise violation("RULE-PIPE-001", f"duplicates={dups!r}")
         return self
 
 

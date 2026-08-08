@@ -15,7 +15,7 @@ release table is the plugin's own policy.
 | `description` | No | Human-readable summary. |
 | `tags` | No | Search/grouping labels. |
 | `documentation_url` | No | Provider docs URL. |
-| `version` | Yes | Semantic version string (`ADV-CTOR-032`). |
+| `version` | Yes | Semantic version string (`RULE-CTOR-032`). |
 | `default_transport` | Yes | Name of an entry in `transports`. |
 | `transports` | Yes | Map of named transport contracts. |
 | `transport_defaults` | No | Defaults merged into named transports. |
@@ -34,7 +34,7 @@ as separate sibling artifacts — `{connector_id}/definition/type-map-read.json`
 ## Authoring `connector_id`
 
 The plugin authors `connector_id` on every connector document
-(`ADV-CTOR-042`), so the contract path
+(`RULE-CTOR-042`), so the contract path
 `connectors/{connector_id}/definition/connector.json` and the plugin's
 output path align without a rewrite layer.
 
@@ -82,11 +82,11 @@ the previous release and the new draft.
 ## First release
 
 If no `previous_release_path` is supplied, set `version: "1.0.0"`
-(`ADV-CTOR-032`).
+(`RULE-CTOR-032`).
 
 ## Schema URL declaration
 
-Authored connector files declare `$schema` (`ADV-SHRD-003`) with the canonical
+Authored connector files declare `$schema` (`RULE-SHRD-003`) with the canonical
 `.ai` URL stated in the field table above. The validator matches on it offline;
 it does not fetch it.
 

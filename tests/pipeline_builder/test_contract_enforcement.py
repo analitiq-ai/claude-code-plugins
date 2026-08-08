@@ -168,14 +168,14 @@ def test_pinned_schema_url_is_rejected(tmp_path):
 
 # --- cross-field rules carry their stable advisory id ----------------------
 
-def test_advisory_findings_quote_their_rule_id(tmp_path):
+def test_findings_quote_their_rule_id(tmp_path):
     """Prose cites rules by id, so the id must survive into the message."""
     doc = {"$schema": f"{H}/pipeline/latest.json",
            "connections": {"source": SRC, "destinations": [DST, DST]}}
     diagnostics = _diagnose(tmp_path, doc, entity="pipeline")
     assert not diagnostics["passed"]
-    assert any("ADV-PIPE-001" in f["message"] for f in diagnostics["findings"]), (
-        "duplicate destinations must report ADV-PIPE-001; the docs cite that id")
+    assert any("RULE-PIPE-001" in f["message"] for f in diagnostics["findings"]), (
+        "duplicate destinations must report RULE-PIPE-001; the docs cite that id")
 
 
 def test_active_pipeline_requires_a_stream(tmp_path):
@@ -183,8 +183,8 @@ def test_active_pipeline_requires_a_stream(tmp_path):
            "connections": {"source": SRC, "destinations": [DST]}}
     diagnostics = _diagnose(tmp_path, doc, entity="pipeline")
     assert not diagnostics["passed"]
-    # This rule reports its semantics rather than an [ADV-] id prefix -- unlike
-    # ADV-PIPE-001 above. Pin the distinction so a pin bump that changes either
+    # This rule reports its semantics rather than an [RULE-] id prefix -- unlike
+    # RULE-PIPE-001 above. Pin the distinction so a pin bump that changes either
     # message style is a visible decision rather than a silent one.
     assert any("requires at least one stream" in f["message"]
                for f in diagnostics["findings"])

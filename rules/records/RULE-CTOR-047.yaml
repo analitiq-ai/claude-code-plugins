@@ -1,0 +1,23 @@
+id: RULE-CTOR-047
+statement: >
+  A transport's `tls.mode` MUST resolve to a value the same connector's
+  ssl-mode connection-contract input admits, and that input MUST declare the
+  `enum` the mode is drawn from.
+tier: advisory
+severity: error
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin]
+targets: [DatabaseTls, ConnectionContractInput]
+rationale: >
+  The mode vocabulary belongs to the connector — it is the driver's own
+  documented mode names, researched and never borrowed — so an ssl-mode input
+  left open hands the dialect's TLS hook a string it has no case for, and a
+  mode carried over from a wire-compatible system offers the user a setting
+  their driver will reject at connect. Known enforcement gap: `DatabaseTls`
+  is deliberately vocabulary-agnostic and no validator follows the `mode`
+  expression from the transport into `connection_contract.inputs`, so neither
+  side of the pair is checked against the other.
+status: active
+superseded_by: null

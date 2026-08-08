@@ -22,7 +22,7 @@ there is no hand-maintained registry to drift from the prose:
 * ``<!-- validate: <entity>#/<json-pointer> -->`` — the fragment replaces the
   host's value at that pointer. A fragment may show its enclosing key for
   context; the pointer names the deepest shown node and the gate unwraps it.
-* ``<!-- invalid: <ADV id> -->`` — deliberately wrong; the spliced document
+* ``<!-- invalid: <RULE id> -->`` — deliberately wrong; the spliced document
   must FAIL validation (a "don't do this" example that rots into valid is the
   most misleading rot there is).
 * ``<!-- illustrative -->`` — outside the published contract's validation
@@ -227,7 +227,7 @@ _MARKER = re.compile(
     r"^\s*<!--\s*(?:"
     r"(?P<illustrative>illustrative)"
     r"|validate:\s*(?P<entity>[a-z_]+)(?:#(?P<pointer>/\S+))?"
-    r"|invalid:\s*(?P<adv>ADV-[A-Z]+-\d+)"
+    r"|invalid:\s*(?P<rule>RULE-[A-Z]+-\d+)"
     r")\s*-->\s*$")
 
 _CONVENTION = (
@@ -240,7 +240,7 @@ class Marker(NamedTuple):
     kind: str            # "validate" | "invalid" | "illustrative"
     entity: str | None   # validate: adapter entity the spliced doc grades as
     pointer: str | None  # validate: JSON pointer ("/a/b"); None = top-level merge
-    adv: str | None      # invalid: the ADV rule the block deliberately breaks
+    rule: str | None     # invalid: the rule the block deliberately breaks
 
     @property
     def target(self) -> str:
@@ -255,8 +255,8 @@ def _parse_marker(raw: str) -> Marker | None:
         return None
     if m.group("illustrative"):
         return Marker("illustrative", None, None, None)
-    if m.group("adv"):
-        return Marker("invalid", None, None, m.group("adv"))
+    if m.group("rule"):
+        return Marker("invalid", None, None, m.group("rule"))
     return Marker("validate", m.group("entity"), m.group("pointer"), None)
 
 
@@ -279,7 +279,7 @@ def test_every_block_is_annotated():
         f"fenced json/jsonc blocks whose preceding line is not a "
         f"well-formed annotation: {unannotated}. Put one of "
         "'<!-- validate: <entity> -->', '<!-- validate: <entity>#/<pointer> -->', "
-        "'<!-- invalid: <ADV id> -->', '<!-- illustrative -->' directly above "
+        "'<!-- invalid: <RULE id> -->', '<!-- illustrative -->' directly above "
         f"the fence, per {_CONVENTION} — and move EXPECTED_DISPOSITIONS in "
         "this file to match.")
 
@@ -523,23 +523,23 @@ def _grading_entity(marker: Marker, label: str) -> str:
     """The adapter entity a block grades as.
 
     A ``validate:`` marker states it. An ``invalid:`` marker states only the
-    ADV id; the advisory registry's ``resource`` field supplies the entity —
-    which also makes a dangling ADV id fail the build, the same property a
+    rule id; the registry's ``scope`` field supplies the entity —
+    which also makes a dangling rule id fail the build, the same property a
     citation carries (plugin-prose rung 1). ``invalid:`` blocks target a
     sub-shape by showing its enclosing key (the wrapped-context form), which
     the top-level merge places for them.
     """
     if marker.kind == "invalid":
-        from analitiq.contracts.shared.advisory import all_rules
+        from analitiq.contracts.shared.rules import all_rules
         rules = {rule.id: rule for rule in all_rules()}
-        assert marker.adv in rules, (
-            f"{label}: '<!-- invalid: {marker.adv} -->' names no rule in the "
-            "advisory registry — a dangling ADV id pins nothing.")
+        assert marker.rule in rules, (
+            f"{label}: '<!-- invalid: {marker.rule} -->' names no rule in the "
+            "rule registry — a dangling id pins nothing.")
         # Boundary translation: the registry spells resources hyphenated
         # (database-endpoint), the validator adapter spells entities with
         # underscores (database_endpoint). Without it, a hyphenated resource
         # would surface as a misdirecting KeyError deeper in the splice.
-        entity = rules[marker.adv].scope.replace("-", "_")
+        entity = rules[marker.rule].scope.replace("-", "_")
     else:
         entity = marker.entity
     assert entity in ENTITY_SKILL, (
@@ -600,10 +600,10 @@ def _assert_block_upholds_marker(marker: Marker, body: str, label: str,
                   "for a partial fragment.")
     else:
         # The diagnostics envelope carries Pydantic messages, not rule ids, so
-        # the ADV id in the marker is declared intent that review checks; the
+        # the rule id in the marker is declared intent that review checks; the
         # gate can only assert the failure itself.
         assert not diagnostics["passed"], (
-            f"{label} is marked '<!-- invalid: {marker.adv} -->' but the "
+            f"{label} is marked '<!-- invalid: {marker.rule} -->' but the "
             f"spliced document VALIDATES as {entity} — a deliberately "
             "wrong example that rots into valid is the most misleading rot "
             "there is. Fix the block so it still breaks the rule, or "
@@ -678,8 +678,8 @@ def test_placeholder_accounting_is_pinned():
 # ---------------------------------------------------------------------------
 
 def test_invalid_disposition_requires_the_failure(tmp_path):
-    marker = _parse_marker("<!-- invalid: ADV-PIPE-002 -->")
-    assert marker == Marker("invalid", None, None, "ADV-PIPE-002")
+    marker = _parse_marker("<!-- invalid: RULE-PIPE-002 -->")
+    assert marker == Marker("invalid", None, None, "RULE-PIPE-002")
     # The registry's `resource` supplies the entity (pipeline); the wrapped
     # `schedule` key places the fragment. Manual-type schedules admit no
     # interval_minutes, so this block upholds its marker by failing...
@@ -690,10 +690,10 @@ def test_invalid_disposition_requires_the_failure(tmp_path):
     with pytest.raises(AssertionError, match="rots into valid"):
         _assert_block_upholds_marker(
             marker, '{"schedule": {"type": "manual"}}', "synthetic", tmp_path)
-    # ...and an ADV id the registry does not know pins nothing, loudly.
-    with pytest.raises(AssertionError, match="dangling ADV id"):
+    # ...and a rule id the registry does not know pins nothing, loudly.
+    with pytest.raises(AssertionError, match="dangling id"):
         _assert_block_upholds_marker(
-            _parse_marker("<!-- invalid: ADV-PIPE-999 -->"),
+            _parse_marker("<!-- invalid: RULE-PIPE-999 -->"),
             '{"schedule": {"type": "manual"}}', "synthetic", tmp_path)
 
 
@@ -703,7 +703,7 @@ def test_invalid_disposition_translates_hyphenated_registry_resources():
     boundary — the failure for an unhosted entity is then the actionable
     membership assertion naming the underscore spelling, never a misdirecting
     KeyError on the hyphenated one."""
-    from analitiq.contracts.shared.advisory import all_rules
+    from analitiq.contracts.shared.rules import all_rules
     rule = next(
         (r for r in all_rules()
          if "-" in r.scope and r.scope.replace("-", "_") not in HOST_EXAMPLE),

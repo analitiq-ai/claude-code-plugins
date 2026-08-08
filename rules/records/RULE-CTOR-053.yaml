@@ -1,0 +1,21 @@
+id: RULE-CTOR-053
+statement: >
+  A `lookup` function's inline `map` MUST declare a key for every value of
+  the referenced input's `enum`, and no key outside it.
+tier: advisory
+severity: warning
+scope: connector
+mechanized: false
+validator: null
+owners: [connector-plugin]
+targets: [FunctionExpression, ConnectionContractInput]
+rationale: >
+  The map is how a user-facing vocabulary reaches the wire, and a missing key
+  is not a fallback: the value resolves to nothing and the request goes out
+  without that field, so the connector works for everyone whose selection is
+  covered and fails only for whoever picks the member the author forgot — a
+  coverage gap that surfaces long after sign-off. Known enforcement gap: the
+  function expression carries no link back to the input it maps, so the map
+  keys and the input's `enum` are never compared.
+status: active
+superseded_by: null

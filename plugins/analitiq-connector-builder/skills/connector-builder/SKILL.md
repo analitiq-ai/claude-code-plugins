@@ -96,7 +96,7 @@ Report to the user:
 ## Hard rules
 
 - The plugin authors `connector_id` (the stable connector slug —
-  `ADV-CTOR-042`). The registry-stamped fields `created_at` and
+  `RULE-CTOR-042`). The registry-stamped fields `created_at` and
   `updated_at` are written by the registry on insert/update and must
   not appear in authored documents — `connector_id` is NOT in that
   set.
@@ -113,12 +113,12 @@ Report to the user:
   (`pipeline.md`, `io-contracts.md`, `enum-mappers.md`, plus
   `value-expressions.md` for scope lookups).
 - Every cross-cutting context reference comes from the documented scopes
-  in `references/value-expressions.md` (`ADV-SHRD-008`). Unknown scope =
+  in `references/value-expressions.md` (`RULE-SHRD-008`). Unknown scope =
   stop and ask.
-- Authored documents declare `$schema` (`ADV-SHRD-003`) with the
+- Authored documents declare `$schema` (`RULE-SHRD-003`) with the
   published host (`https://schemas.analitiq.ai/...`). The validator
   matches on this URL offline; it does not fetch it.
-- Storage kinds produce a structured refusal (`ADV-CTOR-037`). If the
+- Storage kinds produce a structured refusal (`RULE-CTOR-037`). If the
   user asks for one, surface the refusal note and stop.
 - In `build` mode, never overwrite an existing `{connector_id}/`
   directory — the phase-0 check halts the run and asks the user to

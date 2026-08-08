@@ -46,12 +46,12 @@ statement of what the contract requires.
 ## Field references are verbatim
 
 Every field in the `source` block that names a source-endpoint field carries it
-**as discovered** (`ADV-STRM-023`). `Order_ID` and `order_id` are different
+**as discovered** (`RULE-STRM-023`). `Order_ID` and `order_id` are different
 fields; the contract compares them literally and so does the engine.
 
-## `selected_columns` (database only, `ADV-STRM-014`)
+## `selected_columns` (database only, `RULE-STRM-014`)
 
-A field projection over source-endpoint field names (`ADV-STRM-022`). Omit for
+A field projection over source-endpoint field names (`RULE-STRM-022`). Omit for
 "all columns from the endpoint schema."
 <!-- PROBE: stream-selected-columns-unresolved-locally -->
 The local validator does **not** resolve column names
@@ -84,7 +84,7 @@ Ownership across the system:
 | Late-arrival safety window | stream-authored, runtime-applied |
 | Tie-breaking when cursor values collide | contract-specific (`tie_breaker_fields`, database sources only) |
 
-Omitting `replication` is bounded by `ADV-STRM-029`. Nothing local can check it —
+Omitting `replication` is bounded by `RULE-STRM-029`. Nothing local can check it —
 the plugin has no endpoint-capability view at authoring time — so when the
 source's full-refresh support is not established, author an explicit
 `replication` policy rather than relying on the omission default. A source that
@@ -92,7 +92,7 @@ cannot full-refresh and carries no policy is rejected server-side.
 
 `cursor_field` is the **source record field** used as the watermark. It is not a
 provider request parameter and not a page-ordering key. Consequences of
-`ADV-STRM-022` the local validator cannot enforce:
+`RULE-STRM-022` the local validator cannot enforce:
 
 - For a database source, `cursor_field` must name a column that exists in the
   source endpoint's schema.
@@ -118,14 +118,14 @@ other.
 
 `order_by_field` is required for keyset paging (it defines the seek order) and
 optional for offset paging. Whichever form is used, it names a source-endpoint
-field (`ADV-STRM-022`) — resolved server-side, not locally.
+field (`RULE-STRM-022`) — resolved server-side, not locally.
 
 When `database_pagination` is omitted for a database source, the runtime pages
 with offset pagination sized from `pipeline.runtime.batching.batch_size`.
 
 ## `primary_keys`
 
-A **fallback** identity hint (`ADV-STRM-030`).
+A **fallback** identity hint (`RULE-STRM-030`).
 
 For API endpoints this is the only source identity hint there is: an API endpoint
 document has no primary-key metadata to inherit, so record identity for an upsert

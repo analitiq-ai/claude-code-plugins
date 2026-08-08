@@ -12,7 +12,7 @@ site to a disposition and pinning
 its exact wording with a content hash
 (`analitiq.contracts.shared.introspect.prose_fingerprint`). The diff this
 script prints is computed once, in `introspect.census_report`, the same
-function `tests/unit/test_advisory_prose.py` asserts on — the lint and this
+function `tests/unit/test_prose_census.py` asserts on — the lint and this
 tool can never disagree.
 
 Usage:

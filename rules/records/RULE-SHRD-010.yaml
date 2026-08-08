@@ -1,0 +1,21 @@
+id: RULE-SHRD-010
+statement: >
+  An inherited header MUST be dropped with `headers_remove`; declaring the
+  header with a value that resolves to null or empty is not a deletion.
+tier: structural
+severity: error
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [HttpTransport, TransportDefaults, _RequestBase]
+rationale: >
+  The headers map is typed open and what the runtime does with an
+  empty resolved value is deliberately left undecided by the contract, so an
+  explicit null validates and behaves however the runtime happens to — most
+  often by sending the header with an empty value, which on an inherited
+  auth header is a rejected request rather than an inherited default that
+  went away. The removal list is the only spelling that states the intent
+  where the resolution order can act on it.
+status: active
+superseded_by: null

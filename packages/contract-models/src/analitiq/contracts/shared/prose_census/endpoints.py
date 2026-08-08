@@ -1,7 +1,7 @@
 """Census entries for ``analitiq.contracts.endpoints``."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.advisory_prose import (
+from analitiq.contracts.shared.prose_obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -35,17 +35,17 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="_RequestBase", field="path_params",
         prose_hash="18b30a3b6dcb",
-        rule_ids=("ADV-ENDP-024", "ADV-ENDP-027"),
+        rule_ids=("RULE-ENDP-024", "RULE-ENDP-027"),
     ),
     ProseObligation(
         model="WriteRequest", field="path_params",
         prose_hash="48153a4015ce",
-        rule_ids=("ADV-ENDP-024", "ADV-ENDP-025", "ADV-ENDP-027", "ADV-ENDP-028"),
+        rule_ids=("RULE-ENDP-024", "RULE-ENDP-025", "RULE-ENDP-027", "RULE-ENDP-028"),
         waiver=UNKNOWABLE_SKIP,
     ),
     # === api-endpoint: pagination ============================================
     ProseObligation(
-        model="ReadOperation", field="pagination", rule_ids=("ADV-ENDP-023",),
+        model="ReadOperation", field="pagination", rule_ids=("RULE-ENDP-023",),
         prose_hash="b6cbe51e7ce7",
     ),
     ProseObligation(
@@ -67,7 +67,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="LinkPagination", field="limit",
         prose_hash="1ea90bda27f5",
-        rule_ids=("ADV-ENDP-009", "ADV-ENDP-010"),
+        rule_ids=("RULE-ENDP-009", "RULE-ENDP-010"),
     ),
     ProseObligation(
         model="OffsetCursor", field="increment_by",
@@ -99,7 +99,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ResponseExtraction", field="records",
         prose_hash="edb6f6f3bd17",
-        rule_ids=("ADV-ENDP-012",),
+        rule_ids=("RULE-ENDP-012",),
         structural=(
             "typed RefExpression (never template/literal/function); the "
             "response.body anchor is enforced by ResponseExtraction._validate "
@@ -110,18 +110,18 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="ResponseExtraction", field="schema_",
         prose_hash="4fdb3a003c8c",
         rule_ids=(
-            "ADV-ENDP-012", "ADV-ENDP-013", "ADV-ENDP-023", "ADV-ENDP-026",
+            "RULE-ENDP-012", "RULE-ENDP-013", "RULE-ENDP-023", "RULE-ENDP-026",
         ),
     ),
     ProseObligation(
-        model="ResponseExtraction", field="metadata", rule_ids=("ADV-ENDP-023",),
+        model="ResponseExtraction", field="metadata", rule_ids=("RULE-ENDP-023",),
         prose_hash="f499ea237375",
     ),
     # === api-endpoint: write =================================================
     ProseObligation(
         model="WriteOperation", field="conflict_keys",
         prose_hash="0f620ea3b1a7",
-        rule_ids=("ADV-ENDP-014", "ADV-ENDP-019"),
+        rule_ids=("RULE-ENDP-014", "RULE-ENDP-019"),
     ),
     ProseObligation(
         model="endpoints.Batching", field="max_records",
@@ -186,7 +186,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ColumnFieldSpec", field="arrow_type",
         prose_hash="bba63a6a84da",
-        rule_ids=("ADV-ENDP-020",),
+        rule_ids=("RULE-ENDP-020",),
         structural=(
             "Field(pattern=ARROW_TYPE_PATTERN), generated from the vendored "
             "engine grammar; the container-marker sentence is the rule's "
@@ -233,7 +233,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="OffsetCursor", field="param", prose_hash="5c1a0248aafa", descriptive=True),
     ProseObligation(model="OffsetPagination", prose_hash="b0101e20267e", descriptive=True),
     ProseObligation(
-        model="Operations", rule_ids=("ADV-ENDP-018",),
+        model="Operations", rule_ids=("RULE-ENDP-018",),
         prose_hash="57393ed00d58",
     ),
     ProseObligation(model="PageCursor", field="initial", prose_hash="896fe0e59108", descriptive=True),
@@ -269,7 +269,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="PostReadRequest", field="body",
         prose_hash="958783250f0b",
-        rule_ids=("ADV-ENDP-022",),
+        rule_ids=("RULE-ENDP-022",),
     ),
     ProseObligation(model="PostReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
     ProseObligation(model="ReadOperation", prose_hash="ec0e00d340de", descriptive=True),
@@ -292,19 +292,19 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="WriteInput", field="schema_",
         prose_hash="dff7e3bde5fe",
-        rule_ids=("ADV-ENDP-006", "ADV-ENDP-026"),
+        rule_ids=("RULE-ENDP-006", "RULE-ENDP-026"),
     ),
     ProseObligation(model="WriteOperation", prose_hash="494e5ab7f5db", descriptive=True),
     ProseObligation(
         model="WriteOperation", field="idempotency",
         prose_hash="f689d018db5b",
-        rule_ids=("ADV-ENDP-015",),
+        rule_ids=("RULE-ENDP-015",),
     ),
     ProseObligation(model="WriteRequest", prose_hash="c2059bccd496", descriptive=True),
     ProseObligation(
         model="WriteRequest", field="body",
         prose_hash="191d279412ec",
-        rule_ids=("ADV-ENDP-017", "ADV-ENDP-022"),
+        rule_ids=("RULE-ENDP-017", "RULE-ENDP-022"),
     ),
     ProseObligation(
         model="WriteRequest", field="method",
@@ -357,14 +357,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="_RequestBase", field="headers",
         prose_hash="7b62a1a97b23",
-        rule_ids=("ADV-ENDP-022",),
+        rule_ids=("RULE-ENDP-022",),
     ),
     ProseObligation(model="_RequestBase", field="headers_remove", prose_hash="b518759030fa", descriptive=True),
     ProseObligation(model="_RequestBase", field="path", prose_hash="21f5956ac9f8", descriptive=True),
     ProseObligation(
         model="_RequestBase", field="query",
         prose_hash="16b50146e9fe",
-        rule_ids=("ADV-ENDP-022",),
+        rule_ids=("RULE-ENDP-022",),
     ),
     ProseObligation(model="endpoints.Batching", prose_hash="6d788e505a0c", descriptive=True),
     ProseObligation(model="endpoints.RefExpression", prose_hash="533282983d9a", descriptive=True),

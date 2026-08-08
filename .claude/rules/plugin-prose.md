@@ -28,29 +28,30 @@ bump.
 
 ## Facts arrive by this ladder — stop at the first rung that fits
 
-1. **Cite, don't state.** An `ADV-*` id, the generated advisory reference, a
+1. **Cite, don't state.** A `RULE-*` id, the generated rule reference, a
    schema URL, a path to a validated `examples/` file. Citation is the pinned
-   form of repetition — a dangling `ADV-*` id already fails the build.
+   form of repetition — a dangling `RULE-*` id already fails the build.
 
    The registry carries a rule whether or not anything applies it, so "no rule
-   enforces this" is not a reason to restate a fact. Each record answers three
-   questions separately: `tier` says what kind of rule it is, `mechanized` and
+   enforces this" is not a reason to restate a fact. Each record answers these
+   separately: `tier` says what kind of rule it is, `mechanized` and
    `validator` say whether anything applies it and what, and `severity` says
-   what a violation costs. An `advisory` rule is one the validator rejects and
-   names; a `structural` one the published schema rejects, naming the field —
-   those ids exist so prose stops copying enum members and patterns, and the
-   rendered reference prints the members off the live model. A rule with no
-   validator is applied by nobody here, and its `rationale` says what would
-   have to be read to catch a violation.
+   what a violation costs. Tier is the rule's nature, not its enforcement — an
+   `advisory` rule states that fields within one document must agree, a
+   `structural` one that an artifact has a given shape, and either may be
+   applied by something or by nothing. Those ids exist so prose stops copying
+   enum members and patterns, and the rendered reference prints the members off
+   the live model. A rule with no validator is applied by nobody here, and its
+   `rationale` says what would have to be read to catch a violation.
 
    So an obligation with no id is a **missing registry entry**, not a licence
-   to hand-write it. Add `rules/adv/<id>.yaml` (schema: `rules/SCHEMA.md`), name
+   to hand-write it. Add `rules/records/<id>.yaml` (schema: `rules/SCHEMA.md`), name
    this plugin in its `owners` so the reference renders it here, run
    `python3 scripts/render_rules.py write`, then cite it. What stays in prose
    beside the citation is the craft the record deliberately does not carry: the
    worked example, the consequence of getting it wrong, the decision procedure.
 2. **A "validates clean but breaks" warning is a validator gap.** Raise the
-   contract gap; when the rule lands, its `ADV-*` entry carries the fact and
+   contract gap; when the rule lands, its `RULE-*` entry carries the fact and
    the warning is deleted. Only a refused gap drops to rung 3.
 3. **Generate it** into a `BEGIN GENERATED` block from the pinned packages —
    constants and models read directly, behavioral facts derived by probing the
@@ -93,7 +94,7 @@ bump.
   file) or annotated with its verification contract:
   `validate: <resource>` (full document, run through the validator) ·
   `validate: <resource>#/<pointer>` (fragment, against the sub-model) ·
-  `invalid: <ADV id>` (deliberately wrong, asserted to fail validation — a
+  `invalid: <RULE id>` (deliberately wrong, asserted to fail validation — a
   "don't do this" example that rots into valid is the most misleading rot
   there is; that the failure is the named rule's diagnostic stays
   review-enforced, since the validator reports model messages, not rule ids)
@@ -117,7 +118,7 @@ review surface and potential rot.
   judgment. No hedging, no paraphrase of a neighboring sentence, no synonym for
   a term the contract already names.
 - Keep a "why" only when it changes what the agent does next; rationale that
-  does not alter behavior belongs in the commit message or the ADV registry,
+  does not alter behavior belongs in the commit message or the rule registry,
   not in agent prose.
 - A sentence that adds no new obligation, judgment, or example is deleted, not
   polished.

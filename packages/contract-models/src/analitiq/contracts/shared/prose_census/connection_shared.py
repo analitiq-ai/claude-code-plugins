@@ -2,7 +2,7 @@
 ``credentials_file``, ``shared.common``, and ``type_map``."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.advisory_prose import (
+from analitiq.contracts.shared.prose_obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,
@@ -97,7 +97,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectionStoredMaps", field="discovered",
         prose_hash="f456853380e0",
-        rule_ids=("ADV-CONN-004",),
+        rule_ids=("RULE-CONN-004",),
         waiver=(
             "the key vocabulary is cross-document: post-auth output names "
             "live on the owning connector's `post_auth_outputs`, which this "
@@ -109,7 +109,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectionStoredMaps", field="parameters",
         prose_hash="de989e1e1dff",
-        rule_ids=("ADV-CONN-004",),
+        rule_ids=("RULE-CONN-004",),
         waiver=(
             "the per-key value vocabularies are cross-document — authored on "
             "the owning connector's `connection_contract` — and enforced "
@@ -122,7 +122,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ConnectionStoredMaps", field="selections",
         prose_hash="2df6349b013a",
-        rule_ids=("ADV-CONN-004",),
+        rule_ids=("RULE-CONN-004",),
         waiver=(
             "the key vocabulary is cross-document: post-auth output names "
             "live on the owning connector's `post_auth_outputs`, which this "
@@ -205,7 +205,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="TypeMapReadRegexRule",
         prose_hash="2226dbb14336",
-        rule_ids=("ADV-TMAP-003", "ADV-TMAP-005", "ADV-TMAP-006"),
+        rule_ids=("RULE-TMAP-003", "RULE-TMAP-005", "RULE-TMAP-006"),
     ),
     ProseObligation(
         model="TypeMapWriteExactRule",
@@ -219,6 +219,6 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="TypeMapWriteRegexRule",
         prose_hash="2ba3689a611b",
-        rule_ids=("ADV-TMAP-009",),
+        rule_ids=("RULE-TMAP-009",),
     ),
 )

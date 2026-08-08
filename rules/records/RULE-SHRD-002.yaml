@@ -1,0 +1,22 @@
+id: RULE-SHRD-002
+statement: >
+  A temporal field's declared Arrow type MUST carry a zone only when a real
+  wire sample carries one, and a date-time MUST NOT be defaulted to
+  zone-aware.
+tier: judgment
+severity: error
+scope: any
+mechanized: false
+validator: null
+owners: [connector-plugin, pipeline-plugin]
+rationale: >
+  Both the bare and the zoned spelling are canonical Arrow types the engine
+  grammar admits, so both validate and only the provider's actual wire value
+  decides which is true — and no authored document records that value. The
+  common error is assuming zone-awareness because a field is named like an
+  instant, which reinterprets every value the provider sends and shifts it by
+  the destination's offset, silently and uniformly enough that nobody reads it
+  as corruption. Catching a wrong call means going back to a captured sample
+  response, which lives outside every document the connector ships.
+status: active
+superseded_by: null

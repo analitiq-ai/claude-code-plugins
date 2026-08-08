@@ -1,0 +1,26 @@
+id: RULE-STRM-020
+statement: >
+  An assignment whose source and target types form a conversion the engine
+  classifies as explicit MUST name that conversion function in a pipe stage
+  rather than reading the field bare.
+tier: referential
+severity: error
+scope: stream
+mechanized: false
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Assignment, StreamMapping]
+rationale: >
+  Whether a pair needs a named conversion is decided by the engine-published
+  conversion matrix, and the source type it is keyed on lives in the source
+  endpoint document, so the two facts the rule relates are both outside the
+  stream — nothing local can resolve either. The bare read validates and is
+  refused when the stream runs, at the transform build and again at the
+  destination cast. Authors assume the type difference will be coerced,
+  because most pipelines they have used do coerce; here the explicit
+  classification exists precisely to make the lossy step something the
+  document says out loud. Catching a violation means reading the source
+  endpoint's declared column type and the target type against the published
+  matrix.
+status: active
+superseded_by: null

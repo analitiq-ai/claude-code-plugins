@@ -96,7 +96,7 @@ mode-level envelope (`{"mode", "outputs", …}`, plus `type_maps` in
 agent file itself, not here.
 
 For unsupported cases (e.g., a connector kind the engine can't run —
-`ADV-CTOR-037`), the creator returns:
+`RULE-CTOR-037`), the creator returns:
 
 <!-- illustrative -->
 ```jsonc
@@ -158,7 +158,7 @@ structurally cannot make:
   `endpoint-spec/spec-type-map-gaps.md`.
 
 A finding raised by a cross-field (relational) rule carries that rule's stable id
-inline in its `message`, as `[ADV-<AREA>-NNN] …`. Quote the id when relaying a
+inline in its `message`, as `[RULE-<AREA>-NNN] …`. Quote the id when relaying a
 failure — `pipeline-spec` and `stream-spec` list those rules by id.
 
 ## `DriftVerdict` (output of `pipeline-drift-classifier`)

@@ -9,7 +9,7 @@
 | `destinations` | **yes** | array of string | — | `minItems=1`, `uniqueItems=True`, `item pattern=\S`, `item minLength=1` |
 <!-- END GENERATED: fields-pipeline-connections -->
 
-Duplicate destinations are rejected — `ADV-PIPE-001` in the cross-field rule
+Duplicate destinations are rejected — `RULE-PIPE-001` in the cross-field rule
 table in `SKILL.md`.
 
 ## Connection reference format
@@ -32,7 +32,7 @@ for file organization, not for cross-document identity. See
 - The contract defines **no upper bound** on `destinations`. A deployment may
   impose one, so treat a very wide fan-out as a question for the user rather
   than as something the contract has blessed.
-- Connection ownership (`ADV-PIPE-008`): the plugin does not enforce it; the
+- Connection ownership (`RULE-PIPE-008`): the plugin does not enforce it; the
   registry does at save time.
 
 ## What is NOT in this block

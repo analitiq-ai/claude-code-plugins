@@ -19,7 +19,7 @@ from analitiq.contracts.endpoints import (
     WriteMode,
 )
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-from analitiq.contracts.shared.advisory import find_duplicates, violation
+from analitiq.contracts.shared.rules import find_duplicates, violation
 from analitiq.contracts.shared.arrow_shape import (
     ARROW_CONTAINER_SCHEMA_RULES,
     enforce_container_shape,
@@ -60,7 +60,7 @@ def _check_unique_destinations(
 ) -> list["StreamDestination"]:
     """Reject duplicate destinations by `(scope, connection_id, endpoint_id)`.
 
-    ADV-STRM-001, applied to the authored contract by
+    RULE-STRM-001, applied to the authored contract by
     `StreamAuthored._destinations_unique` and importable here for a downstream
     caller that holds a destination list without the stream around it. One
     definition, so the two callers cannot disagree about what a duplicate is.
@@ -74,7 +74,7 @@ def _check_unique_destinations(
         ),
     )
     if dups:
-        raise violation("ADV-STRM-001", f"duplicates={dups!r}")
+        raise violation("RULE-STRM-001", f"duplicates={dups!r}")
     return destinations
 
 
@@ -459,7 +459,7 @@ class StreamSource(StrictModel):
         # (connector-scope) read has none of them to configure, and the
         # structural types cannot see the source scope — only the binding
         # (endpoint_ref) knows it, like `_validate_filter_operator_scope`
-        # above (ADV-STRM-012). This check is ADV-STRM-014. `is not None`
+        # above (RULE-STRM-012). This check is RULE-STRM-014. `is not None`
         # rather than truthiness: declaring an empty list is still declaring
         # the feature. Neither check publishes a scope-conditioned `if`/`then`
         # mirror, and the stream schema carries none to copy: every published
@@ -484,7 +484,7 @@ class StreamSource(StrictModel):
         ]
         if declared:
             raise violation(
-                "ADV-STRM-014",
+                "RULE-STRM-014",
                 f"{self.endpoint_ref.scope} source declares {declared!r}",
             )
         return self
@@ -1042,7 +1042,7 @@ class ConstantAssignmentValue(StrictModel):
 
 
 # `kind`-discriminated union, replacing a single model with two nullable fields
-# and a `_validate_one_of` (retired ADV-STRM-008).
+# and a `_validate_one_of` (retired RULE-STRM-008).
 #
 # This is the BREAKING half of the release: `kind` is required, so every
 # document written against the two-nullable-fields shape — which had no such
@@ -1288,10 +1288,10 @@ class StreamMapping(StrictModel):
 
     @model_validator(mode="after")
     def _assignment_targets_unique(self) -> "StreamMapping":
-        """ADV-STRM-002: array position never decides a destination field's value."""
+        """RULE-STRM-002: array position never decides a destination field's value."""
         dups = find_duplicates(self.assignments, key=lambda a: a.target.path)
         if dups:
-            raise violation("ADV-STRM-002", f"duplicates={dups!r}")
+            raise violation("RULE-STRM-002", f"duplicates={dups!r}")
         return self
 
     @model_validator(mode="after")
@@ -1405,7 +1405,7 @@ class StreamAuthored(StrictModel):
 
     @model_validator(mode="after")
     def _destinations_unique(self) -> "StreamAuthored":
-        """ADV-STRM-001: no endpoint receives the same records twice."""
+        """RULE-STRM-001: no endpoint receives the same records twice."""
         _check_unique_destinations(self.destinations)
         return self
 

@@ -2,7 +2,7 @@
 
 Per-auth-type authoring craft. `auth` is a discriminated union on `type`: each
 branch declares its own children and rejects any that belong to another type
-(`ADV-CTOR-024`), so take a branch's field set from
+(`RULE-CTOR-024`), so take a branch's field set from
 `https://schemas.analitiq.ai/connector/latest.json`, not from this page. What
 each section below carries is the craft that shape cannot express, and a
 pointer to a worked example under `examples/` where one ships.
@@ -10,7 +10,7 @@ pointer to a worked example under `examples/` where one ships.
 ## `api_key`
 
 The API key value itself lives in `connection_contract.inputs`
-(`ADV-CTOR-052`) with `secret: true`. Auth header construction happens in the
+(`RULE-CTOR-052`) with `secret: true`. Auth header construction happens in the
 transport's `headers` block, e.g.
 `"Authorization": { "template": "Bearer ${secrets.api_key}" }`.
 
@@ -40,7 +40,7 @@ should use the `basic_auth` function expression — never pre-compute base64.
 `authorize` describes the URL that will be opened in the user's browser
 (method usually `GET`); `token_exchange` describes the back-channel
 request that swaps the auth code for tokens. Both are
-`AuthOperationTemplate` objects (`ADV-CTOR-025`).
+`AuthOperationTemplate` objects (`RULE-CTOR-025`).
 
 `client_id` typically lives in `connection.parameters` with
 `source: "platform"`; `client_secret` lives in `secrets` with
@@ -53,7 +53,7 @@ the authorize URL can be built (a region, or a tenant slug in the authorize
 host). Asking the user for anything the redirect already yields is noise.
 
 This does not mean an empty `inputs` map: every ref an auth template resolves
-must be declared there (`ADV-CTOR-052`), and the app's own `client_id` /
+must be declared there (`RULE-CTOR-052`), and the app's own `client_id` /
 `client_secret` still are, as `source: "platform"` (above).
 <!-- PROBE: connector-refs-unchecked -->
 Nothing validates that a ref resolves, so dropping them leaves a connector that
@@ -103,7 +103,7 @@ from the minted token with the `Bearer ${auth.access_token}` template —
 <!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
 > **Inline signing is not yet available.** `jwt_sign` is planned, not
 > registered (`connector-builder/references/value-expressions.md` §Function
-> catalog), so it is authored nowhere (`ADV-SHRD-007`) — and nothing rejects
+> catalog), so it is authored nowhere (`RULE-SHRD-007`) — and nothing rejects
 > the call at authoring time: it validates clean and fails at connect. Declare
 > the inputs, author no `jwt_sign` call, and flag this capability gap before
 > shipping a `jwt` connector that depends on local signing.

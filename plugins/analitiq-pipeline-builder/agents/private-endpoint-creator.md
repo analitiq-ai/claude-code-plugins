@@ -106,7 +106,7 @@ The agent has four modes; one invocation runs exactly one mode.
    `scripts/type_map_gaps.py --direction read` (maps in precedence order: the
    connection's own `definition/type-map-read.json` if present, then the
    connector's) and freeze the rendered canonical for every covered native
-   (`ADV-DBEP-004`). Only for natives in `gaps` derive the canonical
+   (`RULE-DBEP-004`). Only for natives in `gaps` derive the canonical
    yourself, using `skills/endpoint-spec/spec-columns.md` as the mapping
    reference. `arrow_type` is **required**, and parameterized types must carry
    their parameters — `Timestamp(MICROSECOND, UTC)`, `Decimal128(p, s)`,
@@ -219,7 +219,7 @@ Load on demand:
 ## Hard rules
 
 - Identifier strings (`schema`, `name`, `catalog`, column `name`, `native_type`)
-  are preserved **verbatim** (`ADV-DBEP-009`) — in `author-new-table`, the target
+  are preserved **verbatim** (`RULE-DBEP-009`) — in `author-new-table`, the target
   identifiers come from the orchestrator's user-supplied spelling and column
   names from the source document. Pass them verbatim to `endpoint_id.py` too;
   the derived hash is computed over the raw values, so pre-slugging them yields
@@ -237,8 +237,8 @@ Load on demand:
   database name as `--catalog` to `endpoint_id.py`.
 - If the connection cannot be reached (network error, bad credentials), surface
   the underlying error verbatim and stop. Do not retry.
-- Connection type-map rules are **gap-only** (`ADV-TMAP-018`; the override blast
-  radius is `ADV-TMAP-018`), never an empty rule array, and append-only
-  (`ADV-TMAP-012`).
+- Connection type-map rules are **gap-only** (`RULE-TMAP-018`; the override blast
+  radius is `RULE-TMAP-018`), never an empty rule array, and append-only
+  (`RULE-TMAP-012`).
 - Do **not** author `version`, `connection_id`, `connector_id`,
   `connector_version`, or `schema_hash` — those are server-managed.

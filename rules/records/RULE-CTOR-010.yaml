@@ -1,0 +1,22 @@
+id: RULE-CTOR-010
+statement: >
+  A connector whose kind runs no post-authentication phase MUST NOT declare
+  post-auth outputs, nor the activation prerequisites that would resolve from
+  them.
+tier: advisory
+severity: error
+scope: connector
+mechanized: true
+validator: "packages/contract-models/src/analitiq/contracts/connector.py::FileConnector._validate_no_post_auth_contract"
+owners: [connector-plugin]
+targets: [FileConnector, S3Connector, StdoutConnector]
+rationale: >
+  These kinds authenticate with static credentials or not at all, so nothing
+  ever executes an options or discovery request on their behalf. A post-auth
+  output declared on one is not merely unused: an activation prerequisite
+  pointing at it never resolves, and the connection cannot become active. The
+  usual route in is copying a connection contract from an API connector, where
+  the block is load-bearing, into one where the phase it belongs to does not
+  exist.
+status: active
+superseded_by: null
