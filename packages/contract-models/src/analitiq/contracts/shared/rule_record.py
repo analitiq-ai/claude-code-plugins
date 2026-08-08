@@ -98,6 +98,25 @@ SCOPES = (
     "any",
 )
 
+#: Ids retired before the registry had files, so no record on disk remembers
+#: them. A live record normally carries `status: retired` and guards its own id;
+#: these have nothing to carry it, and an id is never reissued — it appears in
+#: findings and archived diagnostics, where reuse silently re-points every
+#: stored occurrence at a different rule.
+RETIRED_BEFORE_THE_REGISTRY = (
+    # `exactly one of expression or constant`, retired in 1.0.0rc19 when
+    # `AssignmentValue` became a `kind`-discriminated union, so the union states
+    # the rule and no validator enforces it.
+    "RULE-STRM-008",
+    # `conflict_keys required for a connection-scope upsert, forbidden
+    # otherwise` and `a database destination's write.mode belongs to the closed
+    # database vocabulary`: the destination became an `endpoint_ref.scope`-tagged
+    # union whose database branch is itself `mode`-discriminated, so both are now
+    # the shape rather than a check over it.
+    "RULE-STRM-011",
+    "RULE-STRM-013",
+)
+
 #: RFC 2119 keywords, which `statement` must use in caps. Checked rather than
 #: assumed: a statement with no keyword is usually a description that drifted
 #: into the registry, and the tier vocabulary has a name for that.

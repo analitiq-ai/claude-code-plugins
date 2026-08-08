@@ -47,25 +47,10 @@ os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 from analitiq.contracts.shared.rule_record import (  # noqa: E402
     OWNERS,
+    RETIRED_BEFORE_THE_REGISTRY,
     RULES_PATH,
     RuleRecord,
 )
-
-#: Ids that have been retired and must never be reissued. A retired record
-#: normally stays on disk with `status: retired`, which is self-guarding; these
-#: are the ones retired before the registry had files, so nothing on disk
-#: remembers them.
-RETIRED_BEFORE_THE_REGISTRY = {
-    # `exactly one of expression or constant`, retired in 1.0.0rc19 when
-    # `AssignmentValue` became a `kind`-discriminated union.
-    "RULE-STRM-008",
-    # `conflict_keys required for a connection-scope upsert` and `a database
-    # destination's write.mode belongs to the closed database vocabulary`: the
-    # destination became an `endpoint_ref.scope`-tagged union whose database
-    # branch is itself `mode`-discriminated, so both are now the shape.
-    "RULE-STRM-011",
-    "RULE-STRM-013",
-}
 
 
 def _load_yaml(path: Path) -> dict:
@@ -83,6 +68,14 @@ def load_registry() -> list[RuleRecord]:
     """Every record, validated, ordered by id."""
     problems: list[str] = []
     records: list[RuleRecord] = []
+    for path in sorted(RULES_DIR.glob("*.yml")):
+        # The glob below takes one spelling. A record saved under the other one
+        # is not a rejected record, it is an absent one — the same silence a
+        # moved directory produces, one file at a time.
+        problems.append(
+            f"{path.name}: the registry reads *.yaml — rename it, or this "
+            "record is skipped rather than refused"
+        )
     for path in sorted(RULES_DIR.glob("*.yaml")):
         payload = _load_yaml(path)
         if not isinstance(payload, dict):
@@ -175,10 +168,25 @@ def _module_name(path: str) -> str | None:
 
 
 def _has_member(owner: object, attr: str) -> bool:
-    if hasattr(owner, attr):
-        return True
+    """Whether `attr` is something this repo defines on `owner`.
+
+    Deliberately narrower than `hasattr`: every contract model inherits
+    pydantic's API and `object`'s, so a bare attribute lookup resolves a
+    binding naming `dict`, `copy` or `json` and reports a live enforcer for a
+    rule nothing applies. A member counts only if a class in this project's own
+    namespace declares it, or it is a declared model field.
+    """
     fields = getattr(owner, "model_fields", None)
-    return bool(fields and attr in fields)
+    if fields and attr in fields:
+        return True
+    mro = getattr(owner, "__mro__", None)
+    if mro is None:
+        return hasattr(owner, attr)
+    return any(
+        attr in vars(cls)
+        for cls in mro
+        if getattr(cls, "__module__", "").startswith("analitiq")
+    )
 
 
 def compile_registry(records: list[RuleRecord]) -> str:

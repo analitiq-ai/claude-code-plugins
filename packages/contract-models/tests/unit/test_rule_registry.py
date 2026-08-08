@@ -24,6 +24,7 @@ from analitiq.contracts.shared.rules import all_rules
 from analitiq.contracts.shared.rule_record import (
     DESCRIPTIVE_TIER,
     OWNERS,
+    RETIRED_BEFORE_THE_REGISTRY,
     SEVERITIES,
     STRUCTURAL_TIER,
     TIERS,
@@ -78,29 +79,10 @@ def test_rule_ids_are_unique():
     assert len(ids) == len(set(ids)), "duplicate rule ids"
 
 
-#: Ids that have been retired and must never be reissued. Rule ids appear in
-#: user-facing findings and in archived diagnostics, so reusing one silently
-#: re-points every stored occurrence at a different rule. Uniqueness alone does
-#: not catch this — a retired id is free by definition.
-RETIRED_RULE_IDS = {
-    # RULE-STRM-008 ("exactly one of expression or constant"), retired in
-    # 1.0.0rc19: `AssignmentValue` became a `kind`-discriminated union, so the
-    # union states the rule and no validator enforces it.
-    "RULE-STRM-008",
-    # RULE-STRM-011 ("conflict_keys required for a connection-scope upsert,
-    # forbidden otherwise") and RULE-STRM-013 ("a database destination's
-    # write.mode belongs to the closed database vocabulary"): the destination
-    # became an `endpoint_ref.scope`-tagged union whose database branch is
-    # itself `mode`-discriminated, so both rules are now the shape rather than
-    # a check over it.
-    "RULE-STRM-011",
-    "RULE-STRM-013",
-}
-
-
 def test_retired_rule_ids_are_not_reissued():
+    """Uniqueness alone misses this — a retired id is free by definition."""
     live = {r.id for r in all_rules()}
-    reissued = sorted(RETIRED_RULE_IDS & live)
+    reissued = sorted(set(RETIRED_BEFORE_THE_REGISTRY) & live)
     assert not reissued, (
         f"retired rule ids reissued: {reissued}. These appear in archived "
         "findings; give the new rule the next free number instead."
