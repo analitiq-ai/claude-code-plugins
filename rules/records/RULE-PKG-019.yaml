@@ -14,8 +14,8 @@ rationale: >
   address carries no schema — and silently lands the batch in the wrong
   schema on a real-scope one. Caught by nobody: the engine verifies the
   landed row count and not where the rows landed, no contract model sees
-  `bulk_land`, and the two stage scopes differ only in whether the address
-  is qualified, so testing against a temp stage proves nothing about the
-  other.
+  `bulk_land`, and a stage's scope shows up only in whether its address is
+  qualified, so testing against a temp stage proves nothing about a
+  real-scope one.
 status: active
 superseded_by: null

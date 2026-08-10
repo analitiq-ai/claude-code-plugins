@@ -1,8 +1,9 @@
 # Rule: every referent must resolve for the reader
 
-Applies to every comment, docstring, field description and `.md` this repo
-tracks. A referent is anything a sentence points at instead of saying: a ticket
-number, a path, a name, a moment in time, "the rule above", "the four cases".
+Applies to every comment, docstring, field description, `.md` and rule record
+this repo tracks. A referent is anything a sentence points at instead of
+saying: a ticket number, a path, a name, a moment in time, "the rule above",
+"the four cases".
 
 **The invariant:** a reader holding nothing but a clone of this repo can resolve
 every referent in the sentence, or the sentence states the fact instead of

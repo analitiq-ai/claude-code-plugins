@@ -14,8 +14,10 @@ rationale: >
   operands the predicate takes, so an object carrying two of them, or one the
   union does not tag, has no defined shape to check its operands against. Left
   open, a misspelled operator would read as a valid predicate that simply never
-  holds — and the two places predicates are used are the ones where "never
-  holds" is silent and expensive: a `stop_when` that stops paging after the
-  first page, and a `success_when` that reports a rejected write as a success.
+  holds. A predicate is only ever read to decide whether to stop, to accept or
+  to apply, and every one of those decisions has a quiet default it falls back
+  to, so "never holds" is silent wherever a predicate is used: a `stop_when`
+  that stops paging after the first page, a `success_when` that reports a
+  rejected write as a success, a validation rule's `when` that never fires.
 status: active
 superseded_by: null

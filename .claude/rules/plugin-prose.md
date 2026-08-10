@@ -1,5 +1,7 @@
 ---
-paths: plugins/**/*.md
+paths:
+  - "plugins/**/*.md"
+  - "rules/records/*.yaml"
 ---
 
 # Rule: what may enter plugin prose
@@ -11,6 +13,12 @@ verbatim, so a wrong sentence ships wrong authoring behavior to every user. The
 general checklist is `no-drift-surfaces.md`. The failure class this rule
 prevents: prose restating validator behavior, falsified by a `VALIDATOR_PIN`
 bump.
+
+It applies to a rule record's `statement` for the same reason and by the same
+route: `render_rule_reference.py` copies that sentence verbatim into the
+plugin references, so a statement is plugin prose that has not been pasted
+yet. Write it here and the rendered `.md` inherits it — including the defect,
+which arrives in a generated block no one may hand-edit.
 
 ## Classify every sentence: craft or fact
 

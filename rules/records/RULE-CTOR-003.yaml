@@ -10,9 +10,10 @@ validator: "packages/contract-models/src/analitiq/contracts/connector.py::Resour
 owners: [engine, connector-plugin]
 targets: [ResourceDiscoveryImplementation]
 rationale: >
-  The two implementation kinds are loaded by different code paths: one imports
-  the named entrypoint out of the connector's own package, the other looks the
-  strategy up in the runtime's registry and never reads an entrypoint at all.
+  Each implementation kind is loaded by its own code path: a package-shipped
+  strategy is imported by the named entrypoint out of the connector's own
+  package, while a runtime-provided one is looked up in the runtime's registry
+  and never reads an entrypoint at all.
   A package-shipped strategy with no entrypoint leaves the loader nothing to
   import, and an entrypoint beside a runtime-provided strategy is dead
   configuration a later reader will trust — both fail at the first connection

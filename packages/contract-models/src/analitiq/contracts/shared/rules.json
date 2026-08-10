@@ -274,7 +274,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The two implementation kinds are loaded by different code paths: one imports the named entrypoint out of the connector's own package, the other looks the strategy up in the runtime's registry and never reads an entrypoint at all. A package-shipped strategy with no entrypoint leaves the loader nothing to import, and an entrypoint beside a runtime-provided strategy is dead configuration a later reader will trust — both fail at the first connection that discovers anything, not while authoring.\n",
+   "rationale": "Each implementation kind is loaded by its own code path: a package-shipped strategy is imported by the named entrypoint out of the connector's own package, while a runtime-provided one is looked up in the runtime's registry and never reads an entrypoint at all. A package-shipped strategy with no entrypoint leaves the loader nothing to import, and an entrypoint beside a runtime-provided strategy is dead configuration a later reader will trust — both fail at the first connection that discovers anything, not while authoring.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2397,7 +2397,7 @@
    "fields": [],
    "mechanism": "discriminated_union",
    "fixture_model": null,
-   "rationale": "The operator key is the discriminator: it selects the branch that says what operands the predicate takes, so an object carrying two of them, or one the union does not tag, has no defined shape to check its operands against. Left open, a misspelled operator would read as a valid predicate that simply never holds — and the two places predicates are used are the ones where \"never holds\" is silent and expensive: a `stop_when` that stops paging after the first page, and a `success_when` that reports a rejected write as a success.\n",
+   "rationale": "The operator key is the discriminator: it selects the branch that says what operands the predicate takes, so an object carrying two of them, or one the union does not tag, has no defined shape to check its operands against. Left open, a misspelled operator would read as a valid predicate that simply never holds. A predicate is only ever read to decide whether to stop, to accept or to apply, and every one of those decisions has a quiet default it falls back to, so \"never holds\" is silent wherever a predicate is used: a `stop_when` that stops paging after the first page, a `success_when` that reports a rejected write as a success, a validation rule's `when` that never fires.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3121,7 +3121,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "A mechanism handed only the table name resolves it against whatever the session default happens to be, so it works on a temp-scope stage — whose address carries no schema — and silently lands the batch in the wrong schema on a real-scope one. Caught by nobody: the engine verifies the landed row count and not where the rows landed, no contract model sees `bulk_land`, and the two stage scopes differ only in whether the address is qualified, so testing against a temp stage proves nothing about the other.\n",
+   "rationale": "A mechanism handed only the table name resolves it against whatever the session default happens to be, so it works on a temp-scope stage — whose address carries no schema — and silently lands the batch in the wrong schema on a real-scope one. Caught by nobody: the engine verifies the landed row count and not where the rows landed, no contract model sees `bulk_land`, and a stage's scope shows up only in whether its address is qualified, so testing against a temp stage proves nothing about a real-scope one.\n",
    "status": "active",
    "superseded_by": null
   },
