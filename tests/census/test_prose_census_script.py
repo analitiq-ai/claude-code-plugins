@@ -1,10 +1,11 @@
 """The maintenance script's file surgery, proven on real bytes.
 
 ``scripts/render_prose_census.py write`` edits census area files in place;
-these tests pin the three properties that make that safe: a restamp changes
-EXACTLY the targeted 12-char hash, a clean census is a byte-exact no-op with
-exit 0, and an entry the regex cannot restamp is reported for manual work
-with a nonzero exit — never a success line.
+these tests pin the properties that make that safe: a restamp changes EXACTLY
+the targeted 12-char hash, a clean census is a byte-exact no-op with exit 0,
+an entry the regex cannot restamp is reported for manual work with a nonzero
+exit — never a success line — and a directory holding no area files is
+refused rather than walked as an empty census.
 """
 from __future__ import annotations
 
@@ -57,7 +58,7 @@ PROSE_OBLIGATIONS = (
 
 
 def _tmp_census(tmp_path, monkeypatch, module):
-    census_dir = tmp_path / "prose_census"
+    census_dir = tmp_path / "areas"
     census_dir.mkdir()
     area = census_dir / "synthetic.py"
     area.write_text(_AREA_FILE, encoding="utf-8")
@@ -153,21 +154,47 @@ def test_entry_spans_reports_an_unclosed_block():
         raise AssertionError("unclosed block did not raise")
 
 
+def test_an_area_directory_holding_no_files_is_refused(tmp_path, monkeypatch):
+    """A moved CENSUS_DIR must not read as a census nothing needs restamping.
+
+    `_restamp` reports a key it cannot place as "restamp by hand", so a walk
+    over a directory that no longer exists restamps nothing and reports every
+    mismatch as manual work — a run that looks like a census in poor repair
+    rather than a path that stopped matching. That is not hypothetical: moving
+    the census out of the package left this constant behind, and nothing here
+    failed.
+    """
+    module = _load_script()
+    monkeypatch.setattr(module, "CENSUS_DIR", tmp_path / "gone")
+    try:
+        module._restamp(SiteKey(model="A", field="x"), "a" * 12)
+    except SystemExit as err:
+        assert "no census area files" in str(err)
+        assert "gone" in str(err)
+    else:
+        raise AssertionError("an empty area directory did not raise")
+
+
 def _census_dir_digest() -> dict[str, str]:
-    census_dir = (
-        REPO_ROOT
-        / "packages"
-        / "contract-models"
-        / "src"
-        / "analitiq"
-        / "contracts"
-        / "shared"
-        / "prose_census"
-    )
-    return {
+    """Byte digests of the real area files, refusing an empty walk.
+
+    An empty mapping compares equal to another empty mapping, so a digest
+    taken over a directory that has moved makes the no-op assertion below pass
+    without reading a byte of census. The refusal is what makes the comparison
+    mean something.
+    """
+    census_dir = REPO_ROOT / "census" / "areas"
+    digest = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(census_dir.glob("*.py"))
+        if path.name != "__init__.py"
     }
+    assert digest, (
+        f"{census_dir} holds no area files — the census is never empty, so "
+        "this is a path that stopped matching, and every comparison against "
+        "this digest would pass vacuously"
+    )
+    return digest
 
 
 def test_write_on_a_clean_census_is_a_byte_exact_noop():

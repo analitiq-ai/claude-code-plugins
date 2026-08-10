@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check or restamp the prose census against the live contract prose.
 
-The census (`census`) catalogues EVERY prose
+The census (`census/`, entries under `census/areas/`) catalogues EVERY prose
 site in the contract tree — each field description and docstring of every
 pydantic model, and the docstring of every Enum, under `analitiq.contracts`
 (membership by category, mechanical and judgment-free: public enum docstrings
@@ -10,9 +10,9 @@ rather than requiring a per-class publishability judgment; plain classes and
 enum member docstrings publish nothing and are out of scope) — binding each
 site to a disposition and pinning
 its exact wording with a content hash
-(`analitiq.contracts.shared.introspect.prose_fingerprint`). The diff this
-script prints is computed once, in `introspect.census_report`, the same
-function `tests/unit/test_prose_census.py` asserts on — the lint and this
+(`census.sites.prose_fingerprint`). The diff this
+script prints is computed once, in `census.sites.census_report`, the same
+function `tests/census/test_prose_census.py` asserts on — the lint and this
 tool can never disagree.
 
 Usage:
@@ -55,16 +55,7 @@ sys.path.insert(0, str(REPO_ROOT))
 # raises KeyError without it.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
-CENSUS_DIR = (
-    REPO_ROOT
-    / "packages"
-    / "contract-models"
-    / "src"
-    / "analitiq"
-    / "contracts"
-    / "shared"
-    / "prose_census"
-)
+CENSUS_DIR = REPO_ROOT / "census" / "areas"
 
 
 def _grouped_by_module(records, module_of):
@@ -130,6 +121,25 @@ def _block_key(block: str):
     return SiteKey(model=model, field=field_match.group(1) if field_match else None)
 
 
+def _area_files() -> list[Path]:
+    """The census area files, refusing a walk that has gone empty.
+
+    `_restamp` reports "no area file holds this entry" for a key it cannot
+    place, which is indistinguishable from every key being unplaceable because
+    the directory moved: the run then restamps nothing and reads as a census
+    needing manual work. The census is never empty, so an empty walk is a path
+    that stopped matching and says so.
+    """
+    files = [p for p in sorted(CENSUS_DIR.glob("*.py")) if p.name != "__init__.py"]
+    if not files:
+        raise SystemExit(
+            f"{CENSUS_DIR} holds no census area files — the census is never "
+            "empty, so this is a path that stopped matching, not a census with "
+            "nothing in it"
+        )
+    return files
+
+
 def _restamp(key, new_hash: str) -> Path | None:
     """Rewrite the entry's prose_hash in whichever area file holds it.
 
@@ -138,9 +148,7 @@ def _restamp(key, new_hash: str) -> Path | None:
     carries no substitutable ``prose_hash="..."`` (both mean: restamp by
     hand).
     """
-    for path in sorted(CENSUS_DIR.glob("*.py")):
-        if path.name == "__init__.py":
-            continue
+    for path in _area_files():
         text = path.read_text(encoding="utf-8")
         lines = text.splitlines(keepends=True)
         stripped = [l.rstrip("\n") for l in lines]

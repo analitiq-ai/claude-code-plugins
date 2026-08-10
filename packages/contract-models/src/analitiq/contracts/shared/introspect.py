@@ -1,13 +1,16 @@
-"""Contract-tree introspection for the census suites — one scan, one diff.
+"""Contract-tree introspection — the one walk of ``analitiq.contracts``.
 
 :func:`contract_classes` imports the whole ``analitiq.contracts`` namespace
 package rather than a hand-kept module list, so a new contract module is
 scanned the moment it exists, and a subpackage that fails to import fails the
-census instead of being skipped. Both census directions — prose→registry
-(``test_prose_census``) and enforcer→registry (``test_rule_registry``) —
-walk the tree through it, so neither can develop a blind spot the other lacks.
-The prose scan covers ALL pydantic models and ALL ``Enum`` classes defined
-under ``analitiq.contracts`` — membership by category, mechanical and
+scan instead of being skipped. Every survey of the tree walks through here, so
+none can develop a blind spot the others lack: the enforcer census
+(``test_rule_registry``), the strict-numeric and immutability policies, the
+rendered rule reference, and — from outside the package — this repo's prose
+census, which reads these functions to find the sentences it catalogues.
+
+The walk covers ALL pydantic models and ALL ``Enum`` classes defined under
+``analitiq.contracts`` — membership by category, mechanical and
 judgment-free. For public enums pydantic publishes the class docstring into
 the JSON Schema ``description`` exactly like a model docstring; private helper
 enums ride along under the same category rather than requiring a per-class
@@ -16,15 +19,14 @@ classes publish nothing and are out of scope, as are enum MEMBER docstrings —
 pydantic does not publish those, so an obligation belongs in the enum's
 CLASS docstring (``.claude/rules/contract-prose.md``).
 
-:func:`census_report` computes the full live-prose vs census diff in ONE
-place, consumed by both ``tests/unit/test_prose_census.py`` and
-``scripts/render_prose_census.py`` — the lint and the maintenance tool can
-never disagree about what is missing, stale, or re-worded.
+What this module does NOT hold is the prose census itself — the catalogue of
+those sentences and the live-vs-census diff. That is how this repo keeps its
+own wording honest rather than anything the contract states, so it lives at
+the repo root (``census/``) and does not ship in the wheel. Only the generic
+walk is here, because it describes the contract.
 
-This module's top-level imports are stdlib-only (pydantic is imported lazily,
-inside the functions that need it): ``prose_obligation`` imports
-:class:`SiteKey` from here at module import time, and the census must stay
-readable without pulling in pydantic.
+This module's top-level imports are stdlib-only; pydantic is imported lazily,
+inside the functions that need it.
 """
 from __future__ import annotations
 

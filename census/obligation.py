@@ -35,7 +35,7 @@ vocabulary of modal words — must carry exactly one entry in
   violate at all: nothing to enforce, nothing to waive.
 
 Each entry pins its prose with ``prose_hash``
-(:func:`analitiq.contracts.shared.introspect.prose_fingerprint`): any wording
+(:func:`census.sites.prose_fingerprint`): any wording
 change breaks the pin and forces the author to re-affirm the disposition. That
 hash ratchet is what catches a new obligation slipping into existing prose.
 Whether a given sentence states an obligation at all is the author's and the
@@ -43,24 +43,25 @@ reviewer's judgment, written down in ``.claude/rules/contract-prose.md``: a
 regex over modal words returns a verdict about what English means, which
 ``.claude/rules/validator-claims.md`` bans.
 
-``tests/unit/test_prose_census.py`` enforces the census bidirectionally
-through :func:`analitiq.contracts.shared.introspect.census_report` (the same
+``tests/census/test_prose_census.py`` enforces the census bidirectionally
+through :func:`census.sites.census_report` (the same
 diff ``scripts/render_prose_census.py`` prints): an uncatalogued prose site
 fails the build, and so do an entry whose site disappeared and a broken hash
 pin. A waiver is therefore *data* — a declared, reviewable state — never a
 comment or an absence nobody can review.
 
-This module imports no contract models (the :mod:`rule_record` convention):
+This module imports no contract models (the ``rule_record`` convention):
 entries bind to their prose sites by class name, so tooling can read the
 census without pulling in pydantic. The census entries themselves live in the
-:mod:`prose_census` area modules, which import this module and nothing else.
+:mod:`census.areas` modules, which import this module and nothing else.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-# introspect's top-level imports are stdlib-only (it lazy-imports pydantic),
+# `sites` and the `introspect` it reads both keep their top-level imports
+# stdlib-only (pydantic is imported lazily, inside the functions that need it),
 # so this import keeps the census readable without pulling in pydantic.
 from census.sites import SiteKey
 

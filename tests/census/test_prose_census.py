@@ -20,7 +20,7 @@ The lint is bidirectional so the census cannot rot in either direction: an
 uncatalogued site fails (the unenforced-obligation direction), and so do a
 stale entry and a broken hash pin (prose re-worded since its disposition was
 affirmed). All three groups come from one computation —
-:func:`analitiq.contracts.shared.introspect.census_report`, the same diff
+:func:`census.sites.census_report`, the same diff
 ``scripts/render_prose_census.py`` prints — so the lint and the maintenance
 tool can never disagree.
 
@@ -64,7 +64,7 @@ def test_census_has_no_duplicate_sites():
 def test_every_prose_site_is_catalogued():
     """The unenforced-obligation direction: prose bound to nothing.
 
-    Fix by cataloguing each site in its ``prose_census`` area module — bind it
+    Fix by cataloguing each site in its ``census/areas`` module — bind it
     to the ``RULE-*`` rule enforcing it, to the structural mechanism carrying
     it, to a waiver saying why it is not mechanisable, or mark it
     ``descriptive=True`` when it states no obligation at all.

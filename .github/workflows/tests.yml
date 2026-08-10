@@ -109,7 +109,7 @@ jobs:
         # category (private helper enums ride along; plain classes and enum
         # member docstrings publish nothing and are out of scope) — must carry
         # a hash-pinned census entry; this prints the same diff
-        # tests/unit/test_prose_census.py asserts on, grouped for reading.
+        # tests/census/test_prose_census.py asserts on, grouped for reading.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_prose_census.py check
       - name: Check validator-behavior claims against the in-repo contract
