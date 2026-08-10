@@ -18,7 +18,8 @@ containing one endpoint document body.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
-  (the `api-endpoint` section — the cross-field rules your document must satisfy)
+  (the rules your document must satisfy: every row whose Grades column reads
+  `api-endpoint`. The file is ordered by tier, not by document.)
 
 ## Inputs
 

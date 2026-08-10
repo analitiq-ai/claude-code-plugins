@@ -24,7 +24,7 @@ input omitting any of them is rejected.
 | Field | What the choice decides |
 |---|---|
 | `source` | Who supplies the value — the end user filling in the connection form, or the platform/admin provisioning it. |
-| `phase` | When the value has to be available. An input declared later than the operation referencing it cannot resolve (`RULE-CTOR-050`; `lifecycle-phases.md` walks the ordering). |
+| `phase` | When the value has to be available. An input a transport references must declare a phase no later than that transport's first use (`RULE-CTOR-050`); `lifecycle-phases.md` walks the ordering. |
 | `storage` | Which durable store the resolved value lands in, and so the prefix of the reference path every other document targets. An input may only name a store the user supplies *into*: the post-auth stores are produced by `post_auth_outputs` (below), never collected as an input. |
 | `type` | The JSON value type used for validation and coercion. Not an Arrow type — that vocabulary describes data coming back from a resource, not configuration going in. |
 | `required` | Boolean — whether the input must resolve to a value before the connection can be used. |

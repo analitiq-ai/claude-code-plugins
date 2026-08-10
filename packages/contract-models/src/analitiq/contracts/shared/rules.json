@@ -2775,7 +2775,7 @@
    ],
    "mechanism": "literal_enum",
    "fixture_model": null,
-   "rationale": "The placement decides which part of the request the engine builds the value into, and it is also what every binding is matched against: a binding may only sit in the request slot its param's placement names, so the placement and the one legal binding site move together. An invented placement names no slot, and the value would simply be absent from the request the provider receives — an unfiltered or unscoped call rather than an error. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because one param can carry a value on both journeys. Each field's own closed set moves both failures to authoring time and publishes the admissible values in the JSON Schema, so nothing has to restate them.\n",
+   "rationale": "The placement decides which part of the request the engine builds the value into, and it is also what every binding is matched against: a binding may only sit in the request slot its param's placement names, so the placement and the one legal binding site move together. Closing the set is what makes a wrong placement report as a wrong placement: RULE-ENDP-009 catches the same document one step later, as a param no binding references, and that diagnosis sends the author to delete the param rather than to correct where it is sent. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because one param can carry a value on both journeys. Each field's closed set also publishes the admissible values in the JSON Schema, so nothing has to restate them.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2822,7 +2822,7 @@
    ],
    "mechanism": "literal_enum",
    "fixture_model": null,
-   "rationale": "A write mode names the operation a provider exposes for creating or updating a record, and the vocabulary is the set of methods that carry a request body to be created or updated with. The retrieval method is absent deliberately: a provider route that writes through it is a route whose effect the engine cannot distinguish from a read, and the mode-keyed map is what tells the engine which of the two it is doing. An author reaching for one outside the vocabulary has usually found a delete route, which the write modes do not cover at all.\n",
+   "rationale": "A write mode names the operation a provider exposes for creating or updating a record, and the vocabulary is the set of methods that carry a request body to be created or updated with. The retrieval method is absent because it carries no body at all in this contract, and a write binds the record it is writing through the request body — there would be nowhere for that binding to land. An author reaching for a method outside the vocabulary has usually found a delete route, which the write modes do not cover at all.\n",
    "status": "active",
    "superseded_by": null
   },

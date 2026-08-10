@@ -147,6 +147,14 @@ def _live_values(rule, models: dict) -> str:
     what type it carries, and those share no members — so pouring them into one
     list renders a vocabulary that does not exist and reads as though any
     member were legal in any of the fields.
+
+    Each set is labelled with the field's **wire alias** where it has one, not
+    the Python attribute the record names. An author writes the document, and
+    `Param.location` is spelled `in` there. The two are easy to conflate because
+    the models set `populate_by_name`, so a document authored under the
+    attribute name validates locally and is then rejected by the published
+    schema, which requires the alias and forbids unknown keys — a failure that
+    surfaces after the connector ships rather than at authoring time.
     """
     from analitiq.contracts.shared.introspect import closed_members
 
@@ -158,10 +166,12 @@ def _live_values(rule, models: dict) -> str:
         if model is None:
             continue
         for expr in rule.fields:
-            info = model.model_fields.get(expr.split("[]")[0].split(".")[0])
+            head = expr.split("[]")[0].split(".")[0]
+            info = model.model_fields.get(head)
             if info is None:
                 continue
-            members = by_field.setdefault(expr, [])
+            label = expr.replace(head, info.alias, 1) if info.alias else expr
+            members = by_field.setdefault(label, [])
             members += [m for m in closed_members(info.annotation) if m not in members]
     rendered = [
         f"`{field}`: " + ", ".join(f"`{m}`" for m in members)

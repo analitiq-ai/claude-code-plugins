@@ -128,3 +128,55 @@ def test_prose_rule_citations_resolve() -> None:
         "citation to the current rule, or restate the constraint if the rule "
         "was retired."
     )
+
+
+def test_values_column_labels_a_field_by_its_wire_alias() -> None:
+    """The rendered vocabulary is labelled with the key an author types.
+
+    The record names a Python attribute, and for two fields that is not what
+    the document spells: `Param.location` and `Idempotency.location` both
+    publish as `in`. Labelling the row with the attribute is not a cosmetic
+    slip — the models set `populate_by_name`, so a connector authored under the
+    attribute name passes the local validator and is then rejected by the
+    published schema, which requires the alias and forbids unknown keys. The
+    failure lands after the connector ships.
+
+    Prose used to carry these vocabularies inline and no longer does, so this
+    column is the only place an agent can read them. Derived from the models
+    rather than asserted against a literal, so a field that gains or loses an
+    alias is covered without editing this test.
+    """
+    renderer = _load_renderer()
+    from analitiq.contracts.shared.rules import all_rules
+
+    models = renderer._model_index()
+    checked = 0
+    for rule in all_rules():
+        if rule.mechanism != "literal_enum":
+            continue
+        rendered = renderer._live_values(rule, models)
+        for target in rule.targets:
+            model = models.get(target)
+            if model is None:
+                continue
+            for expr in rule.fields:
+                head = expr.split("[]")[0].split(".")[0]
+                info = model.model_fields.get(head)
+                if info is None or not info.alias or info.alias == head:
+                    continue
+                checked += 1
+                assert f"`{info.alias}`:" in rendered, (
+                    f"{rule.id} renders {target}.{head} without its wire alias "
+                    f"{info.alias!r}: {rendered!r}. An author would type the "
+                    "attribute name, which the local validator accepts and the "
+                    "published schema rejects."
+                )
+                assert f"`{head}`:" not in rendered, (
+                    f"{rule.id} labels {target}.{head} with the Python "
+                    f"attribute rather than {info.alias!r}: {rendered!r}"
+                )
+    assert checked, (
+        "no alias-bearing field reached this guard — every `literal_enum` rule "
+        "now names a field whose attribute and wire key agree, or the record "
+        "shape changed. Re-point it before deleting it."
+    )
