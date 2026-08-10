@@ -27,8 +27,24 @@ from analitiq.contracts.shared.introspect import (
     contract_enums,
 )
 
+# Re-exported: `SiteKey` is defined in `census.keys` so `census.obligation` can
+# reach it without importing this module, which is what used to close the
+# import cycle. Every existing reader imports it from here, and this module is
+# still where a site is produced, so the name stays available at both spellings.
+from census.keys import SiteKey
+
 if TYPE_CHECKING:
     from pydantic import BaseModel
+
+__all__ = [
+    "CensusReport",
+    "HashMismatch",
+    "ProseSite",
+    "SiteKey",
+    "census_report",
+    "prose_fingerprint",
+    "prose_sites",
+]
 
 
 def prose_fingerprint(text: str) -> str:
@@ -40,24 +56,6 @@ def prose_fingerprint(text: str) -> str:
     """
     normalized = " ".join(text.split())
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
-
-
-@dataclass(frozen=True)
-class SiteKey:
-    """Identity of one prose site — the ONE definition of the site label.
-
-    ``field`` is ``None`` for a class docstring. Every surface that names a
-    site (:class:`ProseSite`, ``ProseObligation``, the lint's failure lines,
-    the maintenance script's output) formats through :attr:`label`, so the
-    rendering can never fork between them.
-    """
-
-    model: str
-    field: str | None = None
-
-    @property
-    def label(self) -> str:
-        return f"{self.model}.{self.field}" if self.field else f"{self.model} (docstring)"
 
 
 @dataclass(frozen=True)

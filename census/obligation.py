@@ -60,10 +60,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# `sites` and the `introspect` it reads both keep their top-level imports
-# stdlib-only (pydantic is imported lazily, inside the functions that need it),
-# so this import keeps the census readable without pulling in pydantic.
-from census.sites import SiteKey
+# `keys` holds the dataclass and nothing else — no contract package, no
+# pydantic, and no path back to any other census module. Taking the key from
+# there rather than from `sites` is what keeps this module's dependencies
+# one-directional: `sites` diffs the live tree against the entries these
+# classes describe, so an edge from here to `sites` would close a loop.
+from census.keys import SiteKey
 
 #: The exact shape of a ``prose_hash``: the first 12 hex chars of the
 #: whitespace-normalized prose's sha256 (see ``census.sites.prose_fingerprint``).
