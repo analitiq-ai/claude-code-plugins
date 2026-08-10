@@ -885,9 +885,15 @@ class UrlEncodeDerived(StrictModel):
 
 
 # `pkce_challenge_s256` and `jwt_sign` are `planned` in the callable-function
-# catalog: connectors must not reference them yet — validation rejects unknown
-# function names. Add their Pydantic shapes when the engine ships them; until
-# then they intentionally have no model.
+# catalog: connectors must not reference them yet. Add their Pydantic shapes
+# when the engine ships them; until then they intentionally have no model.
+#
+# Having no model is not what stops one being referenced. A slot that accepts a
+# value expression is annotated `Any`, so this union is never the thing a
+# `function` expression is validated against, and an unregistered name — these
+# two included — is accepted here and fails when the engine resolves it at
+# connect. That gap is RULE-SHRD-007, which carries no validator for exactly
+# this reason: the registry the name must exist in belongs to the engine.
 
 
 DerivedValue = Annotated[
