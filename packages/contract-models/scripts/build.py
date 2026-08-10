@@ -76,6 +76,24 @@ def read_version() -> str:
     return tomllib.loads(PYPROJECT.read_text())["project"]["version"]
 
 
+def _git() -> str:
+    """The `git` executable, resolved to a full path.
+
+    Resolved rather than spelled as a bare name: a bare name is looked up in
+    whatever `PATH` the build inherits, and this build decides what reaches
+    PyPI. Absent `git` is a hard stop, not a fallback to an unfiltered tree —
+    the point of asking git is that tracking, not presence on disk, is what
+    ships.
+    """
+    exe = shutil.which("git")
+    if exe is None:
+        raise SystemExit(
+            "build: no `git` on PATH — the staged file list is taken from the "
+            "index, so there is no safe way to continue without it."
+        )
+    return exe
+
+
 def tracked_files(root: Path) -> list[Path]:
     """Every git-tracked file under `root` — exactly what `stage()` copies.
 
@@ -89,7 +107,7 @@ def tracked_files(root: Path) -> list[Path]:
     This is what lets the wheel ship the whole tree without enumerating it.
     """
     listing = subprocess.run(
-        ["git", "-C", str(root), "ls-files", "-z", "--", "."],
+        [_git(), "-C", str(root), "ls-files", "-z", "--", "."],
         capture_output=True,
         text=True,
         check=True,

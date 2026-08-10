@@ -60,6 +60,24 @@ def _top_level_imports(source: str) -> set[str]:
     return names
 
 
+def _git() -> str:
+    """The `git` executable, resolved to a full path.
+
+    Resolved rather than spelled as a bare name: a bare name is looked up in
+    whatever `PATH` the build inherits, and this build decides what reaches
+    PyPI. Absent `git` is a hard stop, not a fallback to an unfiltered tree —
+    the point of asking git is that tracking, not presence on disk, is what
+    ships.
+    """
+    exe = shutil.which("git")
+    if exe is None:
+        raise SystemExit(
+            "build: no `git` on PATH — the staged module list is taken from "
+            "the index, so there is no safe way to continue without it."
+        )
+    return exe
+
+
 def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
     """Every tracked `*.py` module of the validator source package.
 
@@ -70,7 +88,7 @@ def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
     one a reviewer sees.
     """
     listing = subprocess.run(
-        ["git", "-C", str(src_dir), "ls-files", "-z", "--", "*.py"],
+        [_git(), "-C", str(src_dir), "ls-files", "-z", "--", "*.py"],
         capture_output=True,
         text=True,
         check=True,
