@@ -23,6 +23,7 @@ from analitiq.contracts.shared import common
 from analitiq.contracts.shared.rules import all_rules
 from analitiq.contracts.shared.rule_record import (
     DESCRIPTIVE_TIER,
+    MECHANISMS,
     OWNERS,
     RETIRED_BEFORE_THE_REGISTRY,
     SEVERITIES,
@@ -260,6 +261,21 @@ def test_every_severity_is_used():
 def test_every_owner_owns_something():
     used = {o for r in all_rules() for o in r.owners}
     assert used == set(OWNERS), f"owners nothing is assigned to: {sorted(set(OWNERS) - used)}"
+
+
+def test_every_mechanism_names_a_rule():
+    """The same, for the shape-device axis.
+
+    Only `literal_enum` is read — it is what makes the rendered reference print
+    a rule's members off the live model — so the rest earn their place by
+    being the answer some author chose instead. A member no record takes is a
+    distinction offered and never used, which is the shape of a vocabulary kept
+    ready rather than one in service.
+    """
+    used = {r.mechanism for r in all_rules() if r.mechanism}
+    assert used == set(MECHANISMS), (
+        f"mechanisms no rule takes: {sorted(set(MECHANISMS) - used)}"
+    )
 
 
 def test_descriptive_prose_cannot_take_a_rule_id():

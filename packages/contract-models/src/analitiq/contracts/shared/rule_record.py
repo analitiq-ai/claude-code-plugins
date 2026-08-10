@@ -97,6 +97,25 @@ SCOPES = (
     "any",
 )
 
+#: Which shape device a structural rule is ABOUT — not merely which one the
+#: target happens to carry, because a model usually carries several. It decides
+#: whether the rendered reference prints that rule's vocabulary off the live
+#: model: `literal_enum` says the members ARE the rule, so print them.
+#:
+#: The distinction is not derivable, which is why an author writes it down.
+#: `Schedule.type` is a `Literal` with a default, and a rule about omitting
+#: fields that default reads `default` while a rule about the legal values of
+#: `encoding` reads `literal_enum` — same shape in the model, opposite answers.
+#: Deriving from the annotation would print a vocabulary that is true and
+#: beside the point.
+MECHANISMS = (
+    "literal_enum",
+    "discriminated_union",
+    "pattern",
+    "closed_object",
+    "default",
+)
+
 #: Ids retired before the registry had files, so no record on disk remembers
 #: them. A live record normally carries `status: retired` and guards its own id;
 #: these have nothing to carry it, and an id is never reissued — it appears in
@@ -155,8 +174,7 @@ class RuleRecord:
     #: Fields on those classes that carry the rule, for a structural rule whose
     #: `mechanism` the rendered reference reads members off.
     fields: tuple[str, ...] = ()
-    #: Which shape device carries a structural rule — `literal_enum`,
-    #: `discriminated_union`, `pattern`, `closed_object`, `default`.
+    #: Which shape device a structural rule is about, from :data:`MECHANISMS`.
     mechanism: str | None = None
     #: The concrete model the shared fixture corpus validates against. Naming
     #: one is how a rule joins the corpus, so membership is a thing the record
@@ -213,12 +231,19 @@ class RuleRecord:
             bad = [v for v in getattr(self, name) if not isinstance(v, str)]
             if bad:
                 self._fail(f"{name} carries non-name entries {bad!r}")
-        for value, label in (
-            (self.mechanism, "mechanism"),
-            (self.fixture_model, "fixture_model"),
-        ):
-            if value is not None and not isinstance(value, str):
-                self._fail(f"{label} is one name or absent, not {value!r}")
+        if self.fixture_model is not None and not isinstance(self.fixture_model, str):
+            self._fail(f"fixture_model is one name or absent, not {self.fixture_model!r}")
+        if self.mechanism is not None and self.mechanism not in MECHANISMS:
+            # A closed set, checked like every other one the record carries.
+            # Untyped it was a live hole rather than a tidiness point: one
+            # member is load-bearing, and a record whose `mechanism` misses it
+            # by a character still compiles, still renders, and stops being
+            # graded — the vocabulary guard and the no-restatement guard both
+            # select on that spelling, and the reference prints a dash where
+            # the members belong.
+            self._fail(
+                f"unknown mechanism {self.mechanism!r}; expected one of {MECHANISMS}"
+            )
         if not self.owners:
             self._fail(f"name who applies this rule — one or more of {OWNERS}")
         unknown = [o for o in self.owners if o not in OWNERS]

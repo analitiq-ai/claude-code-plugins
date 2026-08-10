@@ -160,6 +160,22 @@ def test_an_unknown_owner_is_refused(registry):
     assert "marketing" in _refusal(registry)
 
 
+@pytest.mark.parametrize("field", ["tier", "severity", "scope", "status", "mechanism"])
+def test_a_value_outside_its_closed_vocabulary_is_refused(registry, field):
+    """Every closed set the record carries, refused the same way.
+
+    `mechanism` is why this is parametrized rather than written for the one
+    that was missing. It was typed `str` and checked only for being a string,
+    so a value a character off its spelling compiled, shipped and rendered —
+    and stopped being graded, because the vocabulary guard and the
+    no-restatement guard both select records by that spelling and the rendered
+    reference prints a dash in place of the members. A vocabulary nothing
+    rejects is a vocabulary in name.
+    """
+    _write(registry, **{field: "no_such_value"})
+    assert "no_such_value" in _refusal(registry)
+
+
 def test_a_validator_that_is_not_a_binding_is_refused(registry):
     _write(registry, validator='"ConnectorBase._validate"')
     assert "validator" in _refusal(registry)
