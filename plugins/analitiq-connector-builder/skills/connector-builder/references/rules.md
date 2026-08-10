@@ -18,7 +18,7 @@ some are applied only at connect or run time. **Tier** is what kind of
 obligation a rule is, **Grades** the document it binds, **Severity** what a
 violation costs.
 
-Owned here: **52** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
+Owned here: **57** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
 
 
 ## Structural
@@ -45,6 +45,8 @@ than edited.
 | RULE-CTOR-025 | An auth operation slot MUST hold an `AuthOperationTemplate`, which admits only the request fields that model names and rejects any other key. | `connector` | error | — |
 | RULE-CTOR-035 | A DSN binding's `value` MUST take one of the forms the value-expression grammar defines, since the runtime resolves it at connection time. | `connector` | error | — |
 | RULE-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode. | `connector` | error | — |
+| RULE-CTOR-055 | A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`. | `connector` | error | — |
+| RULE-CTOR-056 | A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it. | `connector` | error | — |
 | RULE-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | `api-endpoint` | error | — |
 | RULE-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | `api-endpoint` | error | — |
 | RULE-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | `api-endpoint` | error | — |
@@ -60,6 +62,7 @@ than edited.
 | RULE-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries, and MUST NOT carry anything that produces the key's value. | `api-endpoint` | error | `location`: `header`, `body` |
 | RULE-ENDP-044 | A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null. | `api-endpoint` | warning | — |
 | RULE-ENDP-048 | An embedded request or response schema MUST be valid against the JSON Schema draft this contract is written in, and MUST NOT declare a different draft. | `api-endpoint` | error | — |
+| RULE-ENDP-049 | Every `${...}` placeholder in a template expression MUST begin with a declared resolution scope. | `api-endpoint` | error | — |
 | RULE-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — |
 | RULE-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — |
 | RULE-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — |
@@ -78,6 +81,8 @@ than edited.
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — |
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | — |
+| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | — |
+| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | — |
 | RULE-TMAP-005 | A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect. | `type-map` | error | — |
 | RULE-TMAP-006 | A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | `type-map` | error | — |
 | RULE-TMAP-007 | A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name. | `type-map` | error | — |

@@ -1,0 +1,20 @@
+id: RULE-SHRD-011
+statement: >
+  A `display_name` MUST NOT carry leading or trailing whitespace.
+tier: structural
+severity: error
+scope: any
+validator: "analitiq.contracts.connector::ConnectorBase._validate_display_name_field"
+owners: [connector-plugin, pipeline-plugin]
+targets: [ConnectorBase, ConnectionAuthored, StreamAuthored, PipelineAuthored, _EndpointBase]
+rationale: >
+  The field is the label a human picks the artifact out by, in a list where
+  nothing renders the padding. Two artifacts whose names differ only by a
+  space read as duplicates in every surface that shows them and as distinct
+  everywhere that compares them, and the author who typed the space is the one
+  person who cannot see it. The length bound is declarative and says nothing
+  about the edges, so the padding would otherwise be carried into storage and
+  into every export of it. Rejecting is preferred to trimming because a value
+  silently altered on the way in stops matching the document the author kept.
+status: active
+superseded_by: null

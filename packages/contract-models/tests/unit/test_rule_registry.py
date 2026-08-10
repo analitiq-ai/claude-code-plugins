@@ -130,7 +130,26 @@ def test_bound_rules_name_a_real_enforcer():
         assert not missing, f"{rule.id}: enforcer {enforcer!r} missing on {missing}"
 
 
-#: @model_validator methods that are deliberately NOT registry rules. Keyed by
+def _declared_validators() -> set[tuple[str, str]]:
+    """Every validator method pydantic runs on a contract model, by (class, name).
+
+    Both decorator dicts, because both reject. Only `model_validators` was
+    walked once, so `@field_validator` was a third door into the same house —
+    sixteen of them rejecting documents, none named by a record, and the sweep
+    reporting a clean census over the half it could see. The two are the same
+    kind of thing to an author: something says no, and the finding should name
+    the rule it broke.
+    """
+    declared: set[tuple[str, str]] = set()
+    for cls in contract_classes():
+        decorators = cls.__pydantic_decorators__
+        for group in (decorators.model_validators, decorators.field_validators):
+            for name, dec in group.items():
+                declared.add((dec.func.__qualname__.rsplit(".", 2)[-2], name))
+    return declared
+
+
+#: Validator methods that are deliberately NOT registry rules. Keyed by
 #: (defining class, method name); the value says why. Anything else that
 #: raises on invalid input is a relational rule and belongs in the registry.
 EXEMPT_MODEL_VALIDATORS = {
@@ -146,6 +165,11 @@ EXEMPT_MODEL_VALIDATORS = {
         "message-quality duplicate: the closed model (extra='forbid') already "
         "rejects the reserved keys; this validator only names the spec section"
     ),
+    ("PipelineRunStatusData", "_iso8601"): (
+        "pure normalizer: swaps a stored timestamp's space separator for `T` "
+        "and passes a non-string straight through, so the declarative "
+        "ISO_TS_PATTERN sees the normalized value and reports every rejection"
+    ),
 }
 
 
@@ -153,42 +177,53 @@ def test_every_model_validator_is_registered_or_exempt():
     """The enforcer→registry direction of the census.
 
     The registry's other tests all start from a registered rule, so a bespoke
-    @model_validator nobody registered was invisible — an enforced rule the
-    census claimed not to exist. Every model validator on a contract model must
-    be some rule's enforcer (target-aware: the defining class must sit in a
-    target's MRO, so a same-named validator on an unrelated class does not
-    satisfy it) or carry an explicit exemption above. The universe is the
-    walked namespace package, not this module's hand-kept list, so a new
-    contract module — and every same-named class, not just the last one a
-    name-keyed index retains — is swept the moment it exists.
+    validator nobody registered was invisible — an enforced rule the census
+    claimed not to exist. Every validator method on a contract model must be
+    some rule's enforcer or carry an explicit exemption above. A rule accounts
+    for one either way:
+
+    * its `validator` names the defining class outright (`Owner.method`), which
+      is the exact statement and needs no lookup; or
+    * the enforcer name matches and the defining class sits in a target's MRO,
+      which is what lets one record cover a shared enforcer across every model
+      inheriting it, and what stops a same-named validator on an unrelated
+      class from satisfying it.
+
+    The first is why an ambiguous class name cannot silence the census.
+    `targets` binds by bare class name and two contract modules each declare a
+    `TemplateExpression`, so neither is nameable there — while the binding is a
+    dotted path and says exactly which one.
+
+    The universe is the walked namespace package, not this module's hand-kept
+    list, so a new contract module — and every same-named class, not just the
+    last one a name-keyed index retains — is swept the moment it exists.
     """
     walked = contract_classes()
     by_name: dict[str, list[type[BaseModel]]] = {}
     for cls in walked:
         by_name.setdefault(cls.__name__, []).append(cls)
-    validators = set()
-    for cls in walked:
-        for name, dec in cls.__pydantic_decorators__.model_validators.items():
-            owner = dec.func.__qualname__.rsplit(".", 2)[-2]
-            validators.add((owner, name))
     unaccounted = []
-    for owner, name in sorted(validators):
+    for owner, name in sorted(_declared_validators()):
         if (owner, name) in EXEMPT_MODEL_VALIDATORS:
             continue
         registered = any(
-            rule.validator_symbol and _enforcer_name(rule) == name
-            and any(
-                owner in (a.__name__ for a in cls.__mro__)
-                for t in rule.targets
-                for cls in by_name.get(t, ())
+            rule.validator_symbol == f"{owner}.{name}"
+            or (
+                rule.validator_symbol
+                and _enforcer_name(rule) == name
+                and any(
+                    owner in (a.__name__ for a in cls.__mro__)
+                    for t in rule.targets
+                    for cls in by_name.get(t, ())
+                )
             )
             for rule in all_rules()
         )
         if not registered:
             unaccounted.append(f"{owner}.{name}")
     assert not unaccounted, (
-        "model validators that are no rule's enforcer and not exempt — give "
-        "each a record in rules/records/ naming it as the `validator` (then run "
+        "validators that are no rule's enforcer and not exempt — give each a "
+        "record in rules/records/ naming it as the `validator` (then run "
         "`python3 scripts/render_rules.py write`), or add an explicit "
         f"exemption with its reason: {unaccounted}"
     )
@@ -198,17 +233,13 @@ def test_exemptions_name_live_validators():
     """The rot direction of the exemption table: an exemption whose validator
     is gone stays green forever, and silently exempts the next validator to
     reuse the (class, method) name."""
-    walked = {
-        (dec.func.__qualname__.rsplit(".", 2)[-2], name)
-        for cls in contract_classes()
-        for name, dec in cls.__pydantic_decorators__.model_validators.items()
-    }
+    walked = _declared_validators()
     stale = sorted(
         f"{owner}.{name}"
         for owner, name in EXEMPT_MODEL_VALIDATORS
         if (owner, name) not in walked
     )
-    assert not stale, f"exemptions naming no live model validator: {stale}"
+    assert not stale, f"exemptions naming no live validator: {stale}"
 
 
 def test_rule_targets_are_unambiguous_class_names():

@@ -91,6 +91,7 @@ run time.
 | `RULE-PIPE-012` | Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it. |
 | `RULE-PIPE-013` | A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id. |
 | `RULE-PIPE-014` | A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status. |
+| `RULE-PIPE-015` | A schedule's `timezone` MUST name a zone in the IANA database. |
 <!-- END GENERATED: rules-pipeline -->
 
 ## Output rules

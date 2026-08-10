@@ -92,6 +92,8 @@ are things an agent gets wrong by writing a plausible value that validates.
 | `RULE-SHRD-008` | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. |
 | `RULE-SHRD-009` | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. |
 | `RULE-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. |
+| `RULE-SHRD-011` | A `display_name` MUST NOT carry leading or trailing whitespace. |
+| `RULE-SHRD-012` | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. |
 <!-- END GENERATED: rules-shared -->
 
 ## Required reading
