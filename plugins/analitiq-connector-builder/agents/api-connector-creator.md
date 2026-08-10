@@ -61,8 +61,9 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
-  (the rules your artifacts must satisfy: every row whose Grades column reads
-  `connector` or `type-map`. The file is ordered by tier, not by document.)
+  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
+  Grades column says which artifact each one binds, and a rule graded `any`
+  binds every document you author.)
 
 ## Authoring order
 

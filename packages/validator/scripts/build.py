@@ -63,11 +63,12 @@ def _top_level_imports(source: str) -> set[str]:
 def _git() -> str:
     """The `git` executable, resolved to a full path.
 
-    Resolved rather than spelled as a bare name: a bare name is looked up in
-    whatever `PATH` the build inherits, and this build decides what reaches
-    PyPI. Absent `git` is a hard stop, not a fallback to an unfiltered tree —
-    the point of asking git is that tracking, not presence on disk, is what
-    ships.
+    Resolving first is what turns a missing `git` into the failure below rather
+    than a `FileNotFoundError` from inside `subprocess`. It does not harden the
+    lookup — `which` searches the same inherited `PATH` — so the value is the
+    message and the stop: absent `git` is never a fallback to an unfiltered
+    tree, because the point of asking git is that tracking, not presence on
+    disk, decides what ships.
     """
     exe = shutil.which("git")
     if exe is None:

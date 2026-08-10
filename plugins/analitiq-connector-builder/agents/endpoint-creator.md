@@ -18,8 +18,9 @@ containing one endpoint document body.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
-  (the rules your document must satisfy: every row whose Grades column reads
-  `api-endpoint`. The file is ordered by tier, not by document.)
+  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
+  Grades column says which artifact each one binds, and a rule graded `any`
+  binds every document you author.)
 
 ## Inputs
 

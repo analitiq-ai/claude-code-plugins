@@ -180,3 +180,57 @@ def test_values_column_labels_a_field_by_its_wire_alias() -> None:
         "now names a field whose attribute and wire key agree, or the record "
         "shape changed. Re-point it before deleting it."
     )
+
+
+def test_one_field_renders_as_one_row_across_a_rules_targets() -> None:
+    """A rule over a union collects one field's members from every branch.
+
+    The row is keyed on the record's own field spelling, not on the resolved
+    wire label. Keying on the label splits a rule whose branches alias the
+    field differently into a row per spelling — each an incomplete vocabulary
+    presented as a whole one, which is the failure this column exists to
+    prevent and which nothing downstream could detect. Branches that agree
+    merge into one row; branches that disagree have no single row to render, so
+    the renderer says so instead of picking one.
+
+    Synthetic models rather than contract ones: no rule in the registry has
+    disagreeing branches today, so the real tree cannot exercise either path,
+    and a guard that only runs once the defect has shipped is not a guard.
+    """
+    from typing import Literal
+
+    import pytest
+    from pydantic import BaseModel, Field
+
+    renderer = _load_renderer()
+
+    class GetBranch(BaseModel):
+        location: Literal["path", "query"] = Field(..., alias="in")
+
+    class PostBranch(BaseModel):
+        location: Literal["body"] = Field(..., alias="in")
+
+    class RenamedBranch(BaseModel):
+        location: Literal["body"] = Field(..., alias="where")
+
+    class Rule:
+        id = "RULE-TEST-001"
+        mechanism = "literal_enum"
+        fields = ("location",)
+
+        def __init__(self, targets):
+            self.targets = targets
+
+    merged = renderer._live_values(
+        Rule(["GetBranch", "PostBranch"]),
+        {"GetBranch": GetBranch, "PostBranch": PostBranch},
+    )
+    assert merged == "`in`: `path`, `query`, `body`", (
+        f"branches agreeing on the wire name must merge into one row: {merged!r}"
+    )
+
+    with pytest.raises(ValueError, match="disagree on the wire name"):
+        renderer._live_values(
+            Rule(["GetBranch", "RenamedBranch"]),
+            {"GetBranch": GetBranch, "RenamedBranch": RenamedBranch},
+        )

@@ -161,6 +161,7 @@ def _live_values(rule, models: dict) -> str:
     if rule.mechanism != "literal_enum":
         return "—"
     by_field: dict[str, list[str]] = {}
+    labels: dict[str, str] = {}
     for target in rule.targets:
         model = models.get(target)
         if model is None:
@@ -171,10 +172,22 @@ def _live_values(rule, models: dict) -> str:
             if info is None:
                 continue
             label = expr.replace(head, info.alias, 1) if info.alias else expr
-            members = by_field.setdefault(label, [])
+            # Keyed on the record's own spelling, never the resolved label: a
+            # rule over a union collects one field's members from every branch,
+            # and keying on the label would split them into a row per spelling —
+            # each an incomplete vocabulary presented as a whole one, with
+            # nothing failing. Branches that disagree on the wire name have no
+            # single row to render, so say that instead of picking one.
+            if labels.setdefault(expr, label) != label:
+                raise ValueError(
+                    f"{rule.id}: targets disagree on the wire name of {expr!r} "
+                    f"({labels[expr]!r} vs {label!r}) — one vocabulary cannot "
+                    "render under two keys; split the rule per spelling."
+                )
+            members = by_field.setdefault(expr, [])
             members += [m for m in closed_members(info.annotation) if m not in members]
     rendered = [
-        f"`{field}`: " + ", ".join(f"`{m}`" for m in members)
+        f"`{labels[field]}`: " + ", ".join(f"`{m}`" for m in members)
         for field, members in by_field.items()
         if members
     ]
