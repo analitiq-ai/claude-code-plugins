@@ -71,7 +71,9 @@ from analitiq.contracts.shared.types import (
     StrictPositiveInt,
 )
 from analitiq.contracts.value_expression import (
+    RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    has_known_scope,
     iter_expression_strings,
     template_placeholders,
 )
@@ -138,20 +140,6 @@ _METADATA_PROPERTY_NAMES: dict[str, Any] = {
         "not": {"enum": sorted(RESERVED_RESPONSE_SCOPES)},
     }
 }
-
-# Published JSON-Schema pattern for a typed `RefExpression.ref`: the value must
-# begin with one of the resolution scopes (imported from the resolver so the
-# vocabulary has one home). The `(?:\.|$)` boundary rejects a longer look-alike
-# token — `responseX` fails while `response` and `response.body` pass. Only the
-# leading scope is contract-checked; sub-path existence and per-phase
-# availability are the runtime resolver's concern.
-_RESOLUTION_SCOPE_PATTERN = r"^(?:" + "|".join(RESOLUTION_SCOPES) + r")(?:\.|$)"
-
-
-def _has_known_scope(token: str) -> bool:
-    """True when a ref/placeholder token's leading scope is a known resolution
-    scope. Stripped like the resolver, which strips before resolving."""
-    return token.strip().split(".", 1)[0] in RESOLUTION_SCOPES
 
 # The UNIVERSE of destination write modes — every mode a destination may be
 # asked to perform. It keys an API endpoint's `operations.write` map below, and
@@ -240,7 +228,7 @@ class RefExpression(_EndpointModel):
     ref: str = Field(
         ...,
         min_length=1,
-        pattern=_RESOLUTION_SCOPE_PATTERN,
+        pattern=RESOLUTION_SCOPE_PATTERN,
         description=(
             "Must begin with a known resolution scope: "
             + ", ".join(RESOLUTION_SCOPES)
@@ -268,7 +256,7 @@ class TemplateExpression(_EndpointModel):
         # construction. Model-enforced only — not a published JSON-Schema
         # pattern, so the validator, not `latest.json`, is the complete gate.
         for placeholder in template_placeholders(value):
-            if not _has_known_scope(placeholder):
+            if not has_known_scope(placeholder):
                 raise ValueError(
                     f"template placeholder ${{{placeholder}}} must begin with a "
                     "known resolution scope "
@@ -2841,7 +2829,7 @@ def _first_unscoped_expression(value: Any) -> str | None:
     ``Any``-typed request slots, parsed via the shared resolver grammar
     (``iter_expression_strings`` skips protected ``literal`` subtrees)."""
     for token in _expression_tokens(value):
-        if not _has_known_scope(token):
+        if not has_known_scope(token):
             return token
     return None
 
@@ -4333,12 +4321,12 @@ def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> 
     either side of the dot and the run-time failure is identical.
 
     The typed `Expression` fields are already covered by the published
-    `_RESOLUTION_SCOPE_PATTERN`, but the `Any`-typed paging slots
+    `RESOLUTION_SCOPE_PATTERN`, but the `Any`-typed paging slots
     (`keyset.initial`, `offset.initial`, `page.initial`, every `Predicate`
     operand) are covered by nothing, and those are the most load-bearing paging
     sites in the contract.
     """
-    if _has_known_scope(token):
+    if has_known_scope(token):
         return
     raise ValueError(
         f"{where} references {token!r}, whose leading token is not a known "
@@ -4363,7 +4351,7 @@ def _reject_unknown_response_scope(
     truncation RULE-ENDP-023 exists to catch, reachable by misspelling `body`
     instead of the field after it.
 
-    `_has_known_scope` cannot catch it: it inspects only the LEADING token, and
+    `has_known_scope` cannot catch it: it inspects only the LEADING token, and
     `response` is a real scope. The sub-scope needs its own check.
     """
     stripped = token.strip()

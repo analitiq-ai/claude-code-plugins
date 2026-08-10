@@ -55,7 +55,7 @@ host). Asking the user for anything the redirect already yields is noise.
 This does not mean an empty `inputs` map: every ref an auth template resolves
 must be declared there (`RULE-CTOR-052`), and the app's own `client_id` /
 `client_secret` still are, as `source: "platform"` (above).
-<!-- PROBE: connector-refs-unchecked -->
+<!-- PROBE: connector-ref-tail-unchecked -->
 Nothing validates that a ref resolves, so dropping them leaves a connector that
 passes validation and fails at connect with no credentials.
 

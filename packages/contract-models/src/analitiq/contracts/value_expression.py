@@ -70,6 +70,24 @@ RESOLUTION_SCOPES: tuple[str, ...] = (
 )
 
 
+# Published JSON-Schema pattern for a typed `ref`: the value must begin with one
+# of the resolution scopes. The `(?:\.|$)` boundary rejects a longer look-alike
+# token — `responseX` fails while `response` and `response.body` pass. Only the
+# leading scope is contract-checked; sub-path existence and per-phase
+# availability are the runtime resolver's concern.
+RESOLUTION_SCOPE_PATTERN = r"^(?:" + "|".join(RESOLUTION_SCOPES) + r")(?:\.|$)"
+
+
+def has_known_scope(token: str) -> bool:
+    """True when a ref/placeholder token's leading scope is a known resolution
+    scope. Stripped like the resolver, which strips before resolving.
+
+    Lives here, beside the lookup it decides about: a token that fails this is
+    exactly a token `_lookup_placeholder` would send to the flat fallback.
+    """
+    return token.strip().split(".", 1)[0] in RESOLUTION_SCOPES
+
+
 def _is_expression_node(value: Any) -> bool:
     """True when a value is a value-expression object form (not structural JSON)."""
     return isinstance(value, dict) and any(k in value for k in _EXPRESSION_KEYS)
@@ -123,6 +141,21 @@ def template_placeholders(template: str) -> list[str]:
     stripped exactly as the resolver strips it before lookup. A template with no
     placeholders (a plain literal string) returns an empty list."""
     return [match.strip() for match in _TEMPLATE_RE.findall(template)]
+
+
+def unqualified_tokens(node: Any) -> list[str]:
+    """Every ref/placeholder token in `node` whose leading scope is unknown.
+
+    Walks the grammar with `iter_expression_strings`, so it reaches a function's
+    nested input, skips a `literal` subtree, and reads a bare string as the
+    template form — the same boundaries the resolver uses. Lets a field typed
+    `Any` be checked as closely as one typed as an expression model.
+    """
+    found: list[str] = []
+    for kind, text in iter_expression_strings(node):
+        tokens = [text] if kind == "ref" else template_placeholders(text)
+        found.extend(token for token in tokens if not has_known_scope(token))
+    return found
 
 
 def build_resolution_context(

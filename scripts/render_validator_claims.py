@@ -377,9 +377,15 @@ def _p_write_truncate_insert() -> list[dict]:
 
 # --- connector-document probes ---------------------------------------------
 
-def _p_connector_refs_unchecked() -> list[dict]:
+def _p_connector_ref_tail_unchecked() -> list[dict]:
+    # The leading scope is contract-checked; what follows it is not. This is
+    # the connector-side twin of `scope-tail-unchecked`, and it is what keeps
+    # the phase-resolvability claim honest now that the scope itself is
+    # refused — the ref names a real scope and an output nothing produces.
     def mutate(doc: dict) -> dict:
-        _first_transport(doc).setdefault("headers", {})["X-Weird"] = {"ref": "garbage.nonsense"}
+        _first_transport(doc).setdefault("headers", {})["X-Weird"] = {
+            "ref": "connection.discovered.nothing_produces_this"
+        }
         return doc
     return _staged_connector(mutate, API_EXAMPLE)
 
@@ -647,7 +653,8 @@ PROBES: tuple[Probe, ...] = (
     # connector documents. The forbid_re on the "nothing checks X" probes is
     # what expect="clean" alone cannot give: a warning-tier check for X would
     # falsify the sentence while leaving the document error-free.
-    Probe("connector-refs-unchecked", "clean", _p_connector_refs_unchecked),
+    Probe("connector-ref-tail-unchecked", "clean", _p_connector_ref_tail_unchecked,
+          forbid_re=r"(?i)nothing_produces_this|discovered"),
     # The closed-value-set error names the ALLOWED values, not the field, so the
     # pattern pins the vocabulary rather than the key — which is the half of the
     # sentence that matters ("closed value sets").
@@ -779,10 +786,11 @@ CLAIMS: tuple[Claim, ...] = (
         "> **This is entirely author-side.** No validator checks phase\n"
         "> resolvability: a transport referencing `connection.discovered.api_domain`\n"
         "> with no post-auth output producing it validates clean and fails at\n"
-        "> connect. On a connector document refs are not checked *at all* — even a\n"
-        "> nonsense scope passes — so there is no backstop here whatsoever. Walk\n"
+        "> connect. What a ref must name is the scope it starts from; whether\n"
+        "> anything ever puts a value at the rest of the path is not knowable\n"
+        "> from the document, on either the connector or the endpoint side. Walk\n"
         "> the phases by hand.",
-        ("connector-refs-unchecked", "scope-tail-unchecked"),
+        ("connector-ref-tail-unchecked", "scope-tail-unchecked"),
     ),
     Claim(
         "tls-coherence-unchecked",
@@ -931,7 +939,7 @@ def render_scope_guarantees() -> str:
 _SCOPE_GUARANTEES_EXTRA_PROBES: tuple[str, ...] = (
     "read-subscope-typo", "write-subscope-typo", "read-leading-scope-typo",
     "scope-tail-unchecked", "request-slot-response-ref",
-    "write-request-slot-response-ref", "connector-refs-unchecked",
+    "write-request-slot-response-ref", "connector-ref-tail-unchecked",
 )
 
 
@@ -951,9 +959,8 @@ def render_validator_blind_spots() -> str:
         "  only, and a WRITE mode has no `response.schema`, so no write-side",
         "  `response.body` path is resolved — a `success_when` typo validates clean and",
         "  the predicate then holds unconditionally. Every remaining scope is checked",
-        "  on its leading token only, and a connector document is not ref-checked at",
-        "  all — so a `connection.discovered.*` ref with no post-auth output that",
-        "  produces it validates clean, on either document.",
+        "  on its leading token only — so a `connection.discovered.*` ref with no",
+        "  post-auth output that produces it validates clean, on either document.",
         "- **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**",
     ]) + "\n"
 
@@ -963,7 +970,7 @@ _BLIND_SPOT_PROBES: tuple[str, ...] = (
     "read-body-path-typo", "read-metadata-undeclared-key",
     "write-metadata-undeclared-key", "read-records-tail-unchecked",
     "read-headers-tail-unchecked", "write-body-path-typo-unresolved",
-    "scope-tail-unchecked", "connector-refs-unchecked", "tls-coherence-unchecked",
+    "scope-tail-unchecked", "connector-ref-tail-unchecked", "tls-coherence-unchecked",
 )
 
 

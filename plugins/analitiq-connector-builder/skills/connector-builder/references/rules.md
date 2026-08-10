@@ -18,7 +18,7 @@ some are applied only at connect or run time. **Tier** is what kind of
 obligation a rule is, **Grades** the document it binds, **Severity** what a
 violation costs.
 
-Owned here: **57** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
+Owned here: **58** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
 
 
 ## Structural
@@ -47,6 +47,7 @@ than edited.
 | RULE-CTOR-040 | A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode. | `connector` | error | — |
 | RULE-CTOR-055 | A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`. | `connector` | error | — |
 | RULE-CTOR-056 | A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it. | `connector` | error | — |
+| RULE-CTOR-057 | Every ref and every `${...}` template placeholder a connector authors MUST lead with one of the resolution scopes the contract declares. | `connector` | error | — |
 | RULE-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | `api-endpoint` | error | — |
 | RULE-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | `api-endpoint` | error | — |
 | RULE-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | `api-endpoint` | error | — |

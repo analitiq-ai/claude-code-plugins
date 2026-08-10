@@ -17,6 +17,7 @@ from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import (
+    BaseModel,
     ConfigDict,
     Discriminator,
     Field,
@@ -46,8 +47,40 @@ from analitiq.contracts.shared.common import (
     validate_tags,
 )
 from analitiq.contracts.shared.types import StrictPositiveInt
+from analitiq.contracts.value_expression import (
+    RESOLUTION_SCOPE_PATTERN,
+    RESOLUTION_SCOPES,
+    unqualified_tokens,
+)
 
 CONNECTOR_SCHEMA_URL = schema_url_for("connector")
+
+
+def _dumped(node: Any) -> Any:
+    """A parsed expression back in the plain-JSON shape the grammar walker reads.
+
+    A field typed as an expression union hands back a model; one typed `Any`
+    hands back what was authored. `unqualified_tokens` walks dicts and strings,
+    so the model form is dumped and everything else passes through.
+    """
+    return node.model_dump() if isinstance(node, BaseModel) else node
+
+
+def _reject_unqualified(node: Any, where: str) -> None:
+    """Refuse a value expression whose ref/placeholder names no resolution scope.
+
+    `where` names the field — or, for a map, the key — so a transport declaring
+    several headers reports the one that is wrong rather than the block.
+    """
+    unqualified = unqualified_tokens(node)
+    if unqualified:
+        raise ValueError(
+            f"{where}: {', '.join(sorted(set(unqualified)))} "
+            f"names no resolution scope ({', '.join(RESOLUTION_SCOPES)}); "
+            "an unqualified token is resolved by a flat lookup over `secrets` "
+            "and the context root, which is how a value nobody addressed "
+            "reaches the wire (spec: §Value Expressions)"
+        )
 # Host-tolerant matcher for the `$schema` field: a connector authored against
 # the canonical `schemas.analitiq.ai` URL must still validate when the engine
 # checks it against a per-environment schema (`schemas.analitiq.work` / `.dev`).
@@ -826,8 +859,15 @@ is exclusive to `lookup`.
 # A field that must resolve to a non-empty URL string models its
 # value-expression object forms as these typed models — NOT a bare
 # `dict[str, Any]` — so the PUBLISHED JSON Schema constrains the shape exactly
-# as the Pydantic model does. Schema and validator stay aligned by
-# construction; there is no imperative `@field_validator` the schema misses.
+# as the Pydantic model does.
+#
+# The SHAPE is expressible as schema and stays aligned by construction. The
+# resolution-scope vocabulary is expressible for a `ref`, which carries it as a
+# published pattern, and not for a template, where it is a property of each
+# `${...}` the string contains rather than of the string: asserting it needs a
+# negative lookahead, which pydantic-core's regex engine rejects, so it would
+# publish a pattern the model could not run. `_placeholders_qualified` is
+# therefore the complete gate for a template — the validator, not `latest.json`.
 
 
 class TemplateExpression(StrictModel):
@@ -837,12 +877,24 @@ class TemplateExpression(StrictModel):
         description="Template string carrying `${scope.path}` placeholders."
     )
 
+    @field_validator("template")
+    @classmethod
+    def _expressions_qualified(cls, value: str) -> str:
+        _reject_unqualified(value, "template")
+        return value
+
 
 class RefExpression(StrictModel):
     """`{ref}` form: a dotted path into the resolution context."""
 
-    ref: Annotated[str, StringConstraints(min_length=1)] = Field(
-        description="Dotted reference path, e.g. `connection.parameters.host`."
+    ref: Annotated[
+        str, StringConstraints(min_length=1, pattern=RESOLUTION_SCOPE_PATTERN)
+    ] = Field(
+        description=(
+            "Dotted reference path beginning with a resolution scope: "
+            + ", ".join(RESOLUTION_SCOPES)
+            + " (e.g. `connection.parameters.host`)."
+        ),
     )
 
 
@@ -878,6 +930,12 @@ class TransportRateLimit(StrictModel):
     max_requests: StrictPositiveInt = Field(..., description="Maximum requests allowed per window")
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
+    @field_validator("time_window_seconds")
+    @classmethod
+    def _expressions_qualified(cls, value: Any) -> Any:
+        _reject_unqualified(value, "time_window_seconds")
+        return value
+
 
 class HttpTransport(HeaderMergeRules, StrictModel):
     """HTTP transport contract. Spec: §Transport Contracts."""
@@ -898,6 +956,7 @@ class HttpTransport(HeaderMergeRules, StrictModel):
         default=None,
         description="Default request headers; values may be literals or expressions",
     )
+
     headers_remove: list[str] | None = Field(
         default=None,
         description="Header names to delete from inherited defaults (case-insensitive)",
@@ -910,11 +969,36 @@ class HttpTransport(HeaderMergeRules, StrictModel):
         default=None, description="Rate-limit policy"
     )
 
+    @model_validator(mode="after")
+    def _expressions_qualified(self) -> "HttpTransport":
+        # Both expression-bearing fields in one place, after the union has
+        # settled, so the answer does not depend on which branch matched — a
+        # bare string is the template form spelled without its wrapper, and a
+        # function's input is an expression the branch models never see.
+        #
+        # A transport applies to every request made through it, so an
+        # unqualified token here reaches further than the same mistake in a
+        # single operation.
+        _reject_unqualified(
+            self.base_url if isinstance(self.base_url, str) else _dumped(self.base_url),
+            "base_url",
+        )
+        for name, header in (self.headers or {}).items():
+            _reject_unqualified(header, f"headers.{name}")
+        return self
+
 
 class DsnBinding(StrictModel):
     """Single binding entry inside a `url_template` DSN. Spec: §Transport Contracts."""
 
     value: Any = Field(..., description="Value-expression resolving to the raw binding value")
+
+    @field_validator("value")
+    @classmethod
+    def _expressions_qualified(cls, value: Any) -> Any:
+        _reject_unqualified(value, "value")
+        return value
+
     encoding: Literal[
         "raw", "host", "url_userinfo", "url_path_segment", "url_query_key", "url_query_value"
     ] = Field(..., description="Generic encoding applied before substitution into the template")

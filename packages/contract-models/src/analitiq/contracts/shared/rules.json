@@ -1410,6 +1410,29 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-CTOR-057",
+   "statement": "Every ref and every `${...}` template placeholder a connector authors MUST lead with one of the resolution scopes the contract declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::TemplateExpression._expressions_qualified",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "HttpTransport",
+    "DsnBinding",
+    "TransportRateLimit"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same resolver from `base_url`, transport headers and DSN bindings. What made the gap worth closing rather than noting is where an unqualified token goes: the resolver falls back to a flat lookup over `secrets` and then the context root, so a bare `${token}` finds whatever is stored under that name. On a transport that is the whole surface at once — a base URL and a default header apply to every request made through it — so one unscoped token can put a credential the author never addressed into all of them, and the request still looks well formed on the way out. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-DBEP-001",
    "statement": "Every column a database endpoint declares MUST carry a name no other column in that document repeats.\n",
    "tier": "advisory",

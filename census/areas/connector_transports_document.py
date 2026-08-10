@@ -627,7 +627,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural="a Field ge lower bound",
     ),
     ProseObligation(model="connector.RefExpression", prose_hash="302bf6735c2a", descriptive=True),
-    ProseObligation(model="connector.RefExpression", field="ref", prose_hash="c6bff4fda865", descriptive=True),
+    ProseObligation(
+        model="connector.RefExpression", field="ref",
+        prose_hash="aef030c7b2e0",
+        rule_ids=("RULE-CTOR-057",),
+        structural="a StringConstraints pattern on the leading scope",
+    ),
     ProseObligation(model="connector.TemplateExpression", prose_hash="54e41c6b1776", descriptive=True),
-    ProseObligation(model="connector.TemplateExpression", field="template", prose_hash="c955414c0650", descriptive=True),
+    ProseObligation(
+        model="connector.TemplateExpression", field="template",
+        prose_hash="c955414c0650",
+        rule_ids=("RULE-CTOR-057",),
+    ),
 )

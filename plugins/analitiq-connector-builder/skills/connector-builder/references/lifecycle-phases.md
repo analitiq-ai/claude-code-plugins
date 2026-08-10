@@ -7,8 +7,9 @@ that can actually resolve at the point it runs.
 > **This is entirely author-side.** No validator checks phase
 > resolvability: a transport referencing `connection.discovered.api_domain`
 > with no post-auth output producing it validates clean and fails at
-> connect. On a connector document refs are not checked *at all* — even a
-> nonsense scope passes — so there is no backstop here whatsoever. Walk
+> connect. What a ref must name is the scope it starts from; whether
+> anything ever puts a value at the rest of the path is not knowable
+> from the document, on either the connector or the endpoint side. Walk
 > the phases by hand.
 <!-- END GENERATED: claim:phase-resolvability-unchecked -->
 
@@ -56,7 +57,7 @@ mirror image is declaring an input's `phase` too late for the transport that
 needs it (`RULE-CTOR-050` again, from the declaration side: a `base_url`
 component declared `phase: "auth"` cannot serve a pre-auth request).
 
-<!-- PROBE: connector-refs-unchecked -->
+<!-- PROBE: connector-ref-tail-unchecked -->
 Neither is caught by validation. Before returning a connector, trace each
 transport's refs to the declaration that produces them and confirm the
 producing phase is no later than the consuming one.

@@ -105,9 +105,8 @@ do not rely on them, and treat these as author-side discipline:
   only, and a WRITE mode has no `response.schema`, so no write-side
   `response.body` path is resolved — a `success_when` typo validates clean and
   the predicate then holds unconditionally. Every remaining scope is checked
-  on its leading token only, and a connector document is not ref-checked at
-  all — so a `connection.discovered.*` ref with no post-auth output that
-  produces it validates clean, on either document.
+  on its leading token only — so a `connection.discovered.*` ref with no
+  post-auth output that produces it validates clean, on either document.
 - **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**
 <!-- END GENERATED: validator-blind-spots -->
 
