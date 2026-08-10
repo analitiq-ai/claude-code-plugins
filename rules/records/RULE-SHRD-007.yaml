@@ -10,8 +10,8 @@ owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The registry belongs to the engine and is consulted at connect time. A slot
   annotated with the contract's function union rejects a name it carries no
-  model for, but that is one slot — a transport's base URL — and every other
-  site a function expression reaches is loosely typed, so a typo there, or a
+  model for; a transport's base URL is annotated that way. Every other site a
+  function expression reaches is loosely typed, so a typo there, or a
   function some document promises is coming, validates clean and fails on the
   first connection attempt, after the connector has shipped. Even the typed
   slot only proves membership in the set this repo models, which tracks the

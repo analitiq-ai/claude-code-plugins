@@ -888,9 +888,10 @@ class UrlEncodeDerived(StrictModel):
 # catalog: connectors must not reference them yet. Add their Pydantic shapes
 # when the engine ships them; until then they intentionally have no model.
 #
-# Having no model rejects one only where this union is the annotation, which is
-# `base_url` by way of `UrlValueExpression`: naming an unmodelled function there
-# fails `model_validate`. Every other site a function expression reaches is
+# Having no model rejects one only where this union is the annotation, which it
+# reaches through `UrlValueExpression` — a transport's `base_url` is declared
+# that way, and naming an unmodelled function there fails `model_validate`.
+# Every other site a function expression reaches is
 # loosely typed — a transport header, a param `default`, a request body — so the
 # union never grades it and an unregistered name is accepted, then fails when
 # the engine resolves it at connect. RULE-SHRD-007 is that gap. It carries no

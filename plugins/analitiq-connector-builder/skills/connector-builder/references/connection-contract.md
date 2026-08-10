@@ -18,8 +18,8 @@ not.
 `source`, `phase`, `storage` and `type` each draw from a closed vocabulary the
 model declares (`RULE-CTOR-021`). Read the members off that rule's Values column
 in `rules.md`, which prints them from the live model; what each choice *decides*
-is below. Those four are mandatory, and so is `required` — an input that omits
-any of them is rejected.
+is below. Every field that rule names is mandatory, and so is `required` — an
+input omitting any of them is rejected.
 
 | Field | What the choice decides |
 |---|---|
@@ -72,8 +72,8 @@ context. Required fields per output:
 - `storage` — which durable store it lands in.
 - `type` — the value type the response field is coerced to.
 
-  `RULE-CTOR-022` carries the vocabulary for all three, printed from the live
-  model in `rules.md`. Which pairings of `mode` and `storage` are legal, and
+  `RULE-CTOR-022` carries the vocabulary for each of those fields, printed from
+  the live model in `rules.md`. Which pairings of `mode` and `storage` are legal, and
   each mode's required and forbidden request fields, are `RULE-CTOR-002`.
 - `value_path` — the **response-extraction path**: the field read out of the
   `options_request` / `discovery_request` response (e.g. `"id"` for a

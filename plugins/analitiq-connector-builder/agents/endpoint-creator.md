@@ -79,9 +79,9 @@ was raised.
    and `schema` are required); `params`, `pagination`, `replication`
    are optional.
    - `request.method` and `request.path` — from `endpoint_facts.method` /
-     `endpoint_facts.path`. The methods a read may declare are `RULE-ENDP-051`;
-     the one that carries a body exists for providers whose search read is a
-     body-bearing POST, so reach for it only when the provider documents that.
+     `endpoint_facts.path`. The methods a read may declare are `RULE-ENDP-051`.
+     A body-bearing method is there for providers whose search read takes its
+     query in the body; reach for one only when the provider documents that.
    - `request.transport_ref` — only if not the default transport.
    - `params` — declared operation inputs, each a `Param` with `in` (where it
      is sent) and `type` (the *request-input* type, not an Arrow type), both
