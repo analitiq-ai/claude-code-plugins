@@ -15,17 +15,20 @@ not.
 
 ## Per-input fields (`ConnectionContractInput`)
 
-Required: `source`, `phase`, `storage`, `type`, `required`.
+`source`, `phase`, `storage` and `type` each draw from a closed vocabulary the
+model declares, and every one of them is required (`RULE-CTOR-021`). Read the
+members off that rule's Values column in `references/rules.md`, which prints
+them from the live model; what each choice *decides* is below.
 
-| Field | Values |
+| Field | What the choice decides |
 |---|---|
-| `source` | `"user"` (entered by end user) or `"platform"` (provisioned by the platform/admin). |
-| `phase` | `"pre_auth"` or `"auth"` — when the value must be available. |
-| `storage` | Closed enum for inputs: `"connection.parameters"` (non-secret, durable) or `"secrets"` (secret, durable, materialized via secret refs). Inputs **cannot** target `"connection.selections"` / `"connection.discovered"` — those are produced by `post_auth_outputs` (below), never collected as inputs. |
-| `type` | JSON Schema type: `string`, `integer`, `boolean`, `number`. |
+| `source` | Who supplies the value — the end user filling in the connection form, or the platform/admin provisioning it. |
+| `phase` | When the value has to be available. An input declared later than the operation referencing it cannot resolve (`RULE-CTOR-050`; `lifecycle-phases.md` walks the ordering). |
+| `storage` | Which durable store the resolved value lands in, and so the prefix of the reference path every other document targets. An input may only name a store the user supplies *into*: the post-auth stores are produced by `post_auth_outputs` (below), never collected as an input. |
+| `type` | The JSON value type used for validation and coercion. Not an Arrow type — that vocabulary describes data coming back from a resource, not configuration going in. |
 | `required` | Boolean. |
-| `secret` | Boolean (default false). True if and only if storage is `secrets` (RULE-CONN-003). |
-| `enum` | Array of allowed values (closed enum). |
+| `secret` | Boolean (default false). True if and only if `storage` is the secret store (`RULE-CONN-003`). |
+| `enum` | Array of allowed values; a `ui.options` list must offer exactly this set (`RULE-CONN-001`). |
 | `default` | Default value (for non-required inputs). |
 | `format` / `pattern` | Optional string validation — `format: "uri"` or a regex `pattern`. The published schema names this field `pattern`; the input field set is closed (`additionalProperties: false`). |
 | `ui` | Optional UI hint object (label, placeholder, widget). |
@@ -63,9 +66,14 @@ is never "where is this interpolated from?" but "whose value is this?":
 `post_auth_outputs` are the single source of truth for durable post-auth
 context. Required fields per output:
 
-- `mode` — closed enum: `user_selection` (a value the user picks from an `options_request`) or `auto_discovery` (a value read from a `discovery_request`).
-- `storage` — closed enum `"connection.selections"` (user choices, `user_selection`), `"connection.discovered"` (auto-discovered values, `auto_discovery`), or `"secrets"` (secret-valued outputs). The mode↔storage pairing and each mode's required/forbidden request fields are RULE-CTOR-002.
-- `type` — the value's type.
+- `mode` — which post-auth flow produces the value: a choice the user picks
+  from an `options_request`, or a value read from a `discovery_request`.
+- `storage` — which durable store it lands in. The vocabulary for both fields
+  is `RULE-CTOR-022`, printed from the live model in `references/rules.md`;
+  which pairings of the two are legal, and each mode's required and forbidden
+  request fields, are `RULE-CTOR-002`.
+- `type` — the value's type, from the same vocabulary an input's `type` draws
+  from (`RULE-CTOR-021`).
 - `value_path` — the **response-extraction path**: the field read out of the
   `options_request` / `discovery_request` response (e.g. `"id"` for a
   selection option, `"company_domain"` for a discovery field). It is *not* the

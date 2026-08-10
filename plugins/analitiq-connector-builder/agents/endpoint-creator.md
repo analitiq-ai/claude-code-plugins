@@ -175,10 +175,12 @@ was raised.
    - `batching` (optional) — `{"max_records": <int ≥ 2>}` when the
      provider documents a per-request cap. Mutually exclusive with
      `idempotency` (RULE-ENDP-015).
-   - `idempotency` (optional) — `{"in": "header" | "body", "name":
-     "<non-empty>"}`: where the provider's idempotency key goes on each
-     write request (`header`: Stripe `Idempotency-Key`; `body`: Square's
-     top-level `idempotency_key` — requires a JSON-object body).
+   - `idempotency` (optional) — `{"in": …, "name": "<non-empty>"}`: where the
+     provider's idempotency key goes on each write request, and what it is
+     called. The placement vocabulary is `RULE-ENDP-039`, printed from the live
+     model in `connector-builder/references/rules.md`; pick by what the provider
+     documents — a request header (Stripe's `Idempotency-Key`) or a top-level
+     body field (Square's `idempotency_key`, which requires a JSON-object body).
      Placement only — the key value is engine-owned: never author it as
      a value expression, in `input.schema`, or in `request.headers` /
      `request.body`. Populate from `endpoint_facts.idempotency`; never
