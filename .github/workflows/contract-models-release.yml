@@ -93,21 +93,30 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
 
-      - name: Smoke-test the built wheel (install + import)
-        # The package loads its vendored engine-grammar JSON at import time, so
-        # a wheel missing the package-data file cannot import AT ALL. build.py's
-        # import_guard exercises the staged source tree (copytree ships every
-        # file regardless of package-data), so only an install of the actual
-        # wheel proves the [tool.setuptools.package-data] declaration — and a
-        # broken rc published to PyPI is an immutable, burned version.
+      - name: Smoke-test the built wheel (install + read every shipped data file)
+        # build.py's import_guard exercises the staged source tree, and copytree
+        # ships every file regardless of package-data, so only an install of the
+        # actual wheel proves the [tool.setuptools.package-data] declaration —
+        # and a broken rc published to PyPI is an immutable, burned version.
+        #
+        # Each shipped data file needs its own line, because the two are reached
+        # differently. The vendored grammar loads at import, so a wheel without
+        # it cannot import at all. The rule registry loads on first use, and
+        # `violation()` is the only thing that opens it — so a wheel without it
+        # imports, and validates a VALID document, exactly like a correct one.
+        # What it does instead is raise FileNotFoundError in place of the
+        # finding, for the first document that breaks an in-process rule.
         run: |
           python -m venv "${{ runner.temp }}/cm-smoke"
           "${{ runner.temp }}/cm-smoke/bin/pip" install --quiet "${{ runner.temp }}"/cm-dist/*.whl
           "${{ runner.temp }}/cm-smoke/bin/python" -c "
           import analitiq.contracts.endpoints as ep
           import analitiq.contracts.arrow_grammar as ag
+          from analitiq.contracts.shared.rules import all_rules
           assert ag.FAMILY_NAMES and ep.ARROW_TYPE_RE.fullmatch('Utf8')
+          assert all_rules(), 'rules.json shipped empty'
           print('wheel imports; grammar loaded:', len(ag.FAMILY_NAMES), 'families')
+          print('rule registry loaded:', len(all_rules()), 'rules')
           "
 
       - name: Publish to PyPI (Trusted Publishing, OIDC)

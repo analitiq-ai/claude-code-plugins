@@ -57,7 +57,9 @@ packages = [
 [tool.setuptools.package-data]
 "analitiq.contracts" = ["arrow_type_grammar.json"]
 # The compiled rule registry, rendered from `rules/records/*.yaml` by
-# `scripts/render_rules.py`. The models enforce the advisory tier at
-# `model_validate` time, so this must ship or an installed package validates
-# against no rules at all — silently, since a missing rule rejects nothing.
+# `scripts/render_rules.py`. Read on first use rather than at import, and only
+# by `violation()`, so a wheel missing it imports and accepts a valid document
+# exactly like a correct one — then raises FileNotFoundError in place of the
+# finding, for the first document that breaks an in-process rule. The release
+# workflow's smoke test loads it explicitly for that reason.
 "analitiq.contracts.shared" = ["rules.json"]
