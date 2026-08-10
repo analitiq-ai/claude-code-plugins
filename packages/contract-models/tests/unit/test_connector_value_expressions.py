@@ -16,11 +16,12 @@ and `headers` apply to every request the transport makes.
 These pin both directions — the scoped form still authors — because a check
 that only ever rejects is one nobody can tell from a broken one.
 
-They do NOT cover every site the rule states. `RULE-CTOR-057` is written over
-every expression a connector authors; the models check the transport's two
-fields, a DSN binding and a rate-limit window. The auth-exchange templates and
-`TransportDefaults.headers` are open, and that gap is tracked as a coverage
-defect, not as a decision.
+Which sites are covered is which sites a runtime resolves, traced through both
+consumers rather than read off the annotations — a field typed `Any` and
+described as taking an expression may still be consumed literally, and the
+rate-limit window beside these is. Each test below therefore stands for a
+traced call path, and the one that asserts a field is NOT checked is doing the
+same work as the ones that assert refusal.
 """
 from __future__ import annotations
 
@@ -28,8 +29,13 @@ import pytest
 from pydantic import ValidationError
 
 from analitiq.contracts.connector import (
+    AdbcTransport,
+    AuthOperationTemplate,
+    DatabaseTls,
     DsnBinding,
     HttpTransport,
+    PostAuthOperationRequest,
+    TransportDefaults,
     TransportRateLimit,
 )
 from analitiq.contracts.value_expression import RESOLUTION_SCOPES
@@ -146,12 +152,19 @@ def test_a_scoped_dsn_binding_is_accepted():
     assert binding.encoding == "host"
 
 
-def test_an_unqualified_rate_limit_window_is_refused():
-    with pytest.raises(ValidationError) as exc:
-        TransportRateLimit.model_validate(
-            {"max_requests": 10, "time_window_seconds": {"ref": "window"}}
-        )
-    assert _shows_the_vocabulary(exc)
+def test_a_rate_limit_window_is_not_scope_checked():
+    """`rate_limit` is read literally by both consumers, so no expression
+    resolves there and the scope rule does not reach it.
+
+    The engine's transport factory calls `int()` on the window directly and
+    the auth Lambdas never read a `rate_limit` block at all. A scope check
+    here would refuse one spelling of a value that does not work in any
+    spelling, which reads to an author as "scope it and it will resolve".
+    """
+    limit = TransportRateLimit.model_validate(
+        {"max_requests": 10, "time_window_seconds": {"ref": "window"}}
+    )
+    assert limit.time_window_seconds == {"ref": "window"}
 
 
 def test_a_plain_rate_limit_window_is_accepted():
@@ -159,6 +172,115 @@ def test_a_plain_rate_limit_window_is_accepted():
         {"max_requests": 10, "time_window_seconds": 60}
     )
     assert limit.time_window_seconds == 60
+
+
+# --- the sites the transport merge and the auth exchange resolve -------------
+#
+# Each is a path a consumer passes through the resolver, established by tracing
+# both of them rather than from the field's description: the transport-defaults
+# header map merges into every transport before resolution, the auth templates
+# build the token exchange, and the post-auth request populates
+# `connection.discovered.*`. A field neither consumer resolves is absent here on
+# purpose — see the rate-limit test above.
+
+
+def test_an_unqualified_transport_default_header_is_refused():
+    # Merge layer one: this map applies to every transport entry, so an
+    # unscoped token here reaches strictly more requests than the same
+    # mistake on a single transport.
+    with pytest.raises(ValidationError) as exc:
+        TransportDefaults.model_validate({"headers": {"Authorization": "Bearer ${token}"}})
+    assert _shows_the_vocabulary(exc)
+
+
+def test_a_scoped_transport_default_header_is_accepted():
+    defaults = TransportDefaults.model_validate(
+        {"headers": {"Authorization": {"template": "Bearer ${auth.access_token}"}}}
+    )
+    assert defaults.headers
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"path": "/t", "headers": {"Authorization": "Bearer ${token}"}}, id="headers"),
+        pytest.param({"path": "/t/${tenant}/token"}, id="path"),
+        pytest.param({"path": "/t", "body": "client_secret=${client_secret}"}, id="body-string"),
+        pytest.param({"path": "/t", "body": {"secret": {"ref": "client_secret"}}}, id="body-object"),
+    ],
+)
+def test_an_unqualified_auth_template_is_refused(payload):
+    with pytest.raises(ValidationError) as exc:
+        AuthOperationTemplate.model_validate(payload)
+    assert _shows_the_vocabulary(exc)
+
+
+def test_a_scoped_auth_template_is_accepted():
+    template = AuthOperationTemplate.model_validate({
+        "path": "/oauth/token",
+        "headers": {"Authorization": {"template": "Bearer ${auth.access_token}"}},
+        "body": {"template": "refresh_token=${auth.refresh_token}"},
+    })
+    assert template.path == "/oauth/token"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"path": "/m", "headers": {"A": {"template": "${token}"}}}, id="headers"),
+        pytest.param({"path": "/m/${tenant}"}, id="path"),
+        pytest.param({"path": "/m", "body": {"q": "${region}"}}, id="body"),
+    ],
+)
+def test_an_unqualified_post_auth_request_is_refused(payload):
+    with pytest.raises(ValidationError) as exc:
+        PostAuthOperationRequest.model_validate(payload)
+    assert _shows_the_vocabulary(exc)
+
+
+def test_a_scoped_post_auth_request_is_accepted():
+    request = PostAuthOperationRequest.model_validate(
+        {"path": "/accounts", "headers": {"A": {"ref": "auth.access_token"}}}
+    )
+    assert request.path == "/accounts"
+
+
+def test_an_unqualified_adbc_db_kwarg_is_refused():
+    with pytest.raises(ValidationError) as exc:
+        AdbcTransport.model_validate({
+            "transport_type": "adbc", "driver": "postgresql",
+            "db_kwargs": {"password": {"ref": "password"}},
+        })
+    assert _shows_the_vocabulary(exc)
+
+
+def test_a_scoped_adbc_db_kwarg_is_accepted():
+    transport = AdbcTransport.model_validate({
+        "transport_type": "adbc", "driver": "postgresql",
+        "db_kwargs": {"password": {"ref": "secrets.password"}},
+    })
+    assert transport.db_kwargs
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param({"mode": {"ref": "ssl_mode"}}, id="mode"),
+        pytest.param({"mode": "require", "ca_certificate": "${ca_pem}"}, id="ca_certificate"),
+    ],
+)
+def test_an_unqualified_tls_field_is_refused(payload):
+    with pytest.raises(ValidationError) as exc:
+        DatabaseTls.model_validate(payload)
+    assert _shows_the_vocabulary(exc)
+
+
+def test_a_scoped_tls_field_is_accepted():
+    tls = DatabaseTls.model_validate(
+        {"mode": {"ref": "connection.parameters.ssl_mode"},
+         "ca_certificate": {"ref": "secrets.ca_pem"}}
+    )
+    assert tls.mode
 
 
 def test_the_two_documents_agree_on_the_vocabulary():

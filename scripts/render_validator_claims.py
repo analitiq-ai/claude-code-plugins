@@ -377,6 +377,30 @@ def _p_write_truncate_insert() -> list[dict]:
 
 # --- connector-document probes ---------------------------------------------
 
+def _p_connector_default_header_scope_checked() -> list[dict]:
+    # `transport_defaults` rather than a transport entry: it is the merge layer
+    # that reaches every request, and it was the last of the resolved header
+    # maps to be covered — so this is the probe that fails first if the
+    # coverage claim in the blind-spot block stops being true.
+    def mutate(doc: dict) -> dict:
+        doc.setdefault("transport_defaults", {}).setdefault("headers", {})["X-Bad"] = {
+            "ref": "garbage_nonsense"
+        }
+        return doc
+    return _staged_connector(mutate, API_EXAMPLE)
+
+
+def _p_connector_literal_field_unchecked() -> list[dict]:
+    # The other half of the same sentence: a field no runtime resolves takes a
+    # `${...}` without complaint, because scoping it would not make it resolve.
+    def mutate(doc: dict) -> dict:
+        _first_transport(doc)["rate_limit"] = {
+            "max_requests": 10, "time_window_seconds": "${garbage_nonsense}",
+        }
+        return doc
+    return _staged_connector(mutate, API_EXAMPLE)
+
+
 def _p_connector_ref_tail_unchecked() -> list[dict]:
     # The leading scope is contract-checked; what follows it is not. This is
     # the connector-side twin of `scope-tail-unchecked`, and it is what keeps
@@ -653,6 +677,12 @@ PROBES: tuple[Probe, ...] = (
     # connector documents. The forbid_re on the "nothing checks X" probes is
     # what expect="clean" alone cannot give: a warning-tier check for X would
     # falsify the sentence while leaving the document error-free.
+    Probe("connector-default-header-scope-checked", "error",
+          _p_connector_default_header_scope_checked,
+          message_re=r"garbage_nonsense"),
+    Probe("connector-literal-field-unchecked", "clean",
+          _p_connector_literal_field_unchecked,
+          forbid_re=r"garbage_nonsense"),
     Probe("connector-ref-tail-unchecked", "clean", _p_connector_ref_tail_unchecked,
           forbid_re=r"(?i)nothing_produces_this|discovered"),
     # The closed-value-set error names the ALLOWED values, not the field, so the
@@ -961,6 +991,12 @@ def render_validator_blind_spots() -> str:
         "  the predicate then holds unconditionally. Every remaining scope is checked",
         "  on its leading token only — so a `connection.discovered.*` ref with no",
         "  post-auth output that produces it validates clean, on either document.",
+        "- **A connector field nothing resolves is not scope-checked either.** The",
+        "  leading-token check covers the fields a runtime actually resolves — the",
+        "  transports, the default header map, the auth exchange, the post-auth",
+        "  request, the DSN bindings. A `${...}` in a field consumed literally, such",
+        "  as a rate-limit window or a SQLAlchemy `options` entry, is refused by",
+        "  nobody and substituted by nobody: it reaches the driver as written.",
         "- **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**",
     ]) + "\n"
 
@@ -971,6 +1007,7 @@ _BLIND_SPOT_PROBES: tuple[str, ...] = (
     "write-metadata-undeclared-key", "read-records-tail-unchecked",
     "read-headers-tail-unchecked", "write-body-path-typo-unresolved",
     "scope-tail-unchecked", "connector-ref-tail-unchecked", "tls-coherence-unchecked",
+    "connector-default-header-scope-checked", "connector-literal-field-unchecked",
 )
 
 

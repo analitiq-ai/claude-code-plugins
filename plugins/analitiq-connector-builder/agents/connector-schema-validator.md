@@ -107,6 +107,12 @@ do not rely on them, and treat these as author-side discipline:
   the predicate then holds unconditionally. Every remaining scope is checked
   on its leading token only — so a `connection.discovered.*` ref with no
   post-auth output that produces it validates clean, on either document.
+- **A connector field nothing resolves is not scope-checked either.** The
+  leading-token check covers the fields a runtime actually resolves — the
+  transports, the default header map, the auth exchange, the post-auth
+  request, the DSN bindings. A `${...}` in a field consumed literally, such
+  as a rate-limit window or a SQLAlchemy `options` entry, is refused by
+  nobody and substituted by nobody: it reaches the driver as written.
 - **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**
 <!-- END GENERATED: validator-blind-spots -->
 

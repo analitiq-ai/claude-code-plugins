@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union
 
 from pydantic import (
     BaseModel,
@@ -66,6 +66,46 @@ def _dumped(node: Any) -> Any:
     return node.model_dump() if isinstance(node, BaseModel) else node
 
 
+class ValueExpressionScopes:
+    """A block carrying value expressions a runtime resolves.
+
+    Enforces RULE-CTOR-057 wherever it applies. Mixed in rather than repeated,
+    for the reason `HeaderMergeRules` is: the check is one check, and a model
+    gains it by inheriting.
+
+    Each model names its own fields, because which of them a runtime resolves
+    is not visible from the annotation. `rate_limit.time_window_seconds` is
+    typed `Any` and described as taking an expression, and both consumers read
+    it literally — so it is absent from every declaration below, and checking
+    it would tell an author that scoping the token makes it resolve.
+
+    The two declarations differ by what the field HOLDS. `EXPRESSION_FIELDS` is
+    one expression; `EXPRESSION_MAPS` is a name-to-expression map, walked per
+    entry so the failure names the header rather than the block.
+
+    Keeping them apart is not only about the message. Walking an expression as
+    though it were a map drops a check: the entries of `{"ref": "token"}` are
+    the string `"token"`, and a bare string is the TEMPLATE form, so it carries
+    no placeholder and passes. The reverse — walking a map whole — stays
+    correct, because the grammar walker recurses through a plain object into
+    the expressions under it, and costs only the key name in the message.
+    """
+
+    #: Fields whose whole value is one value expression.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ()
+    #: Fields holding a map of name -> value expression.
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ()
+
+    @model_validator(mode="after")
+    def _expressions_qualified(self):
+        for name in self.EXPRESSION_FIELDS:
+            _reject_unqualified(_dumped(getattr(self, name)), name)
+        for name in self.EXPRESSION_MAPS:
+            for key, value in (getattr(self, name) or {}).items():
+                _reject_unqualified(_dumped(value), f"{name}.{key}")
+        return self
+
+
 def _reject_unqualified(node: Any, where: str) -> None:
     """Refuse a value expression whose ref/placeholder names no resolution scope.
 
@@ -115,13 +155,19 @@ class FormFieldOption(StrictModel):
 # --- Auth Models (discriminated union) ---
 
 
-class AuthOperationTemplate(HeaderMergeRules, StrictModel):
+class AuthOperationTemplate(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     """Operation template for auth `authorize` / `token_exchange` / `refresh` / `test`.
 
     The HTTP `base_url` lives on the named transport; this template selects the
     transport via `transport_ref` (omit to use `default_transport`) and supplies
     the per-operation `path`, headers, and body.
     """
+
+    # The auth Lambdas resolve all three when they build the token exchange:
+    # `path` joins the transport's base URL, `headers` is the last merge layer,
+    # and `body` resolves as a string or walked as JSON.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("path", "body")
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
     transport_ref: str | None = Field(
         default=None,
@@ -534,10 +580,17 @@ class ConnectionContractValidation(StrictModel):
     )
 
 
-class PostAuthOperationRequest(StrictModel):
+class PostAuthOperationRequest(ValueExpressionScopes, StrictModel):
     """Request template used by `options_request` / `discovery_request` to populate
     a post-auth output. Spec: §Post-Auth Outputs.
     """
+
+    # Resolved through the same auth-request path that serves the auth block.
+    # `PostAuthOutput`'s `value_path` / `label_path` / `options_path` sit beside
+    # this and are NOT expressions — they are extraction paths walked against
+    # the response.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("path", "body")
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
 
     transport_ref: str | None = Field(
@@ -870,18 +923,16 @@ is exclusive to `lookup`.
 # therefore the complete gate for a template — the validator, not `latest.json`.
 
 
-class TemplateExpression(StrictModel):
+class TemplateExpression(ValueExpressionScopes, StrictModel):
     """`{template}` form: a `${scope.path}`-bearing string resolved at runtime."""
+
+    # The wrapper says this string IS an expression, so it carries the rule on
+    # its own rather than only where a field of this type is checked.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("template",)
 
     template: Annotated[str, StringConstraints(min_length=1)] = Field(
         description="Template string carrying `${scope.path}` placeholders."
     )
-
-    @field_validator("template")
-    @classmethod
-    def _expressions_qualified(cls, value: str) -> str:
-        _reject_unqualified(value, "template")
-        return value
 
 
 class RefExpression(StrictModel):
@@ -930,14 +981,8 @@ class TransportRateLimit(StrictModel):
     max_requests: StrictPositiveInt = Field(..., description="Maximum requests allowed per window")
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
-    @field_validator("time_window_seconds")
-    @classmethod
-    def _expressions_qualified(cls, value: Any) -> Any:
-        _reject_unqualified(value, "time_window_seconds")
-        return value
 
-
-class HttpTransport(HeaderMergeRules, StrictModel):
+class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     """HTTP transport contract. Spec: §Transport Contracts."""
 
     transport_type: Literal["http"] = Field(description="Transport type discriminator")
@@ -969,36 +1014,20 @@ class HttpTransport(HeaderMergeRules, StrictModel):
         default=None, description="Rate-limit policy"
     )
 
-    @model_validator(mode="after")
-    def _expressions_qualified(self) -> "HttpTransport":
-        # Both expression-bearing fields in one place, after the union has
-        # settled, so the answer does not depend on which branch matched — a
-        # bare string is the template form spelled without its wrapper, and a
-        # function's input is an expression the branch models never see.
-        #
-        # A transport applies to every request made through it, so an
-        # unqualified token here reaches further than the same mistake in a
-        # single operation.
-        _reject_unqualified(
-            self.base_url if isinstance(self.base_url, str) else _dumped(self.base_url),
-            "base_url",
-        )
-        for name, header in (self.headers or {}).items():
-            _reject_unqualified(header, f"headers.{name}")
-        return self
+    # Both resolved at transport materialization, by the engine's transport
+    # factory and by the auth Lambdas' header merge. `timeout_seconds` and
+    # `rate_limit` sit beside them and are read literally by both.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("base_url",)
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
 
-class DsnBinding(StrictModel):
+class DsnBinding(ValueExpressionScopes, StrictModel):
     """Single binding entry inside a `url_template` DSN. Spec: §Transport Contracts."""
 
+    # Resolved when the engine renders the DSN from its template.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("value",)
+
     value: Any = Field(..., description="Value-expression resolving to the raw binding value")
-
-    @field_validator("value")
-    @classmethod
-    def _expressions_qualified(cls, value: Any) -> Any:
-        _reject_unqualified(value, "value")
-        return value
-
     encoding: Literal[
         "raw", "host", "url_userinfo", "url_path_segment", "url_query_key", "url_query_value"
     ] = Field(..., description="Generic encoding applied before substitution into the template")
@@ -1059,7 +1088,7 @@ class UrlTemplateDsn(StrictModel):
         return self
 
 
-class DatabaseTls(StrictModel):
+class DatabaseTls(ValueExpressionScopes, StrictModel):
     """Database transport TLS declaration. Spec: §Transport Contracts.
 
     Both fields resolve to plain strings at runtime. The interpretation of
@@ -1068,6 +1097,8 @@ class DatabaseTls(StrictModel):
     canonical mode set is enforced here; the connector's
     ``connection_contract.inputs[<field>].enum`` is the user-facing constraint.
     """
+
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("mode", "ca_certificate")
 
     mode: Any = Field(
         ...,
@@ -1118,7 +1149,7 @@ class SqlAlchemyTransport(StrictModel):
     )
 
 
-class AdbcTransport(StrictModel):
+class AdbcTransport(ValueExpressionScopes, StrictModel):
     """ADBC (Arrow Database Connectivity) database transport contract. Spec: §Transport Contracts."""
 
     model_config = ConfigDict(
@@ -1155,6 +1186,10 @@ class AdbcTransport(StrictModel):
     )
 
     transport_type: Literal["adbc"] = Field(description="Transport type discriminator")
+    # Resolved per entry by the engine's transport factory, unlike the
+    # SQLAlchemy `options` map beside it, which is read literally.
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("db_kwargs",)
+
     driver: Literal["postgresql", "snowflake", "bigquery"] = Field(
         ...,
         description=(
@@ -1306,8 +1341,14 @@ Transport = Annotated[
 """Named transport contract entry. Spec: §Transport Contracts."""
 
 
-class TransportDefaults(HeaderMergeRules, StrictModel):
+class TransportDefaults(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     """Defaults merged into every entry of `transports`. Spec: §Transport Contracts."""
+
+    # Merge layer one: this map is folded into every transport entry before any
+    # of it resolves, so an unscoped token here reaches every request the
+    # connector makes. `options` beside it is driver configuration, read
+    # literally.
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
     transport_type: Literal["http", "sqlalchemy", "adbc", "s3", "file", "stdout"] | None = Field(
         default=None,

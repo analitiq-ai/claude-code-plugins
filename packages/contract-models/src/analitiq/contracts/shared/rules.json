@@ -1411,24 +1411,28 @@
   },
   {
    "id": "RULE-CTOR-057",
-   "statement": "Every ref and every `${...}` template placeholder a connector authors MUST lead with one of the resolution scopes the contract declares.\n",
+   "statement": "In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares.\n",
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "analitiq.contracts.connector::TemplateExpression._expressions_qualified",
+   "validator": "analitiq.contracts.connector::ValueExpressionScopes._expressions_qualified",
    "owners": [
     "engine",
     "connector-plugin"
    ],
    "targets": [
     "HttpTransport",
-    "DsnBinding",
-    "TransportRateLimit"
+    "TransportDefaults",
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest",
+    "AdbcTransport",
+    "DatabaseTls",
+    "DsnBinding"
    ],
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same grammar from `base_url`, transport headers and DSN bindings. What made the gap worth closing rather than noting is that a transport is the whole surface at once: a base URL and a default header apply to every request made through it, so one unscoped token reaches all of them rather than one operation. Where it then goes depends on which resolver reads the document — one takes the bare name as a top-level context key and falls back to `secrets`, substituting whatever is stored under that name into a request that still looks well formed; the other refuses a scope it does not know and raises. Neither names the placeholder to the connector's author. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles.\n",
+   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same grammar from its transports, its auth exchange and its DSN bindings. What made the gap worth closing rather than noting is that a transport is the whole surface at once: the default header map is folded into every transport before any of it resolves, so one unscoped token there reaches every request the connector makes rather than one operation. Which fields this covers is which fields a runtime resolves — traced through both consumers, not read off the annotations, because a field typed `Any` and described as taking an expression may still be consumed literally, and one beside it is. Where an unscoped token goes depends on which resolver reads the document — one takes the bare name as a top-level context key and falls back to `secrets`, substituting whatever is stored under that name into a request that still looks well formed; the other refuses a scope it does not know and raises. Neither names the placeholder to the connector's author. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles.\n",
    "status": "active",
    "superseded_by": null
   },
