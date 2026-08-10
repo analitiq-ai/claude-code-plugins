@@ -1681,3 +1681,124 @@ def test_slug_pattern_governs_the_restated_fields(
         "The prose pins above now reference the wrong constant — re-anchor them "
         "to whatever governs connector_id/endpoint_id."
     )
+
+
+# --- the one-sided pins, closed from the prose side -------------------------
+# Every pin above this section compares the contract to a constant in this
+# file. That leaves the document an agent actually reads unchecked: renaming
+# `url_userinfo` to `url_credentials` in the DSN table, measured, left the whole
+# suite green while the table taught an encoding the contract rejects.
+# `enum-mappers.md` even asserts the opposite in its own header — "a contract
+# change that isn't reflected here fails the build" — which was true only of
+# the constant, never of the table.
+#
+# These read the target column: the last cell of every data row in the table a
+# section owns, which is where the mapper puts the member it maps onto. Both
+# directions, so a member the contract gains must reach the table AND a member
+# the table invents must exist.
+
+ENUM_MAPPERS = (
+    PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "enum-mappers.md"
+)
+DSN_BINDINGS = (
+    PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-dsn-bindings.md"
+)
+
+
+def _section(doc: Path, heading: str) -> str:
+    """The text under `## <heading>`, to the next column-0 heading."""
+    match = re.search(
+        rf"^##\s+{re.escape(heading)}\s*$(.*?)(?=^#|\Z)",
+        doc.read_text(encoding="utf-8"), re.M | re.S,
+    )
+    assert match, (
+        f"{doc.name}: no `## {heading}` section — the document was "
+        "restructured, so this guard would have graded nothing."
+    )
+    return match.group(1)
+
+
+_SEPARATOR_ROW = re.compile(r"^\|[\s:|-]+\|$")
+
+
+def _target_column(section: str) -> set[str]:
+    """Backticked tokens in the last cell of each table BODY row in `section`.
+
+    The last cell is the mapper's output — the contract member the row maps
+    onto.
+
+    Body rows only, found by skipping to the separator: a header here names the
+    field being mapped onto, in backticks (``Output `transport_type` ``), so
+    reading every row would collect the field name as though it were one of its
+    own members. Rows before the first separator are header; a section with no
+    table yields nothing and the caller's equality fails, which is the right
+    answer for a table that was restructured away.
+    """
+    found: set[str] = set()
+    in_body = False
+    for line in section.splitlines():
+        if not line.startswith("|"):
+            in_body = False          # a break in the run ends that table
+            continue
+        if _SEPARATOR_ROW.match(line.rstrip()):
+            in_body = True
+            continue
+        if not in_body:
+            continue
+        cells = [c for c in line.split("|") if c.strip()]
+        if cells:
+            found |= set(_BACKTICKED.findall(cells[-1]))
+    return found
+
+
+@pytest.mark.parametrize(
+    "doc_name, heading, expected, extra",
+    [
+        # KindMapper routes the storage stubs and names the two kinds this
+        # plugin recognises but never authors in the prose below its table, so
+        # the section is the unit rather than the table alone.
+        ("enum-mappers", "KindMapper", EXPECTED_KINDS, {"nosql", "document"}),
+        ("enum-mappers", "AuthTypeMapper", EXPECTED_AUTH_TYPES, set()),
+        ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
+    ],
+)
+def test_mapper_target_columns_match_the_contract(
+    doc_name: str, heading: str, expected: set[str], extra: set[str]
+) -> None:
+    """A mapper's output column must be exactly the contract's vocabulary.
+
+    Without this the mapper is pinned only through a constant in this file, so
+    a member could be renamed in the contract, updated in the constant, and
+    left stale in the table an orchestrator classifies against — which is the
+    one copy that decides what gets authored.
+    """
+    doc = {"enum-mappers": ENUM_MAPPERS}[doc_name]
+    section = _section(doc, heading)
+    documented = _target_column(section)
+    if extra:
+        documented |= {m for m in extra if f"`{m}`" in section}
+    assert documented == expected, (
+        f"{doc.relative_to(REPO_ROOT)} §{heading} maps onto different members "
+        f"than the contract — prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}. The mapper is the only "
+        "route from a researched fact to a schema value, so a member missing "
+        "here cannot be authored at all."
+    )
+
+
+def test_dsn_encoding_table_matches_the_contract() -> None:
+    """The DSN table's Encoding column must be exactly the contract's set.
+
+    This table is decision logic — it maps a URL position onto the encoding
+    that position needs — so the members legitimately stay hand-typed. What was
+    missing is anything reading them: `test_dsn_encodings_match_schema` pins the
+    contract to a constant and names this file only in its failure text.
+    """
+    section = _section(DSN_BINDINGS, "Choosing an encoding (`RULE-CTOR-018`)")
+    documented = _target_column(section)
+    assert documented == EXPECTED_DSN_ENCODINGS, (
+        f"{DSN_BINDINGS.relative_to(REPO_ROOT)} §Choosing an encoding lists "
+        f"different encodings than the contract — "
+        f"prose-only={sorted(documented - EXPECTED_DSN_ENCODINGS)} "
+        f"contract-only={sorted(EXPECTED_DSN_ENCODINGS - documented)}."
+    )
