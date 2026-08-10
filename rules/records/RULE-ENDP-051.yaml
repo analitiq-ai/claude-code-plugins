@@ -1,8 +1,8 @@
 id: RULE-ENDP-051
 statement: >
   A read operation's request MUST name its HTTP method from the vocabulary the
-  read-request branches declare; which branch that method selects is what
-  decides whether the request may carry a body, and that is RULE-ENDP-007.
+  read-request branches declare; the branch that method selects is what decides
+  whether the request may declare a body at all.
 tier: structural
 severity: error
 scope: api-endpoint

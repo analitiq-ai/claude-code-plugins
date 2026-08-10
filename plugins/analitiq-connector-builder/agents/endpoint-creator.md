@@ -147,7 +147,7 @@ was raised.
    replace-the-collection operation, raise it as a contract gap rather than
    authoring around it. Each mode block holds:
    - `request` (required) — `method` (from the write vocabulary
-     `RULE-ENDP-052` prints, which is narrower than the read one), `path`,
+     `RULE-ENDP-052` prints), `path`,
      and the same optional `query` / `headers` / `path_params` / `body`
      / `transport_ref` keys as the read request — except that `path_params`
      diverges here (below). The **body must reference the record being

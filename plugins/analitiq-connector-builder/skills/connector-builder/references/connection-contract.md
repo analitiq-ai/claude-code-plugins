@@ -16,9 +16,10 @@ not.
 ## Per-input fields (`ConnectionContractInput`)
 
 `source`, `phase`, `storage` and `type` each draw from a closed vocabulary the
-model declares, and every one of them is required (`RULE-CTOR-021`). Read the
-members off that rule's Values column in `references/rules.md`, which prints
-them from the live model; what each choice *decides* is below.
+model declares (`RULE-CTOR-021`). Read the members off that rule's Values column
+in `rules.md`, which prints them from the live model; what each choice *decides*
+is below. Those four are mandatory, and so is `required` — an input that omits
+any of them is rejected.
 
 | Field | What the choice decides |
 |---|---|
@@ -26,7 +27,7 @@ them from the live model; what each choice *decides* is below.
 | `phase` | When the value has to be available. An input declared later than the operation referencing it cannot resolve (`RULE-CTOR-050`; `lifecycle-phases.md` walks the ordering). |
 | `storage` | Which durable store the resolved value lands in, and so the prefix of the reference path every other document targets. An input may only name a store the user supplies *into*: the post-auth stores are produced by `post_auth_outputs` (below), never collected as an input. |
 | `type` | The JSON value type used for validation and coercion. Not an Arrow type — that vocabulary describes data coming back from a resource, not configuration going in. |
-| `required` | Boolean. |
+| `required` | Boolean — whether the input must resolve to a value before the connection can be used. |
 | `secret` | Boolean (default false). True if and only if `storage` is the secret store (`RULE-CONN-003`). |
 | `enum` | Array of allowed values; a `ui.options` list must offer exactly this set (`RULE-CONN-001`). |
 | `default` | Default value (for non-required inputs). |
@@ -68,12 +69,12 @@ context. Required fields per output:
 
 - `mode` — which post-auth flow produces the value: a choice the user picks
   from an `options_request`, or a value read from a `discovery_request`.
-- `storage` — which durable store it lands in. The vocabulary for both fields
-  is `RULE-CTOR-022`, printed from the live model in `references/rules.md`;
-  which pairings of the two are legal, and each mode's required and forbidden
-  request fields, are `RULE-CTOR-002`.
-- `type` — the value's type, from the same vocabulary an input's `type` draws
-  from (`RULE-CTOR-021`).
+- `storage` — which durable store it lands in.
+- `type` — the value type the response field is coerced to.
+
+  `RULE-CTOR-022` carries the vocabulary for all three, printed from the live
+  model in `rules.md`. Which pairings of `mode` and `storage` are legal, and
+  each mode's required and forbidden request fields, are `RULE-CTOR-002`.
 - `value_path` — the **response-extraction path**: the field read out of the
   `options_request` / `discovery_request` response (e.g. `"id"` for a
   selection option, `"company_domain"` for a discovery field). It is *not* the
