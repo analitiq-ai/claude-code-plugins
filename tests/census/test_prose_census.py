@@ -42,15 +42,15 @@ from typing import get_args
 import pytest
 
 from analitiq.contracts.shared.rules import all_rules
-from analitiq.contracts.shared.prose_obligation import ProseObligation
-from analitiq.contracts.shared.introspect import (
+from census.obligation import ProseObligation
+from analitiq.contracts.shared.introspect import contract_classes
+from census.sites import (
     ProseSite,
     SiteKey,
     census_report,
-    contract_classes,
     prose_fingerprint,
 )
-from analitiq.contracts.shared.prose_census import PROSE_OBLIGATIONS
+from census import PROSE_OBLIGATIONS
 
 REPORT = census_report()
 
@@ -77,7 +77,7 @@ def test_every_prose_site_is_catalogued():
     ]
     assert not REPORT.missing, (
         "prose sites with no census entry — catalogue each in "
-        "analitiq.contracts.shared.prose_census (sites are keyed to the class "
+        "census (sites are keyed to the class "
         "that DEFINES the prose, not a subclass; "
         "scripts/render_prose_census.py write prints skeletons):\n"
         + "\n".join(lines)
@@ -253,13 +253,16 @@ def test_census_stays_importable_without_pydantic():
     """The census is registry data — tooling must be able to read it without
     the contract models' dependency stack. A stray top-level import would
     silently couple every census consumer to pydantic."""
-    src = Path(__file__).resolve().parents[2] / "src"
-    env = dict(os.environ, PYTHONPATH=str(src))
+    repo_root = Path(__file__).resolve().parents[2]
+    src = repo_root / "packages" / "contract-models" / "src"
+    # The census lives at the repo root, the models under `src` — the
+    # subprocess needs both, and inherits neither.
+    env = dict(os.environ, PYTHONPATH=f"{src}{os.pathsep}{repo_root}")
     env.setdefault("DOMAIN", "analitiq.ai")
     code = (
         "import sys\n"
-        "import analitiq.contracts.shared.prose_obligation\n"
-        "import analitiq.contracts.shared.prose_census\n"
+        "import census.obligation\n"
+        "import census\n"
         "assert 'pydantic' not in sys.modules, 'census import pulled in pydantic'\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True, env=env)

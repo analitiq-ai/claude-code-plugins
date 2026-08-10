@@ -14,14 +14,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from analitiq.contracts.shared.introspect import (
+from census.sites import (
     CensusReport,
     HashMismatch,
     ProseSite,
     SiteKey,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "render_prose_census.py"
 
 
@@ -36,7 +36,7 @@ def _load_script():
 #: multi-line entry whose ``prose_hash`` is NOT a string literal — the shape
 #: ``_restamp``'s substitution cannot rewrite.
 _AREA_FILE = '''"""Synthetic census area file for the script tests."""
-from analitiq.contracts.shared.prose_obligation import ProseObligation
+from census.obligation import ProseObligation
 
 _PLACEHOLDER = "0" * 12
 

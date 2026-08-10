@@ -2,7 +2,7 @@
 ``data_sync``)."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.prose_obligation import (
+from census.obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,

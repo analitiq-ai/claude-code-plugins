@@ -48,7 +48,6 @@ packages = [
     "analitiq.contracts",
     "analitiq.contracts.pipelines",
     "analitiq.contracts.shared",
-    "analitiq.contracts.shared.prose_census",
 ]
 
 # The vendored engine-published Arrow type grammar manifest

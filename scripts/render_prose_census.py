@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check or restamp the prose census against the live contract prose.
 
-The census (`analitiq.contracts.shared.prose_census`) catalogues EVERY prose
+The census (`census`) catalogues EVERY prose
 site in the contract tree — each field description and docstring of every
 pydantic model, and the docstring of every Enum, under `analitiq.contracts`
 (membership by category, mechanical and judgment-free: public enum docstrings
@@ -48,6 +48,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # deliberately does not install one. Keeps the script runnable standalone (CI
 # calls it directly, outside pytest and its conftest).
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
+# And the repo root, for `census/` — the catalogue this script maintains lives
+# outside the package because it is this repo's machinery, not the contract.
+sys.path.insert(0, str(REPO_ROOT))
 # `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import and
 # raises KeyError without it.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
@@ -115,7 +118,7 @@ def _entry_spans(lines: list[str], source: str) -> list[tuple[int, int]]:
 
 
 def _block_key(block: str):
-    from analitiq.contracts.shared.introspect import SiteKey
+    from census.sites import SiteKey
 
     # Key kwargs (`model=`, `field=`) always precede the quote-delimited
     # structural/waiver texts, which may themselves contain `field="..."` —
@@ -234,7 +237,7 @@ def main(argv: list[str]) -> int:
         print(f"usage: {argv[0]} [write|check]", file=sys.stderr)
         return 2
 
-    from analitiq.contracts.shared.introspect import census_report
+    from census.sites import census_report
 
     report = census_report()
     return write(report) if mode == "write" else check(report)

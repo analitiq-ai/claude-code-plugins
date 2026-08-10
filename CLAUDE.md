@@ -30,6 +30,7 @@ packages/
   contract-models/                # -> analitiq-contract-models (PyPI); the contract
   validator/                      # -> analitiq-validator (PyPI)
 schemas/                          # RENDERED public JSON Schemas -> schemas.analitiq.ai
+census/                           # catalogue of the contract's own prose; NOT shipped
 scripts/
   render_schemas.py               # renders schemas/ from packages/contract-models
 tests/

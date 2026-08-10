@@ -2,7 +2,7 @@
 here into :data:`PROSE_OBLIGATIONS`.
 
 This is the canonical home of the census entries;
-:mod:`analitiq.contracts.shared.prose_obligation` keeps the datum
+:mod:`census.obligation` keeps the datum
 (:class:`ProseObligation`) and the shared waiver reasons. Area modules import only
 ``prose_obligation`` — never a contract model — so the census stays readable
 without pydantic. The live-vs-census diff both consumers assert on is
@@ -25,13 +25,14 @@ from __future__ import annotations
 import importlib
 import pkgutil
 
-from analitiq.contracts.shared.prose_obligation import ProseObligation
+from census import areas
+from census.obligation import ProseObligation
 
 
 def _aggregate() -> tuple[ProseObligation, ...]:
     entries: list[ProseObligation] = []
-    for info in sorted(pkgutil.iter_modules(__path__), key=lambda i: i.name):
-        module = importlib.import_module(f"{__name__}.{info.name}")
+    for info in sorted(pkgutil.iter_modules(areas.__path__), key=lambda i: i.name):
+        module = importlib.import_module(f"{areas.__name__}.{info.name}")
         obligations = getattr(module, "PROSE_OBLIGATIONS", None)
         if obligations is None:
             raise AttributeError(

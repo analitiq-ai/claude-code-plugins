@@ -4,7 +4,7 @@ expressions. Part 2 (:mod:`.connector_transports_document`) carries the value
 expressions, transports, capability blocks, and the connector documents."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.prose_obligation import (
+from census.obligation import (
     ENGINE_CONDUCT,
     ENGINE_OWNED_DEFAULTING,
     ProseObligation,

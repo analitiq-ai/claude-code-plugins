@@ -3,7 +3,7 @@ expressions, transports, capability blocks, and the connector document
 classes. Part 1 is :mod:`.connector_auth_contract`."""
 from __future__ import annotations
 
-from analitiq.contracts.shared.prose_obligation import (
+from census.obligation import (
     ENGINE_CONDUCT,
     ProseObligation,
 )

@@ -22,7 +22,7 @@ is exactly how the pagination `response.body.*` rule shipped: it lived in
 
 The census is EXHAUSTIVE: every prose site — not just sites matching a
 vocabulary of modal words — must carry exactly one entry in
-:mod:`analitiq.contracts.shared.prose_census`, declaring one of:
+:mod:`census`, declaring one of:
 
 - ``rule_ids`` — the ``RULE-*`` rule(s) enforcing the obligation;
 - ``structural`` — the model's own structure carries it (a Field pattern /
@@ -62,10 +62,10 @@ from dataclasses import dataclass
 
 # introspect's top-level imports are stdlib-only (it lazy-imports pydantic),
 # so this import keeps the census readable without pulling in pydantic.
-from analitiq.contracts.shared.introspect import SiteKey
+from census.sites import SiteKey
 
 #: The exact shape of a ``prose_hash``: the first 12 hex chars of the
-#: whitespace-normalized prose's sha256 (see ``introspect.prose_fingerprint``).
+#: whitespace-normalized prose's sha256 (see ``census.sites.prose_fingerprint``).
 _PROSE_HASH_PATTERN = re.compile(r"[0-9a-f]{12}")
 
 
