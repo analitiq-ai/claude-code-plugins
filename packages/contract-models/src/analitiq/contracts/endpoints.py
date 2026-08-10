@@ -257,8 +257,12 @@ class TemplateExpression(_EndpointModel):
     @field_validator("template")
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
-        # Every `${...}` placeholder must begin with a known resolution scope;
-        # an unqualified `${name}` would resolve to "" at runtime (a silent bug).
+        # Every `${...}` placeholder must begin with a known resolution scope.
+        # An unqualified `${name}` is not refused at runtime: the resolver falls
+        # back to a flat lookup — `secrets`, then the top of the context — so it
+        # either finds whatever is stored under that bare name and substitutes
+        # it, or finds nothing and the field it sits in is dropped from the
+        # request. Neither outcome names the placeholder to the author.
         # Placeholders are parsed by the shared resolver grammar
         # (`template_placeholders`), so this agrees with the resolver by
         # construction. Model-enforced only — not a published JSON-Schema
