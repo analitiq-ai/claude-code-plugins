@@ -26,8 +26,12 @@ way `render_schemas.py` already guards `schemas/`.
   is worse than one that never claimed it, because the claim is what stops
   somebody re-adding the check.
 
-The validator resolution is why this script imports the contract models.
-Nothing else here does.
+The validator resolution is why this script imports the contract models and the
+validator package. Nothing else here does. Both are on the path because a rule
+is enforced from either: a rule one document can settle on its own is a model
+validator, and a rule needing a second document in hand — a sibling type map, a
+connector beside an endpoint, the streams an assembled run pins — is a check in
+`analitiq.validator`, which is the whole reason that package exists.
 """
 
 from __future__ import annotations
@@ -41,8 +45,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_DIR = REPO_ROOT / "rules" / "records"
 
 # Same bootstrap as render_schemas.py: this repo is the contract's SOURCE, and
-# `requirements-dev.txt` deliberately installs no wheel of it.
+# `requirements-dev.txt` deliberately installs no wheel of either package.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
+sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 from analitiq.contracts.shared.rule_record import (  # noqa: E402

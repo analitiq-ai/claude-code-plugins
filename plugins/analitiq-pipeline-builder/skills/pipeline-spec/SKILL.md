@@ -87,6 +87,10 @@ run time.
 | `RULE-PIPE-008` | Every connection a pipeline references MUST belong to the same organization as the pipeline. |
 | `RULE-PIPE-009` | A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone. |
 | `RULE-PIPE-010` | The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one. |
+| `RULE-PIPE-011` | Every stream a pipeline references MUST resolve to exactly one stream document in the run assembled from it, and the pipeline MUST NOT reference the same stream twice. |
+| `RULE-PIPE-012` | Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it. |
+| `RULE-PIPE-013` | A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id. |
+| `RULE-PIPE-014` | A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status. |
 <!-- END GENERATED: rules-pipeline -->
 
 ## Output rules

@@ -1,0 +1,19 @@
+id: RULE-PIPE-012
+statement: >
+  Every connection a pipeline references MUST resolve to exactly one connection
+  document in the run assembled from it.
+tier: referential
+severity: error
+scope: pipeline
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_connections_present"
+owners: [pipeline-plugin, engine]
+rationale: >
+  A connection is where the credentials, the transport and the connector all
+  come from, so a reference that resolves to nothing is a run with a side that
+  cannot open — discovered at connect time, against the user's system, rather
+  than while authoring. Two documents resolving to one reference is the harder
+  failure: the run keys a single document per connection, so one of them is
+  simply dropped, and which one is dropped is not a property of either document.
+  A pipeline naming both looks correct in every reading of it.
+status: active
+superseded_by: null

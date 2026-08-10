@@ -1,0 +1,21 @@
+id: RULE-PIPE-013
+statement: >
+  A pipeline MUST NOT reference two connections that reduce to the same
+  version-stripped base id.
+tier: referential
+severity: error
+scope: pipeline
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_version_conflicts"
+owners: [pipeline-plugin, engine]
+rationale: >
+  Connections resolve by base id, so pinning one version as the source and
+  another as a destination collapses to a single connection when the run is
+  assembled — the pipeline cannot represent both, and nothing about either
+  reference is malformed enough to say so. The author's intent is usually real:
+  the two versions differ, which is why both were named. What they get instead
+  is one of them, silently, on both sides of the transfer. `RULE-PIPE-003`
+  states the same collapse for streams; connections need it stated separately
+  because the two reference sets are declared in different blocks and neither
+  document sees the other.
+status: active
+superseded_by: null

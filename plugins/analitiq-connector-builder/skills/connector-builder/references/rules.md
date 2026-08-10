@@ -18,7 +18,7 @@ some are applied only at connect or run time. **Tier** is what kind of
 obligation a rule is, **Grades** the document it binds, **Severity** what a
 violation costs.
 
-Owned here: **51** structural · **63** advisory · **21** referential · **17** procedural · **8** judgment.
+Owned here: **52** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
 
 
 ## Structural
@@ -59,6 +59,7 @@ than edited.
 | RULE-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | `api-endpoint` | error | `supported_methods`: `full_refresh`, `incremental` |
 | RULE-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries, and MUST NOT carry anything that produces the key's value. | `api-endpoint` | error | `location`: `header`, `body` |
 | RULE-ENDP-044 | A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null. | `api-endpoint` | warning | — |
+| RULE-ENDP-048 | An embedded request or response schema MUST be valid against the JSON Schema draft this contract is written in, and MUST NOT declare a different draft. | `api-endpoint` | error | — |
 | RULE-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — |
 | RULE-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — |
 | RULE-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — |
@@ -157,6 +158,7 @@ single field looks wrong.
 | RULE-TMAP-004 | A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed. | `type-map` | error |
 | RULE-TMAP-010 | A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match. | `type-map` | error |
 | RULE-TMAP-016 | Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares. | `type-map` | error |
+| RULE-TMAP-022 | A type map MUST NOT carry two rules an earlier one already resolves for — the same match kind over the same matcher, compared the way the reader compares it. | `type-map` | warning |
 
 ## Referential
 
@@ -175,15 +177,22 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-CTOR-044 | A `database` connector's release MUST NOT ship endpoint documents, because a database endpoint is produced from resource-discovery output rather than authored. | `connector` | warning |
 | RULE-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | `connector` | error |
 | RULE-CTOR-049 | A database connector whose class satisfies a write capability MUST declare `sql_capabilities`. | `connector` | error |
+| RULE-DBEP-011 | A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`. | `database-endpoint` | error |
 | RULE-ENDP-041 | Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names. | `api-endpoint` | error |
 | RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` | error |
 | RULE-ENDP-045 | An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL. | `api-endpoint` | error |
+| RULE-ENDP-046 | An API endpoint's `endpoint_id` MUST equal the handle derived from the resource locator its operations declare, and that locator MUST be one a handle can be derived from. | `api-endpoint` | error |
+| RULE-ENDP-047 | Every `transport_ref` an endpoint document names MUST resolve to a transport declared by the connector it ships beside. | `api-endpoint` | error |
 | RULE-PKG-003 | A connector's dialect MUST implement every hook the transports and `sql_capabilities` its `connector.json` declares require, in the form the CDK's hook surface defines. | `connector-package` | error |
 | RULE-PKG-007 | Every name in a database connector's `pyproject.toml` MUST derive from its `connector_id`: the distribution `analitiq-connector-{connector_id}`, the importable package `analitiq_connector_{connector_id}` mapped to the repository root, and the entry-point name `{connector_id}` the engine resolves. | `connector-package` | error |
 | RULE-PKG-016 | A database connector's dialect MUST implement exactly the hooks its `sql_capabilities` declaration obliges, so a declared fact with no hook behind it and a hook nothing routes to are both violations. | `connector-package` | error |
 | RULE-PKG-021 | A connector declaring a transport `tls` block MUST ship a package whose dialect implements the TLS connect-argument hook and, with it, the post-connect TLS-state verification hook, and a connector that ships no package MUST NOT declare `tls` at all. | `connector-package` | error |
 | RULE-PKG-027 | A connector package's `requirements.txt` MUST pin the driver distribution each transport its `connector.json` declares needs — the DBAPI named by a SQLAlchemy transport's `dialect+driver`, and the `adbc-driver-{driver}` wheel plus `adbc-driver-manager` for an ADBC transport's `driver` — and nothing else, neither an engine pin nor the CDK the engine environment provides. | `connector-package` | error |
 | RULE-PKG-029 | The mode vocabulary a connector's `ssl_mode` input declares and the vocabulary its dialect's TLS hook interprets MUST be the same set: every declared mode is one the dialect handles, and the dialect handles no mode the input does not declare. | `connector-package` | error |
+| RULE-PKG-030 | A connector MUST ship the sibling type-map documents its `kind` calls for under the filenames the engine reads them by, and MUST NOT ship one for a direction its kind has no use for. | `connector-package` | error |
+| RULE-PKG-031 | An endpoint document in a connector release MUST ship at `endpoints/{endpoint_id}.json`, directly in that directory rather than in a subdirectory of it. | `connector-package` | error |
+| RULE-PKG-032 | Every endpoint document in a connector release MUST declare an `endpoint_id` no other document in that release declares. | `connector-package` | error |
+| RULE-PKG-033 | A connector's read map MUST resolve every `native_type` its endpoint documents declare, and MUST resolve each one to the canonical type the endpoint froze beside it. | `connector-package` | error |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error |
 | RULE-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved. | `type-map` | error |

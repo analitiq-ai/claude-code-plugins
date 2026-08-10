@@ -1,0 +1,20 @@
+id: RULE-PIPE-014
+statement: >
+  A pipeline in the status that schedules it MUST reference at least one stream
+  that is itself in a runnable status.
+tier: referential
+severity: error
+scope: pipeline
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_pipeline_active_gate"
+owners: [pipeline-plugin, engine]
+rationale: >
+  `RULE-PIPE-004` settles that such a pipeline references a stream at all,
+  which the pipeline document can answer alone; whether any referenced stream
+  will actually run is a fact about the stream documents, and the pipeline
+  cannot see it. A pipeline referencing only streams that are not runnable is
+  scheduled, fires, transfers nothing, and reports a clean run — the failure
+  mode operators trust least, because it is indistinguishable from a source
+  with no new records. Both halves are the same obligation seen from the two
+  documents that hold it.
+status: active
+superseded_by: null

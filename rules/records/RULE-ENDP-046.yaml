@@ -1,0 +1,22 @@
+id: RULE-ENDP-046
+statement: >
+  An API endpoint's `endpoint_id` MUST equal the handle derived from the
+  resource locator its operations declare, and that locator MUST be one a
+  handle can be derived from.
+tier: referential
+severity: error
+scope: api-endpoint
+validator: "packages/validator/src/analitiq/validator/connectors.py::_endpoint_locator_findings"
+owners: [connector-plugin, engine]
+targets: [ApiEndpointDoc]
+rationale: >
+  Deriving the handle from the locator is what makes re-authoring the same
+  resource produce the same id, which is what lets a stream's pin survive a
+  connector release. Chosen by hand instead, an id drifts with whoever wrote it
+  — the same resource authored twice gets two handles, and two resources whose
+  paths differ only in a version segment can be given one. The derivation is
+  also why a locator it cannot be computed from is refused rather than waved
+  through: were it skipped, adding a character the derivation cannot carry
+  would be all it takes to detach an id from the resource it names.
+status: active
+superseded_by: null

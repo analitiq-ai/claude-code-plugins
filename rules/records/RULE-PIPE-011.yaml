@@ -1,0 +1,21 @@
+id: RULE-PIPE-011
+statement: >
+  Every stream a pipeline references MUST resolve to exactly one stream
+  document in the run assembled from it, and the pipeline MUST NOT reference
+  the same stream twice.
+tier: referential
+severity: error
+scope: pipeline
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_refs"
+owners: [pipeline-plugin, engine]
+rationale: >
+  A pipeline document holds references, not streams, so it is complete and
+  valid while naming a stream nobody wrote — and the run built from it is
+  simply smaller than the pipeline says, with no error anywhere to say which
+  transfer went missing. A repeated reference fails from the other side: the
+  run keys one document per stream, so the second reference resolves to the
+  same transfer rather than to a second one, and the pipeline claims work it
+  will not do. Neither is visible in the pipeline document alone; both need the
+  stream documents in hand.
+status: active
+superseded_by: null

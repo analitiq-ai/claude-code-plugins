@@ -76,6 +76,7 @@ most of these surface at connect rather than at authoring time.
 | `RULE-CONN-008` | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. |
 | `RULE-CONN-009` | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. |
 | `RULE-CONN-010` | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. |
+| `RULE-CONN-011` | A connection's `connector_id` MUST resolve to a connector present in the run the connection is assembled into. |
 <!-- END GENERATED: rules-connection -->
 
 ## What this skill does NOT cover

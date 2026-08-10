@@ -6,7 +6,7 @@ statement: >
 tier: procedural
 severity: warning
 scope: type-map
-validator: null
+validator: "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]
 rationale: >

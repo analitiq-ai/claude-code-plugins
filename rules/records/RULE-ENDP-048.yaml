@@ -1,0 +1,21 @@
+id: RULE-ENDP-048
+statement: >
+  An embedded request or response schema MUST be valid against the JSON Schema
+  draft this contract is written in, and MUST NOT declare a different draft.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "packages/validator/src/analitiq/validator/connectors.py::_embedded_schema_findings"
+owners: [connector-plugin, engine]
+rationale: >
+  The contract models grade what an embedded schema declares about types — the
+  native and canonical pairing at each node — and not whether the surrounding
+  document is a legal schema at all, so a misspelled keyword or a malformed
+  constraint passes the document and reaches the engine, which reads these
+  schemas to shape records. Declaring an older draft is the subtler half: such
+  a document can be entirely valid in the draft it names and mean something
+  else in the one the engine reads it as, so the keyword silently changes
+  behaviour rather than failing. Omitting the declaration is fine; the engine
+  reads an undeclared schema in the contract's own draft.
+status: active
+superseded_by: null

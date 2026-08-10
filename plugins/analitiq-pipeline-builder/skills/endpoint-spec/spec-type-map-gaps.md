@@ -80,6 +80,7 @@ can still leave a native the engine cannot render.
 | `RULE-TMAP-018` | A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved. |
 | `RULE-TMAP-019` | A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. |
 | `RULE-TMAP-021` | A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches. |
+| `RULE-TMAP-022` | A type map MUST NOT carry two rules an earlier one already resolves for — the same match kind over the same matcher, compared the way the reader compares it. |
 <!-- END GENERATED: rules-type-map -->
 
 ## Authoring rules

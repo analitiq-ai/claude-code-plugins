@@ -131,6 +131,9 @@ run time.
 | `RULE-STRM-029` | A stream source MUST declare a replication policy unless the referenced source endpoint supports full refresh. |
 | `RULE-STRM-030` | A stream MUST declare source primary keys when the transfer needs record identity and the source endpoint carries no primary-key metadata of its own, and MUST NOT declare keys that contradict the endpoint's. |
 | `RULE-STRM-031` | A stream's reference to an API endpoint MUST use connector scope; connection scope refers to a database endpoint only. |
+| `RULE-STRM-032` | A stream MUST name as its parent the pipeline that references it. |
+| `RULE-STRM-033` | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. |
+| `RULE-STRM-034` | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. |
 <!-- END GENERATED: rules-stream -->
 
 ## Output rules

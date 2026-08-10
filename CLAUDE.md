@@ -178,13 +178,19 @@ defines — reference or load it.** Carry only craft the schema can't express
   and `severity` (what a violation costs) — plus the keys binding it to
   the models and fields it governs, so the statement never restates a value the
   contract owns.
-  Enforcement itself is ordinary Python: a rule a model rejects in-process is a
+  Enforcement itself is ordinary Python, in one of two places depending on how
+  much a check must see. A rule one document settles on its own is a
   `@model_validator` on that model, raising through `rules.violation` so the
-  finding names the rule its prose cites. Nothing is dispatched from the
-  record, so a rule is applied by a symbol that exists or by nothing at all.
+  finding names the rule its prose cites. A rule needing a second document in
+  hand — a sibling type map, the connector an endpoint ships beside, the
+  streams an assembled run pins — is a check in `analitiq.validator`, which is
+  the whole reason that package exists; `validator` names the function
+  emitting the finding. Nothing is dispatched from the record, so a rule is
+  applied by a symbol that exists or by nothing at all.
 
   `scripts/render_rules.py` validates every record, resolves every `validator`
-  against the live models, and compiles `analitiq/contracts/shared/rules.json`,
+  against the live models and the live validator, and compiles
+  `analitiq/contracts/shared/rules.json`,
   the copy the wheel ships. `render_rule_reference.py` and the pipeline plugin's
   `gen_contract_docs.py` render the registry into each plugin's prose. An
   obligation with no record is a missing record, not a sentence to hand-write;

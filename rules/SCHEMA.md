@@ -32,7 +32,7 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `tier` | yes | What *kind* of rule it is. See below. |
 | `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it. |
 | `scope` | yes | The artifact kind it binds, from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — one member per published resource, plus `any` for the rules that bind every authored document. A scope decides which block of a plugin's generated reference the rule lands in; who the rule is rendered *to* is `owners`. |
-| `validator` | no | What applies it: `path/to/module.py::Symbol.attr` for code, or a `.claude/rules/*.md` path for an agent rule. Lint-resolved either way — a renamed validator or a deleted rules file fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
+| `validator` | no | What applies it: `path/to/module.py::Symbol.attr` for code, or a `.claude/rules/*.md` path for an agent rule. A code binding lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. Lint-resolved either way — a renamed validator or a deleted rules file fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
 | `targets` | no | Every model class the rule binds, matched against the whole MRO. Wider than `validator`, which names one representative symbol: a rule over a discriminated union lists every branch, and a rule with no validator still names the models it governs. Read by the enforcer census and the reachability tests, which require every one to carry the member `validator` names. |
 | `fields` | no | The model fields a structural rule's `mechanism` rides on, so the rendered reference can print the members off the live model instead of restating them. |
@@ -93,14 +93,14 @@ lint resolves both: a symbol must exist, a file must exist.
 
 | `validator` | Means |
 |---|---|
-| a `.py::Symbol` | code rejects a violation — a model validator, a field annotation, a class whose shape *is* the rule |
+| a `.py::Symbol` | code rejects a violation — a model validator, a field annotation, a class whose shape *is* the rule, or a cross-document check in `analitiq.validator` |
 | a `.claude/rules/*.md` | an agent rule applies it on every edit to the paths that file governs |
 | `null` | nothing here applies it; `rationale` says what would have to be read, and how far away that is |
 
 `RuleRecord.mechanized` reads this and nothing else. It was an authored field
 once, and could only ever restate what `validator` already said — a record
-naming a mechanism is a record with one, in both forms — so it was 215 copies
-of one fact and a lint whose whole job was catching a copy typed wrong.
+naming a mechanism is a record with one, in both forms — so it was one copy of
+that fact per record and a lint whose whole job was catching a copy typed wrong.
 
 One further word, **`descriptive`**, names prose that states no obligation an
 instance could violate. It is not a tier a record may take — such a sentence

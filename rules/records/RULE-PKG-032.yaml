@@ -1,0 +1,20 @@
+id: RULE-PKG-032
+statement: >
+  Every endpoint document in a connector release MUST declare an `endpoint_id`
+  no other document in that release declares.
+tier: referential
+severity: error
+scope: connector-package
+validator: "packages/validator/src/analitiq/validator/connectors.py::check_coverage"
+owners: [connector-plugin, engine]
+rationale: >
+  The id is what a stream pins, and a release resolves it to one document, so
+  two documents claiming it means every stream that pins it reads whichever the
+  release happened to key last. The filename rule hides this rather than
+  catching it: identical ids collide on the filesystem and one file overwrites
+  the other, so the duplicate is gone before anything can report it, and ids
+  that differ only where the filename is not case-sensitive land as a filename
+  mismatch pointing at the wrong problem. Stating uniqueness on the ids
+  themselves is what makes a duplicate report as a duplicate.
+status: active
+superseded_by: null

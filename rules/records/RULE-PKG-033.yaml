@@ -1,0 +1,21 @@
+id: RULE-PKG-033
+statement: >
+  A connector's read map MUST resolve every `native_type` its endpoint
+  documents declare, and MUST resolve each one to the canonical type the
+  endpoint froze beside it.
+tier: referential
+severity: error
+scope: connector-package
+validator: "packages/validator/src/analitiq/validator/connectors.py::check_coverage"
+owners: [connector-plugin, engine]
+rationale: >
+  The endpoint records the pair the connector observed; the map is how every
+  later reader reproduces it. A native the map cannot resolve stalls the stream
+  at configuration, and — worse — a native the map resolves to a different
+  canonical than the endpoint froze is not an error anywhere: both documents are
+  internally valid, and the disagreement decides the destination column's type,
+  so the stream lands real data in a column shaped by whichever document the
+  reader consulted. Neither half is visible from inside one document, which is
+  why it is checked where the endpoint and the map are both in hand.
+status: active
+superseded_by: null

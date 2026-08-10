@@ -1,0 +1,20 @@
+id: RULE-STRM-034
+statement: >
+  A connection-scoped endpoint reference MUST resolve to an endpoint document
+  belonging to the connection it names.
+tier: referential
+severity: error
+scope: stream
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_scoped_endpoints"
+owners: [pipeline-plugin, engine]
+rationale: >
+  A connection-scoped reference is keyed by the connection and the endpoint
+  together, so an endpoint id that exists under a different connection resolves
+  to nothing while looking entirely correct — the id is real, the connection is
+  real, and only the pairing is wrong. It is the shape a reference takes after
+  a stream is copied between connections, and it survives every check either
+  document can make alone, because a stream cannot see which endpoints a
+  connection carries. `RULE-STRM-003` settles that a supplied id is the derived
+  one; this settles that the endpoint it derives to is actually there.
+status: active
+superseded_by: null

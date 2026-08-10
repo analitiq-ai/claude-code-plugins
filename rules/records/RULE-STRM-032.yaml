@@ -1,0 +1,19 @@
+id: RULE-STRM-032
+statement: >
+  A stream MUST name as its parent the pipeline that references it.
+tier: referential
+severity: error
+scope: stream
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_parent_pipeline"
+owners: [pipeline-plugin, engine]
+rationale: >
+  The parent is immutable and it is what gives a stream its run context — the
+  schedule it runs on, the connections it is allowed to reach, the org it
+  belongs to. A stream bundled under a pipeline it does not name is not
+  rejected by either document: the pipeline's reference resolves, the stream's
+  own parent is a well-formed id, and the transfer runs under a context its
+  author never chose. The usual cause is a stream copied from one pipeline into
+  another with the reference updated and the parent left behind, which reads as
+  correct from whichever document you are looking at.
+status: active
+superseded_by: null

@@ -1,0 +1,21 @@
+id: RULE-STRM-033
+statement: >
+  A stream's source connection MUST be the one its pipeline declares as the
+  source, and each of its destination connections MUST be one the pipeline
+  declares as a destination.
+tier: referential
+severity: error
+scope: stream
+validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_connection_roles"
+owners: [pipeline-plugin, engine]
+rationale: >
+  The pipeline decides which connection is read from and which are written to;
+  the stream restates that wiring per transfer. A stream that names a real
+  connection in the wrong role passes every check either document can make on
+  its own — the connection exists, the pipeline references it, the stream's
+  reference resolves — and the run then reads from a system meant to be written
+  to — and, in the other direction, writes to a system the pipeline named only
+  to read from, which fixing the document afterwards does not undo. Role is the
+  one part of the wiring neither document can confirm alone.
+status: active
+superseded_by: null

@@ -216,6 +216,25 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-CONN-011",
+   "statement": "A connection's `connector_id` MUST resolve to a connector present in the run the connection is assembled into.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "connection",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_connector_refs",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The connector is what makes a connection mean anything: it declares the contract the connection's parameters are filed against, the transports it opens and the type maps its endpoints are read through. A `connector_id` naming a connector the run does not carry leaves every one of those unresolved, and the connection document itself is faultless — the id is well-formed and names something that may well exist elsewhere. Nothing in the connection can check it, because a connection carries no view of the connectors available to it.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-CTOR-001",
    "statement": "A connector's default_transport MUST name a transport the same document declares.\n",
    "tier": "advisory",
@@ -1570,6 +1589,26 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-DBEP-011",
+   "statement": "A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "database-endpoint",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_database_endpoint_locator_findings",
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "Discovery mints these ids through that derivation, so an id that does not reproduce it names an endpoint discovery will never produce again: the next run over the same table computes the real handle, and every stream pinned to the authored one resolves to nothing. The derivation reads the identifiers verbatim, which is why tidying a schema or table name into a nicer id breaks the pin — the id looks better and points nowhere. `RULE-STRM-003` holds the stream side of the same handle; this is the endpoint side.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-DSYNC-001",
    "statement": "A run status MUST carry `error` when its `status` is one the contract gates as a failure, and MUST NOT carry `error` under any other status.\n",
    "tier": "advisory",
@@ -2572,6 +2611,65 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-046",
+   "statement": "An API endpoint's `endpoint_id` MUST equal the handle derived from the resource locator its operations declare, and that locator MUST be one a handle can be derived from.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_endpoint_locator_findings",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ApiEndpointDoc"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "Deriving the handle from the locator is what makes re-authoring the same resource produce the same id, which is what lets a stream's pin survive a connector release. Chosen by hand instead, an id drifts with whoever wrote it — the same resource authored twice gets two handles, and two resources whose paths differ only in a version segment can be given one. The derivation is also why a locator it cannot be computed from is refused rather than waved through: were it skipped, adding a character the derivation cannot carry would be all it takes to detach an id from the resource it names.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-047",
+   "statement": "Every `transport_ref` an endpoint document names MUST resolve to a transport declared by the connector it ships beside.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_endpoint_transport_ref_findings",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "This is the half of transport resolution that `RULE-CTOR-005` cannot reach: that rule resolves every ref site inside the connector document, and an endpoint is a separate file, structurally invisible to a validator on the connector model. An endpoint ref that resolves to nothing takes the same shape as one that resolves — a string naming a transport — and the failure arrives when the operation runs, carrying the connection's credentials nowhere or carrying them to the default transport instead of the one the author picked. Both documents have to be in hand to tell the two apart.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-048",
+   "statement": "An embedded request or response schema MUST be valid against the JSON Schema draft this contract is written in, and MUST NOT declare a different draft.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_embedded_schema_findings",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The contract models grade what an embedded schema declares about types — the native and canonical pairing at each node — and not whether the surrounding document is a legal schema at all, so a misspelled keyword or a malformed constraint passes the document and reaches the engine, which reads these schemas to shape records. Declaring an older draft is the subtler half: such a document can be entirely valid in the draft it names and mean something else in the one the engine reads it as, so the keyword silently changes behaviour rather than failing. Omitting the declaration is fine; the engine reads an undeclared schema in the contract's own draft.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
@@ -2801,6 +2899,82 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "Every permutation validates identically and the runtime is free to ignore the order entirely, so an array arranged to mean \"load the dimensions before the facts\" produces wrong results non-deterministically, and nothing can tell that arrangement from an arbitrary one. The second half of the rule carries as much weight as the first: a user told the order is meaningful will go on authoring against a guarantee that does not exist, long after the document that misled them is forgotten.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-011",
+   "statement": "Every stream a pipeline references MUST resolve to exactly one stream document in the run assembled from it, and the pipeline MUST NOT reference the same stream twice.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "pipeline",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_refs",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "A pipeline document holds references, not streams, so it is complete and valid while naming a stream nobody wrote — and the run built from it is simply smaller than the pipeline says, with no error anywhere to say which transfer went missing. A repeated reference fails from the other side: the run keys one document per stream, so the second reference resolves to the same transfer rather than to a second one, and the pipeline claims work it will not do. Neither is visible in the pipeline document alone; both need the stream documents in hand.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-012",
+   "statement": "Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "pipeline",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connections_present",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "A connection is where the credentials, the transport and the connector all come from, so a reference that resolves to nothing is a run with a side that cannot open — discovered at connect time, against the user's system, rather than while authoring. Two documents resolving to one reference is the harder failure: the run keys a single document per connection, so one of them is simply dropped, and which one is dropped is not a property of either document. A pipeline naming both looks correct in every reading of it.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-013",
+   "statement": "A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "pipeline",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_version_conflicts",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "Connections resolve by base id, so pinning one version as the source and another as a destination collapses to a single connection when the run is assembled — the pipeline cannot represent both, and nothing about either reference is malformed enough to say so. The author's intent is usually real: the two versions differ, which is why both were named. What they get instead is one of them, silently, on both sides of the transfer. `RULE-PIPE-003` states the same collapse for streams; connections need it stated separately because the two reference sets are declared in different blocks and neither document sees the other.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-014",
+   "statement": "A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "pipeline",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_pipeline_active_gate",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "`RULE-PIPE-004` settles that such a pipeline references a stream at all, which the pipeline document can answer alone; whether any referenced stream will actually run is a fact about the stream documents, and the pipeline cannot see it. A pipeline referencing only streams that are not runnable is scheduled, fires, transfers nothing, and reports a clean run — the failure mode operators trust least, because it is indistinguishable from a source with no new records. Both halves are the same obligation seen from the two documents that hold it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3254,6 +3428,82 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "The vocabulary is the system's own, researched from the driver's docs and never translated, so nothing derives one half from the other — the author holding both in mind at once is the only link. A declared mode the dialect does not handle reaches the CDK base and raises at connect for whichever user selects it; a mode the dialect handles but the input never offers is dead code standing in for a gap in the enum. The mode set is authored into `connector.json` while its interpretation lives in the package's dialect hook, no validator opens the dialect, and the contract's TLS block is deliberately vocabulary-agnostic.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PKG-030",
+   "statement": "A connector MUST ship the sibling type-map documents its `kind` calls for under the filenames the engine reads them by, and MUST NOT ship one for a direction its kind has no use for.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "connector-package",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::check_coverage",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The maps are separate documents from `connector.json`, so nothing about the connector document is wrong when one is missing — the connector simply has no type vocabulary, and the failure arrives at the first stream that resolves a column instead of at authoring. Shipping a spare map is the same defect wearing the opposite sign: a direction the connector never renders reads as a capability, and the rules in it are graded by nobody and trusted by the next author. The pre-split single-map filename is rejected outright rather than read as a read map, because a connector that still carries it has a write direction nobody has looked at.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PKG-031",
+   "statement": "An endpoint document in a connector release MUST ship at `endpoints/{endpoint_id}.json`, directly in that directory rather than in a subdirectory of it.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "connector-package",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::endpoint_filename_findings",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The engine resolves an endpoint by id and reaches the file by its name, so a document whose filename and `endpoint_id` disagree is unreachable under the id every stream pins it by — and it is unreachable silently, because the file is present and valid and the id it declares is fine. Nesting fails the same way: the release gate reads the directory flat, so a document one level down is not refused, it is simply never seen. Both are the kind of mistake a rename makes and a review does not catch, because the two halves of the identity are never on screen together.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PKG-032",
+   "statement": "Every endpoint document in a connector release MUST declare an `endpoint_id` no other document in that release declares.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "connector-package",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::check_coverage",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The id is what a stream pins, and a release resolves it to one document, so two documents claiming it means every stream that pins it reads whichever the release happened to key last. The filename rule hides this rather than catching it: identical ids collide on the filesystem and one file overwrites the other, so the duplicate is gone before anything can report it, and ids that differ only where the filename is not case-sensitive land as a filename mismatch pointing at the wrong problem. Stating uniqueness on the ids themselves is what makes a duplicate report as a duplicate.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PKG-033",
+   "statement": "A connector's read map MUST resolve every `native_type` its endpoint documents declare, and MUST resolve each one to the canonical type the endpoint froze beside it.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "connector-package",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::check_coverage",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The endpoint records the pair the connector observed; the map is how every later reader reproduces it. A native the map cannot resolve stalls the stream at configuration, and — worse — a native the map resolves to a different canonical than the endpoint froze is not an error anywhere: both documents are internally valid, and the disagreement decides the destination column's type, so the stream lands real data in a column shaped by whichever document the reader consulted. Neither half is visible from inside one document, which is why it is checked where the endpoint and the map are both in hand.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4069,6 +4319,63 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-STRM-032",
+   "statement": "A stream MUST name as its parent the pipeline that references it.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_parent_pipeline",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The parent is immutable and it is what gives a stream its run context — the schedule it runs on, the connections it is allowed to reach, the org it belongs to. A stream bundled under a pipeline it does not name is not rejected by either document: the pipeline's reference resolves, the stream's own parent is a well-formed id, and the transfer runs under a context its author never chose. The usual cause is a stream copied from one pipeline into another with the reference updated and the parent left behind, which reads as correct from whichever document you are looking at.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-033",
+   "statement": "A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_connection_roles",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The pipeline decides which connection is read from and which are written to; the stream restates that wiring per transfer. A stream that names a real connection in the wrong role passes every check either document can make on its own — the connection exists, the pipeline references it, the stream's reference resolves — and the run then reads from a system meant to be written to — and, in the other direction, writes to a system the pipeline named only to read from, which fixing the document afterwards does not undo. Role is the one part of the wiring neither document can confirm alone.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-034",
+   "statement": "A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names.\n",
+   "tier": "referential",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_scoped_endpoints",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "A connection-scoped reference is keyed by the connection and the endpoint together, so an endpoint id that exists under a different connection resolves to nothing while looking entirely correct — the id is real, the connection is real, and only the pairing is wrong. It is the shape a reference takes after a stream is copied between connections, and it survives every check either document can make alone, because a stream cannot see which endpoints a connection carries. `RULE-STRM-003` settles that a supplied id is the derived one; this settles that the endpoint it derives to is actually there.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-TMAP-001",
    "statement": "An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical.\n",
    "tier": "advisory",
@@ -4347,7 +4654,7 @@
    "tier": "procedural",
    "severity": "warning",
    "scope": "type-map",
-   "validator": null,
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4414,7 +4721,7 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "type-map",
-   "validator": null,
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_write_vocabulary_findings",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4487,6 +4794,26 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "Discovery resolves each native through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored, so this is a gap a bundle-aware check could close rather than an inherently unreachable one; today it means reading the endpoint's frozen type beside the rule.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-TMAP-022",
+   "statement": "A type map MUST NOT carry two rules an earlier one already resolves for — the same match kind over the same matcher, compared the way the reader compares it.\n",
+   "tier": "advisory",
+   "severity": "warning",
+   "scope": "type-map",
+   "validator": "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings",
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "Resolution is first-match-wins, so a repeated matcher makes every later copy unreachable — and unreachable is not inert, because the later copy is usually the one somebody added to fix the earlier one. The map then keeps rendering the old answer while carrying the new one in plain sight, which reads on the page as the fix having landed. Read `exact` matchers are compared after the same normalization the reader applies, so two spellings that differ only in case or spacing count as one rule here for the same reason they do at runtime. It warns rather than rejects because a map assembled from concatenated scopes can legitimately arrive with a repeat, which `RULE-TMAP-018` is what settles.\n",
    "status": "active",
    "superseded_by": null
   }

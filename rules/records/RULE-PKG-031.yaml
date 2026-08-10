@@ -1,0 +1,21 @@
+id: RULE-PKG-031
+statement: >
+  An endpoint document in a connector release MUST ship at
+  `endpoints/{endpoint_id}.json`, directly in that directory rather than in a
+  subdirectory of it.
+tier: referential
+severity: error
+scope: connector-package
+validator: "packages/validator/src/analitiq/validator/connectors.py::endpoint_filename_findings"
+owners: [connector-plugin, engine]
+rationale: >
+  The engine resolves an endpoint by id and reaches the file by its name, so a
+  document whose filename and `endpoint_id` disagree is unreachable under the id
+  every stream pins it by — and it is unreachable silently, because the file is
+  present and valid and the id it declares is fine. Nesting fails the same way:
+  the release gate reads the directory flat, so a document one level down is not
+  refused, it is simply never seen. Both are the kind of mistake a rename makes
+  and a review does not catch, because the two halves of the identity are never
+  on screen together.
+status: active
+superseded_by: null

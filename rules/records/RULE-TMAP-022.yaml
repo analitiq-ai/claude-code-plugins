@@ -1,0 +1,23 @@
+id: RULE-TMAP-022
+statement: >
+  A type map MUST NOT carry two rules an earlier one already resolves for —
+  the same match kind over the same matcher, compared the way the reader
+  compares it.
+tier: advisory
+severity: warning
+scope: type-map
+validator: "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings"
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  Resolution is first-match-wins, so a repeated matcher makes every later copy
+  unreachable — and unreachable is not inert, because the later copy is usually
+  the one somebody added to fix the earlier one. The map then keeps rendering
+  the old answer while carrying the new one in plain sight, which reads on the
+  page as the fix having landed. Read `exact` matchers are compared after the
+  same normalization the reader applies, so two spellings that differ only in
+  case or spacing count as one rule here for the same reason they do at
+  runtime. It warns rather than rejects because a map assembled from
+  concatenated scopes can legitimately arrive with a repeat, which
+  `RULE-TMAP-018` is what settles.
+status: active
+superseded_by: null
