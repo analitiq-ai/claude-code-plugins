@@ -130,42 +130,57 @@ def test_bound_rules_name_a_real_enforcer():
         assert not missing, f"{rule.id}: enforcer {enforcer!r} missing on {missing}"
 
 
-def _declared_validators() -> set[tuple[str, str]]:
-    """Every validator method pydantic runs on a contract model, by (class, name).
+def _declared_validators() -> set[tuple[str, str, str]]:
+    """Every validator pydantic runs on a contract model, by (module, class, name).
 
     Both decorator dicts, because both reject. Only `model_validators` was
     walked once, so `@field_validator` was a third door into the same house —
-    sixteen of them rejecting documents, none named by a record, and the sweep
+    validators rejecting documents that no record named, and the sweep
     reporting a clean census over the half it could see. The two are the same
     kind of thing to an author: something says no, and the finding should name
     the rule it broke.
+
+    The module is part of the key because a bare class name does not identify a
+    class here: `TemplateExpression` is declared by both the connector and the
+    endpoint module, and keyed by name alone the one carried the other's
+    record — a validator counted as registered by a rule about a different
+    document.
     """
-    declared: set[tuple[str, str]] = set()
+    declared: set[tuple[str, str, str]] = set()
     for cls in contract_classes():
         decorators = cls.__pydantic_decorators__
         for group in (decorators.model_validators, decorators.field_validators):
             for name, dec in group.items():
-                declared.add((dec.func.__qualname__.rsplit(".", 2)[-2], name))
+                declared.add(
+                    (
+                        dec.func.__module__,
+                        dec.func.__qualname__.rsplit(".", 2)[-2],
+                        name,
+                    )
+                )
     return declared
 
 
 #: Validator methods that are deliberately NOT registry rules. Keyed by
-#: (defining class, method name); the value says why. Anything else that
-#: raises on invalid input is a relational rule and belongs in the registry.
+#: (defining module, class, method name); the value says why. Anything else
+#: that raises on invalid input is a relational rule and belongs in the
+#: registry. The module is part of the key for the same reason it is part of
+#: the census key: a bare class name is not unique across contract modules, so
+#: exempting one would exempt its namesake in the other document too.
 EXEMPT_MODEL_VALIDATORS = {
-    ("ConnectorBase", "_inherit_transport_type"): (
+    ("analitiq.contracts.connector", "ConnectorBase", "_inherit_transport_type"): (
         "normalizer: stamps the transport_type discriminator onto transports "
         "entries before union dispatch; its raises only re-shape "
         "container-type errors the structural tier reports anyway"
     ),
-    ("RetryErrorHandlingBase", "_default_retry_delay"): (
+    ("analitiq.contracts.shared.common", "RetryErrorHandlingBase", "_default_retry_delay"): (
         "pure normalizer: injects the effective retry delay, never rejects"
     ),
-    ("_EndpointModel", "_reject_reserved_fields"): (
+    ("analitiq.contracts.endpoints", "_EndpointModel", "_reject_reserved_fields"): (
         "message-quality duplicate: the closed model (extra='forbid') already "
         "rejects the reserved keys; this validator only names the spec section"
     ),
-    ("PipelineRunStatusData", "_iso8601"): (
+    ("analitiq.contracts.pipelines.data_sync", "PipelineRunStatusData", "_iso8601"): (
         "pure normalizer: swaps a stored timestamp's space separator for `T` "
         "and passes a non-string straight through, so the declarative "
         "ISO_TS_PATTERN sees the normalized value and reports every rejection"
@@ -182,17 +197,24 @@ def test_every_model_validator_is_registered_or_exempt():
     some rule's enforcer or carry an explicit exemption above. A rule accounts
     for one either way:
 
-    * its `validator` names the defining class outright (`Owner.method`), which
-      is the exact statement and needs no lookup; or
-    * the enforcer name matches and the defining class sits in a target's MRO,
-      which is what lets one record cover a shared enforcer across every model
-      inheriting it, and what stops a same-named validator on an unrelated
-      class from satisfying it.
+    * its `validator` names the defining module and class outright
+      (`module::Owner.method`), which is the exact statement and needs no
+      lookup; or
+    * the enforcer name matches and the defining class sits in the MRO of a
+      target declared in that same module, which is what lets one record cover
+      a shared enforcer each document redeclares for itself, and what stops a
+      same-named validator on an unrelated class from satisfying it.
 
-    The first is why an ambiguous class name cannot silence the census.
-    `targets` binds by bare class name and two contract modules each declare a
-    `TemplateExpression`, so neither is nameable there — while the binding is a
-    dotted path and says exactly which one.
+    Neither half matches on a bare class name. `targets` binds by bare class
+    name and two contract modules each declare a `TemplateExpression`, so
+    neither is nameable there — and keyed that way, the connector's validator
+    was accounted for by the endpoint's record: the failure this census exists
+    to prevent, wearing the shape of a pass. The binding is a dotted path and
+    says which module; a target resolves to a class that knows its own.
+
+    The module bounds the second half rather than gating it, because a shared
+    enforcer is deliberately cross-module — the record binds one module's copy
+    and the identical method in four other documents is the same rule.
 
     The universe is the walked namespace package, not this module's hand-kept
     list, so a new contract module — and every same-named class, not just the
@@ -203,16 +225,20 @@ def test_every_model_validator_is_registered_or_exempt():
     for cls in walked:
         by_name.setdefault(cls.__name__, []).append(cls)
     unaccounted = []
-    for owner, name in sorted(_declared_validators()):
-        if (owner, name) in EXEMPT_MODEL_VALIDATORS:
+    for module, owner, name in sorted(_declared_validators()):
+        if (module, owner, name) in EXEMPT_MODEL_VALIDATORS:
             continue
         registered = any(
-            rule.validator_symbol == f"{owner}.{name}"
+            (
+                rule.validator_module == module
+                and rule.validator_symbol == f"{owner}.{name}"
+            )
             or (
                 rule.validator_symbol
                 and _enforcer_name(rule) == name
                 and any(
-                    owner in (a.__name__ for a in cls.__mro__)
+                    cls.__module__ == module
+                    and owner in (a.__name__ for a in cls.__mro__)
                     for t in rule.targets
                     for cls in by_name.get(t, ())
                 )
@@ -220,7 +246,7 @@ def test_every_model_validator_is_registered_or_exempt():
             for rule in all_rules()
         )
         if not registered:
-            unaccounted.append(f"{owner}.{name}")
+            unaccounted.append(f"{module}::{owner}.{name}")
     assert not unaccounted, (
         "validators that are no rule's enforcer and not exempt — give each a "
         "record in rules/records/ naming it as the `validator` (then run "
@@ -232,12 +258,12 @@ def test_every_model_validator_is_registered_or_exempt():
 def test_exemptions_name_live_validators():
     """The rot direction of the exemption table: an exemption whose validator
     is gone stays green forever, and silently exempts the next validator to
-    reuse the (class, method) name."""
+    reuse the (module, class, method) name."""
     walked = _declared_validators()
     stale = sorted(
-        f"{owner}.{name}"
-        for owner, name in EXEMPT_MODEL_VALIDATORS
-        if (owner, name) not in walked
+        f"{module}::{owner}.{name}"
+        for module, owner, name in EXEMPT_MODEL_VALIDATORS
+        if (module, owner, name) not in walked
     )
     assert not stale, f"exemptions naming no live validator: {stale}"
 

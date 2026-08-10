@@ -294,6 +294,17 @@ class RuleRecord:
     def validator_symbol(self) -> str | None:
         return self.validator.split("::", 1)[1] if self.validator else None
 
+    @property
+    def validator_module(self) -> str | None:
+        """The importable module half of the binding.
+
+        A symbol alone does not identify an enforcer: a bare class name can be
+        declared by more than one contract module, and `TemplateExpression` is.
+        Callers matching a record to a live method compare this too, or two
+        classes sharing a name share each other's records.
+        """
+        return self.validator.split("::", 1)[0] if self.validator else None
+
 
 # --- Loading ----------------------------------------------------------------
 

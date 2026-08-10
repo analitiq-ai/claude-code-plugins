@@ -198,13 +198,31 @@ def _census_dir_digest() -> dict[str, str]:
 
 
 def test_write_on_a_clean_census_is_a_byte_exact_noop():
+    """`write` on an already-current census changes nothing.
+
+    It runs against the real tree, because that is the census whose currency is
+    in question. So it puts the bytes back afterwards: on a census that is NOT
+    current, `write` restamps the moved hashes, and the ratchet those hashes
+    are — a wording change summons a reader to re-affirm the disposition —
+    would be satisfied by running the suite instead of by anyone reading the
+    sentence. Restoring makes this test observe the census rather than settle
+    it, and `test_census_hashes_match_live_prose` is left to report the drift.
+    """
+    census_dir = REPO_ROOT / "census" / "areas"
+    original = {path: path.read_bytes() for path in sorted(census_dir.glob("*.py"))}
+    assert original, f"{census_dir} holds no area files to protect"
     before = _census_dir_digest()
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT), "write"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "nothing to do" in result.stdout
-    assert _census_dir_digest() == before
+    try:
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "write"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "nothing to do" in result.stdout
+        assert _census_dir_digest() == before
+    finally:
+        for path, content in original.items():
+            if path.read_bytes() != content:
+                path.write_bytes(content)
