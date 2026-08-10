@@ -75,6 +75,15 @@ def _is_expression_node(value: Any) -> bool:
     return isinstance(value, dict) and any(k in value for k in _EXPRESSION_KEYS)
 
 
+def _is_expression(value: Any) -> bool:
+    """True when a value resolves as a value expression rather than recursing as
+    structural JSON. A bare string is the template form, so it resolves — and
+    drops — on the same terms as `{"template": ...}`; `iter_expression_strings`
+    dispatches identically, which is what keeps the validators reading the
+    grammar the resolver runs."""
+    return isinstance(value, str) or _is_expression_node(value)
+
+
 def iter_expression_strings(node: Any) -> Iterator[tuple[str, str]]:
     """Yield ``('ref'|'template', value)`` for every *resolvable* expression
     string in ``node``, mirroring ``resolve_template_deep``'s dispatch and
@@ -211,9 +220,10 @@ def _lookup_placeholder(key: str, context: dict[str, Any]) -> Any | None:
 def _has_unresolved_placeholder(template: str, context: dict[str, Any]) -> bool:
     """True when any `${...}` placeholder in `template` fails to resolve.
 
-    Lets the direct-template callers (URL, body) treat an unresolved
-    placeholder as a hard error / drop instead of silently substituting "",
-    using the same detection as `_resolve_function_input`.
+    One detection behind every caller that must refuse a partially resolved
+    string — a hard error for a request URL, a dropped field or header
+    everywhere else — so an unresolved placeholder never becomes "" on the
+    wire.
     """
     return any(
         _lookup_placeholder(m.group(1).strip(), context) is None
@@ -221,10 +231,32 @@ def _has_unresolved_placeholder(template: str, context: dict[str, Any]) -> bool:
     )
 
 
+def _resolve_template_or_none(template: Any, context: dict[str, Any]) -> Any | None:
+    """Resolve a template to its string, or None when a placeholder is missing.
+
+    None is what the caller drops on. Substituting "" for the missing half
+    would leave a string that is syntactically fine and semantically empty —
+    `"Bearer ${secrets.token}"` becoming `"Bearer "` — which the provider
+    accepts and answers about something else, spending the request before
+    anything can name the placeholder that was wrong.
+
+    A non-string reaches `resolve_template_string` unchanged so a malformed
+    `{"template": <non-string>}` still raises there rather than resolving to
+    None and being read as an ordinary miss.
+    """
+    if isinstance(template, str) and _has_unresolved_placeholder(template, context):
+        return None
+    return resolve_template_string(template, context)
+
+
 def resolve_template_string(template: str, context: dict[str, Any]) -> str:
     """Resolve `${ref.path}` and bare `${name}` tokens inside a string.
 
-    Unresolved placeholders substitute "" with a WARNING.
+    The substitution primitive: unresolved placeholders become "" with a
+    WARNING. Callers that put the result on the wire go through
+    `_resolve_template_or_none` or check `_has_unresolved_placeholder` first,
+    so that "" is reached only where the caller has established there is
+    nothing to miss.
     """
 
     def _sub(m: "re.Match[str]") -> str:
@@ -241,19 +273,17 @@ def resolve_template_string(template: str, context: dict[str, Any]) -> str:
 def resolve_template_deep(obj: Any, context: dict[str, Any]) -> Any:
     """Recursively resolve value expressions nested in dicts/lists.
 
-    Expression-form dicts (`template`/`function`/`literal`/`ref`) dispatch
-    through `resolve_value_expression` rather than serializing the raw
-    expression dict onto the wire. An expression node that resolves to None —
-    unresolved, or an authored `{"literal": null}`, which this layer cannot
-    tell apart — drops its dict field / list item with a WARNING, mirroring
-    how the header path drops an unresolved header. Plain structural
-    dicts/lists recurse, and non-string scalars (including authored JSON
-    nulls) are returned unchanged, so a JSON body keeps its native structure
-    and types.
+    Expressions — the object forms (`template`/`function`/`literal`/`ref`) and
+    bare strings, which are the template form — dispatch through
+    `resolve_value_expression` rather than serializing the raw expression dict
+    onto the wire. An expression that resolves to None — unresolved, or an
+    authored `{"literal": null}`, which this layer cannot tell apart — drops
+    its dict field / list item with a WARNING, mirroring how the header path
+    drops an unresolved header. Plain structural dicts/lists recurse, and
+    non-string scalars (including authored JSON nulls) are returned unchanged,
+    so a JSON body keeps its native structure and types.
     """
-    if isinstance(obj, str):
-        return resolve_template_string(obj, context)
-    if _is_expression_node(obj):
+    if _is_expression(obj):
         resolved = resolve_value_expression(obj, context)
         if resolved is None:
             # No enclosing field to drop here — without this line a missed
@@ -265,7 +295,7 @@ def resolve_template_deep(obj: Any, context: dict[str, Any]) -> Any:
     if isinstance(obj, dict):
         resolved_dict: dict[str, Any] = {}
         for key, value in obj.items():
-            if _is_expression_node(value):
+            if _is_expression(value):
                 resolved = resolve_value_expression(value, context)
                 if resolved is None:
                     LOG.warning(
@@ -280,7 +310,7 @@ def resolve_template_deep(obj: Any, context: dict[str, Any]) -> Any:
     if isinstance(obj, list):
         resolved_list: list[Any] = []
         for value in obj:
-            if _is_expression_node(value):
+            if _is_expression(value):
                 resolved = resolve_value_expression(value, context)
                 if resolved is None:
                     LOG.warning(
@@ -294,24 +324,6 @@ def resolve_template_deep(obj: Any, context: dict[str, Any]) -> Any:
     return obj
 
 
-def _resolve_function_input(value: Any, context: dict[str, Any]) -> Any | None:
-    """Resolve a function's `input` expression to a value or None (unresolved).
-
-    Template forms (bare strings or `{"template": ...}`) substitute "" for
-    unresolved placeholders, which would make the function encode garbage —
-    empty or partial (`"Bearer ${missing}"` → `"Bearer "`). Any placeholder
-    that fails to resolve marks the whole input unresolved. Placeholder-free
-    strings and `{"literal": ...}` are explicit values and pass through.
-    """
-    if isinstance(value, dict) and "template" in value:
-        template = value["template"]
-    else:
-        template = value
-    if isinstance(template, str) and _has_unresolved_placeholder(template, context):
-        return None
-    return resolve_value_expression(value, context)
-
-
 def resolve_function(spec: dict, context: dict[str, Any]) -> Any | None:
     """Resolve a registered value-expression function to a concrete value.
 
@@ -322,8 +334,8 @@ def resolve_function(spec: dict, context: dict[str, Any]) -> Any | None:
     name = spec.get("function")
     if name == "basic_auth":
         inp = spec.get("input") or {}
-        username = _resolve_function_input(inp.get("username"), context)
-        password = _resolve_function_input(inp.get("password"), context)
+        username = resolve_value_expression(inp.get("username"), context)
+        password = resolve_value_expression(inp.get("password"), context)
         if username is None or password is None:
             # A missing/typo'd credential input must drop the header (return
             # None) rather than send `Basic base64(":")` with partial/blank
@@ -336,7 +348,7 @@ def resolve_function(spec: dict, context: dict[str, Any]) -> Any | None:
         token = base64.b64encode(f"{username}:{password}".encode()).decode()
         return f"Basic {token}"
     if name == "base64_encode":
-        value = _resolve_function_input(spec.get("input"), context)
+        value = resolve_value_expression(spec.get("input"), context)
         if value is None:
             # An absent/typo'd/unresolvable input must drop the field (return
             # None) rather than silently encode "" — same rationale as
@@ -345,13 +357,13 @@ def resolve_function(spec: dict, context: dict[str, Any]) -> Any | None:
             return None
         return base64.b64encode(str(value).encode()).decode()
     if name == "url_encode":
-        value = _resolve_function_input(spec.get("input"), context)
+        value = resolve_value_expression(spec.get("input"), context)
         if value is None:
             LOG.warning("value-expression: url_encode dropped — unresolved input")
             return None
         return quote(str(value), safe=spec.get("safe", ""))
     if name == "lookup":
-        value = _resolve_function_input(spec.get("input"), context)
+        value = resolve_value_expression(spec.get("input"), context)
         if value is None:
             LOG.warning("value-expression: lookup dropped — unresolved input")
             return None
@@ -380,12 +392,15 @@ def resolve_value_expression(value: Any, context: dict[str, Any]) -> Any | None:
 
     Object forms: `{template}`, `{function}`, `{ref}`, `{literal}`. Returns
     None for an unresolvable/unsupported node so header/field callers can drop
-    it instead of emitting a raw dict. Dicts with none of the four recognised
-    keys also emit a WARNING before returning None.
+    it instead of emitting a raw dict, and a template holding a placeholder
+    that does not resolve is unresolvable on those same terms — the drop rule
+    is one rule over the whole grammar, not one the object forms obey and the
+    template form does not. Dicts bearing none of the recognised keys also
+    emit a WARNING before returning None.
     """
     if isinstance(value, dict):
         if "template" in value:
-            return resolve_template_string(value["template"], context)
+            return _resolve_template_or_none(value["template"], context)
         if "function" in value:
             return resolve_function(value, context)
         if "literal" in value:
@@ -395,7 +410,7 @@ def resolve_value_expression(value: Any, context: dict[str, Any]) -> Any | None:
         LOG.warning("value-expression: unrecognised object form (keys: %s)", list(value))
         return None
     if isinstance(value, str):
-        return resolve_template_string(value, context)
+        return _resolve_template_or_none(value, context)
     return value
 
 

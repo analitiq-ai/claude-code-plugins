@@ -18,6 +18,7 @@ import pytest
 from analitiq.contracts.value_expression import (
     OAUTH_TOKEN_PAYLOAD_KEY,
     apply_operation_content_type,
+    build_effective_headers,
     build_resolution_context,
     resolve_body_template,
     resolve_operation_url,
@@ -434,6 +435,113 @@ class TestResolveTemplateDeepExpressionNodes:
     def test_non_string_scalars_unchanged(self):
         body = {"count": 5, "active": True, "ratio": 1.5}
         assert resolve_template_deep(body, {}) == body
+
+
+class TestUnresolvedTemplateNeverReachesTheWire:
+    """A template holding an unresolved `${...}` drops its field, on every path.
+
+    The `ref` and `function` forms already did: an unresolvable input returns
+    None and the enclosing field, list item or header goes away. The template
+    form is the same expression grammar reaching the same wire, so it answers
+    the same way — a request is built from values the author addressed, or it
+    is built without them.
+
+    Partial substitution is what makes this worth pinning rather than an
+    empty one. `Bearer ${secrets.token}` over a missing token is a syntactically
+    fine Authorization header carrying no credential, and a body field of ""
+    is a value the provider will accept and act on. Both spend the request
+    before anything can tell the author which placeholder was wrong.
+    """
+
+    def test_header_from_a_bare_string_is_dropped(self):
+        headers = build_effective_headers(
+            {"headers": {"Authorization": "Bearer ${secrets.token}"}},
+            {"secrets": {}},
+            transport=None,
+            transport_defaults=None,
+        )
+        assert headers == {}
+
+    def test_header_from_a_template_node_is_dropped(self):
+        headers = build_effective_headers(
+            {"headers": {"Authorization": {"template": "Bearer ${secrets.token}"}}},
+            {"secrets": {}},
+            transport=None,
+            transport_defaults=None,
+        )
+        assert headers == {}
+
+    def test_a_resolvable_header_template_still_sends(self):
+        headers = build_effective_headers(
+            {"headers": {"Authorization": "Bearer ${secrets.token}"}},
+            {"secrets": {"token": "t0ken"}},
+            transport=None,
+            transport_defaults=None,
+        )
+        assert headers == {"Authorization": "Bearer t0ken"}
+
+    def test_a_dropped_header_does_not_unset_an_inherited_one(self):
+        # `_merge` skips a None-resolving value before touching the accumulator,
+        # so the transport's header survives an operation-level template that
+        # cannot resolve — the operation fails to override, it does not delete.
+        headers = build_effective_headers(
+            {"headers": {"Authorization": "Bearer ${secrets.token}"}},
+            {"secrets": {}},
+            transport={"headers": {"Authorization": "Bearer inherited"}},
+            transport_defaults=None,
+        )
+        assert headers == {"Authorization": "Bearer inherited"}
+
+    def test_json_body_field_from_a_bare_string_is_dropped(self):
+        payload = resolve_body_template(
+            '{"id": "${secrets.missing}", "n": 1}',
+            content_type="application/json",
+            context={},
+            label="test-op",
+        )
+        assert payload == {"n": 1}
+
+    def test_json_body_field_from_a_template_node_is_dropped(self):
+        payload = resolve_body_template(
+            '{"id": {"template": "${secrets.missing}"}, "n": 1}',
+            content_type="application/json",
+            context={},
+            label="test-op",
+        )
+        assert payload == {"n": 1}
+
+    def test_partial_substitution_drops_rather_than_truncating(self):
+        # The half that resolved is not the point: `Bearer ` is the shape the
+        # encode functions already refuse to build, for the same reason.
+        assert (
+            resolve_value_expression(
+                {"template": "Bearer ${secrets.token}"}, {"secrets": {}}
+            )
+            is None
+        )
+
+    def test_a_nested_body_field_is_dropped_not_its_parent(self):
+        payload = resolve_template_deep(
+            {"outer": {"keep": "static", "drop": "${secrets.missing}"}}, {}
+        )
+        assert payload == {"outer": {"keep": "static"}}
+
+    def test_a_list_item_is_dropped(self):
+        payload = resolve_template_deep(
+            {"scopes": ["read", "${secrets.missing}"]}, {}
+        )
+        assert payload == {"scopes": ["read"]}
+
+    def test_a_placeholder_free_string_is_untouched(self):
+        # Nothing to resolve is not the same as failing to resolve: a plain
+        # string is a template with no placeholders and passes through, and an
+        # empty string an author wrote stays a value.
+        assert resolve_template_deep({"a": "plain", "b": ""}, {}) == {"a": "plain", "b": ""}
+
+    def test_the_drop_is_logged_against_the_field(self, caplog):
+        with caplog.at_level("WARNING", logger="analitiq.contracts.value_expression"):
+            resolve_template_deep({"id": "${secrets.missing}"}, {})
+        assert any("dropping field 'id'" in r.getMessage() for r in caplog.records)
 
 
 class TestResolveValueExpressionPassthrough:
