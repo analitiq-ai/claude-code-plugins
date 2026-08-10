@@ -128,5 +128,10 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
   is some rule's enforcer or carries a written exemption, that a retired id is
   never reissued, and that each rule naming a `fixture_model` is rejected by its
   own invalid fixtures and by no other constraint.
+- `packages/validator/tests/test_check_registry_census.py` — the same
+  enforcer→registry direction over the other enforcement home: every check id
+  `analitiq.validator` registers is emitted by a function some record binds, or
+  carries a written exemption. The census above walks contract classes, so it
+  cannot see a cross-document check.
 - `tests/connector_builder/test_rule_reachability.py` — every id a plugin's
   prose cites is readable inside that plugin.
