@@ -1,8 +1,9 @@
 id: RULE-ENDP-039
 statement: >
   A write operation's `idempotency` MUST declare only where the provider's key
-  is placed, from the placement vocabulary `Idempotency.location` carries, and
-  MUST NOT carry anything that produces the key's value.
+  is placed, from the placement vocabulary `Idempotency.location` carries and
+  written under that field's `in` alias, and MUST NOT carry anything that
+  produces the key's value.
 tier: structural
 severity: error
 scope: api-endpoint

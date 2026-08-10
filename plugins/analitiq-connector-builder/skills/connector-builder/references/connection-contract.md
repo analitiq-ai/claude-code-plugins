@@ -25,7 +25,7 @@ input omitting any of them is rejected.
 |---|---|
 | `source` | Who supplies the value — the end user filling in the connection form, or the platform/admin provisioning it. |
 | `phase` | When the value has to be available. An input a transport references must declare a phase no later than that transport's first use (`RULE-CTOR-050`); `lifecycle-phases.md` walks the ordering. |
-| `storage` | Which durable store the resolved value lands in, and so the prefix of the reference path every other document targets. An input may only name a store the user supplies *into*: the post-auth stores are produced by `post_auth_outputs` (below), never collected as an input. |
+| `storage` | Which durable store the resolved value lands in, and so the prefix of the reference path every other document targets. An input may only name a store that is *collected* — filled in before or during auth, whoever supplies it. The post-auth stores are produced by `post_auth_outputs` (below), never collected as an input. |
 | `type` | The JSON value type used for validation and coercion. Not an Arrow type — that vocabulary describes data coming back from a resource, not configuration going in. |
 | `required` | Boolean — whether the input must resolve to a value before the connection can be used. |
 | `secret` | Boolean (default false). True if and only if `storage` is the secret store (`RULE-CONN-003`). |
@@ -71,14 +71,15 @@ context. Required fields per output:
   from an `options_request`, or a value read from a `discovery_request`.
 - `storage` — which durable store it lands in.
 - `type` — the value type the response field is coerced to.
-
-  `RULE-CTOR-022` carries the vocabulary for each of those fields, printed from
-  the live model in `rules.md`. Which pairings of `mode` and `storage` are legal, and
-  each mode's required and forbidden request fields, are `RULE-CTOR-002`.
 - `value_path` — the **response-extraction path**: the field read out of the
   `options_request` / `discovery_request` response (e.g. `"id"` for a
   selection option, `"company_domain"` for a discovery field). It is *not* the
   materialized reference path.
+
+`RULE-CTOR-022` carries the vocabulary for `mode`, `storage` and `type` alike,
+printed from the live model in `rules.md`. Which pairings of `mode` and
+`storage` are legal, and each mode's required and forbidden request fields, are
+`RULE-CTOR-002`.
 
 The durable reference path is **derived** as `storage` + `"."` + the output
 key — e.g. an output keyed `api_domain` with `storage: "connection.discovered"`

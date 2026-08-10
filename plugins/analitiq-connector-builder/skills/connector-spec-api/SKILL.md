@@ -57,8 +57,9 @@ What to read instead:
   likely to fail validation).
 - `spec-pagination.md` / `spec-replication.md` — choosing and wiring those
   blocks.
-- `connector-builder/references/rules.md` — the `api-endpoint`
-  cross-field rules, by id.
+- `connector-builder/references/rules.md` — every rule this plugin owns,
+  ordered by tier, each citable by id. Satisfy all of them: the Grades column
+  says which artifact a rule binds, and one graded `any` binds every document.
 
 ## What this skill does NOT cover
 

@@ -60,7 +60,7 @@ than edited.
 | RULE-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` | error | — |
 | RULE-ENDP-037 | A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags. | `api-endpoint` | error | — |
 | RULE-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | `api-endpoint` | error | `supported_methods`: `full_refresh`, `incremental` |
-| RULE-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries, and MUST NOT carry anything that produces the key's value. | `api-endpoint` | error | `in`: `header`, `body` |
+| RULE-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries and written under that field's `in` alias, and MUST NOT carry anything that produces the key's value. | `api-endpoint` | error | `in`: `header`, `body` |
 | RULE-ENDP-044 | A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null. | `api-endpoint` | warning | — |
 | RULE-ENDP-048 | An embedded request or response schema MUST be valid against the JSON Schema draft this contract is written in, and MUST NOT declare a different draft. | `api-endpoint` | error | — |
 | RULE-ENDP-049 | Every `${...}` placeholder in a template expression MUST begin with a declared resolution scope. | `api-endpoint` | error | — |
