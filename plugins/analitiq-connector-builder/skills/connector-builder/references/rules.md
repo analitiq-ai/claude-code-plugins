@@ -18,7 +18,7 @@ some are applied only at connect or run time. **Tier** is what kind of
 obligation a rule is, **Grades** the document it binds, **Severity** what a
 violation costs.
 
-Owned here: **58** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
+Owned here: **61** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
 
 
 ## Structural
@@ -64,6 +64,9 @@ than edited.
 | RULE-ENDP-044 | A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null. | `api-endpoint` | warning | — |
 | RULE-ENDP-048 | An embedded request or response schema MUST be valid against the JSON Schema draft this contract is written in, and MUST NOT declare a different draft. | `api-endpoint` | error | — |
 | RULE-ENDP-049 | Every `${...}` placeholder in a template expression MUST begin with a declared resolution scope. | `api-endpoint` | error | — |
+| RULE-ENDP-050 | A parameter MUST declare where it is sent on the request and what value type it carries using only the vocabulary `Param` declares for each; the placement is written under the field's `in` alias. | `api-endpoint` | error | `location`: `path`, `query`, `header`, `body` · `type`: `string`, `integer`, `number`, `boolean`, `array`, `object` |
+| RULE-ENDP-051 | A read operation's request MUST name its HTTP method from the vocabulary the read-request branches declare; which branch that method selects is what decides whether the request may carry a body, and that is RULE-ENDP-007. | `api-endpoint` | error | `method`: `GET`, `POST` |
+| RULE-ENDP-052 | A write mode's request MUST name its HTTP method from the vocabulary `WriteRequest.method` carries. | `api-endpoint` | error | `method`: `POST`, `PUT`, `PATCH` |
 | RULE-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — |
 | RULE-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — |
 | RULE-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — |

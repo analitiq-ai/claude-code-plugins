@@ -1,0 +1,23 @@
+id: RULE-ENDP-052
+statement: >
+  A write mode's request MUST name its HTTP method from the vocabulary
+  `WriteRequest.method` carries.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::WriteRequest.method"
+owners: [connector-plugin, engine]
+targets: [WriteRequest]
+fields: [method]
+mechanism: literal_enum
+rationale: >
+  A write mode names the operation a provider exposes for creating or updating
+  a record, and the vocabulary is the set of methods that carry a request body
+  to be created or updated with. The retrieval method is absent deliberately:
+  a provider route that writes through it is a route whose effect the engine
+  cannot distinguish from a read, and the mode-keyed map is what tells the
+  engine which of the two it is doing. An author reaching for one outside the
+  vocabulary has usually found a delete route, which the write modes do not
+  cover at all.
+status: active
+superseded_by: null

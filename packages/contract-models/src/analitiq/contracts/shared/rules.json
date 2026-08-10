@@ -2755,6 +2755,77 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-050",
+   "statement": "A parameter MUST declare where it is sent on the request and what value type it carries using only the vocabulary `Param` declares for each; the placement is written under the field's `in` alias.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::Param.location",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Param"
+   ],
+   "fields": [
+    "location",
+    "type"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The placement decides which part of the request the engine builds the value into, and it is also what every binding is matched against: a binding may only sit in the request slot its param's placement names, so the placement and the one legal binding site move together. An invented placement names no slot, and the value would simply be absent from the request the provider receives — an unfiltered or unscoped call rather than an error. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because one param can carry a value on both journeys. Each field's own closed set moves both failures to authoring time and publishes the admissible values in the JSON Schema, so nothing has to restate them.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-051",
+   "statement": "A read operation's request MUST name its HTTP method from the vocabulary the read-request branches declare; which branch that method selects is what decides whether the request may carry a body, and that is RULE-ENDP-007.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::GetReadRequest.method",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "GetReadRequest",
+    "PostReadRequest"
+   ],
+   "fields": [
+    "method"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "A read is a retrieval, so the admissible methods are the ones a provider documents for retrieving a collection — the second exists because some providers express a search read as a body-bearing POST. The method is the union's discriminator rather than a free string, so naming one outside the vocabulary selects no branch and the document is refused with a discriminator error instead of dispatching a request the engine has no shape for. Declaring it on the branches is also what lets the published schema forbid a body on the retrieval method structurally.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-052",
+   "statement": "A write mode's request MUST name its HTTP method from the vocabulary `WriteRequest.method` carries.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::WriteRequest.method",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "WriteRequest"
+   ],
+   "fields": [
+    "method"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "A write mode names the operation a provider exposes for creating or updating a record, and the vocabulary is the set of methods that carry a request body to be created or updated with. The retrieval method is absent deliberately: a provider route that writes through it is a route whose effect the engine cannot distinguish from a read, and the mode-keyed map is what tells the engine which of the two it is doing. An author reaching for one outside the vocabulary has usually found a delete route, which the write modes do not cover at all.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",

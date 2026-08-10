@@ -1,0 +1,28 @@
+id: RULE-ENDP-050
+statement: >
+  A parameter MUST declare where it is sent on the request and what value type
+  it carries using only the vocabulary `Param` declares for each; the placement
+  is written under the field's `in` alias.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::Param.location"
+owners: [connector-plugin, engine]
+targets: [Param]
+fields: [location, type]
+mechanism: literal_enum
+rationale: >
+  The placement decides which part of the request the engine builds the value
+  into, and it is also what every binding is matched against: a binding may
+  only sit in the request slot its param's placement names, so the placement
+  and the one legal binding site move together. An invented placement names no
+  slot, and the value would simply be absent from the request the provider
+  receives — an unfiltered or unscoped call rather than an error. The type
+  vocabulary is the request-input one, describing what the connector sends up,
+  and it is separate from the Arrow vocabulary describing what comes back;
+  they are easy to confuse precisely because one param can carry a value on
+  both journeys. Each field's own closed set moves both failures to authoring
+  time and publishes the admissible values in the JSON Schema, so nothing has
+  to restate them.
+status: active
+superseded_by: null

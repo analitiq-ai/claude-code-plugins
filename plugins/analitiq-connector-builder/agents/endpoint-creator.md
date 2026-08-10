@@ -78,14 +78,16 @@ was raised.
    are `request` and `response` (and inside `response`, both `records`
    and `schema` are required); `params`, `pagination`, `replication`
    are optional.
-   - `request.method` (`GET` or `POST`) and `request.path` — from
-     `endpoint_facts.method` / `endpoint_facts.path`.
+   - `request.method` and `request.path` — from `endpoint_facts.method` /
+     `endpoint_facts.path`. The methods a read may declare are `RULE-ENDP-051`;
+     the one that carries a body exists for providers whose search read is a
+     body-bearing POST, so reach for it only when the provider documents that.
    - `request.transport_ref` — only if not the default transport.
-   - `params` — declared operation inputs, each a `Param` with `in`
-     (`query` / `header` / `path` / `body`), `type` (the *request-input*
-     type, not an Arrow type), `required`, optional `default` (value
-     expression), `operators` for stream-filterable params, and
-     `controlled_by` when pagination / replication owns it.
+   - `params` — declared operation inputs, each a `Param` with `in` (where it
+     is sent) and `type` (the *request-input* type, not an Arrow type), both
+     drawn from the vocabularies `RULE-ENDP-050` prints; plus `required`,
+     optional `default` (value expression), `operators` for stream-filterable
+     params, and `controlled_by` when pagination / replication owns it.
    - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
      `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are
@@ -144,7 +146,8 @@ was raised.
    provider was asked to do. If a provider genuinely exposes a
    replace-the-collection operation, raise it as a contract gap rather than
    authoring around it. Each mode block holds:
-   - `request` (required) — `method` (`POST` / `PUT` / `PATCH`), `path`,
+   - `request` (required) — `method` (from the write vocabulary
+     `RULE-ENDP-052` prints, which is narrower than the read one), `path`,
      and the same optional `query` / `headers` / `path_params` / `body`
      / `transport_ref` keys as the read request — except that `path_params`
      diverges here (below). The **body must reference the record being

@@ -94,9 +94,10 @@ are not per-run inputs. Only the `stream`/`state`/`runtime` family is barred.
 
 ## Params carry the *request-input* type
 
-`params.<name>.type` is a JSON-style request-input type (`string`, `integer`,
-`number`, `boolean`, `array`, `object`) describing what is sent **up**. It is
-unrelated to `native_type` / `arrow_type`, which describe what comes **back** in
+`params.<name>.type` is a JSON-style request-input type describing what is sent
+**up** — the vocabulary is `RULE-ENDP-050`, which prints it beside the `in`
+placement vocabulary in `connector-builder/references/rules.md`. It is unrelated
+to `native_type` / `arrow_type`, which describe what comes **back** in
 `response.schema`. A timestamp sent as an ISO string is `type: "string"` even
 though the response field it filters is `Timestamp(...)`.
 
