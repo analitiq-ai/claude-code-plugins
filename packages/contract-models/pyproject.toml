@@ -50,15 +50,14 @@ packages = [
     "analitiq.contracts.shared",
 ]
 
-# The vendored engine-published Arrow type grammar manifest
-# (`arrow_grammar.py` loads it at import time to build ARROW_TYPE_PATTERN) —
-# must ship in the wheel or the installed package cannot import.
+# Every file the staged tree carries, with no per-file entry to keep in sync.
+# `scripts/build.py` stages from `git ls-files`, so tracking IS the decision to
+# publish — an untracked scratch file cannot reach a wheel, and a data file
+# somebody commits ships without a second declaration to remember. A file
+# listed here and absent from the staged tree is simply not matched.
+#
+# The release workflow proves the result against a real installed wheel:
+# `build.py` copies the tree whatever this says, so only an install shows what
+# the declaration actually kept.
 [tool.setuptools.package-data]
-"analitiq.contracts" = ["arrow_type_grammar.json"]
-# The compiled rule registry, rendered from `rules/records/*.yaml` by
-# `scripts/render_rules.py`. Read on first use rather than at import, and only
-# by `violation()`, so a wheel missing it imports and accepts a valid document
-# exactly like a correct one — then raises FileNotFoundError in place of the
-# finding, for the first document that breaks an in-process rule. The release
-# workflow's smoke test loads it explicitly for that reason.
-"analitiq.contracts.shared" = ["rules.json"]
+"*" = ["*"]

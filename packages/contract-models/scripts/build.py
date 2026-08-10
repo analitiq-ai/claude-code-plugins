@@ -76,14 +76,37 @@ def read_version() -> str:
     return tomllib.loads(PYPROJECT.read_text())["project"]["version"]
 
 
-def _is_staged(path: Path) -> bool:
-    """Whether `stage()` would copy this path (mirrors its ignore patterns)."""
-    return path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
+def tracked_files(root: Path) -> list[Path]:
+    """Every git-tracked file under `root` — exactly what `stage()` copies.
+
+    Tracking, not presence on disk, decides what ships. A tree filtered only by
+    `__pycache__` publishes whatever happens to be sitting in it when the build
+    runs — a merge `.orig`, a scratch dump, a parked `.env` — and a published
+    version is immutable, so a file that reaches PyPI can be yanked but never
+    removed. It is also where the decision belongs: `git add` puts the file in
+    a diff a reviewer reads, which a line in `pyproject.toml` does not.
+
+    This is what lets the wheel ship the whole tree without enumerating it.
+    """
+    listing = subprocess.run(
+        ["git", "-C", str(root), "ls-files", "-z", "--", "."],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    names = [name for name in listing.split("\0") if name]
+    if not names:
+        raise SystemExit(
+            f"build: git reports no tracked files under {root} — the package is "
+            "never empty, so this is a path that stopped matching or a tree "
+            "that is not a checkout, not a package with nothing in it"
+        )
+    return sorted(root / name for name in names)
 
 
 def _source_files() -> list[Path]:
     """Every Python module of the package — what the AST guards parse."""
-    return sorted(p for p in PKG_SRC.rglob("*.py") if _is_staged(p))
+    return [p for p in tracked_files(PKG_SRC) if p.suffix == ".py"]
 
 
 def dependency_guard() -> None:
@@ -147,18 +170,22 @@ def namespace_guard(dist_dir: Path) -> None:
 
 
 def stage(dist_dir: Path) -> None:
-    """Copy the source verbatim + metadata; generate only the DOMAIN-pinning
+    """Copy the tracked source + metadata; generate only the DOMAIN-pinning
     `__init__.py`. `pyproject.toml` lists the packages relative to the dist root,
-    so the tree is mirrored as-is."""
+    so the tree is mirrored as-is.
+
+    What is copied here is what the wheel ships: `package-data` keeps every file
+    the staged tree carries, so this selection — `tracked_files` — is the whole
+    decision, and no data file needs declaring one by one."""
     if dist_dir.exists():
         shutil.rmtree(dist_dir)
     dist_dir.mkdir(parents=True)
 
-    shutil.copytree(
-        SRC / "analitiq",
-        dist_dir / "analitiq",
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-    )
+    namespace_root = SRC / "analitiq"
+    for src_path in tracked_files(namespace_root):
+        dest = dist_dir / "analitiq" / src_path.relative_to(namespace_root)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dest)
     (dist_dir / "analitiq" / "contracts" / "__init__.py").write_text(
         _INIT_BANNER + _INIT_BODY
     )

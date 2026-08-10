@@ -482,27 +482,13 @@ def test_dangling_cross_ref_bound_fails_loudly():
         )
 
 
-def test_wheel_packaging_declares_the_vendored_manifest():
-    """`arrow_grammar.py` loads the JSON at import time, so the wheel MUST ship
-    it; the only thing putting it there is the pyproject package-data stanza.
-    Pin the declaration to the filename constant so neither can rot alone.
-    (The release workflow additionally installs the built wheel and imports
-    it — this is the offline half of that guard.)"""
-    import tomllib
-
-    pyproject = (
-        arrow_grammar._GRAMMAR_PATH.parents[3] / "pyproject.toml"
-    )
-    config = tomllib.loads(pyproject.read_text())
-    package_data = config["tool"]["setuptools"]["package-data"]
-    assert arrow_grammar.ENGINE_GRAMMAR_FILENAME in package_data.get(
-        "analitiq.contracts", []
-    ), (
-        "pyproject [tool.setuptools.package-data] must list "
-        f"{arrow_grammar.ENGINE_GRAMMAR_FILENAME} under 'analitiq.contracts' — "
-        "without it the published wheel cannot import"
-    )
+def test_the_vendored_manifest_is_where_the_loader_expects_it():
+    """`arrow_grammar.py` loads the JSON at import time, so a wheel without it
+    cannot import at all. That it SHIPS is settled by tracking — see
+    `test_wheel_packages.py` — and this pins the other half: the constant the
+    loader reads names the file the loader opens."""
     assert arrow_grammar._GRAMMAR_PATH.name == arrow_grammar.ENGINE_GRAMMAR_FILENAME
+    assert arrow_grammar._GRAMMAR_PATH.is_file()
 
 
 def test_cross_params_checks_literals_only():

@@ -42,3 +42,43 @@ def test_setuptools_package_list_matches_the_source_tree():
         "declared packages with no matching source directory (the build "
         f"would fail, or the list has rotted): {phantom}"
     )
+
+
+def test_every_data_file_under_src_is_tracked():
+    """A data file the wheel must ship has to be tracked, because tracking is
+    what stages it.
+
+    ``package-data`` keeps every file the staged tree carries and
+    ``scripts/build.py`` stages from ``git ls-files``, so nothing declares a
+    data file one by one — and the one way such a file goes missing from a wheel
+    is by never being committed. It is a quiet way to fail: the suite reads the
+    source tree, where the file is right there, so only a consumer on the code
+    path that opens it would notice. Python modules are covered by the package
+    list above; this is the rest of the tree.
+    """
+    import subprocess
+
+    listing = subprocess.run(
+        ["git", "-C", str(SRC), "ls-files", "-z", "--", "."],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    tracked = {SRC / name for name in listing.split("\0") if name}
+    on_disk = {
+        path
+        for path in SRC.rglob("*")
+        if path.is_file()
+        and path.suffix not in (".py", ".pyc")
+        and "__pycache__" not in path.parts
+    }
+    assert on_disk, (
+        f"{SRC} carries no data files at all — the vendored grammar and the "
+        "compiled rule registry both live here, so this is a path that stopped "
+        "matching rather than a tree with nothing in it"
+    )
+    untracked = sorted(str(p.relative_to(SRC)) for p in on_disk - tracked)
+    assert not untracked, (
+        "data files under src/ that the wheel would silently drop — the build "
+        f"stages tracked files only, so commit each of these: {untracked}"
+    )
