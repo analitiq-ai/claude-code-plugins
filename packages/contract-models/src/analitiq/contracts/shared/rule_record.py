@@ -20,12 +20,11 @@ single-tier registry unable to describe most of its own rules:
     What kind of rule it is: a shape, an agreement between fields, an agreement
     between artifacts, a procedure, a judgment.
 ``validator``
-    What applies the rule without a human deciding to — a code symbol, or a
-    ``.claude/rules/*.md`` document an agent loads, since the mechanism is not
-    always code. Absent means nothing here applies it, which is what
-    :attr:`RuleRecord.mechanized` reads. A rule is not a lesser rule for having
-    no validator — it is one whose enforcement lives where this repo cannot
-    reach.
+    What applies the rule without a human deciding to: the importable symbol
+    that rejects a violation. Absent means nothing here applies it, which is
+    what :attr:`RuleRecord.mechanized` reads. A rule is not a lesser rule for
+    having no validator — it is one whose enforcement lives where this repo
+    cannot reach.
 ``severity``
     What a violation costs.
 
@@ -141,12 +140,10 @@ class RuleRecord:
     severity: str
     scope: str
     rationale: str
-    #: What applies it — `dotted.module::Symbol.attr` for code, naming the
-    #: module that is imported so the value means the same thing here as it
-    #: does wherever this record is read; or a `.claude/rules/*.md` path for an
-    #: agent rule. Lint-resolved either way, so a renamed validator or a
-    #: deleted rules file fails the build instead of leaving a record claiming
-    #: an enforcement it lost.
+    #: What applies it: `dotted.module::Symbol.attr`, naming the module that is
+    #: imported so the value means the same thing here as it does wherever this
+    #: record is read. Lint-resolved, so a renamed validator fails the build
+    #: instead of leaving a record claiming an enforcement it lost.
     validator: str | None = None
     owners: tuple[str, ...] = ()
     status: str = "active"
@@ -227,23 +224,24 @@ class RuleRecord:
         unknown = [o for o in self.owners if o not in OWNERS]
         if unknown:
             self._fail(f"unknown owner(s) {unknown}; expected from {OWNERS}")
-        if self.validator and not (
-            self.validator.endswith(".md") or "::" in self.validator
-        ):
-            self._fail(
-                f"validator {self.validator!r} is neither "
-                "dotted.module::Symbol nor a .claude/rules/*.md path"
-            )
-        if self.validator and ".py" in self.validator:
-            # The binding names what is imported. A source path was the earlier
-            # form: it shipped in this package's rules.json pointing into a
-            # tree no consumer has, its left half was read by nothing, and the
-            # lint derived the module from it by slicing rather than by
-            # resolving — so a path that never existed resolved cleanly.
-            self._fail(
-                f"validator {self.validator!r} names a source path; bind the "
-                "module that is imported (analitiq.contracts.x::Symbol)"
-            )
+        if self.validator:
+            # The binding names what is IMPORTED, so the left half is a dotted
+            # identifier chain and nothing else. A path was the earlier form:
+            # it shipped in this package's rules.json pointing into a tree no
+            # consumer has, and the lint derived a module from it by slicing
+            # rather than by resolving — so a path that never existed resolved
+            # cleanly. Refusing every non-identifier module half refuses that
+            # whole shape, including a file extension, a separator, and a
+            # markdown document standing in for a mechanism.
+            dotted, separator, _ = self.validator.partition("::")
+            if not separator or not all(
+                part.isidentifier() for part in dotted.split(".")
+            ):
+                self._fail(
+                    f"validator {self.validator!r} is not "
+                    "dotted.module::Symbol — bind the module that is imported "
+                    "(analitiq.contracts.x::Symbol), never a path to a file"
+                )
         if self.status == "retired" and not self.superseded_by:
             self._fail(
                 "a retired rule names the id that replaced it — a retirement "
@@ -259,12 +257,11 @@ class RuleRecord:
     def mechanized(self) -> bool:
         """Whether anything applies this rule without a human deciding to.
 
-        Derived, because it was never a second fact: `validator` names what
-        applies the rule, in either form the binding takes — a code symbol, or
-        a `.claude/rules/*.md` document an agent loads — so "is it applied" is
-        "is that named". Authored, the two could only ever agree, which made
-        the field 215 chances to state the same thing twice and a lint whose
-        whole job was catching one of them typed wrong.
+        Derived, because it was never a second fact: `validator` names the
+        symbol that applies the rule, so "is it applied" is "is that named".
+        Authored, the two could only ever agree, which made the field one
+        chance per record to state the same thing twice and a lint whose whole
+        job was catching one of them typed wrong.
         """
         return bool(self.validator)
 

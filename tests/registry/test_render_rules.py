@@ -160,9 +160,36 @@ def test_an_unknown_owner_is_refused(registry):
     assert "marketing" in _refusal(registry)
 
 
-def test_a_validator_in_neither_binding_form_is_refused(registry):
+def test_a_validator_that_is_not_a_binding_is_refused(registry):
     _write(registry, validator='"ConnectorBase._validate"')
     assert "validator" in _refusal(registry)
+
+
+def test_a_validator_naming_a_source_path_is_refused(registry):
+    """The binding names what is imported, never a path standing in for it.
+
+    A path was the earlier form. It shipped into this package's `rules.json`
+    pointing at a tree no consumer has, and the lint reached the module by
+    slicing the string rather than resolving it — so a path that had never
+    existed produced an importable name and passed.
+    """
+    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase"')
+    assert "connector.py" in _refusal(registry)
+
+
+def test_a_validator_naming_a_prose_document_is_refused(registry):
+    """A document an agent reads is not a binding, even when the file exists.
+
+    The record ships to PyPI inside `rules.json`, where a repo path resolves
+    for nobody, and `mechanized` would then report an applied rule to a
+    consumer who cannot see, load or run the thing applying it. The rules an
+    agent applies reach it by being rendered into the plugin prose it loads,
+    which the plugin references and the reachability tests already keep
+    honest. The path below is a real tracked file, so what is refused is the
+    form and not a typo in it.
+    """
+    _write(registry, validator='".claude/rules/no-drift-surfaces.md"')
+    assert "no-drift-surfaces.md" in _refusal(registry)
 
 
 def test_a_retired_record_naming_no_successor_is_refused(registry):
@@ -220,24 +247,7 @@ def test_reissuing_an_id_retired_before_the_registry_is_refused(registry):
     assert retired in _refusal(registry)
 
 
-# --- What the validator binding refuses (_unresolved_validators) ------------
-
-
-def test_an_agent_rule_naming_a_missing_file_is_refused(registry):
-    _write(registry, validator='".claude/rules/no-such.md"')
-    assert "no-such.md" in _refusal(registry)
-
-
-def test_a_validator_naming_a_source_path_is_refused(registry):
-    """The binding names what is imported, never a path standing in for it.
-
-    A path was the earlier form. It shipped into this package's `rules.json`
-    pointing at a tree no consumer has, and the lint reached the module by
-    slicing the string rather than resolving it — so a path that had never
-    existed produced an importable name and passed.
-    """
-    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase"')
-    assert "source path" in _refusal(registry)
+# --- What resolving the validator binding refuses (_unresolved_validators) --
 
 
 def test_a_validator_outside_the_published_namespace_is_refused(registry):

@@ -32,7 +32,7 @@ this registry exists to remove (`.claude/rules/no-drift-surfaces.md`).
 | `tier` | yes | What *kind* of rule it is. See below. |
 | `severity` | yes | `error` \| `warning` \| `info`. What a violation costs — independent of what enforces it. |
 | `scope` | yes | The artifact kind it binds, from the vocabulary `SCOPES` declares in `analitiq.contracts.shared.rule_record` — one member per published resource, plus `any` for the rules that bind every authored document. A scope decides which block of a plugin's generated reference the rule lands in; who the rule is rendered *to* is `owners`. |
-| `validator` | no | What applies it: `dotted.module::Symbol.attr` for code, or a `.claude/rules/*.md` path for an agent rule. A code binding names the module that is **imported**, under `analitiq.`, never a source path standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. Lint-resolved either way — a renamed validator or a deleted rules file fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
+| `validator` | no | What applies it: `dotted.module::Symbol.attr`. It names the module that is **imported**, under `analitiq.`, never a path to a file standing in for one — the record ships in `rules.json`, where a repo path resolves for nobody, and a path is checked by slicing rather than by importing, so one that never existed passes. The module half must be a dotted identifier chain, which is how a path is refused whatever it ends in. It lands in one of two packages, decided by how much the check must see: a rule one document settles alone is a `@model_validator` in `contract-models`, and a rule needing a second document in hand is a check in `validator`, bound to the function that emits the finding. Lint-resolved by import, so a renamed validator fails the build instead of leaving a record claiming an enforcement it lost. `null` when nothing does. |
 | `owners` | yes | Who applies the rule and decides a change to it, as a list of `engine`, `connector-plugin`, `pipeline-plugin`. More than one is normal: a type map is authored by both plugins and executed by the engine. |
 | `targets` | no | Every model class the rule binds, matched against the whole MRO. Wider than `validator`, which names one representative symbol: a rule over a discriminated union lists every branch, and a rule with no validator still names the models it governs. Read by the enforcer census and the reachability tests, which require every one to carry the member `validator` names. |
 | `fields` | no | The model fields a structural rule's `mechanism` rides on, so the rendered reference can print the members off the live model instead of restating them. |
@@ -88,19 +88,24 @@ one whose enforcement lives somewhere this repo cannot reach.
 
 ## `validator` — what applies the rule
 
-The mechanism is not always code, so the binding takes either form, and the
-lint resolves both: a symbol must exist, a file must exist.
+The binding is an importable symbol, and the lint imports it.
 
 | `validator` | Means |
 |---|---|
 | a `module::Symbol` | code rejects a violation — a model validator, a field annotation, a class whose shape *is* the rule, or a cross-document check in `analitiq.validator` |
-| a `.claude/rules/*.md` | an agent rule applies it on every edit to the paths that file governs |
 | `null` | nothing here applies it; `rationale` says what would have to be read, and how far away that is |
+
+A prose document is not a second form of this. A record ships to PyPI inside
+`rules.json`, so a repo path in it resolves for nobody who reads it there, and
+`mechanized` would report an applied rule to a consumer who cannot see, load or
+run the thing applying it. The rules an agent applies reach that agent by being
+rendered into the plugin prose it loads, which is a mechanism the plugin
+references and `test_rule_reachability.py` already keep honest.
 
 `RuleRecord.mechanized` reads this and nothing else. It was an authored field
 once, and could only ever restate what `validator` already said — a record
-naming a mechanism is a record with one, in both forms — so it was one copy of
-that fact per record and a lint whose whole job was catching a copy typed wrong.
+naming a mechanism is a record with one — so it was one copy of that fact per
+record and a lint whose whole job was catching a copy typed wrong.
 
 One further word, **`descriptive`**, names prose that states no obligation an
 instance could violate. It is not a tier a record may take — such a sentence
@@ -119,9 +124,9 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
 ## Guards
 
 - `scripts/render_rules.py check` — validates every record against this schema,
-  resolves every `validator` binding (a code symbol against the live models, an
-  agent rule against the filesystem), refuses a duplicate or reissued id, and
-  fails when the compiled projection the wheel ships is stale.
+  imports every `validator` binding and resolves the symbol against the live
+  models and the live validator, refuses a duplicate or reissued id, and fails
+  when the compiled projection the wheel ships is stale.
 - `packages/contract-models/tests/unit/test_rule_registry.py` — what
   `render_rules.py` cannot see from a record alone: that every target carries
   the member `validator` names, that every model validator on a contract model

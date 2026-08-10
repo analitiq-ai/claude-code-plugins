@@ -138,15 +138,6 @@ def _unresolved_validators(records: list[RuleRecord]) -> list[str]:
     for record in records:
         if not record.validator:
             continue
-        if record.validator.endswith(".md"):
-            # An agent rule: the mechanism is a document an agent loads, so
-            # "does it resolve" is "does the file exist".
-            if not (REPO_ROOT / record.validator).is_file():
-                problems.append(
-                    f"{record.id}: validator names {record.validator}, which does "
-                    "not exist — the agent rule applying this rule is gone"
-                )
-            continue
         dotted, _, symbol = record.validator.partition("::")
         if not dotted.startswith(_ENFORCER_NAMESPACE):
             problems.append(
