@@ -332,7 +332,6 @@ class ConnectionInput(ConnectionAuthored, ConnectionStoredMaps):
     authored shape: each value goes in the bucket that says what it is.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
 
     connection_id: str | None = Field(
         default=None,

@@ -1422,7 +1422,6 @@ class StreamInput(StreamAuthored):
     service assigns one when the create payload omits it.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
 
     stream_id: str | None = Field(
         default=None,

@@ -409,7 +409,6 @@ class PipelineInput(PipelineAuthored):
     """
 
     model_config = ConfigDict(
-        populate_by_name=True,
         json_schema_extra=_ACTIVE_REQUIRES_STREAMS_RULE,
     )
 

@@ -182,12 +182,17 @@ class _EndpointModel(StrictModel):
     """
 
     model_config = ConfigDict(
-        populate_by_name=True,
         # Default `model_dump()` to wire-format names. Without this, dumps emit
         # Python attribute names (`schema_url`, `schema_`, `location`,
         # `and_`/`or_`/`not_`) and round-trip via `parse_endpoint(model.model_dump())`
         # would fail because none of those are valid spec keys.
         serialize_by_alias=True,
+        # `populate_by_name` is deliberately absent, here and on every contract
+        # model. It would make an aliased field accept its Python attribute name
+        # too, while the published schema admits only the alias under
+        # `additionalProperties: false` — so a document written that way passes
+        # here and is refused by every consumer of the published schema.
+        # `tests/unit/test_wire_name_policy.py` keeps it absent.
     )
 
     @model_validator(mode="before")
@@ -2282,7 +2287,6 @@ class Operations(_EndpointModel):
 
     model_config = ConfigDict(
         extra="forbid",
-        populate_by_name=True,
         serialize_by_alias=True,
         json_schema_extra={
             "additionalProperties": False,

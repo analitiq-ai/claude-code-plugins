@@ -1737,17 +1737,25 @@ class TestExtensionOnNestedDictsClosed:
 
 
 class TestPredicateConstruction:
-    def test_construct_via_python_attribute(self):
-        # populate_by_name=True permits Python attr names.
-        p = PredicateAnd(and_=[PredicateEq(eq=[1, 2]), PredicateMissing(missing={"ref": "response.body.next"})])
-        assert len(p.and_) == 2
+    def test_python_attribute_is_not_a_field_name(self):
+        """`and_` is the attribute; `and` is the field. Only one is authorable.
+
+        The predicate operators are the clearest case of the wire-name policy
+        (`test_wire_name_policy.py`): every one of them is a Python keyword, so
+        every one carries an alias, and accepting the trailing-underscore
+        spelling would admit a document the published schema rejects.
+        """
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            PredicateAnd(and_=[PredicateEq(eq=[1, 2])])
 
     def test_construct_via_alias(self):
         p = PredicateAnd(**{"and": [PredicateEq(eq=[1, 2]), PredicateEq(eq=[3, 4])]})
         assert len(p.and_) == 2
 
     def test_predicate_round_trip_by_default_dump(self):
-        p = PredicateNot(not_=PredicateMissing(missing={"ref": "response.body.next"}))
+        # Constructed under the wire name, which is the only one accepted; the
+        # assertion is about serialization, which is a separate config.
+        p = PredicateNot(**{"not": PredicateMissing(missing={"ref": "response.body.next"})})
         # serialize_by_alias=True default → dump uses wire-format `not`/`missing`.
         assert "not" in p.model_dump()
         assert "not_" not in p.model_dump()

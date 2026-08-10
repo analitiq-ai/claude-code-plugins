@@ -361,7 +361,6 @@ class CorruptedPlaceholderBase(StrictModel):
     Resource placeholders subclass this with their identity fields.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
 
     corrupted: Literal[True] = Field(
         alias="_corrupted",
