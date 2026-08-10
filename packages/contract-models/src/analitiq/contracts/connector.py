@@ -77,9 +77,9 @@ def _reject_unqualified(node: Any, where: str) -> None:
         raise ValueError(
             f"{where}: {', '.join(sorted(set(unqualified)))} "
             f"names no resolution scope ({', '.join(RESOLUTION_SCOPES)}); "
-            "an unqualified token is resolved by a flat lookup over `secrets` "
-            "and the context root, which is how a value nobody addressed "
-            "reaches the wire (spec: §Value Expressions)"
+            "without one the value read is whatever the resolver finds under "
+            "that bare name, or an error naming no placeholder — say where it "
+            "comes from (spec: §Value Expressions)"
         )
 # Host-tolerant matcher for the `$schema` field: a connector authored against
 # the canonical `schemas.analitiq.ai` URL must still validate when the engine
@@ -866,7 +866,7 @@ is exclusive to `lookup`.
 # published pattern, and not for a template, where it is a property of each
 # `${...}` the string contains rather than of the string: asserting it needs a
 # negative lookahead, which pydantic-core's regex engine rejects, so it would
-# publish a pattern the model could not run. `_placeholders_qualified` is
+# publish a pattern the model could not run. `_expressions_qualified` is
 # therefore the complete gate for a template — the validator, not `latest.json`.
 
 

@@ -971,7 +971,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The binding is the only path by which connection state reaches the DSN, so a shape outside the grammar does not degrade into a literal — it resolves to nothing and the DSN renders with a hole where the host or the credential belonged. `DsnBinding.value` is typed open so any object passes the models here, and the failure surfaces only when the engine builds the DSN.\n",
+   "rationale": "The binding is the only path by which connection state reaches the DSN, so a shape outside the grammar does not degrade into a literal — it resolves to nothing and the DSN renders with a hole where the host or the credential belonged. `DsnBinding.value` is typed `Any`, and the only thing the models read inside it is the leading scope of each ref and placeholder (RULE-CTOR-057), so an object outside the grammar carries no token to check and passes — the failure surfaces when the engine builds the DSN.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1196,7 +1196,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The scope a value is read from is what decides whether it is stored encrypted and kept out of logs, so routing a password through `connection.parameters` — or parking one in the open `options` map because discovery needed credentials of its own — does not merely mislabel the value, it exposes it wherever connection state is persisted or printed, and the connector works perfectly meanwhile. Known enforcement gap: `ConnectionStoredMaps._validate_no_secret_keys` (RULE-CONN-004) runs the secret-shaped-key detector on the connection document only, and nothing inspects `DsnBinding.value` or the free-form `ResourceDiscovery.options` in the connector document.\n",
+   "rationale": "The scope a value is read from is what decides whether it is stored encrypted and kept out of logs, so routing a password through `connection.parameters` — or parking one in the open `options` map because discovery needed credentials of its own — does not merely mislabel the value, it exposes it wherever connection state is persisted or printed, and the connector works perfectly meanwhile. Known enforcement gap: `ConnectionStoredMaps._validate_no_secret_keys` (RULE-CONN-004) runs the secret-shaped-key detector on the connection document only. Nothing runs it over the connector document: `DsnBinding.value` is walked for the leading scope of each ref and placeholder (RULE-CTOR-057) and for nothing else, and the free-form `ResourceDiscovery.options` is not walked at all — so which scope a value is read from goes unchecked in both.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1365,7 +1365,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The same encoding function is the right answer for URL components an author builds by hand in a template, so reaching for it inside a binding feels consistent and doubles the encoding — the DSN stays well-formed and carries a credential the server rejects, which reads as a bad secret rather than a bad binding. Known enforcement gap: `DsnBinding.value` is an untyped expression that nothing walks for function calls, so the double encoding is invisible until the DSN is built — unlike the equivalent path_params rule (RULE-ENDP-027), which has an enforcer.\n",
+   "rationale": "The same encoding function is the right answer for URL components an author builds by hand in a template, so reaching for it inside a binding feels consistent and doubles the encoding — the DSN stays well-formed and carries a credential the server rejects, which reads as a bad secret rather than a bad binding. Known enforcement gap: the walk over `DsnBinding.value` reads the leading scope of each ref and placeholder (RULE-CTOR-057) and never which function a node names, so the double encoding is invisible until the DSN is built — unlike the equivalent path_params rule (RULE-ENDP-027), which has an enforcer.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -1428,7 +1428,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same resolver from `base_url`, transport headers and DSN bindings. What made the gap worth closing rather than noting is where an unqualified token goes: the resolver falls back to a flat lookup over `secrets` and then the context root, so a bare `${token}` finds whatever is stored under that name. On a transport that is the whole surface at once — a base URL and a default header apply to every request made through it — so one unscoped token can put a credential the author never addressed into all of them, and the request still looks well formed on the way out. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles.\n",
+   "rationale": "The API-endpoint document has required this of its own expressions since it grew typed models for them, and the connector document feeds the same grammar from `base_url`, transport headers and DSN bindings. What made the gap worth closing rather than noting is that a transport is the whole surface at once: a base URL and a default header apply to every request made through it, so one unscoped token reaches all of them rather than one operation. Where it then goes depends on which resolver reads the document — one takes the bare name as a top-level context key and falls back to `secrets`, substituting whatever is stored under that name into a request that still looks well formed; the other refuses a scope it does not know and raises. Neither names the placeholder to the connector's author. The leading token is the only part a document can be held to; whether anything ever produces a value at the rest of the path is a phase question the runtime settles.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2746,7 +2746,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "An unqualified placeholder is not refused at runtime, and the two ways it can go are both quiet. The resolver falls back to a flat lookup — `secrets` first, then the top of the context — so `${token}` finds whatever happens to be stored under that bare name, which is how a credential reaches a header or a URL nobody addressed it to. When the fallback finds nothing instead, the field it sits in is dropped and the request goes out without it, leaving a warning in an engine log the author of the endpoint does not read. The scope prefix is what says where a value comes from, so omitting it is not shorthand for a default: there is no default, only a search. Refusing the document is where the mistake is still attached to the line that made it.\n",
+   "rationale": "The scope prefix is what says where a value comes from, so omitting it is not shorthand for a default: there is no default, only a search. What that search does depends on which resolver reads the document, and the two that do disagree — one takes the bare name as a top-level context key and falls back to `secrets`, so `${token}` may quietly pick up whatever is stored under that name and paste it into a header or a URL nobody addressed it to; the other knows no such lookup and raises on a scope it does not recognise, which in request building escapes as an unclassified error. An author cannot tell from the document which they will get. Refusing it here is where the mistake is still attached to the line that made it.\n",
    "status": "active",
    "superseded_by": null
   },

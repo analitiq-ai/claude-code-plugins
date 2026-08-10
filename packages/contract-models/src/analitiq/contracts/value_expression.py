@@ -13,9 +13,11 @@ Context shape (nested, scoped — never a flat merge):
         "runtime": {"oauth": {...}, ...},
     }
 
-`${a.b.c}` placeholders walk this nested structure; bare `${name}` falls back
-to a flat lookup in `secrets` then the top-level context (the legacy shape
-some connector specs still use).
+`${a.b.c}` placeholders walk this nested structure. A bare `${name}` addresses
+no scope, so the walk reads it as a top-level key and falls back to `secrets`
+only when the context root has nothing under that name — the legacy shape some
+connector specs still use, and the reason RULE-ENDP-049 and RULE-CTOR-057
+refuse to author a new one.
 
 `build_resolution_context` assembles this shape from a stored connection
 record and its resolved secret set; the `auth` scope is the opaque OAuth
@@ -229,8 +231,11 @@ def resolve_path(path: str, context: dict[str, Any]) -> Any | None:
 def _lookup_placeholder(key: str, context: dict[str, Any]) -> Any | None:
     """Resolve a single `${...}` placeholder key, or None when unresolved.
 
-    Dotted refs walk the nested context; bare names fall back to a flat
-    lookup of `context['secrets']` then the top-level context.
+    Dotted refs walk the nested context. A bare name has no scope to walk
+    into, so `resolve_path` reads it as a top-level key first; `secrets` is
+    the fallback, consulted only when the context root holds nothing under
+    that name. Order matters to anyone reasoning about what an unscoped token
+    picks up: the root wins, not `secrets`.
     """
     val = resolve_path(key, context)
     if val is not None:

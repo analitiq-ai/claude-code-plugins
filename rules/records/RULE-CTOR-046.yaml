@@ -18,8 +18,10 @@ rationale: >
   value, it exposes it wherever connection state is persisted or printed, and
   the connector works perfectly meanwhile. Known enforcement gap:
   `ConnectionStoredMaps._validate_no_secret_keys` (RULE-CONN-004) runs the
-  secret-shaped-key detector on the connection document only, and nothing
-  inspects `DsnBinding.value` or the free-form `ResourceDiscovery.options` in
-  the connector document.
+  secret-shaped-key detector on the connection document only. Nothing runs it
+  over the connector document: `DsnBinding.value` is walked for the leading
+  scope of each ref and placeholder (RULE-CTOR-057) and for nothing else, and
+  the free-form `ResourceDiscovery.options` is not walked at all — so which
+  scope a value is read from goes unchecked in both.
 status: active
 superseded_by: null

@@ -13,9 +13,10 @@ rationale: >
   builds by hand in a template, so reaching for it inside a binding feels
   consistent and doubles the encoding — the DSN stays well-formed and carries
   a credential the server rejects, which reads as a bad secret rather than a
-  bad binding. Known enforcement gap: `DsnBinding.value` is an untyped
-  expression that nothing walks for function calls, so the double encoding is
-  invisible until the DSN is built — unlike the equivalent path_params rule
-  (RULE-ENDP-027), which has an enforcer.
+  bad binding. Known enforcement gap: the walk over `DsnBinding.value` reads
+  the leading scope of each ref and placeholder (RULE-CTOR-057) and never
+  which function a node names, so the double encoding is invisible until the
+  DSN is built — unlike the equivalent path_params rule (RULE-ENDP-027), which
+  has an enforcer.
 status: active
 superseded_by: null

@@ -3,18 +3,24 @@
 The API-endpoint document has enforced this since it grew typed expression
 models: a `ref` carries a published pattern, and a template's placeholders are
 checked against the same vocabulary. The connector document feeds the *same*
-resolver from `base_url`, transport headers and DSN bindings, and checked none
+grammar from `base_url`, transport headers and DSN bindings, and checked none
 of it — so the two halves of one grammar disagreed about what they accepted.
 
-What an unqualified token costs is not a failure to resolve. `_lookup_placeholder`
-falls back to a flat lookup in `secrets`, then the top of the context, so
-`${token}` finds whatever is stored under that bare name. On a transport that
-is worse than on an operation: `base_url` and `headers` apply to every request
-the transport makes, so one unqualified token puts a credential the author
-never addressed into all of them.
+What an unqualified token costs is not a failure to resolve, and it is not one
+thing: the resolvers that read this document disagree. One reads the bare name
+as a top-level context key and falls back to `secrets`, so `${token}` picks up
+whatever is stored under that name; the other raises on a scope it does not
+know. On a transport either is worse than on an operation, because `base_url`
+and `headers` apply to every request the transport makes.
 
 These pin both directions — the scoped form still authors — because a check
 that only ever rejects is one nobody can tell from a broken one.
+
+They do NOT cover every site the rule states. `RULE-CTOR-057` is written over
+every expression a connector authors; the models check the transport's two
+fields, a DSN binding and a rate-limit window. The auth-exchange templates and
+`TransportDefaults.headers` are open, and that gap is tracked as a coverage
+defect, not as a decision.
 """
 from __future__ import annotations
 

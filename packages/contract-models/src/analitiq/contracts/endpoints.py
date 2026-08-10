@@ -246,11 +246,11 @@ class TemplateExpression(_EndpointModel):
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
         # Every `${...}` placeholder must begin with a known resolution scope.
-        # An unqualified `${name}` is not refused at runtime: the resolver falls
-        # back to a flat lookup — `secrets`, then the top of the context — so it
-        # either finds whatever is stored under that bare name and substitutes
-        # it, or finds nothing and the field it sits in is dropped from the
-        # request. Neither outcome names the placeholder to the author.
+        # An unqualified `${name}` is not refused by every runtime that reads
+        # this document: one takes the bare name as a top-level context key and
+        # falls back to `secrets`, substituting whatever is stored under it,
+        # while the other raises on a scope it does not know. Neither names the
+        # placeholder to the author of the endpoint.
         # Placeholders are parsed by the shared resolver grammar
         # (`template_placeholders`), so this agrees with the resolver by
         # construction. Model-enforced only — not a published JSON-Schema

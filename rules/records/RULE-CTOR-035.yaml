@@ -12,7 +12,9 @@ rationale: >
   The binding is the only path by which connection state reaches the DSN, so
   a shape outside the grammar does not degrade into a literal — it resolves
   to nothing and the DSN renders with a hole where the host or the credential
-  belonged. `DsnBinding.value` is typed open so any object passes the models
-  here, and the failure surfaces only when the engine builds the DSN.
+  belonged. `DsnBinding.value` is typed `Any`, and the only thing the models
+  read inside it is the leading scope of each ref and placeholder
+  (RULE-CTOR-057), so an object outside the grammar carries no token to check
+  and passes — the failure surfaces when the engine builds the DSN.
 status: active
 superseded_by: null

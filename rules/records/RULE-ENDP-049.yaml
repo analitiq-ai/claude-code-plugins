@@ -8,15 +8,15 @@ scope: api-endpoint
 validator: "analitiq.contracts.endpoints::TemplateExpression._placeholders_qualified"
 owners: [connector-plugin]
 rationale: >
-  An unqualified placeholder is not refused at runtime, and the two ways it
-  can go are both quiet. The resolver falls back to a flat lookup — `secrets`
-  first, then the top of the context — so `${token}` finds whatever happens to
-  be stored under that bare name, which is how a credential reaches a header
-  or a URL nobody addressed it to. When the fallback finds nothing instead,
-  the field it sits in is dropped and the request goes out without it, leaving
-  a warning in an engine log the author of the endpoint does not read. The
-  scope prefix is what says where a value comes from, so omitting it is not
-  shorthand for a default: there is no default, only a search. Refusing the
-  document is where the mistake is still attached to the line that made it.
+  The scope prefix is what says where a value comes from, so omitting it is
+  not shorthand for a default: there is no default, only a search. What that
+  search does depends on which resolver reads the document, and the two that
+  do disagree — one takes the bare name as a top-level context key and falls
+  back to `secrets`, so `${token}` may quietly pick up whatever is stored
+  under that name and paste it into a header or a URL nobody addressed it to;
+  the other knows no such lookup and raises on a scope it does not recognise,
+  which in request building escapes as an unclassified error. An author
+  cannot tell from the document which they will get. Refusing it here is
+  where the mistake is still attached to the line that made it.
 status: active
 superseded_by: null

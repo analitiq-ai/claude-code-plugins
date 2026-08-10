@@ -48,8 +48,8 @@ REFERENTIAL_TIER = "referential"
 PROCEDURAL_TIER = "procedural"
 JUDGMENT_TIER = "judgment"
 
-#: The tiers a record may take. ``descriptive`` is the sixth name in the
-#: vocabulary and is deliberately absent here: prose that states no obligation
+#: The tiers a record may take. ``descriptive`` is in the vocabulary and is
+#: deliberately absent here: prose that states no obligation
 #: has no rule to register, so a record claiming it is refused rather than
 #: stored (see :meth:`RuleRecord._validate`). The name exists in `SCHEMA.md` so
 #: "this states nothing" stays a verdict someone writes down instead of a
@@ -103,11 +103,11 @@ SCOPES = (
 #: model: `literal_enum` says the members ARE the rule, so print them.
 #:
 #: The distinction is not derivable, which is why an author writes it down.
-#: `Schedule.type` is a `Literal` with a default, and a rule about omitting
-#: fields that default reads `default` while a rule about the legal values of
-#: `encoding` reads `literal_enum` — same shape in the model, opposite answers.
-#: Deriving from the annotation would print a vocabulary that is true and
-#: beside the point.
+#: `Schedule.type` is a `Literal` with a default, so a rule about the legal
+#: values it declares and a rule about omitting fields that default read the
+#: same annotation and want opposite answers — `literal_enum` for the first,
+#: `default` for the second. Deriving from the annotation would print a
+#: vocabulary that is true and beside the point.
 MECHANISMS = (
     "literal_enum",
     "discriminated_union",
@@ -148,9 +148,18 @@ RFC2119 = ("MUST NOT", "MUST", "SHOULD NOT", "SHOULD", "MAY NOT", "MAY")
 class RuleRecord:
     """One rule, as authored in `rules/records/<id>.yaml`.
 
-    Field meanings are `rules/SCHEMA.md`; this class is where they are
-    enforced. Construction is the only gate — a record that reaches tooling has
-    already been checked, so no consumer re-validates.
+    Field meanings are `rules/SCHEMA.md`; this class is where the ones a record
+    settles ALONE are enforced — shapes, closed vocabularies, and the internal
+    agreements between its own fields. Construction is the gate for those, so
+    no consumer re-checks them.
+
+    What a record cannot settle alone is checked by `scripts/render_rules.py`
+    when it compiles the registry: that the filename matches the id, that no id
+    repeats or reissues a retired one, that the binding names a symbol inside
+    `analitiq.`, and that the symbol resolves against the live models and
+    validator. Those run at build time and not when the wheel loads
+    `rules.json`, so a record read back from the compiled copy has been through
+    this class only.
     """
 
     id: str
