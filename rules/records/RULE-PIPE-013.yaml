@@ -5,7 +5,7 @@ statement: >
 tier: referential
 severity: error
 scope: pipeline
-validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_version_conflicts"
+validator: "analitiq.validator.pipelines::_check_connection_version_conflicts"
 owners: [pipeline-plugin, engine]
 rationale: >
   Connections resolve by base id, so pinning one version as the source and

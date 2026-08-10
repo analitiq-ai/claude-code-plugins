@@ -5,7 +5,7 @@ statement: >
 tier: structural
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase.connector_id"
+validator: "analitiq.contracts.connector::ConnectorBase.connector_id"
 owners: [connector-plugin, engine]
 targets: [ConnectorBase]
 fields: [connector_id]

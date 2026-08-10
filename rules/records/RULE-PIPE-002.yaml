@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: pipeline
-validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule._validate_schedule_fields"
+validator: "analitiq.contracts.pipelines.config::Schedule._validate_schedule_fields"
 owners: [pipeline-plugin]
 targets: [Schedule]
 rationale: >

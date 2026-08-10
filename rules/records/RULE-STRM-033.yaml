@@ -6,7 +6,7 @@ statement: >
 tier: referential
 severity: error
 scope: stream
-validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_connection_roles"
+validator: "analitiq.validator.pipelines::_check_stream_connection_roles"
 owners: [pipeline-plugin, engine]
 rationale: >
   The pipeline decides which connection is read from and which are written to;

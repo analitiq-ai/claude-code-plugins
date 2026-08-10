@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: api-endpoint
-validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ColumnFieldSpec._validate_container_shape"
+validator: "analitiq.contracts.endpoints::ColumnFieldSpec._validate_container_shape"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ColumnFieldSpec]
 rationale: >

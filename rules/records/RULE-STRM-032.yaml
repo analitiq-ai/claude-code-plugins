@@ -4,7 +4,7 @@ statement: >
 tier: referential
 severity: error
 scope: stream
-validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_parent_pipeline"
+validator: "analitiq.validator.pipelines::_check_stream_parent_pipeline"
 owners: [pipeline-plugin, engine]
 rationale: >
   The parent is immutable and it is what gives a stream its run context — the

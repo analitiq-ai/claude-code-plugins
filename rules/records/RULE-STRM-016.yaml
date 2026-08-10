@@ -5,7 +5,7 @@ statement: >
 tier: structural
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::DatabaseKeylessWrite"
+validator: "analitiq.contracts.stream::DatabaseKeylessWrite"
 owners: [pipeline-plugin]
 targets: [DatabaseKeylessWrite, DatabaseConflictKeyedWrite, ApiWrite]
 mechanism: discriminated_union

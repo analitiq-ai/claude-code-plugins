@@ -6,7 +6,7 @@ statement: >
 tier: referential
 severity: error
 scope: connector-package
-validator: "packages/validator/src/analitiq/validator/connectors.py::endpoint_filename_findings"
+validator: "analitiq.validator.connectors::endpoint_filename_findings"
 owners: [connector-plugin, engine]
 rationale: >
   The engine resolves an endpoint by id and reaches the file by its name, so a

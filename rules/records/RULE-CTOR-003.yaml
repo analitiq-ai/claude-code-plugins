@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryImplementation._entrypoint_matches_type"
+validator: "analitiq.contracts.connector::ResourceDiscoveryImplementation._entrypoint_matches_type"
 owners: [engine, connector-plugin]
 targets: [ResourceDiscoveryImplementation]
 rationale: >

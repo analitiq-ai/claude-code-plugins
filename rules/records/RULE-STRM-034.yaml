@@ -5,7 +5,7 @@ statement: >
 tier: referential
 severity: error
 scope: stream
-validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_scoped_endpoints"
+validator: "analitiq.validator.pipelines::_check_connection_scoped_endpoints"
 owners: [pipeline-plugin, engine]
 rationale: >
   A connection-scoped reference is keyed by the connection and the endpoint

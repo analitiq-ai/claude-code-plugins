@@ -7,12 +7,16 @@ package ships and loaded by :mod:`rule_record`. This module exposes them —
 enforcer :func:`violation`, so a rejection arrives naming the rule its prose
 cites.
 
-**Enforcement is ordinary Python.** A rule a model rejects in-process is a
-``@model_validator`` on that model, named by the record's ``validator`` and
-resolved against the live class by ``render_rules.py``. There is no data-driven
+**Enforcement is ordinary Python**, in one of two places depending on how much
+a check must see. A rule one document settles on its own is a
+``@model_validator`` on that model. A rule needing a second document in hand —
+a sibling type map, the connector an endpoint ships beside, the streams an
+assembled run pins — is a check in ``analitiq.validator``. Either way the
+record's ``validator`` names the module that is imported and the symbol on it,
+resolved against the live code by ``render_rules.py``. There is no data-driven
 dispatch: a rule is applied by a symbol that exists or by nothing at all, and
-the record cannot claim a third thing. Every other tier is enforced somewhere
-else entirely, or nowhere, and the record says which.
+the record cannot claim a third thing. A tier neither package enforces is
+applied somewhere else entirely, or nowhere, and the record says which.
 
 A rule binding several models that share a shape is a mixin here, so the check
 is written once and every target inherits it.

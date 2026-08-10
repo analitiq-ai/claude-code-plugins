@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_filter_operator_scope"
+validator: "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope"
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]
 rationale: >

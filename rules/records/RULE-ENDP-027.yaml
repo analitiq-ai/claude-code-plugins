@@ -5,7 +5,7 @@ statement: >
 tier: structural
 severity: error
 scope: api-endpoint
-validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring"
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation, WriteOperation]
 rationale: >

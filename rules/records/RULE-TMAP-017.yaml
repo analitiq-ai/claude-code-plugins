@@ -6,7 +6,7 @@ statement: >
 tier: structural
 severity: warning
 scope: type-map
-validator: "packages/validator/src/analitiq/validator/connectors.py::_write_vocabulary_findings"
+validator: "analitiq.validator.connectors::_write_vocabulary_findings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   The write map is the connector's whole DDL vocabulary and is consulted on

@@ -7,7 +7,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._options_offer_the_enum",
+   "validator": "analitiq.contracts.connector::ConnectionContractInput._options_offer_the_enum",
    "owners": [
     "connector-plugin"
    ],
@@ -27,7 +27,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member",
+   "validator": "analitiq.contracts.connector::ConnectionContractInput._default_is_an_enum_member",
    "owners": [
     "engine",
     "connector-plugin"
@@ -48,7 +48,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._consistency",
+   "validator": "analitiq.contracts.connector::ConnectionContractInput._consistency",
    "owners": [
     "engine",
     "connector-plugin"
@@ -69,7 +69,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connection",
-   "validator": "packages/contract-models/src/analitiq/contracts/connection.py::ConnectionStoredMaps._validate_no_secret_keys",
+   "validator": "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys",
    "owners": [
     "pipeline-plugin"
    ],
@@ -221,7 +221,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connection",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_connector_refs",
+   "validator": "analitiq.validator.pipelines::_check_connection_connector_refs",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -240,7 +240,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared",
+   "validator": "analitiq.contracts.connector::ConnectorBase._default_transport_declared",
    "owners": [
     "engine",
     "connector-plugin"
@@ -261,7 +261,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput._mode_consistency",
+   "validator": "analitiq.contracts.connector::PostAuthOutput._mode_consistency",
    "owners": [
     "engine",
     "connector-plugin"
@@ -282,7 +282,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryImplementation._entrypoint_matches_type",
+   "validator": "analitiq.contracts.connector::ResourceDiscoveryImplementation._entrypoint_matches_type",
    "owners": [
     "engine",
     "connector-plugin"
@@ -303,7 +303,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport._require_dsn_or_kwargs",
+   "validator": "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs",
    "owners": [
     "engine",
     "connector-plugin"
@@ -324,7 +324,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._transport_refs_resolvable",
+   "validator": "analitiq.contracts.connector::ConnectorBase._transport_refs_resolvable",
    "owners": [
     "engine",
     "connector-plugin"
@@ -345,7 +345,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
+   "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "engine",
     "connector-plugin"
@@ -366,7 +366,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
+   "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "engine",
     "connector-plugin"
@@ -387,7 +387,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
+   "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "connector-plugin"
    ],
@@ -407,7 +407,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._connection_contract_internal_refs",
+   "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "connector-plugin"
    ],
@@ -427,7 +427,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::FileConnector._validate_no_post_auth_contract",
+   "validator": "analitiq.contracts.connector::FileConnector._validate_no_post_auth_contract",
    "owners": [
     "connector-plugin"
    ],
@@ -449,7 +449,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::UrlTemplateDsn._validate_placeholder_bindings",
+   "validator": "analitiq.contracts.connector::UrlTemplateDsn._validate_placeholder_bindings",
    "owners": [
     "engine",
     "connector-plugin"
@@ -470,7 +470,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionConditionPredicate._exactly_one_operator",
+   "validator": "analitiq.contracts.connector::ConnectionConditionPredicate._exactly_one_operator",
    "owners": [
     "connector-plugin"
    ],
@@ -490,7 +490,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::SqlStageCapabilities._dedicated_schema_matches_scope",
+   "validator": "analitiq.contracts.connector::SqlStageCapabilities._dedicated_schema_matches_scope",
    "owners": [
     "engine",
     "connector-plugin"
@@ -511,7 +511,7 @@
    "tier": "advisory",
    "severity": "warning",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::WriteUnit._at_least_one_bound",
+   "validator": "analitiq.contracts.connector::WriteUnit._at_least_one_bound",
    "owners": [
     "engine",
     "connector-plugin"
@@ -532,7 +532,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::SqlBulkLoad._null_is_not_a_mechanism",
+   "validator": "analitiq.contracts.connector::SqlBulkLoad._null_is_not_a_mechanism",
    "owners": [
     "engine",
     "connector-plugin"
@@ -553,7 +553,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport.driver",
+   "validator": "analitiq.contracts.connector::AdbcTransport.driver",
    "owners": [
     "engine",
     "connector-plugin"
@@ -576,7 +576,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::SqlBulkLoad.sqlalchemy",
+   "validator": "analitiq.contracts.connector::SqlBulkLoad.sqlalchemy",
    "owners": [
     "engine",
     "connector-plugin"
@@ -600,7 +600,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::DsnBinding.encoding",
+   "validator": "analitiq.contracts.connector::DsnBinding.encoding",
    "owners": [
     "engine",
     "connector-plugin"
@@ -623,7 +623,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscovery.produces",
+   "validator": "analitiq.contracts.connector::ResourceDiscovery.produces",
    "owners": [
     "engine",
     "connector-plugin"
@@ -646,7 +646,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ResourceDiscoveryTriggers.list_resources",
+   "validator": "analitiq.contracts.connector::ResourceDiscoveryTriggers.list_resources",
    "owners": [
     "engine",
     "connector-plugin"
@@ -670,7 +670,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput.source",
+   "validator": "analitiq.contracts.connector::ConnectionContractInput.source",
    "owners": [
     "engine",
     "connector-plugin"
@@ -696,7 +696,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput.mode",
+   "validator": "analitiq.contracts.connector::PostAuthOutput.mode",
    "owners": [
     "engine",
     "connector-plugin"
@@ -720,7 +720,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase.connector_id",
+   "validator": "analitiq.contracts.connector::ConnectorBase.connector_id",
    "owners": [
     "engine",
     "connector-plugin"
@@ -743,7 +743,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::ApiKeyAuth",
+   "validator": "analitiq.contracts.connector::ApiKeyAuth",
    "owners": [
     "engine",
     "connector-plugin"
@@ -772,7 +772,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "connector",
-   "validator": "packages/contract-models/src/analitiq/contracts/connector.py::AuthOperationTemplate",
+   "validator": "analitiq.contracts.connector::AuthOperationTemplate",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1375,7 +1375,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._column_names_unique",
+   "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._column_names_unique",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1396,7 +1396,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._ordinal_positions_unique",
+   "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._ordinal_positions_unique",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1417,7 +1417,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "database-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._primary_keys_name_columns",
+   "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._primary_keys_name_columns",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -1594,7 +1594,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "database-endpoint",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_database_endpoint_locator_findings",
+   "validator": "analitiq.validator.connectors::_database_endpoint_locator_findings",
    "owners": [
     "engine",
     "connector-plugin",
@@ -1614,7 +1614,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "data-sync-run-status",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PipelineRunStatusData._error_matches_status",
+   "validator": "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData._error_matches_status",
    "owners": [
     "engine"
    ],
@@ -1634,7 +1634,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "data-sync-run-status",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/data_sync.py::PublicRunError._message_matches_code",
+   "validator": "analitiq.contracts.pipelines.data_sync::PublicRunError._message_matches_code",
    "owners": [
     "engine"
    ],
@@ -1654,7 +1654,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::_RequestBase._validate",
+   "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
    "owners": [
     "connector-plugin"
    ],
@@ -1674,7 +1674,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Param._validate",
+   "validator": "analitiq.contracts.endpoints::Param._validate",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1695,7 +1695,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Param._validate",
+   "validator": "analitiq.contracts.endpoints::Param._validate",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1716,7 +1716,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication._reject_mixed_cursor_forms",
+   "validator": "analitiq.contracts.endpoints::Replication._reject_mixed_cursor_forms",
    "owners": [
     "connector-plugin"
    ],
@@ -1736,7 +1736,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate",
+   "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1757,7 +1757,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteInput._validate",
+   "validator": "analitiq.contracts.endpoints::WriteInput._validate",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1778,7 +1778,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
    ],
@@ -1798,7 +1798,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
    ],
@@ -1819,7 +1819,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
    ],
@@ -1840,7 +1840,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1861,7 +1861,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1882,7 +1882,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1903,7 +1903,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1924,7 +1924,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "connector-plugin"
    ],
@@ -1944,7 +1944,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1965,7 +1965,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1986,7 +1986,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2007,7 +2007,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._at_least_one",
+   "validator": "analitiq.contracts.endpoints::Operations._at_least_one",
    "owners": [
     "connector-plugin"
    ],
@@ -2027,7 +2027,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Operations._conflict_keys_by_mode",
+   "validator": "analitiq.contracts.endpoints::Operations._conflict_keys_by_mode",
    "owners": [
     "connector-plugin"
    ],
@@ -2047,7 +2047,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ColumnFieldSpec._validate_container_shape",
+   "validator": "analitiq.contracts.endpoints::ColumnFieldSpec._validate_container_shape",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2069,7 +2069,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Column._validate_container_shape",
+   "validator": "analitiq.contracts.endpoints::Column._validate_container_shape",
    "owners": [
     "engine",
     "connector-plugin",
@@ -2091,7 +2091,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2113,7 +2113,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2134,7 +2134,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2156,7 +2156,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2177,7 +2177,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate",
+   "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2199,7 +2199,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2221,7 +2221,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2242,7 +2242,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._metadata_keys",
+   "validator": "analitiq.contracts.endpoints::WriteResponse._metadata_keys",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2263,7 +2263,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._reject_record_count",
+   "validator": "analitiq.contracts.endpoints::WriteResponse._reject_record_count",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2284,7 +2284,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseObject._reject_explicit_null_namespaces",
+   "validator": "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2305,7 +2305,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2327,7 +2327,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2349,7 +2349,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::ReadOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2371,7 +2371,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteOperation._wiring",
+   "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2392,7 +2392,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::_EndpointBase.endpoint_id",
+   "validator": "analitiq.contracts.endpoints::_EndpointBase.endpoint_id",
    "owners": [
     "connector-plugin"
    ],
@@ -2414,7 +2414,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::PredicateEq",
+   "validator": "analitiq.contracts.endpoints::PredicateEq",
    "owners": [
     "connector-plugin"
    ],
@@ -2446,7 +2446,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Replication.supported_methods",
+   "validator": "analitiq.contracts.endpoints::Replication.supported_methods",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2469,7 +2469,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/contract-models/src/analitiq/contracts/endpoints.py::Idempotency.location",
+   "validator": "analitiq.contracts.endpoints::Idempotency.location",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2616,7 +2616,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_endpoint_locator_findings",
+   "validator": "analitiq.validator.connectors::_endpoint_locator_findings",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2637,7 +2637,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_endpoint_transport_ref_findings",
+   "validator": "analitiq.validator.connectors::_endpoint_transport_ref_findings",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2656,7 +2656,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "api-endpoint",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_embedded_schema_findings",
+   "validator": "analitiq.validator.connectors::_embedded_schema_findings",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2675,7 +2675,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "any",
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/rules.py::HeaderMergeRules._headers_not_both_set_and_removed",
+   "validator": "analitiq.contracts.shared.rules::HeaderMergeRules._headers_not_both_set_and_removed",
    "owners": [
     "engine",
     "connector-plugin"
@@ -2699,7 +2699,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique",
+   "validator": "analitiq.contracts.pipelines.config::PipelineConnections._destinations_unique",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2719,7 +2719,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule._validate_schedule_fields",
+   "validator": "analitiq.contracts.pipelines.config::Schedule._validate_schedule_fields",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2739,7 +2739,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._validate_streams_unique_base",
+   "validator": "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2759,7 +2759,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._check_active_requires_streams",
+   "validator": "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2779,7 +2779,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type",
+   "validator": "analitiq.contracts.pipelines.config::Schedule.type",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2801,7 +2801,7 @@
    "tier": "structural",
    "severity": "info",
    "scope": "pipeline",
-   "validator": "packages/contract-models/src/analitiq/contracts/pipelines/config.py::Schedule.type",
+   "validator": "analitiq.contracts.pipelines.config::Schedule.type",
    "owners": [
     "pipeline-plugin"
    ],
@@ -2908,7 +2908,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_refs",
+   "validator": "analitiq.validator.pipelines::_check_stream_refs",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2927,7 +2927,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connections_present",
+   "validator": "analitiq.validator.pipelines::_check_connections_present",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2946,7 +2946,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_version_conflicts",
+   "validator": "analitiq.validator.pipelines::_check_connection_version_conflicts",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -2965,7 +2965,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "pipeline",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_pipeline_active_gate",
+   "validator": "analitiq.validator.pipelines::_check_pipeline_active_gate",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -3437,7 +3437,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::check_coverage",
+   "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3456,7 +3456,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::endpoint_filename_findings",
+   "validator": "analitiq.validator.connectors::endpoint_filename_findings",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3475,7 +3475,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::check_coverage",
+   "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3494,7 +3494,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::check_coverage",
+   "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
     "connector-plugin"
@@ -3513,7 +3513,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "any",
-   "validator": "packages/contract-models/src/analitiq/contracts/shared/common.py::RetryErrorHandlingBase._validate_retry_fields",
+   "validator": "analitiq.contracts.shared.common::RetryErrorHandlingBase._validate_retry_fields",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -3739,7 +3739,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique",
+   "validator": "analitiq.contracts.stream::StreamAuthored._destinations_unique",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3759,7 +3759,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._assignment_targets_unique",
+   "validator": "analitiq.contracts.stream::StreamMapping._assignment_targets_unique",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3779,7 +3779,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ConnectionEndpointRef._derive_or_verify_endpoint_id",
+   "validator": "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id",
    "owners": [
     "engine",
     "connector-plugin",
@@ -3801,7 +3801,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::Filter._validate_value_presence",
+   "validator": "analitiq.contracts.stream::Filter._validate_value_presence",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3821,7 +3821,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::PipeExpression._validate_positional_grammar",
+   "validator": "analitiq.contracts.stream::PipeExpression._validate_positional_grammar",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -3842,7 +3842,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ArrowFieldSpec._validate_container_shape",
+   "validator": "analitiq.contracts.stream::ArrowFieldSpec._validate_container_shape",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3862,7 +3862,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ConstantValue._validate_container_shape",
+   "validator": "analitiq.contracts.stream::ConstantValue._validate_container_shape",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3882,7 +3882,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::ValidationRule._validate_value_for_rule",
+   "validator": "analitiq.contracts.stream::ValidationRule._validate_value_for_rule",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3902,7 +3902,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::AssignmentTarget._validate_container_shape",
+   "validator": "analitiq.contracts.stream::AssignmentTarget._validate_container_shape",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3922,7 +3922,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_filter_operator_scope",
+   "validator": "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -3943,7 +3943,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamSource._validate_database_only_read_features",
+   "validator": "analitiq.contracts.stream::StreamSource._validate_database_only_read_features",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -3964,7 +3964,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::StreamMapping._validate_rule_fields_resolve",
+   "validator": "analitiq.contracts.stream::StreamMapping._validate_rule_fields_resolve",
    "owners": [
     "pipeline-plugin"
    ],
@@ -3984,7 +3984,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::DatabaseKeylessWrite",
+   "validator": "analitiq.contracts.stream::DatabaseKeylessWrite",
    "owners": [
     "pipeline-plugin"
    ],
@@ -4006,7 +4006,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/contract-models/src/analitiq/contracts/stream.py::FullRefreshReplication",
+   "validator": "analitiq.contracts.stream::FullRefreshReplication",
    "owners": [
     "pipeline-plugin"
    ],
@@ -4324,7 +4324,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_parent_pipeline",
+   "validator": "analitiq.validator.pipelines::_check_stream_parent_pipeline",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4343,7 +4343,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_stream_connection_roles",
+   "validator": "analitiq.validator.pipelines::_check_stream_connection_roles",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4362,7 +4362,7 @@
    "tier": "referential",
    "severity": "error",
    "scope": "stream",
-   "validator": "packages/validator/src/analitiq/validator/pipelines.py::_check_connection_scoped_endpoints",
+   "validator": "analitiq.validator.pipelines::_check_connection_scoped_endpoints",
    "owners": [
     "engine",
     "pipeline-plugin"
@@ -4381,7 +4381,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadExactRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadExactRule._check",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4403,7 +4403,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4425,7 +4425,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -4446,7 +4446,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -4467,7 +4467,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -4488,7 +4488,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4510,7 +4510,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -4531,7 +4531,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteExactRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapWriteExactRule._check",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4553,7 +4553,7 @@
    "tier": "structural",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapWriteRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapWriteRegexRule._check",
    "owners": [
     "connector-plugin",
     "pipeline-plugin"
@@ -4574,7 +4574,7 @@
    "tier": "advisory",
    "severity": "error",
    "scope": "type-map",
-   "validator": "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check",
+   "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4654,7 +4654,7 @@
    "tier": "procedural",
    "severity": "warning",
    "scope": "type-map",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings",
+   "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4721,7 +4721,7 @@
    "tier": "structural",
    "severity": "warning",
    "scope": "type-map",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_write_vocabulary_findings",
+   "validator": "analitiq.validator.connectors::_write_vocabulary_findings",
    "owners": [
     "engine",
     "connector-plugin",
@@ -4803,7 +4803,7 @@
    "tier": "advisory",
    "severity": "warning",
    "scope": "type-map",
-   "validator": "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings",
+   "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
    "owners": [
     "engine",
     "connector-plugin",

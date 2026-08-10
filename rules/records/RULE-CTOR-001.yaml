@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectorBase._default_transport_declared"
+validator: "analitiq.contracts.connector::ConnectorBase._default_transport_declared"
 owners: [engine, connector-plugin]
 targets: [ConnectorBase]
 fixture_model: ApiConnector

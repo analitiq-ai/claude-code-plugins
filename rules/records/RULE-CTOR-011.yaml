@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::UrlTemplateDsn._validate_placeholder_bindings"
+validator: "analitiq.contracts.connector::UrlTemplateDsn._validate_placeholder_bindings"
 owners: [engine, connector-plugin]
 targets: [UrlTemplateDsn]
 rationale: >

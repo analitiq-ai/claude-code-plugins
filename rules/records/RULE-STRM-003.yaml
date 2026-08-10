@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::ConnectionEndpointRef._derive_or_verify_endpoint_id"
+validator: "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ConnectionEndpointRef]
 rationale: >

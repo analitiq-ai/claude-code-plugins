@@ -27,7 +27,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "render_rules.py"
 
-CONTRACTS = "packages/contract-models/src/analitiq/contracts"
+CONTRACTS = "analitiq.contracts"
 
 
 def _load_script():
@@ -228,24 +228,41 @@ def test_an_agent_rule_naming_a_missing_file_is_refused(registry):
     assert "no-such.md" in _refusal(registry)
 
 
-def test_a_validator_path_outside_a_source_tree_is_refused(registry):
-    """Only a `…/src/…` path maps onto an importable module name."""
-    _write(registry, validator='"scripts/render_rules.py::main"')
-    assert "not importable" in _refusal(registry)
+def test_a_validator_naming_a_source_path_is_refused(registry):
+    """The binding names what is imported, never a path standing in for it.
+
+    A path was the earlier form. It shipped into this package's `rules.json`
+    pointing at a tree no consumer has, and the lint reached the module by
+    slicing the string rather than resolving it — so a path that had never
+    existed produced an importable name and passed.
+    """
+    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase"')
+    assert "source path" in _refusal(registry)
+
+
+def test_a_validator_outside_the_published_namespace_is_refused(registry):
+    """A dotted module resolves against whatever is importable.
+
+    `os.path::join` is a real symbol on a real module and enforces nothing
+    here, so the namespace is what keeps a binding pointing at code this repo
+    owns.
+    """
+    _write(registry, validator='"os.path::join"')
+    assert "outside" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_module_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}/no_such_module.py::Thing"')
+    _write(registry, validator=f'"{CONTRACTS}.no_such_module::Thing"')
     assert "no_such_module" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_class_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}/connector.py::NoSuchModel"')
+    _write(registry, validator=f'"{CONTRACTS}.connector::NoSuchModel"')
     assert "NoSuchModel" in _refusal(registry)
 
 
 def test_a_validator_naming_an_absent_member_is_refused(registry):
-    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase._no_such_method"')
+    _write(registry, validator=f'"{CONTRACTS}.connector::ConnectorBase._no_such_method"')
     assert "_no_such_method" in _refusal(registry)
 
 
@@ -256,7 +273,7 @@ def test_a_validator_naming_an_inherited_member_is_refused(registry):
     an enforcer it certainly does not, so the lint would report a live rule for
     one nothing applies.
     """
-    _write(registry, validator=f'"{CONTRACTS}/connector.py::ConnectorBase.dict"')
+    _write(registry, validator=f'"{CONTRACTS}.connector::ConnectorBase.dict"')
     assert "dict" in _refusal(registry)
 
 
@@ -268,14 +285,14 @@ def test_a_validator_naming_a_real_enforcer_is_accepted(registry):
     """
     _write(
         registry,
-        validator=f'"{CONTRACTS}/connector.py::ConnectorBase._default_transport_declared"',
+        validator=f'"{CONTRACTS}.connector::ConnectorBase._default_transport_declared"',
     )
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 
 def test_a_validator_naming_a_model_field_is_accepted(registry):
     """A structural rule binds the field carrying its `Literal` or pattern."""
-    _write(registry, validator=f'"{CONTRACTS}/connector.py::SqlBulkLoad.sqlalchemy"')
+    _write(registry, validator=f'"{CONTRACTS}.connector::SqlBulkLoad.sqlalchemy"')
     assert [r.id for r in RR.load_registry()] == ["RULE-TEST-001"]
 
 

@@ -5,7 +5,7 @@ statement: >
 tier: referential
 severity: error
 scope: pipeline
-validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_connections_present"
+validator: "analitiq.validator.pipelines::_check_connections_present"
 owners: [pipeline-plugin, engine]
 rationale: >
   A connection is where the credentials, the transport and the connector all

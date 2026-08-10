@@ -5,7 +5,7 @@ statement: >
 tier: referential
 severity: error
 scope: pipeline
-validator: "packages/validator/src/analitiq/validator/pipelines.py::_check_pipeline_active_gate"
+validator: "analitiq.validator.pipelines::_check_pipeline_active_gate"
 owners: [pipeline-plugin, engine]
 rationale: >
   `RULE-PIPE-004` settles that such a pipeline references a stream at all,

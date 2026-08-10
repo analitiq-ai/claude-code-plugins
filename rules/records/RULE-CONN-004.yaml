@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connection
-validator: "packages/contract-models/src/analitiq/contracts/connection.py::ConnectionStoredMaps._validate_no_secret_keys"
+validator: "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys"
 owners: [pipeline-plugin]
 targets: [ConnectionStoredMaps]
 rationale: >

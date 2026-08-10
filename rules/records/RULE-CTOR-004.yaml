@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::AdbcTransport._require_dsn_or_kwargs"
+validator: "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs"
 owners: [engine, connector-plugin]
 targets: [AdbcTransport]
 rationale: >

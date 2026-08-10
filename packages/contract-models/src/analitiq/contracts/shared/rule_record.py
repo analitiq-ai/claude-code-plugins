@@ -141,10 +141,12 @@ class RuleRecord:
     severity: str
     scope: str
     rationale: str
-    #: What applies it — `path/to/module.py::Symbol.attr` for code, or a
-    #: `.claude/rules/*.md` path for an agent rule. Lint-resolved either way, so
-    #: a renamed validator or a deleted rules file fails the build instead of
-    #: leaving a record claiming an enforcement it lost.
+    #: What applies it — `dotted.module::Symbol.attr` for code, naming the
+    #: module that is imported so the value means the same thing here as it
+    #: does wherever this record is read; or a `.claude/rules/*.md` path for an
+    #: agent rule. Lint-resolved either way, so a renamed validator or a
+    #: deleted rules file fails the build instead of leaving a record claiming
+    #: an enforcement it lost.
     validator: str | None = None
     owners: tuple[str, ...] = ()
     status: str = "active"
@@ -230,7 +232,17 @@ class RuleRecord:
         ):
             self._fail(
                 f"validator {self.validator!r} is neither "
-                "path/to/module.py::Symbol nor a .claude/rules/*.md path"
+                "dotted.module::Symbol nor a .claude/rules/*.md path"
+            )
+        if self.validator and ".py" in self.validator:
+            # The binding names what is imported. A source path was the earlier
+            # form: it shipped in this package's rules.json pointing into a
+            # tree no consumer has, its left half was read by nothing, and the
+            # lint derived the module from it by slicing rather than by
+            # resolving — so a path that never existed resolved cleanly.
+            self._fail(
+                f"validator {self.validator!r} names a source path; bind the "
+                "module that is imported (analitiq.contracts.x::Symbol)"
             )
         if self.status == "retired" and not self.superseded_by:
             self._fail(

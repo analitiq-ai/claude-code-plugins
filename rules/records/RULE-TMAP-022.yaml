@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: warning
 scope: type-map
-validator: "packages/validator/src/analitiq/validator/connectors.py::_type_map_rule_warnings"
+validator: "analitiq.validator.connectors::_type_map_rule_warnings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
   Resolution is first-match-wins, so a repeated matcher makes every later copy

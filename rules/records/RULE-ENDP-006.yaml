@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: api-endpoint
-validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteInput._validate"
+validator: "analitiq.contracts.endpoints::WriteInput._validate"
 owners: [connector-plugin, engine]
 targets: [WriteInput]
 rationale: >

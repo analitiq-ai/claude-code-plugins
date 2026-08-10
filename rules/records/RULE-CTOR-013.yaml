@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::SqlStageCapabilities._dedicated_schema_matches_scope"
+validator: "analitiq.contracts.connector::SqlStageCapabilities._dedicated_schema_matches_scope"
 owners: [engine, connector-plugin]
 targets: [SqlStageCapabilities]
 rationale: >

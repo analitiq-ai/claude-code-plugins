@@ -20,11 +20,13 @@ way `render_schemas.py` already guards `schemas/`.
 
 * the filename matches the id, so a record is findable by the id in a finding;
 * no id is reused, including by a record that was retired;
-* every `validator` resolves. A code binding must name a live module symbol,
-  and a dotted `Symbol.attr` a real method or a real model field; an agent-rule
-  binding must name a file that exists. A rule claiming an enforcement it lost
-  is worse than one that never claimed it, because the claim is what stops
-  somebody re-adding the check.
+* every `validator` resolves. A code binding names the module that is imported
+  — not a source path translated into one — so the string a record carries is
+  the string this script resolves, and every part of it is checked: the module
+  imports, the symbol is on it, a dotted `Symbol.attr` is a real method or a
+  real model field. An agent-rule binding must name a file that exists. A rule
+  claiming an enforcement it lost is worse than one that never claimed it,
+  because the claim is what stops somebody re-adding the check.
 
 The validator resolution is why this script imports the contract models and the
 validator package. Nothing else here does. Both are on the path because a rule
@@ -43,6 +45,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RULES_DIR = REPO_ROOT / "rules" / "records"
+
+#: A code binding names an importable module, and only one this repo publishes.
+#: Without the prefix, `os.path::join` resolves and reports a live enforcer.
+_ENFORCER_NAMESPACE = "analitiq."
 
 # Same bootstrap as render_schemas.py: this repo is the contract's SOURCE, and
 # `requirements-dev.txt` deliberately installs no wheel of either package.
@@ -141,10 +147,14 @@ def _unresolved_validators(records: list[RuleRecord]) -> list[str]:
                     "not exist — the agent rule applying this rule is gone"
                 )
             continue
-        module_path, _, symbol = record.validator.partition("::")
-        dotted = _module_name(module_path)
-        if dotted is None:
-            problems.append(f"{record.id}: validator path {module_path!r} is not importable")
+        dotted, _, symbol = record.validator.partition("::")
+        if not dotted.startswith(_ENFORCER_NAMESPACE):
+            problems.append(
+                f"{record.id}: validator module {dotted!r} is outside "
+                f"{_ENFORCER_NAMESPACE}* — the record would resolve against "
+                "whatever else happens to be importable, and report a live "
+                "enforcer for a symbol this repo does not own"
+            )
             continue
         try:
             module = importlib.import_module(dotted)
@@ -162,14 +172,6 @@ def _unresolved_validators(records: list[RuleRecord]) -> list[str]:
                 "the enforcement this rule claims has moved or gone"
             )
     return problems
-
-
-def _module_name(path: str) -> str | None:
-    """`packages/…/src/analitiq/contracts/x.py` -> `analitiq.contracts.x`."""
-    marker = "/src/"
-    if not path.endswith(".py") or marker not in path:
-        return None
-    return path.split(marker, 1)[1][: -len(".py")].replace("/", ".")
 
 
 def _has_member(owner: object, attr: str) -> bool:

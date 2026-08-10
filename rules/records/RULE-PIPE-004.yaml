@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: pipeline
-validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineAuthored._check_active_requires_streams"
+validator: "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams"
 owners: [pipeline-plugin]
 targets: [PipelineAuthored]
 rationale: >

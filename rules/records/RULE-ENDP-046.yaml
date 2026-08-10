@@ -6,7 +6,7 @@ statement: >
 tier: referential
 severity: error
 scope: api-endpoint
-validator: "packages/validator/src/analitiq/validator/connectors.py::_endpoint_locator_findings"
+validator: "analitiq.validator.connectors::_endpoint_locator_findings"
 owners: [connector-plugin, engine]
 targets: [ApiEndpointDoc]
 rationale: >

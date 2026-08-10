@@ -5,7 +5,7 @@ statement: >
 tier: structural
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::FullRefreshReplication"
+validator: "analitiq.contracts.stream::FullRefreshReplication"
 owners: [pipeline-plugin]
 targets: [FullRefreshReplication, IncrementalReplication]
 mechanism: discriminated_union

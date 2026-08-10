@@ -6,7 +6,7 @@ statement: >
 tier: structural
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::DsnBinding.encoding"
+validator: "analitiq.contracts.connector::DsnBinding.encoding"
 owners: [engine, connector-plugin]
 targets: [DsnBinding]
 fields: [encoding]

@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: database-endpoint
-validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::DatabaseEndpointDoc._ordinal_positions_unique"
+validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._ordinal_positions_unique"
 owners: [pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]
 fixture_model: DatabaseEndpointDoc

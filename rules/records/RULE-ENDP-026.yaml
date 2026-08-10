@@ -7,7 +7,7 @@ statement: >
 tier: advisory
 severity: error
 scope: api-endpoint
-validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::ResponseExtraction._validate"
+validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
 owners: [connector-plugin, engine]
 targets: [ResponseExtraction, WriteInput]
 rationale: >

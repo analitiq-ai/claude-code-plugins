@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::ValidationRule._validate_value_for_rule"
+validator: "analitiq.contracts.stream::ValidationRule._validate_value_for_rule"
 owners: [pipeline-plugin]
 targets: [ValidationRule]
 rationale: >

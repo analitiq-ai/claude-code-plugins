@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: type-map
-validator: "packages/contract-models/src/analitiq/contracts/type_map.py::TypeMapReadRegexRule._check"
+validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]
 rationale: >

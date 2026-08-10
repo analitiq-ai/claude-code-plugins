@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionConditionPredicate._exactly_one_operator"
+validator: "analitiq.contracts.connector::ConnectionConditionPredicate._exactly_one_operator"
 owners: [connector-plugin]
 targets: [ConnectionConditionPredicate]
 rationale: >

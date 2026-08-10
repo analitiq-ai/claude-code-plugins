@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::StreamAuthored._destinations_unique"
+validator: "analitiq.contracts.stream::StreamAuthored._destinations_unique"
 owners: [pipeline-plugin]
 targets: [StreamAuthored]
 fixture_model: StreamInput

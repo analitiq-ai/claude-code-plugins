@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::PostAuthOutput._mode_consistency"
+validator: "analitiq.contracts.connector::PostAuthOutput._mode_consistency"
 owners: [engine, connector-plugin]
 targets: [PostAuthOutput]
 rationale: >

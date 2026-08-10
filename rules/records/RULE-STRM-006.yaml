@@ -6,7 +6,7 @@ statement: >
 tier: advisory
 severity: error
 scope: stream
-validator: "packages/contract-models/src/analitiq/contracts/stream.py::ArrowFieldSpec._validate_container_shape"
+validator: "analitiq.contracts.stream::ArrowFieldSpec._validate_container_shape"
 owners: [pipeline-plugin]
 targets: [ArrowFieldSpec]
 rationale: >

@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: pipeline
-validator: "packages/contract-models/src/analitiq/contracts/pipelines/config.py::PipelineConnections._destinations_unique"
+validator: "analitiq.contracts.pipelines.config::PipelineConnections._destinations_unique"
 owners: [pipeline-plugin]
 targets: [PipelineConnections]
 fixture_model: PipelineConnections

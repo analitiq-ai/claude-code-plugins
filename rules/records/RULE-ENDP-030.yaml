@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: api-endpoint
-validator: "packages/contract-models/src/analitiq/contracts/endpoints.py::WriteResponse._reject_record_count"
+validator: "analitiq.contracts.endpoints::WriteResponse._reject_record_count"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]
 rationale: >

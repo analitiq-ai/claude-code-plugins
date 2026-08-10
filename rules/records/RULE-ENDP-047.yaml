@@ -5,7 +5,7 @@ statement: >
 tier: referential
 severity: error
 scope: api-endpoint
-validator: "packages/validator/src/analitiq/validator/connectors.py::_endpoint_transport_ref_findings"
+validator: "analitiq.validator.connectors::_endpoint_transport_ref_findings"
 owners: [connector-plugin, engine]
 rationale: >
   This is the half of transport resolution that `RULE-CTOR-005` cannot reach:

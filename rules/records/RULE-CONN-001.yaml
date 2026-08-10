@@ -5,7 +5,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._options_offer_the_enum"
+validator: "analitiq.contracts.connector::ConnectionContractInput._options_offer_the_enum"
 owners: [connector-plugin]
 targets: [ConnectionContractInput]
 fixture_model: ConnectionContractInput

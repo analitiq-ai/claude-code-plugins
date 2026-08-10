@@ -4,7 +4,7 @@ statement: >
 tier: advisory
 severity: error
 scope: connector
-validator: "packages/contract-models/src/analitiq/contracts/connector.py::ConnectionContractInput._default_is_an_enum_member"
+validator: "analitiq.contracts.connector::ConnectionContractInput._default_is_an_enum_member"
 owners: [connector-plugin, engine]
 targets: [ConnectionContractInput]
 fixture_model: ConnectionContractInput
