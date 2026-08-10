@@ -131,3 +131,34 @@ def closed_members(annotation) -> list[str]:
         else:
             stack += list(typing.get_args(current))
     return list(dict.fromkeys(found))
+
+
+def contract_vocabularies() -> dict[str, list[str]]:
+    """Every closed vocabulary the contract declares, keyed ``Model.field``.
+
+    Derived from the tree, never enumerated: a survey that decides what a
+    document may not restate has to see every vocabulary the contract owns, and
+    a hand-kept list of them can only ever cover the ones somebody remembered.
+    A field the contract closes tomorrow joins this map the moment it exists,
+    which is the property a curated list cannot have.
+
+    Single-member vocabularies are included. They are a closed set like any
+    other, and whether one carries enough signal to act on is the caller's
+    judgment — a survey that dropped them would be making that call for every
+    caller at once, invisibly.
+
+    Fields are keyed by the Python attribute, not the wire alias: this answers
+    "what does the contract declare", and the alias is a separate question the
+    caller resolves off the model when it needs the authored spelling.
+
+    Two fields may legitimately carry the same members — a param's request-input
+    type and a connection input's value type are different contracts over one
+    member set — so callers that care about the set rather than the field group
+    these themselves rather than getting a deduplicated map they cannot undo.
+    """
+    return {
+        f"{cls.__name__}.{name}": members
+        for cls in contract_classes()
+        for name, info in cls.model_fields.items()
+        if (members := closed_members(info.annotation))
+    }

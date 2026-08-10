@@ -672,9 +672,18 @@ def _field_table(model) -> str:
 def published_vocabularies() -> dict[str, dict]:
     """Every closed vocabulary an author picks a value from, read off the package.
 
-    Single source for both the generated `enum-vocabulary` block and the prose
-    gate in tests/pipeline_builder/test_prose_vocabulary.py. Restating this list in either place
-    would recreate exactly the drift this module exists to prevent.
+    Editorial, and deliberately narrower than the contract: this is what the
+    `enum-vocabulary` block shows a reader, so it names the fields a pipeline
+    author actually chooses a value for. The members are read off the live
+    models, so the curation can go stale in coverage but never in content.
+
+    It is NOT what the prose gate polices. That question — which vocabularies
+    may never be hand-typed — has to cover everything the contract owns, and
+    answering it from this list made the gate's reach a by-product of an
+    editorial choice: a wrong copy of any unlisted vocabulary was invisible.
+    `tests/pipeline_builder/test_prose_vocabulary.py` derives its own set from
+    the models and folds this one in for the vocabularies a field walk cannot
+    see, namely those spread across a discriminated union's branches.
 
     Each value is {label, members, published_as}.
     """

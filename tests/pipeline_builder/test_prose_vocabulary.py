@@ -26,10 +26,23 @@ superset and does not match. Loosening it to "names >= 2 members" would fire on
 ordinary guidance that contrasts two members, which this prose does constantly.
 So the heuristic cannot be the gate for the headline case, and is not asked to be.
 
+**What the gate polices is derived, not listed.** `_contract_vocabularies()`
+walks the models for every closed vocabulary the contract declares, rather than
+reading the curated set the `enum-vocabulary` block renders. Those answer
+different questions, and taking the second for the first made coverage a
+by-product of an editorial choice: measured before the switch, a wrong
+three-member copy of a cursor `format` pasted into a spec left the whole suite
+green, because that field was not one of the ten on the list.
+
 Detection limits of the heuristic, stated so nobody over-trusts it:
   * members must appear in backticks. Dropping that is not an option — members
     include `in`, `range`, `pattern`, `required`, `fail` and `skip`, ordinary
     words that saturate this prose.
+  * a vocabulary whose members are a subset of another's is named by every
+    section that names the superset, so it trips wherever the superset does.
+    Those entries are declared with the superset they ride on rather than
+    filtered out by a subset rule, which would un-gate a real restatement the
+    day some larger vocabulary happened to contain it.
   * a restatement inside a fenced code block using bare (unticked) members is not
     seen. `FENCED_RESTATEMENTS` records the ones that exist today.
   * scope is `*.md` under the plugin root.
@@ -159,6 +172,49 @@ ALLOWED_RESTATEMENTS = {
          "modes — the upsert write variant declares a conflict key set and no "
          "other database write shape has the field — so each statement has to "
          "name them all"),
+    # --- subset co-trips -----------------------------------------------------
+    # A vocabulary whose members are a subset of another gated one is named by
+    # every section that names the superset. These are not second copies: the
+    # same sentence satisfies both labels, and the entry beside each says which
+    # superset it rides on. Recorded rather than filtered out by a
+    # subset-detecting rule, which would silently un-gate a genuine restatement
+    # the day some larger vocabulary happened to contain it.
+    ("agents/stream-creator.md", "DatabaseKeylessWrite.mode"):
+        (2, {"insert", "truncate_insert"},
+         "the two sections above state the full `write.mode` vocabulary, which "
+         "contains the keyless pair; there is no separate sentence naming it"),
+    ("skills/pipeline-builder/references/enum-mappers.md", "DatabaseKeylessWrite.mode"):
+        (1, {"insert", "truncate_insert"},
+         "same sentence as the `write.mode` entry above — WriteModeMapper's "
+         "target column names every mode, so it names this subset too"),
+    ("skills/pipeline-builder/references/identity-and-versioning.md",
+     "ConnectionContractInput.phase"):
+        (1, {"pre_auth", "auth"},
+         "§\"Lifecycle means three unrelated things\" names the connector's "
+         "four template phases to separate them from artifact `status` and from "
+         "the per-run lifecycle; the input-phase pair is contained in that list"),
+    # --- the storage routing table (RULE-CONN-006) ---------------------------
+    # The one place a connection is authored FROM the connector's contract, so
+    # the member is the left-hand side of a mapping and the destination key is
+    # the right — the `enum-mappers.md` shape, one document further on. Naming
+    # every storage value is what makes the table total; a routing rule that
+    # omitted one would silently drop those inputs from the connection.
+    ("agents/connection-creator.md", "ConnectionContractInput.storage"):
+        (1, {"connection.parameters", "secrets"},
+         "§`Process` step 1 routes each input by its storage; both members head "
+         "a row"),
+    ("agents/connection-creator.md", "PostAuthOutput.storage"):
+        (1, {"connection.selections", "connection.discovered", "secrets"},
+         "the same routing list continues into the post-auth stores, which the "
+         "agent must recognise in order to omit or refuse them"),
+    ("skills/connection-spec/spec-envelope.md", "ConnectionContractInput.storage"):
+        (1, {"connection.parameters", "secrets"},
+         "§\"Routing rule (the whole thing)\" is the canonical statement of that "
+         "mapping; the agent prose above cites it"),
+    ("skills/connection-spec/spec-envelope.md", "PostAuthOutput.storage"):
+        (1, {"connection.selections", "connection.discovered", "secrets"},
+         "same rule, post-auth half — the section's claim to cover every "
+         "connector rests on naming every store"),
 }
 
 # Restatements inside fenced code blocks using bare, unticked members. The
@@ -187,9 +243,23 @@ EXCLUDED_FROM_PROSE_GATE = {
         "backticks throughout for unrelated reasons. Measured with the exclusion "
         "lifted, exactly two sections trip and both are incidental co-mentions "
         "contrasting the two ref shapes. Still covered by the emission test.",
+    "SingleCursorMapping.operator":
+        "the comparison operators `gt`/`gte`/`lt`/`lte`, which a cursor mapping "
+        "and the two window-mapping bounds all draw from. Filter prose names "
+        "them constantly for unrelated reasons — the inclusivity note in "
+        "spec-filter-operators.md is the measured case — and the wider "
+        "`filter.operator` vocabulary that contains them stays gated, so the "
+        "operators an author actually picks from are still covered.",
 }
 
-_TICKED = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)`")
+# Members are not all bare identifiers: a storage vocabulary spells its members
+# as dotted paths (`connection.parameters`) and a cursor format carries a hyphen
+# (`date-time`). A pattern that only matched identifiers silently could not see
+# those, so the vocabularies carrying them were ungated no matter what the rest
+# of this file did — `test_every_member_is_matchable_by_the_detector` is what
+# holds this open, and it grades the derived set rather than the curated one so
+# a member shape the contract adds cannot slip in behind it.
+_TICKED = re.compile(r"`([A-Za-z_][A-Za-z0-9_.-]*)`")
 _FENCE = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
 
 
@@ -211,12 +281,60 @@ def _sections(text: str):
         yield start, "\n".join(current)
 
 
+def _contract_vocabularies() -> dict[str, set[str]]:
+    """Every closed vocabulary the CONTRACT declares, labelled for this gate.
+
+    Derived from the models, not from `published_vocabularies()`. Those two
+    answer different questions and conflating them decided this gate's coverage
+    by an editorial choice: the generated block shows the vocabularies a
+    pipeline author picks a value from, which is curated on purpose, while the
+    gate must see every vocabulary the contract owns or a hand-typed copy of an
+    unlisted one is invisible. Measured before the switch: a wrong three-member
+    copy of a cursor `format` could be pasted into a spec and the whole suite
+    stayed green.
+
+    Grouped by member set, because that is what the detector can actually
+    distinguish — a section naming every member of `Param.type` is
+    indistinguishable from one naming every member of `ConnectionContractInput.type`,
+    which share a member set. A group takes its curated name when one exists,
+    so the declarations below keep reading in the contract's own vocabulary
+    rather than in `Model.field` coordinates; otherwise it takes the first
+    `Model.field` in sorted order, which is stable across runs.
+
+    Two sources, because neither sees everything. The derived walk reads a
+    closed vocabulary off a field's own annotation; a vocabulary spread across
+    a discriminated union's branches — each branch carrying a single-member
+    `Literal` — is not on any one field, and `published_vocabularies()` is what
+    knows how to read those. Their union is strictly more than either, and the
+    curated half cannot drift in members since it too reads the live models.
+    """
+    from analitiq.contracts.shared.introspect import contract_vocabularies
+
+    curated = {
+        frozenset(vocab["members"]): key
+        for key, vocab in G.published_vocabularies().items()
+        if len(vocab["members"]) > 1
+    }
+    by_members: dict[frozenset, list[str]] = {}
+    for field, members in sorted(contract_vocabularies().items()):
+        # A single-member "vocabulary" would match almost any mention.
+        if len(members) > 1:
+            by_members.setdefault(frozenset(members), []).append(field)
+    groups = {
+        curated.get(members, fields[0]): set(members)
+        for members, fields in by_members.items()
+    }
+    # Union-carried vocabularies the field walk cannot reach.
+    for members, key in curated.items():
+        groups.setdefault(key, set(members))
+    return groups
+
+
 def _gated_vocabularies():
     return {
-        key: set(vocab["members"])
-        for key, vocab in G.published_vocabularies().items()
-        # A single-member "vocabulary" would match almost any mention.
-        if len(vocab["members"]) > 1 and key not in EXCLUDED_FROM_PROSE_GATE
+        key: members
+        for key, members in _contract_vocabularies().items()
+        if key not in EXCLUDED_FROM_PROSE_GATE
     }
 
 
@@ -308,9 +426,9 @@ def test_every_member_is_matchable_by_the_detector():
     real cause instead.
     """
     unmatchable = {
-        key: [m for m in vocab["members"] if not _TICKED.fullmatch(f"`{m}`")]
-        for key, vocab in G.published_vocabularies().items()
-        if any(not _TICKED.fullmatch(f"`{m}`") for m in vocab["members"])
+        key: [m for m in members if not _TICKED.fullmatch(f"`{m}`")]
+        for key, members in _contract_vocabularies().items()
+        if any(not _TICKED.fullmatch(f"`{m}`") for m in members)
     }
     assert not unmatchable, (
         f"published members the detector cannot match: {unmatchable}. Widen "
@@ -352,13 +470,13 @@ def test_allow_listed_restatements_still_match_the_contract():
     GAINS an invented member is caught by nothing, which the module docstring's
     coverage table states outright.
     """
-    published = G.published_vocabularies()
+    published = _contract_vocabularies()
     # Unknown keys are test_declared_lists_name_real_vocabularies' business —
     # indexing them here would raise a bare KeyError and mask its message.
     wrong = {
-        key: (declared, set(published[key[1]]["members"]))
+        key: (declared, published[key[1]])
         for key, (_n, declared, _why) in ALLOWED_RESTATEMENTS.items()
-        if key[1] in published and declared != set(published[key[1]]["members"])
+        if key[1] in published and declared != published[key[1]]
     }
     assert not wrong, (
         f"allow-listed member sets no longer match the contract (declared, published): "
@@ -388,10 +506,10 @@ def test_fenced_restatements_are_declared():
 
 def test_exclusion_list_names_real_vocabularies():
     """A stale exclusion key silently gates nothing — the dead-constant failure."""
-    unknown = sorted(set(EXCLUDED_FROM_PROSE_GATE) - set(G.published_vocabularies()))
+    unknown = sorted(set(EXCLUDED_FROM_PROSE_GATE) - set(_contract_vocabularies()))
     assert not unknown, (
         f"EXCLUDED_FROM_PROSE_GATE names vocabularies the contract does not "
-        f"publish: {unknown}. Remove them — they exempt nothing.")
+        f"declare: {unknown}. Remove them — they exempt nothing.")
 
 
 def test_declared_lists_name_real_vocabularies():
@@ -401,15 +519,16 @@ def test_declared_lists_name_real_vocabularies():
     test. Every other failure in this file carries an actionable message; these
     two lists should not be the exception.
     """
-    published = set(G.published_vocabularies())
+    published = set(_contract_vocabularies())
     unknown = sorted(
         {key for _doc, key in ALLOWED_RESTATEMENTS} - published
         | {key for _doc, key in FENCED_RESTATEMENTS} - published
     )
     assert not unknown, (
-        f"declared restatements name vocabularies the contract does not publish: "
-        f"{unknown}. The contract renamed or retired them — check the docs those "
-        "entries exempt before editing the lists.")
+        f"declared restatements name vocabularies the contract does not declare: "
+        f"{unknown}. The contract renamed or retired them, or a member set moved "
+        "and the group took a different label — check the docs those entries "
+        "exempt before editing the lists.")
 
 
 def test_allow_list_has_no_stale_entries():
