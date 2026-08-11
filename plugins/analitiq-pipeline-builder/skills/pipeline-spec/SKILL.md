@@ -92,6 +92,8 @@ run time.
 | `RULE-PIPE-013` | A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id. |
 | `RULE-PIPE-014` | A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status. |
 | `RULE-PIPE-015` | A schedule's `timezone` MUST name a zone in the IANA database. |
+| `RULE-PIPE-016` | A pipeline MUST name its lifecycle state from the vocabulary `PipelineAuthored` declares. |
+| `RULE-PIPE-017` | A pipeline's logging block MUST name its level from the vocabulary `Logging` declares. |
 <!-- END GENERATED: rules-pipeline -->
 
 ## Output rules

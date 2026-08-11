@@ -18,7 +18,7 @@ some are applied only at connect or run time. **Tier** is what kind of
 obligation a rule is, **Grades** the document it binds, **Severity** what a
 violation costs.
 
-Owned here: **61** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
+Owned here: **71** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
 
 
 ## Structural
@@ -48,6 +48,11 @@ than edited.
 | RULE-CTOR-055 | A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`. | `connector` | error | — |
 | RULE-CTOR-056 | A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it. | `connector` | error | — |
 | RULE-CTOR-057 | In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares. | `connector` | error | — |
+| RULE-CTOR-058 | Every entry in a connector's error map MUST name its failure category from the vocabulary `ErrorMap` declares. | `connector` | error | `exception`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `http`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `sqlstate`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `vendor_code`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` |
+| RULE-CTOR-059 | A destination's SQL capability block MUST state its catalog support, its upsert grammar and how a write selects its target schema using only the vocabulary `SqlCapabilities` declares for each. | `connector` | error | `catalog`: `none`, `read`, `full` · `merge_form`: `merge`, `insert_on_conflict`, `insert_on_duplicate_key`, `none` · `session_targeting`: `per_statement`, `session_default` |
+| RULE-CTOR-060 | A destination's stage-relation block MUST state where stage relations live and how long they survive using only the vocabulary `SqlStageCapabilities` declares for each. | `connector` | error | `schema`: `target`, `dedicated` · `scope`: `temp`, `real` |
+| RULE-CTOR-061 | The transport type a connector declares as its default MUST come from the transport vocabulary `TransportDefaults` declares. | `connector` | error | `transport_type`: `http`, `sqlalchemy`, `adbc`, `s3`, `file`, `stdout` |
+| RULE-CTOR-062 | A resource-discovery implementation MUST name where its strategy comes from using the vocabulary `ResourceDiscoveryImplementation` declares. | `connector` | error | `type`: `builtin`, `connector_plugin` |
 | RULE-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | `api-endpoint` | error | — |
 | RULE-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | `api-endpoint` | error | — |
 | RULE-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | `api-endpoint` | error | — |
@@ -67,6 +72,11 @@ than edited.
 | RULE-ENDP-050 | A parameter MUST declare where it is sent on the request and what value type it carries using only the vocabulary `Param` declares for each; the placement is written under the field's `in` alias. | `api-endpoint` | error | `in`: `path`, `query`, `header`, `body` · `type`: `string`, `integer`, `number`, `boolean`, `array`, `object` |
 | RULE-ENDP-051 | A read operation's request MUST name its HTTP method from the vocabulary the read-request branches declare; the branch that method selects is what decides whether the request may declare a body at all. | `api-endpoint` | error | `method`: `GET`, `POST` |
 | RULE-ENDP-052 | A write mode's request MUST name its HTTP method from the vocabulary `WriteRequest.method` carries. | `api-endpoint` | error | `method`: `POST`, `PUT`, `PATCH` |
+| RULE-ENDP-053 | Every key of an endpoint's write map MUST name a write mode from the vocabulary `Operations` declares. | `api-endpoint` | error | `write`: `insert`, `upsert`, `truncate_insert` |
+| RULE-ENDP-054 | A parameter handed to a runtime mechanism MUST name that mechanism from the vocabulary `Param` declares. | `api-endpoint` | error | `controlled_by`: `pagination`, `replication` |
+| RULE-ENDP-055 | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. | `api-endpoint` | error | `operators`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
+| RULE-ENDP-056 | A single-bound cursor mapping MUST state the wire format it sends the cursor value as, and the comparison the provider applies to it, using only the vocabularies `SingleCursorMapping` declares for each. | `api-endpoint` | error | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `operator`: `gt`, `gte`, `lt`, `lte` |
+| RULE-ENDP-057 | A windowed cursor mapping MUST state the wire format it sends its bounds as, and the comparison the provider applies at each end of the window, using only the vocabularies `WindowCursorMapping` declares for each. | `api-endpoint` | error | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `start_operator`: `gt`, `gte`, `lt`, `lte` · `end_operator`: `gt`, `gte`, `lt`, `lte` |
 | RULE-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — |
 | RULE-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — |
 | RULE-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — |

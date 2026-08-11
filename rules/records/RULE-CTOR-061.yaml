@@ -1,0 +1,21 @@
+id: RULE-CTOR-061
+statement: >
+  The transport type a connector declares as its default MUST come from the
+  transport vocabulary `TransportDefaults` declares.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::TransportDefaults.transport_type"
+owners: [connector-plugin, engine]
+targets: [TransportDefaults]
+fields: [transport_type]
+mechanism: literal_enum
+rationale: >
+  The member picks which transport implementation the engine instantiates, and
+  the default is inherited by every entry that declares no type of its own — so
+  one unrecognised value here is not one broken transport but every transport
+  the connector did not spell out. The engine has no fallback to reach for: a
+  type it cannot resolve leaves the connection with nothing to open, and the
+  failure surfaces on the first run rather than in the document.
+status: active
+superseded_by: null

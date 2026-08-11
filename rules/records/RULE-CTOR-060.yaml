@@ -1,0 +1,25 @@
+id: RULE-CTOR-060
+statement: >
+  A destination's stage-relation block MUST state where stage relations live
+  and how long they survive using only the vocabulary `SqlStageCapabilities`
+  declares for each.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::SqlStageCapabilities.scope"
+owners: [connector-plugin, engine]
+targets: [SqlStageCapabilities]
+fields: [schema_, scope]
+mechanism: literal_enum
+rationale: >
+  Both members are read by the engine as it creates and drops the stage
+  relation around every write: the placement member decides how the stage is
+  qualified, and the lifetime member decides whether the engine emits a
+  temporary relation the session discards or an ordinary one it must clean up
+  itself. A value outside either set leaves the write with no statement to
+  emit, and it fails at handshake against a live database rather than while the
+  connector is being authored. Which placement is declared also decides whether
+  the block must name a schema, which is why `RULE-CTOR-013` reads the same
+  field for a different obligation.
+status: active
+superseded_by: null

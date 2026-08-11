@@ -1,0 +1,21 @@
+id: RULE-STRM-037
+statement: >
+  A validation rule MUST name its kind from the vocabulary `ValidationRule`
+  declares.
+tier: structural
+severity: error
+scope: stream
+validator: "analitiq.contracts.stream::ValidationRule.type"
+owners: [pipeline-plugin, engine]
+targets: [ValidationRule]
+fields: [type]
+mechanism: literal_enum
+rationale: >
+  The kind selects the check the engine runs against every record, and it is
+  also what decides whether a payload is expected beside it and what shape that
+  payload takes — the obligations `RULE-STRM-009` and `RULE-STRM-021` both read
+  from this field. A kind outside the set has no check behind it, so the rule
+  grades nothing and reads in the document exactly like one that is working,
+  which is the failure a defensive check exists to prevent.
+status: active
+superseded_by: null

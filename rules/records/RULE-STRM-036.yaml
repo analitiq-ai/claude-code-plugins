@@ -1,0 +1,21 @@
+id: RULE-STRM-036
+statement: >
+  A stream filter MUST name its operator from the vocabulary `Filter` declares.
+tier: structural
+severity: error
+scope: stream
+validator: "analitiq.contracts.stream::Filter.operator"
+owners: [pipeline-plugin, engine]
+targets: [Filter]
+fields: [operator]
+mechanism: literal_enum
+rationale: >
+  The field structurally admits the whole vocabulary because only the binding
+  knows which read path the filter will be rendered onto, so this is the outer
+  bound rather than the answer: `RULE-STRM-012` narrows it to the operators the
+  declared scope can carry, and a dialect or a provider may refuse one it
+  admits. What this rule keeps out is the operator that belongs to no read path
+  at all — an author's own spelling, which no narrowing can catch because there
+  is no vocabulary it could be narrowed from.
+status: active
+superseded_by: null

@@ -94,6 +94,7 @@ are things an agent gets wrong by writing a plausible value that validates.
 | `RULE-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. |
 | `RULE-SHRD-011` | A `display_name` MUST NOT carry leading or trailing whitespace. |
 | `RULE-SHRD-012` | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. |
+| `RULE-SHRD-013` | An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares. |
 <!-- END GENERATED: rules-shared -->
 
 ## Required reading

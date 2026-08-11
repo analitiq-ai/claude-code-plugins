@@ -413,6 +413,75 @@ def test_every_bound_vocabulary_field_yields_its_members():
     )
 
 
+def _vocabulary_bindings() -> set[tuple[str, str]]:
+    """Every ``(target, field)`` some `literal_enum` rule binds."""
+    return {
+        (target, _field_head(expr))
+        for rule in all_rules()
+        if rule.mechanism == "literal_enum"
+        for target in rule.targets
+        for expr in rule.fields
+    }
+
+
+def test_every_multi_member_vocabulary_is_bound_by_a_rule():
+    """The registry's admission test, in the direction that was missing.
+
+    Two ways the contract carries an obligation, and only one of them was
+    obliged to register. A rule applied by imperative code is caught by
+    `test_every_model_validator_is_registered_or_exempt` above and by the
+    validator package's check census: write a `@model_validator`, register it or
+    exempt it. A rule applied by an *annotation* — a closed vocabulary on a
+    field — was under no such obligation, so the registry held every
+    code-enforced rule plus whichever annotation-carried ones somebody had
+    wanted to cite. Two records read identically while differing in whether
+    their absence would have failed anything.
+
+    That asymmetry is what let a vocabulary reach plugin prose as a hand-typed
+    list. Prose may cite a rule id and let `render_rule_reference.py` print the
+    members off the live model; where no id existed there was nothing to cite,
+    and the members were retyped.
+
+    So every closed set an author picks a value from carries an id. The rule
+    then owns the vocabulary in one place, and the prose that teaches it cites
+    that id instead of copying the members
+    (`.claude/rules/no-drift-surfaces.md`).
+
+    **Multi-member only, and that threshold is the rule's substance.** A
+    single-member `Literal` — `AdbcTransport.transport_type` is `adbc`,
+    `ApiKeyAuth.type` is `api_key` — is a discriminator tag or a constant stamp.
+    There is no set to pick from and nothing prose can copy wrong: naming the
+    value IS naming the branch, and the obligation that governs it is the
+    discriminated union the tag selects, which registers on its own terms.
+    Demanding an id per tag would mint a record whose statement could only
+    restate the annotation. `contract_vocabularies` deliberately leaves this
+    call to its callers; this is the caller making it.
+
+    Bindings match through the MRO, the way `targets` is defined to: a record
+    naming `StreamAuthored.status` covers `StreamInput`, which inherits the
+    field unchanged. A subclass that *redeclares* the field with a different set
+    is a different vocabulary and needs its own binding — which it gets, because
+    the members are read off the subclass.
+    """
+    bound = _vocabulary_bindings()
+    unbound = []
+    for cls in contract_classes():
+        for name, info in cls.model_fields.items():
+            if len(closed_members(info.annotation)) < 2:
+                continue
+            if any((base.__name__, name) in bound for base in cls.__mro__):
+                continue
+            unbound.append(f"{cls.__name__}.{name}")
+    assert not unbound, (
+        "closed vocabularies no rule binds: "
+        f"{sorted(set(unbound))}. Each is a member list prose can only restate "
+        "by hand. Add a record with `mechanism: literal_enum` naming the model "
+        "in `targets` and the field in `fields` (rules/SCHEMA.md), so the "
+        "rendered reference prints the members off the live model and prose "
+        "cites the id."
+    )
+
+
 def test_structural_rules_do_not_restate_the_values_they_point_at():
     """The tier exists to STOP the copy, so an entry must not become one.
 

@@ -1,0 +1,22 @@
+id: RULE-ENDP-057
+statement: >
+  A windowed cursor mapping MUST state the wire format it sends its bounds as,
+  and the comparison the provider applies at each end of the window, using only
+  the vocabularies `WindowCursorMapping` declares for each.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::WindowCursorMapping.format"
+owners: [connector-plugin, engine]
+targets: [WindowCursorMapping]
+fields: [format, start_operator, end_operator]
+mechanism: literal_enum
+rationale: >
+  A window is sent as a pair of params, and each end carries its own
+  comparison because whether a bound is inclusive is a provider fact and the
+  two ends are routinely spelled differently. Getting one end wrong is the
+  quiet failure: the run succeeds, and the records on that boundary are either
+  dropped from every window or carried in two of them, which reads downstream
+  as missing rows or as duplicates rather than as a mapping to fix.
+status: active
+superseded_by: null

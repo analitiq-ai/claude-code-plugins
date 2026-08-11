@@ -1438,6 +1438,127 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-CTOR-058",
+   "statement": "Every entry in a connector's error map MUST name its failure category from the vocabulary `ErrorMap` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::ErrorMap.exception",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ErrorMap"
+   ],
+   "fields": [
+    "exception",
+    "http",
+    "sqlstate",
+    "vendor_code"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The category is not a label the run reports afterwards; it is the branch the engine takes when the failure arrives. Each member selects a different disposition — retry the request, stop the run and tell the user their settings are wrong, park the record — so a category outside the set leaves the engine with a mapping it cannot act on for a failure that has already happened. Every keyed map here carries the same vocabulary because each is another way of recognising the same failure, and an author who learns it from one map applies it to the rest.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-059",
+   "statement": "A destination's SQL capability block MUST state its catalog support, its upsert grammar and how a write selects its target schema using only the vocabulary `SqlCapabilities` declares for each.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::SqlCapabilities.catalog",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "SqlCapabilities"
+   ],
+   "fields": [
+    "catalog",
+    "merge_form",
+    "session_targeting"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "Each of these vocabularies picks the SQL the engine emits rather than describing the database for a reader: the upsert grammar decides which statement a keyed write compiles to, the targeting member decides whether every statement is qualified or a session default is set once, and the catalog member decides how far a fully qualified name may reach. The engine trusts the declaration instead of probing, so a member outside the set has no code path behind it and the failure arrives as SQL a real database rejects, after the connector has shipped.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-060",
+   "statement": "A destination's stage-relation block MUST state where stage relations live and how long they survive using only the vocabulary `SqlStageCapabilities` declares for each.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::SqlStageCapabilities.scope",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "SqlStageCapabilities"
+   ],
+   "fields": [
+    "schema_",
+    "scope"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "Both members are read by the engine as it creates and drops the stage relation around every write: the placement member decides how the stage is qualified, and the lifetime member decides whether the engine emits a temporary relation the session discards or an ordinary one it must clean up itself. A value outside either set leaves the write with no statement to emit, and it fails at handshake against a live database rather than while the connector is being authored. Which placement is declared also decides whether the block must name a schema, which is why `RULE-CTOR-013` reads the same field for a different obligation.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-061",
+   "statement": "The transport type a connector declares as its default MUST come from the transport vocabulary `TransportDefaults` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::TransportDefaults.transport_type",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "TransportDefaults"
+   ],
+   "fields": [
+    "transport_type"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The member picks which transport implementation the engine instantiates, and the default is inherited by every entry that declares no type of its own — so one unrecognised value here is not one broken transport but every transport the connector did not spell out. The engine has no fallback to reach for: a type it cannot resolve leaves the connection with nothing to open, and the failure surfaces on the first run rather than in the document.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-062",
+   "statement": "A resource-discovery implementation MUST name where its strategy comes from using the vocabulary `ResourceDiscoveryImplementation` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::ResourceDiscoveryImplementation.type",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ResourceDiscoveryImplementation"
+   ],
+   "fields": [
+    "type"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The member selects the loader: one path imports the strategy out of the connector's own package by the entrypoint declared beside it, the other looks the strategy up in the runtime's registry and reads no entrypoint at all. A value outside the set matches neither path, so discovery has nothing to call at the first connection that tries to list resources. `RULE-CTOR-003` reads the same field for the pairing it forces on the entrypoint.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-DBEP-001",
    "statement": "Every column a database endpoint declares MUST carry a name no other column in that document repeats.\n",
    "tier": "advisory",
@@ -1713,6 +1834,50 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "The obvious implementation copies the engine's stored failure detail into `message`, which puts a raw exception string — hostnames, credentials, internal identifiers — on a surface any API-key holder can read. Binding the text to the code on the model makes that leak impossible rather than merely discouraged, and keeps the customer-facing wording changeable in one place instead of wherever an error is constructed.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-DSYNC-003",
+   "statement": "A run status payload MUST report its coarse state from the vocabulary `PipelineRunStatusData` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "data-sync-run-status",
+   "validator": "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData.status",
+   "owners": [
+    "engine"
+   ],
+   "targets": [
+    "PipelineRunStatusData"
+   ],
+   "fields": [
+    "status"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "This payload is the whole of what an external consumer sees of a run, and the state is what their polling loop branches on — whether to keep asking, and whether to alert. The vocabulary is therefore a compatibility surface rather than a description of the engine: it stays coarse so an internal state the engine adds does not reach a consumer that has never heard of it, and the projection maps onto a member here instead of passing one through. `RULE-DSYNC-001` decides, from this same field, when the payload must carry an error.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-DSYNC-004",
+   "statement": "A run error MUST report its category from the code vocabulary `PublicRunError` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "data-sync-run-status",
+   "validator": "analitiq.contracts.pipelines.data_sync::PublicRunError.code",
+   "owners": [
+    "engine"
+   ],
+   "targets": [
+    "PublicRunError"
+   ],
+   "fields": [
+    "code"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The code is the only part of a failure a consumer may branch on, and it is what keeps the customer-safe wording bound to a fixed set rather than to whatever the failure produced — `RULE-DSYNC-002` maps the message from this field, so the vocabulary is what makes that mapping total. A code minted from the failure itself would be both an unbranchable value and the leak that rule exists to prevent, since the shortest way to invent one is to name it after the exception.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2827,6 +2992,125 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-053",
+   "statement": "Every key of an endpoint's write map MUST name a write mode from the vocabulary `Operations` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::Operations.write",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Operations"
+   ],
+   "fields": [
+    "write"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The map is what a stream binds against: a destination names the mode it wants and the engine looks it up here, so a key outside the vocabulary declares a capability no stream can ever select and quietly narrows what the endpoint can be used for. Keying the map by the vocabulary rather than by open strings is also what lets `RULE-ENDP-019` decide the conflict-key requirement from the key alone.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-054",
+   "statement": "A parameter handed to a runtime mechanism MUST name that mechanism from the vocabulary `Param` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::Param.controlled_by",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Param"
+   ],
+   "fields": [
+    "controlled_by"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The member says which machinery sets the value on every request, and each one is a different piece of the engine reading a different part of the endpoint — the paging state, or the incremental cursor. A value outside the set claims an owner that never writes the param, so it is sent as whatever the author defaulted it to and the run reports success over a page or a window nobody advanced. The declaration is also what `RULE-ENDP-002` reads to refuse a param that is both machine-owned and offered to stream filters.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-055",
+   "statement": "The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::Param.operators",
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "Param"
+   ],
+   "fields": [
+    "operators"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members and rendered onto this param, so the two documents agree only while both read one vocabulary. An operator offered here has to survive being serialised into a request the provider accepts, rather than compiled into a predicate the way a database read's operator is, and which ones do is a fact about the provider — so an endpoint declares what it offers instead of inheriting a vocabulary whole.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-056",
+   "statement": "A single-bound cursor mapping MUST state the wire format it sends the cursor value as, and the comparison the provider applies to it, using only the vocabularies `SingleCursorMapping` declares for each.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::SingleCursorMapping.format",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "SingleCursorMapping"
+   ],
+   "fields": [
+    "format",
+    "operator"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The format member decides how the engine renders the stored cursor onto the request, and the comparison member decides which records the provider is expected to return for it. Both are read at every incremental run and neither is discoverable from the response: a format the engine cannot render sends a value the provider parses as something else, and a comparison the provider does not apply silently changes what the window covers — either way the run succeeds and the rows it should have carried are gone.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-057",
+   "statement": "A windowed cursor mapping MUST state the wire format it sends its bounds as, and the comparison the provider applies at each end of the window, using only the vocabularies `WindowCursorMapping` declares for each.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": "analitiq.contracts.endpoints::WindowCursorMapping.format",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "WindowCursorMapping"
+   ],
+   "fields": [
+    "format",
+    "start_operator",
+    "end_operator"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "A window is sent as a pair of params, and each end carries its own comparison because whether a bound is inclusive is a provider fact and the two ends are routinely spelled differently. Getting one end wrong is the quiet failure: the run succeeds, and the records on that boundary are either dropped from every window or carried in two of them, which reads downstream as missing rows or as duplicates rather than as a mapping to fix.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
@@ -3152,6 +3436,52 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "The field is typed as a plain string, so an abbreviation or a UTC offset — `EST`, `PST`, `GMT+2` — is exactly what an author reaches for and exactly what carries no daylight-saving history. The zone is what turns a wall-clock schedule into an instant, so a name the runtime cannot resolve is not a formatting defect: the pipeline either does not fire or fires an hour off for half the year, and the run history is what surfaces it. Checking against the live database is also what keeps the contract current as zones are added and renamed, which a pattern or a copied list could not.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-016",
+   "statement": "A pipeline MUST name its lifecycle state from the vocabulary `PipelineAuthored` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "pipeline",
+   "validator": "analitiq.contracts.pipelines.config::PipelineAuthored.status",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "PipelineAuthored"
+   ],
+   "fields": [
+    "status"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The state is what the scheduler reads to decide whether this pipeline is eligible to run, so it governs execution rather than presentation. A value outside the set leaves that decision undefined for a document that otherwise validates, and either resolution is a defect the author cannot see from the file: a pipeline that never fires, or one that fires while it was meant to be held back.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PIPE-017",
+   "statement": "A pipeline's logging block MUST name its level from the vocabulary `Logging` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "pipeline",
+   "validator": "analitiq.contracts.pipelines.config::Logging.log_level",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "Logging"
+   ],
+   "fields": [
+    "log_level"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The member is handed to the engine's logging configuration as a threshold, so it is ordered rather than merely named — the level chosen decides how much of a failed run there is to read afterwards. An unrecognised value has no position in that ordering, and the resolutions available to a runtime that cannot place it are to log everything or to log nothing, on a run nobody is watching.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3961,6 +4291,29 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-SHRD-013",
+   "statement": "An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "any",
+   "validator": "analitiq.contracts.shared.common::RetryErrorHandlingBase.strategy",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "RetryErrorHandlingBase"
+   ],
+   "fields": [
+    "strategy"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "Each member is a different disposition for data the run could not deliver — stop, park it where someone can retrieve it, or drop it and continue — so the choice decides whether records that failed are recoverable at all. It is declared once on the shared base because every block that inherits it is answering the same question about a different stage, and an author who learns the vocabulary at one of them carries it to the rest. `RULE-RETRY-001` reads the sibling retry fields on the same base.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-STRM-001",
    "statement": "Each entry in a stream's destinations MUST address an endpoint no other entry addresses.\n",
    "tier": "advisory",
@@ -4599,6 +4952,100 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "A connection-scoped reference is keyed by the connection and the endpoint together, so an endpoint id that exists under a different connection resolves to nothing while looking entirely correct — the id is real, the connection is real, and only the pairing is wrong. It is the shape a reference takes after a stream is copied between connections, and it survives every check either document can make alone, because a stream cannot see which endpoints a connection carries. `RULE-STRM-003` settles that a supplied id is the derived one; this settles that the endpoint it derives to is actually there.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-035",
+   "statement": "A stream MUST name its lifecycle state from the vocabulary `StreamAuthored` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "analitiq.contracts.stream::StreamAuthored.status",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "StreamAuthored"
+   ],
+   "fields": [
+    "status"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The state decides whether a pipeline run reads this stream at all, so it is read by the scheduler rather than displayed to a user. A value outside the set is not a mislabelled stream but one whose participation nothing can decide, and the two ways that can resolve — skipped silently, or run when the author meant it held back — are both wrong and neither announces itself.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-036",
+   "statement": "A stream filter MUST name its operator from the vocabulary `Filter` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "analitiq.contracts.stream::Filter.operator",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "Filter"
+   ],
+   "fields": [
+    "operator"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The field structurally admits the whole vocabulary because only the binding knows which read path the filter will be rendered onto, so this is the outer bound rather than the answer: `RULE-STRM-012` narrows it to the operators the declared scope can carry, and a dialect or a provider may refuse one it admits. What this rule keeps out is the operator that belongs to no read path at all — an author's own spelling, which no narrowing can catch because there is no vocabulary it could be narrowed from.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-037",
+   "statement": "A validation rule MUST name its kind from the vocabulary `ValidationRule` declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "analitiq.contracts.stream::ValidationRule.type",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "ValidationRule"
+   ],
+   "fields": [
+    "type"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The kind selects the check the engine runs against every record, and it is also what decides whether a payload is expected beside it and what shape that payload takes — the obligations `RULE-STRM-009` and `RULE-STRM-021` both read from this field. A kind outside the set has no check behind it, so the rule grades nothing and reads in the document exactly like one that is working, which is the failure a defensive check exists to prevent.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-038",
+   "statement": "A stream destination's write block MUST name its mode from the write-mode vocabulary the block it selects declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "stream",
+   "validator": "analitiq.contracts.stream::ApiWrite.mode",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "ApiWrite",
+    "DatabaseKeylessWrite",
+    "DatabaseConflictKeyedWrite"
+   ],
+   "fields": [
+    "mode"
+   ],
+   "mechanism": "literal_enum",
+   "fixture_model": null,
+   "rationale": "The mode is the discriminator `RULE-STRM-016` selects the write shape by, so a value outside the vocabulary is not a wrong mode but a document that matches no shape at all, and the rejection names the union rather than the field. Each shape declares only the modes it can execute, which is why the vocabularies differ between them: a keyed write and a keyless one are different destinations' capabilities, not one set the author picks from twice. For an API destination the mode must additionally be a key the chosen endpoint declares, which is `RULE-STRM-024`.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -1,0 +1,23 @@
+id: RULE-DSYNC-003
+statement: >
+  A run status payload MUST report its coarse state from the vocabulary
+  `PipelineRunStatusData` declares.
+tier: structural
+severity: error
+scope: data-sync-run-status
+validator: "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData.status"
+owners: [engine]
+targets: [PipelineRunStatusData]
+fields: [status]
+mechanism: literal_enum
+rationale: >
+  This payload is the whole of what an external consumer sees of a run, and the
+  state is what their polling loop branches on — whether to keep asking, and
+  whether to alert. The vocabulary is therefore a compatibility surface rather
+  than a description of the engine: it stays coarse so an internal state the
+  engine adds does not reach a consumer that has never heard of it, and the
+  projection maps onto a member here instead of passing one through.
+  `RULE-DSYNC-001` decides, from this same field, when the payload must carry
+  an error.
+status: active
+superseded_by: null

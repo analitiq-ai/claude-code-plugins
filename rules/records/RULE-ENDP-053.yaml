@@ -1,0 +1,21 @@
+id: RULE-ENDP-053
+statement: >
+  Every key of an endpoint's write map MUST name a write mode from the
+  vocabulary `Operations` declares.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::Operations.write"
+owners: [connector-plugin, engine]
+targets: [Operations]
+fields: [write]
+mechanism: literal_enum
+rationale: >
+  The map is what a stream binds against: a destination names the mode it wants
+  and the engine looks it up here, so a key outside the vocabulary declares a
+  capability no stream can ever select and quietly narrows what the endpoint
+  can be used for. Keying the map by the vocabulary rather than by open strings
+  is also what lets `RULE-ENDP-019` decide the conflict-key requirement from
+  the key alone.
+status: active
+superseded_by: null

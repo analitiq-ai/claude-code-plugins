@@ -134,6 +134,10 @@ run time.
 | `RULE-STRM-032` | A stream MUST name as its parent the pipeline that references it. |
 | `RULE-STRM-033` | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. |
 | `RULE-STRM-034` | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. |
+| `RULE-STRM-035` | A stream MUST name its lifecycle state from the vocabulary `StreamAuthored` declares. |
+| `RULE-STRM-036` | A stream filter MUST name its operator from the vocabulary `Filter` declares. |
+| `RULE-STRM-037` | A validation rule MUST name its kind from the vocabulary `ValidationRule` declares. |
+| `RULE-STRM-038` | A stream destination's write block MUST name its mode from the write-mode vocabulary the block it selects declares. |
 <!-- END GENERATED: rules-stream -->
 
 ## Output rules

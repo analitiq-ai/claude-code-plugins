@@ -177,4 +177,5 @@ The rule registry's database-endpoint rules over this array:
 | `RULE-ENDP-020` | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
 | `RULE-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
 | `RULE-ENDP-043` | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. |
+| `RULE-ENDP-055` | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. |
 <!-- END GENERATED: rules-endpoint -->

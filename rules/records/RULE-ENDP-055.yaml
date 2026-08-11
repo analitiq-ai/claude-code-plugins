@@ -1,0 +1,22 @@
+id: RULE-ENDP-055
+statement: >
+  The filter operators a parameter offers MUST come from the operator
+  vocabulary `Param` declares.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::Param.operators"
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [Param]
+fields: [operators]
+mechanism: literal_enum
+rationale: >
+  This set is the endpoint's promise to every stream that binds it: a filter is
+  authored against these members and rendered onto this param, so the two
+  documents agree only while both read one vocabulary. An operator offered here
+  has to survive being serialised into a request the provider accepts, rather
+  than compiled into a predicate the way a database read's operator is, and
+  which ones do is a fact about the provider — so an endpoint declares what it
+  offers instead of inheriting a vocabulary whole.
+status: active
+superseded_by: null

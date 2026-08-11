@@ -1,0 +1,21 @@
+id: RULE-PIPE-016
+statement: >
+  A pipeline MUST name its lifecycle state from the vocabulary
+  `PipelineAuthored` declares.
+tier: structural
+severity: error
+scope: pipeline
+validator: "analitiq.contracts.pipelines.config::PipelineAuthored.status"
+owners: [pipeline-plugin, engine]
+targets: [PipelineAuthored]
+fields: [status]
+mechanism: literal_enum
+rationale: >
+  The state is what the scheduler reads to decide whether this pipeline is
+  eligible to run, so it governs execution rather than presentation. A value
+  outside the set leaves that decision undefined for a document that otherwise
+  validates, and either resolution is a defect the author cannot see from the
+  file: a pipeline that never fires, or one that fires while it was meant to be
+  held back.
+status: active
+superseded_by: null

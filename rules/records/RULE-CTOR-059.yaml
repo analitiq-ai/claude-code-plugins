@@ -1,0 +1,24 @@
+id: RULE-CTOR-059
+statement: >
+  A destination's SQL capability block MUST state its catalog support, its
+  upsert grammar and how a write selects its target schema using only the
+  vocabulary `SqlCapabilities` declares for each.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::SqlCapabilities.catalog"
+owners: [connector-plugin, engine]
+targets: [SqlCapabilities]
+fields: [catalog, merge_form, session_targeting]
+mechanism: literal_enum
+rationale: >
+  Each of these vocabularies picks the SQL the engine emits rather than
+  describing the database for a reader: the upsert grammar decides which
+  statement a keyed write compiles to, the targeting member decides whether
+  every statement is qualified or a session default is set once, and the
+  catalog member decides how far a fully qualified name may reach. The engine
+  trusts the declaration instead of probing, so a member outside the set has no
+  code path behind it and the failure arrives as SQL a real database rejects,
+  after the connector has shipped.
+status: active
+superseded_by: null

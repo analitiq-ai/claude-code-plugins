@@ -150,11 +150,12 @@ def _live_values(rule, models: dict) -> str:
 
     Each set is labelled with the field's **wire alias** where it has one, not
     the Python attribute the record names. An author writes the document, and
-    `Param.location` is spelled `in` there. The two are easy to conflate because
-    the models set `populate_by_name`, so a document authored under the
-    attribute name validates locally and is then rejected by the published
-    schema, which requires the alias and forbids unknown keys — a failure that
-    surfaces after the connector ships rather than at authoring time.
+    `Param.location` is spelled `in` there. Printing the attribute would name a
+    key the published schema forbids, in the one place prose is told to trust
+    over its own memory. The models refuse the attribute spelling too
+    (`test_wire_name_policy.py`), so the two agree — but a label is read by an
+    author, not validated, and a wrong one is only found by a round through the
+    validator.
     """
     from analitiq.contracts.shared.introspect import closed_members
 
