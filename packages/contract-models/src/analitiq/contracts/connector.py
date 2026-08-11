@@ -732,9 +732,9 @@ class ConnectionContract(StrictModel):
     Source of truth for connection form rendering, save-time validation, drift
     detection, and template reference validation. Spec: §Connection Contract.
 
-    No standalone `version` field — drift detection rides on `connector_version`
-    semver: patch = no shape change, minor = additive shape change, major =
-    breaking shape change.
+    No standalone `version` field — drift detection rides on the connector's
+    own `version` semver: patch = no shape change, minor = additive shape
+    change, major = breaking shape change.
     """
 
     inputs: dict[str, ConnectionContractInput] = Field(

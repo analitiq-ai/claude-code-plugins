@@ -72,7 +72,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === connector: connection contract + discovery ==========================
     ProseObligation(
         model="ConnectionContract",
-        prose_hash="57d2c52ff1d9",
+        prose_hash="344a638576c6",
         structural=(
             "the absence of a standalone `version` field is enforced by "
             "StrictModel: extra='forbid' rejects a document declaring one"
