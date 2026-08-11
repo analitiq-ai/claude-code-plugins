@@ -150,6 +150,43 @@ Running a plugin helper from a checkout would otherwise trigger the bootstrap
 conftest sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1` to short-circuit that; without
 it, the bootstrap would replace the pytest process mid-run.
 
+## The stores of record
+
+Each store holds a different **unit**. That is what separates them — not subject
+matter, which crosses all of them. A fact belongs where its unit belongs, and a
+store that could only hold it by taking a second kind of unit is the wrong one.
+
+| Store | Unit | It belongs here when |
+|---|---|---|
+| `packages/*/src` | a **model field** | a machine can reject one document with it |
+| `schemas/` | a **resource version** | never — rendered, never authored |
+| `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
+| `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
+| `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
+| `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
+| `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |
+| `.claude/rules/*.md` | an **obligation on a contributor here** | its verdict needs a person reading a sentence |
+
+The vendored engine grammar is a store too; "The canonical Arrow type
+vocabulary is engine-owned" above says why nothing here may author it.
+
+**The registry and the census are halves of one question.** The registry
+catalogues rules; the census catalogues the sentences the contract publishes
+about itself. Every registry check starts from a registered rule, so an
+obligation stated in a field description and never registered was invisible —
+the census is what makes that case fail. Its entries carry no prose of their
+own: a `prose_hash` fingerprints the wording, and a disposition names what
+rejects a document that ignores it — a rule id, the model's own shape, a
+written waiver, or `descriptive` for a sentence asking nothing. It lives
+outside `packages/` because it is how this repo keeps its own wording honest,
+not part of the contract, and so does not ship in the wheel.
+
+**Where a new fact goes.** Something a document must satisfy is a model field,
+and a name for it is a record. Something an author must judge is plugin craft.
+Something a contributor must do while editing this repo is `.claude/rules/`. A
+sentence added to a contract field description is a census site whether or not
+you catalogue it — the lint finds it either way.
+
 ## Single source of truth (drift policy)
 
 The published schema is the single source of truth. **Never restate what it
