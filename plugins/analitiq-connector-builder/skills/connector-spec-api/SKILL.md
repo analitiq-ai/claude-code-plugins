@@ -10,8 +10,8 @@ This skill is loaded by `api-connector-creator` when authoring an API
 connector. It carries the API-specific vocabulary and examples needed to
 populate `transports`, `auth`, `connection_contract`, and
 `resource_discovery` for `kind: "api"`, plus the standalone
-`type-map-read.json` shipped alongside the connector — an API connector's
-release carries nothing else (`RULE-CTOR-043`).
+`type-map-read.json` shipped alongside the connector. An API connector's
+release carries no connector-package Python files (`RULE-CTOR-043`).
 
 ## Required reading (load on demand)
 
@@ -26,30 +26,23 @@ Pick what you need for the auth and pagination styles you're authoring:
 - `connector-spec-db/spec-type-maps.md` for authoring the standalone
   `type-map-read.json` (same rule shape for API and DB; API ships the
   read direction only)
-- The closest auth archetype under `examples/<name>/` (`api_key`,
-  `oauth2_authorization_code`, `jwt`) — each a `<name>.example.json` connector
-  body + sibling `type-map-read.json`. `spec-auth-flows.md` covers every auth
-  type; only the diverse archetypes ship a full example dir
-
-## What this skill covers
-
-- HTTP transport idioms: single-origin, multi-origin, templated `base_url`.
-- A template per `auth.type` the contract defines (`spec-auth-flows.md`).
-- `auth.authorize` / `auth.token_exchange` / `auth.refresh` / `auth.test`
-  operation templates.
-- Inline function expressions — registered catalog and planned-but-unregistered
-  names: `connector-builder/references/value-expressions.md` §Function catalog.
-- `headers_remove` semantics for inheriting transports.
-- `post_auth_outputs` with `options_request` / `discovery_request`.
-- Pagination styles — the full set and wiring: `spec-pagination.md`.
-- Replication for incremental sync.
+- `connector-builder/references/value-expressions.md` §Function catalog (the
+  registered functions, and the ones documented as planned)
+- `connector-builder/references/lifecycle-phases.md` (for `post_auth_outputs`
+  with `options_request` / `discovery_request`; for `headers_remove` on an
+  inheriting transport see `spec-transport.md`)
+- The closest auth archetype under `examples/<name>/` (`api-key`,
+  `oauth2-authorization-code`, `jwt`) — each a `<name>.example.json` connector
+  body with a sibling `type-map-read.json` and `endpoints/`.
+  `spec-auth-flows.md` carries a section per API auth type (`db` is
+  `connector-spec-db`'s); only the diverse archetypes ship a full example dir
 
 ## Endpoint `operations` shape (cross-reference)
 
 Endpoint authoring lives in the `endpoint-creator` agent, and the shape of
 `operations` — which keys exist, which are required, which combinations are
-legal — is owned by the published api-endpoint contract and enforced by the
-validator. It is not restated here.
+legal — is owned by the published api-endpoint contract. It is not restated
+here.
 
 What to read instead:
 
@@ -58,14 +51,11 @@ What to read instead:
 - `spec-pagination.md` / `spec-replication.md` — choosing and wiring those
   blocks.
 - `connector-builder/references/rules.md` — every rule this plugin owns,
-  ordered by tier, each citable by id. Satisfy all of them: the Grades column
-  says which artifact a rule binds, and one graded `any` binds every document.
+  citable by id. Satisfy all of them.
 
 ## What this skill does NOT cover
 
 - DSN URL templates, bindings, or encoding enums (that's `connector-spec-db`).
 - `tls` block (that's `connector-spec-db`).
 - Database `resource_discovery` (DB-specific shape).
-- Type-map file shape and authoring rules (see
-  `connector-spec-db/spec-type-maps.md` — the standalone `type-map-read.json`
-  has the same shape for API and DB).
+- Type-map file shape and authoring rules (`connector-spec-db/spec-type-maps.md`).

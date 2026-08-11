@@ -6,48 +6,37 @@ resolves a connector in two steps: `kind` selects the generic fallback
 class, `connector_id` selects the connector package's own class via
 Python entry points.
 
-API connectors carry **only** the definition (`connector.json`,
-`type-map-read.json`, `endpoints/`) — no package files (`RULE-CTOR-043`),
-no write map.
+An `api` connector ships the definition (`connector.json`,
+`type-map-read.json`, `endpoints/`) and a README (`RULE-PKG-025`) — no Python
+package files (`RULE-CTOR-043`) and no write map (`RULE-PKG-030`).
 
 ## Required layout
 
-The connector root IS the Python package:
+The connector root IS the Python package (`RULE-PKG-002`):
 
 ```
 {connector_id}/
   definition/
     connector.json                   # connector_id; transports; sql_capabilities
-    type-map-read.json               # native → Arrow; regex patterns UPPERCASE
-    type-map-write.json              # Arrow → native; REQUIRED for kind: database
+    type-map-read.json               # native → Arrow; see spec-type-maps.md
+    type-map-write.json              # Arrow → native; RULE-PKG-030
   __init__.py                        # RULE-PKG-009
   connector.py                       # {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
   requirements.txt                   # THIS connector's driver(s) only
   pyproject.toml                     # see below
+  README.md                          # RULE-PKG-025
 ```
 
-`connector_id` is the entry-point name the engine resolves
-(`RULE-CTOR-042`).
+The release directory is named for the `connector_id` its `connector.json`
+declares (`RULE-CTOR-042`) — the same slug the engine resolves the connector
+class by (`RULE-PKG-007`).
 
 ## `pyproject.toml` (`RULE-PKG-007`)
 
-- Every name derives from `connector_id`, and the repo root is mapped as
-  the importable package (`RULE-PKG-007`).
 - Dependencies are declared dynamically, so `requirements.txt` stays the
   single source of truth for the driver (`RULE-PKG-006`).
-- Entry points registered for read **and** write (`RULE-PKG-008`) — both
-  directions are first-class; never ship a one-directional connector:
-
-  ```toml
-  [project.entry-points."analitiq.source_connectors"]
-  {connector_id} = "analitiq_connector_{connector_id}.connector:{Name}Connector"
-
-  [project.entry-points."analitiq.destination_connectors"]
-  {connector_id} = "analitiq_connector_{connector_id}.connector:{Name}Connector"
-  ```
-
-- The CDK is provided by the engine environment — never list it as a
-  dependency.
+- Entry points registered for read **and** write (`RULE-PKG-008`) — never
+  ship a one-directional connector; both groups are in the template below.
 
 Template (postgres reference):
 
@@ -112,6 +101,11 @@ class {Name}Connector(GenericSQLConnector):
 
 ### Import rules (`RULE-PKG-011`)
 
+**The CDK is the authority on every symbol and hook this page names; this
+document restates them** (`RULE-PKG-003`). Where the CDK and this page
+disagree, the CDK wins, and the disagreement is a bug to report against this
+spec.
+
 The CDK surface a connector reaches for: `cdk.sql.dialects.SqlDialect`
 and `cdk.sql.dialects.TableAddress`,
 `cdk.sql.generic.GenericSQLConnector`, `cdk.sql.exceptions`,
@@ -121,8 +115,8 @@ copy of the mysql-shaped dialect rather than importing the mysql
 connector.
 
 The write-path **renderers** return statement text, so they need no
-SQLAlchemy construct helpers (`sqlalchemy.dialects.*.insert` and friends
-belonged to the removed record-executor surface). `bulk_land` is the
+SQLAlchemy construct helpers — `sqlalchemy.dialects.*.insert` and friends
+are outside the import surface `RULE-PKG-011` admits. `bulk_land` is the
 exception: it performs the landing itself, so it reaches for the driver's
 own bulk API — and, on an **async** driver, for `sqlalchemy.util.await_only`
 to drive that coroutine from a hook the CDK calls synchronously
@@ -172,10 +166,11 @@ just the quirky hook (the thin → thick gradient) — **on the dialect**
 itself declares (`RULE-PKG-012`); anything outside it fails the CDK
 conformance kit's surface check.
 
-Systems on decision-order step 3 reach their native bulk-load path the
-same way: declare the mechanism in `sql_capabilities.bulk_load` and
-implement `bulk_land` (`RULE-PKG-016`), never a private override against
-the raw cursor (`spec-sql-write-path.md`).
+Systems whose native bulk-load path rides the SQLAlchemy transport
+(`spec-driver-selection.md`, the decision order) reach it the same way:
+declare the mechanism in `sql_capabilities.bulk_load` and implement
+`bulk_land` (`RULE-PKG-016`), never a private override against the raw
+cursor (`spec-sql-write-path.md`).
 
 ## `__init__.py` (`RULE-PKG-009`)
 
@@ -189,6 +184,7 @@ __all__ = ["{Name}Connector", "{Name}Dialect"]
 
 ## Enforcement
 
+<!-- PROBE: sql-capabilities-pairing-unchecked -->
 The plugin's schema validator checks JSON documents only. Package files
 are enforced by registry CI: `pip wheel --no-deps .` must build, the
 wheel must contain `analitiq_connector_{id}/connector.py` plus every

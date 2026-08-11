@@ -1,0 +1,23 @@
+id: RULE-DBEP-013
+statement: >
+  A discovered object's recorded type label is descriptive only: whether the
+  object can be read or written MUST be decided by the connector class's
+  protocol conformance, and execution MUST NOT branch on the label.
+tier: procedural
+severity: error
+scope: database-endpoint
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [DatabaseObject]
+fields: [object_type]
+rationale: >
+  The field is an open string a discovery strategy fills from whatever the
+  provider's catalog calls the object, so its vocabulary differs per system and
+  per strategy and no set of values is complete. Gating on it strands objects
+  whose system spells the label differently and hands write paths to objects the
+  connector never implemented a write for, while the connector class already
+  answers the same question exactly. Catching a violation means reading the
+  connector package's own code for a branch on the label, which no document
+  records.
+status: active
+superseded_by: null

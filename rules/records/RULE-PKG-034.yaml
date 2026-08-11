@@ -1,0 +1,23 @@
+id: RULE-PKG-034
+statement: >
+  A connector MUST NOT keep its own record of which batches it has already
+  written; record identity is content-derived and the stage relation's name
+  is engine-owned and deterministic, and together they are the whole
+  idempotency mechanism.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  A side table of committed batches is the natural thing to reach for when a
+  retry has to be made safe, and it duplicates a mechanism that is already
+  complete: identity comes from the record's own content and the stage the
+  engine names deterministically, so a connector-side ledger is a second
+  source of truth the engine never consults and no retry path clears. The
+  ledger lives in `connector.py`, which no contract model opens, and the
+  conformance kit audits which hooks a dialect overrides rather than what one
+  persists — so a violation first appears as rows landed twice after a retry,
+  in production.
+status: active
+superseded_by: null

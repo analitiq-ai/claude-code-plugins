@@ -1011,6 +1011,39 @@ _BLIND_SPOT_PROBES: tuple[str, ...] = (
 )
 
 
+# Natives chosen to exhibit each thing the normalization does — surrounding
+# whitespace, an internal run, and casing — so an author reading the rendered
+# pairs can predict how their own native will be spelled at match time. The
+# right column is never typed: it is what the contract's own function returns.
+_NORMALIZATION_SAMPLES: tuple[str, ...] = (
+    " varchar ",
+    "CHARACTER  VARYING",
+    "numeric(10, 2)",
+)
+
+
+def render_native_normalization() -> str:
+    """The read-side normalization, shown as worked pairs off the live function.
+
+    The steps themselves are `analitiq.contracts.type_map.normalize_native_type`
+    and describing them in prose is a copy that goes stale silently — an author
+    who spells a `regex` literal against the wrong casing writes a rule that can
+    never match, and nothing rejects it. Rendering what the function actually
+    returns keeps the guidance and drops the copy.
+    """
+    from analitiq.contracts.type_map import normalize_native_type
+
+    rows = [
+        f"| `{sample}` | `{normalize_native_type(sample)}` |"
+        for sample in _NORMALIZATION_SAMPLES
+    ]
+    return "\n".join([
+        "| Authored or probed native | Spelled this way at match time |",
+        "|---|---|",
+        *rows,
+    ]) + "\n"
+
+
 def _render_claim(claim_id: str) -> str:
     return CLAIMS_BY_ID[claim_id].text + "\n"
 
@@ -1040,6 +1073,7 @@ def _release_table():
 _DEDICATED_RENDERERS: dict[str, Callable[[], str]] = {
     "scope-guarantees": render_scope_guarantees,
     "validator-blind-spots": render_validator_blind_spots,
+    "native-normalization": render_native_normalization,
 }
 _CLAIM_RENDERERS: dict[str, Callable[[], str]] = {
     f"claim:{c.id}": (lambda cid=c.id: _render_claim(cid)) for c in CLAIMS
@@ -1058,6 +1092,10 @@ def block_probe_ids(block_id: str) -> set[str]:
     """The probe ids one block stands on."""
     if block_id in _release_table().RENDERERS:
         return set()  # data-backed, not probe-backed — see `_release_table`
+    if block_id == "native-normalization":
+        # Contract-backed: the rows are what `normalize_native_type` returns,
+        # so the function is the pin. No validator behavior is asserted.
+        return set()
     if block_id == "scope-guarantees":
         return scope_table_probe_ids() | set(_SCOPE_GUARANTEES_EXTRA_PROBES)
     if block_id == "validator-blind-spots":

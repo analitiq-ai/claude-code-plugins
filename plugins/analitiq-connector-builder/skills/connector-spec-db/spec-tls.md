@@ -4,7 +4,7 @@ How `sqlalchemy` database transports declare TLS intent without
 embedding driver-specific objects. The generic `tls` block is
 **SQLAlchemy-only**; for `adbc` transports, TLS lives inside
 `db_kwargs` (e.g. `adbc.postgresql.sslmode`, `adbc.postgresql.sslrootcert`)
-— see `spec-dsn-bindings.md` and `db-connector-creator.md` step 2.
+— see `spec-dsn-bindings.md`.
 
 <!-- BEGIN GENERATED: claim:tls-coherence-unchecked -->
 > **Nothing validates TLS coherence.** The contract's TLS block is
@@ -32,29 +32,27 @@ carrying a `tls` block (`mode` + `ca_certificate` as `ref` expressions).
   PEM-encoded CA bundle. It should `ref` the canonical secret
   `secrets.ssl_ca_certificate`.
 - <!-- PROBE: tls-coherence-unchecked -->
-  If the `ssl_mode` enum allows any certificate-verification mode (a
-  mode that verifies the server certificate against a CA, whatever the
-  driver names it), the connection contract **must** declare
-  `ssl_ca_certificate` as an input (`RULE-CTOR-029`). Nothing checks
-  this — verify it yourself.
-- Connector authors must NOT embed driver-specific TLS objects, file
-  paths, or executable code in connector JSON. The runtime resolves the
-  generic declaration and hands it to the connector package's dialect,
-  which converts it into driver-specific connect arguments.
+  `RULE-CTOR-029` binds whenever the `ssl_mode` enum admits a mode that
+  verifies the server certificate against a CA, whatever the driver names
+  it. Nothing checks it — verify it yourself.
+- Keep driver-specific TLS material out of connector JSON
+  (`RULE-CTOR-063`). The runtime resolves the generic declaration and hands
+  it to the connector package's dialect, which converts it into
+  driver-specific connect arguments.
 - A `tls` block obligates the connector package's dialect
   (`RULE-PKG-021`; see `spec-connector-package.md` §Dialect hooks). The
-  engine has no built-in TLS interpretation for any driver — the CDK
-  base dialect raises `UnsupportedDialectOperationError` for every
-  mode — so a connector that declares `tls` without a dialect TLS hook
-  fails loudly at connect.
+  engine has no built-in TLS interpretation for any driver, so a connector
+  that declares `tls` without a dialect TLS hook fails loudly at connect.
 
 ## SSL mode vocabulary is connector-defined — researched, never copied
 
 The `ssl_mode` vocabulary belongs to the connector: declare the
 system's native mode names in the `connection_contract.inputs.ssl_mode`
 enum, and interpret them in the connector package's dialect via the
-TLS hook (see `spec-connector-package.md`). Users see the vocabulary
-their database's own docs use; no translation table ships anywhere.
+TLS hook (see `spec-connector-package.md`). The declared set and the set
+the dialect interprets must be the same (`RULE-PKG-029`). Users see the
+vocabulary their database's own docs use; no translation table ships
+anywhere.
 
 The vocabulary is established at author time from the researcher's
 grounded facts (`ProviderFacts.tls.supported_modes` — the mode values
@@ -70,15 +68,12 @@ not a license to borrow a vocabulary.
 The dialect maps each declared mode to whatever the driver's connect
 API takes — a pass-through mode string, a boolean toggle, or an
 `SSLContext` built with `cdk.transport_factory.ca_ssl_context` when a
-CA bundle is supplied. A driver that takes TLS through a single
-connect argument implements `build_tls_connect_arg(mode, ca_pem)`; a
-driver that spreads TLS across several connect parameters overrides
-`build_tls_connect_args(mode, ca_pem)` and returns the full mapping
-(see `spec-connector-package.md` §Dialect hooks). Either form must
-satisfy `RULE-PKG-022`.
+CA bundle is supplied. Which hook carries it — a single connect argument
+or the full connect-args mapping — is `spec-connector-package.md`
+§Dialect hooks; whichever it is must satisfy `RULE-PKG-022`.
 
 ## Authoring checklist
 
 <!-- PROBE: tls-coherence-unchecked -->
-Re-verify each rule above before returning — especially `RULE-PKG-029`,
-which the dialect owns and no validator checks.
+Re-verify every rule on this page before returning — no validator checks
+any of them.

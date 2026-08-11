@@ -1,7 +1,6 @@
 id: RULE-CTOR-043
 statement: >
-  An `api` connector's release MUST ship definition documents only and MUST
-  NOT carry connector-package Python files.
+  An `api` connector's release MUST NOT carry connector-package Python files.
 tier: referential
 severity: warning
 scope: connector

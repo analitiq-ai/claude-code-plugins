@@ -18,7 +18,7 @@ some are applied only at connect or run time. **Tier** is what kind of
 obligation a rule is, **Grades** the document it binds, **Severity** what a
 violation costs.
 
-Owned here: **71** structural · **64** advisory · **28** referential · **17** procedural · **8** judgment.
+Owned here: **74** structural · **64** advisory · **29** referential · **19** procedural · **9** judgment.
 
 
 ## Structural
@@ -53,6 +53,8 @@ than edited.
 | RULE-CTOR-060 | A destination's stage-relation block MUST state where stage relations live and how long they survive using only the vocabulary `SqlStageCapabilities` declares for each. | `connector` | error | `schema`: `target`, `dedicated` · `scope`: `temp`, `real` |
 | RULE-CTOR-061 | The transport type a connector declares as its default MUST come from the transport vocabulary `TransportDefaults` declares. | `connector` | error | `transport_type`: `http`, `sqlalchemy`, `adbc`, `s3`, `file`, `stdout` |
 | RULE-CTOR-062 | A resource-discovery implementation MUST name where its strategy comes from using the vocabulary `ResourceDiscoveryImplementation` declares. | `connector` | error | `type`: `builtin`, `connector_plugin` |
+| RULE-CTOR-063 | A transport's `tls` values MUST be declarations the runtime resolves to plain strings, never a driver-specific object, a filesystem path, or code; converting a resolved mode into driver connect arguments belongs to the connector package's dialect. | `connector` | error | — |
+| RULE-CTOR-064 | An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name. | `connector` | error | — |
 | RULE-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | `api-endpoint` | error | — |
 | RULE-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | `api-endpoint` | error | — |
 | RULE-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | `api-endpoint` | error | — |
@@ -91,6 +93,7 @@ than edited.
 | RULE-PKG-019 | A `bulk_land` implementation MUST target the stage's full address rather than its bare table name, so a real-scope stage lands in the schema the engine qualified it with. | `connector-package` | error | — |
 | RULE-PKG-022 | A dialect's TLS hook MUST raise rather than connect when a certificate-verification mode resolves with an empty CA certificate. | `connector-package` | error | — |
 | RULE-PKG-023 | A connector's write direction MUST live in `type-map-write.json`: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map. | `connector-package` | warning | — |
+| RULE-PKG-034 | A connector MUST NOT keep its own record of which batches it has already written; record identity is content-derived and the stage relation's name is engine-owned and deterministic, and together they are the whole idempotency mechanism. | `connector-package` | error | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — |
@@ -192,10 +195,11 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-CTOR-036 | A `resource_discovery.strategy` MUST name a strategy the engine has registered, unless the connector ships that strategy itself through its own `connector_plugin` implementation. | `connector` | error |
 | RULE-CTOR-039 | A connector's declared SQLAlchemy `driver` MUST name a dialect-and-driver registration that actually exists for the driver package the connector's `requirements.txt` ships. | `connector` | error |
 | RULE-CTOR-042 | The directory a connector release ships as MUST be named for the `connector_id` its `connector.json` declares. | `connector` | error |
-| RULE-CTOR-043 | An `api` connector's release MUST ship definition documents only and MUST NOT carry connector-package Python files. | `connector` | warning |
+| RULE-CTOR-043 | An `api` connector's release MUST NOT carry connector-package Python files. | `connector` | warning |
 | RULE-CTOR-044 | A `database` connector's release MUST NOT ship endpoint documents, because a database endpoint is produced from resource-discovery output rather than authored. | `connector` | warning |
 | RULE-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | `connector` | error |
 | RULE-CTOR-049 | A database connector whose class satisfies a write capability MUST declare `sql_capabilities`. | `connector` | error |
+| RULE-DBEP-009 | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation. | `database-endpoint` | error |
 | RULE-DBEP-011 | A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`. | `database-endpoint` | error |
 | RULE-ENDP-041 | Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names. | `api-endpoint` | error |
 | RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` | error |
@@ -232,11 +236,13 @@ one usually produces a document that validates and then behaves unexpectedly.
 | RULE-CTOR-041 | A capability fact the provider's own documentation does not establish MUST be left undeclared and reported as a research gap, and MUST NOT be inferred from a similar or wire-compatible system. | `connector` | error |
 | RULE-DBEP-006 | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. | `database-endpoint` | error |
 | RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` | error |
+| RULE-DBEP-012 | A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type. | `database-endpoint` | error |
+| RULE-DBEP-013 | A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label. | `database-endpoint` | error |
 | RULE-ENDP-040 | An endpoint MUST declare only where the idempotency key goes; the key's value is engine-owned and MUST NOT appear in a value expression, an input schema, or a request slot. | `api-endpoint` | error |
 | RULE-ENDP-042 | An endpoint MUST declare only how a watermark is sent, and MUST NOT bake sync policy — a lookback, an overlap, a backfill depth — into a cursor mapping. | `api-endpoint` | error |
 | RULE-PKG-002 | A database connector's repository root MUST be its importable Python package: the definition documents sit under `definition/`, and `__init__.py`, `connector.py`, `requirements.txt` and `pyproject.toml` sit at the root beside it. | `connector-package` | error |
 | RULE-PKG-020 | A connector MUST NOT invent a stage name; stage naming is engine-owned and deterministic, and a name the connector chose breaks the idempotency a retried batch depends on. | `connector-package` | error |
-| RULE-PKG-025 | A connector package MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run. | `connector-package` | warning |
+| RULE-PKG-025 | A connector release MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run. | `connector` | warning |
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error |
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error |
 | RULE-TMAP-013 | A type map's rules MUST be authored in the order they are meant to resolve, with a narrow rule ahead of any broader rule that would also match its input. | `type-map` | error |
@@ -257,6 +263,7 @@ not just the statement.
 | RULE-CTOR-030 | A database connector's `resource_discovery` strategy MUST enumerate every namespace level the target system actually has, because a strategy that folds a level away leaves every object outside that level's default unreachable. | `connector` | error |
 | RULE-CTOR-031 | A connector's `sql_capabilities` catalog level MUST state whether one connection can address across the target system's catalogs rather than how deep that system's object hierarchy is, and a system whose statements can name a catalog MUST expose that level in `resource_discovery` too. | `connector` | error |
 | RULE-DBEP-005 | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks. | `database-endpoint` | error |
+| RULE-ENDP-058 | An offset strategy's per-page step MUST advance by the same quantity the provider's offset counts — the records a page returned when the offset counts records, and the page size the request actually asked for when it counts the requested window. | `api-endpoint` | error |
 | RULE-PKG-001 | A connector's dialect MUST override a structural default only where the CDK's portable form is genuinely invalid on the target system, and MUST override type rendering only for logic the write map's rules cannot express. | `connector-package` | warning |
 | RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning |

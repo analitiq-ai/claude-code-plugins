@@ -1,18 +1,17 @@
 # Enum mappers
 
 Closed-enum decision rules used by the orchestrator to classify provider
-facts into schema-bound enum values. If no enum value fits, fail closed
-and ask the user.
+facts into schema-bound enum values. When none fits, see §Failing closed.
 
 > **Source of truth.** The target columns below map onto enums **owned by the
-> published schema** — `auth.type` (the `*Auth` `$defs`), `AdbcTransport.driver`,
-> and the transport/kind discriminators. This file is the *mapping logic*, not
-> a second source for the values; when the schema's enum changes, these tables
-> change with it. The values are pinned against the **pinned contract models**
+> published schema** — `auth.type` (the `*Auth` `$defs`) and the transport/kind
+> discriminators. This file is the *mapping logic*, not a second source for the
+> values; when the schema's enum changes, these tables change with it. Each
+> target column is compared to the **pinned contract models**
 > (`analitiq-contract-models`, the same models the validator validates against)
-> by `tests/connector_builder/test_schema_drift.py` (the drift-check CI, offline), so
-> a contract change that isn't reflected here fails the build. Do not treat a
-> stale copy here as authoritative over the contract.
+> by `tests/connector_builder/test_schema_drift.py` (the drift-check CI,
+> offline), in both directions. Do not treat a stale copy here as authoritative
+> over the contract.
 
 ## KindMapper
 
@@ -24,8 +23,8 @@ and ask the user.
 | Provider is S3 / object storage | `s3` (storage stub only) |
 | Provider is stdout / debug sink | `stdout` (storage stub only) |
 
-For storage kinds the orchestrator dispatches to the stub agent which
-declines until engine support lands. The contract also defines distinct
+For storage kinds the orchestrator dispatches to the stub agent, which returns
+a structured refusal (`RULE-CTOR-037`). The contract also defines distinct
 `nosql` / `document` kinds; this plugin recognizes them but authors none — a
 document or NoSQL provider is authored as `database` (`RULE-CTOR-033`, routed
 above).
@@ -59,25 +58,20 @@ order, stopping at the first match (`RULE-CTOR-027`; full guide:
 `connector-spec-db/spec-driver-selection.md`):
 
 1. **A first-class ADBC driver exists and is in the schema's
-   `AdbcTransport.driver` enum** — currently `postgresql`, `snowflake`,
-   `bigquery`; the enum is the sole validator (rationale and packaging:
+   `AdbcTransport.driver` enum** (`RULE-CTOR-016` in `references/rules.md`
+   prints the current members off the live model; rationale and packaging:
    `spec-driver-selection.md` §1) → `adbc`. Redshift is
    postgres-wire-compatible but does NOT take this tier: its canonical
    path is the sync SQLAlchemy `redshift+redshift_connector` driver.
 2. **The server exposes an Arrow Flight SQL endpoint** → `adbc` via the
-   generic Flight SQL driver — currently unreachable (`flightsql` is
-   not in the enum; `spec-driver-selection.md` §2).
+   generic Flight SQL driver, reachable only once that driver is a member
+   of the same vocabulary (`spec-driver-selection.md` §2).
 3. **Neither, but the system has a native bulk-load protocol** →
    `sqlalchemy` for connect/DDL, with the mechanism declared in
    `sql_capabilities.bulk_load` and implemented in the dialect's
    `bulk_land` hook (`RULE-PKG-016`; the thick path).
 4. **None of the above** → `sqlalchemy` landing via executemany. This is
    the fallback, not the default — pick it last.
-
-Never select the JDBC bridge — the ADBC interface without the
-performance (`spec-driver-selection.md` §Do not use the JDBC bridge).
-Sync vs async DBAPI dispatch is engine-side
-(`spec-driver-selection.md` §Constraints).
 
 ## Failing closed
 

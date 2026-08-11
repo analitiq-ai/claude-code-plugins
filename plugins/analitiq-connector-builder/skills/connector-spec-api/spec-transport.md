@@ -23,9 +23,9 @@ Basic auth.
 
 ## Templated `base_url`
 
-`base_url` takes either a literal string or a value expression resolving to
-one. The expression is resolved once, at connection-materialization time, so a
-host that varies per connection is expressed directly on the transport.
+A host that varies per connection belongs on the transport itself: `base_url`
+accepts a value expression, resolved when the connection is materialized
+(`https://schemas.analitiq.ai/connector/latest.json`, `#/$defs/HttpTransport`).
 
 A region or subdomain the user supplies before auth:
 
@@ -61,8 +61,6 @@ Effective headers per request are built as:
 
 Header names match case-insensitively for override and removal.
 
-**Declare a deletion with `headers_remove`, not with `null`** (`RULE-SHRD-010`).
-A block must not both set and remove the same header name (RULE-HTTP-001).
-`headers_remove` is available on endpoint operation requests too, not just
-connector transports — that is how one endpoint drops an inherited default
-(e.g. an auth header a public sub-resource rejects).
+Removal is governed by `RULE-SHRD-010` and `RULE-HTTP-001`. An endpoint
+operation request removes an inherited default the same way a transport does —
+that is how one endpoint drops an auth header a public sub-resource rejects.

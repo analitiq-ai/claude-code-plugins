@@ -1,6 +1,6 @@
 ---
 name: connector-drift-classifier
-description: Classify the version bump (patch, minor, major, or none) between a draft connector document and its previously released version, per the connector release table in connector-builder/references/metadata-and-versioning.md §Release version (version). Use after the draft has passed validation and before final release. Inputs are previous and current document paths. Output is a DriftVerdict JSON object.
+description: Classify the version bump between a draft connector document and its previously released version, per the connector release table in connector-builder/references/metadata-and-versioning.md §Release version (version). Use after the draft has passed validation and before final release. Inputs are previous and current document paths. Output is a DriftVerdict JSON object.
 tools: Read, Bash, Grep
 color: red
 ---
@@ -22,9 +22,9 @@ object.
 
 ## Process
 
-1. Read both documents AND their sibling type-map files (read and,
-   for database connectors, write). The two maps are diffed
-   independently; a change in either drives the bump.
+1. Read both documents AND every sibling type-map file the connector's kind
+   ships (`RULE-PKG-030`). Each map is diffed independently; a change in any
+   of them drives the bump.
 2. Compute the structural diff. Use `diff` or `jq` via Bash, or compare in
    your reasoning against the rules below.
 3. For each change, classify it under the categories in the `DriftVerdict`
@@ -47,7 +47,12 @@ object.
   every saved connection whose credentials cannot create a persistent stage
   table, or lack rights on a newly-named `dedicated_schema`. Widening alone
   is not drift: adding a `bulk_load` mechanism or gaining a `merge_form` is
-  strictly enabling and classifies as `tuning`), type-map-rule-removed,
+  strictly enabling and classifies as `tuning`), endpoint-removed (an
+  `endpoint_id` the previous release shipped is absent from this one.
+  Streams pin endpoints by id, so the pin resolves to nothing and the stream
+  stops reading — which is why a resource whose locator moves ships as a new
+  document plus this removal rather than a rename (`RULE-ENDP-043`), and why
+  the removal half is what sets the bump), type-map-rule-removed,
   type-map-canonical-changed (an existing matcher now resolves to a
   different render — read map: an existing `native` resolves to a different
   canonical; write map: an existing `canonical` renders a different native

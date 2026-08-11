@@ -135,9 +135,10 @@ EXPECTED_SQL_BULK_MECHANISMS = {
     "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
-# WriteOperation.idempotency `in` targets (api-endpoint ≥ 9.1.0) — restated in
-# io-contracts.md EndpointFacts, endpoint-creator.md,
-# connector-provider-researcher.md, and connector-spec-api/SKILL.md.
+# WriteOperation.idempotency `in` targets. No prose site restates them: the
+# plugin's documents cite `RULE-ENDP-039`, whose `literal_enum` mechanism prints
+# the members off the live model into the rendered rule reference. This set is
+# the assertion target that keeps the contract and that record's field in step.
 EXPECTED_IDEMPOTENCY_TARGETS = {"header", "body"}
 # `Operations.write` keys — the destination write-mode vocabulary, shared with
 # database destinations. `endpoint-creator.md` restates the whole set as decision
@@ -167,9 +168,9 @@ EXPECTED_BARE_MARKER_ARROW_TYPES = {"Object", "List", "Json"}
 EXPECTED_KINDS = {"api", "database", "nosql", "document", "file", "s3", "stdout"}
 EXPECTED_TRANSPORT_TYPES = {"http", "sqlalchemy", "adbc", "s3", "file", "stdout"}
 # Validator ids a connector/endpoint/type-map finding may carry — restated in
-# io-contracts.md's `Diagnostics` enum and the connector-schema-validator agent's
-# id table. Owned by `analitiq.validator.VALIDATOR_IDS`, minus the `bundle-*` ids,
-# which only apply to pipeline bundles this plugin never validates.
+# io-contracts.md's `Diagnostics` enum and README.md § Validation. Owned by
+# `analitiq.validator.VALIDATOR_IDS`, minus the `bundle-*` ids, which only apply
+# to pipeline bundles this plugin never validates.
 EXPECTED_VALIDATOR_IDS = {
     "contract-model",
     "document",
@@ -424,8 +425,11 @@ def test_adbc_drivers_match_schema(connector_schema: dict) -> None:
         "AdbcTransport.driver",
         schema_set,
         EXPECTED_ADBC_DRIVERS,
-        "update the driver-selection guidance (enum-mappers.md, "
-        "spec-driver-selection.md).",
+        "the members render from `RULE-CTOR-016` (mechanism literal_enum) into "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/rules.md "
+        "— re-render it, then re-read the tiered decision order in "
+        "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-driver-selection.md, "
+        "whose tiers reason from which drivers are members.",
     )
 
 
@@ -435,8 +439,9 @@ def test_sqlalchemy_driver_pattern_matches_schema(connector_schema: dict) -> Non
     )
     fix = (
         "update the driver guidance (spec-driver-selection.md, "
-        "spec-dsn-bindings.md, enum-mappers.md, db-connector-creator.md, "
-        "connector-spec-db/SKILL.md, io-contracts.md), the canon extraction in "
+        "spec-dsn-bindings.md, db-connector-creator.md, io-contracts.md, and "
+        "the `redshift+redshift_connector` carve-out in enum-mappers.md "
+        "§TransportTypeMapper), the canon extraction in "
         "scripts/check_validator_pin_contract.py, and "
         "EXPECTED_SQLALCHEMY_DRIVER_PATTERN together."
     )
@@ -459,7 +464,7 @@ def test_dsn_encodings_match_schema(connector_schema: dict) -> None:
         "DsnBinding.encoding",
         schema_set,
         EXPECTED_DSN_ENCODINGS,
-        "update the Encoding values table in "
+        "update the table under `## Choosing an encoding` in "
         "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-dsn-bindings.md.",
     )
 
@@ -1290,8 +1295,12 @@ def test_idempotency_targets_match_schema(api_endpoint_schema: dict) -> None:
         "idempotency.in",
         schema_set,
         EXPECTED_IDEMPOTENCY_TARGETS,
-        "update io-contracts.md EndpointFacts.idempotency, endpoint-creator.md, "
-        "connector-provider-researcher.md, and connector-spec-api/SKILL.md.",
+        "the placement members render from `RULE-ENDP-039` (mechanism "
+        "literal_enum) into "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/rules.md "
+        "— re-render it, then re-read the per-placement guidance in "
+        "plugins/analitiq-connector-builder/agents/endpoint-creator.md, which "
+        "tells the author what each placement means.",
     )
 
 
@@ -1495,6 +1504,159 @@ def test_write_coverage_exclusions_are_named_in_the_spec() -> None:
     )
 
 
+# --- io-contracts.md fragments, pinned at the site ---------------------------
+# Each I/O envelope in that file is one fenced JSON Schema under its own `##`
+# heading, and several carry a contract-owned vocabulary the plugin cannot
+# reach any other way: the researcher and the orchestrator load this file and
+# have no fetch tool, so a member missing here is a fact no agent can recover.
+# The pins below read the fragment at its site rather than comparing the
+# contract to a constant, which is what the constants above already do.
+
+
+def _io_fragment(heading: str) -> dict:
+    """The parsed `json` fence under io-contracts.md's `## <heading>` section.
+
+    Locating is lexical throughout — the heading token, then the fence — and
+    every verdict is handed to the contract by the caller. Both `assert`s are
+    non-vacuity guards: a renamed heading or a fragment that stopped being a
+    `json` fence turns the build red instead of grading nothing.
+    """
+    body = IO_CONTRACTS.read_text(encoding="utf-8")
+    section = re.search(
+        rf"^##\s+{re.escape(heading)}\b.*?$(.*?)(?=^##\s|\Z)", body, re.M | re.S
+    )
+    assert section, (
+        f"{IO_CONTRACTS.relative_to(REPO_ROOT)}: no `## {heading}` section — "
+        "the document was restructured, so this guard would have graded nothing."
+    )
+    fence = re.search(r"```json\n(.*?)```", section.group(1), re.S)
+    assert fence, (
+        f"{IO_CONTRACTS.relative_to(REPO_ROOT)} §{heading}: no `json` fence — "
+        "the fragment moved or changed form, so this guard would have graded "
+        "nothing."
+    )
+    return json.loads(fence.group(1))
+
+
+def _provider_facts_api_branch() -> dict:
+    """The `kind: "api"` branch of the `ProviderFacts` fragment.
+
+    The fragment is a discriminated `oneOf`; the API branch is the one that
+    carries the auth and pagination vocabularies. Selected by the branch's own
+    `kind` const, so a reordered union does not silently move the grading onto
+    the database branch.
+    """
+    branches = [
+        branch
+        for branch in _io_fragment("ProviderFacts").get("oneOf", [])
+        if (branch.get("properties") or {}).get("kind", {}).get("const") == "api"
+    ]
+    assert len(branches) == 1, (
+        f"{IO_CONTRACTS.relative_to(REPO_ROOT)} §ProviderFacts: expected one "
+        f"`kind: \"api\"` branch, found {len(branches)} — the fragment was "
+        "restructured, so this guard would have graded nothing."
+    )
+    return branches[0]
+
+
+def test_provider_facts_auth_families_match_the_contract() -> None:
+    """The researcher's `auth_model.family` targets, read off this file.
+
+    Deliberately the contract set minus `db`: an API connector never authors
+    database auth, so offering it would be a target the researcher can classify
+    onto and no API creator can use. Everything else must be reachable — a
+    family missing here is an auth flow the researcher has no name for, and
+    `connector-provider-researcher.md` loads no other vocabulary file.
+    """
+    documented = set(
+        _provider_facts_api_branch()["properties"]["auth_model"]["properties"][
+            "family"
+        ]["enum"]
+    )
+    expected = EXPECTED_AUTH_TYPES - {"db"}
+    assert documented == expected, _diff_msg(
+        "ProviderFacts auth_model.family",
+        expected,
+        documented,
+        "update the `family` enum in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md.",
+    )
+
+
+def test_provider_facts_pagination_styles_match_the_contract() -> None:
+    """The one pagination-style copy the researcher can read offline.
+
+    `EndpointFacts.pagination.style` defers to this block rather than repeating
+    it, so this is the only enumeration; a style the contract admits and this
+    list omits is a paginator the researcher cannot report.
+    """
+    documented = set(
+        _provider_facts_api_branch()["properties"]["pagination"]["properties"][
+            "style"
+        ]["enum"]
+    )
+    assert documented == EXPECTED_PAGINATION_STYLES, _diff_msg(
+        "ProviderFacts pagination.style",
+        EXPECTED_PAGINATION_STYLES,
+        documented,
+        "update the `style` enum in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md.",
+    )
+
+
+def _diagnostics_finding_item() -> dict:
+    """The `findings[]` item schema of the `Diagnostics` fragment."""
+    return _io_fragment("Diagnostics")["properties"]["findings"]["items"]
+
+
+def test_diagnostics_enum_matches_the_package() -> None:
+    """The id list an orchestrator routes findings by, read off this file.
+
+    `test_validator_ids_match_package` grades the package against this module's
+    constant and names io-contracts.md only in its fix text, so the fragment
+    could drift to a stale id set with that gate green.
+    """
+    from analitiq.validator import VALIDATOR_IDS
+
+    documented = set(_diagnostics_finding_item()["properties"]["validator"]["enum"])
+    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
+    assert documented == package_set, _diff_msg(
+        "Diagnostics validator enum",
+        package_set,
+        documented,
+        "update the `validator` enum in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md.",
+    )
+
+
+def test_diagnostics_severities_are_the_ones_finding_accepts() -> None:
+    """Every severity the fragment declares must be one `finding()` will emit.
+
+    One-directional, and deliberately so. `finding()` is the sole construction
+    point and holds its severity vocabulary as an inline tuple that nothing
+    exports, so the set is not enumerable from outside the package: what is
+    decidable here is that each severity the prose offers is accepted, and that
+    a non-member is refused (without which the first half passes on a function
+    that stopped checking at all). The direction this cannot see — the
+    validator gaining a severity the fragment never names — needs
+    `analitiq.validator` to export the vocabulary beside `VALIDATOR_IDS`
+    first; until it does, that half is a reader's obligation on any change to
+    `finding()`.
+    """
+    from analitiq.validator._core import finding
+
+    documented = set(_diagnostics_finding_item()["properties"]["severity"]["enum"])
+    assert documented, (
+        f"{IO_CONTRACTS.relative_to(REPO_ROOT)} §Diagnostics: the `severity` "
+        "enum is gone — an orchestrator branches on this value to decide "
+        "whether to re-dispatch a creator."
+    )
+    for severity in sorted(documented):
+        finding("document", severity, "/", "probe")
+    with pytest.raises(ValueError):
+        finding("document", "not-a-severity", "/", "probe")
+
+
 def test_diagnostics_properties_match_the_finding_constructor() -> None:
     """The `Diagnostics` finding shape, pinned to the only thing that builds one.
 
@@ -1508,10 +1670,7 @@ def test_diagnostics_properties_match_the_finding_constructor() -> None:
 
     from analitiq.validator._core import finding
 
-    doc = IO_CONTRACTS.read_text(encoding="utf-8")
-    fragment = doc[doc.index("## Diagnostics"):doc.index("## DriftVerdict")]
-    body = json.loads(fragment[fragment.index("{"):fragment.rindex("}") + 1])
-    item = body["properties"]["findings"]["items"]
+    item = _diagnostics_finding_item()
     stated = set(item["properties"])
     produced = set(inspect.signature(finding).parameters)
     assert stated == produced, _diff_msg(
@@ -1545,9 +1704,9 @@ def test_validator_ids_match_package() -> None:
         package_set,
         EXPECTED_VALIDATOR_IDS,
         "update the Diagnostics enum in "
-        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md, the id table in "
-        "plugins/analitiq-connector-builder/agents/connector-schema-validator.md, "
-        "and the check list in plugins/analitiq-connector-builder/README.md § Validation.",
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md "
+        "and the check list in "
+        "plugins/analitiq-connector-builder/README.md § Validation.",
     )
 
 
@@ -1688,9 +1847,8 @@ def test_slug_pattern_governs_the_restated_fields(
 # file. That leaves the document an agent actually reads unchecked: renaming
 # `url_userinfo` to `url_credentials` in the DSN table, measured, left the whole
 # suite green while the table taught an encoding the contract rejects.
-# `enum-mappers.md` even asserts the opposite in its own header — "a contract
-# change that isn't reflected here fails the build" — which was true only of
-# the constant, never of the table.
+# The gap was invisible from either side: the constant matched the contract, so
+# the guard was green, and the table was the only thing an agent read.
 #
 # These read the target column: the last cell of every data row in the table a
 # section owns, which is where the mapper puts the member it maps onto. Both
@@ -1702,6 +1860,16 @@ ENUM_MAPPERS = (
 )
 DSN_BINDINGS = (
     PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-dsn-bindings.md"
+)
+VALUE_EXPRESSIONS = (
+    PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "value-expressions.md"
+)
+REQUEST_BINDING_SPEC = (
+    PLUGIN_ROOT / "skills" / "connector-spec-api" / "spec-request-binding.md"
+)
+TRANSPORT_SPEC = PLUGIN_ROOT / "skills" / "connector-spec-api" / "spec-transport.md"
+RESOURCE_DISCOVERY_SPEC = (
+    PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-resource-discovery.md"
 )
 
 
@@ -1801,4 +1969,238 @@ def test_dsn_encoding_table_matches_the_contract() -> None:
         f"different encodings than the contract — "
         f"prose-only={sorted(documented - EXPECTED_DSN_ENCODINGS)} "
         f"contract-only={sorted(EXPECTED_DSN_ENCODINGS - documented)}."
+    )
+
+
+def _row_labels(section: str) -> set[str]:
+    """The label column of every table row in `section`.
+
+    Routed through `_row_cells` — the module's one label rule — so a row whose
+    label cell also carries a cross-reference stays visible, and header and
+    separator rows fall out for carrying no code span.
+    """
+    return set(_row_cells([line for line in section.splitlines() if line.startswith("|")]))
+
+
+def test_expression_kinds_table_matches_the_contract() -> None:
+    """The Kind column is the only agent-loadable copy of the expression forms.
+
+    `RULE-CTOR-035` renders no Values column — the forms are a union of models,
+    not a field enum, and the rule reference fills that column only for a
+    `literal_enum` record — so an agent cannot recover the set from `rules.md`,
+    and it has no fetch tool. Pinned both directions: a form the contract gains
+    must reach the table, and a form the table invents must exist.
+    """
+    from analitiq.contracts.endpoints import _EXPRESSION_KEYS
+
+    documented = _row_labels(_section(VALUE_EXPRESSIONS, "Expression kinds"))
+    expected = set(_EXPRESSION_KEYS)
+    assert documented == expected, (
+        f"{VALUE_EXPRESSIONS.relative_to(REPO_ROOT)} §Expression kinds names "
+        f"different forms than the contract — "
+        f"prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}."
+    )
+
+
+def test_scope_table_matches_the_contract() -> None:
+    """The scope table is the one agent-loadable copy of RESOLUTION_SCOPES.
+
+    `test_resolution_scopes_match_contract` pins the contract to a constant and
+    names this file only in its failure hint, so the table an authoring agent
+    reads was unowned. `RULE-CTOR-057` renders no Values column, so `rules.md`
+    is not a substitute.
+
+    Row labels are sub-scope-qualified (`connection.parameters.*`), so each is
+    normalised to its leading token — which is the part the contract owns and
+    the part an expression must lead with.
+    """
+    from analitiq.contracts.value_expression import RESOLUTION_SCOPES
+
+    documented = {
+        label.split(".", 1)[0].rstrip("*")
+        for label in _row_labels(_section(VALUE_EXPRESSIONS, "Logical scopes"))
+    }
+    expected = set(RESOLUTION_SCOPES)
+    assert documented == expected, (
+        f"{VALUE_EXPRESSIONS.relative_to(REPO_ROOT)} §Logical scopes names "
+        f"different scopes than the contract — "
+        f"prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}."
+    )
+
+
+def test_function_catalog_matches_the_contract() -> None:
+    """§Function catalog is the catalog other documents cite by name.
+
+    `RULE-SHRD-007` carries the obligation but no member list (it is
+    referential, so the rule reference renders no Values column), and the agent
+    has no fetch tool. Pin the bullets to the union the contract models.
+
+    The heading carries the rule id and is matched verbatim, so renaming it
+    fails loudly through `_section` rather than grading nothing. Only the
+    catalog's own `- \\`name\\` —` bullets are read: the planned-but-unregistered
+    names below them are prose, not list items, and naming them here would be
+    the opposite of what that paragraph teaches.
+    """
+    from analitiq.contracts.connector import DerivedValue
+
+    expected = set(TypeAdapter(DerivedValue).json_schema()["discriminator"]["mapping"])
+    section = _section(VALUE_EXPRESSIONS, "Function catalog (`RULE-SHRD-007`)")
+    documented = {
+        match.group(1)
+        for line in section.splitlines()
+        if (match := re.match(r"- `([a-z0-9_]+)`", line))
+    }
+    assert documented == expected, (
+        f"{VALUE_EXPRESSIONS.relative_to(REPO_ROOT)} §Function catalog names "
+        f"different functions than the contract — "
+        f"prose-only={sorted(documented - expected)} "
+        f"contract-only={sorted(expected - documented)}."
+    )
+
+
+def _bullet_citing(section: str, rule_id: str) -> str | None:
+    """The one top-level list item in `section` that cites `rule_id`.
+
+    A rule id is the lexical anchor a sentence cannot lose by being reworded:
+    it is an immutable registry key, and a dangling one already fails the
+    build. None when no item cites it or more than one does, so the caller
+    turns a restructured section into an explicit failure instead of a pass
+    against an empty item.
+    """
+    items = [
+        item
+        for item in re.split(r"(?m)^(?=- )", section)
+        if item.startswith("- ") and rule_id in item
+    ]
+    return items[0] if len(items) == 1 else None
+
+
+def test_request_binding_prose_names_every_expression_key() -> None:
+    """spec-request-binding.md's expression-key list is the one agent-loadable copy.
+
+    `RULE-ENDP-022` carries no `fields`, so the rendered rule reference prints
+    no members for it, and `value-expressions.md` points here for the set —
+    which makes this the site a new expression form has to reach. Pin the
+    hand-typed list to `_ALL_EXPRESSION_KEYS`, located by the rule id the
+    bullet cites rather than by its wording.
+    """
+    from analitiq.contracts.endpoints import _ALL_EXPRESSION_KEYS
+
+    bullet = _bullet_citing(
+        _section(REQUEST_BINDING_SPEC, "Binding rules"), "RULE-ENDP-022"
+    )
+    assert bullet is not None, (
+        f"{REQUEST_BINDING_SPEC.relative_to(REPO_ROOT)} §Binding rules: no "
+        "single list item cites `RULE-ENDP-022` — the section was restructured "
+        "(or two items now claim it), so this guard would have passed "
+        "vacuously. It is the only copy of the expression-key set an authoring "
+        "agent can load."
+    )
+    stated = set(re.findall(r"`([a-z_]+)`", bullet))
+    expected = set(_ALL_EXPRESSION_KEYS)
+    assert stated == expected, _diff_msg(
+        "expression key",
+        expected,
+        stated,
+        "update the primary-key list in "
+        "plugins/analitiq-connector-builder/skills/connector-spec-api/spec-request-binding.md "
+        "§Binding rules. It reads every backticked lowercase token in that "
+        "item, so do not add one that is not an expression key.",
+    )
+
+
+#: The merge layers `spec-transport.md` numbers, in the order it numbers them.
+#: Each is the last backticked identifier on its numbered line.
+EXPECTED_HEADER_LAYERS = (
+    "transport_defaults.headers",
+    "transports.<ref>.headers",
+    "headers_remove",
+    "headers",
+)
+
+
+def test_header_resolution_order_matches_the_contract() -> None:
+    """`spec-transport.md` numbers the header merge layers; the contract runs them.
+
+    Two halves, because either alone rots. The behavioural half exercises
+    `build_effective_headers` — the function every runtime header map comes
+    from — so a reordered merge or a case-sensitive removal fails here rather
+    than in a connector nobody re-reads. The prose half reads the numbered list
+    back out of the document that teaches it, keyed on the verbatim heading and
+    the backticked identifier per line, so a list rewritten into a different
+    order fails too. Nothing else in this suite reads either.
+
+    The fixture is chosen so every layer is observable: `X-Default` survives
+    from the defaults, `X-Transport` proves the transport overrides them,
+    `X-Both` proves the operation overrides both, and `X-Gone` proves removal
+    drops an inherited name matched in a different case.
+    """
+    from analitiq.contracts.value_expression import build_effective_headers
+
+    effective = build_effective_headers(
+        {"headers": {"X-Op": "op", "X-Both": "op"}, "headers_remove": ["x-gone"]},
+        {},
+        transport={"headers": {"X-Transport": "t", "X-Both": "t", "X-Gone": "t"}},
+        transport_defaults={
+            "headers": {"X-Default": "d", "X-Transport": "d", "X-Both": "d"}
+        },
+    )
+    assert effective == {
+        "X-Default": "d",
+        "X-Transport": "t",
+        "X-Both": "op",
+        "X-Op": "op",
+    }, (
+        "the contract's header merge no longer runs defaults → transport → "
+        "removal → operation with case-insensitive removal; re-read the "
+        f"numbered list in {TRANSPORT_SPEC.relative_to(REPO_ROOT)}."
+    )
+
+    section = _section(TRANSPORT_SPEC, "Header resolution order")
+    layers = tuple(
+        tokens[-1]
+        for line in section.splitlines()
+        if re.match(r"^\d+\.\s", line) and (tokens := _BACKTICKED.findall(line))
+    )
+    assert layers == EXPECTED_HEADER_LAYERS, (
+        f"{TRANSPORT_SPEC.relative_to(REPO_ROOT)} §Header resolution order "
+        f"numbers the layers {list(layers)}; the contract merges "
+        f"{list(EXPECTED_HEADER_LAYERS)}."
+    )
+
+
+def test_discovery_fallback_label_matches_the_contract() -> None:
+    """The fallback a column takes when its provider type could not be read.
+
+    `RULE-DBEP-012` obliges the recorded label to be the one `native_type`
+    declares, and deliberately does not spell it — the label is the contract's,
+    not the registry's. That leaves this bullet the only place an authoring
+    agent can read which string to write, so pin it to the field description
+    the published schema carries. Located by the rule id it cites, which a
+    rewording cannot drop without failing the citation guard first.
+    """
+    from analitiq.contracts.endpoints import Column
+
+    bullet = _bullet_citing(
+        _section(RESOURCE_DISCOVERY_SPEC, "What discovery must record about each object"),
+        "RULE-DBEP-012",
+    )
+    assert bullet is not None, (
+        f"{RESOURCE_DISCOVERY_SPEC.relative_to(REPO_ROOT)}: no single list item "
+        "cites `RULE-DBEP-012` under §What discovery must record about each "
+        "object — the section was restructured (or two items claim it), so this "
+        "guard would have passed vacuously while the only copy of the fallback "
+        "label went unread."
+    )
+    described = Column.model_fields["native_type"].description or ""
+    declared = set(re.findall(r"'([a-z_]+)'", described))
+    stated = set(re.findall(r'`"([a-z_]+)"`', bullet))
+    assert stated and stated == declared, (
+        f"{RESOURCE_DISCOVERY_SPEC.relative_to(REPO_ROOT)} tells an author to "
+        f"record {sorted(stated)}; `Column.native_type` declares "
+        f"{sorted(declared)}. Update the bullet citing RULE-DBEP-012 — it reads "
+        "every double-quoted backticked token in that item, so do not add one "
+        "that is not the fallback label."
     )

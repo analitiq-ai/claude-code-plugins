@@ -20,7 +20,8 @@ Both scopes share one rule shape and one published schema pair
 
 ## Resolution order
 
-For a `scope: "connection"` endpoint, the engine composes the connection map
+Where a stream reads or writes through a connection that ships its own maps,
+the engine composes the connection map
 as **primary** over the connector map as **fallback** — the two rule lists are
 concatenated, connection rules first, into one first-match-wins list
 (`RULE-TMAP-013`). This holds in **both directions**: native → Arrow (read) and
@@ -45,9 +46,8 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
   directly — the read map is not consulted again.
 - **The write map is consulted on every run.** Stream configuration renders
   every destination column's frozen `arrow_type` → native DDL through the
-  write map each time (`CREATE TABLE IF NOT EXISTS` no-ops database-side for
-  an existing table, but the rendering still runs), so a write-side gap fails
-  a destination stream even when its table already exists.
+  write map each time, so a write-side gap fails a destination stream even
+  when its table already exists (`RULE-TMAP-017`).
 - **Dialect overrides bypass the write maps.** Where a connector's dialect
   overrides `render_column_type` for a canonical family (see
   `spec-type-maps.md` §Database coverage), no **write** rule — connector or
@@ -58,8 +58,9 @@ connector's rendering for every stream on that connection (`RULE-TMAP-018`).
 
 - **Absent file** — no map at that scope; resolution falls through (a
   connection without maps uses the connector maps alone).
-- **Present but empty (`[]`)** — a load-time error, worse than absent. Never
-  ship an empty rule array at either scope; the contract rejects it too.
+- **Present but empty (`[]`)** — never ship one at either scope; the contract
+  requires at least one rule, so an empty file is a rejected document rather
+  than the fallthrough an absent one gives you.
 - **The pre-split `type-map.json`** — the engine never reads this filename at
-  either scope; a file by that name is silently inert. The validators reject
-  it with a migration finding so it cannot linger unnoticed.
+  either scope. A connector ships its maps under the names its `kind` calls
+  for (`RULE-PKG-030`).

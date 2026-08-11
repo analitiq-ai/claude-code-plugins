@@ -1,6 +1,6 @@
 # The SQL write path
 
-Every SQL write — every write mode, on either
+Every SQL write — every write mode, on every SQL
 transport — is **stage-then-merge**: the engine creates a stage relation,
 lands the batch into it, applies one mode statement against the target,
 and drops the stage. The engine owns the plan and picks the mode
@@ -24,15 +24,17 @@ at registry CI. Author them together, never one alone.
 
 ## `sql_capabilities` — the declaration
 
-Top-level in `connector.json`, beside `transports`. The contract makes it
-**optional**; the engine makes it **functionally mandatory for any
-write-capable connector** — omit it and every write mode is refused at
-handshake. A database connector is write-capable by definition (read and
-write are both first-class), so declare it (`RULE-CTOR-049`).
+Top-level in `connector.json`, beside `transports`. The contract leaves the
+block optional; declare it on every database connector (`RULE-CTOR-040`).
+Read and write are both first-class here, so the write capability that
+obliges it (`RULE-CTOR-049`) always holds.
 
 A declared block is **complete**: every fact in the declaration table below
 that is not marked optional is required. A partial declaration is a config
-error, not a request for defaults.
+error, not a request for defaults. Closed value sets come from the contract
+(`RULE-CTOR-059`); a fact the provider's own documentation does not
+establish is left undeclared, never inferred from a similar or
+wire-compatible system (`RULE-CTOR-041`).
 
 | Fact | Values | How to choose |
 |---|---|---|
@@ -48,7 +50,8 @@ error, not a request for defaults.
 A bulk mechanism is a fact about a **transport**, not the connector:
 `copy_from` needs the driver's wire connection, `adbc_ingest` an ADBC
 cursor. So `bulk_load` maps each SQL transport family it applies to its
-mechanism (`RULE-CTOR-048`).
+mechanism (`RULE-CTOR-048`), and a mechanism is declarable only under the
+family whose row lists it (`RULE-CTOR-017`).
 
 | Family | Mechanisms |
 |---|---|
@@ -57,9 +60,8 @@ mechanism (`RULE-CTOR-048`).
 
 - **Absence of a key is the only "none"** (`RULE-CTOR-015`) — omit the
   key, and that family lands via executemany.
-- `copy_from`, `load_data_local_infile`, `load_job` are
-  **dialect-implemented** — declaring one on either family obliges the
-  `bulk_land` hook.
+- Every mechanism but `adbc_ingest` is **dialect-implemented** — declaring
+  one obliges the `bulk_land` hook (`RULE-PKG-016`).
 - `adbc_ingest` is the ADBC backend's **own** native landing, valid only
   under `adbc`, and involves no dialect code — declaring it obliges
   nothing. This is what makes the ADBC tier of the driver-selection
@@ -67,10 +69,13 @@ mechanism (`RULE-CTOR-048`).
 
 ### `stage`
 
+`scope` and `schema` take only the vocabulary the contract declares for each
+(`RULE-CTOR-060`).
+
 | Field | Values | How to choose |
 |---|---|---|
 | `scope` | `temp` / `real` | `temp` — a session/transaction-scoped temporary table. `real` — an ordinary table the engine creates and drops around the write, for systems with no usable temp relation. The engine passes this through to `stage_table_sql`'s `temp` argument. |
-| `schema` | `target` / `dedicated` | `target` co-locates the stage in the target's own schema. `dedicated` places it in a separate schema, named by `dedicated_schema` below. |
+| `schema` | `target` / `dedicated` | Co-locate with the target unless the target schema cannot hold stage relations — an account without CREATE rights there, or a system where staging tables have to be swept separately. `dedicated` then puts stages in a schema of their own and obliges `dedicated_schema` below. |
 | `transactional_ddl` | `true` / `false` | Whether the system runs `CREATE`/`DROP` **inside** the write transaction. `false` for engines that auto-commit DDL (MySQL), which forces the engine onto a per-step staging strategy. A guess here is a correctness bug, not a tuning knob — take it from the system's documented DDL behaviour. |
 | `dedicated_schema` | string, conditional | The schema name the stage goes in (`RULE-CTOR-013`) — which is why it is never in the block's required set. |
 
@@ -175,10 +180,9 @@ Build addresses by calling the framework-owned `table_address()` factory
 
 - **No stage naming** (`RULE-PKG-020`) — a retry of the same batch reuses
   the engine's deterministic name and self-heals leftovers.
-- **No side ledger.** Idempotency is content-derived (the contract primary
-  key, or the engine's synthetic record-hash identity) plus the
-  deterministic stage name. There is no batch-commit table and no key-type
-  hook for one.
+- **No side ledger** (`RULE-PKG-034`) — idempotency is content-derived (the
+  contract primary key, or the engine's synthetic record-hash identity) plus
+  the deterministic stage name.
 - **No private overrides** (`RULE-PKG-012`) — the conformance kit's
   surface check rejects the package.
 - **Nothing on the connector class but `dialect_class`**
@@ -194,6 +198,7 @@ no wired bulk path (`LOAD DATA LOCAL INFILE` needs `local_infile` enabled
 on **both** server and client, off by default on MySQL 8.0), temp staging
 in the target schema, and DDL that auto-commits.
 
+<!-- validate: connector#/sql_capabilities -->
 ```json
 "sql_capabilities": {
   "catalog": "none",

@@ -1,0 +1,23 @@
+id: RULE-CTOR-063
+statement: >
+  A transport's `tls` values MUST be declarations the runtime resolves to plain
+  strings, never a driver-specific object, a filesystem path, or code;
+  converting a resolved mode into driver connect arguments belongs to the
+  connector package's dialect.
+tier: structural
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [DatabaseTls]
+rationale: >
+  The TLS slots are untyped value-expression carriers, so a driver object or a
+  path parked in one is a well-formed document: it resolves to something the
+  dialect was never written to interpret, and the failure arrives at connect as
+  a driver error naming nothing the author wrote. The instinct is strong
+  because every driver's own documentation shows exactly such an object.
+  Nothing here can see it — the fields are typed open precisely so the mode
+  vocabulary can stay the connector's own, and no validator resolves an
+  expression offline.
+status: active
+superseded_by: null

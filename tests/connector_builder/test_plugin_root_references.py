@@ -63,15 +63,14 @@ _BARE_PATH_REF = re.compile(
     r"(?<![\w`./-])((?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_.-]+\.md)(?![\w-])"
 )
 
-# References that deliberately name something outside this plugin, each a
-# recorded decision. A new entry here should be rare and deserves a reason.
-_EXTERNAL_REFS = {
-    # The storage skill is an explicit stub: it names the specs that will exist
-    # "when engine support arrives" (see its own prose).
-    "spec-file-transport.md",
-    "spec-stdout-transport.md",
-    "spec-s3-transport.md",
-}
+# Every reference this plugin's prose writes names a file this plugin ships, so
+# resolution is the whole predicate — there is no allow-list of deliberately
+# external targets. There was one, holding the specs the storage stub said would
+# exist "when engine support arrives"; naming files no clone contains is the
+# defect `.claude/rules/resolvable-referents.md` forbids, and the prose that did
+# it is gone. Should a citation ever have to point outside the plugin, this
+# guard fails and the exemption is reintroduced with a member and a reason —
+# which is strictly better than keeping an empty one waiting.
 
 
 def _plugin_paths() -> list[str]:
@@ -127,11 +126,10 @@ def _references() -> list[tuple[str, int, str]]:
 
 
 def _is_dangling(target: str, paths: list[str]) -> bool:
-    """The one exemption-and-resolution predicate: a reference dangles unless
-    it is allow-listed as deliberately external or names a file that exists.
-    Both the real-tree sweep and the synthetic acceptance tests go through
-    this, so the acceptance tests exercise the exemption logic that ships."""
-    return target not in _EXTERNAL_REFS and not _resolves(target, paths)
+    """The one resolution predicate: a reference dangles unless it names a file
+    that exists. Both the real-tree sweep and the synthetic acceptance tests go
+    through this, so the acceptance tests exercise the predicate that ships."""
+    return not _resolves(target, paths)
 
 
 def test_doc_references_resolve() -> None:
@@ -148,23 +146,8 @@ def test_doc_references_resolve() -> None:
             f"  plugins/analitiq-connector-builder/{rel}:{lineno} -> {target}"
             for rel, lineno, target in dangling
         )
-        + "\nFix the path, restore the file the agent is told to read, or — if "
-        "the target deliberately lives outside this plugin — add it to "
-        "_EXTERNAL_REFS with a reason."
-    )
-
-
-def test_external_ref_allowlist_is_not_stale() -> None:
-    """An allow-listed name that no prose cites any more is dead config.
-
-    Without this, `_EXTERNAL_REFS` only ever grows, and an entry could mask a
-    genuine dangling reference introduced later under the same filename.
-    """
-    cited = {target for _rel, _lineno, target in _references()}
-    unused = sorted(_EXTERNAL_REFS - cited)
-    assert not unused, (
-        f"_EXTERNAL_REFS entries {unused} are no longer referenced by any "
-        "prose — drop them so the allow-list keeps meaning what it says."
+        + "\nFix the path, restore the file the agent is told to read, or state "
+        "the fact the citation was carrying instead of pointing at it."
     )
 
 

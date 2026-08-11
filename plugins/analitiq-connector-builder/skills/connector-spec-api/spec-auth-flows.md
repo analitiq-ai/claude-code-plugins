@@ -20,9 +20,10 @@ host, see the multi-origin transport pattern in `spec-transport.md`.
 
 ## `basic_auth`
 
-`username` and `password` are declared as
-`connection_contract.inputs`. The `Authorization` header in the transport
-should use the `basic_auth` function expression — never pre-compute base64.
+Declare `username` and `password` in `connection_contract.inputs`
+(`RULE-CTOR-052`), the password with `secret: true`. The `Authorization` header
+in the transport should use the `basic_auth` function expression — never
+pre-compute base64.
 
 <!-- validate: connector#/transports/api/headers/Authorization -->
 ```json
@@ -100,25 +101,22 @@ Declare the signing key, algorithm, and claim inputs in
 from the minted token with the `Bearer ${auth.access_token}` template —
 `examples/jwt/jwt.example.json` shows both.
 
-<!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
-> **Inline signing is not yet available.** `jwt_sign` is planned, not
-> registered (`connector-builder/references/value-expressions.md` §Function
-> catalog), so it is authored nowhere (`RULE-SHRD-007`) — and nothing rejects
-> the call at authoring time: it validates clean and fails at connect. Declare
-> the inputs, author no `jwt_sign` call, and flag this capability gap before
-> shipping a `jwt` connector that depends on local signing.
+> **A `jwt` connector may only call a signing function the catalog registers**
+> (`connector-builder/references/value-expressions.md` §Function catalog,
+> `RULE-SHRD-007`). Where it registers none, declare the inputs, author no
+> signing call, and flag the capability gap before shipping a `jwt` connector
+> that depends on local signing.
 
 ## `credentials`
 
-Use only when the provider's auth doesn't fit any narrower type. Declare
-the credential bundle in `connection_contract.inputs` with appropriate
-`secret: true` flags.
+Declare the credential bundle in `connection_contract.inputs`
+(`RULE-CTOR-052`), flagging each secret member `secret: true`.
 
 ## `aws_iam`
 
-User-supplied AWS account, role, profile, or credential values are
-declared in `connection_contract.inputs`. The transport handles signing
-via runtime mechanics — connector JSON declares intent only.
+Declare the user-supplied values in `connection_contract.inputs`
+(`RULE-CTOR-052`). There is no signing block to author: the connector document
+declares intent only.
 
 ## `none`
 

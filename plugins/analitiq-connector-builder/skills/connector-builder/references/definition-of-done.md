@@ -5,15 +5,8 @@ returning `CreatorOutput`**. It is a gate, not a substitute for the
 `connector-schema-validator` (whose agent file owns the authoritative
 check/blind-spot list): this checklist covers **only what the validator cannot
 enforce** — classification correctness, completeness against the provider's
-documentation, the both-directions principle, driver-choice discipline, and
-the non-JSON artifacts (package files, README) the in-plugin validator never
-sees.
-
-<!-- PROBE: connector-function-name-unchecked, write-body-path-typo-unresolved, tls-coherence-unchecked -->
-Three things authors often assume are validated but are not — a `function`
-name, a ref's resolvability outside a READ's `response.body` and either
-operation's `response.metadata`, and TLS mode ↔ CA-certificate coherence.
-Those belong on this list, not in the validator's column.
+documentation, the both-directions principle, driver-choice discipline, and the
+non-JSON artifacts (package files, README).
 
 The kind-specific lists live at the end of each creator agent
 (`api-connector-creator` / `db-connector-creator`); both also apply this
@@ -23,11 +16,10 @@ shared core.
 
 - [ ] **Classification is correct.** `kind`, `auth.type`, and each
   `transport_type` match the provider's *actual* documented behavior —
-  not merely a schema-valid value. (The validator checks the value is
-  in-enum; it cannot check it is the right one.)
-- [ ] **`connector_id` is the intended stable slug** (`RULE-CTOR-042`). (The
-  schema checks the slug pattern, not that it is the slug the
-  user/provider actually means.)
+  not merely a schema-valid value.
+- [ ] **`connector_id` is the intended stable slug** — the one the
+  user/provider actually means, and the one the release directory is named
+  for (`RULE-CTOR-045`, `RULE-CTOR-042`).
 - [ ] **`display_name`, `description`, and `tags` are meaningful**, not
   placeholders.
 - [ ] <!-- PROBE: read-map-completeness-unchecked, endpoint-pair-unresolved-through-read-map -->
@@ -59,8 +51,7 @@ shared core.
 - [ ] **`default_transport` is the right default**, and any
   multi-transport split (auth / discovery / api origins) reflects the
   provider's real topology.
-- [ ] **README is present** (`RULE-PKG-025`). (The in-plugin validator
-  ignores README entirely.)
+- [ ] **README is present** (`RULE-PKG-025`).
 - [ ] **Both read and write land as a working unit for this system**
   (the both-directions-first-class *capability* principle) — scope was
   not cut to source-only or destination-only. This means the connector's

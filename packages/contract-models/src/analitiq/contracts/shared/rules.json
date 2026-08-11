@@ -1123,7 +1123,7 @@
   },
   {
    "id": "RULE-CTOR-043",
-   "statement": "An `api` connector's release MUST ship definition documents only and MUST NOT carry connector-package Python files.\n",
+   "statement": "An `api` connector's release MUST NOT carry connector-package Python files.\n",
    "tier": "referential",
    "severity": "warning",
    "scope": "connector",
@@ -1559,6 +1559,48 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-CTOR-063",
+   "statement": "A transport's `tls` values MUST be declarations the runtime resolves to plain strings, never a driver-specific object, a filesystem path, or code; converting a resolved mode into driver connect arguments belongs to the connector package's dialect.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "DatabaseTls"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The TLS slots are untyped value-expression carriers, so a driver object or a path parked in one is a well-formed document: it resolves to something the dialect was never written to interpret, and the failure arrives at connect as a driver error naming nothing the author wrote. The instinct is strong because every driver's own documentation shows exactly such an object. Nothing here can see it — the fields are typed open precisely so the mode vocabulary can stay the connector's own, and no validator resolves an expression offline.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-064",
+   "statement": "An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector",
+   "validator": "analitiq.contracts.connector::ConnectorBase",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ConnectorBase"
+   ],
+   "fields": [],
+   "mechanism": "closed_object",
+   "fixture_model": null,
+   "rationale": "The two names read as ordinary metadata an author is expected to fill, and a provider response legitimately carrying a field of either name makes the mistake feel confirmed — but the stamps belong to the registry row, not to the document, and one authored by hand is either overwritten or contradicts the row it describes. Reserving the names at the document's own top level reserves nothing inside a provider-owned namespace: `response.schema` describes the provider's data, so a `created_at` field there is fine.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-DBEP-001",
    "statement": "Every column a database endpoint declares MUST carry a name no other column in that document repeats.\n",
    "tier": "advisory",
@@ -1742,6 +1784,7 @@
    "validator": null,
    "owners": [
     "engine",
+    "connector-plugin",
     "pipeline-plugin"
    ],
    "targets": [
@@ -1794,6 +1837,54 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "Discovery mints these ids through that derivation, so an id that does not reproduce it names an endpoint discovery will never produce again: the next run over the same table computes the real handle, and every stream pinned to the authored one resolves to nothing. The derivation reads the identifiers verbatim, which is why tidying a schema or table name into a nicer id breaks the pin — the id looks better and points nowhere. `RULE-STRM-003` holds the stream side of the same handle; this is the endpoint side.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-DBEP-012",
+   "statement": "A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type.\n",
+   "tier": "procedural",
+   "severity": "error",
+   "scope": "database-endpoint",
+   "validator": null,
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "Column"
+   ],
+   "fields": [
+    "native_type"
+   ],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The field is required with a length floor, so something is always written and the model cannot tell a real label from a stand-in. A guessed type resolves through the read map into a wrong Arrow type and the column syncs with silently wrong values; an invented placeholder resolves through nothing and reports as a type-map miss the author cannot recognise. Only the declared fallback surfaces the gap as a visible miss. Catching a violation means comparing the recorded label against what the provider's introspection actually returned, which no document records.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-DBEP-013",
+   "statement": "A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label.\n",
+   "tier": "procedural",
+   "severity": "error",
+   "scope": "database-endpoint",
+   "validator": null,
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "DatabaseObject"
+   ],
+   "fields": [
+    "object_type"
+   ],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The field is an open string a discovery strategy fills from whatever the provider's catalog calls the object, so its vocabulary differs per system and per strategy and no set of values is complete. Gating on it strands objects whose system spells the label differently and hands write paths to objects the connector never implemented a write for, while the connector class already answers the same question exactly. Catching a violation means reading the connector package's own code for a branch on the label, which no document records.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3111,6 +3202,26 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-058",
+   "statement": "An offset strategy's per-page step MUST advance by the same quantity the provider's offset counts — the records a page returned when the offset counts records, and the page size the request actually asked for when it counts the requested window.\n",
+   "tier": "judgment",
+   "severity": "error",
+   "scope": "api-endpoint",
+   "validator": null,
+   "owners": [
+    "connector-plugin"
+   ],
+   "targets": [
+    "OffsetCursor"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "Neither offset family is distinguishable from the other in a document — both name a param and a step — so the step is the only place the document says which one the provider implements, and every spelling of it is a legal value expression. A step larger than the window skips rows and a smaller one re-reads them; neither raises, and the run reports success over a partial or duplicated pull, so the only symptom is a row count nobody compares. Where a cap clamps the window the effective size is the clamped one, not the batch size the run was configured with, which is the case authors get wrong most often. Nothing here can catch it: the offset semantics live in the provider's documentation, so seeing the mistake means reading that beside the step expression.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
@@ -3884,10 +3995,10 @@
   },
   {
    "id": "RULE-PKG-025",
-   "statement": "A connector package MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run.\n",
+   "statement": "A connector release MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run.\n",
    "tier": "procedural",
    "severity": "warning",
-   "scope": "connector-package",
+   "scope": "connector",
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3896,7 +4007,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "Every other file in the package tells a machine how to run the connector; none of them tells a human which credentials to obtain or what has to be enabled server-side first, and that knowledge was in the researcher's hands at authoring time and nowhere afterwards. The in-plugin validator ignores README entirely and the registry wheel build does not require one, so a connector that ships undocumented is caught by nobody.\n",
+   "rationale": "Every other file in a release tells a machine how to run the connector; none of them tells a human which credentials to obtain or what has to be enabled server-side first, and that knowledge was in the researcher's hands at authoring time and nowhere afterwards. It binds the release rather than the Python package because an API connector ships no package and needs the document most — its credentials are obtained from a provider console, not a database administrator. The in-plugin validator ignores README entirely and the registry wheel build does not require one, so a connector that ships undocumented is caught by nobody.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4011,6 +4122,25 @@
    "mechanism": null,
    "fixture_model": null,
    "rationale": "The endpoint records the pair the connector observed; the map is how every later reader reproduces it. A native the map cannot resolve stalls the stream at configuration, and — worse — a native the map resolves to a different canonical than the endpoint froze is not an error anywhere: both documents are internally valid, and the disagreement decides the destination column's type, so the stream lands real data in a column shaped by whichever document the reader consulted. Neither half is visible from inside one document, which is why it is checked where the endpoint and the map are both in hand.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-PKG-034",
+   "statement": "A connector MUST NOT keep its own record of which batches it has already written; record identity is content-derived and the stage relation's name is engine-owned and deterministic, and together they are the whole idempotency mechanism.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "connector-package",
+   "validator": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "A side table of committed batches is the natural thing to reach for when a retry has to be made safe, and it duplicates a mechanism that is already complete: identity comes from the record's own content and the stage the engine names deterministically, so a connector-side ledger is a second source of truth the engine never consults and no retry path clears. The ledger lives in `connector.py`, which no contract model opens, and the conformance kit audits which hooks a dialect overrides rather than what one persists — so a violation first appears as rows landed twice after a retry, in production.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -51,8 +51,7 @@ was raised.
 The `connector-spec-api` skill is preloaded. Beyond that, read:
 
 - `spec-auth-flows.md` — the authoritative reference for **every** auth type.
-  Complete worked example connectors ship for the diverse archetypes only
-  (`api_key`, `oauth2_authorization_code`, `jwt`) under
+  Worked example connectors ship under
   `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/examples/`; when your
   `auth_type` has no example dir, author from the spec + the closest archetype.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
@@ -67,9 +66,12 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 
 ## Authoring order
 
-1. **Top-level metadata** — `$schema` (`https://schemas.analitiq.ai/connector/latest.json`),
-   `kind: "api"`, `connector_id` (the stable connector slug — pattern in
-   `metadata-and-versioning.md`; `RULE-CTOR-042`), `display_name`,
+1. **Top-level metadata** — `$schema` (`RULE-SHRD-003`; URL in
+   `metadata-and-versioning.md` § Schema URL declaration),
+   `kind: "api"`, `connector_id` (the stable slug the document, the registry
+   repo and the release directory all carry — `RULE-CTOR-023`,
+   `RULE-CTOR-045`, `RULE-CTOR-042`; pattern in
+   `metadata-and-versioning.md`), `display_name`,
    `description`, `tags`, `version` (`RULE-CTOR-032`).
 2. **Transports** — populate `transports` map, `default_transport`, and
    `transport_defaults`. Use `transport_type: "http"`. For multi-origin
@@ -90,17 +92,18 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 5. **Resource discovery** — only if the provider has dynamic post-auth
    discovery (a value only readable after auth, e.g. an account id or
    region read from a post-auth probe).
-6. **Type map (read)** — author a standalone `type_map_read` (a top-level array of
-   `{match, native, canonical}` rules) covering every `(native_type,
-   arrow_type)` pair the endpoint-creator emits on typed field schemas.
-   Schemaless natives (e.g. `jsonb`, `VARIANT`, MongoDB documents) map
-   to `"Json"` (`RULE-TMAP-001`); endpoint authors may narrow these to
-   `Object` / `List` inline. The validator walks endpoint files and asserts every
-   `native_type` resolves through this array with a rendered canonical
-   equal to the endpoint's declared `arrow_type` (`Object` / `List` are
-   accepted narrowings of `Json`). The orchestrator writes this array
-   to `{connector_id}/definition/type-map-read.json` and validates it
-   against `https://schemas.analitiq.ai/type-map-read/latest.json`. Author
+6. **Type map (read)** — author a standalone `type_map_read` array covering
+   every `(native_type, arrow_type)` pair the endpoint-creator emits on typed
+   field schemas. Rule shape: the rule-shape table in
+   `connector-spec-db/spec-type-maps.md` §File shape, and its §API coverage
+   (read map). Schemaless natives (e.g. `jsonb`, `VARIANT`, MongoDB
+   documents) map to `"Json"` (`RULE-TMAP-001`); endpoint authors may narrow
+   these to `Object` / `List` inline. Every `native_type` an endpoint
+   declares must resolve through this array to the `arrow_type` frozen beside
+   it (`RULE-PKG-033`); `Object` / `List` are accepted narrowings of `Json`.
+   The orchestrator writes this array to the connector's sibling read-map
+   file and validates it (`RULE-PKG-030`; layout in
+   `skills/shared/type-maps.md`). Author
    read-side regex `native` literals uppercase (`RULE-TMAP-014`). API
    connectors ship no write map and no package files (`RULE-CTOR-043`):
    return `type_map_write: null` and `package_files: null`.
@@ -108,40 +111,26 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
 ## Definition of Done
 
 Before returning `CreatorOutput`, confirm the shared-core checklist in
-`references/definition-of-done.md` AND these API-only items. These cover
-what the `connector-schema-validator` cannot enforce — completeness
-against the provider's docs and behavior the schema can't see. Do not
-restate validator rules.
+`references/definition-of-done.md` AND these API-only items. Each one is
+settled against the provider's documented behavior, not against the artifacts
+you are returning.
 
 - [ ] **Every resource the user asked for has an endpoint** authored.
-  (The validator checks each authored endpoint resolves through the read
-  map; it cannot know which resources were requested.)
-- [ ] **Pagination is configured for every endpoint whose API
-  paginates.** (The validator cannot know the upstream API paginates.)
+- [ ] **Pagination is configured for every endpoint whose API paginates.**
 - [ ] **An incremental/replication cursor is set wherever the resource
-  supports one.** (Provider behavior, not schema.)
+  supports one.**
 - [ ] **The auth flow matches the provider's documented auth**, including
-  token refresh where the provider issues short-lived tokens. (The contract
-  checks the structural validity of the chosen flow, not that it is the
-  correct flow.)
+  token refresh where the provider issues short-lived tokens.
 - [ ] **No package files and no write map were produced**
-  (`package_files: null`, `type_map_write: null`). Package-file absence
-  is something the validator cannot see — it checks JSON documents only;
-  a stray write map is separately caught by `type-map-coverage`. Kept
-  here as the defining API/DB boundary check.
-
-## Output
-
-Return a `CreatorOutput` JSON block carrying `connector` (the
-connector body) and `type_map_read` (the top-level rules array), with
-`type_map_write: null` and `package_files: null`. Do not write to disk.
+  (`package_files: null`, `type_map_write: null`) — `RULE-CTOR-043`,
+  `RULE-PKG-030`. Kept here as the defining API/DB boundary check.
 
 ## Hard rules
 
-- Schema enums are **owned by the live published schema**; when prose
-  and schema disagree, the schema wins — the validator enforces it.
-- Never author `created_at` / `updated_at` — those are registry-stamped.
-  `connector_id` is author-supplied.
+- When skill prose and the live contract disagree, the contract wins: author to
+  the contract and report the prose defect.
+- Never author `created_at` / `updated_at` (`metadata-and-versioning.md`
+  §Registry-stamped fields). `connector_id` is author-supplied.
 - Never use `${...}` interpolation outside a `template` value expression
   (`RULE-SHRD-006`).
 - Never pre-compute base64 / SHA / signature values — use `function`

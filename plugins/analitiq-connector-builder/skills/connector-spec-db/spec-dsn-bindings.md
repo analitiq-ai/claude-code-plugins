@@ -7,13 +7,12 @@ fields are:
 
 | `transport_type` | Identity field | Extras |
 |---|---|---|
-| `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). Optional in the contract, since SQLAlchemy can derive it from the DSN's scheme — but **declare it anyway**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
-| `adbc` | `driver` — a closed enum owned by the contract's `AdbcTransport` (see `spec-driver-selection.md` §1) | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`** (RULE-CTOR-004). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
+| `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). **Always declare it**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
+| `adbc` | `driver` — a closed enum the contract owns (`RULE-CTOR-016`; choice: `spec-driver-selection.md` §1) | `db_kwargs` (object; values may be value expressions). The transport must carry connection state one way or the other (`RULE-CTOR-004`). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
 
 Transport choice follows the decision order in `spec-driver-selection.md`
-(`RULE-CTOR-027`). The chosen driver ships ONLY in the connector's
-`requirements.txt` (the engine pins no database drivers). ADBC drivers that accept all connection
-state via `db_kwargs` (e.g. Snowflake) may omit `dsn` entirely.
+(`RULE-CTOR-027`), which also covers where the driver ships
+(`RULE-PKG-027`).
 
 ## Shape
 
@@ -26,13 +25,10 @@ See the `transports.database.dsn` block in
 - `template` is a connector-authored string with `{placeholder}` markers.
   A `${...}` context reference never appears in the template (`RULE-SHRD-006`) —
   those go inside binding `value` expressions.
-- Every placeholder in the template must have a matching binding key, and
-  every binding key must be referenced by the template (RULE-CTOR-011).
-- Each binding declares:
-  - `value` — a value expression the runtime resolves at connection time
-    (`RULE-CTOR-035`); the grammar is in
-    `connector-builder/references/value-expressions.md`.
-  - `encoding` — see "Choosing an encoding" below.
+- Template and bindings must correspond (`RULE-CTOR-011`).
+- Each binding declares a `value` (`RULE-CTOR-035`; grammar in
+  `connector-builder/references/value-expressions.md`) and an `encoding`
+  (see "Choosing an encoding" below).
 
 ## Choosing an encoding (`RULE-CTOR-018`)
 
@@ -68,10 +64,10 @@ the value is substituted into:
 | `mysql+aiomysql` | `mysql+aiomysql://{username}:{password}@{host}:{port}/{database}` |
 | `redshift+redshift_connector` | `redshift+redshift_connector://{username}:{password}@{host}:{port}/{database}` |
 
-These are SQLAlchemy transports (DSN `url_template`) — the first two
-async, the third a sync driver (Redshift). ADBC drivers
-differ by driver: a driver may carry all connection state in `db_kwargs`
-and omit the DSN entirely (Snowflake authenticates this way), while
-`postgresql` keeps core coordinates in a `dsn` `url_template` and
-reserves `db_kwargs` for driver-namespaced extras like TLS — see the
-`postgresql-adbc` reference example for the DSN-plus-`db_kwargs` shape.
+These are SQLAlchemy transports (DSN `url_template`); the sync/async split
+is `spec-driver-selection.md` §Constraints. An ADBC transport differs by
+driver: some carry all connection state in `db_kwargs` and omit the DSN
+(Snowflake), while `postgresql` keeps core coordinates in a `dsn`
+`url_template` and reserves `db_kwargs` for driver-namespaced extras like
+TLS — see the `postgresql-adbc` reference example for the
+DSN-plus-`db_kwargs` shape.

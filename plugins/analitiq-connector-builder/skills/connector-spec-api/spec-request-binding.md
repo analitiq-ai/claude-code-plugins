@@ -2,12 +2,13 @@
 
 How an endpoint's declared `params` reach its `request`. This is the part of
 endpoint authoring most likely to fail validation, because the intuitive form —
-dropping a `ref` straight into `request.query` — is rejected for anything
-dynamic.
+dropping a per-run `ref` straight into `request.query` — is rejected
+(RULE-ENDP-032).
 
-Rule ids below (`RULE-ENDP-*`) are the contract's cross-field rules; the full
-list is `connector-builder/references/rules.md`. The validator enforces
-them, so cite them rather than re-deriving them.
+Rule ids below (`RULE-ENDP-*`) are registry ids;
+`connector-builder/references/rules.md` carries each one's statement, the
+document it grades and what a violation costs. Cite them rather than
+re-deriving them.
 
 ## The model: declare the input, then bind it
 
@@ -45,21 +46,21 @@ prohibitions below).
 
 ## Binding rules
 
-- **`path_params` values are bindings, never free expressions**, and the block
-  is present exactly when `request.path` declares placeholders (RULE-ENDP-001).
+- **`path_params` values are bindings, never free expressions** (RULE-ENDP-001).
   On a read, exactly `{"from_param": <name>}`, and the bound param must declare
   `in: "path"`. On a write, `{"from_input": "record.<dotted>"}` is also legal —
   the record itself supplies the segment; see "Write path segments" below.
-- **A binding's location must match the site it appears in** (RULE-ENDP-008):
-  `request.headers` binds only `in: "header"` params, `request.query` only
-  `in: "query"`, `request.body` only `in: "body"`.
-- **Every declared param must be referenced by exactly one request binding**
-  (RULE-ENDP-009). A declared-but-unbound param is an error, not dead weight —
-  if you don't need it, delete it.
+- **A binding's location must match the site it appears in** (RULE-ENDP-008);
+  the placement vocabulary is printed under RULE-ENDP-050 in
+  `connector-builder/references/rules.md`.
+- **RULE-ENDP-009** — a declared-but-unbound param is an error, not dead
+  weight: if you don't need it, delete it.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
   only `x-*` siblings (RULE-ENDP-022).
-- **A GET read operation must not declare a body param** (RULE-ENDP-007).
+- **A GET read operation must not declare a body param** (RULE-ENDP-007) — a
+  provider's body-bearing search route is a POST read, so change the method,
+  not the param's placement.
 
 ## What must NOT go directly in a request slot
 
@@ -88,9 +89,11 @@ input to type or filter on: a fixed header is authored directly
 `examples/*/endpoints/` carries it), and a fixed query value binds a literal
 expression (`"query": { "api_version": { "literal": "2024-01" } }`).
 
-Connection-scoped values resolved from the connector's connection contract
-(`connection.parameters.*`, `secrets.*`, `auth.*`) are also direct refs — they
-are not per-run inputs. Only the `stream`/`state`/`runtime` family is barred.
+Connection-scoped values resolved from the connector's connection contract are
+also direct refs — they are not per-run inputs. Which scopes are barred from a
+request slot, and which are not, is
+`connector-builder/references/value-expressions.md` §Logical scopes
+(RULE-ENDP-032).
 
 ## Params carry the *request-input* type
 
@@ -101,18 +104,15 @@ to `native_type` / `arrow_type`, which describe what comes **back** in
 `response.schema`. A timestamp sent as an ISO string is `type: "string"` even
 though the response field it filters is `Timestamp(...)`.
 
-Two more param rules worth knowing while authoring:
+More param rules worth knowing while authoring:
 
 - **`operators` is the stream-filterability contract.** Declaring
   `operators: ["gte", "lte"]` is what permits a downstream stream to filter on
   that param, restricted to those operators. Omit it and the param is not
   stream-filterable at all.
-- **A `controlled_by` param must not declare `operators`** (RULE-ENDP-002) —
-  pagination and replication own those params, so a stream may not also filter
-  on them.
-- **A `query` param of type `array` or `object` must declare `style` and
-  `explode`** (RULE-ENDP-003), because the wire serialization is otherwise
-  ambiguous.
+- **RULE-ENDP-003** — a container-typed `query` param has several legal
+  spellings on the wire (repeated key, delimiter-joined, bracketed) and the
+  provider accepts one, so the serialization has to be declared, not guessed.
 
 ## The same value in two places is two params
 
@@ -134,9 +134,8 @@ is in scope.
 | `records` | the whole batch array |
 | `record.<dotted>` | one field of the record |
 
-- **A write request body must reference `from_input`.** Batching selects the
-  arity: a batched write must use `records`, a non-batched write must use
-  `record` / `record.<field>` (RULE-ENDP-017).
+- **Batching selects the arity** (RULE-ENDP-017) — the table above gives the
+  spelling for each.
 - **`records.<dotted>` is not supported** (RULE-ENDP-035).
 
 Provider envelopes are authored literally around the binding; no wrapper key is
@@ -171,18 +170,13 @@ source to fill it (RULE-ENDP-028).
 
 The rules that bite:
 
-- **`record.<dotted>` only** (RULE-ENDP-024). A path segment carries exactly one
-  value, so the whole `record` and any `records[...]` form are refused, and the
-  field it names must exist in the mode's `input.schema` (membership is checked
-  through `$ref` / `allOf`, so a shared `$defs` shape works — but the `$defs`
-  must live inside `input.schema`, since a ref out of it dangles and is refused
-  by RULE-ENDP-026). The binding is write-only: on a read, `path_params` takes
-  `{from_param}` and nothing else.
-- **Mutually exclusive with `batching`** (RULE-ENDP-025). A multi-record request
-  has no single record to take the segment from. An update-by-id endpoint is
-  per-record by nature; if the provider also offers a bulk route, that is a
-  separate mode.
-- **Never wrap the binding in `url_encode` / `base64_encode`** (RULE-ENDP-027).
-  Encoding is engine-owned: the engine percent-encodes each substituted value as
-  one path segment, so wrapping double-encodes (`a b` arrives as `a%2520b`) and
-  the provider 404s or matches the wrong resource.
+- **`record.<dotted>` only** (RULE-ENDP-024). Membership in the mode's
+  `input.schema` is checked through `$ref` / `allOf`, so a shared `$defs` shape
+  works — but the `$defs` must live inside `input.schema`, since a ref out of it
+  dangles and is refused by RULE-ENDP-026.
+- **Mutually exclusive with `batching`** (RULE-ENDP-025). An update-by-id
+  endpoint is per-record by nature; if the provider also offers a bulk route,
+  that is a separate mode.
+- **Never wrap the binding in a wire-encoding function** (RULE-ENDP-027).
+  Encoding is engine-owned, so wrapping double-encodes (`a b` arrives as
+  `a%2520b`) and the provider 404s or matches the wrong resource.

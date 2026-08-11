@@ -7,27 +7,26 @@ The exact shape — property names, required keys, and the closed enums — is
 owned by the published api-endpoint contract, not by this page. Author
 against it and let the validator check you:
 
-- `#/$defs/Replication` — the block itself (`supported_methods` and
-  `cursor_mappings`, each required).
+- `#/$defs/Replication` — the block itself: `supported_methods` and
+  `cursor_mappings`, each required, and nothing else.
 - `#/$defs/SingleCursorMapping` — a cursor filtered by one provider param.
 - `#/$defs/WindowCursorMapping` — a cursor filtered by a start/end param pair.
 
 (all in `https://schemas.analitiq.ai/api-endpoint/latest.json`). This page
 covers only the authoring decisions the schema can't express: which
 mapping variant fits a provider, and when to skip replication entirely.
-The examples below illustrate those variants; the published schema is the
-source of truth.
 
 ## What a replication block declares
 
-A cursor mapping ties together two halves of incremental sync:
+A cursor mapping ties a record field to the request params filtered on it:
 
 - a **cursor field** — the dotted record path whose value is the
   per-record watermark (`updated_at`, `meta.changed`); and
 - the **request param(s)** the runtime sets on the next run to fetch only
   records past that watermark, plus the comparison `operator`.
 
-Pick the variant by how the provider's filter works.
+Pick the variant by how the provider's filter works, and author one form or the
+other — a mapping mixing their fields is refused (`RULE-ENDP-004`).
 
 ## Single-param cursor (most providers)
 
@@ -51,10 +50,9 @@ The provider takes one open-ended "changed since X" filter. Use a
 }
 ```
 
-- `cursor_field` reads the watermark from each record (dotted path).
-- `param` is the request param the runtime sets on the next run.
-- `operator` relates them (`gte` → "at or after the stored watermark").
-- `format` is optional — set it only when the param expects a specific
+- `operator` relates the cursor field to the param (`gte` → "at or after the
+  stored watermark").
+- `format` — set it only when the param expects a specific
   encoding of the value (e.g. `epoch_seconds`); omit it when the field is
   already in the param's native form.
 
@@ -89,16 +87,16 @@ simpler and spares the runtime from computing an upper bound.
 
 ## Wiring (same three places as pagination)
 
-A cursor mapping's `param` must be declared in `params` with
-`controlled_by: "replication"`, bound into the request with
-`{"from_param": …}`, and must not declare `operators` (RULE-ENDP-011,
-RULE-ENDP-009, RULE-ENDP-002). Window mappings wire **both** `start_param` and
-`end_param` that way.
+Each param a cursor mapping names is an ordinary declared param: give it
+`controlled_by: "replication"` (`RULE-ENDP-011`), bind it with
+`{"from_param": …}` (`RULE-ENDP-009`), and declare no `operators` on it
+(`RULE-ENDP-002`) — replication owns its value, so an operator set advertises a
+filter the runtime overwrites and the run reports success over unfiltered data.
+A window mapping wires `start_param` and `end_param` each that way.
 
-Each `cursor_field` must resolve to a field in the record shape of
-`response.schema` (RULE-ENDP-013) — so a cursor on `updated_at` requires
-`updated_at` to be a declared field of the record, not merely something the
-provider mentions.
+A cursor on `updated_at` requires `updated_at` to be a declared field of the
+record shape `response.schema` describes (`RULE-ENDP-013`), not merely
+something the provider mentions.
 
 ## More than one cursor mapping
 
@@ -110,19 +108,18 @@ than pre-choosing on the operator's behalf.
 
 ## What the endpoint does and does not own
 
-The endpoint declares **how the watermark is sent** — which param, which
-operator, which encoding. It does not own sync *policy*: lookback/safety
-windows, overlap handling, and how far back a backfill reaches are decided per
-run, not baked into the endpoint. Don't encode a fudge factor into the mapping.
+The endpoint declares how the watermark is sent, never sync policy
+(`RULE-ENDP-042`). An author reaches for a fudge factor when the provider has
+clock skew or late-arriving rows: that is the operator's sync policy to set per
+run, not a shift to bake into the mapping's `operator` or `format`.
 
 ## Supported methods
 
-`supported_methods` lists what the endpoint can do — `full_refresh`,
-`incremental`, or both. List `incremental` only when a cursor mapping
-actually backs it; an endpoint with no cursorable field is `full_refresh`
-only and should omit `replication` (see below). There is no separate
-"default method" key — the block carries `supported_methods` and
-`cursor_mappings` and nothing else.
+`supported_methods` is the endpoint's capability claim, drawn from the
+vocabulary `RULE-ENDP-038` names — which is also why the block carries no
+default-method key. Claim incremental sync only where a cursor mapping actually
+backs it; an endpoint with no cursorable field omits `replication` entirely
+(below).
 
 ## When to omit
 
@@ -136,11 +133,7 @@ Omit `replication` entirely when:
 
 - Don't fabricate a cursor field. If `updated_at` is response-side only
   (no filter param), there's no incremental sync to declare.
-- `cursor_field` reads per-record. It's a dotted path into each record
-  (`updated_at`, `meta.changed`), not a pointer into the page envelope and
-  not a value expression.
-- `incremental` in `supported_methods` is only valid with a matching
-  cursor mapping — listing it without one is a dead declaration.
-- Don't add a `type-map` field to `cursor_mappings`; canonical types are
-  resolved through the standalone `type-map-read.json` file shipped
-  alongside the connector.
+- `cursor_field` is not a pointer into the page envelope and not a value
+  expression.
+- Canonical types are resolved through the standalone `type-map-read.json`
+  shipped alongside the connector, never from anything in `cursor_mappings`.

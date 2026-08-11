@@ -1,19 +1,22 @@
 id: RULE-PKG-025
 statement: >
-  A connector package MUST ship a README describing the system it connects
+  A connector release MUST ship a README describing the system it connects
   to, its authentication, and any setup the user has to perform before the
   connector will run.
 tier: procedural
 severity: warning
-scope: connector-package
+scope: connector
 validator: null
 owners: [connector-plugin]
 rationale: >
-  Every other file in the package tells a machine how to run the connector;
+  Every other file in a release tells a machine how to run the connector;
   none of them tells a human which credentials to obtain or what has to be
   enabled server-side first, and that knowledge was in the researcher's
-  hands at authoring time and nowhere afterwards. The in-plugin validator
-  ignores README entirely and the registry wheel build does not require
-  one, so a connector that ships undocumented is caught by nobody.
+  hands at authoring time and nowhere afterwards. It binds the release
+  rather than the Python package because an API connector ships no package
+  and needs the document most — its credentials are obtained from a provider
+  console, not a database administrator. The in-plugin validator ignores
+  README entirely and the registry wheel build does not require one, so a
+  connector that ships undocumented is caught by nobody.
 status: active
 superseded_by: null

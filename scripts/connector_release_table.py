@@ -84,6 +84,19 @@ CATEGORIES: tuple[Category, ...] = (
             "`merge_form` is strictly enabling and classifies as `tuning`"
         ),
     ),
+    Category(
+        "endpoint-removed",
+        "major",
+        "Endpoint removed",
+        note=(
+            "an `endpoint_id` the previous release shipped is absent from this "
+            "one. Streams pin endpoints by id, so the pin resolves to nothing "
+            "and the stream stops reading — which is why a resource whose "
+            "locator moves ships as a new document plus this removal rather "
+            "than a rename (`RULE-ENDP-043`), and why the removal half is what "
+            "sets the bump"
+        ),
+    ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
     Category(
         "type-map-canonical-changed",

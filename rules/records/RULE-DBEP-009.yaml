@@ -6,7 +6,7 @@ tier: referential
 severity: error
 scope: database-endpoint
 validator: null
-owners: [pipeline-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject, DatabaseEndpointDoc]
 rationale: >
   Quoted PostgreSQL names, BigQuery catalog names and MongoDB collections are
