@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+  "endpoint_id": "v1__accounts__invoices",
+  "operations": {
+    "read": {
+      "params": {
+        "account_id": { "in": "path", "type": "string", "required": true }
+      },
+      "request": {
+        "method": "GET",
+        "path": "/v1/accounts/{account_id}/invoices",
+        "path_params": { "account_id": { "from_param": "account_id" } }
+      },
+      "response": {
+        "records": { "ref": "response.body.data" },
+        "schema": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "native_type": "array",
+              "arrow_type": "List",
+              "items": {
+                "type": "object",
+                "native_type": "object",
+                "arrow_type": "Object",
+                "properties": {
+                  "id": { "type": "string", "native_type": "string", "arrow_type": "Utf8" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

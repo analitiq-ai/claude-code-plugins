@@ -1,0 +1,182 @@
+{
+  "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+  "endpoint_id": "v1__items",
+  "operations": {
+    "read": {
+      "params": {
+        "limit": {
+          "in": "query",
+          "type": "integer",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "per_page": {
+          "in": "query",
+          "type": "integer",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "page": {
+          "in": "query",
+          "type": "integer",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "offset": {
+          "in": "query",
+          "type": "integer",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "starting_after": {
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "since_id": {
+          "in": "query",
+          "type": "string",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "updated_since": {
+          "in": "query",
+          "type": "string",
+          "format": "date-time",
+          "required": false,
+          "controlled_by": "replication"
+        },
+        "created_after": {
+          "in": "query",
+          "type": "string",
+          "format": "date",
+          "required": false,
+          "controlled_by": "replication"
+        },
+        "created_before": {
+          "in": "query",
+          "type": "string",
+          "format": "date",
+          "required": false,
+          "controlled_by": "replication"
+        }
+      },
+      "request": {
+        "method": "GET",
+        "path": "/v1/items",
+        "query": {
+          "limit": {
+            "from_param": "limit"
+          },
+          "per_page": {
+            "from_param": "per_page"
+          },
+          "page": {
+            "from_param": "page"
+          },
+          "offset": {
+            "from_param": "offset"
+          },
+          "starting_after": {
+            "from_param": "starting_after"
+          },
+          "since_id": {
+            "from_param": "since_id"
+          },
+          "updated_since": {
+            "from_param": "updated_since"
+          },
+          "created_after": {
+            "from_param": "created_after"
+          },
+          "created_before": {
+            "from_param": "created_before"
+          }
+        },
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "pagination": {
+        "type": "page",
+        "page": {
+          "param": "page",
+          "initial": 1,
+          "increment_by": 1
+        },
+        "limit": {
+          "param": "limit",
+          "default": {
+            "ref": "runtime.batch_size"
+          },
+          "max": 100
+        },
+        "stop_when": {
+          "empty": {
+            "ref": "response.body.data"
+          }
+        }
+      },
+      "response": {
+        "records": {
+          "ref": "response.body.data"
+        },
+        "schema": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "array",
+              "native_type": "array",
+              "arrow_type": "List",
+              "items": {
+                "type": "object",
+                "native_type": "object",
+                "arrow_type": "Object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8"
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8"
+                  },
+                  "created": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8"
+                  },
+                  "next_cursor": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8"
+                  }
+                }
+              }
+            },
+            "next_cursor": {
+              "type": "string",
+              "native_type": "string",
+              "arrow_type": "Utf8"
+            },
+            "links": {
+              "type": "object",
+              "native_type": "object",
+              "arrow_type": "Object",
+              "properties": {
+                "next": {
+                  "type": "string",
+                  "native_type": "string",
+                  "arrow_type": "Utf8"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

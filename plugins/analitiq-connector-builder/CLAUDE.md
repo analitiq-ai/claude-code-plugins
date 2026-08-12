@@ -108,17 +108,18 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 Prefer pointing prose at a validated file under a skill's `examples/` tree
 (gated by `tests/*/test_examples*.py`) over an inline fence. An inline
 `json` / `jsonc` fence that stays carries an HTML comment directly above it
-declaring how it is verified (applies to BOTH plugins; machine-enforced for
-the pipeline plugin by `tests/pipeline_builder/test_prose_snippets.py`,
-review-enforced here until a matching gate lands):
+declaring how it is verified (applies to BOTH plugins; every fence under this
+tree is graded against the contract by
+`tests/connector_builder/test_prose_fences.py`, and the pipeline plugin's by
+`tests/pipeline_builder/test_prose_snippets.py`):
 
 - `<!-- validate: <resource> -->` — a full document; must validate against
   that resource's contract.
-- `<!-- validate: <resource>#/<pointer> -->` — a fragment; must validate
-  against the sub-model at that pointer. A fragment may show its enclosing
-  key for context (`"replication": { … }`, wrapped or not) — the pointer
-  names the deepest shown node, and a gate unwraps the key before
-  validating.
+- `<!-- validate: <resource>#/<pointer> -->` — a fragment; spliced in at that
+  pointer, the whole document must validate, so the fragment is graded with
+  the context around it. A fragment may show its enclosing key for context
+  (`"replication": { … }`, wrapped or not) — the pointer names the deepest
+  shown node, and a gate unwraps the key before splicing.
 - `<!-- invalid: <rule id> -->` — deliberately wrong; must fail validation
   (that half is what a gate asserts — a "don't do this" example that rots
   into valid is the most misleading rot there is). That the failure is the

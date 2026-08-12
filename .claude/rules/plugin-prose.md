@@ -107,11 +107,11 @@ which arrives in a generated block no one may hand-edit.
   there is; that the failure is the named rule's diagnostic stays
   review-enforced, since the validator reports model messages, not rule ids)
   · `illustrative` (explicit, reviewable exemption).
-  Enforcement is split by plugin: for the pipeline plugin the annotation is
-  machine-enforced by `tests/pipeline_builder/test_prose_snippets.py`, which
-  grades every fence under that plugin's tree; for the connector plugin it
-  is review-enforced until a matching gate lands — write it anyway so that
-  gate can adopt existing fences without a sweep.
+  Each plugin's tree is graded by its own gate —
+  `tests/connector_builder/test_prose_fences.py`,
+  `tests/pipeline_builder/test_prose_snippets.py`: an unannotated fence fails
+  the build, and a `validate:` / `invalid:` block is run through the validator
+  in a host document that carries the context its pointer names.
 - Prefer minimal-complete documents over fragments — a fragment costs a harness
   or annotation forever. Fenced Python (CDK excerpts) must at least parse;
   anything beyond that is rung 5.
