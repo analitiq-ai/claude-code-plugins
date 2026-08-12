@@ -10,6 +10,7 @@ there are no committed fixtures to drift from the contract.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -524,6 +525,56 @@ def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
     assert not diag["passed"]
     assert any(f["validator"] == "connection-type-map" and "not a readable file" in f["message"]
                for f in diag["findings"]), diag["findings"]
+
+
+# ---------------------------------------------------------------------------
+# The entity vocabulary, as the agent that drives the CLI states it
+# ---------------------------------------------------------------------------
+
+VALIDATOR_AGENT = ROOT / "agents" / "pipeline-schema-validator.md"
+
+# The `entity` input bullet, located by the backticked field name that opens it
+# and closed by the next top-level bullet. Lexical throughout: the anchor is an
+# identifier `validate.py` owns (it is the CLI flag), and the verdict below is
+# handed to `V.ENTITIES` — no sentence is read.
+_ENTITY_BULLET = re.compile(r"^- `entity`.*?(?=^- |\Z)", re.M | re.S)
+_TICKED = re.compile(r"`([a-z_]+)`")
+
+
+def test_validator_agent_states_the_adapter_entity_vocabulary():
+    """The agent's `entity` input is the CLI's `--entity` choices, verbatim.
+
+    The agent prose is the only place a user's agent learns which entities
+    exist; a member missing from it is a document nobody can ask to have
+    validated, and an invented one is a run that dies at argparse. Neither
+    shows up in any other gate, because the contract is unchanged either way.
+
+    The expected set is `{entity}` — the field's own name, which is what
+    locates the bullet — plus whatever `ENTITIES` currently holds, so adding an
+    entity to the adapter fails here until the agent learns it.
+
+    One site this cannot reach: the same file's frontmatter `description`, which
+    paraphrases the vocabulary in running English ("database-endpoint",
+    "connection-scoped type-map") because that string is what routes work to
+    this agent, not something an agent reads members off. Grading a paraphrase
+    means deciding that a hyphenated phrase denotes an underscored identifier,
+    and that is a guard reading a sentence — banned by
+    `.claude/rules/validator-claims.md`. So it is carried by the failure hint
+    below and by a reader, not by an assertion.
+    """
+    bullet = _ENTITY_BULLET.search(VALIDATOR_AGENT.read_text())
+    assert bullet, (
+        f"{VALIDATOR_AGENT.name}: no '- `entity`' input bullet — the file was "
+        "restructured, and this guard is now reading nothing")
+    assert set(_TICKED.findall(bullet.group(0))) == {"entity", *V.ENTITIES}, (
+        f"{VALIDATOR_AGENT.name}'s `entity` input no longer names exactly "
+        f"validate.py's ENTITIES ({', '.join(V.ENTITIES)}). Update the bullet, "
+        "then update the two prose sites this guard does not read: this same "
+        "file's frontmatter `description`, which names the entities in English "
+        "so the orchestrator routes to it, and the entity names in "
+        "skills/pipeline-builder/SKILL.md (phase 5's type-map writes, and Edit "
+        "mode's referenced-closure step)."
+    )
 
 
 def test_cli_main_type_map_entities(tmp_path, capsys):

@@ -2611,7 +2611,8 @@
    "validator": "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [
     "DatabaseObject"
@@ -3372,8 +3373,8 @@
   },
   {
    "id": "RULE-PIPE-007",
-   "statement": "A stream's per-destination batching override MAY lower the batch size resolved from the pipeline default, but MUST NOT raise it above the capacity the destination endpoint declares.\n",
-   "tier": "referential",
+   "statement": "A stream's per-destination `execution` block MUST NOT be authored as a way to change how much a run writes at a time; the batch size a run uses is the one the pipeline's runtime declares, for every stream.\n",
+   "tier": "judgment",
    "severity": "warning",
    "scope": "pipeline",
    "validator": null,
@@ -3387,7 +3388,7 @@
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The pipeline default, the stream override and the endpoint's declared capacity are three documents composed only at run time, and the capacity is a ceiling applied by capping rather than by rejection. So an override above it validates everywhere, is silently reduced, and the user is told a write size the run never uses — the pipeline still works, which is why this costs a wrong expectation rather than a failure. Catching it means reading the destination endpoint the stream binds to, which the pipeline plugin holds only while the connector it came from is on disk.\n",
+   "rationale": "The block is accepted by the contract and consumed by nothing: the engine resolves one batch size from the pipeline's runtime, hands it to every stream processor, and never reads a destination's `execution`, nor applies the capacity a destination endpoint declares as a cap. So authoring one is not a smaller write — it is a write size the author believes in and the run never uses, and no document the plugin holds contradicts them. That is why this is a judgment rule with nothing applying it: the artifact is legal, the run succeeds, and only a row-rate nobody compares would show the difference. Whether the engine should honour the block or the contract should stop declaring it is a decision for the owners of both; until one is taken, an author is better served by tuning the pipeline runtime, which does take effect.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4070,20 +4071,21 @@
   },
   {
    "id": "RULE-PKG-031",
-   "statement": "An endpoint document in a connector release MUST ship at `endpoints/{endpoint_id}.json`, directly in that directory rather than in a subdirectory of it.\n",
+   "statement": "An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the connector release or the connection that carries it, directly in that directory rather than in a subdirectory of it.\n",
    "tier": "referential",
    "severity": "error",
    "scope": "connector-package",
    "validator": "analitiq.validator.connectors::endpoint_filename_findings",
    "owners": [
     "engine",
-    "connector-plugin"
+    "connector-plugin",
+    "pipeline-plugin"
    ],
    "targets": [],
    "fields": [],
    "mechanism": null,
    "fixture_model": null,
-   "rationale": "The engine resolves an endpoint by id and reaches the file by its name, so a document whose filename and `endpoint_id` disagree is unreachable under the id every stream pins it by — and it is unreachable silently, because the file is present and valid and the id it declares is fine. Nesting fails the same way: the release gate reads the directory flat, so a document one level down is not refused, it is simply never seen. Both are the kind of mistake a rename makes and a review does not catch, because the two halves of the identity are never on screen together.\n",
+   "rationale": "The engine resolves an endpoint by id and reaches the file by its name, so a document whose filename and `endpoint_id` disagree is unreachable under the id every stream pins it by — and it is unreachable silently, because the file is present and valid and the id it declares is fine. Nesting fails the same way: the gate that walks the directory reads it flat, so a document one level down is not refused, it is simply never seen. Both are the kind of mistake a rename makes and a review does not catch, because the two halves of the identity are never on screen together.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4444,6 +4446,30 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-SHRD-014",
+   "statement": "An authored document MUST NOT declare a field the registry stamps on insert or update; the authored models name the authorable fields and reject every other key.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scope": "any",
+   "validator": "analitiq.contracts.shared.common::StrictModel",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "PipelineInput",
+    "StreamInput",
+    "ConnectionInput",
+    "DatabaseEndpointDoc"
+   ],
+   "fields": [],
+   "mechanism": "closed_object",
+   "fixture_model": null,
+   "rationale": "A server-stamped name reads as ordinary metadata an author is expected to fill, and a document fetched from the registry carries the stamps beside the authored fields with nothing marking which half is which — so an edit that starts from a stored record reproduces them by default. One authored by hand is either overwritten or contradicts the row it describes. Reserving a name on an artifact reserves it only there: a database column named `version` or an operation parameter named `org_id` is provider-owned and copied verbatim.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-STRM-001",
    "statement": "Each entry in a stream's destinations MUST address an endpoint no other entry addresses.\n",
    "tier": "advisory",
@@ -4456,7 +4482,11 @@
    "targets": [
     "StreamAuthored"
    ],
-   "fields": [],
+   "fields": [
+    "destinations[].endpoint_ref.scope",
+    "destinations[].endpoint_ref.connection_id",
+    "destinations[].endpoint_ref.endpoint_id"
+   ],
    "mechanism": null,
    "fixture_model": "StreamInput",
    "rationale": "A repeated destination writes the same records twice with nothing downstream able to tell the two entries apart. The key is the whole reference rather than the connection, because fanning one stream into several objects of the same warehouse is a normal shape and must stay authorable; narrowing the key to the connection would forbid it. The emitted JSON Schema carries no uniqueness keyword for the array, so a schema-only reading looks permissive and an author can believe duplicates are intended.\n",
@@ -5176,6 +5206,52 @@
    "mechanism": "literal_enum",
    "fixture_model": null,
    "rationale": "The mode is the discriminator `RULE-STRM-016` selects the write shape by, so a value outside the vocabulary is not a wrong mode but a document that matches no shape at all, and the rejection names the union rather than the field. Each shape declares only the modes it can execute, which is why the vocabularies differ between them: a keyed write and a keyless one are different destinations' capabilities, not one set the author picks from twice. For an API destination the mode must additionally be a key the chosen endpoint declares, which is `RULE-STRM-024`.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-039",
+   "statement": "An incremental stream's late-arrival safety window MUST be sized from how late the source's own records arrive, and MUST NOT be authored as a rewind the stream can count on: whether a window shifts a read at all is decided by the source, not by the stream document.\n",
+   "tier": "judgment",
+   "severity": "warning",
+   "scope": "stream",
+   "validator": null,
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "IncrementalReplication"
+   ],
+   "fields": [
+    "safety_window_seconds"
+   ],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "Every window the field admits validates, so the number is settled by judgment alone and no document records what it was sized against. What decides the right one is outside every artifact here: how long after an event the source system makes the record visible. The window is also not a guarantee the stream holds — a source applies it or resumes from the stored cursor unchanged, and an author who sized it as a rewind then believes records are re-read that never are. Catching a violation means comparing the window against the provider's own late-arrival behaviour and against what the source does with the field, neither of which any document the plugin holds carries.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-STRM-040",
+   "statement": "A mapping assignment's validation `error_handling` MUST NOT be authored as the policy for the failures its own rules raise; how a run answers a validation failure is what the pipeline's runtime error handling declares, for every assignment.\n",
+   "tier": "judgment",
+   "severity": "warning",
+   "scope": "stream",
+   "validator": null,
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "Validation"
+   ],
+   "fields": [
+    "error_handling"
+   ],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The block is accepted by the contract and read by nothing: a failing record fails the batch it arrived in, and the policy a run answers a failed batch with is built once from the pipeline's runtime error handling, so an assignment-scoped strategy or retry count has no grain to act at. Authoring one is therefore not a narrower policy — it is a policy the author believes in and the run never consults, and because the pipeline's block governs whether or not the assignment carries one, both documents stay legal and the run succeeds. Catching a violation means reading how the engine builds its batch policy, which no artifact here records. Whether the engine should honour the block or the contract should stop declaring it is a decision for the owners of both; until one is taken, an author asking for a different answer to a validation failure is served by the pipeline's runtime, which does take effect.\n",
    "status": "active",
    "superseded_by": null
   },

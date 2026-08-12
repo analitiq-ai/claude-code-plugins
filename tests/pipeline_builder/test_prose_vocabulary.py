@@ -135,10 +135,15 @@ REQUIRED_BLOCKS = {
         "endpoint-id-derivation", "fields-connection-endpoint-ref", "fields-connector-endpoint-ref"},
     "skills/stream-spec/spec-filter-operators.md": {"filter-operators"},
     "skills/stream-spec/spec-mapping.md": {
-        "fields-assignment-target", "fields-assignment-value-constant",
-        "fields-assignment-value-expression", "fields-stream-mapping"},
-    "skills/stream-spec/spec-source.md": {"fields-stream-source"},
-    "skills/stream-spec/spec-validation-rules.md": {"fields-validation-rule"},
+        "fields-assignment", "fields-assignment-target",
+        "fields-assignment-value-constant", "fields-assignment-value-expression",
+        "fields-constant-value", "fields-stream-mapping"},
+    "skills/stream-spec/spec-source.md": {
+        "fields-stream-pagination-keyset", "fields-stream-pagination-offset",
+        "fields-stream-replication-full-refresh",
+        "fields-stream-replication-incremental", "fields-stream-source"},
+    "skills/stream-spec/spec-validation-rules.md": {
+        "fields-validation", "fields-validation-rule"},
 }
 
 # (doc, vocabulary) -> (occurrences, expected members, why a hand-typed copy is right here).
@@ -154,13 +159,6 @@ ALLOWED_RESTATEMENTS = {
     ("skills/pipeline-builder/references/enum-mappers.md", "write.mode"):
         (1, {"insert", "upsert", "truncate_insert"},
          "same: mapper table target column"),
-    ("skills/pipeline-spec/spec-schedule.md", "schedule.type"):
-        (1, {"manual", "interval", "cron"},
-         "the §`timezone` section names all three types while explaining that "
-         "timezone is validated for every one of them — an incidental co-mention"),
-    ("skills/pipeline-spec/spec-schedule.md", "status"):
-        (1, {"draft", "active", "inactive"},
-         "the status->scheduling-effect table explains behaviour per member"),
     ("skills/pipeline-spec/spec-streams-and-status.md", "status"):
         (1, {"draft", "active", "inactive"}, "the status->runnability table"),
     ("skills/stream-spec/spec-validation-rules.md", "validation_rule.type"):
@@ -187,12 +185,6 @@ ALLOWED_RESTATEMENTS = {
         (1, {"insert", "truncate_insert"},
          "same sentence as the `write.mode` entry above — WriteModeMapper's "
          "target column names every mode, so it names this subset too"),
-    ("skills/pipeline-builder/references/identity-and-versioning.md",
-     "ConnectionContractInput.phase"):
-        (1, {"pre_auth", "auth"},
-         "§\"Lifecycle means three unrelated things\" names the connector's "
-         "four template phases to separate them from artifact `status` and from "
-         "the per-run lifecycle; the input-phase pair is contained in that list"),
     # --- the storage routing table (RULE-CONN-006) ---------------------------
     # The one place a connection is authored FROM the connector's contract, so
     # the member is the left-hand side of a mapping and the destination key is
@@ -221,18 +213,13 @@ ALLOWED_RESTATEMENTS = {
 # heuristic cannot see these (a fence body is illustrative JSON, where quoting
 # every member would be wrong), so they are recorded explicitly rather than left
 # to look like clean prose.
-FENCED_RESTATEMENTS = {
-    ("skills/pipeline-builder/references/io-contracts.md", "replication.method"):
-        "the PipelineFacts jsonc example annotates the field with its vocabulary",
-    ("skills/pipeline-builder/references/io-contracts.md", "schedule.type"):
-        "same example, schedule field",
-    # `write.mode` used to be listed here: the DriftVerdict example's
-    # write_mode_changed entry needs a concrete from/to pair, and with a
-    # two-member vocabulary that pair happened to name the whole set. It gained
-    # `truncate_insert`, so an insert->upsert pair is now what it always meant to
-    # be — one illustrative transition, not an enumeration — and there is no
-    # restatement left to record.
-}
+# Empty is the intended state, not a gap: an example that needs a member picks
+# one, and an example that wants the whole vocabulary cites the document owning
+# it (`enum-mappers.md` for the mapper targets) instead of listing it in a
+# comment. The dict stays because it is the gate's declaration surface — a fence
+# that starts naming a full vocabulary fails until someone writes the reason
+# here.
+FENCED_RESTATEMENTS: dict[tuple[str, str], str] = {}
 
 # Vocabularies whose members are ordinary domain nouns, so a full-set match
 # carries no signal. Keyed to a written reason, like the allow-list — the gate's

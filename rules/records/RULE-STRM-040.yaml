@@ -1,0 +1,29 @@
+id: RULE-STRM-040
+statement: >
+  A mapping assignment's validation `error_handling` MUST NOT be authored as the
+  policy for the failures its own rules raise; how a run answers a validation
+  failure is what the pipeline's runtime error handling declares, for every
+  assignment.
+tier: judgment
+severity: warning
+scope: stream
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Validation]
+fields: [error_handling]
+rationale: >
+  The block is accepted by the contract and read by nothing: a failing record
+  fails the batch it arrived in, and the policy a run answers a failed batch
+  with is built once from the pipeline's runtime error handling, so an
+  assignment-scoped strategy or retry count has no grain to act at. Authoring
+  one is therefore not a narrower policy — it is a policy the author believes in
+  and the run never consults, and because the pipeline's block governs whether
+  or not the assignment carries one, both documents stay legal and the run
+  succeeds. Catching a violation means reading how the engine builds its batch
+  policy, which no artifact here records. Whether the engine should honour the
+  block or the contract should stop declaring it is a decision for the owners of
+  both; until one is taken, an author asking for a different answer to a
+  validation failure is served by the pipeline's runtime, which does take
+  effect.
+status: active
+superseded_by: null

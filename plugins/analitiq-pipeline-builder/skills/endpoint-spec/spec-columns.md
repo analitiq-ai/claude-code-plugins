@@ -1,6 +1,6 @@
 # `columns` block
 
-A non-empty array of:
+The `columns` array holds:
 
 <!-- BEGIN GENERATED: fields-column -->
 `analitiq.contracts.endpoints.Column` — closed (`additionalProperties: false`); required: `arrow_type`, `name`, `native_type`
@@ -22,7 +22,8 @@ Carries 3 declarative cross-field `if`/`then` rule(s) — see the registered rul
 
 ## `name`
 
-Verbatim from introspection.
+Verbatim from introspection — no case-folding, quoting or other normalisation
+(`RULE-DBEP-009`).
 
 ## `native_type`
 
@@ -36,12 +37,13 @@ The provider-native type label, e.g.:
 | BigQuery | `STRING`, `INT64`, `STRUCT<…>`, `TIMESTAMP`, `BIGNUMERIC` |
 | MongoDB | `BSON.ObjectId`, `BSON.Date`, `BSON.Document` |
 
-Use `"unknown"` as a sentinel when the engine doesn't expose a type.
+When introspection cannot report a column's type, author `"unknown"` — the
+fallback label the contract's `native_type` field declares — never a guess and
+never an invented placeholder (`RULE-DBEP-012`).
 
 ## `arrow_type`
 
-Fully-qualified Apache Arrow canonical type string. Base names are
-PascalCase from `arrow/format/Schema.fbs`.
+Fully-qualified Apache Arrow canonical type string.
 
 <!-- BEGIN GENERATED: arrow-types -->
 `arrow_type` is validated by one published regex, `analitiq.contracts.endpoints.ARROW_TYPE_PATTERN` — generated from the engine-published grammar manifest, so it accepts exactly what the engine executes. Its top-level alternatives fall into two families.
@@ -63,20 +65,16 @@ PascalCase from `arrow/format/Schema.fbs`.
 There are **no angle-bracket container forms**: nested data is declared with the bare authored-shape markers `Object` / `List` (with sibling `properties` / `items` on the owning column or field spec) or opaque `Json`. `Decimal128/256` additionally require scale <= precision — a cross-parameter bound the regex cannot express; the validator enforces it.
 <!-- END GENERATED: arrow-types -->
 
-Units are the literal Flatbuffers enum identifiers, uppercase, and each type
-admits only the units its alternative above lists — `Time32(MICROSECOND)` and
-`Time64(SECOND)` are rejected.
+Each type admits only the units its alternative above lists —
+`Time32(MICROSECOND)` and `Time64(SECOND)` are rejected.
 
 ### `Timestamp` timezone
 
-Optional second argument. Valid forms:
-
-- **Omit the slot** — naive timestamp, no implied zone: `Timestamp(MICROSECOND)`.
-- **Literal `null`** — explicit naive marker: `Timestamp(MICROSECOND, null)`
-  (distinct from omitting; some readers treat it as "zone is unknown
-  rather than absent").
-- **An actual zone** — IANA name (`UTC`, `Europe/Berlin`), `Etc/GMT±N`,
-  or a fixed `±HH:MM` offset: `Timestamp(MICROSECOND, +05:30)`.
+The zone slot is optional; the `Timestamp` alternative above carries every
+accepted spelling. The judgment is which to author: omit the slot for a source
+column with no zone; write literal `null` to mark the zone explicitly unknown
+rather than absent; write an actual zone for a zoned source, preferring `UTC`
+unless the source's own zone is load-bearing.
 
 ### Canonical examples
 
@@ -101,6 +99,10 @@ Json
 
 ### Mapping guidance
 
+Judgment supplies a value only where no type map covers the native
+(`RULE-DBEP-004`); resolve through the maps first — `spec-type-map-gaps.md`
+§Gap detection.
+
 | Provider native | Typical fully-qualified `arrow_type` |
 |---|---|
 | `uuid`, `text`, `varchar(n)`, `char(n)` | `Utf8` |
@@ -108,7 +110,7 @@ Json
 | `BIGINT UNSIGNED` (MySQL) | `UInt64` |
 | `real` / `double precision` | `Float32` / `Float64` |
 | `boolean` / `BOOL` | `Boolean` |
-| `numeric(p,s)` / `DECIMAL(p,s)` | `Decimal128(p, s)` (use `Decimal256` when `p > 38`; max precision is 76) |
+| `numeric(p,s)` / `DECIMAL(p,s)` | `Decimal128(p, s)` (use `Decimal256` when the precision exceeds what the `Decimal128` alternative above admits) |
 | `date` | `Date32` |
 | `timestamp` / `DATETIME` (no zone) | `Timestamp(MICROSECOND)` |
 | `timestamp with time zone` / `TIMESTAMP_TZ` / BigQuery `TIMESTAMP` | `Timestamp(MICROSECOND, UTC)` |
@@ -121,10 +123,8 @@ Json
 
 ### Nested data is authored-shape only
 
-There are **no angle-bracket container canonicals** (`Struct<…>`, `List<…>`,
-`Map<…>`): the engine does not execute them, and the contract — generated
-from the engine's own grammar — rejects them. Declare nested shape with the
-bare markers plus sibling keys on the **column itself** (`RULE-ENDP-021`):
+Declare nested shape with the bare markers plus sibling keys on the **column
+itself** (`RULE-ENDP-021`):
 
 - `Object` — the sibling `properties` map is recursive: each child is
   `{arrow_type, …}` and may itself be `Object`/`List`.
@@ -144,8 +144,8 @@ the dialect doesn't expose this (e.g., schemaless engines).
 
 ## `default`
 
-The parsed default expression if reasonable, else `null`. The runtime treats this
-as advisory — actual default behavior is dialect-owned.
+The parsed default expression when introspection reports one, else `null` —
+never an invented one.
 
 ## `comment`
 
@@ -154,11 +154,13 @@ etc.). Forwarded verbatim. `null` when absent.
 
 ## `ordinal_position`
 
-Canonicalizes column order for hashing. Omit for schemaless engines (MongoDB).
+Declared ordinals canonicalise column order; each must differ from every
+other's (`RULE-DBEP-002`). Omit for schemaless engines (MongoDB).
 
-## Uniqueness
+## Registered endpoint rules
 
-The rule registry's database-endpoint rules over this array:
+Every rule this plugin owns over an endpoint document, whichever endpoint scope
+it is filed at:
 
 <!-- BEGIN GENERATED: rules-endpoint -->
 | Rule | Constraint |
@@ -178,6 +180,7 @@ The rule registry's database-endpoint rules over this array:
 | `RULE-DBEP-013` | A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label. |
 | `RULE-ENDP-020` | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
 | `RULE-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
+| `RULE-ENDP-031` | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. |
 | `RULE-ENDP-043` | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. |
 | `RULE-ENDP-055` | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. |
 <!-- END GENERATED: rules-endpoint -->

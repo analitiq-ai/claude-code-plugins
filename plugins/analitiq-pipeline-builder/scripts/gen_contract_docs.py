@@ -451,9 +451,27 @@ FIELD_TABLE_MODELS = {
     "fields-column": ("analitiq.contracts.endpoints", "Column"),
     "fields-stream-source": ("analitiq.contracts.stream", "StreamSource"),
     "fields-stream-execution": ("analitiq.contracts.stream", "Execution"),
+    # `Replication` and `DatabasePagination` are discriminated unions like
+    # `AssignmentValue` below, and take the same per-variant treatment: the
+    # requiredness that separates the variants (`cursor_field` on incremental,
+    # `order_by_field` on keyset) is exactly what an author needs, and a single
+    # merged table cannot state it.
+    "fields-stream-replication-full-refresh": (
+        "analitiq.contracts.stream", "FullRefreshReplication",
+    ),
+    "fields-stream-replication-incremental": (
+        "analitiq.contracts.stream", "IncrementalReplication",
+    ),
+    "fields-stream-pagination-offset": (
+        "analitiq.contracts.stream", "OffsetDatabasePagination",
+    ),
+    "fields-stream-pagination-keyset": (
+        "analitiq.contracts.stream", "KeysetDatabasePagination",
+    ),
     "fields-connector-endpoint-ref": ("analitiq.contracts.stream", "ConnectorEndpointRef"),
     "fields-connection-endpoint-ref": ("analitiq.contracts.stream", "ConnectionEndpointRef"),
     "fields-stream-mapping": ("analitiq.contracts.stream", "StreamMapping"),
+    "fields-assignment": ("analitiq.contracts.stream", "Assignment"),
     "fields-assignment-target": ("analitiq.contracts.stream", "AssignmentTarget"),
     # `AssignmentValue` is a `kind`-discriminated union, not a model class, so it
     # has no single field table. Each variant gets its own block: the reader sees
@@ -465,6 +483,11 @@ FIELD_TABLE_MODELS = {
     "fields-assignment-value-constant": (
         "analitiq.contracts.stream", "ConstantAssignmentValue",
     ),
+    # The payload each variant above admits: `ConstantValue` is what a
+    # `kind: "constant"` value carries, so the discriminator table names it and
+    # this one shows its shape.
+    "fields-constant-value": ("analitiq.contracts.stream", "ConstantValue"),
+    "fields-validation": ("analitiq.contracts.stream", "Validation"),
     "fields-validation-rule": ("analitiq.contracts.stream", "ValidationRule"),
 }
 

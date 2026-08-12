@@ -1,0 +1,25 @@
+id: RULE-STRM-039
+statement: >
+  An incremental stream's late-arrival safety window MUST be sized from how late
+  the source's own records arrive, and MUST NOT be authored as a rewind the
+  stream can count on: whether a window shifts a read at all is decided by the
+  source, not by the stream document.
+tier: judgment
+severity: warning
+scope: stream
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [IncrementalReplication]
+fields: [safety_window_seconds]
+rationale: >
+  Every window the field admits validates, so the number is settled by judgment
+  alone and no document records what it was sized against. What decides the
+  right one is outside every artifact here: how long after an event the source
+  system makes the record visible. The window is also not a guarantee the
+  stream holds — a source applies it or resumes from the stored cursor
+  unchanged, and an author who sized it as a rewind then believes records are
+  re-read that never are. Catching a violation means comparing the window
+  against the provider's own late-arrival behaviour and against what the source
+  does with the field, neither of which any document the plugin holds carries.
+status: active
+superseded_by: null

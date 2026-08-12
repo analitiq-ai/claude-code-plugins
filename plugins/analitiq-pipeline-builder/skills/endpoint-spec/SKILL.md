@@ -17,8 +17,8 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 - `spec-columns.md` — the column shape, provider `native_type` labels and
   the fully-qualified Apache Arrow `arrow_type` vocabulary.
 - `spec-type-map-gaps.md` — connection-scoped type maps for discovered
-  natives the connector's base maps don't cover: gap detection, both
-  directions, and the authoring rules.
+  natives the connector's base maps don't cover: gap detection in each
+  direction, and the authoring rules.
 - `spec-new-table.md` — deriving a destination endpoint for a table that
   does not exist yet (no introspection; the engine creates it on first run).
 - At least one of `examples/*.example.json` for the database dialect
@@ -29,15 +29,16 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 API endpoints come from the connector document, not from here. This
 skill is **database-only**. API endpoints in stream `endpoint_ref`s use
 `scope: connector` and point at the connector's `definition/endpoints/`.
-Database endpoints use `scope: connection` and live under
-`connections/<connection-slug>/definition/endpoints/`.
+Database endpoints use `scope: connection`; their file location is in the table
+at the foot of this file.
 
 ## What this skill covers
 
 - The structural identity of a database object: catalog, schema, name,
   object_type.
 - The column shape per table/view/collection.
-- Primary keys: optional declared list, must reference existing columns.
+- Primary keys: every declared name must name a column this document declares
+  (`RULE-DBEP-003`).
 - Connection-scoped type maps
   (`connections/<connection-slug>/definition/type-map-{read,write}.json`),
   authored only when discovery surfaces natives the connector's maps don't
@@ -62,9 +63,9 @@ Database endpoints use `scope: connection` and live under
 | `primary_keys` | no | array of string \| null | `None` | `minItems=1` |
 <!-- END GENERATED: fields-database-endpoint -->
 
-The model is closed: a field the table does not list is rejected, not ignored.
-That includes every server-managed field (`schema_hash`, `org_id`, timestamps) —
-the published model is the **authored** shape, not the persisted one.
+Server-managed fields are never authored — the published model is the
+**authored** shape, not the persisted one, and it names every field you may
+write. `schema_hash` is the usual mistake.
 
 ## What this skill does NOT cover
 
@@ -79,15 +80,16 @@ the published model is the **authored** shape, not the persisted one.
 Every authored document must:
 
 1. Declare `$schema` with the database-endpoint URL from the table below
-   (`RULE-SHRD-003`; the schema marks it a `const`-required field).
+   (`RULE-SHRD-003`).
 2. Carry every required field from the top-level shape table above.
    `endpoint_id` is the **derived** handle computed by `scripts/endpoint_id.py`,
    never a hand-authored slug — see `spec-database-object.md`
    §Derived `endpoint_id`.
 3. Preserve identifier strings verbatim from introspection (`RULE-DBEP-009`).
 4. Pass validation (the `pipeline-schema-validator`, entity `database_endpoint`)
-   with zero error findings — the validator recomputes and enforces the derived
-   `endpoint_id`.
+   with zero error findings. The `endpoint_id` must equal the handle the
+   contract's derivation produces from the verbatim `database_object`
+   (`RULE-DBEP-011`).
 
 <!-- BEGIN GENERATED: schema-urls -->
 | Entity | Authored file | `$schema` value |

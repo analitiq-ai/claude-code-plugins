@@ -20,27 +20,20 @@ document: one user's configured **instance** of a connector.
 
 ## What this skill covers
 
-A connection owns exactly this much, and nothing else:
+Authoring the connection document: every field the table below declares, and
+nothing else. Parts of it are not yours to write — `discovered` is filled by the
+service from the connector's post-auth discovery (`RULE-CONN-005`), and a
+`selections` value the user has not already chosen is only known after auth.
 
-- user-entered non-secret values;
-- user-selected post-auth values that must persist;
-- provider-discovered post-auth values (server-managed);
-- secret references;
-- auth lifecycle metadata (server-managed);
-- connection-level private endpoints, discovery artifacts, and
-  connection-scoped type maps.
-
-Plus the authoring jobs those imply: routing each `connection_contract` input /
+The authoring jobs that implies: routing each `connection_contract` input /
 post-auth output into its map (`RULE-CONN-006`; see `spec-envelope.md`), and
 scaffolding `secret_refs` as `env:` pointers with the matching
 `.secrets/credentials.json` template.
 
-Only what the field table below declares is authorable here. The server-managed
-parts of that list — `discovered` (`RULE-CONN-005`) and auth lifecycle metadata —
-belong to the service, and the endpoint / discovery / type-map artifacts are
-separate documents that merely hang off this connection — endpoints and
-connection-scoped type maps are authored by `private-endpoint-creator`
-(see `endpoint-spec`, incl. `spec-type-map-gaps.md`), never here.
+The artifacts that merely hang off a connection are separate documents:
+endpoints, discovery artifacts and connection-scoped type maps are authored by
+`private-endpoint-creator` (see `endpoint-spec`, incl. `spec-type-map-gaps.md`),
+never here.
 
 <!-- BEGIN GENERATED: fields-connection -->
 `analitiq.contracts.connection.ConnectionInput` — closed (`additionalProperties: false`); required: `connector_id`
@@ -61,10 +54,10 @@ connection-scoped type maps are authored by `private-endpoint-creator`
 
 ## Registered rules for a connection
 
-Satisfy every rule below, and cite one by id rather than restating it. A clean
-validation run is especially weak proof here: a connection is judged against the
-*connector's* `connection_contract`, which a single-document run never opens, so
-most of these surface at connect rather than at authoring time.
+Satisfy every rule below, and cite one by id rather than restating it. A rule
+whose statement names the connector's `connection_contract` is judged against
+that document, so read the downloaded connector beside the connection while
+authoring.
 
 <!-- BEGIN GENERATED: rules-connection -->
 | Rule | Constraint |
@@ -92,17 +85,15 @@ most of these surface at connect rather than at authoring time.
 ## Draft connections, and what a clean validation does not prove
 
 A connection may be saved as a **draft** with its activation requirements unmet
-— a secret not yet provisioned, a post-auth step not yet run. It becomes active
-only once everything the contract marks `required_for_activation` resolves.
-Author the honest draft; never invent a placeholder value to force a connection
-into looking activatable. Draft-vs-active is service-side state, not something
-this document carries — the field table declares no connection `status`, so
-there is nothing to author either way.
+— a secret not yet provisioned, a post-auth step not yet run. What must resolve
+first is the connector's `connection_contract.required_for_activation`. Author
+the honest draft; never invent a placeholder value to force a connection into
+looking activatable. Draft-vs-active is service-side state, not something this
+document carries.
 
-Provider reachability is out of scope for connection validation: the validator
-never contacts the provider. A connection with zero findings can still fail at
-runtime on credentials, network, permissions or a missing resource. Report it as
-structurally valid, never as "working" or "tested".
+Provider reachability is out of scope: a connection with zero findings can still
+fail at runtime on credentials, network, permissions or a missing resource.
+Report it as structurally valid, never as "working" or "tested".
 
 ## Output rules
 
@@ -110,13 +101,13 @@ Every authored document must:
 
 1. Declare `$schema` with the connection URL from the table below
    (`RULE-SHRD-003`).
-2. Author `connector_id` (the connector slug being instantiated; required).
-   `connection_id` is an RFC-4122 UUID — author one the plugin generates, or
-   omit it and let the service assign one on ingest.
-3. Route every contract input/output into `parameters` / `selections` /
-   `secret_refs` by its `storage` (never author `discovered` —
-   `RULE-CONN-005`). For each `storage: "secrets"` key, write an `env:` pointer
-   into `secret_refs` and add the env-var name to `.secrets/credentials.json`.
+2. Author `connector_id` — the slug of the downloaded connector being
+   instantiated (`RULE-CONN-011`). Author `connection_id` from the UUID the
+   orchestrator minted, or omit it (the service assigns one on ingest).
+3. Route every contract input/output by its `storage` (`RULE-CONN-006`;
+   procedure in `spec-envelope.md`). For each key the contract routes to secret
+   storage, write an `env:` pointer into `secret_refs` and add the env-var name
+   to `.secrets/credentials.json`.
 4. Pass the validator (`pipeline-schema-validator`, entity `connection`) with
    zero error findings.
 

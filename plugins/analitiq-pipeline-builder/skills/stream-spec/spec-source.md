@@ -13,11 +13,8 @@
 | `primary_keys` | no | array of string \| null | `None` | — |
 <!-- END GENERATED: fields-stream-source -->
 
-`replication` and `database_pagination` are discriminated unions —
-`analitiq.contracts.stream.{FullRefreshReplication, IncrementalReplication}` and
-`analitiq.contracts.stream.{OffsetDatabasePagination, KeysetDatabasePagination}`
-respectively. The sketch below illustrates a filled-in source; it is not a
-statement of what the contract requires.
+The sketch below illustrates a filled-in source; it is not a statement of what
+the contract requires.
 
 <!-- validate: stream#/source -->
 ```jsonc
@@ -36,7 +33,7 @@ statement of what the contract requires.
     },
     "database_pagination": {
       "type": "offset",
-      "page_size": 1000
+      "order_by_field": "updated_at"
     },
     "primary_keys": ["id"]
   }
@@ -45,14 +42,13 @@ statement of what the contract requires.
 
 ## Field references are verbatim
 
-Every field in the `source` block that names a source-endpoint field carries it
-**as discovered** (`RULE-STRM-023`). `Order_ID` and `order_id` are different
-fields; the contract compares them literally and so does the engine.
+Copy each source-endpoint field name byte-for-byte from the endpoint document
+(`RULE-STRM-023`) — `Order_ID` and `order_id` are different fields.
 
 ## `selected_columns` (database only, `RULE-STRM-014`)
 
-A field projection over source-endpoint field names (`RULE-STRM-022`). Omit for
-"all columns from the endpoint schema."
+A field projection over source-endpoint field names (`RULE-STRM-022`). Omit it
+unless the user asked for a subset.
 <!-- PROBE: stream-selected-columns-unresolved-locally -->
 The local validator does **not** resolve column names
 against endpoint files — this check happens server-side at save time;
@@ -61,9 +57,7 @@ typos surface as a registry rejection rather than a local error.
 ## `filters`
 
 Stream-owned read predicates; the operator vocabulary is closed and depends on
-the source's endpoint scope — see `spec-filter-operators.md`. For an API source
-(`scope: connector`) the endpoint narrows it further per parameter through
-`operations.read.params.<name>.operators`.
+the source's endpoint scope — see `spec-filter-operators.md`.
 
 A filter may reference a database column that is **not** in
 `selected_columns`: the projection controls what is carried to the destination,
@@ -72,27 +66,49 @@ projecting only `id` and `amount` is legitimate and common.
 
 ## `replication`
 
+`method` selects the variant, and the variant decides the rest of the block
+(`RULE-STRM-017`):
+
+<!-- BEGIN GENERATED: fields-stream-replication-full-refresh -->
+`analitiq.contracts.stream.FullRefreshReplication` — closed (`additionalProperties: false`); required: `method`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `safety_window_seconds` | no | integer \| null | `None` | `min=0` |
+| `tie_breaker_fields` | no | array of string \| null | `None` | — |
+| `method` | **yes** | const 'full_refresh' | — | — |
+<!-- END GENERATED: fields-stream-replication-full-refresh -->
+
+<!-- BEGIN GENERATED: fields-stream-replication-incremental -->
+`analitiq.contracts.stream.IncrementalReplication` — closed (`additionalProperties: false`); required: `cursor_field`, `method`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `safety_window_seconds` | no | integer \| null | `None` | `min=0` |
+| `tie_breaker_fields` | no | array of string \| null | `None` | — |
+| `method` | **yes** | const 'incremental' | — | — |
+| `cursor_field` | **yes** | string | — | `minLength=1` |
+<!-- END GENERATED: fields-stream-replication-incremental -->
+
 `replication` is the stream's **policy** declaration, and that is all it is.
 Ownership across the system:
 
 | Concern | Owner |
 |---|---|
 | Replication policy for this stream | the stream (`source.replication`) |
-| Which methods a source actually supports | the source endpoint / runtime |
+| Which methods a source actually supports | the source endpoint / runtime (`RULE-STRM-025`) |
 | How a cursor maps onto a provider request | the API endpoint's `operations.read.replication.cursor_mappings` |
 | The current cursor **value** | runtime state — never the stream document |
-| Late-arrival safety window | stream-authored, runtime-applied |
+| Late-arrival safety window | the stream (`source.replication.safety_window_seconds`) |
 | Tie-breaking when cursor values collide | contract-specific (`tie_breaker_fields`, database sources only) |
 
-Omitting `replication` is bounded by `RULE-STRM-029`. Nothing local can check it —
-the plugin has no endpoint-capability view at authoring time — so when the
-source's full-refresh support is not established, author an explicit
-`replication` policy rather than relying on the omission default. A source that
-cannot full-refresh and carries no policy is rejected server-side.
+Omitting `replication` is bounded by `RULE-STRM-029`: when the source's
+full-refresh support is not established, author an explicit `replication`
+policy rather than relying on the omission default.
 
 `cursor_field` is the **source record field** used as the watermark. It is not a
-provider request parameter and not a page-ordering key. Consequences of
-`RULE-STRM-022` the local validator cannot enforce:
+provider request parameter and not a page-ordering key. `RULE-STRM-022`,
+applied to `cursor_field`:
 
 - For a database source, `cursor_field` must name a column that exists in the
   source endpoint's schema.
@@ -100,28 +116,49 @@ provider request parameter and not a page-ordering key. Consequences of
   `operations.read.replication.cursor_mappings[].cursor_field` on the endpoint
   exactly — the mapping is what turns the watermark into a request.
 
-Both resolve server-side at save time. Read the field name back to the user
-rather than guessing it.
+Read the field name back to the user rather than guessing it.
 
-`safety_window_seconds` is a stream-authored overlap that the **runtime** applies
-when it resumes from the stored cursor. Authoring it does not store a cursor and
-does not move one; the stream never carries a cursor value.
+`safety_window_seconds` is a late-arrival overlap the author declares — size it
+from how late the provider's records arrive, not from a rewind you assume
+happens.
 
 ## `database_pagination` (database only)
 
-Pagination governs how a read is **paged**; replication governs where a read
-**resumes**. They are independent even when both name the same field: declaring
-`order_by_field: "updated_at"` alongside `cursor_field: "updated_at"` is
-legitimate, and the two declarations still mean different things — one orders
-pages, the other watermarks progress. Never author one expecting it to imply the
-other.
+`type` selects the variant:
 
-`order_by_field` is required for keyset paging (it defines the seek order) and
-optional for offset paging. Whichever form is used, it names a source-endpoint
-field (`RULE-STRM-022`) — resolved server-side, not locally.
+<!-- BEGIN GENERATED: fields-stream-pagination-offset -->
+`analitiq.contracts.stream.OffsetDatabasePagination` — closed (`additionalProperties: false`); required: `type`
 
-When `database_pagination` is omitted for a database source, the runtime pages
-with offset pagination sized from `pipeline.runtime.batching.batch_size`.
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `page_size` | no | integer \| null | `None` | `min=1` |
+| `type` | **yes** | const 'offset' | — | — |
+| `order_by_field` | no | string \| null | `None` | `minLength=1` |
+<!-- END GENERATED: fields-stream-pagination-offset -->
+
+<!-- BEGIN GENERATED: fields-stream-pagination-keyset -->
+`analitiq.contracts.stream.KeysetDatabasePagination` — closed (`additionalProperties: false`); required: `order_by_field`, `type`
+
+| Field | Required | Type | Default | Constraints |
+|---|---|---|---|---|
+| `page_size` | no | integer \| null | `None` | `min=1` |
+| `type` | **yes** | const 'keyset' | — | — |
+| `order_by_field` | **yes** | string | — | `minLength=1` |
+<!-- END GENERATED: fields-stream-pagination-keyset -->
+
+Of this block, only `order_by_field` reaches the runtime: it sets the ORDER BY
+the read pages by. On an incremental stream it must name the same field as
+`cursor_field` — a mismatch raises before a single record is extracted, so
+declare it there only to restate the cursor, never to order by something else.
+
+`type` and `page_size` are declared and validated by the contract but consumed
+by nothing: every database source read pages with OFFSET/LIMIT whichever `type`
+says, and the LIMIT is `pipeline.runtime.batching.batch_size`. Neither is a
+lever — never offer a paging strategy or a page size as a way to tune a read,
+and never author `page_size` expecting it to bound one.
+
+`order_by_field` names a source-endpoint field (`RULE-STRM-022`). Author
+`database_pagination` only when the read needs a declared page order.
 
 ## `primary_keys`
 

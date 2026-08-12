@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Validate an authored Analitiq document against the published contract.
 
-This is a thin **adapter**. It holds no validation logic of its own — it
-dispatches to the published `analitiq-validator` + `analitiq-contract-models`
-packages (the same offline, model-driven contract the Analitiq services validate
-against) and normalizes every backend into one Diagnostics envelope:
+This is a thin **adapter**: it dispatches to the published `analitiq-validator`
++ `analitiq-contract-models` packages (the same offline, model-driven contract
+the Analitiq services validate against) and normalizes every backend into one
+Diagnostics envelope:
 
     {"passed": bool, "findings": [{"validator", "severity", "path", "message"}]}
 
@@ -39,8 +39,10 @@ entry point. This adapter routes each entity as follows:
     bundle passes ``require_runnable=False`` (a not-yet-runnable draft is not an
     authoring error); an ``active`` pipeline is held to full runnability.
 
-The adapter adds two checks of its own, each only because the published contract
-structurally cannot make it:
+Each check below is the adapter's own: it reads something on disk — a
+connection's directory, a downloaded connector's endpoint files — that the
+published validator never receives, so the published contract structurally
+cannot make it:
 
   * ``connector-endpoint-ref`` — the published bundle validator receives
     connector *identity* only (slugs), never connector endpoint *contents*, so it

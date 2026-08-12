@@ -1,14 +1,14 @@
 # New-table endpoints (pending physical creation)
 
 A destination endpoint may target a table that does not exist yet. There is
-no flag for this: the authored document is an ordinary
-`database-endpoint/latest.json` document, and the engine creates the missing
-table on the first pipeline run (`CREATE TABLE IF NOT EXISTS`) from the
-document's `columns` — rendering each column's DDL type from its `arrow_type`
-through the write type maps (connection first, then connector). `native_type`
-is not consulted for DDL. This file governs deriving such a document without
-introspection; the mode contract lives in `private-endpoint-creator`
-(`author-new-table`).
+no flag for this: the authored document is an ordinary database-endpoint
+document (`$schema` per the table in `SKILL.md`), and the engine creates the
+missing table on the first pipeline run from the document's `columns`,
+rendering each column's DDL type from its `arrow_type` through the write maps
+(`RULE-DBEP-004`; invocation and precedence per `spec-type-map-gaps.md`).
+`native_type` is not consulted for DDL. This file governs deriving such a
+document without introspection; the mode contract lives in
+`private-endpoint-creator` (`author-new-table`).
 
 ## Identity
 
@@ -57,9 +57,10 @@ precedence per `spec-type-map-gaps.md`) and freeze the rendered native
 
 For an uncovered canonical:
 
-- If the connector's package files show a `render_column_type` dialect
-  override covering the family, the engine renders it in code — no rule can
-  say what. Author `native_type: "unknown"` with a `type_maps.notes` entry.
+- If a connector dialect override covers the family, follow the
+  dialect-override case in `spec-type-map-gaps.md`: author the fallback label
+  `spec-columns.md` §`native_type` names (`RULE-DBEP-012`), plus a
+  `type_maps.notes` entry, and no rule.
 - Otherwise the engine cannot render the DDL at all. The user must supply the
   native (the orchestrator interviews → `write_render_choices`); author it as
   the column's `native_type` **and** as a connection-scoped write rule per

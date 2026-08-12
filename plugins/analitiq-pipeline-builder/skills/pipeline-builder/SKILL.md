@@ -30,14 +30,16 @@ Pick the mode from the user's intent:
   in `references/identity-and-versioning.md`; immutable; the on-disk pipeline
   directory (not the document's UUID identity).
 - `replication_method` (optional, default per source capability) — a member of
-  the replication vocabulary in §Closed vocabularies. `cursor_field` is required
-  when the method is `incremental`.
+  the replication vocabulary in §Closed vocabularies. The method selects the
+  replication block's shape and the fields it must carry (`RULE-STRM-017`).
 - `write_mode` (optional, default per destination capability) — for a database
   destination, a member of the write-mode vocabulary in §Closed vocabularies
-  (`upsert` additionally requires `conflict_keys`); for an API destination, one
-  the referenced endpoint declares (`RULE-STRM-024`).
+  (the mode selects the write block's shape — `RULE-STRM-016`); for an API
+  destination, one the referenced endpoint declares (`RULE-STRM-024`).
 - `schedule_type` (optional) — a member of the schedule vocabulary in
-  §Closed vocabularies. Omit it and the contract's own default applies.
+  §Closed vocabularies. Omit it and the contract's declared default applies
+  (`RULE-PIPE-006`); do not author one the user did not ask for
+  (`RULE-SHRD-004`).
 - `previous_release_path` (optional) — path to the prior released directory
   of this pipeline. Required for the drift step.
 
@@ -73,14 +75,17 @@ carries the phrasing tables — and halt rather than inventing a member:
 
 These bind whatever you are authoring — pipeline, stream, connection or
 database endpoint — so they are not repeated in the per-document specs. Satisfy
-every one; a clean validation run is not proof they all hold, and most of these
-are things an agent gets wrong by writing a plausible value that validates.
+every one.
+<!-- PROBE: pipeline-copied-default-unchecked -->
+A clean validation run is not proof they all hold, and most of these are things
+an agent gets wrong by writing a plausible value that validates.
 
 <!-- BEGIN GENERATED: rules-shared -->
 | Rule | Constraint |
 |---|---|
 | `RULE-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. |
 | `RULE-CTOR-045` | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. |
+| `RULE-PKG-031` | An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the connector release or the connection that carries it, directly in that directory rather than in a subdirectory of it. |
 | `RULE-RETRY-001` | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. |
 | `RULE-SHRD-001` | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. |
 | `RULE-SHRD-002` | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. |
@@ -95,6 +100,7 @@ are things an agent gets wrong by writing a plausible value that validates.
 | `RULE-SHRD-011` | A `display_name` MUST NOT carry leading or trailing whitespace. |
 | `RULE-SHRD-012` | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. |
 | `RULE-SHRD-013` | An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares. |
+| `RULE-SHRD-014` | An authored document MUST NOT declare a field the registry stamps on insert or update; the authored models name the authorable fields and reject every other key. |
 <!-- END GENERATED: rules-shared -->
 
 ## Required reading
@@ -108,14 +114,12 @@ Always load:
 
 Read on demand:
 
-- `references/extension-policy.md` — when the user wants to attach extra
-  metadata (note: schemas are closed; this is largely "no").
 - `references/schema-hosts.md` — when explaining or troubleshooting the
   published schema host or how validation runs.
-- `references/reserved-fields.md` — only when debugging a server-managed-field
-  finding from the validator. The spec skills and examples define what IS
-  authored; this file enumerates the fields the contract model rejects if they
-  leak in.
+- `references/reserved-fields.md` — when a validator finding names an unknown
+  field, or when a name discovered from a provider matches an artifact field:
+  what to do with a server-managed name that leaked into an authored document,
+  and why reservation binds per namespace.
 
 Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
 `endpoint-spec` here — the creator sub-agents own those.
@@ -147,7 +151,7 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
      start the pipeline over from scratch.
 
 1. **Research** — invoke `pipeline-provider-researcher`. Receive
-   `PipelineFacts` (discriminated by `source_kind` and `destination_kind`).
+   `PipelineFacts` (discriminated by each side's `kind`).
    If the user did not supply required inputs, halt and ask.
 
 2. **Connectors** — for each side, check whether
@@ -156,9 +160,8 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    - **If present and parses** → reuse it. Read it directly; do not
      re-fetch from the registry. Record "Reused existing connector
      at `connectors/<connector-slug>/`" in the final summary. Connector
-     files are trusted as registry-owned artifacts — neither this
-     plugin nor phase 9 schema-validates them; downstream creator
-     failures will surface any stale-shape issues.
+     files are registry-owned inputs; a stale shape surfaces as a
+     downstream creator failure.
    - **If present but does not parse** → halt and ask the user to
      fix or remove the file themselves. Do not invoke
      `registry-browser` against an existing-but-broken directory; it
@@ -261,9 +264,9 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    **New destination table.** When this connection is the pipeline's
    *destination* and the user wants to stream into a table that
    `discover-tables` did not list, branch to the `author-new-table`
-   sub-mode for that table instead of `create-endpoints`. The engine
-   creates the physical table on the first pipeline run; the plugin
-   only authors the endpoint document and runs no DDL.
+   sub-mode for that table instead of `create-endpoints`. The plugin
+   authors the endpoint document only and runs no DDL
+   (`endpoint-spec/spec-new-table.md`).
    - Collect the full target identity: `{schema}.{table}`, plus
      `catalog` where the dialect uses one (for schemaless dialects
      the database travels as `catalog` and `schema` is omitted —
@@ -272,8 +275,8 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
      discovered one (or a different target) instead of authoring a
      first run that may fail.
    - Collect the new table's `primary_keys`, suggesting the source
-     endpoint's own primary keys as the default. An `upsert` write
-     mode needs them as the stream's `conflict_keys`.
+     endpoint's own primary keys as the default — an `upsert`
+     destination draws its `conflict_keys` from them (`RULE-STRM-016`).
    - Compute the endpoint filename with `scripts/endpoint_id.py` (as
      above, passing the same `--catalog` / `--schema` / `--name`
      arguments discovery would); an existing file for it is an
@@ -333,30 +336,25 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    pipeline file with `bundle_root: .` so the bundle referential checks
    run.
 
-9. **Validate** — invoke `pipeline-schema-validator` against every
-    authored artifact, once per entity (`pipeline`, `stream`,
-    `connection`, `database_endpoint`, and `type_map_read` /
-    `type_map_write` for any authored connection-scoped map); for the
-    stitched pipeline pass `bundle_root: .` so the cross-document
-    referential checks run (these also re-validate every connection's
-    on-disk type maps and reject the dead `type-map.json` filename).
+9. **Validate** — invoke `pipeline-schema-validator` once per authored
+    artifact, passing the entity that artifact was authored as (the
+    vocabulary is the agent's `entity` input); for the stitched pipeline
+    pass `bundle_root: .` so the cross-document referential checks run —
+    `references/io-contracts.md` lists every finding id this pass can emit.
 
-    Attempt at most **5 fix passes per artifact** — re-dispatch the
-    matching creator with the validator's findings, re-validate, repeat.
-    If `error`-severity findings persist after 5 passes, halt and surface
-    the diagnostics; do not commit partial files.
-    <!-- PROBE: pipeline-draft-runnability-unchecked -->
+    Attempt at most **5 fix passes per artifact**, then halt and surface the
+    diagnostics; do not commit partial files (`references/pipeline.md`
+    §"Fix-and-revalidate loop (phase 9)").
+    <!-- PROBE: pipeline-draft-runnability-unchecked, pipeline-active-runnability-enforced -->
     A draft pipeline produces no not-runnable finding (runnability is
-    enforced only once it is `active`). The validator is single-shot —
-    iteration discipline lives here in the orchestrator's prose.
+    enforced only once it is `active`).
 
-    **`connector-endpoint-ref` warnings.** The bundle validation (run with
-    `bundle_root: .`) may return `connector-endpoint-ref` **warnings** — a
-    `scope: "connector"` stream ref naming an endpoint the downloaded connector
-    does not publish. These do not fail validation, but do not ignore them:
-    surface each one and, when the warning carries a "Did you mean `X`?"
-    suggestion, offer to **align** the stream's `endpoint_ref.endpoint_id` to the
-    connector's real endpoint name. Apply the alignment only on the user's
+    **`connector-endpoint-ref` findings.** The bundle validation (run with
+    `bundle_root: .`) may return `connector-endpoint-ref` findings
+    (`references/io-contracts.md`). Do not ignore them: surface each one
+    and, when the finding carries a "Did you mean `X`?" suggestion, offer to
+    **align** the stream's `endpoint_ref.endpoint_id` to the connector's real
+    endpoint name. Apply the alignment only on the user's
     confirmation — it is a surgical edit to that stream (change nothing else),
     then re-validate. Never edit the connector; only the stream ref moves. If
     there is no confident suggestion, report the connector's available endpoints
@@ -365,10 +363,9 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
 10. **Drift (optional)** — if `previous_release_path` was supplied,
     invoke `pipeline-drift-classifier`. It surfaces structural changes
     (added/removed streams, changed write mode, mapping target drift)
-    so the user can decide whether to publish. Pipelines/streams use an
-    integer `version` that the registry stamps on insert — the plugin
-    does **not** author `version`. The classifier is informational only
-    in this plugin.
+    so the user can decide whether to publish. The plugin does not author
+    `version` (`references/identity-and-versioning.md` §"Server-managed
+    `version` field"). The classifier is informational only in this plugin.
 
 ## Edit mode
 
@@ -398,8 +395,9 @@ and leaves everything else — including `.secrets/` — untouched.
    - Removal → drop the reference, and only if the user confirms, the file
      itself.
 3. **Never** change an identity field (`pipeline_id` / `stream_id` /
-   `connection_id`, `connector_id`, or a stream's parent `pipeline_id`). A
-   changed identity is a new artifact, not an edit — halt and confirm.
+   `connection_id`, or a stream's parent `pipeline_id`), and never rewrite a
+   `connector_id` (`RULE-CTOR-045`) — a changed identity mints a different
+   entity rather than editing this one. Halt and confirm.
 4. **Re-validate.** Run `pipeline-schema-validator` on every touched document,
    with the same ≤ 5 fix-pass loop. When a pipeline or stream changed, also
    validate its **referenced closure** — every connection the pipeline references
@@ -407,18 +405,15 @@ and leaves everything else — including `.secrets/` — untouched.
    connections own, and any connection-scoped type maps beside them — each
    against its own contract (entities `connection` / `database_endpoint` /
    `type_map_read` / `type_map_write`), which catches a stale or broken
-   referenced artifact; plus
-   the whole bundle with `bundle_root: .`, which additionally catches a mis-named
-   endpoint file whose name no longer matches its `endpoint_id` (the engine locates
-   it by filename stem) and any `connector-endpoint-ref` warning (a `scope:
-   "connector"` stream ref whose endpoint the connector does not publish). Both
-   surface at edit time instead of at engine runtime. Write only once validation is
-   clean.
+   referenced artifact; plus the whole bundle with `bundle_root: .`, the pass
+   that resolves cross-document references and the on-disk endpoint file names
+   (`references/io-contracts.md` lists the finding ids). Both surface at edit
+   time instead of at engine runtime. Write only once validation is clean.
 
    **Aligning a connector-scoped endpoint ref** is itself an edit intent ("align
    the endpoint names to the connector", "fix the endpoint reference"): on a
-   `connector-endpoint-ref` warning, retarget the offending stream's
-   `endpoint_ref.endpoint_id` to the connector's real endpoint name (the warning's
+   `connector-endpoint-ref` finding, retarget the offending stream's
+   `endpoint_ref.endpoint_id` to the connector's real endpoint name (the finding's
    suggestion, or — if none is confident — a name the user picks from the
    connector's endpoint set), then re-validate. This is a surgical stream edit;
    never touch the connector, and change nothing else in the stream.
@@ -443,21 +438,24 @@ Report to the user:
 - Never author connector documents. Those belong to the
   `analitiq-connector-builder` plugin. `registry-browser` only
   *downloads* connector files from the DIP registry.
-- Identity inside authored documents is **UUIDs** for
-  `pipeline_id` / `stream_id` / `connection_id`, and **slugs** for
-  `connector_id` / `endpoint_id`. Directory names use slugs. Do not
+- Identity inside authored documents follows
+  `references/identity-and-versioning.md` §"Identifier shapes". Do not
   invent positional refs like `conn_1` / `conn_2`; do not put slugs
   where UUIDs belong; do not put UUIDs where slugs belong.
-- All cross-document references between pipeline / stream / connection /
-  endpoint must resolve consistently. The bundle referential checks
-  enforce this; pass `bundle_root: .` when validating the stitched
-  pipeline.
+- Every cross-document reference must resolve in the assembled run
+  (`RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-STRM-032`, `RULE-STRM-033`,
+  `RULE-STRM-034`, `RULE-CONN-011`). Pass `bundle_root: .` when validating
+  the stitched pipeline, which is what runs them.
 - Authored documents declare `$schema` with the published host
-  (`RULE-SHRD-003`); the per-entity URLs are tabulated in
-  `references/schema-hosts.md`. Validation is offline and model-driven —
-  no schema is fetched.
-- The published schemas are **closed** (`additionalProperties: false`).
-  Do not author unknown fields, including `x-*` extension keys.
+  (`RULE-SHRD-003`); the per-entity URLs and how validation runs are in
+  `references/schema-hosts.md`.
+- Do not author unknown fields, including `x-*` extension keys — the
+  published schemas are closed (`RULE-SHRD-014`). When the user asks to
+  attach extra metadata, decline and say why; never smuggle it into a known
+  field to route around the validator.
+- Cross-agent state travels in the orchestrator's payloads
+  (`references/io-contracts.md`); never use an authored document as a
+  side-channel between agents.
 - Never infer undeclared behavior. If the contract does not declare a
   request, transport, auth, pagination, replication, resource-discovery
   or lifecycle rule, do not guess one — surface the gap to the user

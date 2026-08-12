@@ -1,7 +1,8 @@
 # Closed-enum mappers
 
-The orchestrator runs these mappers inline at phase 3. Every mapper is
-**fail-closed**: if the user input doesn't match an entry, halt and ask.
+The orchestrator runs these mappers inline at phase 3 of `../SKILL.md`. Every
+mapper is **fail-closed**: if the user input doesn't match an entry, halt and
+ask.
 
 The target vocabularies are contract-owned. The mapping from a user's phrasing
 onto them is not, and is what this file adds.
@@ -30,7 +31,7 @@ onto them is not, and is what this file adds.
 | "cron expression", "at 02:00 UTC", "weekdays at 9am" (anything that needs a cron spec) | → | `cron` |
 
 After selecting `type`, the contract gates which sibling fields may appear
-(`RULE-PIPE-002`); `pipeline-spec/spec-schedule.md` carries the generated shape
+(`RULE-PIPE-002`); `../../pipeline-spec/spec-schedule.md` carries the generated shape
 and the cron dialect (`RULE-PIPE-009`).
 
 ## ReplicationMethodMapper
@@ -46,9 +47,8 @@ the watermark.
 
 For an API endpoint, `replication.method` is bounded by the source endpoint's
 own declared support set (`RULE-STRM-025`). A database endpoint carries
-no `replication` block, so no endpoint-declared support set constrains it;
-the stream-side rule above still does, and `incremental` still requires a
-`cursor_field`.
+no `replication` block, so no endpoint-declared support set constrains it; the
+stream-side rule above still does.
 
 ## WriteModeMapper
 
@@ -56,13 +56,16 @@ the stream-side rule above still does, and `incremental` still requires a
 |---|---|---|---|
 | api | one of the endpoint's `operations.write` keys | → | that key (verbatim) |
 | database | "insert", "append", "load" | → | `insert` |
-| database | "upsert", "merge", "on-conflict update" | → | `upsert` (requires `conflict_keys`) |
-| database | "overwrite", "replace", "full refresh", "truncate and load", "re-sync" | → | `truncate_insert` (forbids `conflict_keys`) |
+| database | "upsert", "merge", "on-conflict update" | → | `upsert` |
+| database | "overwrite", "replace", "full refresh", "truncate and load", "re-sync" | → | `truncate_insert` |
 
-For database `upsert`, ask the user (or infer from the destination
-endpoint's `primary_keys`) which fields form the conflict resolution
-key set. `conflict_keys` is a flat, non-empty list of field names
-(`[<field>, …]`).
+Each mode selects a write shape that decides what else the block may carry
+(`RULE-STRM-016`); `../../stream-spec/spec-destinations.md` renders each shape.
+
+For database `upsert`, ask the user (or infer from the destination endpoint's
+`primary_keys`) which fields form the conflict resolution key set;
+`../../stream-spec/spec-destinations.md` §`write.conflict_keys` carries the
+shape.
 
 `truncate_insert` **empties the destination** and reloads it — the full-refresh
 mode every comparable tool carries (Airbyte `overwrite`, Singer `FULL_TABLE`,
@@ -77,18 +80,7 @@ what the destination is *for*: a mirror of current state (route here) or an
 accumulating record (do not). When the user's intent is not explicit, **ask
 before routing to a mode that empties a table.**
 
-Delivery is at-least-once by design; say so if the user is weighing modes.
-
-## AuthTypeMapper (informational)
-
-The orchestrator does **not** author the connector's `auth` block — that's the
-connector-builder plugin's job. `connection-creator` routes each connection value
-into `parameters` / `secret_refs` / `selections` by the connector contract's
-`storage` field, so it needs **no** per-auth-type template. The connector's
-`auth.type` is only a hint for which `examples/*.example.json` is the closest
-shape illustration (`api_key`, `basic_auth`, `oauth2_authorization_code`,
-`oauth2_client_credentials`, `jwt`, `db`, `credentials`, `aws_iam` each map to the
-same-named example; `none` → `examples/none.example.json`, parameters only).
-
-`connection-creator` loads `connection-spec` and routes by `storage` regardless
-of auth type, so a new auth type needs no plugin change.
+Delivery is at-least-once by design, so a retried run can re-deliver records an
+`insert` destination already holds. That is the standing argument for `upsert`
+over `insert` wherever the destination has a stable key — say so when the user
+is weighing the modes.

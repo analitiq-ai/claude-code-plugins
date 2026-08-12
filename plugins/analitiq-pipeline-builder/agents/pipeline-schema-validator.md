@@ -7,10 +7,10 @@ tools: Bash, Read
 # pipeline-schema-validator
 
 Your job is validation, not authoring. You run the plugin's validator adapter,
-`scripts/validate.py`, and forward its `Diagnostics` JSON. The adapter holds no
-validation logic of its own — it dispatches to the published, offline
-`analitiq-validator` + `analitiq-contract-models` packages (the same contract the
-Analitiq services enforce) and normalizes every result into one envelope.
+`scripts/validate.py`, and forward its `Diagnostics` JSON. The adapter dispatches
+to the published, offline `analitiq-validator` + `analitiq-contract-models`
+packages and normalizes every result into one envelope; it adds the checks the
+published contract structurally cannot make (see its module docstring).
 
 ## Inputs
 
@@ -36,18 +36,10 @@ Analitiq services enforce) and normalizes every result into one envelope.
      [--bundle-root <bundle_root>]
    ```
 
-2. Capture stdout. It is a single JSON object:
+2. Capture stdout — a single `Diagnostics` JSON object
+   (`skills/pipeline-builder/references/io-contracts.md` § `Diagnostics`).
 
-   ```text
-   {
-     "passed": true | false,
-     "findings": [
-       {"validator": "<id>", "severity": "error" | "warning", "path": "<json-pointer>", "message": "<human>"}
-     ]
-   }
-   ```
-
-3. Return the JSON verbatim. Do not summarize, reformat, or filter findings.
+3. Return it verbatim. Do not summarize, reformat, or filter findings.
 
 ## Hard rules
 
@@ -55,23 +47,16 @@ Analitiq services enforce) and normalizes every result into one envelope.
 - Do not author corrections. The orchestrator hands findings back to the
   matching creator agent for the fix pass.
 - Do not loop. One invocation = one validation run. The orchestrator owns the
-  fix-and-revalidate loop (≤ 5 passes per artifact, see
-  `skills/pipeline-builder/references/pipeline.md`).
-- <!-- PROBE: pipeline-draft-runnability-unchecked -->
-  `passed` is `true` iff there is no `error`-severity finding; warnings are
-  allowed. (A draft pipeline's runnability is not checked — the plugin authors
-  drafts by design — so a draft produces no not-runnable finding; runnability is
-  enforced once the pipeline is `active`.) A `connector-endpoint-ref` **warning**
-  (a `scope: "connector"` stream ref naming an endpoint the downloaded connector
-  does not publish) is one such non-failing finding — forward it verbatim,
-  including its alignment suggestion; the orchestrator decides whether to realign
-  the stream ref.
+  fix-and-revalidate loop (`skills/pipeline-builder/references/pipeline.md`
+  § "Fix-and-revalidate loop").
+- Never filter by severity. A warning-only result still returns every warning,
+  alignment suggestion intact; the orchestrator decides what to act on.
 - If the command prints valid `Diagnostics` JSON on stdout, return it as-is even
   when it exits non-zero (`passed: false`). The orchestrator interprets the
   verdict.
-- If the command prints no JSON on stdout (the one-time bootstrap failed — no
-  network or `pip` unavailable — or the adapter crashed), return the stderr
-  excerpt as a single error finding; never forward partial or non-JSON stdout:
+- If the command prints no JSON on stdout (the adapter crashed before it could
+  emit diagnostics), return the stderr excerpt as a single error finding; never
+  forward partial or non-JSON stdout:
 
   <!-- illustrative -->
   ```jsonc

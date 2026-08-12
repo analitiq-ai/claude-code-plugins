@@ -5,9 +5,9 @@ A connector ships a *documented base vocabulary* in its
 deployment can surface — extension types (`citext`, `ltree`, `hstore`,
 `vector(N)`, PostGIS geometries), custom domains/enums, parameterized variants.
 The engine composes a **connection-scoped** map as primary over the connector
-map as fallback, in both directions, and hard-errors on a type neither covers.
-Discovery is when the gap is visible and fixable: this file governs authoring
-the connection-scoped maps that close it.
+map in each direction, and hard-errors on a type neither covers — which is why a
+connection rule may only close a gap the connector leaves (`RULE-TMAP-018`). Discovery is when the gap is visible and fixable: this file governs
+authoring the connection-scoped maps that close it.
 
 ## Files
 
@@ -16,19 +16,14 @@ the connection-scoped maps that close it.
 | native → Arrow | `connections/<connection-slug>/definition/type-map-read.json` | `type_map_read` |
 | Arrow → native DDL | `connections/<connection-slug>/definition/type-map-write.json` | `type_map_write` |
 
-Published schemas: `https://schemas.analitiq.ai/type-map-read/latest.json` /
-`.../type-map-write/latest.json`. The rule shape (exact/regex `match`, matcher
-vs rendered key per direction, `${name}` captures) is identical to the
-connector's own maps — the connector files you resolve against during gap
-detection are the live reference for it; do not restate their vocabulary here.
+The rule shape (exact/regex `match`, matcher vs rendered key per direction,
+`${name}` captures) is identical to the connector's own maps — the connector
+files you resolve against during gap detection are the live reference for it;
+do not restate their vocabulary here.
 
-Filenames are load-bearing: the engine loads exactly the names in the table
-above from the connection's `definition/`. The pre-split `type-map.json` is dead — the engine
-never reads it, and the validators reject it with a migration finding. The
-published `type-map-write-coverage` warning does not apply here — it presumes
-a connector's full-vocabulary write map, which a gap-only connection map
-deliberately is not — so the validator adapter filters it; never "fix" a
-coverage warning by adding connection rules.
+Filenames are load-bearing: author only the names in the table above. The engine
+loads exactly those from the connection's `definition/`, and the pre-split
+`type-map.json` is dead.
 
 ## Gap detection
 
@@ -53,9 +48,11 @@ uncovered ones. Pass only map files that exist.
 
 ## Registered rules for a type map
 
-The rules a type-map document is graded by, at either scope. Satisfy every one;
-a clean validation run is not proof they all hold, and a gap file that validates
-can still leave a native the engine cannot render.
+The rules a type-map document is graded by, whichever scope the map is authored
+at. Satisfy every one.
+<!-- PROBE: write-map-regex-canonical-case-unchecked -->
+A clean validation run is not proof they all hold — some are applied only at
+connect or run time.
 
 <!-- BEGIN GENERATED: rules-type-map -->
 | Rule | Constraint |
@@ -88,9 +85,10 @@ can still leave a native the engine cannot render.
 - **Gap-only** (`RULE-TMAP-018`). The probes to author for are
   the ones `type_map_gaps.py` reports under `gaps`. A connection rule for
   anything the connector already covers *overrides* the connector for every
-  stream on this connection — never shadow.
-- **No gaps → no file.** A present-but-empty `[]` is an engine load-time error
-  (worse than absent) and the contract rejects it. Write nothing.
+  stream on this connection — never shadow. A write-coverage warning is not a
+  reason to add one.
+- **No gaps → no file.** Never write an empty array; when a direction has no
+  gaps, write nothing.
 - **Extend, never rewrite** (`RULE-TMAP-012`). Append after the rules a
   connection map already carries — they are prior authored behavior on this
   connection.
@@ -98,19 +96,19 @@ can still leave a native the engine cannot render.
   `spec-columns.md` judgment; the rule is the durable record of that judgment
   (`RULE-TMAP-021`). Generalize a parameterized native family with one regex rule
   and `${name}` captures (`vector(3)` observed → match the family, not the
-  instance); literals inside a regex must be uppercase (`RULE-TMAP-014`).
+  instance); spell a regex's literals the way the engine normalizes the probe
+  (`RULE-TMAP-014`) — probe with the helper rather than eyeballing it.
 - **Write rules.** For an uncovered canonical, render the discovered native
   that produced it — the deployment's own spelling is the one type the
   deployment certainly accepts as DDL. When **several distinct** discovered
   natives share one uncovered canonical, do not pick: report the ambiguity
   (see the mode contract in `private-endpoint-creator`) so the orchestrator
   asks the user which native this connection renders.
-- **Dialect-override caution.** A connector dialect may render a canonical
-  family in code (a `render_column_type` override — e.g. precision-range
-  arithmetic no rule can express). No map rule, connector or connection, is
-  consulted for such a family, so a connection write rule for it is dead
-  weight. If the connector's package files show an override covering the gap
-  family, record the gap in `type_maps.notes` instead of authoring a rule.
+- **Dialect-override caution.** A canonical family the connector's write map
+  leaves unrendered may be one its dialect renders in code (`RULE-TMAP-019`);
+  no map rule is consulted for such a family, so a connection rule for it is
+  dead weight. If the connector's package files show that override, record the
+  gap in `type_maps.notes` instead of authoring a rule.
 
 ## What a clean result does not prove
 

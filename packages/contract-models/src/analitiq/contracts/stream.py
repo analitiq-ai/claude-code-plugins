@@ -347,7 +347,11 @@ class _DatabasePaginationBase(StrictModel):
 
     page_size: StrictPositiveInt | None = Field(
         default=None,
-        description="Positive integer read page size; pipeline batch-size default applies when omitted.",
+        description=(
+            "Positive integer read page size. Declaring one does not change how "
+            "much a read fetches: the size is the pipeline runtime's batching "
+            "value for every stream, and no engine release consumes this field."
+        ),
     )
 
 
@@ -356,7 +360,11 @@ class OffsetDatabasePagination(_DatabasePaginationBase):
 
     type: Literal["offset"] = Field(
         ...,
-        description="Database pagination strategy.",
+        description=(
+            "Database pagination strategy. It selects which variant's shape the "
+            "document must satisfy; it does not select a read path — every "
+            "database source read is offset-paged, whichever variant is declared."
+        ),
     )
     order_by_field: str | None = Field(
         default=None,
@@ -370,7 +378,11 @@ class KeysetDatabasePagination(_DatabasePaginationBase):
 
     type: Literal["keyset"] = Field(
         ...,
-        description="Database pagination strategy.",
+        description=(
+            "Database pagination strategy. It selects which variant's shape the "
+            "document must satisfy; it does not select a read path — every "
+            "database source read is offset-paged, whichever variant is declared."
+        ),
     )
     order_by_field: str = Field(
         ...,
@@ -445,10 +457,11 @@ class StreamSource(StrictModel):
         )
         for filt in self.filters:
             if filt.operator not in allowed:
-                raise ValueError(
+                raise violation(
+                    "RULE-STRM-012",
                     f"filters[].operator {filt.operator!r} is not valid for a "
                     f"{self.endpoint_ref.scope} source "
-                    f"(allowed: {sorted(allowed)})"
+                    f"(allowed: {sorted(allowed)})",
                 )
         return self
 

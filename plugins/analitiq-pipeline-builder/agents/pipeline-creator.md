@@ -1,6 +1,6 @@
 ---
 name: pipeline-creator
-description: "Author a pipeline JSON document conforming to https://schemas.analitiq.ai/pipeline/latest.json. Receives the minted pipeline_id UUID, source + destination connection_id UUIDs, schedule classification, and engine/runtime overrides from the orchestrator. Emits a CreatorOutput JSON object with `entity: pipeline`. The `streams` array starts empty; the orchestrator stitches stream_id UUIDs in afterwards. Loads pipeline-spec for the authoring vocabulary."
+description: "Author a pipeline JSON document conforming to the published `pipeline` schema. Receives the minted pipeline_id UUID, source + destination connection_id UUIDs, schedule classification, and engine/runtime overrides from the orchestrator. Emits a CreatorOutput JSON object with `entity: pipeline`. The `streams` array starts empty; the orchestrator stitches stream_id UUIDs in afterwards. Loads pipeline-spec for the authoring vocabulary."
 tools: Read
 ---
 
@@ -18,6 +18,7 @@ Load on demand:
 - The matching `skills/pipeline-spec/examples/*.example.json` for the
   schedule style being authored.
 - `skills/pipeline-builder/references/identity-and-versioning.md`
+- `skills/pipeline-builder/references/reserved-fields.md`
 
 ## Inputs
 
@@ -41,9 +42,12 @@ stitches in `stream_id` UUIDs in phase 8.
 1. Pick the closest example under `pipeline-spec/examples/` for the
    schedule style.
 2. Replace example identifiers / values with the orchestrator's inputs.
-3. Set `status: "draft"`. Do not set `active` — promotion is a later
-   step (typically post-submission).
-4. Set `$schema: "https://schemas.analitiq.ai/pipeline/latest.json"` and
+3. Omit `status` — the contract's default is what a new pipeline should start
+   in, and a copied default is indistinguishable from a value the user chose
+   (`RULE-SHRD-004`). Promotion to `active` is a later step (typically
+   post-submission), never this agent's.
+4. Set `$schema` to the published URL for `pipeline` (`RULE-SHRD-003`; the
+   value is in the `$schema` table in `pipeline-spec/SKILL.md`) and
    `pipeline_id` to the orchestrator-minted UUID.
 5. Return a `CreatorOutput` (`entity: pipeline`).
 
@@ -70,15 +74,14 @@ stitches in `stream_id` UUIDs in phase 8.
 - `pipeline_id` is the orchestrator-minted UUID. Do not generate your
   own; do not omit it (the orchestrator generates one specifically so
   sibling docs can cross-reference).
-- Always emit `streams: []` — stitching happens later.
 - Author only the schedule fields the chosen `type` calls for
   (`RULE-PIPE-002`); leave the other type's field out entirely rather
   than setting it to `null`. See `pipeline-spec/spec-schedule.md` for
   the generated shape.
-- Omit `schedule.type` and `schedule.timezone` when no schedule facts
-  are supplied, rather than authoring the values they default to
-  (`RULE-PIPE-006`).
-- Use the engine / runtime defaults from the published schema unless
-  the orchestrator explicitly passed overrides.
-- Do **not** author `version`, `org_id`, `created_at`, `updated_at` —
-  the registry stamps these on insert.
+- Omit any schedule field the contract declares a default for, rather than
+  authoring the value it defaults to (`RULE-PIPE-006`); the defaults are in
+  the `fields-schedule` table in `pipeline-spec/spec-schedule.md`.
+- Author `engine` / `runtime` only where the orchestrator passed an override;
+  a contract default is never copied into the document (`RULE-SHRD-004`).
+- Do **not** author server-managed fields — every key the model does not name
+  is rejected (`RULE-SHRD-014`); see `references/reserved-fields.md`.

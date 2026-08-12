@@ -6,7 +6,7 @@ tier: structural
 severity: error
 scope: api-endpoint
 validator: "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces"
-owners: [connector-plugin, engine]
+owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject]
 rationale: >
   Identifiers here are stored verbatim from introspection, so the object's

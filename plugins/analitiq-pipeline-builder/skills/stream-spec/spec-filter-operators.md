@@ -1,10 +1,9 @@
 # Filter operator vocabularies
 
-Filters declared in `source.filters[]` draw from a closed, per-scope operator
-vocabulary. The contract enforces it: `operator` is a closed Literal
-(`analitiq.contracts.stream.FilterOperator`), and the operator must belong to the
-**source scope's** vocabulary — a database operator on an API source, or the
-reverse, fails local validation with `[RULE-STRM-012]`.
+Filters declared in `source.filters[]` name an operator from a closed
+vocabulary (`RULE-STRM-036`), narrowed to the **source scope's** half of it — a
+database operator on an API source, or the reverse, is rejected locally
+(`RULE-STRM-012`).
 
 <!-- BEGIN GENERATED: filter-operators -->
 | Availability | Operators |
@@ -45,10 +44,10 @@ fields against endpoint files, so a typo in `field` passes here and fails
 server-side at save time. Read the field name back to the user rather than
 guessing it.
 
-Membership in the contract vocabulary is also not a promise of executability. A
-database dialect **may reject** an operator it cannot render safely for a given
-column or type, even though the operator is in the set above. Local validation
-proves the operator is *authorable*, never that the target database will run it.
+Membership is not a promise of executability (`RULE-STRM-012`): a dialect may
+refuse an operator for a given column or type even though it is in the set
+above. Read the operator choice back to the user when the column type is
+unusual.
 
 For an API source, the endpoint document narrows the vocabulary further
 (`RULE-STRM-026`):
@@ -59,6 +58,3 @@ For an API source, the endpoint document narrows the vocabulary further
   never stream-owned. The runtime-side validator rejects a filter that targets
   one, and such a parameter carries no `operators` to draw from anyway.
 - no `operators` → not filterable, whatever else the parameter declares.
-
-The plugin can only tell that an operator is in the API set; the registry
-validates it against the per-parameter subset on save.

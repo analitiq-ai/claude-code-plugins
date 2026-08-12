@@ -2,9 +2,15 @@
 
 Pipelines, streams, and connections each carry an RFC-4122 UUID **identity
 field** (`pipeline_id`, `stream_id`, `connection_id`) that the plugin authors
-directly. Connectors and database endpoints use **slug identifiers**
-(`connector_id`, `endpoint_id`). Directory names on disk stay human-readable
-slugs and are independent of the UUID identity stored inside the documents.
+directly. Connectors and database endpoints carry handles instead of a UUID
+identity field: the plugin writes a connection's `connector_id` as the
+connector's slug, and an endpoint's `endpoint_id` is derived from its
+`database_object`, never hand-written (`RULE-DBEP-011`). A `connector_id` the
+plugin did not author — the registry also assigns UUID-shaped ones — is read as
+given and never rewritten (`RULE-CTOR-045`); treating one as a defect and
+"fixing" it is a rename. Directory names on disk stay
+human-readable slugs and are independent of the UUID identity stored inside the
+documents.
 
 ## Identifier shapes
 
@@ -29,13 +35,13 @@ fields only; it does not constrain on-disk names. This plugin reuses the same
 shape for every directory and file slug (see §"Directory layout vs. document
 identity") **by convention**, so a directory name is always a legal identifier.
 The convention is pinned by reference: if the published pattern changes, the
-directory-slug rule follows it. Prose elsewhere cites this convention instead
-of restating the pattern.
+directory-slug rule follows it.
 
-All three identity fields are **optional** in the contract — omit one and the
-service assigns it on ingest. The plugin authors them anyway so that sibling
-documents written in the same run can cross-reference each other; the
-orchestrator keeps the minted UUIDs in memory for exactly that reason.
+The plugin authors every identity field it can, even where the contract does not
+require one, so that sibling documents written in the same run can
+cross-reference each other; the orchestrator keeps the minted UUIDs in memory
+for exactly that reason. Which fields are required is in each spec skill's
+generated field table.
 
 `connector_id` and `endpoint_id` are **immutable** (`RULE-CTOR-045`). In edit
 mode, never rewrite an existing identifier in place; author a new artifact and
@@ -47,15 +53,13 @@ into `pipeline_id`.
 
 ## Cross-document references — contract vs. plugin policy
 
-Keep these two apart; the prose used to conflate them.
+Keep these two apart.
 
-**What the contract says.** Every cross-document reference field is just a
-non-empty string. The schema constrains nothing further, and engines resolve the
-reference at runtime. The published field descriptions go further and say that
-`pipeline.connections.source`, `pipeline.connections.destinations[]` and
-`pipeline.streams[]` are *typically versioned* ids of the form `<uuid>_v<n>`
-(the published examples show `…_v1`), while `stream.pipeline_id` is *typically
-the base UUID*. Both forms validate.
+**What the contract says.** The shape and constraints of every reference field
+are in the generated tables: `../../pipeline-spec/spec-connections.md`
+(`fields-pipeline-connections`) and `../../stream-spec/SKILL.md`
+(`fields-stream`). Read them there rather than from this page. Both a bare id
+and a `_v<n>`-suffixed one satisfy those constraints.
 
 **What this plugin does.** The plugin authors **bare UUIDs** in every reference —
 it does not append a `_v<n>` suffix anywhere. That is a deliberate plugin
@@ -73,22 +77,17 @@ strip a `_v<n>` suffix from a reference the user supplied.
 | `stream.source.endpoint_ref.connection_id` | the source `connection.connection_id` UUID |
 | `stream.destinations[].endpoint_ref.connection_id` | each destination `connection.connection_id` UUID |
 
-The bundle referential checks (run with `--bundle-root`) compare these values
-against the identities inside the sibling documents, so a mismatch is caught
-locally.
-
-Version-pinned reference strings that only exist in a specific deployment are
-outside the public contract — never author one.
+`RULE-PIPE-011`, `RULE-PIPE-012`, `RULE-STRM-032`, `RULE-STRM-033` and
+`RULE-STRM-034` bind these values to the identities in the sibling documents.
+Run the validator with `--bundle-root` so it has those siblings in hand.
 
 ## Metadata fields
 
-`display_name` is a user-facing **label, not an identity key**: it is
-case-preserving, may change freely without changing identity, and nothing should
-key off it. `description` is a plain summary and may be an empty string. `tags`
-are opaque, case-preserving grouping labels the contract assigns no meaning to.
+`display_name` is a user-facing **label, not an identity key**: it may change
+freely without changing identity, and nothing keys off it. `tags` are opaque
+grouping labels the contract assigns no meaning to.
 
-Top-level artifact metadata uses `display_name` — never `name` or `title`, which
-no authored model declares.
+Top-level artifact metadata uses `display_name` — never `name` or `title`.
 
 These rules govern **artifact metadata only**. They say nothing about
 provider-owned names: a database column, an operation parameter, or a
@@ -114,9 +113,8 @@ inside the documents.
 
 Never conflate them:
 
-1. **Connector template phases** — `pre_auth` / `auth` / `post_auth` / `active`,
-   describing when a connector's contract fields resolve. Connector-owned; this
-   plugin only reads them.
+1. **Connector template phases** — the connector contract's own staging of when
+   each field it declares resolves. Connector-owned; this plugin only reads it.
 2. **Authored artifact `status`** — the lifecycle of a pipeline or stream
    document. See `pipeline-spec`.
 3. **Per-run operation lifecycle** — the state of one execution. Runtime-owned
@@ -124,9 +122,5 @@ Never conflate them:
 
 ## Server-managed `version` field
 
-Pipelines and streams have a server-managed integer `version` field. **The plugin
-does not author it.** The registry sets it on insert and increments it on certain
-updates per the published lifecycle contract.
-
-This differs from connectors, which use semver and a drift classifier to bump the
-field. Pipelines and streams use a counter, and the registry owns it.
+`version` is server-managed on pipelines and streams: never author it, never
+edit it. See `reserved-fields.md`.

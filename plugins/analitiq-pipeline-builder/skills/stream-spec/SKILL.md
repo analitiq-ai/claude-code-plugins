@@ -6,9 +6,9 @@ disable-model-invocation: true
 
 # stream-spec
 
-This skill is loaded by `stream-creator` when authoring a stream document. The
-`$schema` value is a `const` in the contract — copy it from the row below, never
-retype it, and never invent a version-pinned variant of it:
+This skill is loaded by `stream-creator` when authoring a stream document. Copy
+the `$schema` value from the row below — never retype it, and never invent a
+version-pinned variant:
 
 <!-- BEGIN GENERATED: schema-urls -->
 | Entity | Authored file | `$schema` value |
@@ -24,7 +24,7 @@ retype it, and never invent a version-pinned variant of it:
 - `spec-endpoint-refs.md` — scope=connector vs scope=connection rules.
 - `spec-source.md` — selected_columns, filters, replication, database_pagination, primary_keys.
 - `spec-destinations.md` — write modes, conflict_keys, execution overrides.
-- `spec-mapping.md` — assignments shape; what the registry computes.
+- `spec-mapping.md` — assignments shape; the constant and expression vocabulary.
 - `spec-validation-rules.md` — assignment-level validation.
 - `spec-filter-operators.md` — DB vs API operator vocabularies.
 - At least one of `examples/*.example.json` for the source/destination kind you're authoring.
@@ -32,10 +32,7 @@ retype it, and never invent a version-pinned variant of it:
 ## What this skill covers
 
 - The stream's top-level shape (below).
-- The mapping expression vocabulary: `{op: "get", path}` (the default) plus
-  `pipe`/`fn` conversion chains, and `{arrow_type, value}` constants.
-  `arrow_type` is a fully-qualified Apache Arrow canonical type string (see
-  `spec-mapping.md`).
+- The mapping expression and constant vocabulary — see `spec-mapping.md`.
 - The closed source-filter operator vocabularies per endpoint kind.
 
 ## Top-level shape
@@ -57,10 +54,9 @@ retype it, and never invent a version-pinned variant of it:
 | `stream_id` | no | string \| null | `None` | `pattern=^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` |
 <!-- END GENERATED: fields-stream -->
 
-The model is closed, so a field the table does not list is not merely ignored —
-it is rejected. That includes every server-managed field (`version`, `org_id`,
-timestamps): the published model is the **authored** shape, not the persisted
-one, so those fields are not authorable at all.
+A field the table does not list is rejected, not ignored — including every
+server-managed field (see
+`../pipeline-builder/references/reserved-fields.md`).
 
 ## Closed vocabularies
 
@@ -82,23 +78,24 @@ validation error, not a pass-through value.
 | `stream.destinations[].write.mode` (database) | `insert`, `truncate_insert`, `upsert` | discriminated union `analitiq.contracts.stream.DatabaseWrite` (an API destination's mode is bounded by the endpoint write-key universe instead) |
 <!-- END GENERATED: enum-vocabulary -->
 
-`status` is the only execution gate on a stream — there is no parallel boolean
-flag, and no member beyond those listed exists (in particular there is no
-`error` status to author).
+`status` is the only execution gate on a stream; take its value from the
+vocabulary table above and from nowhere else (`RULE-STRM-035`).
 
 ## What this skill does NOT cover
 
-- The full registry-side type vocabulary expansion. Authored mapping
-  declares one assignment per destination field; the registry computes
-  `source_to_generic` / `generic_to_destination` / hashes.
+- The full registry-side type vocabulary expansion — the authored mapping is
+  `assignments`-only, and a key no field table names is rejected rather than
+  passed through (`RULE-SHRD-014`;
+  `../pipeline-builder/references/reserved-fields.md`).
 - Endpoint bodies. The stream **references** endpoints by ref; it does
   not embed them.
 
 ## Registered rules for a stream
 
-Satisfy every rule below, and cite one by id rather than restating it. A clean
-validation run is not proof they all hold — some are applied only at connect or
-run time.
+Satisfy every rule below, and cite one by id rather than restating it.
+<!-- PROBE: stream-filter-field-unresolved-locally -->
+A clean validation run is not proof they all hold — some are applied only at
+connect or run time.
 
 <!-- BEGIN GENERATED: rules-stream -->
 | Rule | Constraint |
@@ -138,6 +135,8 @@ run time.
 | `RULE-STRM-036` | A stream filter MUST name its operator from the vocabulary `Filter` declares. |
 | `RULE-STRM-037` | A validation rule MUST name its kind from the vocabulary `ValidationRule` declares. |
 | `RULE-STRM-038` | A stream destination's write block MUST name its mode from the write-mode vocabulary the block it selects declares. |
+| `RULE-STRM-039` | An incremental stream's late-arrival safety window MUST be sized from how late the source's own records arrive, and MUST NOT be authored as a rewind the stream can count on: whether a window shifts a read at all is decided by the source, not by the stream document. |
+| `RULE-STRM-040` | A mapping assignment's validation `error_handling` MUST NOT be authored as the policy for the failures its own rules raise; how a run answers a validation failure is what the pipeline's runtime error handling declares, for every assignment. |
 <!-- END GENERATED: rules-stream -->
 
 ## Output rules
@@ -147,14 +146,14 @@ Every authored document must:
 1. Declare `$schema` with the stream URL from the table at the top of this file
    (`RULE-SHRD-003`).
 2. Carry every required field from the top-level shape table. Author `stream_id`
-   as an RFC-4122 UUID the plugin generates (plugin convention; the contract
-   permits omission and the service assigns one on ingest). `pipeline_id`
+   even though the table marks it optional — see
+   `../pipeline-builder/references/identity-and-versioning.md`. `pipeline_id`
    carries the parent pipeline's UUID.
-3. Use **connection UUIDs** in every `endpoint_ref.connection_id` — they
-   must match the `connection_id` of the corresponding connection
-   document.
-4. Shape each `endpoint_ref` by its `scope` (see `spec-endpoint-refs.md`): a
-   `connector` ref carries `endpoint_id` (the connector endpoint key); a
-   `connection` ref carries the endpoint's `database_object` (`RULE-STRM-018`).
+3. Fill every `endpoint_ref.connection_id` from the pipeline's own connection
+   references (`RULE-STRM-033`); `spec-endpoint-refs.md` §`connection_id` says
+   which side takes which.
+4. Shape each `endpoint_ref` by its `scope` — see `spec-endpoint-refs.md` for
+   the per-scope field tables and `RULE-STRM-018` for the derived
+   `endpoint_id`.
 5. Pass validation (the `pipeline-schema-validator`, entity `stream`) with zero
    error findings.

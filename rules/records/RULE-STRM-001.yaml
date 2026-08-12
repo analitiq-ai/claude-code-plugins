@@ -8,6 +8,10 @@ scope: stream
 validator: "analitiq.contracts.stream::StreamAuthored._destinations_unique"
 owners: [pipeline-plugin]
 targets: [StreamAuthored]
+fields:
+  - destinations[].endpoint_ref.scope
+  - destinations[].endpoint_ref.connection_id
+  - destinations[].endpoint_ref.endpoint_id
 fixture_model: StreamInput
 rationale: >
   A repeated destination writes the same records twice with nothing

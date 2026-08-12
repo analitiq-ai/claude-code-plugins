@@ -1,6 +1,6 @@
 ---
 name: registry-browser
-description: Download a connector from the Analitiq DIP registry (https://github.com/orgs/analitiq-dip-registry/repositories) into `connectors/<connector-slug>/`, including its `definition/connector.json` and (for API connectors) `definition/endpoints/*.json`. Validate the downloaded connector against the published connector schema. Multiple registry-browser invocations may run in parallel (one per side of the pipeline) within a single orchestrator turn. Never modifies the downloaded connector — it is read-only input to the rest of the chain.
+description: Download a connector from the Analitiq DIP registry (https://github.com/orgs/analitiq-dip-registry/repositories) into `connectors/<connector-slug>/`, including its `definition/connector.json` and (for API connectors) `definition/endpoints/*.json`. Verifies the download landed a `definition/connector.json` before committing it; it does not schema-validate the connector. Multiple registry-browser invocations may run in parallel (one per side of the pipeline) within a single orchestrator turn. Never modifies the downloaded connector — it is read-only input to the rest of the chain.
 tools: Bash, Read
 ---
 
@@ -26,10 +26,8 @@ and you do not author anything.
    when a valid connector is already on disk.
 2. **Download the connector as a unit, and verify it before trusting it.**
    The registry hosts each connector as its own repository under the
-   `analitiq-dip-registry` GitHub org, named after the connector slug (its
-   `connector_id`). That slug is one identity wearing three hats — the
-   connector's canonical identifier, its registry repository name, and its
-   on-disk directory name (`RULE-CTOR-045`). A connector's endpoints (and its type-maps / manifest)
+   `analitiq-dip-registry` GitHub org, named after the connector slug
+   (`RULE-CTOR-045`). A connector's endpoints (and its type-maps / manifest)
    are published **alongside** `connector.json` under `definition/`, so
    download that directory **wholesale** — do not enumerate endpoints from
    a manifest and do not walk the repo file-by-file. Fetch the repo's
@@ -87,10 +85,10 @@ and you do not author anything.
    `connectors/<slug>/definition/connector.json` for `kind` and
    `auth.type`. Derive the endpoint set by listing the **downloaded**
    `definition/endpoints/*.json` files (ignore non-JSON entries such as
-   `.gitkeep`); each endpoint's id is its `endpoint_id`, which equals the
-   filename stem. **Never** read a `connector.json#/endpoints` array (the
-   published connector contract has none) and **never** reach back to
-   GitHub — the downloaded directory is authoritative.
+   `.gitkeep`); each endpoint's id is its filename stem (`RULE-PKG-031`).
+   **Never** read a `connector.json#/endpoints` array and
+   **never** reach back to GitHub — the downloaded directory is
+   authoritative.
 4. **On-disk layout** (already written by the extraction in step 2 —
    read-only inputs; do not edit them):
 
@@ -103,23 +101,20 @@ and you do not author anything.
        └── …                         # type-maps / manifest, if the connector ships them
    ```
 
-5. **Validate (optional).** The downloaded connector is a trusted, read-only
-   registry artifact — the connector-creator plugin's CI and the registry own its
-   validity, and pipeline-builder does not schema-validate connectors. For a local
-   check, the published validator's CLI handles connector documents
-   (`analitiq-validate --document connectors/<slug>/definition/connector.json`);
-   otherwise skip with a note.
+5. **Do not validate.** The downloaded connector is a trusted, read-only
+   registry artifact; the `analitiq-connector-builder` plugin's CI and the
+   registry own its validity. Record the skip in the summary.
 6. **Return a summary.** On a successful download, report:
 
    ```text
    {
      "status": "downloaded",
      "connector_slug": "<slug>",
-     "kind": "api" | "database" | "file" | "s3" | "stdout",
+     "kind": "<connector.kind>",
      "auth_type": "<connector.auth.type>",
      "endpoint_ids": ["transfers", "balances"],         // empty for non-api
      "target_dir": "connectors/<slug>",
-     "validation": {"passed": true | "skipped", "findings": []}
+     "validation": {"passed": "skipped", "findings": []}
    }
    ```
 
@@ -154,10 +149,6 @@ whenever any of the following trips:
   transport error, DNS failure, timeout) **or** a download that arrives
   but will not extract or contains no `definition/connector.json`.
 
-The orchestrator routes around `target_exists` (reuse the on-disk
-connector). `registry_missing` and `fetch_failed` are both halts —
-the orchestrator surfaces `detail` verbatim to the user.
-
 ## Hard rules
 
 - Never edit downloaded connector / endpoint JSON. The downloaded
@@ -166,12 +157,10 @@ the orchestrator surfaces `detail` verbatim to the user.
 - Never invent endpoints. The endpoint set is exactly the downloaded
   `definition/endpoints/*.json` files; if that directory is absent or
   empty for an API connector, return `endpoint_ids: []` and let the
-  orchestrator surface that to the user. Never reconstruct endpoints
-  from a `connector.json#/endpoints` array — the connector contract has
-  no such field.
-- Storage kinds (`file`, `s3`, `stdout`) are downloaded normally —
-  the downstream `stream-creator` will issue a structured refusal
-  for them (`RULE-CTOR-037`).
+  orchestrator surface that to the user.
+- A connector whose kind the engine does not execute is downloaded normally —
+  the downstream `stream-creator` issues the structured refusal
+  (`RULE-CTOR-037`).
 - This plugin does **not** publish connectors to the registry. That
   belongs to the `analitiq-connector-builder` plugin's submission
   workflow.

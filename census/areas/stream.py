@@ -7,6 +7,19 @@ from census.obligation import (
     ProseObligation,
 )
 
+#: Shared by both `DatabasePagination` variants' `type`, whose descriptions each
+#: report that the discriminator selects a document shape and not a read path.
+#: The variant it selects is structural; that the selection changes nothing at
+#: run time is a statement about engine code, which nothing here reads. It is
+#: stated rather than left out because the field name promises a strategy, and
+#: an author who takes the promise authors a keyset variant and gets an
+#: offset-paged read.
+_PAGINATION_TYPE_INERT = (
+    "the description also reports that no engine release branches on this "
+    "value — every database source read is offset-paged whichever variant is "
+    "declared — which is engine behaviour no document here can be checked against"
+)
+
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === stream ==============================================================
     ProseObligation(
@@ -245,10 +258,20 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="9fbe9368f9bb",
         structural="declared required with no default on this variant",
     ),
-    ProseObligation(model="KeysetDatabasePagination", field="type", prose_hash="1443d503a370", descriptive=True),
+    ProseObligation(
+        model="KeysetDatabasePagination", field="type",
+        prose_hash="4388a16a4775",
+        structural="the `Literal` selects which variant of the union applies",
+        waiver=_PAGINATION_TYPE_INERT,
+    ),
     ProseObligation(model="OffsetDatabasePagination", prose_hash="b18e21310f08", descriptive=True),
     ProseObligation(model="OffsetDatabasePagination", field="order_by_field", prose_hash="f0584d1307f0", descriptive=True),
-    ProseObligation(model="OffsetDatabasePagination", field="type", prose_hash="1443d503a370", descriptive=True),
+    ProseObligation(
+        model="OffsetDatabasePagination", field="type",
+        prose_hash="4388a16a4775",
+        structural="the `Literal` selects which variant of the union applies",
+        waiver=_PAGINATION_TYPE_INERT,
+    ),
     ProseObligation(
         model="PipeExpression", field="args", rule_ids=("RULE-STRM-005",),
         prose_hash="8941ee97faed",
@@ -396,9 +419,15 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="_DatabasePaginationBase", prose_hash="f1a6f478c511", descriptive=True),
     ProseObligation(
         model="_DatabasePaginationBase", field="page_size",
-        prose_hash="f4392d4845ba",
+        prose_hash="9b10a8032319",
         structural="a `Field` lower bound rejects a non-positive size",
-        waiver=ENGINE_OWNED_DEFAULTING,
+        waiver=(
+            "the description's second half reports that no engine release reads "
+            "this field, so a declared size never takes effect. Nothing here can "
+            "check it — the claim is about engine code, not about this document "
+            "— and it is stated rather than omitted because an author who "
+            "believes the field works gets a read size they never chose"
+        ),
     ),
     ProseObligation(
         model="_EndpointRefBase", rule_ids=("RULE-STRM-003",),
