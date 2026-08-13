@@ -1,7 +1,6 @@
 # API auth flows
 
-Per-auth-type authoring craft. `auth` is a discriminated union on `type`: each
-branch declares its own children and rejects any that belong to another type
+Per-auth-type authoring craft. `auth` is a discriminated union on `type`
 (`RULE-CTOR-024`), so take a branch's field set from
 `https://schemas.analitiq.ai/connector/latest.json`, not from this page. What
 each section below carries is the craft that shape cannot express, and a

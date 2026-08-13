@@ -100,7 +100,7 @@ The `connector-spec-api` skill is preloaded. Beyond that, read:
    documents) map to `"Json"` (`RULE-TMAP-001`); endpoint authors may narrow
    these to `Object` / `List` inline. Every `native_type` an endpoint
    declares must resolve through this array to the `arrow_type` frozen beside
-   it (`RULE-PKG-033`); `Object` / `List` are accepted narrowings of `Json`.
+   it (`RULE-PKG-033`).
    The orchestrator writes this array to the connector's sibling read-map
    file and validates it (`RULE-PKG-030`; layout in
    `skills/shared/type-maps.md`). Author
@@ -139,9 +139,8 @@ you are returning.
 - Never embed DSN templates. If you find yourself reaching for one, the
   classification was wrong; report and stop.
 - Do not author endpoint files. The endpoint-creator sub-agent does that.
-- Never embed type-map rules inside `connector.json` — the connector
-  schema rejects unknown fields. Emit them as the standalone
-  `type_map_read` output instead.
+- Never embed type-map rules inside `connector.json`. Emit them as the
+  standalone `type_map_read` output instead.
 
 ## Output format
 
