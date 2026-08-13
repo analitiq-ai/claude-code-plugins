@@ -35,9 +35,9 @@ This module is the fix, in three parts:
 
    What is NOT here: a gate deciding whether a SENTENCE asserts validator
    behavior. That was a list of hand-curated English regexes, and the rule
-   against it is in `.claude/rules/validator-claims.md` — which also states the
-   authoring obligation the regexes were standing in for. Pinning a claim is
-   still required; noticing that a sentence makes one is a reader's job.
+   against it is in `.claude/rules/guards.md`, and the authoring obligation the
+   regexes were standing in for is in `.claude/rules/plugin-prose.md`. Pinning a
+   claim is still required; noticing that a sentence makes one is a reader's job.
 
 Stated limits (deliberate, in the repo tradition of measured gates):
 
@@ -45,7 +45,7 @@ Stated limits (deliberate, in the repo tradition of measured gates):
   and nothing checks that the sentence beside it describes what the probe
   measures. A probe can keep passing while the prose says something else. A
   generated block cannot drift that way, which is why it is the first rung of
-  the authoring ladder in `.claude/rules/validator-claims.md` — prefer one
+  the validator-claim ladder in `.claude/rules/plugin-prose.md` — prefer one
   whenever a whole section states validator behavior. Most sites are fenced
   rather than generated because generating readable English for one spot in one
   document is more work than pointing at a probe, not because fencing is
@@ -1513,7 +1513,7 @@ def dangling_fence_ids() -> list[str]:
     All that survives of the old prose scan, and the only part of it a
     mechanism could ever decide: a fence either names a registered probe or it
     does not. Whether a SENTENCE asserts validator behaviour is a judgment, and
-    judgments live in `.claude/rules/validator-claims.md`.
+    judgments live in `.claude/rules/guards.md`.
     """
     return [
         f"{path.relative_to(REPO_ROOT).as_posix()}: fence names unknown probe "

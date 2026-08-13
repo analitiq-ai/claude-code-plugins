@@ -208,7 +208,7 @@ def test_census_texts_reference_live_names():
 # is safe only while no member docstring states an obligation — a judgment
 # about what a sentence says, so it is an authoring obligation in
 # `.claude/rules/contract-prose.md`, read by a person, and there is no guard
-# here for it. `.claude/rules/validator-claims.md` argues the general case.
+# here for it. `.claude/rules/guards.md` argues the general case.
 
 
 _HASH = "0" * 12  # format-valid placeholder for the refusal probes

@@ -8,10 +8,10 @@ one pagination strategy, a write request), so no complete-document gate ever
 sees them. This suite closes that hole over the WHOLE plugin tree, and it is
 the extraction gate the annotation convention promised: every inline fence
 carries an HTML comment directly above it declaring its verification contract
-(this plugin's `CLAUDE.md` § "Fenced JSON examples — the annotation
-convention", which is the normative home for both plugins). The gate
-classifies each block FROM that marker — there is no hand-maintained registry
-of dispositions to drift from the prose.
+(`.claude/rules/plugin-prose.md` § "The annotation convention", the normative
+home for both plugins). The gate classifies each block FROM that marker — there
+is no hand-maintained registry of dispositions to drift from the prose. What
+follows is how THIS gate grades each marker:
 
 * ``<!-- validate: <resource> -->`` — the block claims to be a complete
   document: graded on its own where the registry below marks it STANDALONE,
@@ -261,8 +261,8 @@ _MARKER = re.compile(
     r")\s*-->\s*$")
 
 _CONVENTION = (
-    "the annotation convention (this plugin's CLAUDE.md § 'Fenced JSON "
-    "examples — the annotation convention')")
+    "the annotation convention (.claude/rules/plugin-prose.md § 'The "
+    "annotation convention')")
 
 
 class Marker(NamedTuple):

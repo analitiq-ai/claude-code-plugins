@@ -10,8 +10,9 @@ guidance.
 
 What this module does NOT do is decide which sentences make a claim. That was
 a list of hand-curated English regexes over both plugins;
-`.claude/rules/validator-claims.md` owns the obligation now, and says why no
-such list belongs in a test. What survives is decidable both ways: a fence
+`.claude/rules/guards.md` says why no such list belongs in a test, and
+`.claude/rules/plugin-prose.md` owns the authoring obligation the list was
+standing in for. What survives is decidable both ways: a fence
 naming an id no probe defines fails, and a probe nothing references fails.
 
 Same environment contract as the other drift guards — skipped when the
@@ -91,7 +92,7 @@ def test_no_fence_names_a_probe_that_does_not_exist() -> None:
     This is what remains of the old claim scan, and it is the half a mechanism
     can decide: an id either resolves in the registry or it does not. Whether a
     SENTENCE asserts validator behaviour was decided by a list of hand-curated
-    English regexes; `.claude/rules/validator-claims.md` owns that now, and
+    English regexes; a reader decides it now, and `.claude/rules/guards.md`
     says why no such list belongs in a test.
     """
     dangling = _REGISTRY.dangling_fence_ids()

@@ -559,7 +559,7 @@ def test_validator_agent_states_the_adapter_entity_vocabulary():
     this agent, not something an agent reads members off. Grading a paraphrase
     means deciding that a hyphenated phrase denotes an underscored identifier,
     and that is a guard reading a sentence — banned by
-    `.claude/rules/validator-claims.md`. So it is carried by the failure hint
+    `.claude/rules/guards.md`. So it is carried by the failure hint
     below and by a reader, not by an assertion.
     """
     bullet = _ENTITY_BULLET.search(VALIDATOR_AGENT.read_text())

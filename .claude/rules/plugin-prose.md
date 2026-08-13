@@ -77,6 +77,31 @@ which arrives in a generated block no one may hand-edit.
    naming the copy and why (the `ALLOWED_RESTATEMENTS` pattern).
    Unpinned-and-undeclared is the defect.
 
+## A sentence about what the validator checks
+
+The most rot-prone fact class, and the one that adds a rung the ladder above
+does not carry. A sentence stating what the validator **does or does not** check
+takes the first of these that fits:
+
+1. **A generated block** (rung 3), rendered by
+   `scripts/render_validator_claims.py` — it moves with the measurement by
+   construction, so prefer it whenever a whole section states validator
+   behaviour.
+2. **A probe fence.** Add a `Claim`/probe to that script and put
+   `<!-- PROBE: <id> -->` directly above the sentence. Gated both ways: a fence
+   naming an id no probe defines fails the build, and a probe nothing references
+   fails the build. Nothing checks that the sentence beside the fence describes
+   what the probe measures — that half is yours.
+3. **Cite the `RULE-*`** that enforces the behaviour (rung 1).
+4. **Do not make the claim.** "The validator does not check this" is rarely
+   load-bearing guidance; state what the author must do instead.
+
+Recognising that a sentence makes such a claim is the author's job: deciding it
+from the wording took a list of hand-curated English regexes, which `guards.md`
+bans and explains. Pin the claim in the commit that writes it. On the contract's
+own surface the same sentence takes a census disposition instead —
+`contract-prose.md`.
+
 ## Placement
 
 - A fact binds only where the authoring agent reads it: its own definition, or
@@ -98,23 +123,39 @@ which arrives in a generated block no one may hand-edit.
   residue is review-owned craft.
 - An example that is the *output of code* (derived ids, rendered DSNs) is
   computed by calling the real code, never transcribed.
-- An inline `json` fence is either generated (transcluded from a validated
-  file) or annotated with its verification contract:
-  `validate: <resource>` (full document, run through the validator) ·
-  `validate: <resource>#/<pointer>` (fragment, against the sub-model) ·
-  `invalid: <RULE id>` (deliberately wrong, asserted to fail validation — a
-  "don't do this" example that rots into valid is the most misleading rot
-  there is; that the failure is the named rule's diagnostic stays
-  review-enforced, since the validator reports model messages, not rule ids)
-  · `illustrative` (explicit, reviewable exemption).
-  Each plugin's tree is graded by its own gate —
-  `tests/connector_builder/test_prose_fences.py`,
-  `tests/pipeline_builder/test_prose_snippets.py`: an unannotated fence fails
-  the build, and a `validate:` / `invalid:` block is run through the validator
-  in a host document that carries the context its pointer names.
 - Prefer minimal-complete documents over fragments — a fragment costs a harness
   or annotation forever. Fenced Python (CDK excerpts) must at least parse;
   anything beyond that is rung 5.
+
+### The annotation convention
+
+An inline `json` / `jsonc` fence is either generated (transcluded from a
+validated file) or carries an HTML comment directly above it declaring how it is
+verified. This is the normative home of that vocabulary, and it is the same in
+both plugins:
+
+- `<!-- validate: <resource> -->` — a complete document; must validate against
+  that resource's contract.
+- `<!-- validate: <resource>#/<pointer> -->` — a fragment, spliced into a host
+  document at that pointer, so it is graded with the context around it. A
+  fragment may show its enclosing key for context, braces or not
+  (`"replication": { … }`); the pointer names the deepest shown node, and the
+  gate unwraps the key before splicing.
+- `<!-- invalid: <RULE id> -->` — deliberately wrong; the graded document must
+  FAIL validation. A "don't do this" example that rots into valid is the most
+  misleading rot there is, so that half is asserted. That the failure is the
+  named rule's diagnostic stays review-enforced: the validator reports model
+  messages, not rule ids.
+- `<!-- illustrative -->` — outside the published contract's validation surface
+  (plugin-internal I/O envelopes, shape sketches); an explicit, reviewable
+  exemption, still required to parse.
+
+Each plugin's tree is graded by its own gate —
+`tests/connector_builder/test_prose_fences.py` and
+`tests/pipeline_builder/test_prose_snippets.py`, whose docstrings own how that
+gate hosts and splices a block. An unannotated fence fails the build, and the
+gate classifies each block from its marker alone, so no registry of dispositions
+can drift from the prose.
 
 ## Economy
 
@@ -131,23 +172,11 @@ review surface and potential rot.
 - A sentence that adds no new obligation, judgment, or example is deleted, not
   polished.
 
-## Guard hygiene
-
-- Extractors assert non-vacuity: zero matched citation/fence/example sites is a
-  red build, not a silent exemption.
-- Failure-message fix-hints are part of the guard: a hint naming a file or
-  section that no longer carries the fact is a defect. Repoint hints in the
-  same commit that moves a fact.
-- **A guard reads marked text or a token, never a sentence.** The rule and its
-  reasons are in the root `CLAUDE.md` → "Authoring rules"; what it means here is
-  that a guard over plugin prose extracts backticked identifiers, fenced blocks,
-  a named heading or a generated-block marker, and hands the verdict to the
-  contract. If the check you want needs to read the English, it is a review
-  item, not a test — the section below names the ones this repo has.
-
 ## Does the document still TEACH it?
 
-Read for it. When you touch a plugin document, check each of these:
+No guard can answer this — one reads marked text or a token, never a sentence
+(`guards.md`). So read for it. When you touch a plugin document, check each of
+these:
 
 - **A rule the contract still needs stated.** `stream-creator.md` must rule out
   the dotted-string `get` path, because the array-of-segments shape is the one
@@ -159,10 +188,8 @@ Read for it. When you touch a plugin document, check each of these:
   endpoint carrying no `replication` block. Reword that away and
   `test_prose_absence_claims.py` sits green protecting a claim nobody makes; it
   can only check the token `replication` is still somewhere in the document.
-- **A sentence that closes a set.** "…and nothing else" is what tells an agent
-  the enumeration beside it is exhaustive; drop the closure and the sentence
-  stays true while the agent starts authoring keys the contract rejects. The
-  member list is pinned against the contract; the closure is yours —
+- **A sentence that closes a set.** The member list is pinned against the
+  contract; that the sentence still says the list is exhaustive is yours —
   `no-cardinality-restatements.md` §Closure claims.
 
 The pattern: where a test pins a contract fact and the prose is what teaches it,

@@ -282,7 +282,7 @@ named heading, a generated-block marker, a name the contract owns, a probe id
 resolved against its registry. Deciding is semantic: does this sentence assert
 that the validator checks X, does this paragraph still teach the rule. If the verdict needs to know
 what the English means, it belongs in `.claude/rules/`, applied by a reader, not
-in a test. `.claude/rules/validator-claims.md` owns this rule and the worked
+in a test. `.claude/rules/guards.md` owns this rule and the worked
 cases; the short version is that hand-curated English regexes and phrase lists
 are banned outright, whatever property they claim to measure.
 
@@ -302,15 +302,20 @@ state and stays ignored). Read the one that matches what you are editing:
   has. Counts are the one restatement class every guard here is blind to. Also
   owns closure claims — the "and nothing else" a set's enumeration ends with.
 - `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships
-  verbatim to users and is executed by agents.
+  verbatim to users and is executed by agents. Also carries the ladder a
+  sentence about what the validator checks has to land on.
 - `contract-prose.md` — before writing a field description or docstring under
   `analitiq.contracts`. It renders into a published schema, and a published
   `X.Y.Z.json` is immutable. Choosing its census disposition is the judgment
   the census itself cannot make.
 - `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
   count, "the rule above". The PR template asks you to attest you applied it.
-- `validator-claims.md` — before writing a sentence about what a tool checks or
-  refuses, and before writing any check that reads prose.
+- `guards.md` — before writing any check that reads prose this repo tracks.
+
+`plugin-prose.md` and `contract-prose.md` are keyed to the surface you are
+editing. `no-drift-surfaces.md`, `no-cardinality-restatements.md` and
+`resolvable-referents.md` are keyed to a class of sentence that rots on any
+surface. `guards.md` is keyed to the mechanism that reads them.
 
 ## Conventions
 

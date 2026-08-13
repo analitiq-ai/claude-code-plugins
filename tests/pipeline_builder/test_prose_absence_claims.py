@@ -11,7 +11,7 @@ Every claim below is graded the same way: the verdict comes from the model's
 own property names, and the prose is only ever *located* — by a token the
 contract owns, in backticks. Deciding whether the sentence around that token
 still teaches the absence is `.claude/rules/plugin-prose.md`'s job, per
-`.claude/rules/validator-claims.md`; a phrase match could not tell a sentence
+`.claude/rules/guards.md`; a phrase match could not tell a sentence
 forbidding a shape from one permitting it.
 
 Kept in this suite rather than the connector one: the claims live in this

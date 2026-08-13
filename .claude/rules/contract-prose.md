@@ -1,5 +1,7 @@
 ---
-paths: packages/contract-models/**/*.py
+paths:
+  - "packages/contract-models/**/*.py"
+  - "census/**/*.py"
 ---
 
 # Rule: prose on the contract's own surface

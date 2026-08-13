@@ -84,10 +84,8 @@ A closure claim over a set no test reads has no mechanical half at all.
 
 **What you cover.** Whether the sentence still closes the set. Deleting "and
 nothing else" leaves a sentence that is weaker, still true, and no longer
-teaching the thing it exists to teach. That verdict needs someone reading the
-sentence: a check for the phrase fires on prose that was reworded better, and
-passes on prose that says the opposite (`validator-claims.md` carries the
-argument).
+teaching the thing it exists to teach. No check can take that verdict, and
+`guards.md` carries the argument.
 
 So on any edit to a spec carrying a closure claim, and on any change to the set
 it closes:

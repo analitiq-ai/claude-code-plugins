@@ -1,3 +1,10 @@
+---
+paths:
+  - "**/*.md"
+  - "**/*.py"
+  - "rules/records/*.yaml"
+---
+
 # Rule: every referent must resolve for the reader
 
 Applies to every comment, docstring, field description, `.md` and rule record

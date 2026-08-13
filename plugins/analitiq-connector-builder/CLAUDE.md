@@ -86,7 +86,7 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   a `PROBE:` fence comment naming the probe(s) that prove it placed directly
   above it, or cite the `RULE-*` rule that enforces it in the same sentence.
   Recognising that a sentence makes a claim is the author's job, and
-  `.claude/rules/validator-claims.md` says why: deciding it from the wording
+  `.claude/rules/guards.md` says why: deciding it from the wording
   took a list of hand-curated English regexes, which is banned. Pin the claim
   when you write it.
 - A probe that stops matching the contract means the contract moved: update
@@ -103,31 +103,14 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 - `tests/connector_builder/test_validator_claims.py` runs the same predicate
   in pytest.
 
-## Fenced JSON examples — the annotation convention
+## Fenced JSON examples
 
 Prefer pointing prose at a validated file under a skill's `examples/` tree
 (gated by `tests/*/test_examples*.py`) over an inline fence. An inline
 `json` / `jsonc` fence that stays carries an HTML comment directly above it
-declaring how it is verified (applies to BOTH plugins; every fence under this
-tree is graded against the contract by
-`tests/connector_builder/test_prose_fences.py`, and the pipeline plugin's by
-`tests/pipeline_builder/test_prose_snippets.py`):
-
-- `<!-- validate: <resource> -->` — a full document; must validate against
-  that resource's contract.
-- `<!-- validate: <resource>#/<pointer> -->` — a fragment; spliced in at that
-  pointer, the whole document must validate, so the fragment is graded with
-  the context around it. A fragment may show its enclosing key for context
-  (`"replication": { … }`, wrapped or not) — the pointer names the deepest
-  shown node, and a gate unwraps the key before splicing.
-- `<!-- invalid: <rule id> -->` — deliberately wrong; must fail validation
-  (that half is what a gate asserts — a "don't do this" example that rots
-  into valid is the most misleading rot there is). That the failure is the
-  named rule's diagnostic stays review-enforced: the validator reports
-  model messages, not rule ids.
-- `<!-- illustrative -->` — outside the published contract's validation
-  surface (plugin-internal I/O envelopes, shape sketches); an explicit,
-  reviewable exemption.
+declaring how it is verified; `.claude/rules/plugin-prose.md` § "The annotation
+convention" defines the markers for both plugins. This tree's gate is
+`tests/connector_builder/test_prose_fences.py`.
 
 ## Where the authoring rules live
 

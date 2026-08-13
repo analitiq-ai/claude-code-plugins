@@ -41,7 +41,7 @@ hash ratchet is what catches a new obligation slipping into existing prose.
 Whether a given sentence states an obligation at all is the author's and the
 reviewer's judgment, written down in ``.claude/rules/contract-prose.md``: a
 regex over modal words returns a verdict about what English means, which
-``.claude/rules/validator-claims.md`` bans.
+``.claude/rules/guards.md`` bans.
 
 ``tests/census/test_prose_census.py`` enforces the census bidirectionally
 through :func:`census.sites.census_report` (the same

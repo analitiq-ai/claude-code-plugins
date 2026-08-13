@@ -1,3 +1,12 @@
+---
+paths:
+  - "plugins/**/*.md"
+  - "packages/**/*.py"
+  - "scripts/**/*.py"
+  - "tests/**/*.py"
+  - "rules/records/*.yaml"
+---
+
 # Rule: don't create drift surfaces
 
 **Purpose:** avoid adding new places where a fact must be kept in sync by hand.

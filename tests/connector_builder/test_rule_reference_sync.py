@@ -243,7 +243,7 @@ def test_the_header_warning_describes_a_registry_that_still_has_unapplied_rules(
     validator's code path: it is true exactly while some rule rendered here has
     nothing applying it, which the record states as an absent `validator`. So it
     is pinned by reading the registry rather than by a probe — the same split
-    `.claude/rules/validator-claims.md` asks for, with the contract deciding.
+    `.claude/rules/guards.md` asks for, with the contract deciding.
 
     If every rule owned here gained an applier, the sentence would become a
     warning about nothing and the header should say so instead. That is the day

@@ -8,10 +8,10 @@ agents copy shapes from the fenced ``jsonc`` blocks inline in the plugin's
 gate ever sees them. This suite closes that hole over the WHOLE plugin tree,
 and it is the extraction gate the annotation convention promised: every inline
 fence carries an HTML comment directly above it declaring its verification
-contract (this plugin's `CLAUDE.md` § "Fenced JSON examples", whose normative
-home is the connector plugin's `CLAUDE.md` § "Fenced JSON examples — the
-annotation convention"). The gate classifies each block FROM that marker —
-there is no hand-maintained registry to drift from the prose:
+contract (`.claude/rules/plugin-prose.md` § "The annotation convention", the
+normative home for both plugins). The gate classifies each block FROM that
+marker — there is no hand-maintained registry to drift from the prose. What
+follows is how THIS gate grades each marker:
 
 * ``<!-- validate: <entity> -->`` — graded twice: the bare fragment must
   validate standalone as a complete ``<entity>`` document (a fragment decayed
@@ -231,9 +231,8 @@ _MARKER = re.compile(
     r")\s*-->\s*$")
 
 _CONVENTION = (
-    "the annotation convention (this plugin's CLAUDE.md § 'Fenced JSON "
-    "examples', normative home: the connector plugin's CLAUDE.md § 'Fenced "
-    "JSON examples — the annotation convention')")
+    "the annotation convention (.claude/rules/plugin-prose.md § 'The "
+    "annotation convention')")
 
 
 class Marker(NamedTuple):

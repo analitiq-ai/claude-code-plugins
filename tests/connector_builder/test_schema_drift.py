@@ -1110,7 +1110,7 @@ EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
 # sentence, and `_CLOSURE_FIX` is what sends a failing comparison back to the
 # right one. Grading such a sentence stays with the reader: locating it takes an
 # English anchor, which stops matching when the sentence is reworded, and
-# grading it takes a closure phrase, which `.claude/rules/validator-claims.md`
+# grading it takes a closure phrase, which `.claude/rules/guards.md`
 # keeps out of tests. What a mechanism decides is the contract's own member
 # sets, asserted below, each failing with the document that must be re-read.
 _CLOSURE_FIX = (
