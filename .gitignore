@@ -44,3 +44,7 @@ docs/
 # Local MCP server config — machine-specific tooling, not project contract.
 .mcp.json
 
+
+# Eval run log — one JSON line per finished run, appended locally by
+# evals/run_evals.py. A measurement of a moment, not a tracked artifact.
+eval-results.jsonl

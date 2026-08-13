@@ -83,8 +83,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections import Counter
 from pathlib import Path
+
+# Stdout is block-buffered when it is not a terminal, so a run redirected to a
+# file or a pipe shows nothing until the process exits — and a job killed part
+# way through shows nothing at all, however far it got. Line buffering here
+# rather than `flush=True` per call or `-u` at the call site: one place, and it
+# holds however the script is invoked.
+sys.stdout.reconfigure(line_buffering=True)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
@@ -311,6 +319,21 @@ def check_text(scenario: dict, workdir: Path) -> list[str]:
     return failures
 
 
+def discard(workdir: Path) -> str | None:
+    """Remove a run's working directory, reporting what stopped it.
+
+    Not `ignore_errors=True`. A run leaves a whole seeded pipeline tree behind,
+    and a job that quietly fails to clean one up per run fills the disk while
+    reporting nothing — the same shape as the buffered output this harness
+    already lost results to. A cleanup that cannot happen is worth a line.
+    """
+    try:
+        shutil.rmtree(workdir)
+    except OSError as exc:
+        return f"could not remove {workdir}: {exc}"
+    return None
+
+
 def one_run(scenario: dict, keep: bool, timeout: int) -> list[str]:
     """Every way this run fell short. Empty means it passed."""
     workdir = Path(tempfile.mkdtemp(prefix=f"eval-{scenario['id']}-"))
@@ -338,7 +361,9 @@ def one_run(scenario: dict, keep: bool, timeout: int) -> list[str]:
         if keep:
             print(f"    kept {workdir}")
         else:
-            shutil.rmtree(workdir, ignore_errors=True)
+            left = discard(workdir)
+            if left:
+                print(f"    cleanup: {left}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -416,6 +441,22 @@ def cmd_list(scenarios: list[dict]) -> int:
     return 0
 
 
+def record(path: Path, entry: dict) -> None:
+    """Append one finished run to the results log, before anything else happens.
+
+    Flushing stdout keeps a watcher informed; it does not keep a result. The
+    pass rate used to be computed at the end from memory, so killing the job
+    threw away every run that had already finished. A line per run on disk means
+    a kill costs the in-flight run only, partial results are readable while the
+    job is still going, and rates can be counted across invocations instead of
+    only within one.
+    """
+    with path.open("a", encoding="utf-8") as log:
+        log.write(json.dumps(entry, sort_keys=True) + "\n")
+        log.flush()
+        os.fsync(log.fileno())
+
+
 def cmd_run(scenarios: list[dict], args) -> int:
     selected = [s for s in scenarios if args.scenario in (None, s["id"])]
     if args.scenario and not selected:
@@ -428,12 +469,26 @@ def cmd_run(scenarios: list[dict], args) -> int:
     if not selected:
         raise SystemExit("every selected scenario was skipped — nothing ran")
 
+    results = args.results.resolve()
+    results.parent.mkdir(parents=True, exist_ok=True)
+    print(f"appending each finished run to {results}")
+
     worst = 1.0
     for scenario in selected:
         passed = 0
         print(f"\n{scenario['id']} ({args.runs} run(s))")
         for attempt in range(1, args.runs + 1):
+            started = time.time()
             failures = one_run(scenario, args.keep, args.timeout)
+            record(results, {
+                "scenario": scenario["id"],
+                "plugin": scenario["plugin"],
+                "run": attempt,
+                "of": args.runs,
+                "passed": not failures,
+                "failures": failures,
+                "seconds": round(time.time() - started, 1),
+            })
             if failures:
                 print(f"  run {attempt}: FAIL")
                 for line in failures:
@@ -463,6 +518,10 @@ def main(argv: list[str]) -> int:
     run.add_argument("--keep", action="store_true", help="leave each working directory on disk")
     run.add_argument("--timeout", type=int, default=1800, help="seconds per run (default 1800)")
     run.add_argument("--fail-under", type=float, help="exit 1 if any pass rate falls below this")
+    run.add_argument("--results", type=Path, default=Path("eval-results.jsonl"),
+                     help="file each finished run is appended to as JSON, one line per run "
+                          "(default: ./eval-results.jsonl). Appended, never truncated, so rates "
+                          "can be counted across invocations.")
     args = parser.parse_args(argv[1:])
 
     scenarios = load_scenarios()

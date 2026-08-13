@@ -52,6 +52,14 @@ Each run gets a fresh temporary directory, seeded from the scenario, and invokes
 `claude -p --plugin-dir <plugin>` there. `--keep` leaves the directory behind so
 you can read what the agent actually wrote.
 
+Every finished run is appended to `eval-results.jsonl` (`--results` moves it) as
+it completes, one JSON line carrying the scenario, the verdict, the failures and
+the elapsed seconds. That file is the record, not the terminal output: a run
+takes long enough that jobs get killed, and a pass rate computed only at the end
+is a pass rate you lose. It is appended and never truncated, so rates can be
+counted across invocations. It is gitignored — a measurement of a moment, not a
+tracked artifact.
+
 This is not part of `pytest`. It takes minutes per run, spends tokens, and the
 networked scenarios reach a provider's live documentation — three things the
 suite deliberately avoids. Run it on a schedule or on demand.
