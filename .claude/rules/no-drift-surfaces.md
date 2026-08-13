@@ -1,10 +1,13 @@
 ---
 paths:
+  - "*.md"
   - "plugins/**/*.md"
   - "packages/**/*.py"
+  - "census/**/*.py"
   - "scripts/**/*.py"
   - "tests/**/*.py"
   - "rules/records/*.yaml"
+  - ".github/workflows/*.yml"
 ---
 
 # Rule: don't create drift surfaces

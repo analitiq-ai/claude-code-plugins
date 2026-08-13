@@ -1,6 +1,8 @@
 ---
 paths:
   - "tests/**/*.py"
+  - "packages/**/tests/**/*.py"
+  - "census/**/*.py"
   - "scripts/**/*.py"
   - ".github/workflows/*.yml"
 ---

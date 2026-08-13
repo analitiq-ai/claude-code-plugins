@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/contract-models/**/*.py"
+  - "packages/contract-models/src/**/*.py"
   - "census/**/*.py"
 ---
 
