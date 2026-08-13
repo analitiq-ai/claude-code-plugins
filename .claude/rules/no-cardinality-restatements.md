@@ -7,29 +7,28 @@ paths:
 
 # Rule: state the mechanism, not the cardinality
 
-Applies when editing prose that describes a shape a model carries — plugin
-markdown, contract-model docstrings and field descriptions, and the
-`statement` and `rationale` of a rule record. Companion to
-`plugin-prose.md`, which classifies every sentence as craft or fact: **a
-cardinality is always a fact**, and this rule is how that one fact class is
-written.
+Governs prose describing a shape a model carries — plugin markdown,
+contract-model docstrings and field descriptions, and a rule record's
+`statement` and `rationale`. `plugin-prose.md` classifies every sentence as
+craft or fact: **a cardinality is always a fact**, and this rule is how that
+fact class is written.
 
-A record is the surface where a count rots furthest from the reader who could
-catch it. Its `statement` renders verbatim into the plugin references agents
-author against, and its `rationale` ships to PyPI inside the wheel's
-`rules.json` — so a count written once here reaches users through two
-surfaces, neither of which re-reads the sentence. `RULE-ENDP-037` said
-predicates were used in two places while the contract read them in every
-paginator's stop condition, in a write response's success condition, and in
-every cross-input validation rule — and every gate in this repo stayed green.
+A record is where a count rots furthest from the reader who could catch it. Its
+`statement` renders verbatim into the plugin references agents author against,
+and its `rationale` ships to PyPI inside the wheel's `rules.json` — one count
+reaching users through two surfaces, neither of which re-reads the sentence.
+`RULE-ENDP-037` said predicates were used in two places while the contract read
+them in every paginator's stop condition, in a write response's success
+condition, and in every cross-input validation rule — and every gate in this
+repo stayed green.
 
 ## The invariant
 
 Never state **how many** members a declared shape has. State what makes
 something a member.
 
-Counts are the restatement class the mechanisms this repo uses cannot see,
-which is why this is absolute rather than a judgment call:
+Counts are the restatement class this repo's mechanisms cannot see, which is
+why this is absolute rather than a judgment call:
 
 - A **wording ratchet** (the prose-census hash pin) fingerprints the sentence.
   Adding a sixth required field changes no word, so the hash still matches while
@@ -54,46 +53,45 @@ So a count is correct the day it is written, and adding a member falsifies it
 | "both caps may be omitted" | "each cap may be omitted" |
 | "the three discovery actions" | "the discovery actions" |
 
-The first row is not hypothetical — that sentence shipped in this repo's prose
+The first row is not hypothetical: that sentence shipped in this repo's prose
 and was swept out, which is why it heads the list.
 
-The shape of the fix is always the same: replace the number with the **rule that
+The fix always has the same shape — replace the number with the **rule that
 decides membership**, or defer to the enumeration that follows ("named below",
-"in the table", "the sub-bullets"). Where you defer to an enumeration, make sure
-a guard pins *that* — otherwise the drift has only moved.
+"in the table", "the sub-bullets"). Where you defer, make sure a guard pins
+*that*; otherwise the drift has only moved.
 
 ## Closure claims
 
-A closure claim is the recommended fix's finished form: "the block carries
+A closure claim is that fix's finished form: "the block carries
 `supported_methods` and `cursor_mappings`, nothing else". It states the
-membership rule (an exhaustive list) instead of its size, and it stays true as
+membership rule — an exhaustive list — instead of its size, and stays true as
 long as the list does.
 
-A closure claim is load-bearing wherever an authoring agent reads the
-enumeration as exhaustive, which is most places one appears — plugin prose
-closes sets with "and nothing else", "exposes exactly these", "owns exactly this
-much". An agent reading a claim that has lost its closure authors extra keys,
-and the contract models reject unknown keys, so the document fails at the
-validator instead of teaching the shape.
+It is load-bearing wherever an authoring agent reads the enumeration as
+exhaustive, which is most places one appears: plugin prose closes sets with "and
+nothing else", "exposes exactly these", "owns exactly this much". An agent
+reading a claim that has lost its closure authors extra keys, and the contract
+models reject unknown keys, so the document fails at the validator instead of
+teaching the shape.
 
 **What a guard covers.** Only the contract half, and only where a test reads
 that set back: `tests/connector_builder/test_schema_drift.py` pins
-`Replication`, `ResourceDiscoveryTriggers` and the type-map rule keys, and a
-member landing or leaving fails with the document whose sentence goes false.
-A closure claim over a set no test reads has no mechanical half at all.
+`Replication`, `ResourceDiscoveryTriggers` and the type-map rule keys, so a
+member landing or leaving fails with the document whose sentence goes false. A
+closure claim over a set no test reads has no mechanical half at all.
 
 **What you cover.** Whether the sentence still closes the set. Deleting "and
 nothing else" leaves a sentence that is weaker, still true, and no longer
-teaching the thing it exists to teach. No check can take that verdict, and
-`guards.md` carries the argument.
+teaching what it exists to teach. No check can take that verdict — `guards.md`
+carries the argument.
 
 So on any edit to a spec carrying a closure claim, and on any change to the set
 it closes:
 
 1. Read the sentence. Does it still say the list is exhaustive?
 2. Does the list still name exactly the contract's members? The test tells you
-   when the contract moved; it never tells you the sentence went stale on its
-   own.
+   when the contract moved; never that the sentence went stale on its own.
 3. If the closure is gone deliberately — the set opened — say so in the same
    change. Any test pinning that set stays: it pins the members, not the
    sentence.
@@ -101,7 +99,7 @@ it closes:
 ## Counting words to watch
 
 `one two three four five six seven eight nine ten`, `both`, `a pair of`, and
-digits. `both` and `two` are the easiest to miss because they read as ordinary
+digits. `both` and `two` are easiest to miss because they read as ordinary
 English: "both caps", "the two identifiers", "both required".
 
 Not every number is a cardinality restatement. These are fine:
@@ -120,9 +118,9 @@ false?** If yes, it is a cardinality and it does not go in prose.
 ## Where a count genuinely helps the reader
 
 Render it. A `BEGIN GENERATED` block fed from the pinned models is the only
-sanctioned form of a written-out count, because it moves with the contract by
+sanctioned written-out count, because it moves with the contract by
 construction (`plugin-prose.md` ladder, rung 3). Never hand-type one and pin it
-with a test — a test asserting "the prose says five and the model has five"
+with a test: a test asserting "the prose says five and the model has five"
 passes by being updated in the same commit that breaks the reader's
 understanding.
 
@@ -138,5 +136,4 @@ On every prose edit, and whenever a model gains or loses a member:
    pins that enumeration bidirectionally; if none does, the deferral is a new
    drift surface, not a fix.
 
-A count found in prose during review is a defect regardless of whether it is
-accurate.
+A count found in prose during review is a defect whether or not it is accurate.

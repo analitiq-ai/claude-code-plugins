@@ -12,17 +12,17 @@ paths:
 
 # Don't create drift surfaces
 
-**Purpose:** avoid adding new places where a fact must be kept in sync by hand.
+**Purpose:** avoid adding places where a fact must be kept in sync by hand.
 Every hand-maintained copy of something a single source already owns is a *drift
-surface* — it silently rots when the source changes.
+surface* — it rots silently when the source changes.
 
 ## The rule
 
-Before you hardcode a value that some other source already owns — a
-schema/contract enum, a vocabulary, a `$schema` URL, a field list, a package
-version pin — **stop and reference the owner instead of copying it.**
+Before hardcoding a value another source owns — a schema/contract enum, a
+vocabulary, a `$schema` URL, a field list, a package version pin — **reference
+the owner instead of copying it.**
 
-A "value some other source owns" includes at least:
+A "value another source owns" includes at least:
 - schema-owned enums/vocabularies (kinds, auth types, transports, encodings,
   pagination styles, …) — owned by the published contract / `analitiq-contract-models`;
 - canonical type vocabularies — owned by the contract models;
@@ -36,22 +36,21 @@ A "value some other source owns" includes at least:
    file/section, or read it at runtime). Do **not** paste a second copy.
 2. **Is a copy genuinely unavoidable?** Only three reasons qualify:
    decision/mapping logic (e.g. `enum-mappers.md`), a test's assertion target,
-   or a curated human-facing summary (e.g. the README support matrix). If it's
-   none of those, you're making a drift surface — reference instead.
+   or a curated human-facing summary (e.g. the README support matrix). Anything
+   else is a drift surface — reference instead.
 
    "Nothing enforces it, so I have to write it down" is **not** one of the
-   three. The rule registry carries unenforced rules too: a record with
-   no `validator`, whose `rationale` says what would
-   have to be read to catch a violation. Give the obligation an id in
-   `rules/records/` and cite it; keep in prose only the craft the record does not
-   carry.
+   three. The rule registry carries unenforced rules too: a record with no
+   `validator`, whose `rationale` says what would have to be read to catch a
+   violation. Give the obligation an id in `rules/records/` and cite it; keep in
+   prose only the craft the record does not carry.
 3. **If the copy is unavoidable, is it pinned?** An unavoidable restatement of a
    contract-owned value **must** be pinned by a drift test that reads the
    contract package — `tests/connector_builder/test_schema_drift.py` is the
    worked example — so a divergence fails the build. An *unpinned* copy of a
    contract value is a defect, not documentation.
-4. **Collapse parallel copies.** Prefer one canonical restatement + references
-   to it over N copies. When you touch a value that appears in several places,
+4. **Collapse parallel copies.** Prefer one canonical restatement plus
+   references over N copies. When you touch a value appearing in several places,
    reduce the count if you can; never increase it.
 5. **Repeated pins stay in lockstep.** When a version/const must appear at
    several call sites (install command, CI, docs), keep every site identical and

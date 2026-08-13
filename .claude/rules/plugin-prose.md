@@ -6,19 +6,18 @@ paths:
 
 # Rule: what may enter plugin prose
 
-Applies when editing any `.md` under `plugins/` — agent definitions, skills,
-references, READMEs. These are distribution artifacts: agents execute them
-verbatim, so a wrong sentence ships wrong authoring behavior to every user. The
-*why* is the root `CLAUDE.md` → "Single source of truth (drift policy)"; the
-general checklist is `no-drift-surfaces.md`. The failure class this rule
-prevents: prose restating validator behavior, falsified by a `VALIDATOR_PIN`
-bump.
+Governs every `.md` under `plugins/` — agent definitions, skills, references,
+READMEs. These are distribution artifacts: agents execute them verbatim, so a
+wrong sentence ships wrong authoring behavior to every user. The *why* is the
+root `CLAUDE.md` → "Single source of truth (drift policy)"; the general
+checklist is `no-drift-surfaces.md`. The failure class this rule prevents:
+prose restating validator behavior, falsified by a `VALIDATOR_PIN` bump.
 
-It applies to a rule record's `statement` for the same reason and by the same
-route: `render_rule_reference.py` copies that sentence verbatim into the
-plugin references, so a statement is plugin prose that has not been pasted
-yet. Write it here and the rendered `.md` inherits it — including the defect,
-which arrives in a generated block no one may hand-edit.
+It governs a rule record's `statement` by the same route:
+`render_rule_reference.py` copies that sentence verbatim into the plugin
+references, so a statement is plugin prose that has not been pasted yet. Write
+it here and the rendered `.md` inherits it — including the defect, which lands
+in a generated block no one may hand-edit.
 
 ## Classify every sentence: craft or fact
 
@@ -38,23 +37,21 @@ which arrives in a generated block no one may hand-edit.
 
 1. **Cite, don't state.** A `RULE-*` id, the generated rule reference, a
    schema URL, a path to a validated `examples/` file. Citation is the pinned
-   form of repetition — a dangling `RULE-*` id already fails the build.
+   form of repetition — a dangling `RULE-*` id already fails the build, and the
+   rendered reference prints enum members off the live model, so citing loses
+   the reader nothing.
 
    The registry carries a rule whether or not anything applies it, so "no rule
-   enforces this" is not a reason to restate a fact. Each record answers these
-   separately: `tier` says what kind of rule it is, `validator` names what
-   applies it and is absent when nothing does, and `severity` says what a
-   violation costs. Tier is the rule's nature, not its enforcement — an
-   `advisory` rule states that fields within one document must agree, a
-   `structural` one that an artifact has a given shape, and either may be
-   applied by something or by nothing. Those ids exist so prose stops copying
-   enum members and patterns, and the rendered reference prints the members off
-   the live model. A rule with no validator is applied by nobody here, and its
-   `rationale` says what would have to be read to catch a violation.
+   enforces this" is no reason to restate a fact. Each record answers
+   separately: `tier` (what kind of rule), `validator` (what applies it, absent
+   when nothing does), `severity` (what a violation costs). Tier is the rule's
+   nature, not its enforcement — a rule of any tier may be applied by something
+   or by nothing. A record with no `validator` says in its `rationale` what
+   would have to be read to catch a violation.
 
    So an obligation with no id is a **missing registry entry**, not a licence
-   to hand-write it. Add `rules/records/<id>.yaml` (schema: `rules/SCHEMA.md`), name
-   this plugin in its `owners` so the reference renders it here, run
+   to hand-write it. Add `rules/records/<id>.yaml` (schema: `rules/SCHEMA.md`),
+   name this plugin in its `owners` so the reference renders it here, run
    `python3 scripts/render_rules.py write`, then cite it. What stays in prose
    beside the citation is the craft the record deliberately does not carry: the
    worked example, the consequence of getting it wrong, the decision procedure.
@@ -65,12 +62,12 @@ which arrives in a generated block no one may hand-edit.
    constants and models read directly, behavioral facts derived by probing the
    validator with minimal documents, never hand-measured. One block id rendered
    into several files is the sanctioned way to repeat a fact.
-4. **Pin it hard.** A fact that must stay hand-typed (the exemptions listed
-   under checklist item 2 of `no-drift-surfaces.md` — decision/mapping logic, a
-   test's assertion target, a curated human-facing summary) needs a test that
-   reads **this file at this
-   site**. A test comparing the contract to its own constant, naming the prose
-   only in a failure hint, pins nothing — the prose can rot while it passes.
+4. **Pin it hard.** A fact that must stay hand-typed (the exemptions under
+   checklist item 2 of `no-drift-surfaces.md` — decision/mapping logic, a test's
+   assertion target, a curated human-facing summary) needs a test reading **this
+   file at this site**. A test comparing the contract to its own constant and
+   naming the prose only in a failure hint pins nothing: the prose can rot while
+   it passes.
 5. **Declare the exemption.** A fact with no model in this repo (CDK surface,
    engine runtime behavior) is backed by a pinned vendored artifact (the
    `arrow_grammar` pattern) or by an allowlist entry in the relevant drift test
@@ -79,8 +76,8 @@ which arrives in a generated block no one may hand-edit.
 
 ## A sentence about what the validator checks
 
-The most rot-prone fact class, and the one that adds a rung the ladder above
-does not carry. A sentence stating what the validator **does or does not** check
+The most rot-prone fact class, and the one adding a rung the ladder above does
+not carry. A sentence stating what the validator **does or does not** check
 takes the first of these that fits:
 
 1. **A generated block** (rung 3), rendered by
@@ -167,8 +164,7 @@ review surface and potential rot.
   judgment. No hedging, no paraphrase of a neighboring sentence, no synonym for
   a term the contract already names.
 - Keep a "why" only when it changes what the agent does next; rationale that
-  does not alter behavior belongs in the commit message or the rule registry,
-  not in agent prose.
+  does not alter behavior belongs in the commit message or the rule registry.
 - A sentence that adds no new obligation, judgment, or example is deleted, not
   polished.
 
