@@ -760,7 +760,9 @@ def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
 
 def _endpoint_rule() -> str:
     from analitiq.contracts.shared.rules import all_rules
-    return next(r.id for r in all_rules() if r.scope == "api-endpoint")
+    # StopIteration here is the failure signal working, not a case to guard:
+    # the registry losing every api-endpoint rule is the defect to report.
+    return next(r.id for r in all_rules() if r.scope == "api-endpoint")  # skipcq: PTC-W0063
 
 
 def test_invalid_disposition_requires_the_failure(tmp_path):
@@ -791,6 +793,8 @@ def test_invalid_disposition_rejects_a_resource_with_no_document():
     a type map whose direction the id does not state) must fail on the
     resource, not deeper — a KeyError in the splice would misdirect."""
     from analitiq.contracts.shared.rules import all_rules
-    rule = next(r for r in all_rules() if r.scope not in ENTITY_SCHEMA)
+    rule = next((r for r in all_rules() if r.scope not in ENTITY_SCHEMA), None)
+    if rule is None:  # every scope gained a document: real blocks cover it
+        pytest.skip("no rule scoped outside the published documents")
     with pytest.raises(AssertionError, match="cannot validate as a document"):
         _grading_entity(_parse_marker(f"<!-- invalid: {rule.id} -->"), "synthetic")

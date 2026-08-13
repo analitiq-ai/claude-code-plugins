@@ -21,7 +21,6 @@ import re
 from typing import Annotated, Any, Literal
 
 from pydantic import (
-    ConfigDict,
     Field,
     StringConstraints,
     field_validator,

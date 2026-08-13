@@ -10,15 +10,11 @@ paths:
   - ".github/workflows/*.yml"
 ---
 
-# Rule: don't create drift surfaces
+# Don't create drift surfaces
 
 **Purpose:** avoid adding new places where a fact must be kept in sync by hand.
 Every hand-maintained copy of something a single source already owns is a *drift
 surface* — it silently rots when the source changes.
-
-This rule is the *how-to-behave* checklist. The *why* and the canonical policy
-live in `CLAUDE.md` → **"## Single source of truth (drift policy)"** — read it,
-don't restate it here.
 
 ## The rule
 
@@ -66,5 +62,5 @@ A "value some other source owns" includes at least:
 > "If the owning source changes tomorrow, how many places must a human remember
 > to edit — and will anything fail loudly if they forget?"
 
-Answer should be **as few as possible**, and **each of them pinned by a test**.
+Answer should be **one**, and **each of them pinned by a test**.
 If editing here adds an unpinned place, reference the owner instead.
