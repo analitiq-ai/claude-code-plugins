@@ -295,7 +295,8 @@ carries that argument and the waiver-registry one in full.
 
 `.claude/rules/` holds the invariants this policy implies, tracked
 so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
-state and stays ignored). Read the one that matches what you are editing:
+state, ignored except where `.gitignore` re-includes it). Read the one that
+matches what you are editing:
 
 - `no-drift-surfaces.md` — before hardcoding a value another source owns.
 - `no-cardinality-restatements.md` — before writing how many members a shape

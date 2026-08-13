@@ -10,15 +10,22 @@ htmlcov/
 coverage.xml
 .idea/
 # Claude Code's working directory: local settings, session state, and
-# `worktrees/`, which holds whole nested checkouts. `skills/` stays out too — it
-# is the maintainer's own tooling, assembled per machine and partly symlinked
-# out to other repos, so tracking it would publish paths nobody outside can
-# follow.
+# `worktrees/`, which holds whole nested checkouts. `skills/` stays out too —
+# it is the maintainer's own tooling, assembled per machine and partly
+# symlinked out to other repos, so tracking it would publish paths nobody
+# outside can follow; whatever is re-included below is the exception.
 .claude/*
 # `rules/` is the exception: authoring policy this repo's prose and tests cite
 # by path. Ignored, those citations resolved only on the machine that wrote
 # them; tracked, they resolve for anyone with a clone.
 !.claude/rules/
+# `skills/rules-audit/` is tracked for the same reason: it is the audit half of
+# `rules/`, deriving its triggers from those files' `paths:` frontmatter or its
+# absence, and it must reach anyone who can open a PR. The rest of `skills/`
+# stays local.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/rules-audit/
 
 # Python packaging build artifacts
 build/

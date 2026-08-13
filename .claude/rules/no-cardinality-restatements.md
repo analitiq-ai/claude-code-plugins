@@ -1,15 +1,8 @@
----
-paths:
-  - "plugins/**/*.md"
-  - "packages/**/*.py"
-  - "rules/records/*.yaml"
----
-
 # Rule: state the mechanism, not the cardinality
 
-Governs prose describing a shape a model carries — plugin markdown,
-contract-model docstrings and field descriptions, and a rule record's
-`statement` and `rationale`. `plugin-prose.md` classifies every sentence as
+Governs prose describing a shape a model carries, on every surface this repo
+tracks — the rule carries no `paths:` because the sentence class it names rots
+anywhere. `plugin-prose.md` classifies every sentence as
 craft or fact: **a cardinality is always a fact**, and this rule is how that
 fact class is written.
 

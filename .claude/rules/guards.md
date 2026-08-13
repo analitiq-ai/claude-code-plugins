@@ -1,5 +1,6 @@
 ---
 paths:
+  - ".claude/**/*.md"
   - "tests/**/*.py"
   - "packages/**/tests/**/*.py"
   - "census/**/*.py"
@@ -10,7 +11,8 @@ paths:
 # Rule: a guard never decides what a sentence asserts
 
 Governs every check this repo runs over prose it tracks — tests, render
-scripts, CI steps. `plugin-prose.md` (what ships to users) and
+scripts, CI steps — and the tracked prose that specifies such a check, like
+the rules-audit skill. `plugin-prose.md` (what ships to users) and
 `contract-prose.md` (what the contract publishes about itself) govern the prose;
 this file governs the mechanism that reads it.
 
