@@ -1,0 +1,277 @@
+{
+  "id": "pipeline-api-to-new-table",
+  "plugin": "analitiq-pipeline-builder",
+  "network": false,
+  "why": "The plainest whole-pipeline run, and the one that reaches the most obligations nothing rejects: routing each connection-contract input by its declared storage, keeping a secret as a pointer, supplying CA material for a verifying TLS mode, and authoring no default the contract already declares. Both connectors are seeded, so the run needs no registry and no live system — an API source reads its endpoints out of the connector document, and a destination table that does not exist yet is derived without connecting.",
+  "seed": [
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/api-key.example.json",
+      "to": "connectors/api-key-example/definition/connector.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/endpoints/v1__items.json",
+      "to": "connectors/api-key-example/definition/endpoints/v1__items.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-api/examples/api-key/type-map-read.json",
+      "to": "connectors/api-key-example/definition/type-map-read.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/postgresql.example.json",
+      "to": "connectors/postgresql-example/definition/connector.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map-read.json",
+      "to": "connectors/postgresql-example/definition/type-map-read.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map-write.json",
+      "to": "connectors/postgresql-example/definition/type-map-write.json"
+    }
+  ],
+  "prompt": "Build a pipeline named items-sync from the api-key-example connector to the postgresql-example connector. Both connectors are already downloaded under connectors/ — use them as they are, do not fetch anything. Stream the source endpoint v1__items into a destination table public.items that does not exist yet, so derive it as a new table rather than connecting to the database. Full refresh, insert on write, run it manually with no schedule. For the destination connection use host db.internal, port 5432, database analytics, username loader, ssl_mode verify-full. Everything you need is in this message; do not ask me questions, and make a reasonable choice if something is not stated.",
+  "expect": "build",
+  "validate": [
+    {
+      "glob": "pipelines/*/pipeline.json",
+      "entity": "pipeline",
+      "bundle_root": "."
+    },
+    {
+      "glob": "pipelines/*/streams/*.json",
+      "entity": "stream"
+    },
+    {
+      "glob": "connections/*/connection.json",
+      "entity": "connection"
+    },
+    {
+      "glob": "connections/*/definition/endpoints/*.json",
+      "entity": "database_endpoint"
+    }
+  ],
+  "docs": {
+    "pipeline": {
+      "glob": "pipelines/*/pipeline.json"
+    },
+    "stream": {
+      "glob": "pipelines/*/streams/*.json"
+    },
+    "api_connection": {
+      "glob": "connections/*/connection.json",
+      "where": {
+        "connector_id": "api-key-example"
+      }
+    },
+    "db_connection": {
+      "glob": "connections/*/connection.json",
+      "where": {
+        "connector_id": "postgresql-example"
+      }
+    },
+    "db_endpoint": {
+      "glob": "connections/*/definition/endpoints/*.json"
+    }
+  },
+  "also_covers": [
+    "RULE-DBEP-010",
+    "RULE-STRM-022",
+    "RULE-STRM-023",
+    "RULE-STRM-025",
+    "RULE-PIPE-010"
+  ],
+  "assert": [
+    {
+      "doc": "pipeline",
+      "path": "$schema",
+      "equals": "https://schemas.analitiq.ai/pipeline/latest.json",
+      "rule": "RULE-SHRD-003"
+    },
+    {
+      "doc": "pipeline",
+      "path": "status",
+      "absent": true,
+      "rule": "RULE-SHRD-004",
+      "note": "the contract's default is what a new pipeline starts in; authoring it is indistinguishable from a value the user chose"
+    },
+    {
+      "doc": "pipeline",
+      "path": "engine",
+      "absent": true,
+      "rule": "RULE-SHRD-004",
+      "note": "no engine override was asked for, and the worked example carries one — the copy is the trap"
+    },
+    {
+      "doc": "pipeline",
+      "path": "runtime",
+      "absent": true,
+      "rule": "RULE-SHRD-004",
+      "note": "same trap as engine"
+    },
+    {
+      "doc": "pipeline",
+      "path": "schedule.type",
+      "equals": "manual",
+      "rule": "intent"
+    },
+    {
+      "doc": "pipeline",
+      "path": "streams",
+      "min_length": 1,
+      "rule": "intent"
+    },
+    {
+      "doc": "api_connection",
+      "path": "secret_refs.api_key",
+      "matches": "^env:",
+      "rule": "RULE-CONN-009",
+      "note": "routed to secret storage, so the connection carries a pointer; this pins the env: scheme the plugin defaults to, which is narrower than the rule requires"
+    },
+    {
+      "doc": "api_connection",
+      "path": "parameters.api_key",
+      "absent": true,
+      "rule": "RULE-SHRD-001",
+      "note": "a secret in the parameters map is a literal credential in a tracked file"
+    },
+    {
+      "doc": "api_connection",
+      "path": "discovered",
+      "absent": true,
+      "rule": "RULE-CONN-005"
+    },
+    {
+      "doc": "api_connection",
+      "path": "connector_id",
+      "equals": "api-key-example",
+      "rule": "RULE-CTOR-045"
+    },
+    {
+      "doc": "db_connection",
+      "path": "parameters.port",
+      "equals": 5432,
+      "rule": "RULE-CONN-007",
+      "note": "the input declares type integer; \"5432\" is as valid a document and fails at the driver"
+    },
+    {
+      "doc": "db_connection",
+      "path": "parameters.host",
+      "equals": "db.internal",
+      "rule": "RULE-CONN-006"
+    },
+    {
+      "doc": "db_connection",
+      "path": "parameters.ssl_mode",
+      "equals": "verify-full",
+      "rule": "RULE-CONN-006"
+    },
+    {
+      "doc": "db_connection",
+      "path": "secret_refs.password",
+      "matches": "^env:",
+      "rule": "RULE-CONN-009"
+    },
+    {
+      "doc": "db_connection",
+      "path": "secret_refs.ssl_ca_certificate",
+      "present": true,
+      "rule": "RULE-CONN-008",
+      "note": "verify-full verifies the server certificate, so the CA input the connector declares must be supplied even though it is optional"
+    },
+    {
+      "doc": "db_connection",
+      "path": "parameters.password",
+      "absent": true,
+      "rule": "RULE-SHRD-001"
+    },
+    {
+      "doc": "db_connection",
+      "path": "discovered",
+      "absent": true,
+      "rule": "RULE-CONN-005"
+    },
+    {
+      "doc": "db_endpoint",
+      "path": "database_object.schema",
+      "equals": "public",
+      "rule": "RULE-DBEP-009"
+    },
+    {
+      "doc": "db_endpoint",
+      "path": "database_object.name",
+      "equals": "items",
+      "rule": "RULE-DBEP-009",
+      "note": "the identifier the user spelled, verbatim — not slugged, folded or quoted"
+    },
+    {
+      "doc": "db_endpoint",
+      "path": "columns",
+      "pluck": "name",
+      "equals": [
+        "id",
+        "name",
+        "active"
+      ],
+      "rule": "RULE-DBEP-008",
+      "note": "exactly the source's fields — an extra column here collides with what the engine synthesises when it creates the table"
+    },
+    {
+      "doc": "stream",
+      "path": "$schema",
+      "equals": "https://schemas.analitiq.ai/stream/latest.json",
+      "rule": "RULE-SHRD-003"
+    },
+    {
+      "doc": "stream",
+      "path": "status",
+      "absent": true,
+      "rule": "RULE-SHRD-004"
+    },
+    {
+      "doc": "stream",
+      "path": "source.endpoint_ref.scope",
+      "equals": "connector",
+      "rule": "RULE-STRM-031",
+      "note": "connection scope refers to a database endpoint only"
+    },
+    {
+      "doc": "stream",
+      "path": "source.endpoint_ref.endpoint_id",
+      "equals": "v1__items",
+      "rule": "intent"
+    },
+    {
+      "doc": "stream",
+      "path": "source.replication.method",
+      "equals": "full_refresh",
+      "rule": "intent",
+      "note": "the seeded endpoint declares no supported set, so the prompt is the only authority"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].endpoint_ref.scope",
+      "equals": "connection",
+      "rule": "RULE-STRM-031"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].endpoint_ref.database_object.name",
+      "equals": "items",
+      "rule": "RULE-DBEP-007",
+      "note": "identity is read from database_object; the derived handle is opaque"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].write.mode",
+      "equals": "insert",
+      "rule": "intent"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].execution",
+      "absent": true,
+      "rule": "RULE-PIPE-007",
+      "note": "no execution override was asked for, and it is not a write-size lever"
+    }
+  ]
+}

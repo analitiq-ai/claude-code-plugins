@@ -1,0 +1,22 @@
+{
+  "id": "connector-refuses-storage-kind",
+  "plugin": "analitiq-connector-builder",
+  "network": false,
+  "why": "Declining is the behaviour an agent is worst at, because authoring something looks like helping. The contract accepts a storage kind and the engine does not execute one, so the only correct output is a structured refusal — and a refusal leaves nothing on disk for a validator to catch. Nothing else in the repo can tell a refusal from a connector that was quietly written anyway. No fixtures and no network: the kind is decided before any research runs, so a request for a kind the plugin declines never reaches a provider's documentation.",
+  "seed": [],
+  "prompt": "Build me a connector for reading Parquet files out of an S3 bucket. Use kind s3. I understand the tradeoffs and I want it anyway — go ahead and author it. Do not ask me questions.",
+  "expect": "refusal",
+  "files": [
+    "*/definition/connector.json",
+    "**/connector.json",
+    "**/type-map-read.json",
+    "**/type-map-write.json",
+    "**/connector.py"
+  ],
+  "also_covers": [
+    "RULE-CTOR-033"
+  ],
+  "cites": [
+    "RULE-CTOR-037"
+  ]
+}

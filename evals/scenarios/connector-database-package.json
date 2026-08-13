@@ -1,0 +1,127 @@
+{
+  "id": "connector-database-package",
+  "plugin": "analitiq-connector-builder",
+  "network": true,
+  "why": "The connector-package obligations are the largest block the registry leaves to nothing: the validator grades JSON documents and says so, and a package file is not one. Entry points registered in one direction, a driver that cannot serve the transport the connector declares, a write map left out — each of those ships a connector that installs and then fails at run time. MySQL rather than Postgres on purpose: the worked example under the skill is Postgres, so a run that merely copies the archetype produces the wrong driver and the wrong type map.",
+  "seed": [],
+  "prompt": "Build a database connector with connector_id mysql for MySQL 8. Author the full connector package. Do not ask me questions; make a reasonable choice where something is not stated, and prefer the MySQL server documentation as your source.",
+  "expect": "build",
+  "validate": [
+    {
+      "glob": "mysql/definition/connector.json",
+      "schema_url": "https://schemas.analitiq.ai/connector/latest.json"
+    },
+    {
+      "glob": "mysql/definition/type-map-read.json",
+      "schema_url": "https://schemas.analitiq.ai/type-map-read/latest.json"
+    },
+    {
+      "glob": "mysql/definition/type-map-write.json",
+      "schema_url": "https://schemas.analitiq.ai/type-map-write/latest.json"
+    }
+  ],
+  "docs": {
+    "connector": {
+      "glob": "mysql/definition/connector.json"
+    }
+  },
+  "also_covers": [
+    "RULE-TMAP-011",
+    "RULE-TMAP-013",
+    "RULE-TMAP-016",
+    "RULE-PKG-009",
+    "RULE-PKG-007",
+    "RULE-PKG-025",
+    "RULE-CTOR-033"
+  ],
+  "assert": [
+    {
+      "doc": "connector",
+      "path": "$schema",
+      "equals": "https://schemas.analitiq.ai/connector/latest.json",
+      "rule": "RULE-SHRD-003"
+    },
+    {
+      "doc": "connector",
+      "path": "kind",
+      "equals": "database",
+      "rule": "intent"
+    },
+    {
+      "doc": "connector",
+      "path": "connector_id",
+      "equals": "mysql",
+      "rule": "RULE-CTOR-042",
+      "note": "the release directory is named for the connector_id its document declares"
+    },
+    {
+      "doc": "connector",
+      "path": "sql_capabilities",
+      "present": true,
+      "rule": "RULE-CTOR-040",
+      "note": "the contract leaves it optional and the engine requires it before running any write mode"
+    }
+  ],
+  "artifacts": [
+    {
+      "glob": "mysql/__init__.py",
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
+    },
+    {
+      "glob": "mysql/connector.py",
+      "rule": "RULE-PKG-002"
+    },
+    {
+      "glob": "mysql/requirements.txt",
+      "rule": "RULE-PKG-006"
+    },
+    {
+      "glob": "mysql/pyproject.toml",
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
+    },
+    {
+      "glob": "mysql/README.md",
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
+    },
+    {
+      "glob": "mysql/definition/endpoints/*.json",
+      "absent": true,
+      "rule": "RULE-DBEP-006",
+      "note": "a database endpoint is connection-scoped and belongs to resource discovery, never to a connector release"
+    }
+  ],
+  "text_assert": [
+    {
+      "file": "mysql/pyproject.toml",
+      "matches": "entry-points\\.\"analitiq\\.source_connectors\"",
+      "rule": "RULE-PKG-008",
+      "note": "read and write entry points are both required — a one-directional connector is not shippable"
+    },
+    {
+      "file": "mysql/pyproject.toml",
+      "matches": "entry-points\\.\"analitiq\\.destination_connectors\"",
+      "rule": "RULE-PKG-008"
+    },
+    {
+      "file": "mysql/pyproject.toml",
+      "matches": "dynamic\\s*=\\s*\\[\\s*\"dependencies\"\\s*\\]",
+      "rule": "RULE-PKG-006",
+      "note": "requirements.txt stays the single source of truth for the driver"
+    },
+    {
+      "file": "mysql/requirements.txt",
+      "matches": "(?i)(aiomysql|asyncmy|pymysql|mysqlclient|mysql-connector)",
+      "rule": "RULE-PKG-027",
+      "note": "a driver that actually serves MySQL, not the Postgres archetype's driver carried over"
+    },
+    {
+      "file": "mysql/requirements.txt",
+      "not_matches": "(?i)(psycopg|asyncpg)",
+      "rule": "RULE-PKG-027",
+      "note": "the Postgres driver appearing here is the archetype-copy failure this scenario exists to catch"
+    }
+  ]
+}

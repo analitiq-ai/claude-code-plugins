@@ -124,7 +124,11 @@ Read on demand:
 Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
 `endpoint-spec` here — the creator sub-agents own those.
 
-## Pipeline (full contract: `references/pipeline.md`)
+## Pipeline
+
+The phases below are the build, in order. What holds across all of them —
+what halting means, how a phase dispatches in parallel, and the
+fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
 
 0. **Pre-flight: pipeline directory check** — before any research or
    authoring, check whether `pipelines/<pipeline-slug>/` already
@@ -170,7 +174,7 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    - **If absent** → invoke `registry-browser` to fetch it.
 
    When both sides need fetching, invoke `registry-browser` twice in
-   parallel (single message, two tool calls).
+   parallel.
 
    `registry-browser` returns one of two shapes:
    - `status: "downloaded"` → continue.
@@ -230,11 +234,14 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
      - `connections/<connection-slug>/.secrets/credentials.json` —
        template the user fills in with the real secret values (keyed by
        the env-var names the `secret_refs` pointers resolve).
-   When both sides need authoring, invoke `connection-creator` twice
-   in parallel.
+
+   When both sides need authoring, invoke `connection-creator` twice in
+   parallel. A `connection-creator` structured refusal — an auth type the chosen
+   connector does not support, a connector with no `connection_contract` —
+   halts. Surface the refusal's notes; there is nothing to fix by retrying.
 
 5. **Endpoint discovery (database connections only)** — for each
-   database connection, run the three discovery sub-modes with
+   database connection, run the discovery sub-modes with
    `private-endpoint-creator`: `discover-schemas` → user picks →
    `discover-tables` → user picks → `create-endpoints`. Sub-modes
    are sequential per connection but parallel across connections
@@ -260,6 +267,10 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    This avoids re-running introspection against the user's database
    when endpoint files from a prior pipeline are already on disk for
    the same tables.
+
+   Introspection that cannot reach the database — wrong credentials, an
+   unreachable host — halts. Surface the underlying error verbatim and wait for
+   the user to fix it; the connection details are theirs to correct.
 
    **New destination table.** When this connection is the pipeline's
    *destination* and the user wants to stream into a table that
@@ -311,7 +322,7 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    - Write a non-null `type_maps.read` / `type_maps.write` to
      `connections/<connection-slug>/definition/type-map-read.json` /
      `type-map-write.json` and validate each (entity `type_map_read` /
-     `type_map_write`) in the same ≤ 5 fix-pass loop as other artifacts.
+     `type_map_write`) through the same fix-and-revalidate loop as other artifacts.
      `null` means write nothing — never create an empty map file, and never
      delete an existing one. Record authored or extended maps in the final
      summary.
@@ -322,8 +333,8 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
    `pipelines/<pipeline-slug>/pipeline.json` with `streams: []` (filled
    in phase 8). Validates as entity `pipeline`.
 
-7. **Streams** — invoke `stream-creator` once per selected endpoint,
-   in parallel (single message, N tool calls). Each receives the
+7. **Streams** — invoke `stream-creator` once per selected endpoint, in
+   parallel. Each receives the
    source + destination endpoint refs (with `database_object` for
    connection-scoped endpoints), source + destination `connection_id`
    UUIDs, the minted `stream_id` UUID, replication method, write mode,
@@ -342,9 +353,9 @@ Do NOT load `pipeline-spec`, `stream-spec`, `connection-spec`, or
     pass `bundle_root: .` so the cross-document referential checks run —
     `references/io-contracts.md` lists every finding id this pass can emit.
 
-    Attempt at most **5 fix passes per artifact**, then halt and surface the
-    diagnostics; do not commit partial files (`references/pipeline.md`
-    §"Fix-and-revalidate loop (phase 9)").
+    Run each artifact through the fix-and-revalidate loop
+    (`references/pipeline.md` §"Fix-and-revalidate loop (phase 9)"), which owns
+    the pass cap and what happens when it is reached.
     <!-- PROBE: pipeline-draft-runnability-unchecked, pipeline-active-runnability-enforced -->
     A draft pipeline produces no not-runnable finding (runnability is
     enforced only once it is `active`).
@@ -399,7 +410,7 @@ and leaves everything else — including `.secrets/` — untouched.
    `connector_id` (`RULE-CTOR-045`) — a changed identity mints a different
    entity rather than editing this one. Halt and confirm.
 4. **Re-validate.** Run `pipeline-schema-validator` on every touched document,
-   with the same ≤ 5 fix-pass loop. When a pipeline or stream changed, also
+   through the same fix-and-revalidate loop. When a pipeline or stream changed, also
    validate its **referenced closure** — every connection the pipeline references
    (public and private), every connection-scoped private endpoint those
    connections own, and any connection-scoped type maps beside them — each
