@@ -96,7 +96,7 @@ sits on the first of these that fits:
    load-bearing guidance; the prose states what the author must do instead.
 
 Recognising that a sentence makes such a claim is the author's job: deciding it
-from the wording took a list of hand-curated English regexes, which `guards.md`
+from the wording takes a list of hand-curated English regexes, which `guards.md`
 bans and explains. A claim and its pin land in the same commit — an unpinned
 claim is a defect, not a pending task. On the contract's own surface the same
 sentence takes a census disposition instead — `contract-prose.md`.

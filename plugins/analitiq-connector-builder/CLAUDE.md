@@ -86,8 +86,8 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   a `PROBE:` fence comment naming the probe(s) that prove it placed directly
   above it, or cite the `RULE-*` rule that enforces it in the same sentence.
   Recognising that a sentence makes a claim is the author's job, and
-  `.claude/rules/guards.md` says why: deciding it from the wording
-  took a list of hand-curated English regexes, which is banned. Pin the claim
+  `.claude/rules/guards.md` says why: deciding it from the wording takes a
+  list of hand-curated English regexes, which is banned. Pin the claim
   when you write it.
 - A probe that stops matching the contract means the contract moved: update
   the prose AND the probe together, then re-run `write`.

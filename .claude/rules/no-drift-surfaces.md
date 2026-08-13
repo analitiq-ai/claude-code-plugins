@@ -42,7 +42,8 @@ A copy is permitted in exactly these forms:
 
 - decision or mapping logic (e.g. `enum-mappers.md`);
 - a test's assertion target;
-- a curated human-facing summary (e.g. the README support matrix).
+- a curated human-facing summary — a table written for a person weighing
+  options, not for an agent authoring a document.
 
 Every other copy is a drift surface. "Nothing enforces it, so it has to be
 written down" is not one of these forms: the rule registry carries unenforced
