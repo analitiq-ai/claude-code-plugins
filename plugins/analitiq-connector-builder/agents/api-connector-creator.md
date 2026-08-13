@@ -2,6 +2,8 @@
 name: api-connector-creator
 description: Author an API connector JSON document (kind=api) plus its sibling `type-map-read.json` from ProviderFacts and enum classifications. Loads the connector-spec-api skill. Knows nothing about DSN/TLS or database transports. Use when the connector-builder orchestrator has classified a provider as kind=api. Output is a CreatorOutput JSON object containing the connector body and the read-map array — does not write to disk. API connectors carry no write map and no package files.
 tools: Read, Glob, Grep
+skills:
+  - connector-spec-api
 color: blue
 ---
 
@@ -48,9 +50,13 @@ was raised.
 
 ## Required reading
 
-The `connector-spec-api` skill is preloaded. Beyond that, read:
+The `connector-spec-api` skill is preloaded — its `SKILL.md` is already in
+context. Read the rest from the plugin root; later mentions use a file's bare
+name, which resolves against this list. The working directory holds the user's
+artifacts, not the plugin's.
 
-- `spec-auth-flows.md` — the authoritative reference for **every** auth type.
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-auth-flows.md` — the
+  authoritative reference for **every** auth type.
   Worked example connectors ship under
   `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/examples/`; when your
   `auth_type` has no example dir, author from the spec + the closest archetype.

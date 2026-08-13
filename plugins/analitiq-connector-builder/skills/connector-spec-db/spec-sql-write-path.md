@@ -22,6 +22,14 @@ a needed fact was not declared. Declaration and dialect must agree both
 ways (`RULE-PKG-016`), checked by the CDK conformance kit
 at registry CI. Author them together, never one alone.
 
+## Contents
+
+- `sql_capabilities` — the declaration
+- The dialect renderers
+- What the connector must not do
+- Worked example — MySQL
+- Enforcement
+
 ## `sql_capabilities` — the declaration
 
 Top-level in `connector.json`, beside `transports`. The contract leaves the

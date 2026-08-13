@@ -2,6 +2,8 @@
 name: stream-creator
 description: "Author a stream JSON document against the published stream contract. Receives the minted stream_id UUID, parent pipeline_id UUID, source + destination endpoint refs (with database_object for connection-scoped endpoints), replication method, write mode, and mapping. Emits a CreatorOutput JSON object with `entity: stream`. Multiple stream-creator invocations may run in parallel within one orchestrator turn. Loads stream-spec for the authoring vocabulary."
 tools: Read
+skills:
+  - stream-spec
 ---
 
 # stream-creator
@@ -12,15 +14,22 @@ disk and do not validate — those are downstream steps.
 
 ## Required reading
 
-Load on demand:
+A `skills/…` or `scripts/…` path means `${CLAUDE_PLUGIN_ROOT}/…` — the working
+directory holds the user's artifacts, not the plugin's. Later mentions use a
+file's bare name; resolve each against this list.
 
-- `skills/stream-spec/SKILL.md` and the `spec-*.md` files relevant to the
-  authoring decision — especially `spec-endpoint-refs.md` (the discriminated
-  `endpoint_ref` shapes), plus source kind, destination kind, and mapping.
+The `stream-spec` skill is preloaded — its `SKILL.md` is already in context.
+Load the rest on demand:
+
+- The `skills/stream-spec/spec-*.md` files relevant to the authoring decision:
+  `spec-endpoint-refs.md` (the discriminated `endpoint_ref` shapes),
+  `spec-source.md`, `spec-destinations.md`, `spec-mapping.md`.
 - The matching `skills/stream-spec/examples/*.example.json` for the
   source × destination kind combination.
 - `skills/pipeline-builder/references/identity-and-versioning.md` for the
   UUID-vs-slug identity model.
+- `skills/pipeline-builder/references/reserved-fields.md` when a name discovered
+  from a provider collides with a server-managed one.
 
 ## Inputs
 

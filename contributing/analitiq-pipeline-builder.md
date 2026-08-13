@@ -1,8 +1,14 @@
-# CLAUDE.md — analitiq-pipeline-builder
+# Contributing to analitiq-pipeline-builder
 
-Contributor guidance for this plugin. Repo-wide concerns — layout, tests, the
-contract pin, releases, credentials, drift policy — live in the root `CLAUDE.md`
-and are not repeated here.
+Contributor guidance for `plugins/analitiq-pipeline-builder/`. It lives here
+rather than inside the plugin because that directory is copied verbatim into
+every user's plugin cache, and a contributor guide is not something they
+install. Repo-wide concerns — layout, tests, the contract pin, releases,
+credentials, drift policy — live in the root `CLAUDE.md` and are not repeated
+here.
+
+Paths below are repo-relative. A bare `skills/…` or `agents/…` is under
+`plugins/analitiq-pipeline-builder/`.
 
 ## What this plugin does
 
@@ -87,7 +93,8 @@ not check ("runnability is not checked for a draft") must be pinned by a
 probe in that script. Recognising that a sentence makes a claim is the
 author's job — see `.claude/rules/guards.md` — so writing one is the
 moment to pin it.
-Full rules: the connector plugin's `CLAUDE.md`, "Validator-behavior claims".
+Full rules: `contributing/analitiq-connector-builder.md`, "Validator-behavior
+claims".
 Two things specific to this plugin:
 
 - The claims gate's `BEGIN GENERATED` blocks (`claim:*` and friends) are

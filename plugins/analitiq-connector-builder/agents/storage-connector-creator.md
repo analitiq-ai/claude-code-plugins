@@ -2,6 +2,8 @@
 name: storage-connector-creator
 description: Stub agent for connector kinds the engine does not execute. The contract accepts them, so the plugin declines with a structured refusal instead of authoring one (RULE-CTOR-037); the orchestrator routes such a kind here and surfaces the refusal.
 tools: Read
+skills:
+  - connector-spec-storage
 color: blue
 ---
 

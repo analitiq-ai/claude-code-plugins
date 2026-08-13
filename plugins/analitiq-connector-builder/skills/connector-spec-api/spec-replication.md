@@ -16,6 +16,18 @@ against it and let the validator check you:
 covers only the authoring decisions the schema can't express: which
 mapping variant fits a provider, and when to skip replication entirely.
 
+## Contents
+
+- What a replication block declares
+- Single-param cursor (most providers)
+- Bounded-window cursor
+- Wiring (same three places as pagination)
+- More than one cursor mapping
+- What the endpoint does and does not own
+- Supported methods
+- When to omit
+- Common pitfalls
+
 ## What a replication block declares
 
 A cursor mapping ties a record field to the request params filtered on it:

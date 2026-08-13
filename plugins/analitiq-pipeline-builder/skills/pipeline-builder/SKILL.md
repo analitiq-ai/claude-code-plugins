@@ -11,6 +11,18 @@ mint UUID identities, then dispatch creator sub-agents in a specific order. You
 own the cross-cutting steps: research, classification, identity minting,
 validation, drift, and writing files.
 
+## Contents
+
+- Modes
+- Inputs to collect
+- Closed vocabularies
+- Registered rules for every document
+- Required reading
+- Pipeline
+- Edit mode
+- Output
+- Hard rules
+
 ## Modes
 
 Pick the mode from the user's intent:

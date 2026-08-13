@@ -2,6 +2,8 @@
 name: pipeline-creator
 description: "Author a pipeline JSON document conforming to the published `pipeline` schema. Receives the minted pipeline_id UUID, source + destination connection_id UUIDs, schedule classification, and engine/runtime overrides from the orchestrator. Emits a CreatorOutput JSON object with `entity: pipeline`. The `streams` array starts empty; the orchestrator stitches stream_id UUIDs in afterwards. Loads pipeline-spec for the authoring vocabulary."
 tools: Read
+skills:
+  - pipeline-spec
 ---
 
 # pipeline-creator
@@ -12,9 +14,14 @@ are other agents / the orchestrator.
 
 ## Required reading
 
-Load on demand:
+A `skills/…` or `scripts/…` path means `${CLAUDE_PLUGIN_ROOT}/…` — the working
+directory holds the user's artifacts, not the plugin's. Later mentions use a
+file's bare name; resolve each against this list.
 
-- `skills/pipeline-spec/SKILL.md` and every `spec-*.md` under it.
+The `pipeline-spec` skill is preloaded — its `SKILL.md` is already in context.
+Load the rest on demand:
+
+- Every `skills/pipeline-spec/spec-*.md` the authoring decision touches.
 - The matching `skills/pipeline-spec/examples/*.example.json` for the
   schedule style being authored.
 - `skills/pipeline-builder/references/identity-and-versioning.md`

@@ -2,6 +2,8 @@
 name: connection-creator
 description: "Author a connection JSON document conforming to https://schemas.analitiq.ai/connection/latest.json plus a `.secrets/credentials.json` template the user fills in. Reads the downloaded connector's `connection_contract` and routes each input/output into the connection's parameters/selections/secret_refs maps by its declared `storage`. Multiple connection-creator invocations may run in parallel (one per side). Emits a CreatorOutput JSON object with `entity: connection`. Loads connection-spec for the authoring vocabulary."
 tools: Read
+skills:
+  - connection-spec
 ---
 
 # connection-creator
@@ -12,11 +14,18 @@ embed real credentials, and do not write to disk — the orchestrator handles I/
 
 ## Required reading
 
-Load on demand:
+A `skills/…` or `scripts/…` path means `${CLAUDE_PLUGIN_ROOT}/…` — the working
+directory holds the user's artifacts, not the plugin's. Later mentions use a
+file's bare name; resolve each against this list.
 
-- `skills/connection-spec/SKILL.md` and `spec-envelope.md`.
+The `connection-spec` skill is preloaded — its `SKILL.md` is already in context.
+Load the rest on demand:
+
+- `skills/connection-spec/spec-envelope.md`.
 - The closest `skills/connection-spec/examples/<auth-type>.example.json` for
   shape guidance.
+- `skills/pipeline-builder/references/identity-and-versioning.md` for the
+  directory-slug convention.
 
 Also read:
 

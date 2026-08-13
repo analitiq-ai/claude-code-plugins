@@ -12,6 +12,15 @@ given and never rewritten (`RULE-CTOR-045`); treating one as a defect and
 human-readable slugs and are independent of the UUID identity stored inside the
 documents.
 
+## Contents
+
+- Identifier shapes
+- Cross-document references — contract vs. plugin policy
+- Metadata fields
+- Directory layout vs. document identity
+- "Lifecycle" means three unrelated things
+- Server-managed `version` field
+
 ## Identifier shapes
 
 <!-- BEGIN GENERATED: shared-vocabulary -->

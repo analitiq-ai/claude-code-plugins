@@ -17,6 +17,21 @@ Arrow canonical types, in two directions:
 Which map a connector ships is decided by its `kind` (`RULE-PKG-030`): a
 database connector ships both, an API connector the read map alone.
 
+## Contents
+
+- On-disk location
+- File shape
+- Uppercase rule (read maps)
+- `${name}` substitution in regex rules
+- Schemaless / JSON-shaped natives
+- Non-obvious natives (derive, don't guess)
+- API coverage (read map)
+- Database coverage
+- Canonical types
+- Worked example: Postgres (read)
+- Worked example: Postgres (write)
+- Out of scope
+
 ## On-disk location
 
 Both files are **standalone** siblings of `connector.json`:

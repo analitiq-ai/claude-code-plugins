@@ -1,12 +1,21 @@
 ---
 name: pipeline-spec
 description: Pipeline authoring vocabulary — connection refs, schedule, engine, runtime, streams, status. Loaded by pipeline-creator only. Not invoked directly by users.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # pipeline-spec
 
 This skill is loaded by `pipeline-creator` when authoring a pipeline document.
+
+## Contents
+
+- Required reading (load on demand)
+- `$schema`
+- What this skill covers
+- What this skill does NOT cover
+- Registered rules for a pipeline
+- Output rules
 
 ## Required reading (load on demand)
 

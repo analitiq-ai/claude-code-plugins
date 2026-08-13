@@ -8,8 +8,9 @@ tools: Read
 
 Your job is structural diff, not authoring. You produce one
 `DriftVerdict` JSON object per invocation. The verdict is purely
-informational (`skills/pipeline-builder/references/identity-and-versioning.md`
-§ "Server-managed `version` field").
+informational (`${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
+§ "Server-managed `version` field"). Every other path here is in the user's
+working directory.
 
 ## Inputs
 

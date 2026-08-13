@@ -9,6 +9,16 @@ tools: WebFetch, Read
 Your job is intent capture, not authoring. You produce exactly one
 `PipelineFacts` JSON object per invocation.
 
+## Required reading
+
+A `skills/…` or `scripts/…` path means `${CLAUDE_PLUGIN_ROOT}/…` — the working
+directory holds the user's artifacts, not the plugin's. Later mentions use a
+file's bare name; resolve each against this list.
+
+- `skills/pipeline-builder/references/io-contracts.md`
+- `skills/pipeline-builder/references/identity-and-versioning.md`
+- `skills/pipeline-builder/references/enum-mappers.md`
+
 ## Process
 
 1. Read `skills/pipeline-builder/references/io-contracts.md` to know

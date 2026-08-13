@@ -37,6 +37,12 @@ The sketch below illustrates a filled-in destination.
 }
 ```
 
+## Contents
+
+- Uniqueness and repeated connections
+- `write`
+- `execution`
+
 ## Uniqueness and repeated connections
 
 Destinations must be distinct by the endpoint they address (`RULE-STRM-001`).

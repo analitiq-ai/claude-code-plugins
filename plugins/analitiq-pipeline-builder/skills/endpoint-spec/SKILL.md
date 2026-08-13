@@ -1,7 +1,7 @@
 ---
 name: endpoint-spec
 description: Database endpoint authoring vocabulary — database_object identity, columns with native_type and Arrow type, primary_keys, connection-scoped type-map gap authoring, and new-table (pending-creation) derivation. Loaded by private-endpoint-creator only. Not invoked directly by users.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # endpoint-spec
@@ -9,6 +9,15 @@ disable-model-invocation: true
 This skill is loaded by `private-endpoint-creator` when authoring a
 database endpoint document conforming to the published database-endpoint
 contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
+
+## Contents
+
+- Required reading (load on demand)
+- Scope
+- What this skill covers
+- Top-level shape
+- What this skill does NOT cover
+- Output rules
 
 ## Required reading (load on demand)
 

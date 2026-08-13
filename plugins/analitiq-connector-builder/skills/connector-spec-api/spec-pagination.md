@@ -7,6 +7,19 @@ predicate grammar — is owned by the published api-endpoint contract, not
 by this page. Each strategy is a discriminated branch on `type`; the
 sections below take one branch each.
 
+## Contents
+
+- Pagination is wired in three places
+- `limit`: `max` is the provider's cap, `default` is ours
+- `stop_when` is a predicate, not a keyword
+- Pagination is not sync scoping
+- `offset`
+- `page`
+- `cursor`
+- `link`
+- `keyset`
+- Pick the right one
+
 ## Pagination is wired in three places
 
 This is the part authors get wrong. A pagination block **does not create a

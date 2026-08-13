@@ -4,6 +4,14 @@ Every cross-agent payload is a JSON object matching one of the shapes
 below. The orchestrator checks a payload against its shape before
 dispatching the next phase.
 
+## Contents
+
+- `PipelineFacts` (output of `pipeline-provider-researcher`)
+- `MintedIdentities` (orchestrator-local, phase 3)
+- `CreatorOutput` (output of every creator agent)
+- `Diagnostics` (output of `scripts/validate.py`)
+- `DriftVerdict` (output of `pipeline-drift-classifier`)
+
 ## `PipelineFacts` (output of `pipeline-provider-researcher`)
 
 Discriminated by each side's `kind`. Each kind has its own required

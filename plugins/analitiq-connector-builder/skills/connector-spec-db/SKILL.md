@@ -1,7 +1,7 @@
 ---
 name: connector-spec-db
 description: Database connector authoring vocabulary — driver selection, DSN URL templates with bindings and encoding, TLS declarations, resource discovery, read/write type maps, the SQL write path (sql_capabilities + the dialect renderers), and the Python package files. Loaded by db-connector-creator only. Not invoked directly by users.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # connector-spec-db

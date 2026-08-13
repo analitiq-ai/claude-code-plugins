@@ -45,7 +45,10 @@ Read the `ProviderFacts` and `EndpointFacts` fragments in
 `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
 before you research: they state every field to fill and what each must carry.
 Cited `RULE-*` ids resolve in
-`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`.
+`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`, and the
+phrasing tables that map what a provider says onto a closed vocabulary are
+`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/enum-mappers.md`.
+Later mentions use a file's bare name; resolve each against these paths.
 
 ## Process
 

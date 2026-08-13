@@ -103,6 +103,15 @@ jobs:
         # stale prose here misleads every creator agent that reads it.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_rule_reference.py check
+      - name: Check every long skill document's Contents section
+        # A skill document over 100 lines is previewed as often as it is read,
+        # so its Contents section is what tells a reader the rest exists. The
+        # section is derived from the document's own `##` headings, so this
+        # catches one thing: a heading renamed, added or removed above a
+        # Contents left behind. tests/plugins/test_reference_toc.py asserts the
+        # same predicate; this step prints the offending files.
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: python3 scripts/render_reference_toc.py check
       - name: Check the prose census is complete and current
         # Every prose site under analitiq.contracts — each field description
         # and docstring of every pydantic model and every Enum, membership by

@@ -3,6 +3,11 @@
 Phase-by-phase contract for the `connector-builder` orchestrator —
 always loaded by the orchestrator skill (`SKILL.md` §Required reading).
 
+## Contents
+
+- Modes
+- Phases
+
 ## Modes
 
 The orchestrator runs in the mode given by input `mode` (default

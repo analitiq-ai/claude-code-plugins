@@ -31,11 +31,14 @@ packages/
   validator/                      # -> analitiq-validator (PyPI)
 schemas/                          # RENDERED public JSON Schemas -> schemas.analitiq.ai
 census/                           # catalogue of the contract's own prose; NOT shipped
+contributing/                     # contributor guide per plugin; outside the artifact
 scripts/
   render_schemas.py               # renders schemas/ from packages/contract-models
+  render_reference_toc.py         # renders each long skill doc's Contents from its headings
 tests/
   connector_builder/              # suite per plugin; package suites live in packages/*/tests
   pipeline_builder/
+  plugins/                        # gates spanning both plugin trees
 conftest.py                       # puts packages/*/src on sys.path - see "The contract"
 requirements-dev.txt              # runtime deps of the packages + pytest
 ```
@@ -93,12 +96,15 @@ outside `analitiq.contracts`.
 
 **`plugins/<name>/` is a distribution artifact.** Its contents are copied
 verbatim into every user's plugin cache when they install. Tests, scratch
-output, and CI config do not belong inside it — that is why `tests/` sits at
-the repo root, namespaced per plugin, rather than under each plugin.
+output, CI config, and contributor documentation do not belong inside it — that
+is why `tests/` and `contributing/` sit at the repo root, namespaced per plugin,
+rather than under each plugin. A `CLAUDE.md` there is doubly wrong: Claude Code
+does not load one from a plugin root, so it ships to users and instructs nobody.
 
-Each plugin carries its own `CLAUDE.md` with its agents, skills, and authoring
-rules. Read `plugins/<name>/CLAUDE.md` when working inside that plugin; this
-file covers only what spans both.
+Each plugin's contributor guide — its agents, skills, and authoring rules —
+is `contributing/<plugin-name>.md`, outside the artifact for the same reason
+`tests/` is. Read the one for the plugin you are working inside; this file
+covers only what spans both.
 
 ## The contract, and the runtime pin
 

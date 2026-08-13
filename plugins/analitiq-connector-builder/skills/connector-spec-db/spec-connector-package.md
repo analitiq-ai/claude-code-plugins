@@ -10,6 +10,15 @@ An `api` connector ships the definition (`connector.json`,
 `type-map-read.json`, `endpoints/`) and a README (`RULE-PKG-025`) — no Python
 package files (`RULE-CTOR-043`) and no write map (`RULE-PKG-030`).
 
+## Contents
+
+- Required layout
+- `pyproject.toml` (`RULE-PKG-007`)
+- `requirements.txt`
+- `connector.py`
+- `__init__.py` (`RULE-PKG-009`)
+- Enforcement
+
 ## Required layout
 
 The connector root IS the Python package (`RULE-PKG-002`):

@@ -5,6 +5,13 @@ Shared invariant both creator agents must follow. The scopes below are owned by
 `analitiq.contracts.endpoints` and the function forms by
 `analitiq.contracts.connector`; this page is the authoring guide to them.
 
+## Contents
+
+- Expression kinds
+- Logical scopes
+- Function catalog (`RULE-SHRD-007`)
+- DSN placeholders are not value expressions
+
 ## Expression kinds
 
 A value expression is one of:

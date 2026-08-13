@@ -84,6 +84,7 @@ sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 PLUGINS_ROOT = REPO_ROOT / "plugins"
+CONTRIBUTING_ROOT = REPO_ROOT / "contributing"
 CONNECTOR_PLUGIN = PLUGINS_ROOT / "analitiq-connector-builder"
 API_EXAMPLE = CONNECTOR_PLUGIN / "skills" / "connector-spec-api" / "examples" / "api-key"
 DB_EXAMPLE = CONNECTOR_PLUGIN / "skills" / "connector-spec-db" / "examples" / "postgresql"
@@ -1503,8 +1504,12 @@ def _fence_docs() -> list[Path]:
     Fence bookkeeping asks a different question, and for it those exemptions
     are not a narrowing but a blind spot: a fence naming a deleted probe goes
     unreported in exactly the files nobody rereads.
+
+    `contributing/` is scanned for the same reason. A plugin's contributor
+    guide states validator behaviour as readily as the prose that ships, and
+    living outside the artifact does not make the claim any less rot-prone.
     """
-    return sorted(PLUGINS_ROOT.rglob("*.md"))
+    return sorted([*PLUGINS_ROOT.rglob("*.md"), *CONTRIBUTING_ROOT.rglob("*.md")])
 
 
 def dangling_fence_ids() -> list[str]:

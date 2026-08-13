@@ -89,7 +89,10 @@ sits on the first of these that fits:
 2. **A probe fence.** A `Claim`/probe in that script, with
    `<!-- PROBE: <id> -->` directly above the sentence. Gated both ways: a fence
    naming an id no probe defines fails the build, and a probe nothing references
-   fails the build. Nothing checks that the sentence beside the fence describes
+   fails the build. The fence scan reaches `contributing/` as well as
+   `plugins/` — a contributor guide states validator behaviour as readily as
+   prose that ships, and sitting outside the artifact makes the claim no less
+   rot-prone. Nothing checks that the sentence beside the fence describes
    what the probe measures — that half is the reader's.
 3. **A `RULE-*` citation** naming what enforces the behaviour (rung 1).
 4. **No claim at all.** "The validator does not check this" is rarely
@@ -106,6 +109,11 @@ sentence takes a census disposition instead — `contract-prose.md`.
 - A fact binds only where the authoring agent reads it: its own definition, or
   a skill its instructions load. Correct content in a reference no agent opens
   teaches nothing.
+- A skill document long enough to be previewed rather than read carries a
+  `## Contents` section, so a partial read still shows what the rest holds.
+  Never hand-write or hand-edit one: it is derived from the document's own `##`
+  headings by `scripts/render_reference_toc.py`, whose `check` is the gate.
+  Renaming a section is therefore two edits — the heading, then `write`.
 - One canonical prose site per fact; every other mention is a citation (rung 1)
   or the same generated block (rung 3). A corrected fact is corrected at the
   canonical site and in every citing file by the same commit.

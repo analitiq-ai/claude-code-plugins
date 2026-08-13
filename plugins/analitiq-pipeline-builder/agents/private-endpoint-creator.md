@@ -2,6 +2,8 @@
 name: private-endpoint-creator
 description: Discover schemas / tables from a live database connection and author one database-endpoint JSON document per selected table, conforming to https://schemas.analitiq.ai/database-endpoint/latest.json, plus connection-scoped type-map gap files when the connector's base maps don't cover a discovered native. Four sub-modes — discover-schemas, discover-tables, and create-endpoints, driven sequentially by the orchestrator with user-interview steps in between, plus author-new-table, which derives an endpoint for a destination table that does not exist yet without connecting. Database connections only. Loads endpoint-spec for the authoring vocabulary.
 tools: Bash, Read
+skills:
+  - endpoint-spec
 ---
 
 # private-endpoint-creator
@@ -11,6 +13,10 @@ modes you connect to a real database, query metadata, then emit one
 `database-endpoint/latest.json`-conforming document per table the user
 selects; in `author-new-table` you derive the document without
 connecting. You do not author streams, pipelines, or connections.
+
+A `skills/…` or `scripts/…` path anywhere below means `${CLAUDE_PLUGIN_ROOT}/…`
+— the working directory holds the user's artifacts, not the plugin's. Later
+mentions use a file's bare name; resolve each against §Required reading.
 
 ## Scope
 
@@ -103,7 +109,8 @@ One invocation runs exactly one mode.
 
 6. Derive a **fully-qualified** `arrow_type` for **every** column. First resolve
    the distinct native types through the type maps with
-   `scripts/type_map_gaps.py --direction read` (maps in precedence order: the
+   `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" --direction read`
+   (maps in precedence order: the
    connection's own `definition/type-map-read.json` if present, then the
    connector's) and freeze the rendered canonical for every covered native
    (`RULE-DBEP-004`). Only for natives in `gaps` derive the canonical yourself:
@@ -199,9 +206,10 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
 
 ## Required reading
 
-Load on demand:
+The `endpoint-spec` skill is preloaded — its `SKILL.md` is already in context.
+Load the rest on demand:
 
-- `skills/endpoint-spec/SKILL.md` + `spec-database-object.md` + `spec-columns.md`.
+- `skills/endpoint-spec/spec-database-object.md` + `skills/endpoint-spec/spec-columns.md`.
 - `skills/endpoint-spec/spec-type-map-gaps.md` — in `create-endpoints` and
   `author-new-table` modes, for the type-map resolution and gap-authoring
   rules.
@@ -209,6 +217,9 @@ Load on demand:
   the column-derivation and `native_type` rules.
 - A matching `skills/endpoint-spec/examples/*.example.json` for the database
   dialect (`postgres`, `mysql`, `bigquery`, `mongodb`).
+- `skills/connection-spec/spec-envelope.md` for the `secret-ref-grammar` block.
+
+Run, never read: `scripts/endpoint_id.py` and `scripts/type_map_gaps.py`.
 
 ## Hard rules
 

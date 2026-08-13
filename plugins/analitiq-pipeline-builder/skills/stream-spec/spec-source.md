@@ -40,6 +40,15 @@ the contract requires.
 }
 ```
 
+## Contents
+
+- Field references are verbatim
+- `selected_columns` (database only, `RULE-STRM-014`)
+- `filters`
+- `replication`
+- `database_pagination` (database only)
+- `primary_keys`
+
 ## Field references are verbatim
 
 Copy each source-endpoint field name byte-for-byte from the endpoint document

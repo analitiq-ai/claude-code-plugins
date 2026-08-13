@@ -1,13 +1,22 @@
 ---
 name: connection-spec
 description: Connection authoring vocabulary — the parameters/selections/discovered/secret_refs envelope, storage-driven routing, and the `.secrets/` template workflow. Loaded by connection-creator only. Not invoked directly by users.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # connection-spec
 
 This skill is loaded by `connection-creator` when authoring a connection
 document: one user's configured **instance** of a connector.
+
+## Contents
+
+- Required reading (load on demand)
+- What this skill covers
+- Registered rules for a connection
+- What this skill does NOT cover
+- Draft connections, and what a clean validation does not prove
+- Output rules
 
 ## Required reading (load on demand)
 

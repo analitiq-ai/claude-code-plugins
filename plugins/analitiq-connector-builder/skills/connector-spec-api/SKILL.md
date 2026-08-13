@@ -1,7 +1,7 @@
 ---
 name: connector-spec-api
 description: API connector authoring vocabulary — auth flows, HTTP transports, pagination, replication, post-auth discovery. Loaded by api-connector-creator only. Not invoked directly by users.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # connector-spec-api
