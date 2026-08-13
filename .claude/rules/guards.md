@@ -80,7 +80,7 @@ needed yet.
   Guards whose verdicts a human keeps overriding are review items wearing a
   test's clothes.
 
-## The state every remaining guard is in
+## The state every guard is in
 
 - **Non-vacuous.** Zero matched citation/fence/example sites is a red build, not
   a silent exemption. An extractor that finds nothing has stopped measuring, and
@@ -97,10 +97,11 @@ needed yet.
   docstring. That sentence is how the next contributor learns the check is not
   the whole obligation.
 
-## What the ban does not relax
+## What this does not relax
 
-The pinning requirement did not go away, only its detection. A sentence stating
-what the validator does or does not check is still pinned —
+Nothing above relaxes the requirement to pin a fact; it constrains only what may
+detect one. A sentence stating what the validator does or does not check is
+pinned —
 `plugin-prose.md` § "A sentence about what the validator checks" is the ladder,
 and `contract-prose.md` is the same obligation on the contract's own surface.
 Recognising that a sentence makes such a claim is the author's job, and this

@@ -17,10 +17,13 @@ either references that owner or is pinned to it by a test that fails when the
 two diverge. A hand-maintained copy is a *drift surface* — it rots silently when
 the owner changes.
 
-The property that follows: when an owning source changes, exactly one place
-needs a human edit, and anything that forgets fails loudly.
+The property that follows: a change to an owning source reaches every place
+that carries the value, and any place it does not reach fails loudly.
 
 ## What has an owner
+
+A value has an owner when some source is authoritative for it. At least
+these do:
 
 - schema-owned enums and vocabularies (kinds, auth types, transports,
   encodings, pagination styles, …) — owned by the published contract and
@@ -55,7 +58,8 @@ the record does not carry.
   the worked example — so divergence fails the build. An unpinned copy of a
   contract value is a defect, not documentation.
 - **Minimal.** One canonical restatement plus references, never N parallel
-  copies. The number of copies of a value never rises.
+  copies. An edit touching a value already copied to several places reduces
+  that number where it can, and never raises it.
 - **In lockstep.** Where a pin must appear at several call sites (install
   command, CI, docs), every site is identical and cross-references the others,
   so they move together.

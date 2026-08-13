@@ -293,8 +293,7 @@ saying a shape is fine satisfies a substring check exactly as well as one
 forbidding it. Between them those make its coverage undecidable — the rule file
 carries that argument and the waiver-registry one in full.
 
-`.claude/rules/` holds the invariants this policy implies, each stated as the
-state its surface is in rather than a step in an edit, tracked
+`.claude/rules/` holds the invariants this policy implies, tracked
 so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
 state and stays ignored). Read the one that matches what you are editing:
 

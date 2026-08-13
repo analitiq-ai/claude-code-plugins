@@ -23,7 +23,7 @@ in a generated block no one may hand-edit.
 
 - **Craft** — judgment no schema expresses: when to apply a rule, what to ask
   the user, provider gotchas, orchestration order, what the plugin refuses.
-  Hand-written freely.
+  Hand-written freely; no rung applies to it.
 - **Fact** — anything a source of truth owns: field shapes, enums, patterns,
   bounds, defaults, `$schema` URLs, validator behavior — **including what it
   does NOT check** — engine/CDK behavior, version-coupled claims ("planned, not
