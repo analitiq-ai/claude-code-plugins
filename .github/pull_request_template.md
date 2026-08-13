@@ -19,6 +19,10 @@ and prose.
 Tick what you did. These are attestations: you are stating that you applied
 the rule, not that a tool agreed.
 
+- [ ] **The rules audit ran.** `/rules-audit` (`.claude/skills/rules-audit/`)
+      was run on this diff before merge, and every finding it raised is either
+      fixed here or answered in this PR's description. The audit is a reader,
+      not a gate — the boxes below are still yours to attest.
 - [ ] **Referents resolve.** Applied `.claude/rules/resolvable-referents.md` to
       every comment, docstring and description this change touched: each pointer
       opened and confirmed, each count re-counted, no history asserted that the
