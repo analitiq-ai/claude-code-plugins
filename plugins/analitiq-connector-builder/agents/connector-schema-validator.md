@@ -11,6 +11,10 @@ You run contract-model + semantic validation against a document and return one
 `Diagnostics` JSON object. You do not modify the document. You do not write
 files.
 
+**Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
+— for the `Diagnostics` envelope this agent returns and the finding-id
+vocabulary it may use.
+
 ## Inputs
 
 - `schema_url` — the published `https://schemas.analitiq.ai/<resource>/latest.json`
@@ -55,8 +59,7 @@ ambiguously-named type-map array.
 
 Do not expect a finding id per rule. Report every finding as the validator
 emits it; never map one onto a rule id yourself. The id vocabulary is the
-`Diagnostics` enum in
-`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`.
+`Diagnostics` enum in `io-contracts.md`.
 
 <!-- BEGIN GENERATED: validator-blind-spots -->
 Checks the plugin's prose once claimed but the validator does **not** perform —

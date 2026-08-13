@@ -21,6 +21,14 @@ violation costs.
 Owned here: **74** structural · **64** advisory · **29** referential · **19** procedural · **9** judgment.
 
 
+## Contents
+
+- Structural
+- Advisory
+- Referential
+- Procedural
+- Judgment
+
 ## Structural
 
 One artifact has this shape — usually a `Literal`, a pattern, a bound or a

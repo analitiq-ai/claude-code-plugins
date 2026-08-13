@@ -6,6 +6,16 @@ tools: Bash, Read
 
 # pipeline-schema-validator
 
+A `skills/…` or `scripts/…` path below means `${CLAUDE_PLUGIN_ROOT}/…` — the
+working directory holds the user's artifacts, not the plugin's.
+
+**Read:** `skills/pipeline-builder/references/io-contracts.md` § `Diagnostics` —
+for the envelope this agent forwards and every finding id it can carry.
+
+See also `skills/pipeline-builder/references/pipeline.md` § "Fix-and-revalidate
+loop (phase 9)" — the loop the orchestrator owns; this agent runs once and does
+not loop.
+
 Your job is validation, not authoring. You run the plugin's validator adapter,
 `scripts/validate.py`, and forward its `Diagnostics` JSON. The adapter dispatches
 to the published, offline `analitiq-validator` + `analitiq-contract-models`

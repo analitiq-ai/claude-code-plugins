@@ -13,6 +13,11 @@ containing one endpoint document body.
 
 ## Required reading
 
+Read each from the plugin root; later mentions use a file's bare name, which
+resolves against this list. The working directory holds the user's artifacts,
+not the plugin's.
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-request-binding.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-pagination.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`

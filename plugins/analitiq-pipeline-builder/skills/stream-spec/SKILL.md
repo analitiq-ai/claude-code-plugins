@@ -1,7 +1,7 @@
 ---
 name: stream-spec
 description: Stream authoring vocabulary — endpoint refs, source filters/replication/pagination, destinations write modes, mapping assignments, validation rules. Loaded by stream-creator only. Not invoked directly by users.
-disable-model-invocation: true
+user-invocable: false
 ---
 
 # stream-spec
@@ -18,6 +18,16 @@ version-pinned variant:
 | Connection | `connections/<slug>/connection.json` | `https://schemas.analitiq.ai/connection/latest.json` |
 | Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
 <!-- END GENERATED: schema-urls -->
+
+## Contents
+
+- Required reading (load on demand)
+- What this skill covers
+- Top-level shape
+- Closed vocabularies
+- What this skill does NOT cover
+- Registered rules for a stream
+- Output rules
 
 ## Required reading (load on demand)
 

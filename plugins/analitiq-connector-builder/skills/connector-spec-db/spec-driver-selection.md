@@ -15,6 +15,15 @@ per-system capability table, because a frozen copy of researched facts
 rots silently and biases authoring toward whichever systems happen to be
 listed.
 
+## Contents
+
+- Decision order
+- 1. First-class ADBC drivers
+- 2. Flight SQL
+- Do not use the JDBC bridge
+- 3. Native bulk-load protocols (no ADBC)
+- Constraints from the engine contract
+
 ## Decision order
 
 Apply in order; stop at the first match.

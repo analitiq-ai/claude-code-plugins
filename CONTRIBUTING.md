@@ -6,8 +6,9 @@ Read first, in this order:
 - **`CLAUDE.md`** — the drift policy, the runtime validator pin, the PR review
   loop, and the release model. It is the authority on all of those; nothing here
   restates them.
-- **`plugins/<name>/CLAUDE.md`** — the authoring rules for the plugin you are
-  working inside.
+- **`contributing/<plugin-name>.md`** — the authoring rules for the plugin you
+  are working inside. It sits here rather than in `plugins/<name>/` because that
+  directory ships verbatim to every user who installs the plugin.
 
 This document carries only what those do not: **how a class of defect gets
 closed.** Two rules — one for filing, one for closing.

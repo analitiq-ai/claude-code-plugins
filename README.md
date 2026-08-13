@@ -67,7 +67,7 @@ pytest
 ```
 
 Contributor guidance lives in `CLAUDE.md` (repo-wide) and
-`plugins/<name>/CLAUDE.md` (per plugin);
+`contributing/<plugin-name>.md` (per plugin);
 [CONTRIBUTING.md](CONTRIBUTING.md) carries the filing and closing discipline —
 read it before opening or closing an issue.
 

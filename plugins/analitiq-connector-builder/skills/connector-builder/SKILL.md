@@ -11,6 +11,15 @@ then dispatch the matching creator sub-agent. You own the cross-cutting
 steps: research, classification, validation, drift classification, and
 writing files.
 
+## Contents
+
+- Inputs to collect
+- Modes
+- Required reading
+- Pipeline
+- Output
+- Hard rules
+
 ## Inputs to collect
 
 - `provider` (required) — provider name or slug (e.g. `stripe`, `postgresql`).

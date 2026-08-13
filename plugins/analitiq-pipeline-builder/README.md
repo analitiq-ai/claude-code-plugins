@@ -87,7 +87,7 @@ connectors themselves.
 | Schemas | [schemas.analitiq.ai](https://schemas.analitiq.ai) | The published JSON Schema contract everything validates against. |
 
 Architecture, the agent chain, and internals are documented in
-[CLAUDE.md](CLAUDE.md).
+[contributing/analitiq-pipeline-builder.md](https://github.com/analitiq-ai/claude-code-plugins/blob/main/contributing/analitiq-pipeline-builder.md).
 
 ## License
 

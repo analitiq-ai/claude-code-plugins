@@ -20,6 +20,17 @@ The `columns` array holds:
 Carries 3 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-column -->
 
+## Contents
+
+- `name`
+- `native_type`
+- `arrow_type`
+- `nullable`
+- `default`
+- `comment`
+- `ordinal_position`
+- Registered endpoint rules
+
 ## `name`
 
 Verbatim from introspection — no case-folding, quoting or other normalisation

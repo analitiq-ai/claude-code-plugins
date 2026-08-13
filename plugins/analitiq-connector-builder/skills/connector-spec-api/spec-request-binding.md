@@ -10,6 +10,17 @@ Rule ids below (`RULE-ENDP-*`) are registry ids;
 document it grades and what a violation costs. Cite them rather than
 re-deriving them.
 
+## Contents
+
+- The model: declare the input, then bind it
+- Binding rules
+- What must NOT go directly in a request slot
+- What legitimately stays direct
+- Params carry the *request-input* type
+- The same value in two places is two params
+- Writes: `from_input`
+- Write path segments: `path_params` + `from_input`
+
 ## The model: declare the input, then bind it
 
 A dynamic request value is declared **once** as a param — the typed contract for

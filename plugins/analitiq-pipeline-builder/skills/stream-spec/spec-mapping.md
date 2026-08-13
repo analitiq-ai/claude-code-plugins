@@ -64,6 +64,13 @@ Each `assignments[]` entry:
 }
 ```
 
+## Contents
+
+- `assignments` order is significant (`RULE-STRM-019`)
+- `assignments[].value`
+- `assignments[].target`
+- `arrow_type` vocabulary
+
 ## `assignments` order is significant (`RULE-STRM-019`)
 
 Preserve the order a caller gave you and never re-sort the array for tidiness —

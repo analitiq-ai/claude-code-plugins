@@ -4,6 +4,16 @@ The `source` and every `destinations[]` entry carry an `endpoint_ref`. It is a
 **discriminated union on `scope`** (`analitiq.contracts.stream.EndpointRef`) —
 each scope has its own shape and its own required fields, tabled below.
 
+## Contents
+
+- Prefer the ref discovery handed you
+- `scope: "connector"` — public connector endpoint (API)
+- `scope: "connection"` — private database endpoint
+- `connection_id`
+- Uniqueness
+- Cross-document consistency
+- Connector-side endpoint verification (`connector-endpoint-ref`)
+
 ## Prefer the ref discovery handed you
 
 When endpoint discovery (or a downloaded connector's endpoint set, or a

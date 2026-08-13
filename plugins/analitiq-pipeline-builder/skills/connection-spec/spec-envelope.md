@@ -6,6 +6,13 @@ post-auth-output name. There is no single `values` object — the plugin routes
 each key into the right map itself, driven entirely by the connector's contract.
 Omit any map that would be empty (`RULE-SHRD-004`).
 
+## Contents
+
+- Routing rule (the whole thing)
+- Type fidelity
+- TLS verification needs its CA material (`RULE-CONN-008`)
+- Secrets — reference, never embed (`RULE-CONN-009`)
+
 ## Routing rule (the whole thing)
 
 Read the downloaded connector's `connection_contract` and route each

@@ -6,6 +6,17 @@ Per-auth-type authoring craft. `auth` is a discriminated union on `type`
 each section below carries is the craft that shape cannot express, and a
 pointer to a worked example under `examples/` where one ships.
 
+## Contents
+
+- `api_key`
+- `basic_auth`
+- `oauth2_authorization_code`
+- `oauth2_client_credentials`
+- `jwt`
+- `credentials`
+- `aws_iam`
+- `none`
+
 ## `api_key`
 
 The API key value itself lives in `connection_contract.inputs`

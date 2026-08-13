@@ -5,6 +5,15 @@ inputs differ. Its field set, their types and which are mandatory are
 `ConnectionContract` in the published connector schema — read them there rather
 than from a copy here.
 
+## Contents
+
+- Per-input fields (`ConnectionContractInput`)
+- API vs DB inputs
+- What belongs in the contract at all
+- Post-auth outputs
+- Cross-input validation (`validation`)
+- Drift detection
+
 ## Per-input fields (`ConnectionContractInput`)
 
 `source`, `phase`, `storage` and `type` each draw from a closed vocabulary the

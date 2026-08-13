@@ -256,6 +256,8 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
 def render() -> str:
     from analitiq.contracts.shared.rule_record import TIERS
 
+    import render_reference_toc
+
     rules = _load_rules()
     models = _model_index()
     by_tier = {tier: [r for r in rules if r.tier == tier] for tier in TIERS}
@@ -265,7 +267,12 @@ def render() -> str:
     for tier in TIERS:
         if by_tier[tier]:
             out += _tier_section(tier, by_tier[tier], models)
-    return "".join(out)
+    # This document is long enough to need a Contents section and is generated
+    # in full, so it is the one place that section cannot be rendered by
+    # `render_reference_toc` writing into the file. Call the same function
+    # instead of formatting a second copy of the section by hand — the two
+    # would otherwise be free to disagree, and its `check` grades this file.
+    return render_reference_toc.render_text("".join(out))
 
 
 def main(argv: list[str]) -> int:

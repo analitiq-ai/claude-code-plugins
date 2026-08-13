@@ -10,6 +10,16 @@ color: red
 You compare two connector documents and produce one `DriftVerdict` JSON
 object.
 
+## Required reading
+
+Read each from the plugin root; later mentions use a file's bare name, which
+resolves against this list. The input paths below are elsewhere on disk.
+
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
+  — the `DriftVerdict` shape.
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
+  — the release table the bump classification follows.
+
 ## Inputs
 
 - `previous_release_path` — absolute path to the prior released

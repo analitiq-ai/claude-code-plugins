@@ -2,6 +2,15 @@
 
 Pin every I/O between phases and sub-agents as a JSON Schema fragment.
 
+## Contents
+
+- ProviderFacts (discriminated union by kind)
+- EndpointFacts (per-resource field schema — API fan-out only)
+- Diagnostics
+- DriftVerdict
+- CreatorOutput
+- EndpointCreatorOutput
+
 ## ProviderFacts (discriminated union by kind)
 
 `ProviderFacts` is the researcher's **coverage of the published contract** —

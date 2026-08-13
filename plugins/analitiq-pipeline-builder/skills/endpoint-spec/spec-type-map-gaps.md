@@ -9,6 +9,14 @@ map in each direction, and hard-errors on a type neither covers — which is why
 connection rule may only close a gap the connector leaves (`RULE-TMAP-018`). Discovery is when the gap is visible and fixable: this file governs
 authoring the connection-scoped maps that close it.
 
+## Contents
+
+- Files
+- Gap detection
+- Registered rules for a type map
+- Authoring rules
+- What a clean result does not prove
+
 ## Files
 
 | Direction | File | Validates as entity |
