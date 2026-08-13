@@ -35,11 +35,10 @@ CLAIM_TRIGGERS = (
 )
 ```
 
-A list of exactly that shape decided, in CI, whether a sentence in plugin prose
-asserted validator behaviour. It is gone. Do not write more, in any file, for
-any property — validator behaviour, destructive routes, "the doc still teaches
-it", tone, completeness. A check needing to know what the English means is a
-rule in this directory and a review item, not code.
+Do not write one, in any file, for any property — validator behaviour,
+destructive routes, "the doc still teaches it", tone, completeness. A check
+needing to know what the English means is a rule in this directory and a review
+item, not code.
 
 The shape is not always a tuple of regexes. A single `in` test is the same
 thing, and so is one phrase used to locate the sentence a second assertion then

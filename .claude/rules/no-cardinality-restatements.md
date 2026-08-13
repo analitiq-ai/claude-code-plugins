@@ -17,10 +17,6 @@ A record is where a count rots furthest from the reader who could catch it. Its
 `statement` renders verbatim into the plugin references agents author against,
 and its `rationale` ships to PyPI inside the wheel's `rules.json` — one count
 reaching users through two surfaces, neither of which re-reads the sentence.
-`RULE-ENDP-037` said predicates were used in two places while the contract read
-them in every paginator's stop condition, in a write response's success
-condition, and in every cross-input validation rule — and every gate in this
-repo stayed green.
 
 ## The invariant
 
@@ -52,9 +48,6 @@ So a count is correct the day it is written, and adding a member falsifies it
 | "the two tracking identifiers" | name what makes an identifier a tracking one |
 | "both caps may be omitted" | "each cap may be omitted" |
 | "the three discovery actions" | "the discovery actions" |
-
-The first row is not hypothetical: that sentence shipped in this repo's prose
-and was swept out, which is why it heads the list.
 
 The fix always has the same shape — replace the number with the **rule that
 decides membership**, or defer to the enumeration that follows ("named below",

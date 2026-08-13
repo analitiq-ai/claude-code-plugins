@@ -16,8 +16,7 @@ cases".
 every referent in the sentence, or the sentence states the fact instead of
 pointing at it.
 
-Apply it while you write. Every case below is a real finding from this repo's
-review history, not an invented example.
+Apply it while you write.
 
 ## The cases
 
