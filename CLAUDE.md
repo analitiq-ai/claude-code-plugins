@@ -274,7 +274,7 @@ exception one level up.
 The file outlives the change that wrote it, and the reader has the file, not the
 change. So state what is true, never when it became true — "creators are routed
 to their spec skill", not "the wiring this change extended".
-`.claude/rules/resolvable-referents.md` is the checklist for both halves.
+`.claude/rules/resolvable-referents.md` is the invariant covering both halves.
 
 **A check may match text to LOCATE something. It may never match text to DECIDE
 something.** Locating is lexical — a backticked identifier, a fenced block, a
@@ -293,7 +293,7 @@ saying a shape is fine satisfies a substring check exactly as well as one
 forbidding it. Between them those make its coverage undecidable — the rule file
 carries that argument and the waiver-registry one in full.
 
-`.claude/rules/` holds the how-to-behave checklists this policy implies, tracked
+`.claude/rules/` holds the invariants this policy implies, tracked
 so they reach anyone with a clone (the rest of `.claude/` is local Claude Code
 state and stays ignored). Read the one that matches what you are editing:
 

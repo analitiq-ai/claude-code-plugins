@@ -5,33 +5,39 @@ paths:
   - "rules/records/*.yaml"
 ---
 
-# Rule: every referent must resolve for the reader
+# Rule: every referent resolves for the reader
 
-Applies to every comment, docstring, field description, `.md` and rule record
-this repo tracks. A referent is anything a sentence points at instead of
-saying: a ticket number, a path, a name, a moment in time, "the rule above",
-"the four cases".
+Governs every comment, docstring, field description, `.md` and rule record this
+repo tracks. A referent is anything a sentence points at instead of saying: a
+ticket number, a path, a name, a moment in time, "the rule above", "the four
+cases".
 
 **The invariant:** a reader holding nothing but a clone of this repo can resolve
 every referent in the sentence, or the sentence states the fact instead of
 pointing at it.
 
-Apply it while you write. Every case below is a real finding from this repo's
-review history, not an invented example.
+A referent resolves only when it has been resolved — the file opened, the tests
+counted, the paragraph above read, the regex run. One that "obviously" resolves
+is exactly the one that has rotted before. One that resolves only because the
+writer holds something the reader does not — an untracked file, a tracker login,
+the pull request open in a tab — does not resolve.
 
-## The cases
+Where it does not resolve, the sentence states the fact instead of pointing at
+it: almost always shorter, and it cannot rot.
+
+## What violates it
 
 - **A ticket or pull-request reference.** A bare `(#123)`, `issue #89`, the
   cross-repo `analitiq-engine#406`, a tracker URL. These resolve only for
   someone with a login, and often not even then — the tracker outlives neither
-  the argument nor the decision. State the mechanism the ticket was standing in
-  for. The exempt surfaces are the ones whose subject IS the tracker; the root
+  the argument nor the decision. State the mechanism the ticket stood in for.
+  The exempt surfaces are the ones whose subject IS the tracker; the root
   `CLAUDE.md` lists them.
 - **A path the reader's clone does not contain.** A `.claude/` path outside
   `rules/` (the rest of that tree is ignored, so the citation resolved only on
   the machine that wrote it), or any path `.gitignore` excludes — `docs/`,
-  `htmlcov/`, `dist/`. Name the artifact and the repo that owns it, or state
-  the fact the path was standing in for.
+  `htmlcov/`, `dist/`. Name the artifact and the repo that owns it, or state the
+  fact the path stood in for.
 - **A pointer to something that does not exist.** "(the re-add policy above)"
   where nothing above states a re-add policy — which shipped into a published
   JSON Schema. "the breaking change below", resolving to a different change than
@@ -48,44 +54,19 @@ review history, not an invented example.
   old one is not deleted, and the sentence now says it twice — with the less
   accurate half surviving.
 - **A justification that does not justify.** A comment explaining why a
-  character in a regex is load-bearing, citing an example that another rule
-  handles anyway. The code is right and the stated reason is not, so the next
-  person removes the character.
+  character in a regex is load-bearing, citing an example another rule handles
+  anyway. The code is right and the stated reason is not, so the next person
+  removes the character.
 - **A referent that expires.** "the wiring this PR extended", "the hole this
   commit closed", "the round-3 finding". A file outlives the change that wrote
   it, so these point at a moment the reader is not in. The fix is always the
   same: say what changed, not when. A CI workflow or release script whose
   runtime subject genuinely IS the pull request under check is not this defect;
   both shapes exist in this repo and read identically.
-- **An unmarked path in running prose.** `see docs/thing.md` in bare prose is
-  as unresolvable as a backticked one and harder to spot. Mark paths you cite:
-  it makes them legible, and it makes the citation visible to the next reader
-  as a citation rather than as a word with a slash in it.
-
-## How to apply it
-
-On every prose or comment edit, for each referent in the changed text:
-
-1. **Name what it points at**, concretely — a file, a symbol, a paragraph, a
-   number.
-2. **Resolve it, don't assume it.** Open the file. Count the tests. Read the
-   paragraph above. Run the regex. A referent that "obviously" resolves is
-   exactly the one that has rotted before.
-3. If it does not resolve, **state the fact instead of pointing at it.** That is
-   almost always shorter, and it cannot rot.
-4. If it resolves only because you have something the reader does not — an
-   untracked file, a tracker login, the PR open in a tab — treat it as not
-   resolving.
-
-## Quick test
-
-Run this on every referent you write:
-
-> Hand this file to someone with a fresh clone and no other context. Can they
-> follow every pointer in the sentence you just wrote?
-
-If the answer needs "well, they'd also need…", the sentence states the fact
-instead.
+- **An unmarked path in running prose.** `see docs/thing.md` in bare prose is as
+  unresolvable as a backticked one and harder to spot. Cited paths are marked:
+  it makes them legible, and it makes the citation visible to the next reader as
+  a citation rather than a word with a slash in it.
 
 ## Bare deletion is not the fix
 
