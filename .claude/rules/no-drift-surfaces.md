@@ -53,10 +53,11 @@ the record does not carry.
 
 ## The state a permitted copy is in
 
-- **Pinned.** A copy of a contract-owned value is pinned by a drift test that
-  reads the contract package — `tests/connector_builder/test_schema_drift.py` is
-  the worked example — so divergence fails the build. An unpinned copy of a
-  contract value is a defect, not documentation.
+- **Pinned.** A copy is pinned by a test that reads the owner and fails on
+  divergence, whichever source the owner is —
+  `tests/connector_builder/test_schema_drift.py`, reading the contract package,
+  is the worked example. An unpinned copy of an owned value is a defect, not
+  documentation.
 - **Minimal.** One canonical restatement plus references, never N parallel
   copies. An edit touching a value already copied to several places reduces
   that number where it can, and never raises it.
