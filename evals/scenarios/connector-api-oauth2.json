@@ -1,0 +1,95 @@
+{
+  "id": "connector-api-oauth2",
+  "plugin": "analitiq-connector-builder",
+  "network": true,
+  "why": "An OAuth2 connector is where the value-expression obligations all land at once, and every one of them is a rule nothing rejects: a `${...}` placeholder in a slot that takes characters literally, a ref path whose leading token patterns but whose tail resolves to nothing, a function name documentation calls planned, a token endpoint's value pre-computed instead of derived at connection time. Each of those produces a document that validates and then fails on the first real request. It also exercises the endpoint fan-out, which no other scenario reaches.",
+  "seed": [],
+  "prompt": "Build an API connector with connector_id xero for the Xero Accounting API, authenticating with OAuth2. Author the connector and an endpoint document for the Invoices resource. Do not ask me questions; make a reasonable choice where something is not stated, and ground every fact in Xero's own developer documentation.",
+  "expect": "build",
+  "validate": [
+    {
+      "glob": "xero/definition/connector.json",
+      "schema_url": "https://schemas.analitiq.ai/connector/latest.json"
+    },
+    {
+      "glob": "xero/definition/endpoints/*.json",
+      "schema_url": "https://schemas.analitiq.ai/api-endpoint/latest.json"
+    },
+    {
+      "glob": "xero/definition/type-map-read.json",
+      "schema_url": "https://schemas.analitiq.ai/type-map-read/latest.json"
+    }
+  ],
+  "docs": {
+    "connector": {
+      "glob": "xero/definition/connector.json"
+    }
+  },
+  "also_covers": [
+    "RULE-SHRD-006",
+    "RULE-SHRD-007",
+    "RULE-SHRD-008",
+    "RULE-SHRD-009",
+    "RULE-SHRD-010",
+    "RULE-CTOR-027"
+  ],
+  "assert": [
+    {
+      "doc": "connector",
+      "path": "kind",
+      "equals": "api",
+      "rule": "RULE-CTOR-033"
+    },
+    {
+      "doc": "connector",
+      "path": "connector_id",
+      "equals": "xero",
+      "rule": "RULE-CTOR-042"
+    },
+    {
+      "doc": "connector",
+      "path": "auth.type",
+      "matches": "^oauth2",
+      "rule": "RULE-CTOR-027",
+      "note": "the auth type the provider actually operates, not the archetype nearest to hand"
+    },
+    {
+      "doc": "connector",
+      "path": "connection_contract.inputs.client_secret.storage",
+      "equals": "secrets",
+      "rule": "RULE-CONN-006",
+      "note": "storage is what routes an input into a connection's map; a client secret routed anywhere else lands in a tracked file"
+    },
+    {
+      "doc": "connector",
+      "path": "connection_contract.inputs.client_id.storage",
+      "equals": "connection.parameters",
+      "rule": "RULE-CONN-006"
+    }
+  ],
+  "artifacts": [
+    {
+      "glob": "xero/README.md",
+      "rule": "RULE-PKG-025"
+    },
+    {
+      "glob": "xero/connector.py",
+      "absent": true,
+      "rule": "RULE-CTOR-043",
+      "note": "an API connector ships no Python package files"
+    },
+    {
+      "glob": "xero/pyproject.toml",
+      "absent": true,
+      "rule": "RULE-CTOR-043"
+    }
+  ],
+  "text_assert": [
+    {
+      "file": "xero/definition/connector.json",
+      "not_matches": "(?i)\"(client_secret|password|access_token|refresh_token)\"\\s*:\\s*\"(?!\\$\\{|env:|secrets\\.)[^\"]{8,}\"",
+      "rule": "RULE-SHRD-001",
+      "note": "a credential appears only as a reference expression into the secret scope, never as a literal"
+    }
+  ]
+}

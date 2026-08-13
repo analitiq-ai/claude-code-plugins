@@ -1,0 +1,175 @@
+{
+  "id": "pipeline-db-incremental-upsert",
+  "plugin": "analitiq-pipeline-builder",
+  "network": false,
+  "why": "The shape most likely to be authored plausibly and wrongly. Incremental replication and upsert each select a block shape, each carries fields the other must not have, and the assignment target's arrow_type has to reproduce the destination column exactly rather than be re-derived. Both connections and both endpoint documents are seeded, so the run reuses them instead of introspecting a live database — which also makes the destination column types a fixed thing the mapping can be graded against.",
+  "seed": [
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/postgresql.example.json",
+      "to": "connectors/postgresql-example/definition/connector.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map-read.json",
+      "to": "connectors/postgresql-example/definition/type-map-read.json"
+    },
+    {
+      "from": "plugins/analitiq-connector-builder/skills/connector-spec-db/examples/postgresql/type-map-write.json",
+      "to": "connectors/postgresql-example/definition/type-map-write.json"
+    },
+    {
+      "from": "plugins/analitiq-pipeline-builder/skills/connection-spec/examples/db.example.json",
+      "to": "connections/pg-source/connection.json",
+      "patch": {
+        "connector_id": "postgresql-example",
+        "connection_id": "21212121-2121-4121-8121-212121212121",
+        "display_name": "Orders source"
+      }
+    },
+    {
+      "from": "plugins/analitiq-pipeline-builder/skills/endpoint-spec/examples/postgres-table.example.json",
+      "to": "connections/pg-source/definition/endpoints/public__orders__371c8422.json"
+    },
+    {
+      "from": "plugins/analitiq-pipeline-builder/skills/connection-spec/examples/db.example.json",
+      "to": "connections/pg-warehouse/connection.json",
+      "patch": {
+        "connector_id": "postgresql-example",
+        "connection_id": "05050505-0505-4505-8505-050505050505",
+        "display_name": "Warehouse"
+      }
+    },
+    {
+      "from": "plugins/analitiq-pipeline-builder/skills/endpoint-spec/examples/postgres-table.example.json",
+      "to": "connections/pg-warehouse/definition/endpoints/public__orders__371c8422.json"
+    }
+  ],
+  "prompt": "Build a pipeline named orders-mirror that copies the public.orders table from the existing pg-source connection into the existing pg-warehouse connection. Both connections and both endpoint documents are already on disk under connections/ — reuse them exactly as they are, do not connect to any database and do not re-discover anything. Replicate incrementally using updated_at as the cursor, and upsert on id at the destination. Run it every 15 minutes. Everything you need is in this message; do not ask me questions, and make a reasonable choice if something is not stated.",
+  "expect": "build",
+  "validate": [
+    {
+      "glob": "pipelines/*/pipeline.json",
+      "entity": "pipeline",
+      "bundle_root": "."
+    },
+    {
+      "glob": "pipelines/*/streams/*.json",
+      "entity": "stream"
+    }
+  ],
+  "docs": {
+    "pipeline": {
+      "glob": "pipelines/*/pipeline.json"
+    },
+    "stream": {
+      "glob": "pipelines/*/streams/*.json"
+    }
+  },
+  "also_covers": [
+    "RULE-STRM-019",
+    "RULE-STRM-023",
+    "RULE-TMAP-018"
+  ],
+  "assert": [
+    {
+      "doc": "pipeline",
+      "path": "connections.source",
+      "equals": "21212121-2121-4121-8121-212121212121",
+      "rule": "intent",
+      "note": "the seeded connection's own connection_id, not a fresh UUID and not a directory slug"
+    },
+    {
+      "doc": "pipeline",
+      "path": "connections.destinations[0]",
+      "equals": "05050505-0505-4505-8505-050505050505",
+      "rule": "intent"
+    },
+    {
+      "doc": "pipeline",
+      "path": "schedule.type",
+      "equals": "interval",
+      "rule": "intent"
+    },
+    {
+      "doc": "pipeline",
+      "path": "schedule.interval_minutes",
+      "equals": 15,
+      "rule": "intent"
+    },
+    {
+      "doc": "pipeline",
+      "path": "status",
+      "absent": true,
+      "rule": "RULE-SHRD-004"
+    },
+    {
+      "doc": "pipeline",
+      "path": "engine",
+      "absent": true,
+      "rule": "RULE-SHRD-004"
+    },
+    {
+      "doc": "stream",
+      "path": "source.endpoint_ref.scope",
+      "equals": "connection",
+      "rule": "RULE-STRM-031"
+    },
+    {
+      "doc": "stream",
+      "path": "source.endpoint_ref.endpoint_id",
+      "equals": "public__orders__371c8422",
+      "rule": "RULE-STRM-018",
+      "note": "the handle the seeded endpoint already carries, copied not recomputed"
+    },
+    {
+      "doc": "stream",
+      "path": "source.endpoint_ref.database_object.name",
+      "equals": "orders",
+      "rule": "RULE-DBEP-007",
+      "note": "identity is read from database_object; the handle is opaque and is not parsed back"
+    },
+    {
+      "doc": "stream",
+      "path": "source.replication.method",
+      "equals": "incremental",
+      "rule": "intent"
+    },
+    {
+      "doc": "stream",
+      "path": "source.replication.cursor_field",
+      "equals": "updated_at",
+      "rule": "RULE-STRM-023",
+      "note": "spelled as the endpoint document records it"
+    },
+    {
+      "doc": "stream",
+      "path": "source.primary_keys",
+      "equals": [
+        "id"
+      ],
+      "rule": "RULE-STRM-030",
+      "note": "an upsert needs record identity; the source endpoint declares id as its primary key"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].write.mode",
+      "equals": "upsert",
+      "rule": "intent"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].write.conflict_keys",
+      "equals": [
+        "id"
+      ],
+      "rule": "intent",
+      "note": "a single flat list of destination field names, not a nested or per-column shape"
+    },
+    {
+      "doc": "stream",
+      "path": "destinations[0].execution",
+      "absent": true,
+      "rule": "RULE-PIPE-007",
+      "note": "the worked example carries a batch_size here and none was asked for"
+    }
+  ]
+}
