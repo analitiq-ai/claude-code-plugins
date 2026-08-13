@@ -4,7 +4,7 @@ statement: >
   the binding's declared `encoding` already owns that encoding.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [DsnBinding]

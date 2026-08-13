@@ -5,7 +5,7 @@ statement: >
   such a capture MUST hold against every value that capture can match.
 tier: advisory
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]

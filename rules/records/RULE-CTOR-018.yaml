@@ -5,7 +5,7 @@ statement: >
   value is substituted into.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::DsnBinding.encoding"
 owners: [engine, connector-plugin]
 targets: [DsnBinding]

@@ -4,7 +4,7 @@ statement: >
   the value into secret storage.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput._consistency"
 owners: [connector-plugin, engine]
 targets: [ConnectionContractInput]

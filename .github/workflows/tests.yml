@@ -11,7 +11,7 @@ name: tests
 #       - enum/vocabulary pins: values the plugin restates as decision logic
 #         (enum-mappers.md, skill prose, io-contracts.md) must match the
 #         contract, including validator ids and resolution scopes;
-#       - generated-reference sync: references/rules.md is rendered from
+#       - generated-reference sync: references/rules/*.md is rendered from
 #         the contract's rule registry and must not be stale;
 #       - example validity: every connector/endpoint under skills/*/examples/
 #         must validate, since creator agents copy them as archetypes.
@@ -99,7 +99,7 @@ jobs:
           DOMAIN: analitiq.ai
         run: python3 scripts/render_rules.py check
       - name: Check the generated rule reference is current
-        # references/rules.md is rendered from the contract's rule registry;
+        # Each plugin's references/rules/ set is rendered from the rule registry;
         # stale prose here misleads every creator agent that reads it.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_rule_reference.py check

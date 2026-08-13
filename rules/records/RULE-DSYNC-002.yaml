@@ -4,7 +4,7 @@ statement: >
   contract maps to its `code`, never text derived from the failure itself.
 tier: advisory
 severity: error
-scope: data-sync-run-status
+scopes: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PublicRunError._message_matches_code"
 owners: [engine]
 targets: [PublicRunError]

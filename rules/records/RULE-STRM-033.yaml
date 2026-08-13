@@ -5,7 +5,7 @@ statement: >
   declares as a destination.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.validator.pipelines::_check_stream_connection_roles"
 owners: [pipeline-plugin, engine]
 rationale: >

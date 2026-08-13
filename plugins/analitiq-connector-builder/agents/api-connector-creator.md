@@ -65,7 +65,8 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
   (every rule this plugin owns, ordered by tier. Satisfy all of them — the
   Grades column says which artifact each one binds, and a rule graded `any`
   binds every document you author.)

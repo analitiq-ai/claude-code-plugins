@@ -5,7 +5,7 @@ statement: >
   declared at all.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::AdbcTransport.driver"
 owners: [engine, connector-plugin]
 targets: [AdbcTransport]

@@ -4,7 +4,7 @@ statement: >
   base id.
 tier: advisory
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base"
 owners: [pipeline-plugin]
 targets: [PipelineAuthored]

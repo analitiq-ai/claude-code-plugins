@@ -5,7 +5,7 @@ statement: >
   declares for each.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::SqlStageCapabilities.scope"
 owners: [connector-plugin, engine]
 targets: [SqlStageCapabilities]

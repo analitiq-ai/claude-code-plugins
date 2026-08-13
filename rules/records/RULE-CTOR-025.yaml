@@ -4,7 +4,7 @@ statement: >
   only the request fields that model names and rejects any other key.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::AuthOperationTemplate"
 owners: [connector-plugin, engine]
 targets: [AuthOperationTemplate]

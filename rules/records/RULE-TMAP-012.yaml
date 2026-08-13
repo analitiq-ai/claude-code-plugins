@@ -5,7 +5,7 @@ statement: >
   rewritten.
 tier: procedural
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [pipeline-plugin]
 rationale: >

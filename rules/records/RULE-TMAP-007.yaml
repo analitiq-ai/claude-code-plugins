@@ -4,7 +4,7 @@ statement: >
   non-empty name.
 tier: structural
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin]
 targets: [TypeMapReadRegexRule]

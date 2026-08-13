@@ -4,7 +4,7 @@ statement: >
   in that document repeats.
 tier: advisory
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._column_names_unique"
 owners: [pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

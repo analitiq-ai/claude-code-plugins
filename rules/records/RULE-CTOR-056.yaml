@@ -4,7 +4,7 @@ statement: >
   number or string that stands in for it.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionConditionPredicate._present_is_strictly_boolean"
 owners: [connector-plugin]
 targets: [ConnectionConditionPredicate]

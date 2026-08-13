@@ -4,7 +4,7 @@ statement: >
   and a document that omits one takes that default.
 tier: structural
 severity: info
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Schedule.type"
 owners: [pipeline-plugin]
 targets: [Schedule]

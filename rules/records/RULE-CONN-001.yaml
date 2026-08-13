@@ -4,7 +4,7 @@ statement: >
   its `enum` declares.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput._options_offer_the_enum"
 owners: [connector-plugin]
 targets: [ConnectionContractInput]

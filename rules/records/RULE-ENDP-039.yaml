@@ -6,7 +6,7 @@ statement: >
   produces the key's value.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Idempotency.location"
 owners: [connector-plugin, engine]
 targets: [Idempotency]

@@ -4,7 +4,7 @@ statement: >
   transport's origin, and MUST NOT be authored as an absolute URL.
 tier: referential
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: null
 owners: [connector-plugin, engine]
 targets: [_RequestBase]

@@ -4,7 +4,7 @@ statement: >
   one the contract's predicate union tags.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::PredicateEq"
 owners: [connector-plugin]
 targets: [PredicateEq, PredicateNeq, PredicateLt, PredicateLte, PredicateGt, PredicateGte, PredicateExists, PredicateMissing, PredicateEmpty, PredicateNotEmpty, PredicateAnd, PredicateOr, PredicateNot]

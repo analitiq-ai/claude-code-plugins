@@ -5,7 +5,7 @@ statement: >
   compares it.
 tier: advisory
 severity: warning
-scope: type-map
+scopes: [type-map]
 validator: "analitiq.validator.connectors::_type_map_rule_warnings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

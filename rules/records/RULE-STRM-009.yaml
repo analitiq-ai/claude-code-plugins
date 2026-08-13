@@ -4,7 +4,7 @@ statement: >
   MUST omit one when its type takes none.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::ValidationRule._validate_value_for_rule"
 owners: [pipeline-plugin]
 targets: [ValidationRule]

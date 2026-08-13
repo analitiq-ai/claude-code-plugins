@@ -4,7 +4,7 @@ statement: >
   the referenced input's `enum`, and no key outside it.
 tier: advisory
 severity: warning
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 targets: [FunctionExpression, ConnectionContractInput]

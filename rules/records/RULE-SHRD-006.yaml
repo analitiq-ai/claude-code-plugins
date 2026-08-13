@@ -4,7 +4,7 @@ statement: >
   resolves a template; every other slot takes the characters literally.
 tier: structural
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [_RequestBase, UrlTemplateDsn]

@@ -5,7 +5,7 @@ statement: >
   `requirements.txt` ships.
 tier: referential
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [SqlAlchemyTransport]

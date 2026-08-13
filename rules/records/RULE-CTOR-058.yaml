@@ -4,7 +4,7 @@ statement: >
   the vocabulary `ErrorMap` declares.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ErrorMap.exception"
 owners: [connector-plugin, engine]
 targets: [ErrorMap]

@@ -4,7 +4,7 @@ statement: >
   same document declares.
 tier: advisory
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseEndpointDoc._primary_keys_name_columns"
 owners: [pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

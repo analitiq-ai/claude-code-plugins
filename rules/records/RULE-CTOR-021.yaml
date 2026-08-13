@@ -6,7 +6,7 @@ statement: >
   `ConnectionContractInput` declares for each.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionContractInput.source"
 owners: [connector-plugin, engine]
 targets: [ConnectionContractInput]

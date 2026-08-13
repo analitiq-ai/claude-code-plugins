@@ -33,6 +33,7 @@ import argparse
 import difflib
 import re
 import sys
+import pathlib
 from pathlib import Path
 
 from _bootstrap import ensure_deps_or_reexec
@@ -266,122 +267,25 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-# Which plugin this generator renders for. A rule belongs in this plugin's
-# prose when its record names this owner — the registry's own answer to "who
-# has to know this", decided once per rule where the rule is authored.
-#
-# `scope` decides only WHERE it lands (see `_RULE_BLOCKS`), never whether
-# it appears. The two are different questions and used to be conflated: a rule
-# grading a document this plugin does not author can still bind an author here,
-# which is why an id-prefix allowlist needed a hand-kept list of exceptions
-# beside it. Ownership answers it directly, so both lists are gone.
-PLUGIN_OWNER = "pipeline-plugin"
-
-
-def _owned() -> list:
-    """Every rule this plugin owns — the whole of what its prose may cite."""
-    from analitiq.contracts.shared.rules import all_rules
-
-    return [r for r in all_rules() if PLUGIN_OWNER in r.owners]
-
-
-def _block_rules(block_id: str) -> list:
-    """The owned rules that land in one block, ordered by id.
-
-    Placement is by `scope`, the document a rule grades, because that is what
-    decides which spec a reader is holding when they need it. The block claiming
-    no scopes takes the remainder, so the blocks partition the owned set by
-    construction: every rule lands exactly once, and a rule whose scope is new
-    to this plugin surfaces in the shared block instead of vanishing.
-    """
-    scopes = _RULE_BLOCKS[block_id]
-    claimed = {s for spec in _RULE_BLOCKS.values() for s in spec}
-    rules = [
-        r for r in _owned()
-        if (r.scope in scopes if scopes else r.scope not in claimed)
-    ]
-    return sorted(rules, key=lambda r: r.id)
-
-
-def _rule_block(block_id: str) -> str:
-    """The registry's rules for one block: id and obligation, nothing else.
-
-    No column says whether anything applies a rule, because that changes
-    nothing an agent does — every rule here has to be satisfied either way,
-    and a row reading "nothing here" invites skipping one. The single fact
-    enforcement decides is whether a clean validation run finishes the job, and
-    that is about the whole set, so the prose above says it once.
-
-    The record still carries `validator`; it is resolved by
-    `render_rules.py` and read by the enforcer census. They just do not ship.
-    """
-    rules = _block_rules(block_id)
-    if not rules:
-        raise RuntimeError(
-            f"{block_id} renders no rules — its scopes match nothing this "
-            "plugin owns, so the heading above it now introduces an empty table"
-        )
-
-    out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in rules]
-    return "\n".join(out) + "\n"
-
-
-# Where each owned rule lands, keyed by the document it grades. Placement only
-# — membership is `owners`, decided in the record. An endpoint block claims both
-# endpoint scopes because the two documents share the `Column` model, so a rule
-# filed against one grades the other.
-#
-# The empty tuple is the remainder: whatever this plugin owns that no block
-# above claims renders once in the orchestrator skill rather than being copied
-# into each spec. That is what makes the map a partition instead of a filter —
-# a scope nobody claims cannot fall out of the prose unnoticed.
-_RULE_BLOCKS: dict[str, tuple[str, ...]] = {
-    "rules-pipeline": ("pipeline",),
-    "rules-stream": ("stream",),
-    "rules-endpoint": ("database-endpoint", "api-endpoint"),
-    "rules-connection": ("connection",),
-    "rules-type-map": ("type-map",),
-    "rules-shared": (),
-}
-
-
 def rendered_ids() -> set[str]:
-    """Every id this plugin's prose makes readable, as the generator knows it.
+    """Every rule id this plugin makes readable.
 
-    The generator is the authority on what it rendered. Asking it beats
-    searching its output for row-shaped text, which can only find the malformed
-    rows somebody already thought of.
+    Rule tables no longer live in this generator's blocks: they are the
+    generated set under `skills/pipeline-builder/references/rules/`, rendered
+    by `scripts/render_rule_reference.py` and split by the artifact each rule
+    binds. This function stays because the reachability guard asks each plugin
+    what it renders, and the answer for this plugin is now that renderer's.
     """
-    return {r.id for b in _RULE_BLOCKS for r in _block_rules(b)}
+    import importlib.util
 
-
-def _render_block(block_id: str) -> str:
-    return _rule_block(block_id)
-
-
-def render_rule_reference_pipeline() -> str:
-    return _render_block("rules-pipeline")
-
-
-def render_rule_reference_stream() -> str:
-    return _render_block("rules-stream")
-
-
-def render_rule_reference_endpoint() -> str:
-    return _render_block("rules-endpoint")
-
-
-def render_rule_reference_connection() -> str:
-    return _render_block("rules-connection")
-
-
-def render_rule_reference_type_map() -> str:
-    return _render_block("rules-type-map")
-
-
-def render_rule_reference_shared() -> str:
-    return _render_block("rules-shared")
+    path = (
+        pathlib.Path(__file__).resolve().parents[3]
+        / "scripts" / "render_rule_reference.py"
+    )
+    spec = importlib.util.spec_from_file_location("render_rule_reference", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.rendered_ids("pipeline-plugin")
 
 
 def render_validator_ids() -> str:
@@ -884,12 +788,6 @@ RENDERERS = {
     "shared-vocabulary": render_shared_vocabulary,
     "secret-ref-grammar": render_secret_ref_grammar,
     "filter-operators": render_filter_operators,
-    "rules-pipeline": render_rule_reference_pipeline,
-    "rules-stream": render_rule_reference_stream,
-    "rules-endpoint": render_rule_reference_endpoint,
-    "rules-connection": render_rule_reference_connection,
-    "rules-type-map": render_rule_reference_type_map,
-    "rules-shared": render_rule_reference_shared,
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,

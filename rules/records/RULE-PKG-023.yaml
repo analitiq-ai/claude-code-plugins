@@ -6,7 +6,7 @@ statement: >
   every other type back to the map.
 tier: structural
 severity: warning
-scope: connector-package
+scopes: [connector-package]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

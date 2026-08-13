@@ -4,7 +4,7 @@ statement: >
   document in the run assembled from it.
 tier: referential
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.validator.pipelines::_check_connections_present"
 owners: [pipeline-plugin, engine]
 rationale: >

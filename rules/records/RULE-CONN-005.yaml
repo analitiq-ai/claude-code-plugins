@@ -4,7 +4,7 @@ statement: >
   connections service owns and fills from the connector's post-auth discovery.
 tier: procedural
 severity: error
-scope: connection
+scopes: [connection]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ConnectionStoredMaps, ConnectionInput]

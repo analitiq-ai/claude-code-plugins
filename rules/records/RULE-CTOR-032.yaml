@@ -3,7 +3,7 @@ statement: >
   A connector's first release MUST declare `version` as `1.0.0`.
 tier: procedural
 severity: info
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 rationale: >

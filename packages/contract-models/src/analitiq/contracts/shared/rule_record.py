@@ -82,6 +82,12 @@ OWNERS = ("engine", "connector-plugin", "pipeline-plugin")
 #: authored document — a `$schema` convention, a secret never appearing
 #: literally — which would otherwise be filed under whichever document happened
 #: to state them first.
+#:
+#: A record names one or more, because binding two artifacts is a thing a rule
+#: does and a scalar could not say: a rule over a request slot that a stream
+#: also fills used to have to over-claim `any` or pick one kind and silently
+#: miss the other author. Plural is also what lets the rendered reference fan a
+#: rule out to every agent it binds without any record naming an agent.
 SCOPES = (
     "connector",
     "connector-package",
@@ -166,7 +172,11 @@ class RuleRecord:
     statement: str
     tier: str
     severity: str
-    scope: str
+    #: Every artifact kind the rule binds, from :data:`SCOPES`. A list because a
+    #: rule can grade more than one kind of document, and the rendered reference
+    #: is split by scope: a scalar here would decide, silently, which of two
+    #: authors never meets the rule.
+    scopes: tuple[str, ...]
     rationale: str
     #: What applies it: `dotted.module::Symbol.attr`, naming the module that is
     #: imported so the value means the same thing here as it does wherever this
@@ -197,7 +207,7 @@ class RuleRecord:
     #: The fields a record authors as a YAML list and this class holds as a
     #: tuple. Normalized here rather than by each loader, so a caller that
     #: hands over a list gets a record that is still frozen and comparable.
-    _SEQUENCES = ("owners", "targets", "fields")
+    _SEQUENCES = ("scopes", "owners", "targets", "fields")
 
     def __post_init__(self) -> None:
         for name in self._SEQUENCES:
@@ -223,7 +233,6 @@ class RuleRecord:
         for value, allowed, label in (
             (self.tier, TIERS, "tier"),
             (self.severity, SEVERITIES, "severity"),
-            (self.scope, SCOPES, "scope"),
             (self.status, STATUSES, "status"),
         ):
             if value not in allowed:
@@ -252,6 +261,22 @@ class RuleRecord:
             # the members belong.
             self._fail(
                 f"unknown mechanism {self.mechanism!r}; expected one of {MECHANISMS}"
+            )
+        if not self.scopes:
+            self._fail(f"name the artifact kind(s) this rule binds — from {SCOPES}")
+        unknown = [s for s in self.scopes if s not in SCOPES]
+        if unknown:
+            self._fail(f"unknown scope(s) {unknown}; expected from {SCOPES}")
+        if len(set(self.scopes)) != len(self.scopes):
+            # A repeat renders the rule into the same file twice. Cheap to
+            # refuse here, invisible in a diff of the rendered reference.
+            self._fail(f"scopes repeats an entry: {list(self.scopes)}")
+        if "any" in self.scopes and len(self.scopes) > 1:
+            # `any` already means every authored document, so naming it beside
+            # a specific kind states a narrower claim the renderer will ignore.
+            self._fail(
+                f"scopes names 'any' beside {[s for s in self.scopes if s != 'any']} — "
+                "'any' already covers every authored document; drop one or the other"
             )
         if not self.owners:
             self._fail(f"name who applies this rule — one or more of {OWNERS}")

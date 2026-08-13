@@ -5,7 +5,7 @@ statement: >
   schema declares, never the whole record and never the batch.
 tier: advisory
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation, WriteOperation]

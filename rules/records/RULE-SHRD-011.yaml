@@ -3,7 +3,7 @@ statement: >
   A `display_name` MUST NOT carry leading or trailing whitespace.
 tier: structural
 severity: error
-scope: any
+scopes: [any]
 validator: "analitiq.contracts.connector::ConnectorBase._validate_display_name_field"
 owners: [connector-plugin, pipeline-plugin]
 targets: [ConnectorBase, ConnectionAuthored, StreamAuthored, PipelineAuthored, _EndpointBase]

@@ -4,7 +4,7 @@ statement: >
   entry addresses.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::StreamAuthored._destinations_unique"
 owners: [pipeline-plugin]
 targets: [StreamAuthored]

@@ -234,8 +234,11 @@ defines — reference or load it.** Carry only craft the schema can't express
   `scripts/render_rules.py` validates every record, resolves every `validator`
   against the live models and the live validator, and compiles
   `analitiq/contracts/shared/rules.json`,
-  the copy the wheel ships. `render_rule_reference.py` and the pipeline plugin's
-  `gen_contract_docs.py` render the registry into each plugin's prose. An
+  the copy the wheel ships. `render_rule_reference.py` renders the registry into
+  each plugin's `references/rules/` set — one file per artifact kind, so the file
+  for the document being authored is the whole of what it must satisfy — while
+  the pipeline plugin's `gen_contract_docs.py` renders the rest of the
+  contract-owned facts (enums, regexes, bounds) into its prose blocks. An
   obligation with no record is a missing record, not a sentence to hand-write;
   a citation that stops resolving fails the build.
 - **Fetch-once, pass-down** — an orchestrator hands the live contract schema URLs

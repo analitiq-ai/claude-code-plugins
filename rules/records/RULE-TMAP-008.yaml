@@ -5,7 +5,7 @@ statement: >
   well-formed placeholders.
 tier: structural
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapWriteExactRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapWriteExactRule]

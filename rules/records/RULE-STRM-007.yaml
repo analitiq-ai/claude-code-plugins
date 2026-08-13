@@ -4,7 +4,7 @@ statement: >
   admits, and MUST declare the inner shape that type calls for and no other.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::ConstantValue._validate_container_shape"
 owners: [pipeline-plugin]
 targets: [ConstantValue]

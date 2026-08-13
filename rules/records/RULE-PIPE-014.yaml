@@ -4,7 +4,7 @@ statement: >
   that is itself in a runnable status.
 tier: referential
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.validator.pipelines::_check_pipeline_active_gate"
 owners: [pipeline-plugin, engine]
 rationale: >

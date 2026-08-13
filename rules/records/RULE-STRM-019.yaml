@@ -4,7 +4,7 @@ statement: >
   MUST NOT be re-sorted, because the engine applies them in that order.
 tier: procedural
 severity: error
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [StreamMapping]

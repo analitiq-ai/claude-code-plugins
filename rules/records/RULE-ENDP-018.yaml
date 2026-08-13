@@ -4,7 +4,7 @@ statement: >
   declares MUST carry at least one mode.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Operations._at_least_one"
 owners: [connector-plugin]
 targets: [Operations]

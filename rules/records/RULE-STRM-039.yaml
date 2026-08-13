@@ -6,7 +6,7 @@ statement: >
   source, not by the stream document.
 tier: judgment
 severity: warning
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [IncrementalReplication]

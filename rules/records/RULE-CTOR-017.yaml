@@ -6,7 +6,7 @@ statement: >
   declarable at all.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::SqlBulkLoad.sqlalchemy"
 owners: [engine, connector-plugin]
 targets: [SqlBulkLoad]

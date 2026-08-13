@@ -6,7 +6,7 @@ dropping a per-run `ref` straight into `request.query` — is rejected
 (RULE-ENDP-032).
 
 Rule ids below (`RULE-ENDP-*`) are registry ids;
-`connector-builder/references/rules.md` carries each one's statement, the
+`connector-builder/references/rules/api-endpoint.md` carries each one's statement, the
 document it grades and what a violation costs. Cite them rather than
 re-deriving them.
 
@@ -63,7 +63,7 @@ prohibitions below).
   the record itself supplies the segment; see "Write path segments" below.
 - **A binding's location must match the site it appears in** (RULE-ENDP-008);
   the placement vocabulary is printed under RULE-ENDP-050 in
-  `connector-builder/references/rules.md`.
+  `connector-builder/references/rules/api-endpoint.md`.
 - **RULE-ENDP-009** — a declared-but-unbound param is an error, not dead
   weight: if you don't need it, delete it.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
@@ -110,7 +110,7 @@ request slot, and which are not, is
 
 `params.<name>.type` is a JSON-style request-input type describing what is sent
 **up** — the vocabulary is `RULE-ENDP-050`, which prints it beside the `in`
-placement vocabulary in `connector-builder/references/rules.md`. It is unrelated
+placement vocabulary in `connector-builder/references/rules/api-endpoint.md`. It is unrelated
 to `native_type` / `arrow_type`, which describe what comes **back** in
 `response.schema`. A timestamp sent as an ISO string is `type: "string"` even
 though the response field it filters is `Timestamp(...)`.

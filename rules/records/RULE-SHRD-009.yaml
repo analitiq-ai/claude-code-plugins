@@ -4,7 +4,7 @@ statement: >
   `function` expression and MUST NOT be authored as a pre-computed literal.
 tier: procedural
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ConnectorBase]

@@ -5,7 +5,7 @@ statement: >
   behind it and a hook nothing routes to are both violations.
 tier: referential
 severity: error
-scope: connector-package
+scopes: [connector-package]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

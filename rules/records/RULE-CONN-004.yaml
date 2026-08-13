@@ -5,7 +5,7 @@ statement: >
   `secret_refs`.
 tier: advisory
 severity: error
-scope: connection
+scopes: [connection]
 validator: "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys"
 owners: [pipeline-plugin]
 targets: [ConnectionStoredMaps]

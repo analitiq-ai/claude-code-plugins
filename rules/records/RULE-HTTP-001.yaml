@@ -4,7 +4,7 @@ statement: >
   removal, matched case-insensitively.
 tier: advisory
 severity: error
-scope: any
+scopes: [any]
 validator: "analitiq.contracts.shared.rules::HeaderMergeRules._headers_not_both_set_and_removed"
 owners: [connector-plugin, engine]
 targets: [_RequestBase, AuthOperationTemplate, HttpTransport, TransportDefaults]

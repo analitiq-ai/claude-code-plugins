@@ -4,7 +4,7 @@ statement: >
   no preference and MUST be omitted instead.
 tier: advisory
 severity: warning
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::WriteUnit._at_least_one_bound"
 owners: [engine, connector-plugin]
 targets: [WriteUnit]

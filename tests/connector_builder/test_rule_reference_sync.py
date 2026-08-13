@@ -43,19 +43,51 @@ def _load_renderer():
 
 
 def test_rule_reference_is_in_sync() -> None:
-    renderer = _load_renderer()
-    expected = renderer.render()
-    output_path = renderer.OUTPUT_PATH
+    """Every file in every plugin's rule set matches what the renderer emits.
 
-    assert output_path.exists(), (
-        f"{output_path.relative_to(REPO_ROOT)} is missing — "
-        "run `python scripts/render_rule_reference.py write`"
-    )
-    assert output_path.read_text(encoding="utf-8") == expected, (
-        f"{output_path.relative_to(REPO_ROOT)} is stale — the contract's advisory "
-        "registry changed. Run `python scripts/render_rule_reference.py write` and review "
-        "any prose that cites the affected rule ids."
-    )
+    The reference is a set of per-scope files now, not one document, so this
+    checks the whole set per plugin: a stale file, a missing one, and a file
+    left behind by a bucket that stopped existing are all the same defect —
+    prose citing an id an agent cannot resolve.
+    """
+    renderer = _load_renderer()
+    for owner in renderer.OUTPUT_DIRS:
+        rendered = renderer.render_all(owner)
+        for path, expected in sorted(rendered.items()):
+            assert path.exists(), (
+                f"{path.relative_to(REPO_ROOT)} is missing — "
+                "run `python scripts/render_rule_reference.py write`"
+            )
+            assert path.read_text(encoding="utf-8") == expected, (
+                f"{path.relative_to(REPO_ROOT)} is stale — the rule registry "
+                "changed. Run `python scripts/render_rule_reference.py write` "
+                "and review any prose that cites the affected rule ids."
+            )
+        orphans = sorted(
+            q for q in renderer.OUTPUT_DIRS[owner].glob("*.md") if q not in rendered
+        )
+        assert not orphans, (
+            f"{owner}: these files render no rules any more and would keep "
+            f"serving a document nothing grades: {[str(o) for o in orphans]}. "
+            "Run `python scripts/render_rule_reference.py write`."
+        )
+
+
+def test_every_owned_rule_reaches_a_file() -> None:
+    """Coverage, per plugin — the invariant that replaced 'exactly once'.
+
+    A rule can name several scopes and so land in several files; what must not
+    happen is landing in none, because then the plugin's prose can cite an id
+    that resolves nowhere. `render_all` raises on that, so this is the guard
+    that runs it for every plugin rather than the one that happens to be first.
+    """
+    renderer = _load_renderer()
+    for owner in renderer.OUTPUT_DIRS:
+        placed = {r.id for rules in renderer.buckets(owner).values() for r in rules}
+        assert renderer.rendered_ids(owner) <= placed, (
+            f"{owner}: owned rules reach no file: "
+            f"{sorted(renderer.rendered_ids(owner) - placed)}"
+        )
 
 
 # Prose abbreviates groups of ids two ways: `RULE-TMAP-001/002` for a handful and
@@ -101,13 +133,18 @@ def test_prose_rule_citations_resolve() -> None:
     from analitiq.contracts.shared.rules import all_rules
 
     known = {rule.id for rule in all_rules()}
-    generated = _load_renderer().OUTPUT_PATH
+    renderer = _load_renderer()
+    generated = {
+        path
+        for owner in renderer.OUTPUT_DIRS
+        for path in renderer.render_all(owner)
+    }
 
     dangling: dict[str, set[str]] = {}
     plugins_root = REPO_ROOT / "plugins"
     plugin_cited = 0
     for path in [*REPO_ROOT.glob("*.md"), *plugins_root.rglob("*.md")]:
-        if path == generated:
+        if path in generated:
             continue  # generated from the registry; covered by the sync test
         ids = _cited_ids(path.read_text(encoding="utf-8"))
         if plugins_root in path.parents:

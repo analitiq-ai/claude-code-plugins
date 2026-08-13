@@ -4,7 +4,7 @@ statement: >
   grammar defines, since the runtime resolves it at connection time.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [DsnBinding]

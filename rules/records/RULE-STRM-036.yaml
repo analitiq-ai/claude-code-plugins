@@ -3,7 +3,7 @@ statement: >
   A stream filter MUST name its operator from the vocabulary `Filter` declares.
 tier: structural
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::Filter.operator"
 owners: [pipeline-plugin, engine]
 targets: [Filter]

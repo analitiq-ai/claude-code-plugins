@@ -6,7 +6,7 @@ statement: >
   secret-shaped key.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [DsnBinding, ResourceDiscovery]

@@ -6,7 +6,7 @@ statement: >
   assignment.
 tier: judgment
 severity: warning
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [Validation]

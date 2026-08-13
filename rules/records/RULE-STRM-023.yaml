@@ -5,7 +5,7 @@ statement: >
   other normalization.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

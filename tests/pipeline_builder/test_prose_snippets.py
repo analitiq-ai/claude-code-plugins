@@ -538,7 +538,15 @@ def _grading_entity(marker: Marker, label: str) -> str:
         # (database-endpoint), the validator adapter spells entities with
         # underscores (database_endpoint). Without it, a hyphenated resource
         # would surface as a misdirecting KeyError deeper in the splice.
-        entity = rules[marker.rule].scope.replace("-", "_")
+        # A rule may bind more than one artifact kind; a snippet grades ONE
+        # document, so resolve to the scope that names a hosted entity.
+        scopes = rules[marker.rule].scopes
+        hosted = [s for s in scopes if s.replace("-", "_") in ENTITY_SKILL]
+        assert len(hosted) < 2, (
+            f"{label}: '<!-- invalid: {marker.rule} -->' binds {hosted}, so "
+            "which document this block grades is ambiguous — use a 'validate:' "
+            "marker naming the one the block carries.")
+        entity = (hosted[0] if hosted else scopes[0]).replace("-", "_")
     else:
         entity = marker.entity
     assert entity in ENTITY_SKILL, (
@@ -703,13 +711,16 @@ def test_invalid_disposition_translates_hyphenated_registry_resources():
     membership assertion naming the underscore spelling, never a misdirecting
     KeyError on the hyphenated one."""
     from analitiq.contracts.shared.rules import all_rules
+    # Single-scope only: a rule binding a hosted scope too would resolve to
+    # that one in `_grading_entity` and never reach the assertion under test.
     rule = next(
         (r for r in all_rules()
-         if "-" in r.scope and r.scope.replace("-", "_") not in HOST_EXAMPLE),
+         if len(r.scopes) == 1 and "-" in r.scopes[0]
+         and r.scopes[0].replace("-", "_") not in HOST_EXAMPLE),
         None)
     if rule is None:  # every hyphenated resource gained a host: real blocks cover it
         pytest.skip("no hyphenated-resource rule without a host in the registry")
     marker = _parse_marker(f"<!-- invalid: {rule.id} -->")
     with pytest.raises(AssertionError,
-                       match=re.escape(repr(rule.scope.replace("-", "_")))):
+                       match=re.escape(repr(rule.scopes[0].replace("-", "_")))):
         _grading_entity(marker, "synthetic")

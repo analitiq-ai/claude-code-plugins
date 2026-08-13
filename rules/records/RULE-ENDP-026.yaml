@@ -6,7 +6,7 @@ statement: >
   defers a reference to evaluation time.
 tier: advisory
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
 owners: [connector-plugin, engine]
 targets: [ResponseExtraction, WriteInput]

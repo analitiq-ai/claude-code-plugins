@@ -6,7 +6,7 @@ statement: >
   than editing this one.
 tier: referential
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

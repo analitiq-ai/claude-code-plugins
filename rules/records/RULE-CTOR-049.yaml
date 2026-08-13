@@ -4,7 +4,7 @@ statement: >
   `sql_capabilities`.
 tier: referential
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [DatabaseConnector]

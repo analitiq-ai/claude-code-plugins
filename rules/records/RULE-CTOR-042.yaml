@@ -4,7 +4,7 @@ statement: >
   `connector_id` its `connector.json` declares.
 tier: referential
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

@@ -4,7 +4,7 @@ statement: >
   earlier-resolving rules leave uncovered.
 tier: structural
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

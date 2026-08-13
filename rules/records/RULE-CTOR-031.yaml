@@ -6,7 +6,7 @@ statement: >
   name a catalog MUST expose that level in `resource_discovery` too.
 tier: judgment
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

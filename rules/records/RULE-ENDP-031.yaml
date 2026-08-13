@@ -4,7 +4,7 @@ statement: >
   have, and MUST NOT declare that absence as an explicit null.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject]

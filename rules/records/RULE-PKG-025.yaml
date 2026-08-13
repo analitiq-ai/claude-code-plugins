@@ -5,7 +5,7 @@ statement: >
   connector will run.
 tier: procedural
 severity: warning
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 rationale: >

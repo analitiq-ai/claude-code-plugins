@@ -111,24 +111,23 @@ import gen_contract_docs as G  # noqa: E402
 # reality in both directions so it cannot rot.
 REQUIRED_BLOCKS = {
     "skills/connection-spec/SKILL.md": {
-        "rules-connection", "fields-connection", "schema-urls"},
+        "fields-connection", "schema-urls"},
     "skills/connection-spec/spec-envelope.md": {"secret-ref-grammar"},
     "skills/endpoint-spec/SKILL.md": {"fields-database-endpoint", "schema-urls"},
-    "skills/endpoint-spec/spec-columns.md": {"rules-endpoint", "arrow-types", "fields-column"},
+    "skills/endpoint-spec/spec-columns.md": {"arrow-types", "fields-column"},
     "skills/endpoint-spec/spec-database-object.md": {"endpoint-id-derivation", "fields-database-object"},
-    "skills/endpoint-spec/spec-type-map-gaps.md": {"rules-type-map"},
-    "skills/pipeline-builder/SKILL.md": {"rules-shared", "enum-vocabulary"},
+    "skills/pipeline-builder/SKILL.md": {"enum-vocabulary"},
     "skills/pipeline-builder/references/enum-mappers.md": {"enum-vocabulary"},
     "skills/pipeline-builder/references/identity-and-versioning.md": {"shared-vocabulary"},
     "skills/pipeline-builder/references/io-contracts.md": {"validator-ids"},
     "skills/pipeline-builder/references/schema-hosts.md": {"schema-urls"},
-    "skills/pipeline-spec/SKILL.md": {"rules-pipeline", "fields-pipeline", "schema-urls"},
+    "skills/pipeline-spec/SKILL.md": {"fields-pipeline", "schema-urls"},
     "skills/pipeline-spec/spec-connections.md": {"fields-pipeline-connections"},
     "skills/pipeline-spec/spec-engine-runtime.md": {
         "fields-batching", "fields-engine", "fields-error-handling", "fields-logging", "fields-runtime"},
     "skills/pipeline-spec/spec-schedule.md": {"fields-schedule"},
     "skills/stream-spec/SKILL.md": {
-        "rules-stream", "enum-vocabulary", "fields-stream", "schema-urls"},
+        "enum-vocabulary", "fields-stream", "schema-urls"},
     "skills/stream-spec/spec-destinations.md": {
         "fields-stream-destination", "fields-stream-execution", "fields-stream-write"},
     "skills/stream-spec/spec-endpoint-refs.md": {

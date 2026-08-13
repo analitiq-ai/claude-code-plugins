@@ -48,7 +48,7 @@ every field to fill and what each must carry.
 **Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/enum-mappers.md`
 — when mapping what a provider says onto a closed vocabulary.
 
-See also `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md` —
+See also `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md` —
 where a cited `RULE-*` id resolves.
 
 Later mentions use a file's bare name; resolve each against these paths.

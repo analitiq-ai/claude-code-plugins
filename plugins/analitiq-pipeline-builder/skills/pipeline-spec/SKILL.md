@@ -79,32 +79,13 @@ document as its own file and reference it by id.
 
 ## Registered rules for a pipeline
 
-Satisfy every rule below, and cite one by id rather than restating it.
+Every rule binding a pipeline document is in
+`../pipeline-builder/references/rules/pipeline.md` — **read it before
+authoring**, satisfy every row, and cite one by id rather than restating it.
 <!-- PROBE: pipeline-cron-inner-spec-unchecked -->
 A clean validation run is not proof they all hold — some are applied only at
 connect or run time.
 
-<!-- BEGIN GENERATED: rules-pipeline -->
-| Rule | Constraint |
-|---|---|
-| `RULE-PIPE-001` | A pipeline's destination list MUST NOT name the same connection more than once. |
-| `RULE-PIPE-002` | A pipeline's schedule MUST author exactly the fields its chosen `type` calls for, and MUST omit the fields belonging to the types it did not choose. |
-| `RULE-PIPE-003` | A pipeline MUST NOT list two streams that reduce to the same version-stripped base id. |
-| `RULE-PIPE-004` | A pipeline in the status that schedules it MUST reference at least one stream. |
-| `RULE-PIPE-005` | A pipeline's `schedule.type` MUST be a member of the vocabulary `Schedule.type` declares; the member chosen then gates which schedule fields are legal (RULE-PIPE-002). |
-| `RULE-PIPE-006` | A pipeline MAY omit any schedule field `Schedule` declares a default for, and a document that omits one takes that default. |
-| `RULE-PIPE-007` | A stream's per-destination `execution` block MUST NOT be authored as a way to change how much a run writes at a time; the batch size a run uses is the one the pipeline's runtime declares, for every stream. |
-| `RULE-PIPE-008` | Every connection a pipeline references MUST belong to the same organization as the pipeline. |
-| `RULE-PIPE-009` | A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone. |
-| `RULE-PIPE-010` | The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one. |
-| `RULE-PIPE-011` | Every stream a pipeline references MUST resolve to exactly one stream document in the run assembled from it, and the pipeline MUST NOT reference the same stream twice. |
-| `RULE-PIPE-012` | Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it. |
-| `RULE-PIPE-013` | A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id. |
-| `RULE-PIPE-014` | A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status. |
-| `RULE-PIPE-015` | A schedule's `timezone` MUST name a zone in the IANA database. |
-| `RULE-PIPE-016` | A pipeline MUST name its lifecycle state from the vocabulary `PipelineAuthored` declares. |
-| `RULE-PIPE-017` | A pipeline's logging block MUST name its level from the vocabulary `Logging` declares. |
-<!-- END GENERATED: rules-pipeline -->
 
 ## Output rules
 

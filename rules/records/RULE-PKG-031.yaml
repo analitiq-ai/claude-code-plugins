@@ -5,7 +5,7 @@ statement: >
   directory rather than in a subdirectory of it.
 tier: referential
 severity: error
-scope: connector-package
+scopes: [connector-package]
 validator: "analitiq.validator.connectors::endpoint_filename_findings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

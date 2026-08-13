@@ -4,7 +4,7 @@ statement: >
   `ConnectorBase.connector_id` declares.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase.connector_id"
 owners: [connector-plugin, engine]
 targets: [ConnectorBase]

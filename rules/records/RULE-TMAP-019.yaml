@@ -4,7 +4,7 @@ statement: >
   connector's own dialect renders in code, never one left out to cut scope.
 tier: referential
 severity: warning
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

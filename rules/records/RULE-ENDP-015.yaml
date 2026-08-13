@@ -3,7 +3,7 @@ statement: >
   A write mode MUST NOT declare both an idempotency key placement and batching.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [WriteOperation]

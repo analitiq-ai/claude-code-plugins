@@ -5,7 +5,7 @@ statement: >
   declares.
 tier: advisory
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_RequestBase._validate"
 owners: [connector-plugin]
 targets: [_RequestBase]

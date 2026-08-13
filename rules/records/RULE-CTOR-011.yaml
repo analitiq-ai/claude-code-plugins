@@ -4,7 +4,7 @@ statement: >
   binding MUST be referenced by the template.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::UrlTemplateDsn._validate_placeholder_bindings"
 owners: [engine, connector-plugin]
 targets: [UrlTemplateDsn]

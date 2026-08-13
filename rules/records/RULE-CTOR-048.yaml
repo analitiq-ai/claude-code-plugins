@@ -4,7 +4,7 @@ statement: >
   transport family the same connector declares in `transports`.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [SqlBulkLoad, DatabaseConnector]

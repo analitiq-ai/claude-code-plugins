@@ -4,7 +4,7 @@ statement: >
   seeds it and continue only with conversion stages applied left to right.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::PipeExpression._validate_positional_grammar"
 owners: [pipeline-plugin, engine]
 targets: [PipeExpression]

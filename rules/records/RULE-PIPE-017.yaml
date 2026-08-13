@@ -4,7 +4,7 @@ statement: >
   declares.
 tier: structural
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Logging.log_level"
 owners: [pipeline-plugin, engine]
 targets: [Logging]

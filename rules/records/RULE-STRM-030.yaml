@@ -5,7 +5,7 @@ statement: >
   own, and MUST NOT declare keys that contradict the endpoint's.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

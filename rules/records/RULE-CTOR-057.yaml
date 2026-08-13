@@ -5,7 +5,7 @@ statement: >
   contract declares.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ValueExpressionScopes._expressions_qualified"
 owners: [connector-plugin, engine]
 targets:

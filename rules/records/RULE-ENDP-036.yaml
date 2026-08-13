@@ -4,7 +4,7 @@ statement: >
   `_EndpointBase.endpoint_id` declares.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::_EndpointBase.endpoint_id"
 owners: [connector-plugin]
 targets: [_EndpointBase]

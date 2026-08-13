@@ -4,7 +4,7 @@ statement: >
   declares.
 tier: structural
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::StreamAuthored.status"
 owners: [pipeline-plugin, engine]
 targets: [StreamAuthored]

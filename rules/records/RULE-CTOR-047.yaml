@@ -5,7 +5,7 @@ statement: >
   `enum` the mode is drawn from.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 targets: [DatabaseTls, ConnectionContractInput]

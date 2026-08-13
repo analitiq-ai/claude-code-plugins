@@ -6,7 +6,7 @@ statement: >
   connector package's dialect.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [DatabaseTls]

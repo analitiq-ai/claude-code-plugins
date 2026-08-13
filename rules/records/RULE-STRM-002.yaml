@@ -4,7 +4,7 @@ statement: >
   assignment in that mapping writes.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::StreamMapping._assignment_targets_unique"
 owners: [pipeline-plugin]
 targets: [StreamMapping]

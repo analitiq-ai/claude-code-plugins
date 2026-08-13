@@ -21,6 +21,10 @@ contract (`analitiq.contracts.endpoints.DatabaseEndpointDoc`).
 
 ## Required reading (load on demand)
 
+- `../pipeline-builder/references/rules/database-endpoint.md` — **read before
+  authoring**. Every rule binding the document you are about to write, with a
+  **Checked** column saying which ones the validator will not catch for you.
+
 - `spec-database-object.md` — catalog/schema/name/object_type rules; no
   identifier normalization.
 - `spec-columns.md` — the column shape, provider `native_type` labels and

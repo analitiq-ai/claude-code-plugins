@@ -4,7 +4,7 @@ statement: >
   value another entry produces.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [PostAuthOutput, ConnectorBase]

@@ -5,7 +5,7 @@ statement: >
   connection contract.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 rationale: >

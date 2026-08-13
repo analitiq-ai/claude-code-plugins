@@ -5,7 +5,7 @@ statement: >
   the field optional.
 tier: structural
 severity: warning
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin]
 rationale: >

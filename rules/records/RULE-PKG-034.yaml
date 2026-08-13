@@ -6,7 +6,7 @@ statement: >
   idempotency mechanism.
 tier: structural
 severity: error
-scope: connector-package
+scopes: [connector-package]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

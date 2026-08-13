@@ -4,7 +4,7 @@ statement: >
   mix fields belonging to different forms.
 tier: advisory
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Replication._reject_mixed_cursor_forms"
 owners: [connector-plugin]
 targets: [Replication]

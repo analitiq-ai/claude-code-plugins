@@ -5,7 +5,7 @@ statement: >
   token a field declared beneath the one before it.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::StreamMapping._validate_rule_fields_resolve"
 owners: [pipeline-plugin]
 targets: [StreamMapping]

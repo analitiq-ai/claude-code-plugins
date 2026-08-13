@@ -4,7 +4,7 @@ statement: >
   with a narrow rule ahead of any broader rule that would also match its input.
 tier: procedural
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

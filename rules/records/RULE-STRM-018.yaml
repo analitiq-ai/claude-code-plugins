@@ -5,7 +5,7 @@ statement: >
   bundle check can resolve the reference.
 tier: judgment
 severity: warning
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin]
 rationale: >

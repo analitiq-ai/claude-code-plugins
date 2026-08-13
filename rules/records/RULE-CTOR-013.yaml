@@ -4,7 +4,7 @@ statement: >
   co-located with the target MUST NOT name one.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::SqlStageCapabilities._dedicated_schema_matches_scope"
 owners: [engine, connector-plugin]
 targets: [SqlStageCapabilities]

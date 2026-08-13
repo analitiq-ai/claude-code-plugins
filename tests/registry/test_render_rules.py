@@ -52,7 +52,7 @@ BASELINE = {
     "statement": "A connector MUST declare a default transport.",
     "tier": "structural",
     "severity": "error",
-    "scope": "connector",
+    "scopes": "[connector]",
     "validator": "null",
     "owners": "[connector-plugin]",
     "rationale": "Stated here because the corpus needs a record to mutate.",
@@ -114,7 +114,7 @@ def test_a_descriptive_tier_is_refused(registry):
     assert "descriptive" in _refusal(registry)
 
 
-@pytest.mark.parametrize("field", ["tier", "severity", "scope", "status"])
+@pytest.mark.parametrize("field", ["tier", "severity", "status"])
 def test_a_value_outside_a_closed_vocabulary_is_refused(registry, field):
     _write(registry, **{field: "nonsense"})
     assert field in _refusal(registry)
@@ -155,12 +155,65 @@ def test_a_record_naming_no_owner_is_refused(registry):
     assert "owners" in _refusal(registry) or "applies this rule" in _refusal(registry)
 
 
+def test_an_unknown_scope_is_refused(registry):
+    _write(registry, scopes="[nonsense]")
+    assert "nonsense" in _refusal(registry)
+
+
+def test_an_empty_scope_list_is_refused(registry):
+    """A record naming no artifact kind renders into no file.
+
+    `owners` decides which plugin's set a rule joins; `scopes` decides which
+    file inside it. With neither the rule is owned by a plugin and reachable
+    from none of its documents — cited in prose, resolvable nowhere.
+    """
+    _write(registry, scopes="[]")
+    assert "artifact kind" in _refusal(registry)
+
+
+def test_a_scalar_scope_is_refused(registry):
+    """`scopes: connector` is a list of ten one-letter names to YAML's reader.
+
+    Tuple-of-a-string is the failure that matches nothing and says so nowhere,
+    which is why the record refuses the scalar rather than coercing it.
+    """
+    _write(registry, scopes="connector")
+    assert "list of names" in _refusal(registry)
+
+
+def test_a_repeated_scope_is_refused(registry):
+    _write(registry, scopes="[connector, connector]")
+    assert "repeats" in _refusal(registry)
+
+
+def test_any_beside_a_named_scope_is_refused(registry):
+    """`any` already covers every authored document.
+
+    Naming it beside a specific kind states a narrower claim than the record
+    makes, and the renderer would ignore the narrower half — so the record is
+    refused instead of rendering something its author did not mean.
+    """
+    _write(registry, scopes="[any, connector]")
+    assert "any" in _refusal(registry)
+
+
+def test_a_rule_may_bind_two_artifact_kinds(registry):
+    """The case the scalar could not express, and the reason for the list.
+
+    A rule binding two kinds renders into both files, so both authors meet it.
+    Under a scalar one of them silently did not.
+    """
+    _write(registry, scopes="[connector, api-endpoint]")
+    records = RR.load_registry()
+    assert records[0].scopes == ("connector", "api-endpoint")
+
+
 def test_an_unknown_owner_is_refused(registry):
     _write(registry, owners="[marketing]")
     assert "marketing" in _refusal(registry)
 
 
-@pytest.mark.parametrize("field", ["tier", "severity", "scope", "status", "mechanism"])
+@pytest.mark.parametrize("field", ["tier", "severity", "status", "mechanism"])
 def test_a_value_outside_its_closed_vocabulary_is_refused(registry, field):
     """Every closed set the record carries, refused the same way.
 

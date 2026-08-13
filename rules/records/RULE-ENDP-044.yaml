@@ -4,7 +4,7 @@ statement: >
   and MUST NOT spell that absence as an explicit null.
 tier: structural
 severity: warning
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: null
 owners: [connector-plugin]
 targets: [Keyset]

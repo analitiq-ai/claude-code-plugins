@@ -6,7 +6,7 @@ statement: >
   storage are legal is RULE-CTOR-002.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::PostAuthOutput.mode"
 owners: [connector-plugin, engine]
 targets: [PostAuthOutput]
