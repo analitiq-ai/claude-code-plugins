@@ -19,6 +19,12 @@ coverage.xml
 # by path. Ignored, those citations resolved only on the machine that wrote
 # them; tracked, they resolve for anyone with a clone.
 !.claude/rules/
+# `skills/rules-audit/` is tracked for the same reason: it is the audit half of
+# `rules/`, deriving its triggers from those files' `paths:` frontmatter, and it
+# must reach anyone who can open a PR. The rest of `skills/` stays local.
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/rules-audit/
 
 # Python packaging build artifacts
 build/
