@@ -41,13 +41,16 @@ You run at one of two scopes per invocation:
   fields — a **real sample value** and its zone-awareness. This is the
   field-level category `ProviderFacts` deliberately omits.
 
-Read the `ProviderFacts` and `EndpointFacts` fragments in
-`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
-before you research: they state every field to fill and what each must carry.
-Cited `RULE-*` ids resolve in
-`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`, and the
-phrasing tables that map what a provider says onto a closed vocabulary are
-`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/enum-mappers.md`.
+**Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
+— before researching. Its `ProviderFacts` and `EndpointFacts` fragments state
+every field to fill and what each must carry.
+
+**Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/enum-mappers.md`
+— when mapping what a provider says onto a closed vocabulary.
+
+See also `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md` —
+where a cited `RULE-*` id resolves.
+
 Later mentions use a file's bare name; resolve each against these paths.
 
 ## Process

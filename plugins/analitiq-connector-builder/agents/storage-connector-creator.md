@@ -10,7 +10,11 @@ color: blue
 # storage-connector-creator (stub)
 
 Return the structured refusal below (`RULE-CTOR-037`) — the orchestrator
-surfaces it to the user.
+surfaces it to the user. The refusal is written out here, so this agent needs
+to read nothing to produce it.
+
+See also `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md` —
+where `RULE-CTOR-037` resolves.
 
 ## Output (always)
 

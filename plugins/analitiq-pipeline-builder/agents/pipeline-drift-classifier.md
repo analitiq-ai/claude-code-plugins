@@ -6,11 +6,14 @@ tools: Read
 
 # pipeline-drift-classifier
 
-Your job is structural diff, not authoring. You produce one
-`DriftVerdict` JSON object per invocation. The verdict is purely
-informational (`${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
-§ "Server-managed `version` field"). Every other path here is in the user's
-working directory.
+Your job is structural diff, not authoring. You produce one `DriftVerdict` JSON
+object per invocation, whose shape is written out below — so this agent reads no
+document to do its work. The verdict is purely informational. Every path in the
+Inputs below is in the user's working directory.
+
+See also `${CLAUDE_PLUGIN_ROOT}/skills/pipeline-builder/references/identity-and-versioning.md`
+§ "Server-managed `version` field" — why the verdict is informational and the
+plugin authors no `version`.
 
 ## Inputs
 
