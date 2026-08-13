@@ -1,12 +1,3 @@
----
-paths:
-  - "**/*.md"
-  - "**/*.py"
-  - "rules/records/*.yaml"
-  - ".github/workflows/*.yml"
-  - ".gitignore"
----
-
 # Rule: every referent resolves for the reader
 
 Governs every comment, docstring, field description, `.md` and rule record this

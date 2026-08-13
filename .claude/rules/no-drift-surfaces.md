@@ -1,16 +1,3 @@
----
-paths:
-  - "*.md"
-  - ".claude/**/*.md"
-  - "plugins/**/*.md"
-  - "packages/**/*.py"
-  - "census/**/*.py"
-  - "scripts/**/*.py"
-  - "tests/**/*.py"
-  - "rules/records/*.yaml"
-  - ".github/workflows/*.yml"
----
-
 # Rule: no hand-maintained second copy
 
 **The invariant:** every value has one owner, and every other place it appears
