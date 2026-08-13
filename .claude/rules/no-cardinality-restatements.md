@@ -80,8 +80,9 @@ closure claim over a set no test reads has no mechanical half at all.
 teaching what it exists to teach. No check can take that verdict — `guards.md`
 carries the argument.
 
-So a live closure claim holds two properties at once: the sentence still says
-the list is exhaustive, and the list still names exactly the contract's members.
+So a live closure claim holds every part of this at once: the sentence still
+says the list is exhaustive, and the list still names exactly the contract's
+members.
 A test tells you when the contract moved; never that the sentence went stale on
 its own. A set deliberately opened loses its closure in the same change that
 opens it, and any test pinning that set stays — it pins the members, not the
