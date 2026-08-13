@@ -1,5 +1,6 @@
 ---
 paths:
+  - ".claude/**/*.md"
   - "tests/**/*.py"
   - "packages/**/tests/**/*.py"
   - "census/**/*.py"

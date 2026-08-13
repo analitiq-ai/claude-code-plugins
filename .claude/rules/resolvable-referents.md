@@ -33,11 +33,11 @@ it: almost always shorter, and it cannot rot.
   the argument nor the decision. State the mechanism the ticket stood in for.
   The exempt surfaces are the ones whose subject IS the tracker; the root
   `CLAUDE.md` lists them.
-- **A path the reader's clone does not contain.** A `.claude/` path outside
-  `rules/` (the rest of that tree is ignored, so the citation resolved only on
-  the machine that wrote it), or any path `.gitignore` excludes — `docs/`,
-  `htmlcov/`, `dist/`. Name the artifact and the repo that owns it, or state the
-  fact the path stood in for.
+- **A path the reader's clone does not contain.** A `.claude/` path that
+  `.gitignore` does not re-include (most of that tree is local state, so the
+  citation resolved only on the machine that wrote it), or any path
+  `.gitignore` excludes — `docs/`, `htmlcov/`, `dist/`. Name the artifact and
+  the repo that owns it, or state the fact the path stood in for.
 - **A pointer to something that does not exist.** "(the re-add policy above)"
   where nothing above states a re-add policy — which shipped into a published
   JSON Schema. "the breaking change below", resolving to a different change than

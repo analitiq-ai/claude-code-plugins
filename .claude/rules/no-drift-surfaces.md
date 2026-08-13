@@ -1,6 +1,7 @@
 ---
 paths:
   - "*.md"
+  - ".claude/**/*.md"
   - "plugins/**/*.md"
   - "packages/**/*.py"
   - "census/**/*.py"
