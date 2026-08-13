@@ -20,8 +20,8 @@ reaching users through two surfaces, neither of which re-reads the sentence.
 
 ## The invariant
 
-Never state **how many** members a declared shape has. State what makes
-something a member.
+Prose never states **how many** members a declared shape has. It states what
+makes something a member.
 
 Counts are the restatement class this repo's mechanisms cannot see, which is
 why this is absolute rather than a judgment call:
@@ -36,9 +36,10 @@ why this is absolute rather than a judgment call:
   identifiers.
 
 So a count is correct the day it is written, and adding a member falsifies it
-*without changing a word of it*.
+*without changing a word of it*. A count in prose is a defect whether or not it
+is accurate.
 
-## Rewrite recipes
+## The compliant form
 
 | Instead of | Write |
 |---|---|
@@ -49,10 +50,10 @@ So a count is correct the day it is written, and adding a member falsifies it
 | "both caps may be omitted" | "each cap may be omitted" |
 | "the three discovery actions" | "the discovery actions" |
 
-The fix always has the same shape — replace the number with the **rule that
-decides membership**, or defer to the enumeration that follows ("named below",
-"in the table", "the sub-bullets"). Where you defer, make sure a guard pins
-*that*; otherwise the drift has only moved.
+The fix always has the same shape — the number is replaced by the **rule that
+decides membership**, or defers to the enumeration that follows ("named below",
+"in the table", "the sub-bullets"). A deferral is compliant only where a guard
+pins that enumeration bidirectionally; otherwise the drift has only moved.
 
 ## Closure claims
 
@@ -74,22 +75,19 @@ that set back: `tests/connector_builder/test_schema_drift.py` pins
 member landing or leaving fails with the document whose sentence goes false. A
 closure claim over a set no test reads has no mechanical half at all.
 
-**What you cover.** Whether the sentence still closes the set. Deleting "and
-nothing else" leaves a sentence that is weaker, still true, and no longer
+**What a reader covers.** Whether the sentence still closes the set. Deleting
+"and nothing else" leaves a sentence that is weaker, still true, and no longer
 teaching what it exists to teach. No check can take that verdict — `guards.md`
 carries the argument.
 
-So on any edit to a spec carrying a closure claim, and on any change to the set
-it closes:
+So a live closure claim holds two properties at once: the sentence still says
+the list is exhaustive, and the list still names exactly the contract's members.
+A test tells you when the contract moved; never that the sentence went stale on
+its own. A set deliberately opened loses its closure in the same change that
+opens it, and any test pinning that set stays — it pins the members, not the
+sentence.
 
-1. Read the sentence. Does it still say the list is exhaustive?
-2. Does the list still name exactly the contract's members? The test tells you
-   when the contract moved; never that the sentence went stale on its own.
-3. If the closure is gone deliberately — the set opened — say so in the same
-   change. Any test pinning that set stays: it pins the members, not the
-   sentence.
-
-## Counting words to watch
+## What is a cardinality
 
 `one two three four five six seven eight nine ten`, `both`, `a pair of`, and
 digits. `both` and `two` are easiest to miss because they read as ordinary
@@ -105,28 +103,14 @@ Not every number is a cardinality restatement. These are fine:
 - Bounds and literals the contract genuinely defines — a `max_bind_params` of
   2100, a version triple.
 
-The test: **if a member were added to the set, would this sentence become
-false?** If yes, it is a cardinality and it does not go in prose.
+The discriminator: **if a member were added to the set, would this sentence
+become false?** If yes, it is a cardinality and it does not go in prose.
 
 ## Where a count genuinely helps the reader
 
-Render it. A `BEGIN GENERATED` block fed from the pinned models is the only
+Rendered. A `BEGIN GENERATED` block fed from the pinned models is the only
 sanctioned written-out count, because it moves with the contract by
-construction (`plugin-prose.md` ladder, rung 3). Never hand-type one and pin it
-with a test: a test asserting "the prose says five and the model has five"
-passes by being updated in the same commit that breaks the reader's
+construction (`plugin-prose.md` ladder, rung 3). A hand-typed count pinned by a
+test is not an alternative: a test asserting "the prose says five and the model
+has five" passes by being updated in the same commit that breaks the reader's
 understanding.
-
-## The sweep
-
-On every prose edit, and whenever a model gains or loses a member:
-
-1. Read the changed file for the counting words above.
-2. For each, name the set it counts.
-3. If a model owns that set, rewrite per the recipes — even when the number is
-   currently correct. Correctness today is not the property being protected.
-4. If the rewrite defers to an enumeration ("the table below"), confirm a guard
-   pins that enumeration bidirectionally; if none does, the deferral is a new
-   drift surface, not a fix.
-
-A count found in prose during review is a defect whether or not it is accurate.

@@ -10,7 +10,7 @@ Governs every `.md` under `plugins/` — agent definitions, skills, references,
 READMEs. These are distribution artifacts: agents execute them verbatim, so a
 wrong sentence ships wrong authoring behavior to every user. The *why* is the
 root `CLAUDE.md` → "Single source of truth (drift policy)"; the general
-checklist is `no-drift-surfaces.md`. The failure class this rule prevents:
+invariant is `no-drift-surfaces.md`. The failure class this rule prevents:
 prose restating validator behavior, falsified by a `VALIDATOR_PIN` bump.
 
 It governs a rule record's `statement` by the same route:
@@ -19,21 +19,23 @@ references, so a statement is plugin prose that has not been pasted yet. Write
 it here and the rendered `.md` inherits it — including the defect, which lands
 in a generated block no one may hand-edit.
 
-## Classify every sentence: craft or fact
+## Every sentence is craft or fact
 
 - **Craft** — judgment no schema expresses: when to apply a rule, what to ask
   the user, provider gotchas, orchestration order, what the plugin refuses.
-  Hand-write it freely.
+  Hand-written freely.
 - **Fact** — anything a source of truth owns: field shapes, enums, patterns,
   bounds, defaults, `$schema` URLs, validator behavior — **including what it
   does NOT check** — engine/CDK behavior, version-coupled claims ("planned, not
   registered", "older releases…"). Negative and version-coupled claims are the
   most rot-prone facts, not exemptions from being facts.
-- The test: could a contract release, a `VALIDATOR_PIN` bump, or an engine
-  release falsify this sentence with nobody editing it? Then it is a fact, and
-  it never enters prose by hand.
+- The discriminator: a sentence a contract release, a `VALIDATOR_PIN` bump or an
+  engine release could falsify with nobody editing it is a fact, and never
+  enters prose by hand.
 
-## Facts arrive by this ladder — stop at the first rung that fits
+## Every fact sits on a rung
+
+Facts arrive by this ladder, and the compliant rung is the first that fits.
 
 1. **Cite, don't state.** A `RULE-*` id, the generated rule reference, a
    schema URL, a path to a validated `examples/` file. Citation is the pinned
@@ -62,8 +64,8 @@ in a generated block no one may hand-edit.
    constants and models read directly, behavioral facts derived by probing the
    validator with minimal documents, never hand-measured. One block id rendered
    into several files is the sanctioned way to repeat a fact.
-4. **Pin it hard.** A fact that must stay hand-typed (the exemptions under
-   checklist item 2 of `no-drift-surfaces.md` — decision/mapping logic, a test's
+4. **Pin it hard.** A fact that must stay hand-typed (the exemptions in
+   `no-drift-surfaces.md` §Permitted copies — decision/mapping logic, a test's
    assertion target, a curated human-facing summary) needs a test reading **this
    file at this site**. A test comparing the contract to its own constant and
    naming the prose only in a failure hint pins nothing: the prose can rot while
@@ -78,26 +80,26 @@ in a generated block no one may hand-edit.
 
 The most rot-prone fact class, and the one adding a rung the ladder above does
 not carry. A sentence stating what the validator **does or does not** check
-takes the first of these that fits:
+sits on the first of these that fits:
 
 1. **A generated block** (rung 3), rendered by
    `scripts/render_validator_claims.py` — it moves with the measurement by
-   construction, so prefer it whenever a whole section states validator
+   construction, so it is the rung whenever a whole section states validator
    behaviour.
-2. **A probe fence.** Add a `Claim`/probe to that script and put
+2. **A probe fence.** A `Claim`/probe in that script, with
    `<!-- PROBE: <id> -->` directly above the sentence. Gated both ways: a fence
    naming an id no probe defines fails the build, and a probe nothing references
    fails the build. Nothing checks that the sentence beside the fence describes
-   what the probe measures — that half is yours.
-3. **Cite the `RULE-*`** that enforces the behaviour (rung 1).
-4. **Do not make the claim.** "The validator does not check this" is rarely
-   load-bearing guidance; state what the author must do instead.
+   what the probe measures — that half is the reader's.
+3. **A `RULE-*` citation** naming what enforces the behaviour (rung 1).
+4. **No claim at all.** "The validator does not check this" is rarely
+   load-bearing guidance; the prose states what the author must do instead.
 
 Recognising that a sentence makes such a claim is the author's job: deciding it
 from the wording took a list of hand-curated English regexes, which `guards.md`
-bans and explains. Pin the claim in the commit that writes it. On the contract's
-own surface the same sentence takes a census disposition instead —
-`contract-prose.md`.
+bans and explains. A claim and its pin land in the same commit — an unpinned
+claim is a defect, not a pending task. On the contract's own surface the same
+sentence takes a census disposition instead — `contract-prose.md`.
 
 ## Placement
 
@@ -105,8 +107,8 @@ own surface the same sentence takes a census disposition instead —
   a skill its instructions load. Correct content in a reference no agent opens
   teaches nothing.
 - One canonical prose site per fact; every other mention is a citation (rung 1)
-  or the same generated block (rung 3). When correcting a fact, fix the
-  canonical site and every citing file in one commit.
+  or the same generated block (rung 3). A corrected fact is corrected at the
+  canonical site and in every citing file by the same commit.
 
 ## Fenced examples and excerpts
 
@@ -114,9 +116,9 @@ own surface the same sentence takes a census disposition instead —
   validator, with a glob-coverage guard, making it a *pinned* copy rather than a
   drift surface. Pinned only as strongly as the validator is strict, though: an
   example inherits every validator blind spot (rung 2 tightens all examples for
-  free); the gate grades in-repo source while users run the published pin, so
-  hold new-shape examples back with the prose until `VALIDATOR_PIN` moves; and
-  validity never proves the example still shows the recommended shape — that
+  free); the gate grades in-repo source while users run the published pin, so a
+  new-shape example lands with the prose no earlier than `VALIDATOR_PIN` moves;
+  and validity never proves the example still shows the recommended shape — that
   residue is review-owned craft.
 - An example that is the *output of code* (derived ids, rendered DSNs) is
   computed by calling the real code, never transcribed.
@@ -160,19 +162,18 @@ Prose is loaded into an agent's context and executed, not read at leisure —
 every sentence spends budget the authoring task needs, and every sentence is
 review surface and potential rot.
 
-- State each point once, in the fewest words that carry the obligation or the
-  judgment. No hedging, no paraphrase of a neighboring sentence, no synonym for
-  a term the contract already names.
-- Keep a "why" only when it changes what the agent does next; rationale that
+- Each point is stated once, in the fewest words that carry the obligation or
+  the judgment. No hedging, no paraphrase of a neighboring sentence, no synonym
+  for a term the contract already names.
+- A "why" stays only when it changes what the agent does next; rationale that
   does not alter behavior belongs in the commit message or the rule registry.
 - A sentence that adds no new obligation, judgment, or example is deleted, not
   polished.
 
-## Does the document still TEACH it?
+## The document still teaches it
 
 No guard can answer this — one reads marked text or a token, never a sentence
-(`guards.md`). So read for it. When you touch a plugin document, check each of
-these:
+(`guards.md`). These are properties of the document, not of a diff:
 
 - **A rule the contract still needs stated.** `stream-creator.md` must rule out
   the dotted-string `get` path, because the array-of-segments shape is the one
@@ -185,15 +186,8 @@ these:
   `test_prose_absence_claims.py` sits green protecting a claim nobody makes; it
   can only check the token `replication` is still somewhere in the document.
 - **A sentence that closes a set.** The member list is pinned against the
-  contract; that the sentence still says the list is exhaustive is yours —
-  `no-cardinality-restatements.md` §Closure claims.
+  contract; that the sentence still says the list is exhaustive is the reader's
+  — `no-cardinality-restatements.md` §Closure claims.
 
 The pattern: where a test pins a contract fact and the prose is what teaches it,
-the test guards the fact and **you** guard the teaching.
-
-## Quick test
-
-For every new or changed sentence: **which rung carries this, and is it the
-fewest words that carry it?** Craft needs no rung. A fact you cannot place on
-one is the review finding you are about to receive — and after the next pin
-bump, the wrong guidance an agent will follow.
+the test guards the fact and **a reader** guards the teaching.

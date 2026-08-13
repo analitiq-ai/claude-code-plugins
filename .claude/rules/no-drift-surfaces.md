@@ -10,56 +10,52 @@ paths:
   - ".github/workflows/*.yml"
 ---
 
-# Don't create drift surfaces
+# Rule: no hand-maintained second copy
 
-**Purpose:** avoid adding places where a fact must be kept in sync by hand.
-Every hand-maintained copy of something a single source already owns is a *drift
-surface* — it rots silently when the source changes.
+**The invariant:** every value has one owner, and every other place it appears
+either references that owner or is pinned to it by a test that fails when the
+two diverge. A hand-maintained copy is a *drift surface* — it rots silently when
+the owner changes.
 
-## The rule
+The property that follows: when an owning source changes, exactly one place
+needs a human edit, and anything that forgets fails loudly.
 
-Before hardcoding a value another source owns — a schema/contract enum, a
-vocabulary, a `$schema` URL, a field list, a package version pin — **reference
-the owner instead of copying it.**
+## What has an owner
 
-A "value another source owns" includes at least:
-- schema-owned enums/vocabularies (kinds, auth types, transports, encodings,
-  pagination styles, …) — owned by the published contract / `analitiq-contract-models`;
+- schema-owned enums and vocabularies (kinds, auth types, transports,
+  encodings, pagination styles, …) — owned by the published contract and
+  `analitiq-contract-models`;
 - canonical type vocabularies — owned by the contract models;
 - dependency version pins (e.g. `analitiq-validator==…`) — one intended value,
-  repeated across install/CI/docs;
+  repeated across install, CI and docs;
 - anything already stated once in `CLAUDE.md`, a `SKILL.md`, or a reference doc.
 
-## Checklist when an edit adds a value list or a pinned value
+A value with an owner is referenced, not pasted: the file or section is linked,
+or the value is read at runtime.
 
-1. **Does a single source already own this?** If yes → reference it (link the
-   file/section, or read it at runtime). Do **not** paste a second copy.
-2. **Is a copy genuinely unavoidable?** Only three reasons qualify:
-   decision/mapping logic (e.g. `enum-mappers.md`), a test's assertion target,
-   or a curated human-facing summary (e.g. the README support matrix). Anything
-   else is a drift surface — reference instead.
+## Permitted copies
 
-   "Nothing enforces it, so I have to write it down" is **not** one of the
-   three. The rule registry carries unenforced rules too: a record with no
-   `validator`, whose `rationale` says what would have to be read to catch a
-   violation. Give the obligation an id in `rules/records/` and cite it; keep in
-   prose only the craft the record does not carry.
-3. **If the copy is unavoidable, is it pinned?** An unavoidable restatement of a
-   contract-owned value **must** be pinned by a drift test that reads the
-   contract package — `tests/connector_builder/test_schema_drift.py` is the
-   worked example — so a divergence fails the build. An *unpinned* copy of a
-   contract value is a defect, not documentation.
-4. **Collapse parallel copies.** Prefer one canonical restatement plus
-   references over N copies. When you touch a value appearing in several places,
-   reduce the count if you can; never increase it.
-5. **Repeated pins stay in lockstep.** When a version/const must appear at
-   several call sites (install command, CI, docs), keep every site identical and
-   cross-reference them so they move together.
+A copy is permitted in exactly these forms:
 
-## Quick test
+- decision or mapping logic (e.g. `enum-mappers.md`);
+- a test's assertion target;
+- a curated human-facing summary (e.g. the README support matrix).
 
-> "If the owning source changes tomorrow, how many places must a human remember
-> to edit — and will anything fail loudly if they forget?"
+Every other copy is a drift surface. "Nothing enforces it, so it has to be
+written down" is not one of these forms: the rule registry carries unenforced
+rules too — a record with no `validator`, whose `rationale` says what would have
+to be read to catch a violation. An obligation with no id is a missing
+`rules/records/` entry, and what stays in prose beside the citation is the craft
+the record does not carry.
 
-Answer should be **one**, and **each of them pinned by a test**.
-If editing here adds an unpinned place, reference the owner instead.
+## The state a permitted copy is in
+
+- **Pinned.** A copy of a contract-owned value is pinned by a drift test that
+  reads the contract package — `tests/connector_builder/test_schema_drift.py` is
+  the worked example — so divergence fails the build. An unpinned copy of a
+  contract value is a defect, not documentation.
+- **Minimal.** One canonical restatement plus references, never N parallel
+  copies. The number of copies of a value never rises.
+- **In lockstep.** Where a pin must appear at several call sites (install
+  command, CI, docs), every site is identical and cross-references the others,
+  so they move together.

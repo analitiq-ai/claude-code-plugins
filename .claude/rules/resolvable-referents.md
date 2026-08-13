@@ -5,7 +5,7 @@ paths:
   - "rules/records/*.yaml"
 ---
 
-# Rule: every referent must resolve for the reader
+# Rule: every referent resolves for the reader
 
 Governs every comment, docstring, field description, `.md` and rule record this
 repo tracks. A referent is anything a sentence points at instead of saying: a
@@ -16,9 +16,16 @@ cases".
 every referent in the sentence, or the sentence states the fact instead of
 pointing at it.
 
-Apply it while you write.
+A referent resolves only when it has been resolved — the file opened, the tests
+counted, the paragraph above read, the regex run. One that "obviously" resolves
+is exactly the one that has rotted before. One that resolves only because the
+writer holds something the reader does not — an untracked file, a tracker login,
+the pull request open in a tab — does not resolve.
 
-## The cases
+Where it does not resolve, the sentence states the fact instead of pointing at
+it: almost always shorter, and it cannot rot.
+
+## What violates it
 
 - **A ticket or pull-request reference.** A bare `(#123)`, `issue #89`, the
   cross-repo `analitiq-engine#406`, a tracker URL. These resolve only for
@@ -57,34 +64,9 @@ Apply it while you write.
   runtime subject genuinely IS the pull request under check is not this defect;
   both shapes exist in this repo and read identically.
 - **An unmarked path in running prose.** `see docs/thing.md` in bare prose is as
-  unresolvable as a backticked one and harder to spot. Mark paths you cite: it
-  makes them legible, and it makes the citation visible to the next reader as a
-  citation rather than a word with a slash in it.
-
-## How to apply it
-
-On every prose or comment edit, for each referent in the changed text:
-
-1. **Name what it points at**, concretely — a file, a symbol, a paragraph, a
-   number.
-2. **Resolve it, don't assume it.** Open the file. Count the tests. Read the
-   paragraph above. Run the regex. A referent that "obviously" resolves is
-   exactly the one that has rotted before.
-3. If it does not resolve, **state the fact instead of pointing at it** — almost
-   always shorter, and it cannot rot.
-4. If it resolves only because you have something the reader does not — an
-   untracked file, a tracker login, the PR open in a tab — treat it as not
-   resolving.
-
-## Quick test
-
-Run this on every referent you write:
-
-> Hand this file to someone with a fresh clone and no other context. Can they
-> follow every pointer in the sentence you just wrote?
-
-If the answer needs "well, they'd also need…", the sentence states the fact
-instead.
+  unresolvable as a backticked one and harder to spot. Cited paths are marked:
+  it makes them legible, and it makes the citation visible to the next reader as
+  a citation rather than a word with a slash in it.
 
 ## Bare deletion is not the fix
 
