@@ -76,7 +76,9 @@
   "also_covers": [
     "RULE-DBEP-010",
     "RULE-STRM-022",
-    "RULE-STRM-023"
+    "RULE-STRM-023",
+    "RULE-STRM-025",
+    "RULE-PIPE-010"
   ],
   "assert": [
     {
@@ -116,14 +118,14 @@
       "doc": "pipeline",
       "path": "streams",
       "min_length": 1,
-      "rule": "RULE-PIPE-010"
+      "rule": "intent"
     },
     {
       "doc": "api_connection",
       "path": "secret_refs.api_key",
       "matches": "^env:",
       "rule": "RULE-CONN-009",
-      "note": "the connector routes api_key to secret storage, so the connection carries a pointer"
+      "note": "routed to secret storage, so the connection carries a pointer; this pins the env: scheme the plugin defaults to, which is narrower than the rule requires"
     },
     {
       "doc": "api_connection",
@@ -236,14 +238,14 @@
       "doc": "stream",
       "path": "source.endpoint_ref.endpoint_id",
       "equals": "v1__items",
-      "rule": "RULE-STRM-022"
+      "rule": "intent"
     },
     {
       "doc": "stream",
       "path": "source.replication.method",
       "equals": "full_refresh",
-      "rule": "RULE-STRM-025",
-      "note": "the seeded endpoint declares no supported set, so nothing else is defensible"
+      "rule": "intent",
+      "note": "the seeded endpoint declares no supported set, so the prompt is the only authority"
     },
     {
       "doc": "stream",
@@ -255,8 +257,8 @@
       "doc": "stream",
       "path": "destinations[0].endpoint_ref.database_object.name",
       "equals": "items",
-      "rule": "RULE-STRM-018",
-      "note": "a connection ref carries database_object verbatim — that is the identity"
+      "rule": "RULE-DBEP-007",
+      "note": "identity is read from database_object; the derived handle is opaque"
     },
     {
       "doc": "stream",

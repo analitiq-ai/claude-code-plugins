@@ -13,5 +13,10 @@
     "**/type-map-write.json",
     "**/connector.py"
   ],
-  "also_covers": ["RULE-CTOR-037", "RULE-CTOR-033"]
+  "also_covers": [
+    "RULE-CTOR-033"
+  ],
+  "cites": [
+    "RULE-CTOR-037"
+  ]
 }

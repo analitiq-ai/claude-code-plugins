@@ -66,8 +66,8 @@
   },
   "also_covers": [
     "RULE-STRM-019",
-    "RULE-STRM-023",
-    "RULE-TMAP-018"
+    "RULE-TMAP-018",
+    "RULE-STRM-030"
   ],
   "assert": [
     {
@@ -146,8 +146,8 @@
       "equals": [
         "id"
       ],
-      "rule": "RULE-STRM-030",
-      "note": "an upsert needs record identity; the source endpoint declares id as its primary key"
+      "rule": "intent",
+      "note": "the upsert's conflict keys come from these; the source endpoint already declares id, so RULE-STRM-030's own precondition is not met here"
     },
     {
       "doc": "stream",

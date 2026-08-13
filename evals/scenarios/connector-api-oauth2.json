@@ -31,14 +31,15 @@
     "RULE-SHRD-008",
     "RULE-SHRD-009",
     "RULE-SHRD-010",
-    "RULE-CTOR-027"
+    "RULE-PKG-025",
+    "RULE-CTOR-033"
   ],
   "assert": [
     {
       "doc": "connector",
       "path": "kind",
       "equals": "api",
-      "rule": "RULE-CTOR-033"
+      "rule": "intent"
     },
     {
       "doc": "connector",
@@ -50,8 +51,8 @@
       "doc": "connector",
       "path": "auth.type",
       "matches": "^oauth2",
-      "rule": "RULE-CTOR-027",
-      "note": "the auth type the provider actually operates, not the archetype nearest to hand"
+      "rule": "RULE-CTOR-026",
+      "note": "the auth type the provider actually operates, grounded in its own documentation rather than the archetype nearest to hand"
     },
     {
       "doc": "connector",
@@ -70,7 +71,8 @@
   "artifacts": [
     {
       "glob": "xero/README.md",
-      "rule": "RULE-PKG-025"
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
     },
     {
       "glob": "xero/connector.py",

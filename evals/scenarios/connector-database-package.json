@@ -26,10 +26,13 @@
     }
   },
   "also_covers": [
-    "RULE-PKG-002",
     "RULE-TMAP-011",
     "RULE-TMAP-013",
-    "RULE-TMAP-016"
+    "RULE-TMAP-016",
+    "RULE-PKG-009",
+    "RULE-PKG-007",
+    "RULE-PKG-025",
+    "RULE-CTOR-033"
   ],
   "assert": [
     {
@@ -42,7 +45,7 @@
       "doc": "connector",
       "path": "kind",
       "equals": "database",
-      "rule": "RULE-CTOR-033"
+      "rule": "intent"
     },
     {
       "doc": "connector",
@@ -55,13 +58,15 @@
       "doc": "connector",
       "path": "sql_capabilities",
       "present": true,
-      "rule": "RULE-CTOR-026"
+      "rule": "RULE-CTOR-040",
+      "note": "the contract leaves it optional and the engine requires it before running any write mode"
     }
   ],
   "artifacts": [
     {
       "glob": "mysql/__init__.py",
-      "rule": "RULE-PKG-009"
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
     },
     {
       "glob": "mysql/connector.py",
@@ -73,11 +78,13 @@
     },
     {
       "glob": "mysql/pyproject.toml",
-      "rule": "RULE-PKG-007"
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
     },
     {
       "glob": "mysql/README.md",
-      "rule": "RULE-PKG-025"
+      "rule": "intent",
+      "note": "presence only; the rule's content obligation is not graded"
     },
     {
       "glob": "mysql/definition/endpoints/*.json",
