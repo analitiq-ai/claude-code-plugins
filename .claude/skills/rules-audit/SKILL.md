@@ -27,7 +27,9 @@ From the invocation argument:
 - **Nothing** → the current work, committed, staged and unstaged in one range:
   `git diff $(git merge-base origin/main HEAD)`; add `--name-only` for the
   file list. Untracked files never appear in that diff — take them from
-  `git status --porcelain` and audit their full content as added lines.
+  `git ls-files --others --exclude-standard` and audit their full content as
+  added lines (a bare `git status --porcelain` collapses a new directory to
+  one entry and silently hides every file under it).
 - **A path to another checkout** → the same commands with **every** git
   invocation carrying `-C <path>`, including the `git merge-base` inside the
   command substitution — otherwise the range resolves in the wrong checkout.
@@ -40,13 +42,17 @@ pre-existing text outside the hunks.
 
 Match the changed files against each rule's `paths:` globs. A rule with no
 `paths:` frontmatter applies to every diff, mirroring the loader's documented
-unconditional load; matching delegates to `pathlib.PurePath.full_match`
-(Python 3.13+) rather than restating glob semantics by hand. Run this with
-two arguments — the checkout root and a file listing one changed path per
-line:
+unconditional load. Frontmatter is parsed with `yaml.safe_load` (PyYAML,
+already among this repo's dev dependencies), so any YAML spelling of `paths:`
+works; a `paths:` value that is not a non-empty list of strings aborts, as
+does a glob using brace expansion — documented for the loader but not
+implemented here, so it must fail loudly rather than silently select nothing.
+Matching delegates to `pathlib.PurePath.full_match`, which is why the snippet
+needs Python 3.13+ (the repo's own test matrix runs it). Run this with two
+arguments — the checkout root and a file listing one changed path per line:
 
 ```python
-import sys
+import sys, yaml
 from pathlib import Path, PurePosixPath
 
 if sys.version_info < (3, 13):
@@ -54,31 +60,33 @@ if sys.version_info < (3, 13):
 
 root = Path(sys.argv[1])
 changed = [l.strip() for l in open(sys.argv[2]) if l.strip()]
-rules = sorted((root / ".claude/rules").rglob("*.md"))
+rules_dir = root / ".claude/rules"
+rules = sorted(rules_dir.rglob("*.md"))
 if not rules:
-    sys.exit(f"no rules under {root}/.claude/rules — wrong root; refusing "
+    sys.exit(f"no rules under {rules_dir} — wrong root; refusing "
              "to report a vacuously clean audit")
 for rule in rules:
-    lines = rule.read_text().splitlines()
-    globs, in_paths, has_key = [], False, False
-    for line in (lines[1:] if lines and lines[0] == "---" else []):
-        if line == "---":
-            break
-        if line == "paths:":
-            in_paths = has_key = True
-        elif line.startswith("paths:"):
-            sys.exit(f"{rule}: unsupported paths: spelling")
-        elif in_paths and line.lstrip().startswith("- "):
-            globs.append(line.lstrip()[2:].strip().strip("\"'"))
-        elif not line.startswith((" ", "\t")):
-            in_paths = False
-    if has_key and not globs:
-        sys.exit(f"{rule}: paths: present but no items parsed")
+    text = rule.read_text()
+    fm = {}
+    if text.startswith("---\n"):
+        head, sep, _ = text[4:].partition("\n---")
+        if not sep:
+            sys.exit(f"{rule}: unterminated frontmatter")
+        fm = yaml.safe_load(head) or {}
+    globs = None
+    if "paths" in fm:
+        globs = fm["paths"]
+        if not (isinstance(globs, list) and globs
+                and all(isinstance(g, str) for g in globs)):
+            sys.exit(f"{rule}: paths: must be a non-empty list of strings")
+        for g in globs:
+            if "{" in g:
+                sys.exit(f"{rule}: {g}: brace expansion not implemented")
     hits = sorted({f for f in changed for g in globs
                    if PurePosixPath(f).full_match(g)}) if globs \
         else list(changed)
     if hits:
-        print(rule.name)
+        print(rule.relative_to(rules_dir))
         for f in hits:
             print("  ", f)
 ```

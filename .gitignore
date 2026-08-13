@@ -10,10 +10,10 @@ htmlcov/
 coverage.xml
 .idea/
 # Claude Code's working directory: local settings, session state, and
-# `worktrees/`, which holds whole nested checkouts. `skills/` stays out too,
-# save the one exception below — it is the maintainer's own tooling, assembled
-# per machine and partly symlinked out to other repos, so tracking it would
-# publish paths nobody outside can follow.
+# `worktrees/`, which holds whole nested checkouts. `skills/` stays out too —
+# it is the maintainer's own tooling, assembled per machine and partly
+# symlinked out to other repos, so tracking it would publish paths nobody
+# outside can follow; whatever is re-included below is the exception.
 .claude/*
 # `rules/` is the exception: authoring policy this repo's prose and tests cite
 # by path. Ignored, those citations resolved only on the machine that wrote

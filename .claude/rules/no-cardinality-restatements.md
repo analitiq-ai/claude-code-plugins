@@ -1,5 +1,7 @@
 ---
 paths:
+  - "*.md"
+  - ".claude/**/*.md"
   - "plugins/**/*.md"
   - "packages/**/*.py"
   - "rules/records/*.yaml"
