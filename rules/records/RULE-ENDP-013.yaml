@@ -1,0 +1,20 @@
+id: RULE-ENDP-013
+statement: >
+  Every replication cursor field MUST resolve to a field declared in the record
+  shape the operation's response schema describes.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+rationale: >
+  The cursor field is read off each returned record to advance the watermark, so
+  a field the record shape does not declare is read as nothing: the watermark
+  never moves and every incremental run re-fetches the same window, or stores an
+  empty watermark and starts over — with the run reporting success either way.
+  It is the rule that stops an author declaring a cursor on a field the provider
+  merely mentions in prose, and resolving it against the declared record shape
+  is the only check available before the endpoint runs.
+status: active
+superseded_by: null

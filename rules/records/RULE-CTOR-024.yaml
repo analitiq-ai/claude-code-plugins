@@ -1,0 +1,22 @@
+id: RULE-CTOR-024
+statement: >
+  A connector's `auth` block MUST carry only the children declared by the union
+  branch its `type` selects, so a child belonging to a different auth type is
+  rejected rather than ignored.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::ApiKeyAuth"
+owners: [connector-plugin, engine]
+targets: [ApiKeyAuth, BasicAuth, OAuth2AuthorizationCodeAuth, OAuth2ClientCredentialsAuth, JwtAuth, DbAuth, CredentialsAuth, AwsIamAuth, NoneAuth]
+mechanism: discriminated_union
+rationale: >
+  The engine dispatches auth entirely by the selected branch, so a template
+  parked on a branch that has no such flow is never read: without the union it
+  would sit in the document looking configured, and the connector would fail at
+  the first moment that flow was needed — a token expiry, a re-auth — far from
+  the authoring mistake and looking like a provider outage. Discriminating on
+  `type` also means an author takes a branch's field set from the published
+  schema rather than from prose, which is why no plugin page restates it.
+status: active
+superseded_by: null

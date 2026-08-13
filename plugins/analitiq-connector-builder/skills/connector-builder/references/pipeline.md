@@ -5,11 +5,11 @@ always loaded by the orchestrator skill (`SKILL.md` §Required reading).
 
 ## Modes
 
-The orchestrator runs in one of three modes (input `mode`, default
+The orchestrator runs in the mode given by input `mode` (default
 `build`). `build` and `update` share phases 1–5 and branch only at
-phases 0, 6, and 7; `validate` runs phase 0 then validates the on-disk
-documents (report-only, no fix loop), skipping research, authoring,
-drift, and write.
+phases 0, 6, and 7; `validate` runs phase 0 and then phase 4 over the
+on-disk documents, skipping research, authoring, drift, and write. Each
+phase states its own halt conditions.
 
 - **`build`** (default) — author a fresh connector; phase 0 halts if the
   `{connector_id}/` directory already exists.
@@ -46,6 +46,10 @@ The warning must include:
 - A note that re-running after removal produces a fresh connector
   authored from scratch (no migration of legacy connector shapes).
 
+If the user cannot remove the directory (permissions, dirty tree under
+VCS), do not attempt workarounds: surface the OS-level error and let them
+resolve it before re-running.
+
 **`update`** — `connector_path` points at the existing connector. Read
 its directory name and `connector.json` `connector_id` up front (the
 target artifact, not spec material) and record it as the read-only drift
@@ -63,11 +67,6 @@ tell the user.
 `definition/endpoints/*.json`) and skip directly to phase 4; do no
 research, authoring, or writing. If `connector_path` does NOT exist, halt
 and tell the user there is nothing to validate.
-
-No migration of legacy connector shapes — stopping early avoids
-partial-state writes. If the user cannot remove the directory
-(permissions, dirty tree under VCS), do not attempt workarounds:
-surface the OS-level error and let them resolve it before re-running.
 
 ### 1. Research (domain)
 
@@ -93,14 +92,14 @@ docs, halt and ask the user for a URL or manually-supplied facts.
 
 Run the closed-enum mappers inline (see `enum-mappers.md`):
 
-- `KindMapper` → `kind` (one of `api`, `database`).
+- `KindMapper` → `kind`.
 - `AuthTypeMapper` → `auth.type`.
 - `TransportTypeMapper` → `transport_type` per transport.
 
-Storage kinds (`file`, `s3`, `stdout`) are accepted by the schema but not
-yet supported by the engine. If the user explicitly asked for one,
-dispatch to `storage-connector-creator` (which currently returns a
-structured refusal); otherwise fail closed and ask.
+A `kind` the mapper routes to the storage stub (`enum-mappers.md`
+§KindMapper) goes to `storage-connector-creator`, which returns a
+structured refusal (`RULE-CTOR-037`). Dispatch there only if the user
+explicitly asked for one; otherwise fail closed and ask.
 
 ### 3. Dispatch creator (domain body + type maps)
 
@@ -109,7 +108,8 @@ Based on `kind`:
 - `kind = api` → invoke `api-connector-creator` with `ProviderFacts` plus
   classifications.
 - `kind = database` → invoke `db-connector-creator` with the same.
-- `kind ∈ {file, s3, stdout}` → invoke `storage-connector-creator` (stub).
+- a storage `kind` (`enum-mappers.md` §KindMapper) → invoke
+  `storage-connector-creator` (stub).
 
 Always pass `provider_facts`. The creator's **hard gate** refuses an
 initial authoring dispatch without it — research cannot be skipped. The
@@ -118,9 +118,10 @@ endpoints (that is the phase-5 fan-out).
 
 Receive a `CreatorOutput` JSON object containing the assembled connector
 body and type map(s). For `kind = database` it additionally carries the
-`package_files` block (`connector.py`, `__init__.py`, `requirements.txt`,
-`pyproject.toml` contents) — the connector is an installable Python
-package and the creator owns all of its files.
+`package_files` block (`io-contracts.md` §CreatorOutput) — the creator
+owns every Python file in the package; the README is the orchestrator's
+to write at phase 7 (`RULE-PKG-025`), from the researched facts, for
+either kind.
 
 ### 4. Validate the domain (barrier)
 
@@ -133,26 +134,23 @@ map(s):
 - Write map (`type-map-write.json`, database only) →
   `https://schemas.analitiq.ai/type-map-write/latest.json`.
 
-Both maps run the full contract-model + semantic pass. The validator derives the
-rule direction from the filename, so write the maps under their exact
-filenames before standalone validation, or validate via the connector
-document so the sibling walk picks them up.
+Validate each map the connector's `kind` calls for, under the filename
+that kind requires (`RULE-PKG-030`), passing the matching schema URL
+above.
 
-The validator validates JSON documents only — the database package files
-(`connector.py`, `__init__.py`, `requirements.txt`, `pyproject.toml`) are
-enforced by registry CI (wheel build, entry-point checks), not by this
-pipeline.
+Validation covers the JSON documents above; the package files are
+governed by rules of their own (`RULE-PKG-007`, `RULE-PKG-009`,
+`RULE-PKG-025`).
 
 This is a **barrier**. In `build` / `update` mode the connector body and
 type maps MUST validate clean before the phase-5 endpoint fan-out, because
 every endpoint references the connector's transports/auth and resolves its
 field types through `type-map-read`. For `kind = database` this completes
-validation — database connectors ship no endpoint files (schema/table
-combinations are connection-scoped and discovered at runtime via
-`resource_discovery`), so phase 5 is skipped.
+validation — a connector release ships no database endpoint documents
+(`RULE-DBEP-006`), so phase 5 is skipped.
 
 In `validate` mode, run the validator once over **every** on-disk document
-— the connector, both type maps when present, and all
+— the connector, every type map present, and all
 `definition/endpoints/*.json` — report the resulting `Diagnostics`, and
 stop. There is no fix loop and no creator re-dispatch (phases 1–3 and 5
 were skipped, so there is no `CreatorOutput` to revise). The fix loop
@@ -188,12 +186,10 @@ Database connectors skip this phase entirely.
      domains, nullability, formats). This is the per-resource research
      that grounds field types instead of guessing them.
    - `endpoint-creator` authors the endpoint document from `EndpointFacts`
-     and the connector document (for transport/auth refs). The API connector
-     body carries no connector-level pagination, so the orchestrator echoes
-     the connector-wide pagination (`ProviderFacts.pagination` → style +
-     params) into the branch's `EndpointFacts.pagination`. Its hard gate
-     refuses if `EndpointFacts` is missing — it has no web access and may not
-     guess field types.
+     and the connector document (for transport/auth refs). The orchestrator
+     echoes the connector-wide pagination (`ProviderFacts.pagination` →
+     style + params) into the branch's `EndpointFacts.pagination`
+     (`io-contracts.md` §EndpointFacts).
    - `connector-schema-validator` validates the endpoint against
      `https://schemas.analitiq.ai/api-endpoint/latest.json`, with the same
      per-artifact 5-pass fix loop as phase 4 (re-dispatch
@@ -212,19 +208,15 @@ addition — re-author and re-validate the domain (phases 3–4), never patch
 the map per endpoint. This keeps canonical types consistent across
 endpoints.
 
-(Database endpoints validate against
-`https://schemas.analitiq.ai/database-endpoint/latest.json` when a future
-mode authors them; this plugin does not.)
-
 ### 6. Drift
 
 The classifier reads `previous_version` from `previous_release_path` and
 returns the computed `next_version`; set the connector's top-level
 `version` to that `next_version` directly (do not recompute the semver
 yourself). This `version` is the connector's own release semver, owned by
-`connector-drift-classifier` — unrelated to the plugin package version,
-which this repo bumps via PR labels. The classifier needs a `current_path`
-to diff, so stage the freshly-authored draft to a temporary path first.
+`connector-drift-classifier` — unrelated to the version of the plugin
+itself. The classifier needs a `current_path` to diff, so stage the
+freshly-authored draft to a temporary path first.
 
 - **`update`** — required: invoke `connector-drift-classifier` with
   `previous_release_path` = the existing connector and `current_path` =
@@ -233,7 +225,10 @@ to diff, so stage the freshly-authored draft to a temporary path first.
 - **`build`** — if `previous_release_path` was supplied, invoke
   `connector-drift-classifier` the same way (staged draft as
   `current_path`) and apply `next_version`; otherwise this is a first
-  release; set `version` to `1.0.0`.
+  release (`RULE-CTOR-032`).
+- A `bump` of `none` because `previous_release_path` is absent is a first
+  release (`RULE-CTOR-032`); a `none` on an unchanged draft leaves
+  `version` as it was.
 
 ### 7. Write
 
@@ -241,50 +236,33 @@ In `update` mode the regenerated files replace the existing connector
 tree — the prior files were read as the drift baseline in phase 6 and
 are never edited in place. Report that the tree was regenerated and
 recommend the user review `git diff` before committing. Otherwise write
-the connector document, type map(s), package files (database only), and
-any endpoint files to disk at predictable paths. The connector root IS
-the Python package for database connectors:
+the connector document, type map(s), package files (database only), any
+endpoint files, and the README (`RULE-PKG-025`) to disk at predictable
+paths. The connector root IS the Python package for database connectors:
 
 ```
 {connector_id}/
 ├── definition/
 │   ├── connector.json
-│   ├── type-map-read.json          # required for both api and db; native → Arrow
-│   ├── type-map-write.json         # database only; Arrow → native DDL render rules
+│   ├── type-map-read.json          # native → Arrow; which kinds ship which map: RULE-PKG-030
+│   ├── type-map-write.json         # Arrow → native DDL render rules; RULE-PKG-030
 │   └── endpoints/
-│       └── {endpoint_id}.json      # api connectors only — one file per endpoint; filename = document.endpoint_id
-├── __init__.py                     # database only — re-exports the connector class
-├── connector.py                    # database only — {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
-├── requirements.txt                # database only — THIS connector's driver(s) only
-├── pyproject.toml                  # database only — analitiq-connector-{connector_id}; entry points named {connector_id}
-└── README.md
+│       └── {endpoint_id}.json      # api connectors only — one file per endpoint; RULE-PKG-031
+├── __init__.py                     # database only — see RULE-PKG-009
+├── connector.py                    # database only — see RULE-PKG-010
+├── requirements.txt                # database only — see RULE-PKG-027
+├── pyproject.toml                  # database only — see RULE-PKG-007
+└── README.md                       # see RULE-PKG-025
 ```
 
-**Reproducibility (update mode).** An update fully regenerates the tree
-from `ProviderFacts` + creator logic; connector content is treated as
-reproducible, so non-reproducible hand edits to a connector are not
-preserved across an update. This is a deliberate limitation — running
-updates inside a VCS checkout keeps any regeneration reviewable and
-revertible. A preserve/merge step for genuinely bespoke connector code
-is out of scope for now.
+**Reproducibility (update mode).** An update regenerates the tree from
+`ProviderFacts` + creator logic, so hand edits to a connector are not
+preserved.
 
-Never write a `type-map.json` — that pre-split filename is dead to the
-engine and the validator rejects it with a migration finding.
+Never write a `type-map.json` — the read and write directions ship under
+the filenames `RULE-PKG-030` requires.
 
-Each endpoint file's basename **must** equal its `endpoint_id` (write the
-endpoint to `endpoints/{endpoint_id}.json`, never a renamed or aliased
-file). The engine looks an endpoint up by `endpoint_id` and reads
-`endpoints/{endpoint_id}.json`, so a divergent filename is unreachable at
-runtime. The validator's `endpoint-filename` check enforces this — both on
-an endpoint validated directly and on every sibling endpoint during
-connector validation.
-
-## Failure modes
-
-- Research timeout: ask user for offline-supplied facts or a different docs URL.
-- Classification ambiguity: fail closed; ask the user to confirm.
-- Validator stuck: surface findings; do not write incomplete files.
-- Drift classifier rolls back to `none`: treat as first release.
-- `update` / `validate` mode but `connector_path` is absent: there is
-  nothing to update or validate — for `update`, fall back to `build`
-  semantics and tell the user; for `validate`, halt and tell the user.
+Write each endpoint to `endpoints/{endpoint_id}.json` (`RULE-PKG-031`) —
+never renamed, aliased, or nested. The engine resolves an endpoint by id
+and reaches the file by that name, so a divergent filename is
+unreachable at runtime.

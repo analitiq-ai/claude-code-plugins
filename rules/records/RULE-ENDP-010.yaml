@@ -1,0 +1,19 @@
+id: RULE-ENDP-010
+statement: >
+  Every parameter a pagination block names MUST be declared by the same
+  operation and MUST declare itself controlled by pagination.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+rationale: >
+  Naming a param in a pagination block creates no request binding on its own:
+  the param still has to be declared, marked as pagination's, and bound into the
+  request like any other, and this is the wiring authors most often leave
+  half-done. The marker is what stops anything else claiming the same param, and
+  a paging param the runtime cannot set means every run re-reads page one and
+  reports success.
+status: active
+superseded_by: null

@@ -1,0 +1,19 @@
+id: RULE-PKG-009
+statement: >
+  A database connector's `__init__.py` MUST re-export the package's
+  connector class and its dialect class.
+tier: structural
+severity: info
+scope: connector-package
+validator: null
+owners: [connector-plugin]
+rationale: >
+  Nothing at run time depends on it — the engine resolves the class through
+  the entry point's own module path — so the re-export exists to make the
+  package name a usable import for tests, for a connector that ships a
+  variant dialect, and for anyone reading the tree. That is also why it
+  goes missing: `__init__.py` is Python no contract model imports, registry
+  CI's wheel build succeeds with an empty one, and only an importer
+  reaching for the dialect class discovers the omission.
+status: active
+superseded_by: null

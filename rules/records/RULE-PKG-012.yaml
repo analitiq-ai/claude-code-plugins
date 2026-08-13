@@ -1,0 +1,24 @@
+id: RULE-PKG-012
+statement: >
+  A connector's dialect MUST override only the public hooks `SqlDialect`
+  itself declares — never a private CDK member, and never the
+  framework-owned `table_address` factory or `capabilities` attribute — and
+  MUST add no public attribute of its own, giving each helper it needs a
+  leading underscore and a name the base does not use.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  The public hook surface is the CDK's compatibility promise; an override
+  reaching under it binds the connector to an internal that may change in
+  any CDK release, and a new public attribute collides with whatever name
+  the base adds next. `table_address` and `capabilities` are the specific
+  traps: both look like ordinary dialect members and both are how the
+  framework, not the connector, decides addressing and capability. The
+  override surface is a Python class this repo's validator never opens; the
+  conformance kit's surface check rejects the package at registry CI, after
+  the connector is authored.
+status: active
+superseded_by: null

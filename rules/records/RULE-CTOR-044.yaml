@@ -1,0 +1,21 @@
+id: RULE-CTOR-044
+statement: >
+  A `database` connector's release MUST NOT ship endpoint documents, because
+  a database endpoint is produced from resource-discovery output rather than
+  authored.
+tier: referential
+severity: warning
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  Discovery output is connection-scoped, so a hand-authored endpoint in the
+  release describes whichever database the author happened to look at and no
+  user's connection: nothing consumes it, and it invites the next author to
+  maintain it in step with a set of endpoints the runtime regenerates anyway.
+  Nothing inspects a database connector's release for files it should not
+  contain — the coverage walk only enumerates `endpoints/` for `api`
+  connectors, so an endpoint shipped beside `connector.json` is never looked
+  at.
+status: active
+superseded_by: null

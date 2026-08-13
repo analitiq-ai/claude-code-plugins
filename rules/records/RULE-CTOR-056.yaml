@@ -1,0 +1,21 @@
+id: RULE-CTOR-056
+statement: >
+  A connection condition's `present` MUST be the JSON boolean `true`, never a
+  number or string that stands in for it.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::ConnectionConditionPredicate._present_is_strictly_boolean"
+owners: [connector-plugin]
+targets: [ConnectionConditionPredicate]
+rationale: >
+  The declared type is the literal `true`, and a literal is compared by
+  equality, so `1` and `1.0` satisfy it in Python while the published schema
+  asks for a real boolean. A document authored against the schema and one
+  authored against the models would then disagree about the same file, and the
+  disagreement surfaces wherever the predicate is next read rather than where
+  it was written. Rejecting the stand-ins keeps the wire grammar and the model
+  answering the same question, which is what makes either of them worth
+  checking.
+status: active
+superseded_by: null

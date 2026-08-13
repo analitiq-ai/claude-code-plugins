@@ -1,0 +1,24 @@
+id: RULE-ENDP-041
+statement: >
+  Every URL an endpoint's request produces, including a next-page link it
+  follows, MUST land on the origin of the transport its `transport_ref` names.
+tier: referential
+severity: error
+scope: api-endpoint
+validator: null
+owners: [connector-plugin, engine]
+targets: [_RequestBase]
+rationale: >
+  The transport is where the connection's origin, its auth and its TLS settings
+  are declared, so a URL that leaves that origin either arrives without the
+  credentials the request needs or carries them to a host the connection never
+  named. The half of containment that checks the transport *name* is settled at
+  author time; this half is not. `request.path` is an open string and a followed
+  next-page link comes from the provider's own response, so where a URL actually
+  lands is decided only when the engine builds the request — and the engine as
+  it stands opens one session at connect time and refuses a link that leaves
+  that origin, which `_RequestBase.transport_ref`'s description already declares
+  unenforced by the contract. Catching a violation means reading every
+  URL-producing site in the document against the sibling connector's transports.
+status: active
+superseded_by: null

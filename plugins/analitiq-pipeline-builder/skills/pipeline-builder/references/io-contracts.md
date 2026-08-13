@@ -1,13 +1,16 @@
 # I/O contracts between orchestrator and agents
 
-Every cross-agent payload is a JSON object that conforms to one of
-these shapes. The orchestrator validates them in code (using the
-matching JSON Schema below) before passing them to the next phase.
+Every cross-agent payload is a JSON object matching one of the shapes
+below. The orchestrator checks a payload against its shape before
+dispatching the next phase.
 
 ## `PipelineFacts` (output of `pipeline-provider-researcher`)
 
-Discriminated by `source_kind` and `destination_kind`. Each kind has its
-own required sub-shape.
+Discriminated by each side's `kind`. Each kind has its own required
+sub-shape. The closed vocabularies the shape below defers to are in
+`enum-mappers.md`'s generated vocabulary table — read the members there
+before filling one in; a value outside it is an error to surface, not a
+guess to make.
 
 <!-- illustrative -->
 ```jsonc
@@ -18,11 +21,12 @@ own required sub-shape.
   "source": {
     "connector_id": "wise",                     // connector slug; resolves in DIP registry
     "connection_slug": "wise",                  // directory name for connections/<slug>/
-    "kind": "api",                              // "api" | "database"
+    "kind": "api",                              // "api" or "database"; a connector of any
+                                                // other kind is refused, not recorded (RULE-CTOR-037)
     "selected_endpoints": ["transfers"],        // endpoint_id list; required
     "replication": {
-      "method": "incremental",                  // "full_refresh" | "incremental"
-      "cursor_field": "updated_at"              // required when method == incremental
+      "method": "incremental",                  // vocabulary per enum-mappers.md
+      "cursor_field": "updated_at"              // the incremental shape requires it (RULE-STRM-017)
     }
   },
   "destination": {
@@ -32,12 +36,12 @@ own required sub-shape.
     "schema": "public",                         // database only
     "write": {
       "mode": "upsert",
-      "conflict_keys": ["id"]                   // flat list of field names; required for a database upsert
+      "conflict_keys": ["id"]                   // flat field names; the keyed write shape requires them (RULE-STRM-016)
     }
   },
   "schedule": {
-    "type": "manual",                           // "manual" | "interval" | "cron"
-    "timezone": "UTC"                           // IANA name; default UTC
+    "type": "manual",                           // vocabulary per enum-mappers.md
+    "timezone": "UTC"                           // IANA zone name (RULE-PIPE-015)
   },
   "engine_overrides": null,                     // pipeline `engine` sub-shape or null
   "runtime_overrides": null                     // pipeline `runtime` sub-shape or null
@@ -95,8 +99,8 @@ mode-level envelope (`{"mode", "outputs", …}`, plus `type_maps` in
 `create-endpoints` / `author-new-table`) — that envelope is defined in the
 agent file itself, not here.
 
-For unsupported cases (e.g., a connector kind the engine can't run),
-the creator returns:
+For unsupported cases (e.g., a connector kind the engine can't run —
+`RULE-CTOR-037`), the creator returns:
 
 <!-- illustrative -->
 ```jsonc
@@ -105,7 +109,7 @@ the creator returns:
   "directory_slug": null,
   "document": null,
   "notes": [
-    "Storage-kind destinations (file/s3/stdout) are accepted by the schema but the engine does not yet execute them. The plugin declines to author a stream binding for this destination until engine support lands."
+    "The engine does not execute this connector kind, so no stream binding is authored for it (RULE-CTOR-037)."
   ]
 }
 ```
@@ -127,9 +131,8 @@ the creator returns:
 }
 ```
 
-Each finding is `{validator, severity, path, message}`. `severity ∈ {"error", "warning"}`;
-`passed` is `true` iff no `error` finding exists (a `warning` does not fail
-validation).
+`passed` is `true` only when no `error`-severity finding exists — a `warning`
+does not fail validation.
 
 <!-- BEGIN GENERATED: validator-ids -->
 Validator ids the published package can emit:
@@ -137,34 +140,27 @@ Validator ids the published package can emit:
 `bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
 <!-- END GENERATED: validator-ids -->
 
-The `bundle-*` ids only appear when the validator runs with `--bundle-root`.
+Pass `--bundle-root` when validating the stitched pipeline; that is what runs
+the cross-document checks and what makes the `bundle-*` ids reachable.
 
-The adapter adds two ids of its own, for checks the published bundle validator
+The adapter adds ids of its own, for checks the published bundle validator
 structurally cannot make:
 
-- `connector-endpoint-ref` — **warning-only**. The published bundle validator
-  receives connector identity and never connector endpoint contents; this checks
-  that a `scope: "connector"` stream ref names an endpoint the downloaded
-  connector actually publishes, and its message carries an alignment suggestion.
-  See `stream-spec/spec-endpoint-refs.md`.
-- `connection-type-map` — **error**. File-level gates on the connection-scoped
-  type maps the engine loads beside `connection.json`: the exact
-  `type-map-{read,write}.json` filenames, a non-array or unreadable map file,
-  and rejection of the dead pre-split `type-map.json` with a migration finding.
-  Content findings for a present map come from the published validator under
-  its own ids — except `type-map-write-coverage`, which the adapter filters
-  for connection maps (it presumes a connector's full-vocabulary write map;
-  a gap-only connection map never satisfies it by design). See
+- `connector-endpoint-ref` — **warning-only**: a `scope: "connector"` stream ref
+  naming an endpoint the downloaded connector does not publish. The message
+  carries an alignment suggestion. See `stream-spec/spec-endpoint-refs.md`.
+- `connection-type-map` — **error**: file-level gates on the connection-scoped
+  type maps the engine loads beside `connection.json`. See
   `endpoint-spec/spec-type-map-gaps.md`.
 
-A finding raised by a cross-field (relational) rule carries that rule's stable id
-inline in its `message`, as `[ADV-<AREA>-NNN] …`. Quote the id when relaying a
-failure — `pipeline-spec` and `stream-spec` list those rules by id.
+Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
+`message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
+`stream-spec` list the rules by id.
 
 ## `DriftVerdict` (output of `pipeline-drift-classifier`)
 
-Informational only. The plugin does not author `version` (registry-
-stamped integer counter). The verdict's role is to flag structural
+Informational only; the plugin authors no `version` (see
+`identity-and-versioning.md`). The verdict's role is to flag structural
 changes the user should think about before publishing.
 
 <!-- illustrative -->
@@ -172,7 +168,7 @@ changes the user should think about before publishing.
 {
   "changes": [
     {"kind": "stream_added", "stream_slug": "balances"},
-    {"kind": "write_mode_changed", "from": "insert", "to": "upsert"},
+    {"kind": "write_mode_changed", "stream_slug": "transfers", "from": "insert", "to": "upsert"},
     {"kind": "mapping_target_added", "stream_slug": "transfers", "path": "currency"}
   ],
   "summary": "1 stream added; 1 write-mode change; 1 mapping target added."

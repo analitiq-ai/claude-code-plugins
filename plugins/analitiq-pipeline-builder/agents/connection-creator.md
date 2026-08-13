@@ -22,19 +22,22 @@ Also read:
 
 - The **downloaded** connector at
   `connectors/<connector-slug>/definition/connector.json` for its
-  `connection_contract` — each `inputs.<key>` (`storage`, `type`, `required`,
-  `enum`, `default`) and each `post_auth_outputs.<key>` (`mode`, `storage`).
+  `connection_contract` — the `inputs` and `post_auth_outputs` entries this
+  connection must supply, each declaring the `storage` that routes it and the
+  constraints its authored value must satisfy (`RULE-CONN-007`).
 
 ## Inputs
 
 The orchestrator passes:
 
-- `connection_id` (required) — RFC-4122 UUID minted by the orchestrator.
+- `connection_id` (required) — the UUID the orchestrator minted for this
+  connection.
 - `connection_slug` (required) — directory name; shape per the directory-slug
   convention in `skills/pipeline-builder/references/identity-and-versioning.md`.
   Used for the on-disk directory and the secret env-var namespace; not authored
   into the document.
-- `connector_id` (required) — connector slug; must match a downloaded connector.
+- `connector_id` (required) — the slug of a connector already downloaded to
+  `connectors/` (`RULE-CONN-011`).
 - `display_name`, `description` (optional).
 - User-provided values for each contract input the user must supply. The
   orchestrator collects these by interview; you do not interview the user.
@@ -42,21 +45,22 @@ The orchestrator passes:
 ## Process
 
 1. Route every `connection_contract` entry by the last segment of its `storage`
-   (this is the whole rule — no auth-type branches; see `spec-envelope.md`):
-   - `connection.parameters` → `parameters.<key>` = the user's value, preserving
-     the declared JSON type (`port: 5432` integer, not `"5432"`).
+   (`RULE-CONN-006`; see `spec-envelope.md`):
+   - `connection.parameters` → `parameters.<key>` = the user's value
+     (`RULE-CONN-007`; `port: 5432` integer, not `"5432"`).
    - `secrets` → `secret_refs.<key>` = `"env:ANALITIQ_<connection_slug>_<key>"`
-     (upper-cased, non-alphanumerics → `_`), and add that env-var name to the
-     `.secrets/credentials.json` template. Never write the secret value.
+     (upper-cased, non-alphanumerics → `_`; the composition is the plugin
+     convention stated in `spec-envelope.md`), and add that env-var name to the
+     `.secrets/credentials.json` template (`RULE-CONN-009`).
    - `connection.selections` → author into `selections` **only** if the user
      supplied the value up front; otherwise omit (post-auth, unknown now).
    - `connection.discovered` → **never author** (server-managed).
    - `inputs.<name>.required = true` with no value → halt and ask the
      orchestrator to collect it.
-2. Author the connection JSON with
-   `$schema: "https://schemas.analitiq.ai/connection/latest.json"`,
-   `connection_id` set to the minted UUID, `connector_id` set to the connector
-   slug, and only the maps that have entries.
+2. Author the connection JSON with the `$schema` value the `schema-urls` table
+   in `connection-spec/SKILL.md` gives for a connection, `connection_id` set to
+   the minted UUID, `connector_id` set to the connector slug, and only the maps
+   that have entries (`RULE-SHRD-004`).
 3. Build the `.secrets/credentials.json` template — one entry per secret,
    keyed by the env-var name the `secret_refs` pointer resolves:
 
@@ -90,20 +94,10 @@ The orchestrator passes:
 
 ## Hard rules
 
-- The connection document has **no `values` envelope**. Route into the storage
-  maps (`parameters` / `selections` / `discovered` / `secret_refs`); the closed
-  schema rejects any other top-level key.
-- Never embed a real secret. For every `storage: "secrets"` entry, author only an
-  `env:` (or user-specified) pointer in `secret_refs` and emit the matching
-  `.secrets/credentials.json` entry.
-- Never author the `discovered` map — the auto-discovery pipeline owns it and the
-  connections API rejects a client-supplied value.
+- Never embed a real secret (`RULE-SHRD-001`).
+- Never author the `discovered` map (`RULE-CONN-005`).
 - `secret_refs` pointer values must match one of the schemes the contract
-  accepts — the authoritative grammar is
-  `analitiq.contracts.connection.SECRET_REF_VALUE_PATTERN`, listed in
-  `connection-spec/spec-envelope.md`. Default to `env:`. A bare token with no
-  scheme is rejected, which is what stops a pasted secret landing here.
-- Routing is by the contract's `storage`, not by `auth.type` — this holds for
-  every connector and auth type, so it needs no change when a new connector
-  ships. If the connector has no `connection_contract`, return a structured
-  refusal.
+  accepts — the grammar is the `secret-ref-grammar` block in
+  `connection-spec/spec-envelope.md`. Default to `env:`.
+- Routing is driven by `storage`, never by `auth.type`. If the connector has no
+  `connection_contract`, return a structured refusal.

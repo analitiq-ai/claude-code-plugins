@@ -19,7 +19,7 @@ from analitiq.contracts.endpoints import (
     WriteMode,
 )
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
-from analitiq.contracts.shared.advisory import AdvisoryValidated, find_duplicates
+from analitiq.contracts.shared.rules import find_duplicates, violation
 from analitiq.contracts.shared.arrow_shape import (
     ARROW_CONTAINER_SCHEMA_RULES,
     enforce_container_shape,
@@ -60,10 +60,10 @@ def _check_unique_destinations(
 ) -> list["StreamDestination"]:
     """Reject duplicate destinations by `(scope, connection_id, endpoint_id)`.
 
-    The public authored contract (`StreamAuthored`) enforces this via the
-    advisory registry (ADV-STRM-001). This importable shim is retained for a
-    downstream caller that reuses it directly; both paths share the
-    `find_duplicates` primitive, so the algorithm is defined once.
+    RULE-STRM-001, applied to the authored contract by
+    `StreamAuthored._destinations_unique` and importable here for a downstream
+    caller that holds a destination list without the stream around it. One
+    definition, so the two callers cannot disagree about what a duplicate is.
     """
     dups = find_duplicates(
         destinations,
@@ -74,10 +74,7 @@ def _check_unique_destinations(
         ),
     )
     if dups:
-        raise ValueError(
-            "destinations[].endpoint_ref must be unique by "
-            f"(scope, connection_id, endpoint_id); duplicates: {dups!r}"
-        )
+        raise violation("RULE-STRM-001", f"duplicates={dups!r}")
     return destinations
 
 
@@ -350,7 +347,11 @@ class _DatabasePaginationBase(StrictModel):
 
     page_size: StrictPositiveInt | None = Field(
         default=None,
-        description="Positive integer read page size; pipeline batch-size default applies when omitted.",
+        description=(
+            "Positive integer read page size. Declaring one does not change how "
+            "much a read fetches: the size is the pipeline runtime's batching "
+            "value for every stream, and no engine release consumes this field."
+        ),
     )
 
 
@@ -359,7 +360,11 @@ class OffsetDatabasePagination(_DatabasePaginationBase):
 
     type: Literal["offset"] = Field(
         ...,
-        description="Database pagination strategy.",
+        description=(
+            "Database pagination strategy. It selects which variant's shape the "
+            "document must satisfy; it does not select a read path — every "
+            "database source read is offset-paged, whichever variant is declared."
+        ),
     )
     order_by_field: str | None = Field(
         default=None,
@@ -373,7 +378,11 @@ class KeysetDatabasePagination(_DatabasePaginationBase):
 
     type: Literal["keyset"] = Field(
         ...,
-        description="Database pagination strategy.",
+        description=(
+            "Database pagination strategy. It selects which variant's shape the "
+            "document must satisfy; it does not select a read path — every "
+            "database source read is offset-paged, whichever variant is declared."
+        ),
     )
     order_by_field: str = Field(
         ...,
@@ -448,10 +457,11 @@ class StreamSource(StrictModel):
         )
         for filt in self.filters:
             if filt.operator not in allowed:
-                raise ValueError(
+                raise violation(
+                    "RULE-STRM-012",
                     f"filters[].operator {filt.operator!r} is not valid for a "
                     f"{self.endpoint_ref.scope} source "
-                    f"(allowed: {sorted(allowed)})"
+                    f"(allowed: {sorted(allowed)})",
                 )
         return self
 
@@ -462,7 +472,7 @@ class StreamSource(StrictModel):
         # (connector-scope) read has none of them to configure, and the
         # structural types cannot see the source scope — only the binding
         # (endpoint_ref) knows it, like `_validate_filter_operator_scope`
-        # above (ADV-STRM-012). This check is ADV-STRM-014. `is not None`
+        # above (RULE-STRM-012). This check is RULE-STRM-014. `is not None`
         # rather than truthiness: declaring an empty list is still declaring
         # the feature. Neither check publishes a scope-conditioned `if`/`then`
         # mirror, and the stream schema carries none to copy: every published
@@ -486,14 +496,9 @@ class StreamSource(StrictModel):
             if value is not None
         ]
         if declared:
-            label = (
-                "a database-source feature"
-                if len(declared) == 1
-                else "database-source features"
-            )
-            raise ValueError(
-                f"a {self.endpoint_ref.scope} source must not declare "
-                f"{' or '.join(declared)} — {label}"
+            raise violation(
+                "RULE-STRM-014",
+                f"{self.endpoint_ref.scope} source declares {declared!r}",
             )
         return self
 
@@ -1050,7 +1055,7 @@ class ConstantAssignmentValue(StrictModel):
 
 
 # `kind`-discriminated union, replacing a single model with two nullable fields
-# and a `_validate_one_of` (retired ADV-STRM-008).
+# and a `_validate_one_of` (retired RULE-STRM-008).
 #
 # This is the BREAKING half of the release: `kind` is required, so every
 # document written against the two-nullable-fields shape — which had no such
@@ -1286,13 +1291,21 @@ def _declared_child(
     return (node.properties or {}).get(token)
 
 
-class StreamMapping(AdvisoryValidated, StrictModel):
+class StreamMapping(StrictModel):
     """Source-to-destination assignment rules. Optional — omit for default mapping."""
 
     assignments: list[Assignment] = Field(
         default_factory=list,
         description="Ordered list of field assignments. Order is significant.",
     )
+
+    @model_validator(mode="after")
+    def _assignment_targets_unique(self) -> "StreamMapping":
+        """RULE-STRM-002: array position never decides a destination field's value."""
+        dups = find_duplicates(self.assignments, key=lambda a: a.target.path)
+        if dups:
+            raise violation("RULE-STRM-002", f"duplicates={dups!r}")
+        return self
 
     @model_validator(mode="after")
     def _validate_rule_fields_resolve(self) -> "StreamMapping":
@@ -1339,7 +1352,7 @@ class StreamMapping(AdvisoryValidated, StrictModel):
 # ---------------------------------------------------------------------------
 
 
-class StreamAuthored(AdvisoryValidated, StrictModel):
+class StreamAuthored(StrictModel):
     """Authored stream fields shared between input and persisted models."""
 
     schema_url: Literal[STREAM_SCHEMA_URL] | None = Field(
@@ -1403,6 +1416,13 @@ class StreamAuthored(AdvisoryValidated, StrictModel):
     def _validate_tags_field(cls, v: list[str] | None) -> list[str] | None:
         return validate_tags(v)
 
+    @model_validator(mode="after")
+    def _destinations_unique(self) -> "StreamAuthored":
+        """RULE-STRM-001: no endpoint receives the same records twice."""
+        _check_unique_destinations(self.destinations)
+        return self
+
+
 class StreamInput(StreamAuthored):
     """Strict API input variant — the source of truth for the `stream/latest.json` published JSON Schema.
 
@@ -1415,7 +1435,6 @@ class StreamInput(StreamAuthored):
     service assigns one when the create payload omits it.
     """
 
-    model_config = ConfigDict(populate_by_name=True)
 
     stream_id: str | None = Field(
         default=None,

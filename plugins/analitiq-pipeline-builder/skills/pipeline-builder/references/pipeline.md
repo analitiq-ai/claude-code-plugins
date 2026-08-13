@@ -1,7 +1,7 @@
 # Orchestration pipeline (full contract)
 
 This file is the long-form contract referenced by `SKILL.md §Pipeline`.
-The orchestrator runs 10 phases in order. Each phase declares its
+The orchestrator runs the phases below in order. Each phase declares its
 preconditions, the agent invoked (if any), and the postconditions that
 the next phase relies on.
 
@@ -11,12 +11,12 @@ the next phase relies on.
 | 1 | Research | `pipeline-provider-researcher` | A `PipelineFacts` JSON object is captured (see `io-contracts.md`). |
 | 2 | Connector download or reuse | `registry-browser` × {0,1,2} (parallel per missing side) | `connectors/<connector-slug>/` exists for each side with `definition/connector.json` + (api only) `definition/endpoints/`. Sides already on disk are reused as-is. |
 | 3 | Classify | _orchestrator_ | `schedule.type`, `replication.method`, `write.mode` resolved against closed enums. UUIDs minted for `pipeline_id` and each `connection_id` and `stream_id` the orchestrator will author. |
-| 4 | Connections (author or reuse) | `connection-creator` × {0,1,2} (parallel per side missing on disk) | One `connections/<connection-slug>/connection.json` plus `connections/<connection-slug>/.secrets/credentials.json` per side, each validating against `connection/latest.json`. Sides already present (with matching `connector_id`) are reused, including their existing `.secrets/`. |
-| 5 | Endpoint discovery | `private-endpoint-creator` × M (DB only, parallel across connections) | `connections/<connection-slug>/definition/endpoints/*.json` for selected tables, each validating against `database-endpoint/latest.json`. Endpoint files already on disk for the chosen tables are reused; only new tables run introspection. |
-| 6 | Pipeline shell | `pipeline-creator` | `pipelines/<pipeline-slug>/pipeline.json` with `streams: []`, validating against `pipeline/latest.json`. |
-| 7 | Streams | `stream-creator` × K (parallel) | `pipelines/<pipeline-slug>/streams/<stream-slug>.json` per selected endpoint, each validating against `stream/latest.json`. |
+| 4 | Connections (author or reuse) | `connection-creator` × {0,1,2} (parallel per side missing on disk) | One `connections/<connection-slug>/connection.json` plus `connections/<connection-slug>/.secrets/credentials.json` per side, each validating as entity `connection`. Sides already present (with matching `connector_id`) are reused, including their existing `.secrets/`. |
+| 5 | Endpoint discovery | `private-endpoint-creator` × M (DB only, parallel across connections) | `connections/<connection-slug>/definition/endpoints/*.json` for selected tables, each validating as entity `database_endpoint`. Endpoint files already on disk for the chosen tables are reused; only new tables run introspection. |
+| 6 | Pipeline shell | `pipeline-creator` | `pipelines/<pipeline-slug>/pipeline.json` with `streams: []`, validating as entity `pipeline`. |
+| 7 | Streams | `stream-creator` × K (parallel) | `pipelines/<pipeline-slug>/streams/<stream-slug>.json` per selected endpoint, each validating as entity `stream`. |
 | 8 | Stitch | _orchestrator_ | `pipeline.json#/streams` is populated with the K `stream_id` UUIDs; bundle validates with `--bundle-root .`. |
-| 9 | Validate | `pipeline-schema-validator` (looped, ≤ 5 passes) | Every artifact has zero `error`-severity findings. |
+| 9 | Validate | `pipeline-schema-validator` (looped — see §Fix-and-revalidate loop) | Every artifact has zero `error`-severity findings. |
 | 10 | Drift (optional) | `pipeline-drift-classifier` | A structural diff vs. `previous_release_path`; informational only. |
 
 ## Halt conditions
@@ -36,7 +36,7 @@ The orchestrator must halt (and surface a clear message) when:
   surfaces `detail` verbatim to the user. (`target_exists` is **not**
   a halt — the orchestrator's existence check should have prevented
   the call; if it fires anyway, read the on-disk connector and flag
-  the inconsistency. See SKILL.md phase 2 for the non-halting
+  the inconsistency. See `SKILL.md` phase 2 for the non-halting
   branch.)
 - Phase 3's enum mappers fail to map an input (the user supplied
   something outside the closed set).
@@ -44,8 +44,8 @@ The orchestrator must halt (and surface a clear message) when:
   `connector_id` does not match the side's connector slug. The user is
   asked to pick a different `connection-slug` or remove the existing
   file themselves.
-- Phase 4's reuse-validation of an existing `connection.json` against
-  `connection/latest.json` fails. The orchestrator surfaces the
+- Phase 4's reuse-validation of an existing `connection.json` as entity
+  `connection` fails. The orchestrator surfaces the
   validator's findings (`validator`, `path`, `message`) verbatim and
   asks the user to fix or remove the existing file. The orchestrator
   does not overwrite user-owned connection files (including
@@ -55,12 +55,12 @@ The orchestrator must halt (and surface a clear message) when:
 - Phase 5's database introspection fails (credentials wrong, network
   unreachable). The orchestrator surfaces the underlying error verbatim
   and waits for the user to fix it.
-- Phase 5's reuse-validation of an existing endpoint file against
-  `database-endpoint/latest.json` fails. The orchestrator surfaces
+- Phase 5's reuse-validation of an existing endpoint file as entity
+  `database_endpoint` fails. The orchestrator surfaces
   the validator's findings (`validator`, `path`, `message`) verbatim
   and asks the user to fix or remove the file; introspection is not
   rerun against a half-broken file.
-- Phase 9 still has `error`-severity findings after 5 fix passes.
+- Phase 9 still has `error`-severity findings when the fix loop gives up.
 
 Halting means: do not write partial files, do not advance to a later
 phase, and do not auto-retry without user input.
@@ -70,14 +70,6 @@ phase, and do not auto-retry without user input.
 Phases that dispatch multiple agents in parallel (2, 4, 7) issue all
 calls in a single message — multiple tool invocations in one turn — so
 they run concurrently. Do not sequence them artificially.
-
-## Identity minting (phase 3)
-
-The orchestrator generates RFC-4122 UUIDs for `pipeline_id`,
-`connection_id` (one per side), and `stream_id` (one per selected
-endpoint) and threads them through the creator agents so cross-document
-references are consistent. Reused on-disk connections contribute their
-existing `connection_id` UUIDs instead.
 
 ## Fix-and-revalidate loop (phase 9)
 

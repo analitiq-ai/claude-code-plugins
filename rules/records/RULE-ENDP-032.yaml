@@ -1,0 +1,22 @@
+id: RULE-ENDP-032
+statement: >
+  A request slot MUST NOT ref a per-run scope directly; a per-run value MUST
+  reach the request through a declared param.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation, WriteOperation]
+rationale: >
+  Per-run values are the ones something upstream supplies — the filters, the
+  cursor, the batch sizing — and the param is the only place their type,
+  requiredness and operator set get declared. A direct ref delivers the value
+  and declares nothing, so no downstream stream can tell whether it may filter
+  on that value or with which operators, and the endpoint that works for its
+  author's own run is unusable as a contract. Worth knowing while authoring: the
+  check looks for a ref, so the same value smuggled in as a template placeholder
+  passes it — the reason to route through a param is the declaration, not the
+  check.
+status: active
+superseded_by: null

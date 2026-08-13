@@ -1,0 +1,22 @@
+id: RULE-DSYNC-004
+statement: >
+  A run error MUST report its category from the code vocabulary
+  `PublicRunError` declares.
+tier: structural
+severity: error
+scope: data-sync-run-status
+validator: "analitiq.contracts.pipelines.data_sync::PublicRunError.code"
+owners: [engine]
+targets: [PublicRunError]
+fields: [code]
+mechanism: literal_enum
+rationale: >
+  The code is the only part of a failure a consumer may branch on, and it is
+  what keeps the customer-safe wording bound to a fixed set rather than to
+  whatever the failure produced — `RULE-DSYNC-002` maps the message from this
+  field, so the vocabulary is what makes that mapping total. A code minted from
+  the failure itself would be both an unbranchable value and the leak that rule
+  exists to prevent, since the shortest way to invent one is to name it after
+  the exception.
+status: active
+superseded_by: null

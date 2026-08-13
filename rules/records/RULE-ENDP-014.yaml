@@ -1,0 +1,19 @@
+id: RULE-ENDP-014
+statement: >
+  Every conflict key a write mode declares MUST name a top-level field of that
+  mode's input schema.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
+owners: [connector-plugin]
+targets: [WriteOperation]
+rationale: >
+  Conflict keys are the provider-defined natural key an upsert matches existing
+  rows on, and the provider can only match on values the request actually
+  carries. A key naming a field the input schema never declares matches nothing,
+  so every upsert inserts and the destination accumulates duplicates without a
+  single failed run. Membership is resolved through composition, so a record
+  assembled from shared definitions still enumerates the fields it declares.
+status: active
+superseded_by: null

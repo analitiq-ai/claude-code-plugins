@@ -6,50 +6,37 @@ resolves a connector in two steps: `kind` selects the generic fallback
 class, `connector_id` selects the connector package's own class via
 Python entry points.
 
-API connectors carry **only** the definition (`connector.json`,
-`type-map-read.json`, `endpoints/`) — no package files, no write map.
+An `api` connector ships the definition (`connector.json`,
+`type-map-read.json`, `endpoints/`) and a README (`RULE-PKG-025`) — no Python
+package files (`RULE-CTOR-043`) and no write map (`RULE-PKG-030`).
 
 ## Required layout
 
-The connector root IS the Python package:
+The connector root IS the Python package (`RULE-PKG-002`):
 
 ```
 {connector_id}/
   definition/
     connector.json                   # connector_id; transports; sql_capabilities
-    type-map-read.json               # native → Arrow; regex patterns UPPERCASE
-    type-map-write.json              # Arrow → native; REQUIRED for kind: database
-  __init__.py                        # re-exports the connector class
+    type-map-read.json               # native → Arrow; see spec-type-maps.md
+    type-map-write.json              # Arrow → native; RULE-PKG-030
+  __init__.py                        # RULE-PKG-009
   connector.py                       # {Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector)
   requirements.txt                   # THIS connector's driver(s) only
-  pyproject.toml                     # analitiq-connector-{connector_id}; see below
+  pyproject.toml                     # see below
+  README.md                          # RULE-PKG-025
 ```
 
-`connector_id` in `connector.json` must equal the repo/directory name —
-it is the entry-point name the engine resolves.
+The release directory is named for the `connector_id` its `connector.json`
+declares (`RULE-CTOR-042`) — the same slug the engine resolves the connector
+class by (`RULE-PKG-007`).
 
-## `pyproject.toml`
+## `pyproject.toml` (`RULE-PKG-007`)
 
-- `name = "analitiq-connector-{connector_id}"`.
-- `dynamic = ["dependencies"]` +
-  `[tool.setuptools.dynamic] dependencies = { file = ["requirements.txt"] }`
-  — `requirements.txt` is the single source of truth for the driver.
-- Package mapping (the repo root is the package):
-  `packages = ["analitiq_connector_{connector_id}"]`,
-  `package-dir = { "analitiq_connector_{connector_id}" = "." }`.
-- Entry points — name = `connector_id`, **both roles** (read and write
-  are both first-class; never ship a one-directional connector):
-
-  ```toml
-  [project.entry-points."analitiq.source_connectors"]
-  {connector_id} = "analitiq_connector_{connector_id}.connector:{Name}Connector"
-
-  [project.entry-points."analitiq.destination_connectors"]
-  {connector_id} = "analitiq_connector_{connector_id}.connector:{Name}Connector"
-  ```
-
-- The CDK is provided by the engine environment — never list it as a
-  dependency.
+- Dependencies are declared dynamically, so `requirements.txt` stays the
+  single source of truth for the driver (`RULE-PKG-006`).
+- Entry points registered for read **and** write (`RULE-PKG-008`) — never
+  ship a one-directional connector; both groups are in the template below.
 
 Template (postgres reference):
 
@@ -81,15 +68,13 @@ package-dir = { "analitiq_connector_{connector_id}" = "." }
 
 ## `requirements.txt`
 
-THIS connector's driver(s) only — the SQLAlchemy DBAPI (sync or async)
-for SQLAlchemy transports and/or the `adbc-driver-{driver}` wheel (+
-`adbc-driver-manager`) for ADBC transports. See
-`spec-driver-selection.md` for choosing. Comment non-obvious pins (e.g.
-`pymysql<1.2`).
+The driver each declared transport needs, and nothing else
+(`RULE-PKG-027`). See `spec-driver-selection.md` for choosing. Comment
+non-obvious pins (e.g. `pymysql<1.2`).
 
 ## `connector.py`
 
-One dialect class plus one connector class:
+One dialect class plus one connector class (`RULE-PKG-010`):
 
 ```python
 from cdk.sql.dialects import SqlDialect, TableAddress
@@ -104,29 +89,34 @@ class {Name}Dialect(SqlDialect):
     def stage_table_sql(
         self, stage: TableAddress, target: TableAddress, *, temp: bool
     ) -> str:
-        ...                          # REQUIRED of every write-capable connector
+        ...                          # RULE-PKG-017
 
     ...                              # + whatever sql_capabilities obliges,
                                      #   per spec-sql-write-path.md
 
 
 class {Name}Connector(GenericSQLConnector):
-    dialect_class = {Name}Dialect    # and nothing else on this class
+    dialect_class = {Name}Dialect    # RULE-PKG-010
 ```
 
-### Import rules
+### Import rules (`RULE-PKG-011`)
 
-A connector depends only on the CDK: `cdk.sql.dialects.SqlDialect` and
-`cdk.sql.dialects.TableAddress`, `cdk.sql.generic.GenericSQLConnector`,
-`cdk.sql.exceptions`, `cdk.transport_factory.ca_ssl_context`,
-`cdk.type_map` — plus the connector's own driver. It never imports
-another connector and never imports an engine/runtime. MariaDB ships its
-own copy of the mysql-shaped dialect rather than importing the mysql
+**The CDK is the authority on every symbol and hook this page names; this
+document restates them** (`RULE-PKG-003`). Where the CDK and this page
+disagree, the CDK wins, and the disagreement is a bug to report against this
+spec.
+
+The CDK surface a connector reaches for: `cdk.sql.dialects.SqlDialect`
+and `cdk.sql.dialects.TableAddress`,
+`cdk.sql.generic.GenericSQLConnector`, `cdk.sql.exceptions`,
+`cdk.transport_factory.ca_ssl_context`, `cdk.type_map` — plus the
+connector's own driver. MariaDB is the worked case: it ships its own
+copy of the mysql-shaped dialect rather than importing the mysql
 connector.
 
 The write-path **renderers** return statement text, so they need no
-SQLAlchemy construct helpers (`sqlalchemy.dialects.*.insert` and friends
-belonged to the removed record-executor surface). `bulk_land` is the
+SQLAlchemy construct helpers — `sqlalchemy.dialects.*.insert` and friends
+are outside the import surface `RULE-PKG-011` admits. `bulk_land` is the
 exception: it performs the landing itself, so it reaches for the driver's
 own bulk API — and, on an **async** driver, for `sqlalchemy.util.await_only`
 to drive that coroutine from a hook the CDK calls synchronously
@@ -134,62 +124,55 @@ to drive that coroutine from a hook the CDK calls synchronously
 
 The standard library is unrestricted — `__future__`, `collections.abc`
 for the `Sequence[str]` annotations the renderers take, `typing`, and
-`ssl` for building a TLS context. Beyond that and the connector's own
-driver, exactly **one** third-party helper is sanctioned, and only where
-the hook needing it exists: `sqlalchemy.util.await_only`, for an async
-`bulk_land`. Any other third-party import is out of bounds.
+`ssl` for building a TLS context.
 
 ### Dialect hooks
 
-The dialect must implement every hook its transports require — missing
-hooks fail loudly with `UnsupportedDialectOperationError`:
+Missing hooks fail loudly with `UnsupportedDialectOperationError`
+(`RULE-PKG-003`):
 
 | Transport feature | Required hook(s) |
 |---|---|
-| SQLAlchemy + TLS | `build_tls_connect_arg(mode, ca_pem)` — interprets the connector's declared `ssl_mode` vocabulary into the driver's single TLS connect argument (mode string, `False`, or an `SSLContext` built via `ca_ssl_context`); the CDK currently lands it under `connect_args["ssl"]`. When the driver takes TLS through **several** connect parameters instead, override `build_tls_connect_args(mode, ca_pem)` (plural) and return the full connect-args mapping. |
-| TLS downgrade check | `verify_tls_state(dbapi_connection, mode)` — the post-connect probe that refuses a TLS-promising mode which landed an unencrypted session. Its mode vocabulary is the one `spec-tls.md` teaches you to research. |
+| SQLAlchemy + TLS (`RULE-PKG-021`) | `build_tls_connect_arg(mode, ca_pem)` — interprets the connector's declared `ssl_mode` vocabulary into the driver's single TLS connect argument (mode string, `False`, or an `SSLContext` built via `ca_ssl_context`); the CDK currently lands it under `connect_args["ssl"]`. When the driver takes TLS through **several** connect parameters instead, override `build_tls_connect_args(mode, ca_pem)` (plural) and return the full connect-args mapping. |
+| TLS downgrade check (`RULE-PKG-021`) | `verify_tls_state(dbapi_connection, mode)` — the post-connect probe that refuses a TLS-promising mode which landed an unencrypted session. Its mode vocabulary is the one `spec-tls.md` teaches you to research. |
 | Writing | `stage_table_sql`, and — paired with what `sql_capabilities` declares — `merge_statement_sql` / `bulk_land`. The write path has its own spec: **`spec-sql-write-path.md`**. |
 | Discovery | `schemas_query(catalog="")` and the `system_schemas` exclusion list. |
 | Pre-DDL | `sqlalchemy_pre_ddl(schema_name)` when schemas must exist before `create_all` (postgres `CREATE SCHEMA IF NOT EXISTS`). |
 | Session setup | `session_init_sql()` for per-connection statements (MySQL's `SET time_zone`). |
 
-### Structural overrides — only where the portable form is invalid
+### Structural overrides — only where the portable form is invalid (`RULE-PKG-001`)
 
 - `current_timestamp_default()` — where the DEFAULT expression must
   carry precision (MySQL/MariaDB: `CURRENT_TIMESTAMP(6)`; the bare form
   is error 1067 against a `DATETIME(6)` column).
 - `empty_table_sql(target)` — where the base's ANSI `DELETE FROM` is not
   accepted as written (BigQuery requires a `WHERE` clause). Never
-  `TRUNCATE`: its implicit commit breaks the staged write cycle.
+  `TRUNCATE` (`RULE-PKG-015`).
 
-### Type vocabulary is declarative-only
+### Type vocabulary is declarative-only (`RULE-PKG-023`)
 
-The write direction lives in `type-map-write.json` and nowhere else:
-every transport (SQLAlchemy DDL, ADBC DDL, control-plane create_table)
+Every transport (SQLAlchemy DDL, ADBC DDL, control-plane create_table)
 renders column types through `dialect.render_column_type`, whose
-default is the write map. A dialect overrides it ONLY for logic rules
-cannot express (BigQuery's NUMERIC/BIGNUMERIC precision-range
-arithmetic) — and even then delegates everything else back to the map.
-**Connectors must NOT ship Python type-rendering tables.**
+default is the write map. The logic a rule cannot express is the only
+thing that earns an override (BigQuery's NUMERIC/BIGNUMERIC
+precision-range arithmetic) — and even then it delegates everything else
+back to the map.
 
 ### Thick-path overrides go in the dialect, on sanctioned hooks
 
 When the system needs behavior the generic base cannot express, override
-just the quirky hook (the thin → thick gradient) — **on the dialect**.
-The connector class carries `dialect_class` and nothing else; the
-sanctioned override surface is the public hooks `SqlDialect` itself
-declares, minus the framework-owned `capabilities` and `table_address`.
-Anything outside that — a private CDK internal, an invented public
-attribute, an extra member on the connector class — fails the CDK
-conformance kit's surface check. A helper of your own belongs under a
-leading underscore, with a name the base does not use.
+just the quirky hook (the thin → thick gradient) — **on the dialect**
+(`RULE-PKG-001`). The sanctioned surface is the public hooks `SqlDialect`
+itself declares (`RULE-PKG-012`); anything outside it fails the CDK
+conformance kit's surface check.
 
-Systems on decision-order step 3 reach their native bulk-load path the
-same way: declare the mechanism in `sql_capabilities.bulk_load` and
-implement `bulk_land`, never a private override against the raw cursor
-(`spec-sql-write-path.md`).
+Systems whose native bulk-load path rides the SQLAlchemy transport
+(`spec-driver-selection.md`, the decision order) reach it the same way:
+declare the mechanism in `sql_capabilities.bulk_load` and implement
+`bulk_land` (`RULE-PKG-016`), never a private override against the raw
+cursor (`spec-sql-write-path.md`).
 
-## `__init__.py`
+## `__init__.py` (`RULE-PKG-009`)
 
 ```python
 """analitiq-connector-{connector_id}: {DisplayName} connector package for Analitiq."""
@@ -201,6 +184,7 @@ __all__ = ["{Name}Connector", "{Name}Dialect"]
 
 ## Enforcement
 
+<!-- PROBE: sql-capabilities-pairing-unchecked -->
 The plugin's schema validator checks JSON documents only. Package files
 are enforced by registry CI: `pip wheel --no-deps .` must build, the
 wheel must contain `analitiq_connector_{id}/connector.py` plus every

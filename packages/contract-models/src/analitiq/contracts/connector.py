@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union
 
 from pydantic import (
+    BaseModel,
     ConfigDict,
     Discriminator,
     Field,
@@ -29,7 +30,7 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.advisory import AdvisoryValidated
+from analitiq.contracts.shared.rules import HeaderMergeRules, violation
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
     DISPLAY_NAME_MAX,
@@ -46,8 +47,80 @@ from analitiq.contracts.shared.common import (
     validate_tags,
 )
 from analitiq.contracts.shared.types import StrictPositiveInt
+from analitiq.contracts.value_expression import (
+    RESOLUTION_SCOPE_PATTERN,
+    RESOLUTION_SCOPES,
+    unqualified_tokens,
+)
 
 CONNECTOR_SCHEMA_URL = schema_url_for("connector")
+
+
+def _dumped(node: Any) -> Any:
+    """A parsed expression back in the plain-JSON shape the grammar walker reads.
+
+    A field typed as an expression union hands back a model; one typed `Any`
+    hands back what was authored. `unqualified_tokens` walks dicts and strings,
+    so the model form is dumped and everything else passes through.
+    """
+    return node.model_dump() if isinstance(node, BaseModel) else node
+
+
+class ValueExpressionScopes:
+    """A block carrying value expressions a runtime resolves.
+
+    Enforces RULE-CTOR-057 wherever it applies. Mixed in rather than repeated,
+    for the reason `HeaderMergeRules` is: the check is one check, and a model
+    gains it by inheriting.
+
+    Each model names its own fields, because which of them a runtime resolves
+    is not visible from the annotation. `rate_limit.time_window_seconds` is
+    typed `Any` and described as taking an expression, and both consumers read
+    it literally — so it is absent from every declaration below, and checking
+    it would tell an author that scoping the token makes it resolve.
+
+    The two declarations differ by what the field HOLDS. `EXPRESSION_FIELDS` is
+    one expression; `EXPRESSION_MAPS` is a name-to-expression map, walked per
+    entry so the failure names the header rather than the block.
+
+    Keeping them apart is not only about the message. Walking an expression as
+    though it were a map drops a check: the entries of `{"ref": "token"}` are
+    the string `"token"`, and a bare string is the TEMPLATE form, so it carries
+    no placeholder and passes. The reverse — walking a map whole — stays
+    correct, because the grammar walker recurses through a plain object into
+    the expressions under it, and costs only the key name in the message.
+    """
+
+    #: Fields whose whole value is one value expression.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ()
+    #: Fields holding a map of name -> value expression.
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ()
+
+    @model_validator(mode="after")
+    def _expressions_qualified(self):
+        for name in self.EXPRESSION_FIELDS:
+            _reject_unqualified(_dumped(getattr(self, name)), name)
+        for name in self.EXPRESSION_MAPS:
+            for key, value in (getattr(self, name) or {}).items():
+                _reject_unqualified(_dumped(value), f"{name}.{key}")
+        return self
+
+
+def _reject_unqualified(node: Any, where: str) -> None:
+    """Refuse a value expression whose ref/placeholder names no resolution scope.
+
+    `where` names the field — or, for a map, the key — so a transport declaring
+    several headers reports the one that is wrong rather than the block.
+    """
+    unqualified = unqualified_tokens(node)
+    if unqualified:
+        raise ValueError(
+            f"{where}: {', '.join(sorted(set(unqualified)))} "
+            f"names no resolution scope ({', '.join(RESOLUTION_SCOPES)}); "
+            "without one the value read is whatever the resolver finds under "
+            "that bare name, or an error naming no placeholder — say where it "
+            "comes from (spec: §Value Expressions)"
+        )
 # Host-tolerant matcher for the `$schema` field: a connector authored against
 # the canonical `schemas.analitiq.ai` URL must still validate when the engine
 # checks it against a per-environment schema (`schemas.analitiq.work` / `.dev`).
@@ -82,13 +155,19 @@ class FormFieldOption(StrictModel):
 # --- Auth Models (discriminated union) ---
 
 
-class AuthOperationTemplate(AdvisoryValidated, StrictModel):
+class AuthOperationTemplate(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     """Operation template for auth `authorize` / `token_exchange` / `refresh` / `test`.
 
     The HTTP `base_url` lives on the named transport; this template selects the
     transport via `transport_ref` (omit to use `default_transport`) and supplies
     the per-operation `path`, headers, and body.
     """
+
+    # The auth Lambdas resolve all three when they build the token exchange:
+    # `path` joins the transport's base URL, `headers` is the last merge layer,
+    # and `body` resolves as a string or walked as JSON.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("path", "body")
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
     transport_ref: str | None = Field(
         default=None,
@@ -287,7 +366,7 @@ class ConnectionContractInputUI(StrictModel):
     )
 
 
-class ConnectionContractInput(AdvisoryValidated, StrictModel):
+class ConnectionContractInput(StrictModel):
     """One submitted/provisioned value declared by the connection contract.
 
     Spec: §Connection Inputs. The combination of `name` and `storage` determines
@@ -351,13 +430,36 @@ class ConnectionContractInput(AdvisoryValidated, StrictModel):
                 "secret=true requires storage='secrets' "
                 "(spec: §Connection Inputs — secret iff storage='secrets')"
             )
-        # ui.options ≡ enum (ADV-CONN-001) and default ∈ enum (ADV-CONN-002) are
-        # relational rules enforced by the advisory registry, not here.
         if self.enum is not None and len(self.enum) == 0:
             raise ValueError(
                 "enum must be non-empty when present "
                 "(spec: §Connection Inputs — enum is the authoritative "
                 "allowed-value list)"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _options_offer_the_enum(self) -> "ConnectionContractInput":
+        """RULE-CONN-001: the picker offers exactly what the contract accepts."""
+        offered = [o.value for o in (self.ui.options if self.ui else None) or ()]
+        if not offered or not self.enum:
+            return self
+        # Compared element-wise rather than as sets: an enum member may be an
+        # object or an array, which a set cannot hold.
+        extra = [v for v in offered if v not in self.enum]
+        missing = [v for v in self.enum if v not in offered]
+        if extra or missing:
+            raise violation("RULE-CONN-001", f"extra={extra!r}; missing={missing!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _default_is_an_enum_member(self) -> "ConnectionContractInput":
+        """RULE-CONN-002: the fallback the platform supplies is a legal value."""
+        if self.default is None or not self.enum:
+            return self
+        if self.default not in self.enum:
+            raise violation(
+                "RULE-CONN-002", f"value={self.default!r} not in {self.enum!r}"
             )
         return self
 
@@ -478,10 +580,17 @@ class ConnectionContractValidation(StrictModel):
     )
 
 
-class PostAuthOperationRequest(StrictModel):
+class PostAuthOperationRequest(ValueExpressionScopes, StrictModel):
     """Request template used by `options_request` / `discovery_request` to populate
     a post-auth output. Spec: §Post-Auth Outputs.
     """
+
+    # Resolved through the same auth-request path that serves the auth block.
+    # `PostAuthOutput`'s `value_path` / `label_path` / `options_path` sit beside
+    # this and are NOT expressions — they are extraction paths walked against
+    # the response.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("path", "body")
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
 
     transport_ref: str | None = Field(
@@ -623,9 +732,9 @@ class ConnectionContract(StrictModel):
     Source of truth for connection form rendering, save-time validation, drift
     detection, and template reference validation. Spec: §Connection Contract.
 
-    No standalone `version` field — drift detection rides on `connector_version`
-    semver: patch = no shape change, minor = additive shape change, major =
-    breaking shape change.
+    No standalone `version` field — drift detection rides on the connector's
+    own `version` semver: patch = no shape change, minor = additive shape
+    change, major = breaking shape change.
     """
 
     inputs: dict[str, ConnectionContractInput] = Field(
@@ -776,9 +885,19 @@ class UrlEncodeDerived(StrictModel):
 
 
 # `pkce_challenge_s256` and `jwt_sign` are `planned` in the callable-function
-# catalog: connectors must not reference them yet — validation rejects unknown
-# function names. Add their Pydantic shapes when the engine ships them; until
-# then they intentionally have no model.
+# catalog: connectors must not reference them yet. Add their Pydantic shapes
+# when the engine ships them; until then they intentionally have no model.
+#
+# Having no model rejects one only where this union is the annotation, which it
+# reaches through `UrlValueExpression` — a transport's `base_url` is declared
+# that way, and naming an unmodelled function there fails `model_validate`.
+# Every other site a function expression reaches is
+# loosely typed — a transport header, a param `default`, a request body — so the
+# union never grades it and an unregistered name is accepted, then fails when
+# the engine resolves it at connect. RULE-SHRD-007 is that gap. It carries no
+# validator because what it requires is membership in the ENGINE's registry,
+# which nothing here can read; this union's members coincide with that registry
+# by maintenance, not by construction.
 
 
 DerivedValue = Annotated[
@@ -803,12 +922,23 @@ is exclusive to `lookup`.
 # A field that must resolve to a non-empty URL string models its
 # value-expression object forms as these typed models — NOT a bare
 # `dict[str, Any]` — so the PUBLISHED JSON Schema constrains the shape exactly
-# as the Pydantic model does. Schema and validator stay aligned by
-# construction; there is no imperative `@field_validator` the schema misses.
+# as the Pydantic model does.
+#
+# The SHAPE is expressible as schema and stays aligned by construction. The
+# resolution-scope vocabulary is expressible for a `ref`, which carries it as a
+# published pattern, and not for a template, where it is a property of each
+# `${...}` the string contains rather than of the string: asserting it needs a
+# negative lookahead, which pydantic-core's regex engine rejects, so it would
+# publish a pattern the model could not run. `_expressions_qualified` is
+# therefore the complete gate for a template — the validator, not `latest.json`.
 
 
-class TemplateExpression(StrictModel):
+class TemplateExpression(ValueExpressionScopes, StrictModel):
     """`{template}` form: a `${scope.path}`-bearing string resolved at runtime."""
+
+    # The wrapper says this string IS an expression, so it carries the rule on
+    # its own rather than only where a field of this type is checked.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("template",)
 
     template: Annotated[str, StringConstraints(min_length=1)] = Field(
         description="Template string carrying `${scope.path}` placeholders."
@@ -818,8 +948,14 @@ class TemplateExpression(StrictModel):
 class RefExpression(StrictModel):
     """`{ref}` form: a dotted path into the resolution context."""
 
-    ref: Annotated[str, StringConstraints(min_length=1)] = Field(
-        description="Dotted reference path, e.g. `connection.parameters.host`."
+    ref: Annotated[
+        str, StringConstraints(min_length=1, pattern=RESOLUTION_SCOPE_PATTERN)
+    ] = Field(
+        description=(
+            "Dotted reference path beginning with a resolution scope: "
+            + ", ".join(RESOLUTION_SCOPES)
+            + " (e.g. `connection.parameters.host`)."
+        ),
     )
 
 
@@ -856,7 +992,7 @@ class TransportRateLimit(StrictModel):
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
-class HttpTransport(AdvisoryValidated, StrictModel):
+class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     """HTTP transport contract. Spec: §Transport Contracts."""
 
     transport_type: Literal["http"] = Field(description="Transport type discriminator")
@@ -875,6 +1011,7 @@ class HttpTransport(AdvisoryValidated, StrictModel):
         default=None,
         description="Default request headers; values may be literals or expressions",
     )
+
     headers_remove: list[str] | None = Field(
         default=None,
         description="Header names to delete from inherited defaults (case-insensitive)",
@@ -887,9 +1024,18 @@ class HttpTransport(AdvisoryValidated, StrictModel):
         default=None, description="Rate-limit policy"
     )
 
+    # Both resolved at transport materialization, by the engine's transport
+    # factory and by the auth Lambdas' header merge. `timeout_seconds` and
+    # `rate_limit` sit beside them and are read literally by both.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("base_url",)
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
-class DsnBinding(StrictModel):
+
+class DsnBinding(ValueExpressionScopes, StrictModel):
     """Single binding entry inside a `url_template` DSN. Spec: §Transport Contracts."""
+
+    # Resolved when the engine renders the DSN from its template.
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("value",)
 
     value: Any = Field(..., description="Value-expression resolving to the raw binding value")
     encoding: Literal[
@@ -952,7 +1098,7 @@ class UrlTemplateDsn(StrictModel):
         return self
 
 
-class DatabaseTls(StrictModel):
+class DatabaseTls(ValueExpressionScopes, StrictModel):
     """Database transport TLS declaration. Spec: §Transport Contracts.
 
     Both fields resolve to plain strings at runtime. The interpretation of
@@ -961,6 +1107,8 @@ class DatabaseTls(StrictModel):
     canonical mode set is enforced here; the connector's
     ``connection_contract.inputs[<field>].enum`` is the user-facing constraint.
     """
+
+    EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("mode", "ca_certificate")
 
     mode: Any = Field(
         ...,
@@ -1011,7 +1159,7 @@ class SqlAlchemyTransport(StrictModel):
     )
 
 
-class AdbcTransport(StrictModel):
+class AdbcTransport(ValueExpressionScopes, StrictModel):
     """ADBC (Arrow Database Connectivity) database transport contract. Spec: §Transport Contracts."""
 
     model_config = ConfigDict(
@@ -1048,6 +1196,10 @@ class AdbcTransport(StrictModel):
     )
 
     transport_type: Literal["adbc"] = Field(description="Transport type discriminator")
+    # Resolved per entry by the engine's transport factory, unlike the
+    # SQLAlchemy `options` map beside it, which is read literally.
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("db_kwargs",)
+
     driver: Literal["postgresql", "snowflake", "bigquery"] = Field(
         ...,
         description=(
@@ -1199,8 +1351,14 @@ Transport = Annotated[
 """Named transport contract entry. Spec: §Transport Contracts."""
 
 
-class TransportDefaults(AdvisoryValidated, StrictModel):
+class TransportDefaults(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     """Defaults merged into every entry of `transports`. Spec: §Transport Contracts."""
+
+    # Merge layer one: this map is folded into every transport entry before any
+    # of it resolves, so an unscoped token here reaches every request the
+    # connector makes. `options` beside it is driver configuration, read
+    # literally.
+    EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
 
     transport_type: Literal["http", "sqlalchemy", "adbc", "s3", "file", "stdout"] | None = Field(
         default=None,
@@ -1761,7 +1919,7 @@ class WriteUnit(StrictModel):
         return self
 
 
-class ConnectorBase(AdvisoryValidated, StrictModel):
+class ConnectorBase(StrictModel):
     """Base connector model — fields shared by every connector kind.
 
     `connector_id` is the connector's canonical identifier and its registry
@@ -1937,6 +2095,17 @@ class ConnectorBase(AdvisoryValidated, StrictModel):
             if isinstance(entry, dict) and "transport_type" not in entry:
                 entry["transport_type"] = default_kind
         return data
+
+    @model_validator(mode="after")
+    def _default_transport_declared(self) -> "ConnectorBase":
+        """RULE-CTOR-001: the transport every operation falls back to exists."""
+        if self.default_transport not in self.transports:
+            raise violation(
+                "RULE-CTOR-001",
+                f"value={self.default_transport!r} "
+                f"not in {sorted(self.transports)!r}",
+            )
+        return self
 
     @model_validator(mode="after")
     def _transport_refs_resolvable(self) -> "ConnectorBase":

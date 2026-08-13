@@ -1,0 +1,21 @@
+id: RULE-CONN-006
+statement: >
+  Every connection-contract input and post-auth output MUST be authored into
+  the connection map its own declaration's `storage` names.
+tier: referential
+severity: error
+scope: connection
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [ConnectionAuthored, ConnectionInput]
+rationale: >
+  One routing rule covers every connector and every auth type, and the routing
+  target is declared in the connector document rather than in the connection —
+  a connection carries no view of the contract it instantiates. So a value
+  filed into the wrong map is a perfectly well-formed document holding a value
+  nothing will ever read. Catching it means opening the connector's
+  `connection_contract` beside the connection, which no single-document
+  validation run does; the gap surfaces at connect time, when the engine looks
+  for the value in the map the contract named and finds it absent.
+status: active
+superseded_by: null

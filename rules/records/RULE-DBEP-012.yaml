@@ -1,0 +1,23 @@
+id: RULE-DBEP-012
+statement: >
+  A discovered column whose provider type could not be read MUST carry the
+  fallback label its `native_type` field declares, never an invented
+  placeholder and never a guessed type.
+tier: procedural
+severity: error
+scope: database-endpoint
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [Column]
+fields: [native_type]
+rationale: >
+  The field is required with a length floor, so something is always written and
+  the model cannot tell a real label from a stand-in. A guessed type resolves
+  through the read map into a wrong Arrow type and the column syncs with
+  silently wrong values; an invented placeholder resolves through nothing and
+  reports as a type-map miss the author cannot recognise. Only the declared
+  fallback surfaces the gap as a visible miss. Catching a violation means
+  comparing the recorded label against what the provider's introspection
+  actually returned, which no document records.
+status: active
+superseded_by: null

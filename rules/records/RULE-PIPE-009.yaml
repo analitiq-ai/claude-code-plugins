@@ -1,0 +1,20 @@
+id: RULE-PIPE-009
+statement: >
+  A `cron_expression` MUST carry an inner spec the scheduler that runs it
+  accepts; the contract constrains the wrapper alone.
+tier: structural
+severity: error
+scope: pipeline
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Schedule]
+rationale: >
+  The pattern reaches the wrapper and no further, so any text inside it
+  validates here and the pipeline is accepted carrying a schedule that never
+  fires — the failure surfaces at the scheduler, far from the document that
+  caused it, and looks to a user like a pipeline that is simply idle. The
+  dialect belongs to the scheduler rather than to this contract, which is why
+  the wrapper is all the pattern can honestly claim; checking the rest means
+  submitting the expression to that scheduler.
+status: active
+superseded_by: null

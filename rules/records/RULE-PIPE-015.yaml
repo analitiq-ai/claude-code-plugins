@@ -1,0 +1,20 @@
+id: RULE-PIPE-015
+statement: >
+  A schedule's `timezone` MUST name a zone in the IANA database.
+tier: structural
+severity: error
+scope: pipeline
+validator: "analitiq.contracts.pipelines.config::Schedule._validate_timezone"
+owners: [pipeline-plugin]
+targets: [Schedule]
+rationale: >
+  The field is typed as a plain string, so an abbreviation or a UTC offset —
+  `EST`, `PST`, `GMT+2` — is exactly what an author reaches for and exactly
+  what carries no daylight-saving history. The zone is what turns a wall-clock
+  schedule into an instant, so a name the runtime cannot resolve is not a
+  formatting defect: the pipeline either does not fire or fires an hour off
+  for half the year, and the run history is what surfaces it. Checking against
+  the live database is also what keeps the contract current as zones are added
+  and renamed, which a pattern or a copied list could not.
+status: active
+superseded_by: null

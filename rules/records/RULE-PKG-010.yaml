@@ -1,0 +1,23 @@
+id: RULE-PKG-010
+statement: >
+  `connector.py` MUST define the connector's dialect class on the CDK
+  `SqlDialect` base and its connector class on `GenericSQLConnector`, and
+  that connector class MUST carry `dialect_class` and no other member, not
+  even an `__init__`.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  All system-specific behaviour belongs on the dialect, reached through the
+  sanctioned hooks; a method or an `__init__` on the connector class is
+  behaviour the engine's generic connector path never calls, and it
+  diverges silently from `GenericSQLConnector` as the CDK moves. An author
+  who cannot find a hook for what the system needs reaches for the
+  connector class first, which is exactly the case this forbids.
+  `connector.py` is a file no contract model opens; the CDK conformance
+  kit's surface audit rejects the extra member, but only once the package
+  reaches registry CI.
+status: active
+superseded_by: null

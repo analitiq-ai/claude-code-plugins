@@ -1,0 +1,22 @@
+id: RULE-ENDP-027
+statement: >
+  A request.path_params binding MUST NOT apply a wire-encoding function,
+  because the engine percent-encodes every substituted path segment.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation, WriteOperation]
+rationale: >
+  Encoding a path segment is engine-owned and unconditional, so an author
+  reaching for an encoder here is not adding safety, they are adding a
+  second pass: an id containing a space or a slash goes on the wire
+  double-escaped and the provider either 404s or matches a different
+  resource. Nothing downstream can tell a double-escaped value from one
+  that genuinely contained a percent sign, so the mistake cannot be
+  detected after the fact and is refused at authoring time. The check
+  reaches the whole binding subtree, extension keys included, because the
+  resolver executes what it finds there too.
+status: active
+superseded_by: null

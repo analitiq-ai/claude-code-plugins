@@ -1,0 +1,20 @@
+id: RULE-STRM-035
+statement: >
+  A stream MUST name its lifecycle state from the vocabulary `StreamAuthored`
+  declares.
+tier: structural
+severity: error
+scope: stream
+validator: "analitiq.contracts.stream::StreamAuthored.status"
+owners: [pipeline-plugin, engine]
+targets: [StreamAuthored]
+fields: [status]
+mechanism: literal_enum
+rationale: >
+  The state decides whether a pipeline run reads this stream at all, so it is
+  read by the scheduler rather than displayed to a user. A value outside the
+  set is not a mislabelled stream but one whose participation nothing can
+  decide, and the two ways that can resolve — skipped silently, or run when the
+  author meant it held back — are both wrong and neither announces itself.
+status: active
+superseded_by: null

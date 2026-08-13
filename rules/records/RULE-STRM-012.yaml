@@ -1,0 +1,21 @@
+id: RULE-STRM-012
+statement: >
+  A filter's operator MUST belong to the operator vocabulary of the scope its
+  source endpoint reference declares.
+tier: advisory
+severity: error
+scope: stream
+validator: "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope"
+owners: [pipeline-plugin, engine]
+targets: [StreamSource]
+rationale: >
+  The operator field structurally admits the union of both vocabularies,
+  because only the binding knows which read path a filter will be rendered
+  onto — a database read renders a predicate the dialect must express, an
+  API read renders a request parameter the provider must accept, and neither
+  can carry the other's operators. Checking it at the source is the earliest
+  point where the scope is in view. Membership is not a promise of
+  executability: a dialect may still refuse an operator for a given column
+  type, and an API endpoint narrows the set further per parameter.
+status: active
+superseded_by: null

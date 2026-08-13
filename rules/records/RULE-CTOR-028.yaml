@@ -1,0 +1,23 @@
+id: RULE-CTOR-028
+statement: >
+  A connector document MUST declare the shape of an input and MUST NOT carry a
+  value that belongs to one customer or tenant, which the connection
+  instantiating the connector supplies instead.
+tier: judgment
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin]
+rationale: >
+  Reusability across connections is the entire point of splitting connector
+  from connection, and a baked value defeats it quietly: a real customer host
+  and a plausible placeholder are the same string to every model, so only a
+  reader who knows the target system can tell them apart. The mistake is easy
+  to make because the value is right in front of the author while they build
+  against one system, and it is broader than "no secrets" — a tenant slug or an
+  account id is not secret and still belongs to a connection. It surfaces at
+  the second customer, not the first, when a connector-owned default overrides
+  what they entered, so catching it means reading the authored document against
+  the question "whose value is this?" for every literal in it.
+status: active
+superseded_by: null

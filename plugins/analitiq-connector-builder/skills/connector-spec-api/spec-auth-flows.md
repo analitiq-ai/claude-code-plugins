@@ -1,18 +1,17 @@
 # API auth flows
 
-Per-auth-type authoring contract. Each section lists the required and
-forbidden child fields, points at a worked example under `examples/`,
-and notes common pitfalls.
+Per-auth-type authoring craft. `auth` is a discriminated union on `type`
+(`RULE-CTOR-024`), so take a branch's field set from
+`https://schemas.analitiq.ai/connector/latest.json`, not from this page. What
+each section below carries is the craft that shape cannot express, and a
+pointer to a worked example under `examples/` where one ships.
 
 ## `api_key`
 
-**Required children:** `type`.
-**Forbidden:** `authorize`, `token_exchange`, `refresh` (these are OAuth-only).
-**`test` is optional.**
-
-The actual API key value is declared in `connection_contract.inputs` with
-`secret: true`. Auth header construction happens in the transport's
-`headers` block, e.g. `"Authorization": { "template": "Bearer ${secrets.api_key}" }`.
+The API key value itself lives in `connection_contract.inputs`
+(`RULE-CTOR-052`) with `secret: true`. Auth header construction happens in the
+transport's `headers` block, e.g.
+`"Authorization": { "template": "Bearer ${secrets.api_key}" }`.
 
 Example: `examples/api-key/api-key.example.json` (with sibling
 `examples/api-key/type-map-read.json`). For a templated / post-auth-discovered
@@ -20,12 +19,10 @@ host, see the multi-origin transport pattern in `spec-transport.md`.
 
 ## `basic_auth`
 
-**Required children:** `type`.
-**Forbidden:** OAuth ops.
-
-`username` and `password` are declared as
-`connection_contract.inputs`. The `Authorization` header in the transport
-should use the `basic_auth` function expression — never pre-compute base64.
+Declare `username` and `password` in `connection_contract.inputs`
+(`RULE-CTOR-052`), the password with `secret: true`. The `Authorization` header
+in the transport should use the `basic_auth` function expression — never
+pre-compute base64.
 
 <!-- validate: connector#/transports/api/headers/Authorization -->
 ```json
@@ -40,14 +37,10 @@ should use the `basic_auth` function expression — never pre-compute base64.
 
 ## `oauth2_authorization_code`
 
-**Required children:** `type`, `authorize`, `token_exchange`.
-**Optional:** `refresh`, `test`.
-
 `authorize` describes the URL that will be opened in the user's browser
 (method usually `GET`); `token_exchange` describes the back-channel
 request that swaps the auth code for tokens. Both are
-`AuthOperationTemplate` objects with `path` plus optional `method`,
-`headers`, `body`, `transport_ref`.
+`AuthOperationTemplate` objects (`RULE-CTOR-025`).
 
 `client_id` typically lives in `connection.parameters` with
 `source: "platform"`; `client_secret` lives in `secrets` with
@@ -59,12 +52,12 @@ flow collects the user's authorization through the browser, so declare a
 the authorize URL can be built (a region, or a tenant slug in the authorize
 host). Asking the user for anything the redirect already yields is noise.
 
-This does not mean an empty `inputs` map: the app's own `client_id` /
-`client_secret` are still declared, as `source: "platform"` (above).
-<!-- PROBE: connector-refs-unchecked -->
-Nothing
-validates that a ref resolves, so dropping them leaves a connector that passes
-validation and fails at connect with no credentials.
+This does not mean an empty `inputs` map: every ref an auth template resolves
+must be declared there (`RULE-CTOR-052`), and the app's own `client_id` /
+`client_secret` still are, as `source: "platform"` (above).
+<!-- PROBE: connector-ref-tail-unchecked -->
+Nothing validates that a ref resolves, so dropping them leaves a connector that
+passes validation and fails at connect with no credentials.
 
 **Platform-owned vs user-owned OAuth apps differ only in `source`.** Whether
 your platform registers one app for everyone (`source: "platform"`) or each
@@ -80,10 +73,6 @@ Example: `examples/oauth2-authorization-code/oauth2-authorization-code.example.j
 `examples/oauth2-authorization-code/type-map-read.json`).
 
 ## `oauth2_client_credentials`
-
-**Required children:** `type`, `token_exchange`.
-**Forbidden:** `authorize` (no redirect flow).
-**Optional:** `refresh`, `test`.
 
 Used for machine-to-machine auth. The `token_exchange` request POSTs
 client credentials and gets an access token (no browser redirect):
@@ -106,44 +95,28 @@ client credentials and gets an access token (no browser redirect):
 
 ## `jwt`
 
-**Required children:** `type`.
-**Optional:** `test`.
-
 Declare the signing key, algorithm, and claim inputs in
 `connection_contract.inputs`, and set the transport's `Authorization` header
 from the minted token with the `Bearer ${auth.access_token}` template —
 `examples/jwt/jwt.example.json` shows both.
 
-<!-- PROBE: connector-function-name-unchecked, endpoint-function-name-unchecked -->
-> **Inline signing is not yet available.** `jwt_sign` is planned, not
-> registered (`connector-builder/references/value-expressions.md` §Function
-> catalog) — and nothing rejects the call at authoring time: it validates
-> clean and fails at connect. Declare the inputs, author no `jwt_sign` call,
-> and flag this capability gap before shipping a `jwt` connector that depends
-> on local signing.
+> **A `jwt` connector may only call a signing function the catalog registers**
+> (`connector-builder/references/value-expressions.md` §Function catalog,
+> `RULE-SHRD-007`). Where it registers none, declare the inputs, author no
+> signing call, and flag the capability gap before shipping a `jwt` connector
+> that depends on local signing.
 
 ## `credentials`
 
-**Required children:** `type`.
-**Optional:** `test`.
-
-Use only when the provider's auth doesn't fit any narrower type. Declare
-the credential bundle in `connection_contract.inputs` with appropriate
-`secret: true` flags.
+Declare the credential bundle in `connection_contract.inputs`
+(`RULE-CTOR-052`), flagging each secret member `secret: true`.
 
 ## `aws_iam`
 
-**Required children:** `type`.
-**Optional:** `test`.
-**Forbidden:** OAuth ops.
-
-User-supplied AWS account, role, profile, or credential values are
-declared in `connection_contract.inputs`. The transport handles signing
-via runtime mechanics — connector JSON declares intent only.
+Declare the user-supplied values in `connection_contract.inputs`
+(`RULE-CTOR-052`). There is no signing block to author: the connector document
+declares intent only.
 
 ## `none`
-
-**Required children:** `type`.
-**Forbidden:** `authorize`, `token_exchange`, `refresh`.
 
 For public APIs that require no authentication. Rare.

@@ -7,13 +7,12 @@ fields are:
 
 | `transport_type` | Identity field | Extras |
 |---|---|---|
-| `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). Optional in the contract, since SQLAlchemy can derive it from the DSN's scheme — but **declare it anyway**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
-| `adbc` | `driver` — a closed enum owned by the contract's `AdbcTransport` (see `spec-driver-selection.md` §1) | `db_kwargs` (object; values may be value expressions). **AdbcTransport requires at least one of `dsn` / `db_kwargs`** (ADV-CTOR-004). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
+| `sqlalchemy` | `driver` — a `dialect+driver`, sync or async (e.g. `"postgresql+asyncpg"`, `"mysql+aiomysql"`, `"redshift+redshift_connector"`; dispatch is engine-side — see `spec-driver-selection.md` §Constraints). **Always declare it**: it is the one place a reader can see the sync/async choice was deliberate. | optional `tls` block (`ssl_mode` + `ssl_ca_certificate` refs; mode vocabulary is connector-defined) |
+| `adbc` | `driver` — a closed enum the contract owns (`RULE-CTOR-016`; choice: `spec-driver-selection.md` §1) | `db_kwargs` (object; values may be value expressions). The transport must carry connection state one way or the other (`RULE-CTOR-004`). TLS lives inside `db_kwargs` (e.g. `adbc.postgresql.sslmode`); no `tls` block. |
 
-Transport choice follows the decision order in `spec-driver-selection.md`.
-The chosen driver ships ONLY in the connector's `requirements.txt` (the
-engine pins no database drivers). ADBC drivers that accept all connection
-state via `db_kwargs` (e.g. Snowflake) may omit `dsn` entirely.
+Transport choice follows the decision order in `spec-driver-selection.md`
+(`RULE-CTOR-027`), which also covers where the driver ships
+(`RULE-PKG-027`).
 
 ## Shape
 
@@ -24,24 +23,27 @@ See the `transports.database.dsn` block in
 ## Rules
 
 - `template` is a connector-authored string with `{placeholder}` markers.
-  No direct `${...}` context references — those go inside binding `value`
-  expressions.
-- Every placeholder in the template must have a matching binding key, and
-  every binding key must be referenced by the template (ADV-CTOR-011).
-- Each binding declares:
-  - `value` — a value expression (`ref` or `template` or `function`).
-  - `encoding` — one of the closed enum values listed below.
+  A `${...}` context reference never appears in the template (`RULE-SHRD-006`) —
+  those go inside binding `value` expressions.
+- Template and bindings must correspond (`RULE-CTOR-011`).
+- Each binding declares a `value` (`RULE-CTOR-035`; grammar in
+  `connector-builder/references/value-expressions.md`) and an `encoding`
+  (see "Choosing an encoding" below).
 
-## Encoding values (closed enum)
+## Choosing an encoding (`RULE-CTOR-018`)
 
-| Encoding | Use |
+The vocabulary is closed and the registry prints its members; what it cannot
+tell you is which member a binding takes. That is decided by the URL position
+the value is substituted into:
+
+| Where the value lands in the URL | Encoding |
 |---|---|
-| `raw` | No encoding. Numeric or already-safe values (port, integers). |
-| `host` | Hostname encoding rules (IPv6 brackets, IDN punycode). |
-| `url_userinfo` | RFC 3986 userinfo encoding (passwords, usernames). |
-| `url_path_segment` | RFC 3986 path-segment encoding (database names that may contain special chars). |
-| `url_query_key` | RFC 3986 query-key encoding. |
-| `url_query_value` | RFC 3986 query-value encoding (query parameter values such as warehouse, schema). |
+| Numeric or already-safe values (port, integers) — no encoding | `raw` |
+| Hostname — IPv6 brackets, IDN punycode | `host` |
+| Userinfo: passwords, usernames (RFC 3986) | `url_userinfo` |
+| Path segment: database names that may contain special chars | `url_path_segment` |
+| Query key | `url_query_key` |
+| Query value: warehouse, schema, other query parameters | `url_query_value` |
 
 ## Authoring checklist
 
@@ -49,8 +51,10 @@ See the `transports.database.dsn` block in
    driver documentation).
 2. Write the template with one `{placeholder}` per logical field.
 3. For each placeholder, declare the binding's `value` and `encoding`.
-4. Use `secrets.password` for the password — never `connection.parameters.password`.
-5. Never pre-encode any value. The runtime applies the declared encoding.
+4. Resolve a credential from the `secrets` scope (`secrets.password`), never
+   from `connection.parameters` (`RULE-CTOR-046`).
+5. Never pre-encode any value (`RULE-CTOR-034`) — a pre-encoded password renders
+   a DSN that looks correct and carries the wrong credential.
 
 ## Driver examples
 
@@ -60,10 +64,10 @@ See the `transports.database.dsn` block in
 | `mysql+aiomysql` | `mysql+aiomysql://{username}:{password}@{host}:{port}/{database}` |
 | `redshift+redshift_connector` | `redshift+redshift_connector://{username}:{password}@{host}:{port}/{database}` |
 
-These are SQLAlchemy transports (DSN `url_template`) — the first two
-async, the third a sync driver (Redshift). ADBC drivers
-differ by driver: a driver may carry all connection state in `db_kwargs`
-and omit the DSN entirely (Snowflake authenticates this way), while
-`postgresql` keeps core coordinates in a `dsn` `url_template` and
-reserves `db_kwargs` for driver-namespaced extras like TLS — see the
-`postgresql-adbc` reference example for the DSN-plus-`db_kwargs` shape.
+These are SQLAlchemy transports (DSN `url_template`); the sync/async split
+is `spec-driver-selection.md` §Constraints. An ADBC transport differs by
+driver: some carry all connection state in `db_kwargs` and omit the DSN
+(Snowflake), while `postgresql` keeps core coordinates in a `dsn`
+`url_template` and reserves `db_kwargs` for driver-namespaced extras like
+TLS — see the `postgresql-adbc` reference example for the
+DSN-plus-`db_kwargs` shape.

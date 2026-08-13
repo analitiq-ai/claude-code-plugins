@@ -1,0 +1,25 @@
+id: RULE-PIPE-007
+statement: >
+  A stream's per-destination `execution` block MUST NOT be authored as a way to
+  change how much a run writes at a time; the batch size a run uses is the one
+  the pipeline's runtime declares, for every stream.
+tier: judgment
+severity: warning
+scope: pipeline
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Execution]
+rationale: >
+  The block is accepted by the contract and consumed by nothing: the engine
+  resolves one batch size from the pipeline's runtime, hands it to every stream
+  processor, and never reads a destination's `execution`, nor applies the
+  capacity a destination endpoint declares as a cap. So authoring one is not a
+  smaller write — it is a write size the author believes in and the run never
+  uses, and no document the plugin holds contradicts them. That is why this is a
+  judgment rule with nothing applying it: the artifact is legal, the run
+  succeeds, and only a row-rate nobody compares would show the difference.
+  Whether the engine should honour the block or the contract should stop
+  declaring it is a decision for the owners of both; until one is taken, an
+  author is better served by tuning the pipeline runtime, which does take effect.
+status: active
+superseded_by: null

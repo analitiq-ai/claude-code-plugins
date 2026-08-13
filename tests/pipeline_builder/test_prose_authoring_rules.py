@@ -26,7 +26,7 @@ edit and train people to re-baseline without reading, which is the trade-off
 Where the prose half needs a SENTENCE read — does this paragraph still forbid
 the dotted path, does it still instruct the agent to ask first — the test
 asserts the contract fact alone and stops. Those judgments are
-`.claude/rules/plugin-prose.md`'s, per `.claude/rules/validator-claims.md`, and
+`.claude/rules/plugin-prose.md`'s, per `.claude/rules/guards.md`, and
 the tests that reach only that far say so in their own docstrings.
 """
 from __future__ import annotations
@@ -108,7 +108,7 @@ def test_the_destructive_mode_this_section_must_guard_is_still_routed_here():
     Whether the prose still CARRIES that instruction is not asserted here. Doing
     so meant deciding, from `**…ask…**` in a paragraph, that a sentence
     instructs the reader — a judgment about English, which
-    `.claude/rules/validator-claims.md` forbids in a test and
+    `.claude/rules/guards.md` forbids in a test and
     `.claude/rules/plugin-prose.md` lists among the things a reader must check.
     "Is destructive" is not a property the contract models express, so there is
     nothing to derive the guardrail from either.

@@ -1,6 +1,6 @@
 # `destinations` block
 
-`stream.destinations[]` is a non-empty array of:
+`stream.destinations[]` entries take one of these shapes:
 
 <!-- BEGIN GENERATED: fields-stream-destination -->
 `analitiq.contracts.stream.DatabaseStreamDestination` — closed (`additionalProperties: false`); required: `endpoint_ref`, `write`
@@ -31,9 +31,6 @@ The sketch below illustrates a filled-in destination.
       "write": {
         "mode": "upsert",
         "conflict_keys": ["id"]
-      },
-      "execution": {
-        "batch_size": 1000
       }
     }
   ]
@@ -42,15 +39,11 @@ The sketch below illustrates a filled-in destination.
 
 ## Uniqueness and repeated connections
 
-Destinations must be distinct by their endpoint ref — `ADV-STRM-001` (see
-`SKILL.md` § Cross-field rules) states the tuple and the contract model enforces
-it. The emitted JSON Schema carries no `uniqueItems` keyword for `destinations`,
-so a schema-only reading looks permissive; it is not. Duplicates fail validation.
+Destinations must be distinct by the endpoint they address (`RULE-STRM-001`).
 
-Because uniqueness is over the whole ref and not over `connection_id`, the **same
-destination connection may legitimately appear in several destination entries**
-as long as the endpoint differs — fanning one stream into two tables of the same
-warehouse is a normal shape, not a duplicate.
+Fanning one stream into two tables of the same warehouse is a normal shape: the
+**same destination connection may appear in several entries** as long as the
+endpoint differs.
 
 ## `write`
 
@@ -76,30 +69,29 @@ warehouse is a normal shape, not a duplicate.
 <!-- END GENERATED: fields-stream-write -->
 
 The destination's `endpoint_ref.scope` picks the whole shape, write block
-included — pick the endpoint first, then author the write block its variant
-declares. Each variant's `mode` vocabulary is in the tables above; an API
-destination's mode must additionally be a key the selected endpoint declares
-under `operations.write`, which only that endpoint document can tell you. The
+included — pick the endpoint first, then author the write block its `mode`
+selects, carrying only the fields that shape declares (`RULE-STRM-016`). Each
+variant's `mode` vocabulary is in the tables above; an API destination's mode is
+bounded further by `RULE-STRM-024`. The
 orchestrator's `WriteModeMapper` (see
 `../pipeline-builder/references/enum-mappers.md`) classifies the user's intent
 to one of the database modes.
 
 ### `write.conflict_keys`
 
-Only the conflict-keyed database variant declares this field — no other write
-shape has it to set, and an API upsert's conflict target is endpoint-owned
-(`operations.write.upsert.conflict_keys`). It is a **single composite key set**
-of destination field names, not a list of alternative key sets:
+An API upsert's conflict target is endpoint-owned
+(`operations.write.upsert.conflict_keys`), not stream-owned. This field is a
+**single composite key set** of destination field names, not a list of
+alternative key sets:
 
 <!-- validate: stream#/destinations/0/write/conflict_keys -->
 ```jsonc
 ["id"]                       // or ["org_id", "external_id"] for a composite key
 ```
 
-Every key field must exist in the destination endpoint's schema; that is resolved
-server-side at save time, not by the local validator.
+Every key field names a destination-endpoint field (`RULE-STRM-022`).
 
-## `execution` (per-destination override)
+## `execution`
 
 <!-- BEGIN GENERATED: fields-stream-execution -->
 `analitiq.contracts.stream.Execution` — closed (`additionalProperties: false`); required: none
@@ -109,36 +101,13 @@ server-side at save time, not by the local validator.
 | `batch_size` | no | integer \| null | `None` | `min=1`, `max=100000` |
 <!-- END GENERATED: fields-stream-execution -->
 
-`execution` is one of **three** places batching is decided, and each has a
-different owner:
+The contract accepts this block, and it is never the way to change how much a
+destination writes at a time (`RULE-PIPE-007`). So never offer it as a
+per-destination tuning knob: when a user asks for a different write size, take
+them to the pipeline's `runtime.batching`
+(`../pipeline-spec/spec-engine-runtime.md` § "Where batching is decided") and
+tell them the size they choose applies to the whole pipeline.
 
-| Layer | Field | Owner | Meaning |
-|---|---|---|---|
-| Pipeline default | `pipeline.runtime.batching` | the pipeline | the baseline for every binding |
-| Stream override | destination `execution` | this stream | overrides the default for *this* `(stream, destination)` binding only |
-| Provider capacity | destination endpoint `operations.write.batching` | the endpoint | how much the provider will accept in one request |
-
-Resolution runs in that order — pipeline defaults, then the stream override, then
-endpoint and runtime hard limits capping whatever the override produced. The
-endpoint's `batching` is not a default and not an override: it is a ceiling
-describing the provider, and no stream may raise it.
-
-Use `execution` sparingly — pipeline defaults exist for a reason. Typical use: a
-low-throughput destination next to a high-throughput one in the same
-`destinations[]`.
-
-`batch_size` is the only override there is. `execution` also carried a
-`max_concurrent_batches`, which nothing ever consumed; it was retired from the
-contract instead of being left as a knob that read as load-bearing and did
-nothing.
-
-What batch size means per destination kind:
-
-- **API destination** — the endpoint's write `batching.max_records` caps how many
-  records may ride in one provider request.
-- **Database destination** — `execution.batch_size` is the write chunk size once
-  defaults have resolved.
-
-If a write operation declares no `batching` at all, the runtime treats it as
-single-record writes. That is a real throughput cliff on an API destination:
-absent batching does not mean "unbounded", it means one record per request.
+An API destination whose write operation declares no `batching` is a throughput
+cliff: absent batching means one request per record, not an unbounded one.
+Raise it with the user before authoring against that endpoint.

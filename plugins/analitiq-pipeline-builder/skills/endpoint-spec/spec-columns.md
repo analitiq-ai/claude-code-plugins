@@ -1,6 +1,6 @@
 # `columns` block
 
-A non-empty array of:
+The `columns` array holds:
 
 <!-- BEGIN GENERATED: fields-column -->
 `analitiq.contracts.endpoints.Column` — closed (`additionalProperties: false`); required: `arrow_type`, `name`, `native_type`
@@ -17,12 +17,13 @@ A non-empty array of:
 | `properties` | no | map of ColumnFieldSpec \| null | `None` | — |
 | `items` | no | ColumnFieldSpec \| null | `None` | — |
 
-Carries 3 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 3 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-column -->
 
 ## `name`
 
-Verbatim from introspection.
+Verbatim from introspection — no case-folding, quoting or other normalisation
+(`RULE-DBEP-009`).
 
 ## `native_type`
 
@@ -36,12 +37,13 @@ The provider-native type label, e.g.:
 | BigQuery | `STRING`, `INT64`, `STRUCT<…>`, `TIMESTAMP`, `BIGNUMERIC` |
 | MongoDB | `BSON.ObjectId`, `BSON.Date`, `BSON.Document` |
 
-Use `"unknown"` as a sentinel when the engine doesn't expose a type.
+When introspection cannot report a column's type, author `"unknown"` — the
+fallback label the contract's `native_type` field declares — never a guess and
+never an invented placeholder (`RULE-DBEP-012`).
 
 ## `arrow_type`
 
-Fully-qualified Apache Arrow canonical type string. Base names are
-PascalCase from `arrow/format/Schema.fbs`.
+Fully-qualified Apache Arrow canonical type string.
 
 <!-- BEGIN GENERATED: arrow-types -->
 `arrow_type` is validated by one published regex, `analitiq.contracts.endpoints.ARROW_TYPE_PATTERN` — generated from the engine-published grammar manifest, so it accepts exactly what the engine executes. Its top-level alternatives fall into two families.
@@ -63,20 +65,16 @@ PascalCase from `arrow/format/Schema.fbs`.
 There are **no angle-bracket container forms**: nested data is declared with the bare authored-shape markers `Object` / `List` (with sibling `properties` / `items` on the owning column or field spec) or opaque `Json`. `Decimal128/256` additionally require scale <= precision — a cross-parameter bound the regex cannot express; the validator enforces it.
 <!-- END GENERATED: arrow-types -->
 
-Units are the literal Flatbuffers enum identifiers, uppercase, and each type
-admits only the units its alternative above lists — `Time32(MICROSECOND)` and
-`Time64(SECOND)` are rejected.
+Each type admits only the units its alternative above lists —
+`Time32(MICROSECOND)` and `Time64(SECOND)` are rejected.
 
 ### `Timestamp` timezone
 
-Optional second argument. Three valid forms:
-
-- **Omit the slot** — naive timestamp, no implied zone: `Timestamp(MICROSECOND)`.
-- **Literal `null`** — explicit naive marker: `Timestamp(MICROSECOND, null)`
-  (distinct from omitting; some readers treat it as "zone is unknown
-  rather than absent").
-- **An actual zone** — IANA name (`UTC`, `Europe/Berlin`), `Etc/GMT±N`,
-  or a fixed `±HH:MM` offset: `Timestamp(MICROSECOND, +05:30)`.
+The zone slot is optional; the `Timestamp` alternative above carries every
+accepted spelling. The judgment is which to author: omit the slot for a source
+column with no zone; write literal `null` to mark the zone explicitly unknown
+rather than absent; write an actual zone for a zoned source, preferring `UTC`
+unless the source's own zone is load-bearing.
 
 ### Canonical examples
 
@@ -101,6 +99,10 @@ Json
 
 ### Mapping guidance
 
+Judgment supplies a value only where no type map covers the native
+(`RULE-DBEP-004`); resolve through the maps first — `spec-type-map-gaps.md`
+§Gap detection.
+
 | Provider native | Typical fully-qualified `arrow_type` |
 |---|---|
 | `uuid`, `text`, `varchar(n)`, `char(n)` | `Utf8` |
@@ -108,7 +110,7 @@ Json
 | `BIGINT UNSIGNED` (MySQL) | `UInt64` |
 | `real` / `double precision` | `Float32` / `Float64` |
 | `boolean` / `BOOL` | `Boolean` |
-| `numeric(p,s)` / `DECIMAL(p,s)` | `Decimal128(p, s)` (use `Decimal256` when `p > 38`; max precision is 76) |
+| `numeric(p,s)` / `DECIMAL(p,s)` | `Decimal128(p, s)` (use `Decimal256` when the precision exceeds what the `Decimal128` alternative above admits) |
 | `date` | `Date32` |
 | `timestamp` / `DATETIME` (no zone) | `Timestamp(MICROSECOND)` |
 | `timestamp with time zone` / `TIMESTAMP_TZ` / BigQuery `TIMESTAMP` | `Timestamp(MICROSECOND, UTC)` |
@@ -121,16 +123,13 @@ Json
 
 ### Nested data is authored-shape only
 
-There are **no angle-bracket container canonicals** (`Struct<…>`, `List<…>`,
-`Map<…>`): the engine does not execute them, and the contract — generated
-from the engine's own grammar — rejects them. Declare nested shape with the
-bare markers plus sibling keys on the **column itself**:
+Declare nested shape with the bare markers plus sibling keys on the **column
+itself** (`RULE-ENDP-021`):
 
-- `Object` — requires a non-empty sibling `properties` map of field specs
-  (recursive: each child is `{arrow_type, …}` and may itself be `Object`/`List`).
-- `List` — requires a sibling `items` field spec for the element.
-- `Json` — opaque; no `properties` or `items` permitted. Use it when you do
-  not introspect the inner shape.
+- `Object` — the sibling `properties` map is recursive: each child is
+  `{arrow_type, …}` and may itself be `Object`/`List`.
+- `List` — the sibling `items` field spec describes the element.
+- `Json` — opaque. Use it when you do not introspect the inner shape.
 
 See `examples/bigquery-struct-table.example.json` for a BigQuery `STRUCT`
 column declared as `Object` + `properties`. For schemaless or opaque container
@@ -145,8 +144,8 @@ the dialect doesn't expose this (e.g., schemaless engines).
 
 ## `default`
 
-The parsed default expression if reasonable, else `null`. The runtime treats this
-as advisory — actual default behavior is dialect-owned.
+The parsed default expression when introspection reports one, else `null` —
+never an invented one.
 
 ## `comment`
 
@@ -155,16 +154,33 @@ etc.). Forwarded verbatim. `null` when absent.
 
 ## `ordinal_position`
 
-Canonicalizes column order for hashing. Omit for schemaless engines (MongoDB).
+Declared ordinals canonicalise column order; each must differ from every
+other's (`RULE-DBEP-002`). Omit for schemaless engines (MongoDB).
 
-## Uniqueness
+## Registered endpoint rules
 
-The contract model enforces three advisory rules over this array:
+Every rule this plugin owns over an endpoint document, whichever endpoint scope
+it is filed at:
 
-<!-- BEGIN GENERATED: advisory-endpoint -->
+<!-- BEGIN GENERATED: rules-endpoint -->
 | Rule | Constraint |
 |---|---|
-| `ADV-DBEP-001` | columns[].name must be unique. |
-| `ADV-DBEP-002` | columns[].ordinal_position must be unique where present. |
-| `ADV-DBEP-003` | primary_keys must reference declared columns[].name. |
-<!-- END GENERATED: advisory-endpoint -->
+| `RULE-DBEP-001` | Every column a database endpoint declares MUST carry a name no other column in that document repeats. |
+| `RULE-DBEP-002` | Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's. |
+| `RULE-DBEP-003` | Every name in a database endpoint's `primary_keys` MUST name a column the same document declares. |
+| `RULE-DBEP-004` | A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical. |
+| `RULE-DBEP-005` | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks. |
+| `RULE-DBEP-006` | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. |
+| `RULE-DBEP-007` | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. |
+| `RULE-DBEP-008` | An authored endpoint MUST NOT declare a column the engine synthesises when it creates a table, and MUST drop such a column from a mirrored source's column list. |
+| `RULE-DBEP-009` | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation. |
+| `RULE-DBEP-010` | A database endpoint for a table that does not exist yet MUST target a namespace discovery returned. |
+| `RULE-DBEP-011` | A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`. |
+| `RULE-DBEP-012` | A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type. |
+| `RULE-DBEP-013` | A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label. |
+| `RULE-ENDP-020` | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
+| `RULE-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
+| `RULE-ENDP-031` | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. |
+| `RULE-ENDP-043` | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. |
+| `RULE-ENDP-055` | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. |
+<!-- END GENERATED: rules-endpoint -->

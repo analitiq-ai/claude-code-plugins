@@ -1,0 +1,24 @@
+id: RULE-ENDP-028
+statement: >
+  A `from_param` path_params binding on a write operation MUST name a param
+  that declares a default.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [WriteOperation]
+rationale: >
+  The other things that fill a param are read-side: operators make it
+  filterable from a stream, and controlled_by hands it to pagination or
+  replication. Neither is reachable from a write, so a write param with no
+  default has provably no source, and the placeholder it fills can never be
+  substituted — a document that validates and is dead at the first request.
+  Nothing else in the param's own shape refuses it, which is why it is worth
+  refusing explicitly rather than leaving to discovery at run time; the
+  diagnostic names the two ways out, giving the param a default or binding the
+  segment
+  to the record instead. Reads keep the latitude, because there a stream
+  filter can supply the value.
+status: active
+superseded_by: null

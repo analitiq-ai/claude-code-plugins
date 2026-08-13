@@ -1,0 +1,21 @@
+id: RULE-CTOR-025
+statement: >
+  An auth operation slot MUST hold an `AuthOperationTemplate`, which admits
+  only the request fields that model names and rejects any other key.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::AuthOperationTemplate"
+owners: [connector-plugin, engine]
+targets: [AuthOperationTemplate]
+mechanism: closed_object
+rationale: >
+  Every auth operation is described the same declarative way so the engine can
+  dispatch it through a named transport rather than through per-auth-type code,
+  which means anything the template does not name is not dispatched at all. The
+  key an author reaches for is usually one that belongs to the transport — a
+  base URL, a driver option — and without the closed object it would be
+  accepted, dropped at dispatch, and surface as an auth request sent somewhere
+  unexpected; refusing the key instead points at the transport where it belongs.
+status: active
+superseded_by: null

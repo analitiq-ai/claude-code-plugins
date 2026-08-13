@@ -802,7 +802,7 @@
     },
     "ConnectionContract": {
       "additionalProperties": false,
-      "description": "Connector-level contract for what a saved connection must contribute.\n\nSource of truth for connection form rendering, save-time validation, drift\ndetection, and template reference validation. Spec: \u00a7Connection Contract.\n\nNo standalone `version` field \u2014 drift detection rides on `connector_version`\nsemver: patch = no shape change, minor = additive shape change, major =\nbreaking shape change.",
+      "description": "Connector-level contract for what a saved connection must contribute.\n\nSource of truth for connection form rendering, save-time validation, drift\ndetection, and template reference validation. Spec: \u00a7Connection Contract.\n\nNo standalone `version` field \u2014 drift detection rides on the connector's\nown `version` semver: patch = no shape change, minor = additive shape\nchange, major = breaking shape change.",
       "properties": {
         "inputs": {
           "additionalProperties": {
@@ -3120,8 +3120,9 @@
       "description": "`{ref}` form: a dotted path into the resolution context.",
       "properties": {
         "ref": {
-          "description": "Dotted reference path, e.g. `connection.parameters.host`.",
+          "description": "Dotted reference path beginning with a resolution scope: connector, connection, secrets, auth, stream, state, runtime, request, response (e.g. `connection.parameters.host`).",
           "minLength": 1,
+          "pattern": "^(?:connector|connection|secrets|auth|stream|state|runtime|request|response)(?:\\.|$)",
           "title": "Ref",
           "type": "string"
         }
@@ -4478,5 +4479,5 @@
     }
   ],
   "title": "Analitiq Connector",
-  "version": "20.0.2"
+  "version": "21.0.1"
 }

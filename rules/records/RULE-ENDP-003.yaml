@@ -1,0 +1,20 @@
+id: RULE-ENDP-003
+statement: >
+  A query parameter whose declared request-input type is a container rather
+  than a scalar MUST declare both its wire serialization style and its explode
+  flag.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::Param._validate"
+owners: [connector-plugin, engine]
+targets: [Param]
+rationale: >
+  A scalar has one spelling on the wire; a container has several — repeated key,
+  delimiter-joined, bracketed — and a provider accepts one of them. Leaving the
+  serialization undeclared makes the request a guess the engine has to resolve
+  by default, and a wrong guess is accepted by the provider as a differently
+  shaped filter rather than refused. The obligation is a conditional
+  requirement on one param object, mirrored into the published schema.
+status: active
+superseded_by: null

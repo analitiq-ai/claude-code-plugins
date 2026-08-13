@@ -1,0 +1,20 @@
+id: RULE-SHRD-008
+statement: >
+  A ref path MUST be authored only from the scope paths the engine documents as
+  supplied; the contract patterns the leading token alone, so an invented tail
+  validates and resolves to nothing.
+tier: referential
+severity: error
+scope: any
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  What a scope actually holds is the engine's resolution context at run time,
+  which no authored document records — so a path naming a sub-scope or a field
+  the engine does not supply is well-formed here and resolves to nothing
+  there. The leading token validating is what makes this dangerous rather than
+  merely unchecked: the partial check reads as a full one, and a guessed path
+  looks endorsed. Catching one means reading the engine's documented scope
+  contents and matching the whole path against them.
+status: active
+superseded_by: null

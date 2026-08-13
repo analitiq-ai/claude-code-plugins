@@ -1,0 +1,23 @@
+id: RULE-CTOR-058
+statement: >
+  Every entry in a connector's error map MUST name its failure category from
+  the vocabulary `ErrorMap` declares.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::ErrorMap.exception"
+owners: [connector-plugin, engine]
+targets: [ErrorMap]
+fields: [exception, http, sqlstate, vendor_code]
+mechanism: literal_enum
+rationale: >
+  The category is not a label the run reports afterwards; it is the branch the
+  engine takes when the failure arrives. Each member selects a different
+  disposition — retry the request, stop the run and tell the user their
+  settings are wrong, park the record — so a category outside the set leaves
+  the engine with a mapping it cannot act on for a failure that has already
+  happened. Every keyed map here carries the same vocabulary because each is
+  another way of recognising the same failure, and an author who learns it from
+  one map applies it to the rest.
+status: active
+superseded_by: null

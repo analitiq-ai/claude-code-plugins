@@ -15,11 +15,11 @@ Analitiq contract at `schemas.analitiq.ai`. Connectors may be published to the
 - **`connection` and `pipeline` documents** — runtime credentials for a connector
   instance, and the full integration definition. Owned by the sibling
   `analitiq-pipeline-builder` plugin.
-- **Database endpoints** — connection-scoped, produced by the connector's
-  `resource_discovery` workflow at runtime, never authored here.
-- **Storage kinds** (`file`, `s3`, `stdout`) — accepted by the schema, but the
-  engine does not execute them, so `storage-connector-creator` returns a
-  structured refusal until support lands.
+- **Database endpoints** (`RULE-DBEP-006`) — connection-scoped, produced by the
+  connector's `resource_discovery` workflow at runtime.
+- **Storage kinds** (`file`, `s3`, `stdout`) (`RULE-CTOR-037`) — accepted by the
+  schema, but the engine does not execute them, so `storage-connector-creator`
+  returns a structured refusal until support lands.
 
 Agents must never author JSON that belongs to another agent's responsibility.
 
@@ -84,9 +84,9 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
   pair** — the script overwrites it and CI fails.
 - A sentence asserting validator behavior outside a generated block must have
   a `PROBE:` fence comment naming the probe(s) that prove it placed directly
-  above it, or cite the `ADV-*` rule that enforces it in the same sentence.
+  above it, or cite the `RULE-*` rule that enforces it in the same sentence.
   Recognising that a sentence makes a claim is the author's job, and
-  `.claude/rules/validator-claims.md` says why: deciding it from the wording
+  `.claude/rules/guards.md` says why: deciding it from the wording
   took a list of hand-curated English regexes, which is banned. Pin the claim
   when you write it.
 - A probe that stops matching the contract means the contract moved: update
@@ -103,30 +103,14 @@ Rules when editing prose in this plugin (and validator claims in the sibling):
 - `tests/connector_builder/test_validator_claims.py` runs the same predicate
   in pytest.
 
-## Fenced JSON examples — the annotation convention
+## Fenced JSON examples
 
 Prefer pointing prose at a validated file under a skill's `examples/` tree
 (gated by `tests/*/test_examples*.py`) over an inline fence. An inline
 `json` / `jsonc` fence that stays carries an HTML comment directly above it
-declaring how it is verified (applies to BOTH plugins; machine-enforced for
-the pipeline plugin by `tests/pipeline_builder/test_prose_snippets.py`,
-review-enforced here until a matching gate lands):
-
-- `<!-- validate: <resource> -->` — a full document; must validate against
-  that resource's contract.
-- `<!-- validate: <resource>#/<pointer> -->` — a fragment; must validate
-  against the sub-model at that pointer. A fragment may show its enclosing
-  key for context (`"replication": { … }`, wrapped or not) — the pointer
-  names the deepest shown node, and a gate unwraps the key before
-  validating.
-- `<!-- invalid: <ADV id> -->` — deliberately wrong; must fail validation
-  (that half is what a gate asserts — a "don't do this" example that rots
-  into valid is the most misleading rot there is). That the failure is the
-  named rule's diagnostic stays review-enforced: the validator reports
-  model messages, not rule ids.
-- `<!-- illustrative -->` — outside the published contract's validation
-  surface (plugin-internal I/O envelopes, shape sketches); an explicit,
-  reviewable exemption.
+declaring how it is verified; `.claude/rules/plugin-prose.md` § "The annotation
+convention" defines the markers for both plugins. This tree's gate is
+`tests/connector_builder/test_prose_fences.py`.
 
 ## Where the authoring rules live
 

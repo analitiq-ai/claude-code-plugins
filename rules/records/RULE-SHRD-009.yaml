@@ -1,0 +1,21 @@
+id: RULE-SHRD-009
+statement: >
+  A value the platform derives at connection time MUST be declared as a
+  `function` expression and MUST NOT be authored as a pre-computed literal.
+tier: procedural
+severity: error
+scope: any
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [ConnectorBase]
+rationale: >
+  A pre-computed literal is a perfectly valid literal expression, so nothing
+  rejects it; only resolution at connection time reveals that it has expired,
+  or that it was right for the connection it was computed against and wrong
+  for every other one. A baked-in signature or timestamp is the usual shape,
+  and it is the worst kind of defect to find: it works throughout the author's
+  own testing and breaks for the first other tenant. The derivation belongs to
+  the engine, which is why the document declares the call rather than its
+  result.
+status: active
+superseded_by: null

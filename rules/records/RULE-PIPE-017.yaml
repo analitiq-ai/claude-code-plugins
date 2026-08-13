@@ -1,0 +1,21 @@
+id: RULE-PIPE-017
+statement: >
+  A pipeline's logging block MUST name its level from the vocabulary `Logging`
+  declares.
+tier: structural
+severity: error
+scope: pipeline
+validator: "analitiq.contracts.pipelines.config::Logging.log_level"
+owners: [pipeline-plugin, engine]
+targets: [Logging]
+fields: [log_level]
+mechanism: literal_enum
+rationale: >
+  The member is handed to the engine's logging configuration as a threshold, so
+  it is ordered rather than merely named — the level chosen decides how much of
+  a failed run there is to read afterwards. An unrecognised value has no
+  position in that ordering, and the resolutions available to a runtime that
+  cannot place it are to log everything or to log nothing, on a run nobody is
+  watching.
+status: active
+superseded_by: null

@@ -266,7 +266,7 @@ class TestOriginContainmentGapIsRecorded:
 
     That the field description still declares the half unenforced is a reader's
     check, not this module's: deciding it means reading what a description
-    means, which `.claude/rules/validator-claims.md` keeps out of tests and
+    means, which `.claude/rules/guards.md` keeps out of tests and
     `.claude/rules/contract-prose.md` states as an authoring obligation. The
     description lives on `_RequestBase.transport_ref`, which every
     endpoint-operation request model — read and write alike — inherits, and its

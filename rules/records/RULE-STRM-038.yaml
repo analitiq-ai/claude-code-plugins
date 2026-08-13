@@ -1,0 +1,23 @@
+id: RULE-STRM-038
+statement: >
+  A stream destination's write block MUST name its mode from the write-mode
+  vocabulary the block it selects declares.
+tier: structural
+severity: error
+scope: stream
+validator: "analitiq.contracts.stream::ApiWrite.mode"
+owners: [pipeline-plugin, engine]
+targets: [ApiWrite, DatabaseKeylessWrite, DatabaseConflictKeyedWrite]
+fields: [mode]
+mechanism: literal_enum
+rationale: >
+  The mode is the discriminator `RULE-STRM-016` selects the write shape by, so
+  a value outside the vocabulary is not a wrong mode but a document that
+  matches no shape at all, and the rejection names the union rather than the
+  field. Each shape declares only the modes it can execute, which is why the
+  vocabularies differ between them: a keyed write and a keyless one are
+  different destinations' capabilities, not one set the author picks from
+  twice. For an API destination the mode must additionally be a key the chosen
+  endpoint declares, which is `RULE-STRM-024`.
+status: active
+superseded_by: null

@@ -1,0 +1,21 @@
+id: RULE-STRM-027
+statement: >
+  A filter's value MUST carry the type the referenced field declares, and a
+  membership operator MUST carry an array of such values.
+tier: referential
+severity: error
+scope: stream
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [Filter]
+rationale: >
+  The filter's value is untyped in the contract — it has to be, since the
+  admissible type is whatever the referenced field declares — and that
+  declaration lives in the endpoint document the stream only references, so
+  nothing local can compare the two. A number quoted as a string, or a
+  single value where the operator expects a list, therefore validates and
+  becomes a predicate the database or provider rejects, or worse silently
+  matches nothing. Catching a violation means reading the field's declared
+  type off the endpoint document beside the literal.
+status: active
+superseded_by: null

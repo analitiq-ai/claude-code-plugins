@@ -1,4 +1,4 @@
-"""`PublicRunError` message-to-code pairing (ADV-DSYNC-002).
+"""`PublicRunError` message-to-code pairing (RULE-DSYNC-002).
 
 `PUBLIC_ERROR_MESSAGES` owns the one customer-safe text per `PublicErrorCode`
 member — the public surface must never echo a raw exception string or the

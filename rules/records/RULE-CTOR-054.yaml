@@ -1,0 +1,22 @@
+id: RULE-CTOR-054
+statement: >
+  A DSN binding's `value` MUST NOT apply a wire-encoding function, because
+  the binding's declared `encoding` already owns that encoding.
+tier: advisory
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [DsnBinding]
+rationale: >
+  The same encoding function is the right answer for URL components an author
+  builds by hand in a template, so reaching for it inside a binding feels
+  consistent and doubles the encoding — the DSN stays well-formed and carries
+  a credential the server rejects, which reads as a bad secret rather than a
+  bad binding. Known enforcement gap: the walk over `DsnBinding.value` reads
+  the leading scope of each ref and placeholder (RULE-CTOR-057) and never
+  which function a node names, so the double encoding is invisible until the
+  DSN is built — unlike the equivalent path_params rule (RULE-ENDP-027), which
+  has an enforcer.
+status: active
+superseded_by: null

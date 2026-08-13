@@ -1,0 +1,24 @@
+id: RULE-ENDP-051
+statement: >
+  A read operation's request MUST name its HTTP method from the vocabulary the
+  read-request branches declare; the branch that method selects is what decides
+  whether the request may declare a body at all.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::GetReadRequest.method"
+owners: [connector-plugin, engine]
+targets: [GetReadRequest, PostReadRequest]
+fields: [method]
+mechanism: literal_enum
+rationale: >
+  A read is a retrieval, so the admissible methods are the ones a provider
+  documents for retrieving a collection — the second exists because some
+  providers express a search read as a body-bearing POST. The method is the
+  union's discriminator rather than a free string, so naming one outside the
+  vocabulary selects no branch and the document is refused with a
+  discriminator error instead of dispatching a request the engine has no shape
+  for. Declaring it on the branches is also what lets the published schema
+  forbid a body on the retrieval method structurally.
+status: active
+superseded_by: null

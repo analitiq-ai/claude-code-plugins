@@ -6,53 +6,36 @@ release table is the plugin's own policy.
 
 ## Authored top-level fields
 
-| Field | Required | Notes |
-|---|---|---|
-| `$schema` | Yes (for standalone files) | `https://schemas.analitiq.ai/connector/latest.json`. Always author this canonical URL. The connector contract accepts the published URL on any environment host (`schemas.analitiq.<tld>`), so a document authored against `.ai` still validates where the engine serves a per-environment schema. The validator matches on this URL offline; it does not fetch it. |
-| `kind` | Yes | The connector family — a schema-owned `kind` enum (validator-enforced); routing per value: `enum-mappers.md` §KindMapper. |
-| `connector_id` | Yes | Stable connector slug matching `^[a-z0-9][a-z0-9_-]*$` (lowercase). Names the on-disk `{connector_id}/` directory so the identifier and directory stay in sync. The connector contract **requires** `connector_id` in every authored definition — the "service-assigns-when-omitted" rule is `connection_id`'s on *connection* documents, not `connector_id`'s. |
-| `display_name` | No | User-facing label. |
-| `description` | No | Human-readable summary. |
-| `tags` | No | Search/grouping labels. |
-| `documentation_url` | No | Provider docs URL. |
-| `version` | Yes | Semantic version string. Start at `1.0.0` for first release. |
-| `default_transport` | Yes | Name of an entry in `transports`. |
-| `transports` | Yes | Map of named transport contracts. |
-| `transport_defaults` | No | Defaults merged into named transports. |
-| `auth` | Yes | Auth workflow definition. |
-| `connection_contract` | Yes | Connection-contract shape. |
-| `resource_discovery` | No | Resource discovery declarations. |
+Which top-level fields exist and which are required is the contract's own
+statement, not restated here — the closest worked example under your spec
+skill's `examples/` tree is a full, CI-validated document showing the shape, and
+the validator's findings name any required field you omitted. The notes below
+carry only what that statement does not say.
 
-Note: the connector's type maps are **not** top-level fields. They ship
-as separate sibling artifacts — `{connector_id}/definition/type-map-read.json`
-(native → Arrow, all kinds) and `{connector_id}/definition/type-map-write.json`
-(Arrow → native, database only) — validating against
-`https://schemas.analitiq.ai/type-map-read/latest.json` and
-`https://schemas.analitiq.ai/type-map-write/latest.json` respectively. See
-`connector-spec-db/spec-type-maps.md` for authoring.
+| Field | Note |
+|---|---|
+| `$schema` | Author it (`RULE-SHRD-003`); §Schema URL declaration below. |
+| `kind` | Routing per value: `enum-mappers.md` §KindMapper. |
+| `connector_id` | The stable slug `^[a-z0-9][a-z0-9_-]*$` (`RULE-CTOR-023`), unchanging across releases (`RULE-CTOR-045`). |
+| `default_transport` | Names a transport this document declares (`RULE-CTOR-001`). |
+| `sql_capabilities` | A `database` connector declares it (`RULE-CTOR-040`); authoring: `connector-spec-db/spec-sql-write-path.md`. |
+
+Note: the connector's type maps are **not** top-level fields. They ship as
+separate sibling artifacts, one per direction — authoring:
+`connector-spec-db/spec-type-maps.md`; on-disk paths and schema URLs:
+`pipeline.md` §4 and §7.
 
 ## Authoring `connector_id`
 
-The plugin authors `connector_id` on every connector document. The same
-value names the on-disk directory (`{connector_id}/`), so the contract
-path `connectors/{connector_id}/definition/connector.json` and the
-plugin's output path align without a rewrite layer.
-
-The connector contract requires `connector_id` to match the slug pattern
-in the field table above; this plugin authors that slug directly, so
-directory names stay portable and the identifier is stable.
+The plugin authors `connector_id` on every connector document, so the contract
+path `connectors/{connector_id}/definition/connector.json`, the registry repo
+name and the plugin's output directory are one string (`RULE-CTOR-042`,
+`RULE-CTOR-045`). Pattern: `RULE-CTOR-023`.
 
 ## Registry-stamped fields
 
-The following fields are stamped by the registry on insert/update and
-must not appear in authored documents:
-
-- `created_at`
-- `updated_at`
-
-The published schema reflects this — the authoring shape does not list
-them in `properties` or `required`, so the contract models reject them
-(reported under `contract-model`).
+`created_at` and `updated_at` are stamped by the registry on insert/update; an
+authored document declares neither (`RULE-CTOR-064`).
 
 Reserving a field name at the **document** level does not reserve it inside a
 provider-owned namespace. A provider response legitimately containing a
@@ -61,35 +44,30 @@ the Analitiq document envelope. Only the document's own top level is reserved.
 
 ## Release version (`version`)
 
-Authored top-level `version` is a semver string. It bumps according to
-the connector release table:
+`version` bumps according to the connector release table:
 
 <!-- BEGIN GENERATED: release-table -->
 | Bump | Meaning | Examples |
 |---|---|---|
 | Patch | No connection drift. | Bug fixes, doc fixes, transport implementation tuning, top-level capability block introduced where the connector carried none (`sql_capabilities`, `error_map`), type-map rule reordered (when the reorder does not change first-match resolution for any existing input). |
 | Minor | Additive, non-drifting. | Optional input added, optional discovery output added, optional endpoint added, type-map rule added. |
-| Major | Possible connection drift. | Input removed, input renamed, input type changed, input enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, `sql_capabilities` shape fact narrowed, removed, or replaced with one an existing connection may not satisfy (any `stage.scope` or `stage.schema` change), type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
+| Major | Possible connection drift. | Input removed, input renamed, input type changed, input enum narrowed, storage moved, non-optional input added, auth-shape change, discovery-shape change, `sql_capabilities` shape fact narrowed, removed, or replaced with one an existing connection may not satisfy (any `stage.scope` or `stage.schema` change), endpoint removed, type-map rule removed, render side changed for an existing matcher (read map: `canonical` changed for an existing `native`; write map: `native` changed for an existing `canonical`). |
 <!-- END GENERATED: release-table -->
-
-Type-map drift categories apply per file: `type-map-read.json` and
-`type-map-write.json` are diffed independently, and a change in either
-drives the bump per the table above.
 
 The drift-classifier sub-agent computes this bump from a diff between
 the previous release and the new draft.
 
 ## First release
 
-If no `previous_release_path` is supplied, set `version: "1.0.0"`.
+If no `previous_release_path` is supplied, set `version: "1.0.0"`
+(`RULE-CTOR-032`).
 
 ## Schema URL declaration
 
-Authored connector files declare `$schema` with the canonical `.ai` URL stated
-in the field table above — always. The validator matches on it offline; it
-does not fetch it.
+Authored connector files declare `$schema` (`RULE-SHRD-003`) as
+`https://schemas.analitiq.ai/connector/latest.json`.
 
-The three document families differ, so don't generalize from one to another:
+The document families differ, so don't generalize from one to another:
 
 <!-- PROBE: connector-schema-optional, endpoint-schema-host-locked -->
 | Document | `$schema` | Enforced? |

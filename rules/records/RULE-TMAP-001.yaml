@@ -1,0 +1,21 @@
+id: RULE-TMAP-001
+statement: >
+  An `exact` read rule whose native names a schemaless or structured container
+  MUST NOT render a scalar canonical.
+tier: advisory
+severity: error
+scope: type-map
+validator: "analitiq.contracts.type_map::TypeMapReadExactRule._check"
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [TypeMapReadExactRule]
+rationale: >
+  The canonical is a claim about the shape of the data, not about how the
+  driver happens to hand it over: a container column often arrives as text on
+  the wire, so a scalar canonical looks right at the connection and throws the
+  structure away for every consumer downstream, which then sees an opaque
+  string it cannot address. Only the syntactic half is reachable here — a
+  native whose spelling is visibly a container is refused, while a bare vendor
+  spelling validates clean, so the common case is still the author's to get
+  right.
+status: active
+superseded_by: null

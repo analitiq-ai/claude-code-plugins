@@ -1,0 +1,24 @@
+{
+  "$schema": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+  "endpoint_id": "contact",
+  "operations": {
+    "write": {
+      "upsert": {
+        "request": {
+          "method": "POST",
+          "path": "/Contact",
+          "body": { "from_input": "record" }
+        },
+        "input": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "native_type": "string", "arrow_type": "Utf8" }
+            }
+          }
+        },
+        "conflict_keys": ["id"]
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+id: RULE-ENDP-049
+statement: >
+  Every `${...}` placeholder in a template expression MUST begin with a
+  declared resolution scope.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::TemplateExpression._placeholders_qualified"
+owners: [connector-plugin]
+rationale: >
+  The scope prefix is what says where a value comes from, so omitting it is
+  not shorthand for a default: there is no default, only a search. What that
+  search does depends on which resolver reads the document, and the two that
+  do disagree — one takes the bare name as a top-level context key and falls
+  back to `secrets`, so `${token}` may quietly pick up whatever is stored
+  under that name and paste it into a header or a URL nobody addressed it to;
+  the other knows no such lookup and raises on a scope it does not recognise,
+  which in request building escapes as an unclassified error. An author
+  cannot tell from the document which they will get. Refusing it here is
+  where the mistake is still attached to the line that made it.
+status: active
+superseded_by: null

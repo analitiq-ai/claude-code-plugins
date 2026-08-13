@@ -3,7 +3,6 @@
   "pipeline_id": "10101010-1010-4010-8010-101010101010",
   "display_name": "Wise to PostgreSQL",
   "description": "Replicates Wise transfers to a PostgreSQL warehouse on demand.",
-  "status": "draft",
   "connections": {
     "source": "01010101-0101-4101-8101-010101010101",
     "destinations": [

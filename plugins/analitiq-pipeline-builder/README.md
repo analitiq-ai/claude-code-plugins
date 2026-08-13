@@ -9,7 +9,7 @@ authors validated **pipeline**, **stream**, **connection**, and
 [`schemas.analitiq.ai`](https://schemas.analitiq.ai).
 
 It is a **local authoring tool**: it never creates connectors — that's the
-[connector-creator plugin](https://github.com/analitiq-ai/claude-code-plugins) —
+[analitiq-connector-builder plugin](https://github.com/analitiq-ai/claude-code-plugins) —
 and it calls no registration APIs. It only writes JSON to disk for you to review
 and submit.
 
@@ -38,7 +38,8 @@ The plugin then:
    template you fill in), the endpoint documents, the pipeline shell, and one
    stream per endpoint.
 4. **Validates** every artifact against the published contract (the offline
-   `analitiq-validator` package), including cross-document referential checks.
+   `analitiq-validator` package), and the assembled pipeline through the bundle
+   pass (`--bundle-root`).
 5. **Writes files** to disk — only once everything passes.
 
 You can also **edit** an existing pipeline in place — e.g. "change the schedule
@@ -64,10 +65,14 @@ python3 plugins/analitiq-pipeline-builder/scripts/validate.py \
   --bundle-root path/to/project
 ```
 
-Output is a single `Diagnostics` JSON object; exit `0` iff `passed: true`. Tests
-live under `tests/` — run with `pip install -r requirements-dev.txt && pytest`.
-How validation dispatches per entity is documented in
-[pipeline-schema-validator.md](agents/pipeline-schema-validator.md).
+Output is a single `Diagnostics` JSON object; exit `0` iff `passed: true`. This
+plugin's suite lives at the repo root under `tests/pipeline_builder/`. From the
+repo root: `pip install -r requirements-dev.txt`, then
+`pytest tests/pipeline_builder/`.
+
+The `--entity` values are listed in
+[pipeline-schema-validator.md](agents/pipeline-schema-validator.md); how each one
+routes is in `scripts/validate.py`'s module docstring.
 
 ## How it fits together
 
@@ -78,7 +83,7 @@ connectors themselves.
 |---|---|---|
 | **This plugin** | [claude-code-plugins](https://github.com/analitiq-ai/claude-code-plugins) | Authors pipelines, streams, connections, and endpoints. |
 | Connectors | [analitiq-dip-registry](https://github.com/orgs/analitiq-dip-registry/repositories) | One repository per connector; downloaded read-only. |
-| Connector-creator | [claude-code-plugins](https://github.com/analitiq-ai/claude-code-plugins) | Authors the connectors this plugin consumes. |
+| analitiq-connector-builder | [claude-code-plugins](https://github.com/analitiq-ai/claude-code-plugins) | Authors the connectors this plugin consumes. |
 | Schemas | [schemas.analitiq.ai](https://schemas.analitiq.ai) | The published JSON Schema contract everything validates against. |
 
 Architecture, the agent chain, and internals are documented in

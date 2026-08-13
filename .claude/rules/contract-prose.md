@@ -1,5 +1,7 @@
 ---
-paths: packages/contract-models/**/*.py
+paths:
+  - "packages/contract-models/src/**/*.py"
+  - "census/**/*.py"
 ---
 
 # Rule: prose on the contract's own surface
@@ -15,11 +17,14 @@ inside `plugins/`. Same split, different surface.
 
 ## What the census decides, and what you decide
 
-`analitiq.contracts.shared.prose_census` catalogues every prose site and binds
-it to a disposition — an `ADV-*` rule, a structural mechanism, a waiver, or
-`descriptive=True` — with a `prose_hash` pinning the exact wording.
-`test_advisory_prose.py` and `scripts/render_prose_census.py check` compare the
-census to the live tree.
+`census/` catalogues every prose site and binds it to a disposition — a
+`RULE-*` rule, a structural mechanism, a waiver, or `descriptive=True` —
+with a `prose_hash` pinning the exact wording.
+`tests/census/test_prose_census.py` and `scripts/render_prose_census.py check`
+compare the census to the live tree. It sits outside
+`packages/contract-models/src/` deliberately: it is how this repo keeps its
+own wording honest, not part of the contract, so it does not ship in the
+wheel.
 
 Those comparisons are set membership and a hash. They decide that a site is
 catalogued, that no entry is dead, and that the wording has not moved since the
@@ -34,13 +39,13 @@ restamping; `render_prose_census.py write` restamps, it does not re-judge.
 
 Ask what would happen to a document that ignored the sentence.
 
-- Some rule rejects it → `rule_ids`, naming that `ADV-*` rule.
+- Some rule rejects it → `rule_ids`, naming that `RULE-*` rule.
 - The model's own shape rejects it (a `Literal`, a pattern, a bound, a
   discriminated union, `extra='forbid'`, a field validator) → `structural`,
   naming the mechanism.
 - Nothing rejects it, and nothing here could → `waiver`, saying **why** it is
   not mechanisable: engine-owned at configure or run time, cross-document,
-  authoring judgment. Prefer the shared reasons in `advisory_prose.py`
+  authoring judgment. Prefer the shared reasons in `census/obligation.py`
   (`UNKNOWABLE_SKIP`, `ENGINE_OWNED_DEFAULTING`, `ENGINE_CONDUCT`) so the census
   stays countable by category.
 - Nothing could ignore it, because it asks for nothing → `descriptive=True`.

@@ -42,7 +42,11 @@ from analitiq.contracts.arrow_grammar import (
     ARROW_TYPE_PATTERN,
     validate_cross_params,
 )
-from analitiq.contracts.shared.advisory import AdvisoryValidated
+from analitiq.contracts.shared.rules import (
+    HeaderMergeRules,
+    find_duplicates,
+    violation,
+)
 from analitiq.contracts.shared.arrow_shape import (
     ARROW_CONTAINER_SCHEMA_RULES,
     enforce_container_shape,
@@ -67,7 +71,9 @@ from analitiq.contracts.shared.types import (
     StrictPositiveInt,
 )
 from analitiq.contracts.value_expression import (
+    RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    has_known_scope,
     iter_expression_strings,
     template_placeholders,
 )
@@ -135,20 +141,6 @@ _METADATA_PROPERTY_NAMES: dict[str, Any] = {
     }
 }
 
-# Published JSON-Schema pattern for a typed `RefExpression.ref`: the value must
-# begin with one of the resolution scopes (imported from the resolver so the
-# vocabulary has one home). The `(?:\.|$)` boundary rejects a longer look-alike
-# token — `responseX` fails while `response` and `response.body` pass. Only the
-# leading scope is contract-checked; sub-path existence and per-phase
-# availability are the runtime resolver's concern.
-_RESOLUTION_SCOPE_PATTERN = r"^(?:" + "|".join(RESOLUTION_SCOPES) + r")(?:\.|$)"
-
-
-def _has_known_scope(token: str) -> bool:
-    """True when a ref/placeholder token's leading scope is a known resolution
-    scope. Stripped like the resolver, which strips before resolving."""
-    return token.strip().split(".", 1)[0] in RESOLUTION_SCOPES
-
 # The UNIVERSE of destination write modes — every mode a destination may be
 # asked to perform. It keys an API endpoint's `operations.write` map below, and
 # `stream.py` dispositions each member for the SQL write path: which of them a
@@ -190,12 +182,17 @@ class _EndpointModel(StrictModel):
     """
 
     model_config = ConfigDict(
-        populate_by_name=True,
         # Default `model_dump()` to wire-format names. Without this, dumps emit
         # Python attribute names (`schema_url`, `schema_`, `location`,
         # `and_`/`or_`/`not_`) and round-trip via `parse_endpoint(model.model_dump())`
         # would fail because none of those are valid spec keys.
         serialize_by_alias=True,
+        # `populate_by_name` is deliberately absent, here and on every contract
+        # model. It would make an aliased field accept its Python attribute name
+        # too, while the published schema admits only the alias under
+        # `additionalProperties: false` — so a document written that way passes
+        # here and is refused by every consumer of the published schema.
+        # `tests/unit/test_wire_name_policy.py` keeps it absent.
     )
 
     @model_validator(mode="before")
@@ -236,7 +233,7 @@ class RefExpression(_EndpointModel):
     ref: str = Field(
         ...,
         min_length=1,
-        pattern=_RESOLUTION_SCOPE_PATTERN,
+        pattern=RESOLUTION_SCOPE_PATTERN,
         description=(
             "Must begin with a known resolution scope: "
             + ", ".join(RESOLUTION_SCOPES)
@@ -253,14 +250,18 @@ class TemplateExpression(_EndpointModel):
     @field_validator("template")
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
-        # Every `${...}` placeholder must begin with a known resolution scope;
-        # an unqualified `${name}` would resolve to "" at runtime (a silent bug).
+        # Every `${...}` placeholder must begin with a known resolution scope.
+        # An unqualified `${name}` is not refused by every runtime that reads
+        # this document: one takes the bare name as a top-level context key and
+        # falls back to `secrets`, substituting whatever is stored under it,
+        # while the other raises on a scope it does not know. Neither names the
+        # placeholder to the author of the endpoint.
         # Placeholders are parsed by the shared resolver grammar
         # (`template_placeholders`), so this agrees with the resolver by
         # construction. Model-enforced only — not a published JSON-Schema
         # pattern, so the validator, not `latest.json`, is the complete gate.
         for placeholder in template_placeholders(value):
-            if not _has_known_scope(placeholder):
+            if not has_known_scope(placeholder):
                 raise ValueError(
                     f"template placeholder ${{{placeholder}}} must begin with a "
                     "known resolution scope "
@@ -927,7 +928,7 @@ class Replication(_EndpointModel):
 # `path` with none forbids `path_params` (absent or null). The exact key-set
 # equality (path_params keys == placeholder names) is instance-relative set
 # logic that stock JSON Schema cannot express — it is enforced by
-# `_RequestBase._validate` and catalogued in the advisory registry (ADV-ENDP-001).
+# `_RequestBase._validate` and catalogued in the rule registry (RULE-ENDP-001).
 _REQUEST_SCHEMA_RULES: dict[str, Any] = {
     "allOf": [
         {
@@ -956,7 +957,7 @@ _REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
 )
 
 
-class _RequestBase(AdvisoryValidated, _EndpointModel):
+class _RequestBase(HeaderMergeRules, _EndpointModel):
     """Common request fields shared by read and write operations."""
 
     model_config = ConfigDict(json_schema_extra=_REQUEST_SCHEMA_RULES)
@@ -1051,23 +1052,19 @@ class _RequestBase(AdvisoryValidated, _EndpointModel):
         # Use explicit `is None`: `path_params={}` is meaningfully different
         # from omitted, and the falsy-check version treats them the same.
         if placeholder_set and self.path_params is None:
-            raise ValueError(
-                f"request.path declares placeholders {sorted(placeholder_set)!r} but "
-                "request.path_params is missing (spec: §Request Parameter Binding)"
+            raise violation(
+                "RULE-ENDP-001",
+                f"path declares {sorted(placeholder_set)!r}; path_params missing",
             )
         if not placeholder_set and self.path_params is not None:
-            raise ValueError(
-                "request.path_params is present but request.path has no placeholders "
-                "(spec: §Request Parameter Binding)"
-            )
+            raise violation("RULE-ENDP-001", "path_params present; path declares none")
         if self.path_params is not None:
             extra = set(self.path_params) - placeholder_set
             missing = placeholder_set - set(self.path_params)
             if extra or missing:
-                raise ValueError(
-                    f"request.path_params keys must equal placeholders in path; "
-                    f"extra={sorted(extra)!r}, missing={sorted(missing)!r} "
-                    "(spec: §Request Parameter Binding)"
+                raise violation(
+                    "RULE-ENDP-001",
+                    f"extra={sorted(extra)!r}; missing={sorted(missing)!r}",
                 )
         return self
 
@@ -1340,7 +1337,7 @@ def _validate_arrow_type_in_json_schema(
 
 #: Reference keywords the contract does not author, and why each is refused
 #: rather than tolerated. Every one of them would let a subtree escape both
-#: structural walkers, which is the single harm ADV-ENDP-026 exists to close.
+#: structural walkers, which is the single harm RULE-ENDP-026 exists to close.
 _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
     "$id": (
         "declares a new base URI, which under 2020-12 retargets every `#`-leading "
@@ -1381,7 +1378,7 @@ def _validate_schema_refs(
     """Every reference in an embedded schema must be IN-DOCUMENT, must resolve,
     and must land on a schema.
 
-    ADV-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
+    RULE-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
     `$defs` as a recursive position and the arrow_type walker below descends
     into it, so a `#/$defs/...` target is annotation-checked like any other
     Several spellings are not, and each fails silently (a count here would rot —
@@ -1698,8 +1695,8 @@ class WriteInput(_EndpointModel):
     )
 
     # Named `_validate` (not `_validate_arrow_types`) because it now enforces two
-    # rules — ADV-ENDP-006's arrow_type walk and ADV-ENDP-026's `$ref` walk — and
-    # the advisory registry needs ONE enforcer name that exists on both this model
+    # rules — RULE-ENDP-006's arrow_type walk and RULE-ENDP-026's `$ref` walk — and
+    # the rule registry needs ONE enforcer name that exists on both this model
     # and `ResponseExtraction` for the pair of rules they share.
     @model_validator(mode="after")
     def _validate(self) -> "WriteInput":
@@ -1938,8 +1935,8 @@ def _json_schema_top_level_fields(
     `input.schema`), so a record assembled from `allOf` branches or reached
     through an in-document `$ref` enumerates the fields it actually declares.
     Reading `properties` raw made this return `None` for exactly the
-    `$defs` + `$ref` shape ADV-ENDP-026's rejection message tells authors to
-    write — silently disabling both this check and ADV-ENDP-024's membership
+    `$defs` + `$ref` shape RULE-ENDP-026's rejection message tells authors to
+    write — silently disabling both this check and RULE-ENDP-024's membership
     rule for every document that followed the advice.
     """
     materialized = materialize_node(schema, root if root is not None else schema)
@@ -2098,7 +2095,7 @@ class WriteOperation(_EndpointModel):
         _validate_param_wiring(self.request, self.params, allow_from_input=True)
         _validate_param_binding_uniqueness(self.request, self.params)
 
-        # ADV-ENDP-025. Held here rather than in `_validate_param_wiring`
+        # RULE-ENDP-025. Held here rather than in `_validate_param_wiring`
         # because `batching` is a property of the write MODE, not of the request,
         # so this is the innermost scope that can see both.
         # A write has no `response.schema`, so declared-path resolution has
@@ -2272,7 +2269,7 @@ class WriteOperation(_EndpointModel):
                     f"{missing!r} (spec: §Cross-Field Validation)"
                 )
 
-        # ADV-ENDP-024: the same membership rule for path_params, reported
+        # RULE-ENDP-024: the same membership rule for path_params, reported
         # against its own site so the author is sent to the binding that is
         # actually wrong rather than to the body.
         for fi in path_from_inputs:
@@ -2290,7 +2287,6 @@ class Operations(_EndpointModel):
 
     model_config = ConfigDict(
         extra="forbid",
-        populate_by_name=True,
         serialize_by_alias=True,
         json_schema_extra={
             "additionalProperties": False,
@@ -2510,7 +2506,7 @@ class Column(_EndpointModel):
         return self
 
 
-class DatabaseEndpointDoc(AdvisoryValidated, _EndpointBase):
+class DatabaseEndpointDoc(_EndpointBase):
     """Database endpoint schema document."""
 
     schema_url: Literal[DATABASE_ENDPOINT_SCHEMA_URL] = Field(
@@ -2524,6 +2520,38 @@ class DatabaseEndpointDoc(AdvisoryValidated, _EndpointBase):
     database_object: DatabaseObject = Field(...)
     columns: list[Column] = Field(..., min_length=1)
     primary_keys: list[str] | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def _column_names_unique(self) -> "DatabaseEndpointDoc":
+        """RULE-DBEP-001: the name every downstream lookup addresses is one column."""
+        dups = find_duplicates(self.columns, key=lambda c: c.name)
+        if dups:
+            raise violation("RULE-DBEP-001", f"duplicates={dups!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _ordinal_positions_unique(self) -> "DatabaseEndpointDoc":
+        """RULE-DBEP-002: declared ordinals canonicalise column order unambiguously.
+
+        Schemaless sources expose no ordinal, so a column that omits one is not
+        competing for a position and is left out of the comparison.
+        """
+        declared = [c.ordinal_position for c in self.columns if c.ordinal_position is not None]
+        dups = find_duplicates(declared)
+        if dups:
+            raise violation("RULE-DBEP-002", f"duplicates={dups!r}")
+        return self
+
+    @model_validator(mode="after")
+    def _primary_keys_name_columns(self) -> "DatabaseEndpointDoc":
+        """RULE-DBEP-003: every conflict key an upsert draws is a column here."""
+        if not self.primary_keys:
+            return self
+        declared = {c.name for c in self.columns}
+        extra = sorted(set(self.primary_keys) - declared)
+        if extra:
+            raise violation("RULE-DBEP-003", f"not declared: {extra!r}")
+        return self
 
 
 def parse_endpoint(payload: Any) -> "ApiEndpointDoc | DatabaseEndpointDoc":
@@ -2601,7 +2629,7 @@ _FUNCTION_EXPRESSION_FIELDS: frozenset[str] = frozenset(FunctionExpression.model
 
 # Callable functions whose whole job is to escape a value for the wire. Naming
 # one inside a `path_params` binding double-encodes, because the engine already
-# percent-encodes each substituted path segment (ADV-ENDP-027). This is a
+# percent-encodes each substituted path segment (RULE-ENDP-027). This is a
 # judgement about what each function DOES, not a mechanical subset of the
 # callable catalog — `basic_auth` and `lookup` are equally callable and neither
 # escapes anything — so it is stated here and pinned against the catalog by
@@ -2805,7 +2833,7 @@ def _first_unscoped_expression(value: Any) -> str | None:
     ``Any``-typed request slots, parsed via the shared resolver grammar
     (``iter_expression_strings`` skips protected ``literal`` subtrees)."""
     for token in _expression_tokens(value):
-        if not _has_known_scope(token):
+        if not has_known_scope(token):
             return token
     return None
 
@@ -2849,7 +2877,7 @@ def _validate_param_wiring(
             )
 
     for placeholder, expr in (request.path_params or {}).items():
-        # ADV-ENDP-027. Percent-encoding a path segment is the ENGINE's job, and
+        # RULE-ENDP-027. Percent-encoding a path segment is the ENGINE's job, and
         # it does it unconditionally. An author reaching for `url_encode` here
         # is not adding safety, they are adding a second pass: a record id
         # containing `/` or a space goes on the wire as `a%2520b`, and the
@@ -2927,7 +2955,7 @@ def _validate_param_wiring(
                     f"request.path_params[{placeholder!r}] binds to param {name!r} which has "
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
-            # ADV-ENDP-028, on WRITES only. A write param has exactly one
+            # RULE-ENDP-028, on WRITES only. A write param has exactly one
             # source: its own `default`. `operators` makes a param
             # stream-filterable and `controlled_by` hands it to
             # pagination/replication — both read-side, neither reachable from a
@@ -3078,7 +3106,7 @@ def _declares_a_type(node: Any) -> bool:
     """Whether a resolved node says what kind of value lives there.
 
     `type` is the JSON Schema statement; the `native_type`/`arrow_type` pair is
-    the contract's own, and either answers the question ADV-ENDP-023 asks.
+    the contract's own, and either answers the question RULE-ENDP-023 asks.
     """
     if not isinstance(node, dict):
         return False
@@ -3093,7 +3121,7 @@ def _validate_response_body_paths(
     request: Any = None,
     params: dict[str, "Param"] | None = None,
 ) -> None:
-    """ADV-ENDP-023: every `response.body[.<path>]` a read operation reads
+    """RULE-ENDP-023: every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
 
     `response.records` was already anchored to the declared schema; pagination
@@ -3240,7 +3268,7 @@ def _validate_param_binding_uniqueness(
 #
 # ONE algorithm answers "does this dotted path address something the document
 # declares?" for every site that asks: `response.records`, replication
-# `cursor_field`, and (since ADV-ENDP-023) every `response.body` path
+# `cursor_field`, and (since RULE-ENDP-023) every `response.body` path
 # pagination and `response.metadata` read. Before this there were two
 # half-answers — a `properties`-only walk for records/cursor_field and nothing
 # at all for pagination — which is why a typo in a pagination ref could ship.
@@ -3834,7 +3862,7 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     "what does this node say about `type` / `items` / `properties`?" when the
     answer is spread across a `$ref` target and `allOf` branches. Without it a
     consumer reading `node["type"]` off a `{"$ref": "#/$defs/Coll"}` sees
-    nothing — which is how a document following ADV-ENDP-026's own advice
+    nothing — which is how a document following RULE-ENDP-026's own advice
     ("put it in this document's `$defs`") could validate and then yield zero
     record fields.
 
@@ -4215,7 +4243,7 @@ def _sweep_expression_sites(
                 # lumping `metadata` in with them let `response.metadata.nope`
                 # through — which resolves to nothing on every page, so paging
                 # stops after page one and the run reports success. That is the
-                # ADV-ENDP-023 failure verbatim, one segment to the right of
+                # RULE-ENDP-023 failure verbatim, one segment to the right of
                 # where it was fixed.
                 key = token.split(".", 2)[2].split(".")[0]
                 if key not in metadata_keys:
@@ -4297,12 +4325,12 @@ def _reject_unknown_scope(where: str, token: str, operation: _OperationKind) -> 
     either side of the dot and the run-time failure is identical.
 
     The typed `Expression` fields are already covered by the published
-    `_RESOLUTION_SCOPE_PATTERN`, but the `Any`-typed paging slots
+    `RESOLUTION_SCOPE_PATTERN`, but the `Any`-typed paging slots
     (`keyset.initial`, `offset.initial`, `page.initial`, every `Predicate`
     operand) are covered by nothing, and those are the most load-bearing paging
     sites in the contract.
     """
-    if _has_known_scope(token):
+    if has_known_scope(token):
         return
     raise ValueError(
         f"{where} references {token!r}, whose leading token is not a known "
@@ -4316,7 +4344,7 @@ def _reject_unknown_response_scope(
 ) -> None:
     """A `response.*` token must name a real response sub-scope.
 
-    The hole this closes is the one ADV-ENDP-023 exists to close, one segment
+    The hole this closes is the one RULE-ENDP-023 exists to close, one segment
     to the left. `_response_body_segments` returns ``None`` for anything that is
     not `response.body[.…]`, and the caller skips it — on the stated grounds
     that every OTHER `response.*` scope is reserved and engine-owned. Nothing
@@ -4324,10 +4352,10 @@ def _reject_unknown_response_scope(
     `response.bodyy.next_cursor` was not "a reserved scope this rule leaves
     alone", it was a typo that resolved to nothing at run time. Paging stopped
     after page one and the sync reported success — the identical silent
-    truncation ADV-ENDP-023 exists to catch, reachable by misspelling `body`
+    truncation RULE-ENDP-023 exists to catch, reachable by misspelling `body`
     instead of the field after it.
 
-    `_has_known_scope` cannot catch it: it inspects only the LEADING token, and
+    `has_known_scope` cannot catch it: it inspects only the LEADING token, and
     `response` is a real scope. The sub-scope needs its own check.
     """
     stripped = token.strip()
@@ -4416,7 +4444,7 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     # Materialize before reading `type`/`items`, and again on the record shape:
     # the collection may be reached through a `$ref` (`{"$ref": "#/$defs/Coll"}`)
     # and the record shape is very often `items: {"$ref": "#/$defs/Record"}` —
-    # the exact shape ADV-ENDP-026's rejection message tells authors to write.
+    # the exact shape RULE-ENDP-026's rejection message tells authors to write.
     # Reading the raw node there would return a bare `{"$ref": …}` and every
     # consumer would enumerate zero fields.
     node = materialize_node(node, response_schema)
@@ -4624,7 +4652,7 @@ def _validate_record_field_path(
     defined over it, so a path the record shape does not declare means pages
     advance from a value the engine cannot read — silently truncating or
     repeating, which is the same wrong-data-on-a-green-run failure
-    ADV-ENDP-023 catches on the response-body side, with a different cause.
+    RULE-ENDP-023 catches on the response-body side, with a different cause.
 
     Unknowable shapes are reported, not skipped: this is `response.schema`,
     which the contract holds to the strict standard (see

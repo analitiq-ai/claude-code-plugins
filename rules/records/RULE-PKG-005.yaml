@@ -1,0 +1,22 @@
+id: RULE-PKG-005
+statement: >
+  A write-path renderer on a connector's dialect MUST return statement text
+  and perform no I/O — `bulk_land` is the one hook handed a live connection
+  and the batch, because a bulk mechanism is itself the act of landing
+  data.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  The engine owns the staged write plan and executes the text the renderers
+  return, inside the transaction it is managing; a renderer that opens its
+  own connection writes outside that transaction, so a failure later in the
+  cycle no longer rolls back. It is a tempting shortcut precisely because a
+  renderer often needs a fact about the live database. The method bodies
+  live in `connector.py`, which no contract model reads, so a renderer that
+  performs I/O is caught by the CDK conformance kit at registry CI or not
+  until a run.
+status: active
+superseded_by: null

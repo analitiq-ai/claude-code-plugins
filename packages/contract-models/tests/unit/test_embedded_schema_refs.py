@@ -1,4 +1,4 @@
-"""`$ref` in an embedded response/input schema (ADV-ENDP-026).
+"""`$ref` in an embedded response/input schema (RULE-ENDP-026).
 
 Two halves, tested together because each only makes sense given the other:
 
@@ -50,7 +50,7 @@ from analitiq.contracts.endpoints import (
     resolve_read_record_schema,
     resolve_schema_ref,
 )
-from analitiq.contracts.shared.advisory_rules import ADVISORY_RULES
+from analitiq.contracts.shared.rules import all_rules
 
 
 API_SCHEMA_URL = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -67,7 +67,7 @@ NOT_AUTHORABLE = "is not authorable in an embedded response/input schema"
 
 
 def _response(schema, records="response.body"):
-    """Build a `response` block carrying `schema` (the ADV-ENDP-026 site)."""
+    """Build a `response` block carrying `schema` (the RULE-ENDP-026 site)."""
     return {"records": {"ref": records}, "schema": schema}
 
 
@@ -127,7 +127,7 @@ def _replicating_doc(schema, cursor_field, records="response.body.data"):
 
 
 # ---------------------------------------------------------------------------
-# ADV-ENDP-026 — the guard, on response.schema and on input.schema
+# RULE-ENDP-026 — the guard, on response.schema and on input.schema
 # ---------------------------------------------------------------------------
 
 
@@ -294,7 +294,7 @@ class TestNonStringRefsRejected:
 class TestGuardWalkReachesEveryStructuralPosition:
     """The walk must cover the same positions as the arrow_type walker.
 
-    A `$ref` that escapes the walk is exactly the hole ADV-ENDP-026 closes, so
+    A `$ref` that escapes the walk is exactly the hole RULE-ENDP-026 closes, so
     each structural keyword family gets its own case.
     """
 
@@ -416,18 +416,20 @@ class TestGuardEndToEndOnADocument:
             parse_endpoint(doc)
 
 
-class TestAdvisoryRegistration:
-    def test_adv_endp_026_is_registered_against_both_embedded_schema_classes(self):
+class TestRuleRegistration:
+    def test_rule_endp_026_is_registered_against_both_embedded_schema_classes(self):
         # Look the rule up by id rather than `next(...)`: an unregistered rule
         # is the failure this test exists to catch, and a KeyError on a dict
         # names it, where a bare StopIteration does not.
-        rules = {rule.id: rule for rule in ADVISORY_RULES}
-        assert "ADV-ENDP-026" in rules, "ADV-ENDP-026 is not registered"
-        rule = rules["ADV-ENDP-026"]
+        rules = {rule.id: rule for rule in all_rules()}
+        assert "RULE-ENDP-026" in rules, "RULE-ENDP-026 is not registered"
+        rule = rules["RULE-ENDP-026"]
         assert set(rule.targets) == {"ResponseExtraction", "WriteInput"}
-        # One enforcer name must exist on every target.
-        assert hasattr(ResponseExtraction, rule.enforcer)
-        assert hasattr(WriteInput, rule.enforcer)
+        # The record's `validator` binds one symbol; the same method name must
+        # exist on every target, since the rule runs on each.
+        enforcer = rule.validator_symbol.split(".")[-1]
+        assert hasattr(ResponseExtraction, enforcer)
+        assert hasattr(WriteInput, enforcer)
 
 
 # ---------------------------------------------------------------------------
@@ -810,7 +812,7 @@ class TestRecursiveSchemasTerminate:
 
 
 # ---------------------------------------------------------------------------
-# The two together: cross-block paths (ADV-ENDP-023) resolving through `$defs`
+# The two together: cross-block paths (RULE-ENDP-023) resolving through `$defs`
 # ---------------------------------------------------------------------------
 
 
@@ -981,7 +983,7 @@ class TestRefsIntoNonSchemaPositions:
 
 
 class TestRefusedReferenceKeywords:
-    """`$id` and `$dynamicRef` defeat ADV-ENDP-026 by the exact mechanism it
+    """`$id` and `$dynamicRef` defeat RULE-ENDP-026 by the exact mechanism it
     exists to close, so the guard refuses the keywords rather than trying to
     follow them.
 
@@ -1036,7 +1038,7 @@ class TestRefusedReferenceKeywords:
         assert "#/$defs/<name>" in str(excinfo.value)
 
     def test_input_schema_is_guarded_too(self):
-        # Both targets of ADV-ENDP-026, not just the response side.
+        # Both targets of RULE-ENDP-026, not just the response side.
         with pytest.raises(ValidationError, match=NOT_AUTHORABLE):
             WriteInput.model_validate({"schema": {"type": "object", "$id": "https://evil.example/x"}})
 
@@ -1048,7 +1050,7 @@ class TestRefusedReferenceKeywords:
 
 
 class TestRecordShapeThroughRefs:
-    """ADV-ENDP-026 rejects a non-local ref with "put it in this document's
+    """RULE-ENDP-026 rejects a non-local ref with "put it in this document's
     `$defs`". An author who follows that advice must get a working connector —
     not a document that validates and then extracts zero fields.
     """
@@ -1430,7 +1432,7 @@ class TestMaterializeMatchesTheNaiveFold:
         """The second differential, and the one that was missing.
 
         `materialize_node` was pinned; `_contributors` — the walk that
-        `resolve_declared_path`, `effective_properties`, ADV-ENDP-023, record
+        `resolve_declared_path`, `effective_properties`, RULE-ENDP-023, record
         field enumeration and cursor-field resolution ALL run — was pinned by
         nothing differential. Every historically-shipped bug class was
         reinstallable there with a fully green suite: own-source-first,

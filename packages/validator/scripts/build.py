@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import ast
 import shutil
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -59,9 +60,48 @@ def _top_level_imports(source: str) -> set[str]:
     return names
 
 
+def _git() -> str:
+    """The `git` executable, resolved to a full path.
+
+    Resolving first is what turns a missing `git` into the failure below rather
+    than a `FileNotFoundError` from inside `subprocess`. It does not harden the
+    lookup — `which` searches the same inherited `PATH` — so the value is the
+    message and the stop: absent `git` is never a fallback to an unfiltered
+    tree, because the point of asking git is that tracking, not presence on
+    disk, decides what ships.
+    """
+    exe = shutil.which("git")
+    if exe is None:
+        raise SystemExit(
+            "build: no `git` on PATH — the staged module list is taken from "
+            "the index, so there is no safe way to continue without it."
+        )
+    return exe
+
+
 def _source_files(src_dir: Path = SRC_DIR) -> list[Path]:
-    """Every `*.py` module of the validator source package."""
-    return sorted(src_dir.glob("*.py"))
+    """Every tracked `*.py` module of the validator source package.
+
+    Tracked rather than merely present: this list is both what `stage()`
+    publishes and what the import guards parse, so an untracked scratch module
+    left in the directory would otherwise ship in the wheel and be graded as
+    though it were source. `git add` is the decision to publish, and it is the
+    one a reviewer sees.
+    """
+    listing = subprocess.run(
+        [_git(), "-C", str(src_dir), "ls-files", "-z", "--", "*.py"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    names = [name for name in listing.split("\0") if name]
+    if not names:
+        raise SystemExit(
+            f"build: git reports no tracked modules under {src_dir} — the "
+            "package is never empty, so this is a path that stopped matching "
+            "or a tree that is not a checkout"
+        )
+    return sorted(src_dir / name for name in names)
 
 
 def check_public_safe(src_dir: Path = SRC_DIR) -> list[str]:

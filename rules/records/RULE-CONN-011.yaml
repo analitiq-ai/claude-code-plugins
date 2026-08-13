@@ -1,0 +1,20 @@
+id: RULE-CONN-011
+statement: >
+  A connection's `connector_id` MUST resolve to a connector present in the run
+  the connection is assembled into.
+tier: referential
+severity: error
+scope: connection
+validator: "analitiq.validator.pipelines::_check_connection_connector_refs"
+owners: [pipeline-plugin, engine]
+rationale: >
+  The connector is what makes a connection mean anything: it declares the
+  contract the connection's parameters are filed against, the transports it
+  opens and the type maps its endpoints are read through. A `connector_id`
+  naming a connector the run does not carry leaves every one of those
+  unresolved, and the connection document itself is faultless — the id is
+  well-formed and names something that may well exist elsewhere. Nothing in the
+  connection can check it, because a connection carries no view of the
+  connectors available to it.
+status: active
+superseded_by: null

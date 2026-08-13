@@ -1,0 +1,20 @@
+id: RULE-CTOR-033
+statement: >
+  A document-store or NoSQL provider MUST be authored as a `database`
+  connector, and this plugin MUST NOT author a connector under the
+  contract's separate document-store kinds even though the contract models
+  them.
+tier: procedural
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin]
+rationale: >
+  The contract ships fully-shaped models for the document-store kinds, so an
+  author reading the schema alone reaches the opposite conclusion and
+  produces a connector that validates cleanly — and that this plugin's own
+  routing never reaches, because no creator agent and no authoring spec here
+  covers those kinds. Only the plugin's scope makes the kind wrong, and
+  scope is stated nowhere a checker reads.
+status: active
+superseded_by: null

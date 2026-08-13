@@ -33,7 +33,11 @@ REPO_ROOT = Path(__file__).resolve().parent
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 for _src in (REPO_ROOT / "packages" / "contract-models" / "src",
-             REPO_ROOT / "packages" / "validator" / "src"):
+             REPO_ROOT / "packages" / "validator" / "src",
+             # `census/` is this repo's catalogue of the contract's own prose —
+             # maintenance machinery, deliberately outside `src/` so it stays
+             # out of the wheel, and on the path because the suite reads it.
+             REPO_ROOT):
     # Fail loudly. Skipping a missing root would leave the suite importing
     # whatever happens to be installed while every downstream `importorskip`
     # turned green — a merge gate passing having validated nothing.

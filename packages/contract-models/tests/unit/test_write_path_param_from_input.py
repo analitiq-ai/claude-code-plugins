@@ -14,10 +14,10 @@ The contract now permits `{"from_input": "record.<dotted>"}` in
 declared param. This file is the proof that the sevdesk shape validates, plus
 the fence around it:
 
-  * ADV-ENDP-024 — a write `path_param` may bind `record.<field>`, which must be
+  * RULE-ENDP-024 — a write `path_param` may bind `record.<field>`, which must be
     declared in `input.schema`; a read `path_param` may not bind `from_input` at
     all (a read has no record).
-  * ADV-ENDP-025 — `from_input` in `path_params` is mutually exclusive with
+  * RULE-ENDP-025 — `from_input` in `path_params` is mutually exclusive with
     `batching`: a path segment takes one record's value, and a multi-record
     request has no single record to take it from.
 
@@ -237,7 +237,7 @@ class TestFromInputInPathParamsRejected:
             })
 
     def test_from_input_path_param_with_batching_rejected(self):
-        # ADV-ENDP-025. Same argument as idempotency × batching: the value is
+        # RULE-ENDP-025. Same argument as idempotency × batching: the value is
         # per-record and one request carries many.
         with pytest.raises(
             ValidationError,
@@ -289,7 +289,7 @@ class TestFromInputInPathParamsRejected:
             )}))
 
     def test_field_not_declared_in_input_schema_rejected(self):
-        # ADV-ENDP-024's membership half: the addressed field must exist in the
+        # RULE-ENDP-024's membership half: the addressed field must exist in the
         # record the mode declares, and the error names the path_params site so
         # the author knows which of the two `from_input` surfaces is wrong.
         with pytest.raises(
@@ -462,9 +462,9 @@ class TestPathParamBindingNotRegressed:
 
     def test_path_params_still_required_to_match_placeholders(self):
         # The presence correlation is upstream of the binding rules and untouched.
-        with pytest.raises(
-            ValidationError, match=r"request\.path_params keys must equal placeholders in path"
-        ):
+        # Matched on the rule id, which the registry mints and the diagnostic
+        # carries; the wording after it is the record's and moves with it.
+        with pytest.raises(ValidationError, match=r"RULE-ENDP-001"):
             parse_endpoint(_api_payload({"insert": _write_op(
                 path_params={"contact_id": {"from_input": "record.id"}},
             )}))
@@ -476,7 +476,7 @@ class TestPathParamBindingNotRegressed:
 
 
 class TestPathSegmentEncodingIsEngineOwned:
-    """ADV-ENDP-027. Who percent-encodes a substituted path segment has to be
+    """RULE-ENDP-027. Who percent-encodes a substituted path segment has to be
     settled so an author does not double-encode by reaching for `url_encode` as
     well. Stating it is not enough on its own — the author reaching for it was
     the accepted, unflagged case — so the reach is refused where it would do
@@ -590,7 +590,7 @@ class TestPathSegmentEncodingIsEngineOwned:
 
 
 class TestAWritePathParamMustBeAbleToResolve:
-    """ADV-ENDP-028. The shape this class refuses used to be contract-valid and
+    """RULE-ENDP-028. The shape this class refuses used to be contract-valid and
     unimplementable: a write binding `{id}` to an `in: path`
     param that carries no `default`. On a write a param has exactly ONE source —
     its own `default`.
@@ -663,15 +663,15 @@ class TestAWritePathParamMustBeAbleToResolve:
 
 # ---------------------------------------------------------------------------
 # Review finding: the membership rule no-opped on the very shape
-# ADV-ENDP-026's rejection message tells authors to write.
+# RULE-ENDP-026's rejection message tells authors to write.
 # ---------------------------------------------------------------------------
 
 
 class TestMembershipHoldsThroughRefsAndAllOf:
     """`_json_schema_top_level_fields` read `properties` raw, so an
     `input.schema` written as `{"$ref": "#/$defs/Rec"}` — exactly what
-    ADV-ENDP-026 instructs when it refuses a non-local ref — made
-    ADV-ENDP-024's membership check, the body `from_input` check and
+    RULE-ENDP-026 instructs when it refuses a non-local ref — made
+    RULE-ENDP-024's membership check, the body `from_input` check and
     `conflict_keys` all silently pass. A `{id}` placeholder bound to a field the
     record does not declare then ships, and every write goes to a URL whose id
     segment cannot be substituted from the record — the exact failure the record

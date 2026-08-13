@@ -1,7 +1,7 @@
 # `engine` and `runtime` blocks
 
-Both are optional and every field carries a contract default. Author them only
-when the user has a specific reason to deviate.
+Author `engine` and `runtime` only when the user asked for a value that differs
+from the contract's (`RULE-SHRD-004`).
 
 ## `engine`
 
@@ -14,16 +14,13 @@ when the user has a specific reason to deviate.
 | `memory` | no | integer | `8192` | `min=1024` |
 <!-- END GENERATED: fields-engine -->
 
-The minima are the contract's floor — below them the engine has no workable
-baseline. There is **no public maximum** on either field: a deployment may
-impose its own ceilings, and stricter minimums than these, so a document that
-validates here can still be refused by the deployment it is submitted to. Treat
-an unusually large request as a question for the user.
+A deployment may impose its own ceilings, and stricter minimums than the
+contract's, so a document that validates here can still be refused where it is
+submitted. Treat an unusually large request as a question for the user.
 
-The pipeline schema sizes the run as a whole. It defines **no container
-topology and no sidecar allocation**, so never author `vcpu` / `memory` as a
-split between containers, and never explain the values to the user in those
-terms — how the runtime divides them is not a contract fact.
+`engine` sizes the run as a whole: never author `vcpu` / `memory` as a split
+between containers, and never explain them to the user in those terms — how the
+runtime divides them is not something this document decides.
 
 ## `runtime`
 
@@ -37,8 +34,6 @@ terms — how the runtime divides them is not a contract fact.
 | `batching` | no | Batching | — | — |
 | `error_handling` | no | ErrorHandling | — | — |
 <!-- END GENERATED: fields-runtime -->
-
-`buffer_size` has a floor but, like the `engine` fields, **no public maximum**.
 
 ### `batching`
 
@@ -72,43 +67,31 @@ terms — how the runtime divides them is not a contract fact.
 | `max_retries` | no | integer | `3` | `min=0`, `max=5` |
 | `retry_delay_seconds` | no | integer \| null | `None` | `min=0` |
 
-Carries 1 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 1 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-error-handling -->
 
-`max_retries` and `retry_delay_seconds` are coupled — `ADV-RETRY-001` in the
-table in `SKILL.md`. The coupling exists because a delay with no retries is
-incoherent, and a retry loop with no wait is a hot loop against a system that
-just failed.
+`max_retries` and `retry_delay_seconds` are coupled — `RULE-RETRY-001`.
 
-Everything downstream of the strategy is **runtime-owned and absent from the
-pipeline schema**: where dead-lettered records are stored, retry-attempt
-metrics, and how a run's outcome is classified. Do not look for those fields
-here, do not invent them, and do not promise the user a DLQ location the
-document cannot express.
+What happens to a dead-lettered record — where it is stored, how the run's
+outcome is classified — is runtime-owned, so never promise the user a DLQ
+location the document cannot express.
 
 ## Where batching is decided
 
-Three documents have a say, and they are not alternatives:
+`runtime.batching.batch_size` is the chunk a run reads in, and it is one value
+for the whole pipeline — every stream reads in that size. So when a user asks
+for a specific chunk size, author it here, on the pipeline.
 
-- **pipeline `runtime.batching`** — the defaults for every stream in this pipeline.
-- **stream `destinations[].execution`** — a per-binding override
-  (see `stream-spec/spec-destinations.md`).
-- **destination endpoint write `batching`** — the provider's declared capacity,
-  owned by the connector and never authored here.
+Two other documents also carry a batching value, and neither displaces this one:
 
-Resolution order is: pipeline defaults → stream overrides → endpoint and
-runtime hard limits. An explicit stream pagination or destination `execution`
-value overrides the pipeline default, and the hard limits then cap whatever
-that override resolved to — an override can lower a value below the provider's
-capacity but never raise it above.
+- **stream `destinations[].execution`** — accepted by the contract, and not the
+  place to author a write size (`RULE-PIPE-007`; see
+  `../stream-spec/spec-destinations.md` § `execution`).
+- **the destination endpoint's declared capacity** — an API endpoint's write
+  `batching`, owned by the connector and never authored here.
 
-So the pipeline-level values are defaults, and stream-level overrides win
-within those caps. When a user asks for a specific write size on one
-destination, change the stream, not the pipeline.
+Neither is a lever on the size this pipeline declares (`RULE-PIPE-007`), so
+never promise a user a throughput change from authoring one.
 
-Batch **concurrency** is not authorable at all. `max_concurrent_batches` used
-to sit on both `runtime.batching` and `destinations[].execution`, and nothing
-acted on either — the value bounded no concurrency anywhere — so both were
-retired from the contract rather than left as a knob that looked load-bearing
-and did nothing. Do not author it, and do not offer it when a user asks how to
+Batch **concurrency** is not authorable. Do not offer it when a user asks how to
 tune throughput — `batch_size` is the lever that exists.

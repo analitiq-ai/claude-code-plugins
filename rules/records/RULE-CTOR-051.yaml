@@ -1,0 +1,23 @@
+id: RULE-CTOR-051
+statement: >
+  A `runtime.oauth.*` reference MUST appear only in the auth operation for
+  which that value exists, and only on a connector whose auth type produces
+  it.
+tier: advisory
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [ConnectorBase]
+rationale: >
+  Availability is per operation for a reason: the PKCE verifier exists for
+  the token exchange alone, and referencing it from the browser-facing
+  authorize request leaks it through redirects and provider logs and defeats
+  PKCE outright — a security failure rather than a resolution failure, and
+  one the connector never reports because the flow still completes. Known
+  enforcement gap: which runtime OAuth value exists in which operation is
+  engine-owned and stated in no model, and no validator resolves a
+  connector-document ref, so the reference and its producing operation are
+  never compared.
+status: active
+superseded_by: null

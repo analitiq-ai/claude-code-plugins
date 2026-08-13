@@ -1,8 +1,7 @@
 # Schema host
 
-All Analitiq schemas are served from a single host:
-`https://schemas.analitiq.ai/`. Each authored document declares `$schema`
-against it, and the value is locked to a `const` inside the published schema.
+Each authored document declares `$schema` (`RULE-SHRD-003`) with the exact value
+its row names below.
 
 <!-- BEGIN GENERATED: schema-urls -->
 | Entity | Authored file | `$schema` value |
@@ -13,13 +12,9 @@ against it, and the value is locked to a `const` inside the published schema.
 | Database endpoint | `connections/<slug>/definition/endpoints/<endpoint_id>.json` | `https://schemas.analitiq.ai/database-endpoint/latest.json` |
 <!-- END GENERATED: schema-urls -->
 
-`$schema` is **optional** on every authored entity — omitting it is valid. The
-plugin sets it anyway so each file stays self-describing on disk.
-
+<!-- PROBE: pipeline-schema-pinned-url-rejected -->
 There is no authorable pinned form. Only the `latest.json` URL above validates;
-a version-pinned `…/<X.Y.Z>.json` variant is rejected outright. Which contract
-revision a document conforms to is identified by that `$schema` URL — there is no
-separate per-document schema-version field.
+a version-pinned `…/<X.Y.Z>.json` variant is rejected outright.
 
 ## How validation works
 
@@ -28,19 +23,8 @@ each document against the bundled Pydantic contract models — the same source o
 truth the published JSON Schemas are rendered from. The
 `pipeline-schema-validator` agent runs the plugin's adapter (`scripts/validate.py`),
 which self-installs the pinned validator into a managed virtualenv on first use
-and is offline thereafter:
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/validate.py" \
-  --entity pipeline \
-  --document path/to/pipeline.json \
-  [--bundle-root .]
-```
+and is offline thereafter. That agent's definition carries the invocation.
 
 Because validation is offline, a document's declared `$schema` URL is a label,
 not a fetch target — keep it in sync with the entity so the file stays
 self-describing.
-
-Validating the authored payload locally is exactly what the published package is
-for: the `*Input` models the JSON Schemas render from ship in the offline pip
-package, so the plugin never has to submit a document to discover it is invalid.

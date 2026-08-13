@@ -1,0 +1,21 @@
+id: RULE-CTOR-062
+statement: >
+  A resource-discovery implementation MUST name where its strategy comes from
+  using the vocabulary `ResourceDiscoveryImplementation` declares.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::ResourceDiscoveryImplementation.type"
+owners: [connector-plugin, engine]
+targets: [ResourceDiscoveryImplementation]
+fields: [type]
+mechanism: literal_enum
+rationale: >
+  The member selects the loader: one path imports the strategy out of the
+  connector's own package by the entrypoint declared beside it, the other looks
+  the strategy up in the runtime's registry and reads no entrypoint at all. A
+  value outside the set matches neither path, so discovery has nothing to call
+  at the first connection that tries to list resources. `RULE-CTOR-003` reads
+  the same field for the pairing it forces on the entrypoint.
+status: active
+superseded_by: null

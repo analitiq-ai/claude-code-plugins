@@ -11,7 +11,7 @@ test_patterns = [
 
 # Not source: generated output and data fixtures. `schemas/` is rendered by
 # scripts/render_schemas.py (guarded by `render_schemas.py check`); the corpus,
-# advisory fixtures, and example documents are data, not code — and they carry
+# rule fixtures, and example documents are data, not code — and they carry
 # placeholder credentials, so keeping them out also spares the secrets scan a
 # stream of false positives.
 exclude_patterns = [

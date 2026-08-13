@@ -1,0 +1,20 @@
+id: RULE-ENDP-009
+statement: >
+  Every parameter an operation declares MUST be referenced by exactly one
+  request binding.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin]
+targets: [ReadOperation, WriteOperation]
+rationale: >
+  A declared param is a promise that the endpoint accepts that input; unbound,
+  the promise is empty — a stream that filters on it issues a full unfiltered
+  pull that looks like a successful run, and paging or incremental wiring left
+  half-done fails the same silent way. Bound twice, one declaration with one
+  type and one default is serving two wire positions, so a provider wanting the
+  same value in a header and a query string needs two params, not one bound
+  twice. An unbound param is a deletion, never dead weight to leave in place.
+status: active
+superseded_by: null

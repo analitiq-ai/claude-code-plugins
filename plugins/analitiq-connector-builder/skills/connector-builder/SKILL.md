@@ -18,9 +18,8 @@ writing files.
   omitted, `connector-provider-researcher` locates the provider's
   official docs via WebSearch; facts are still extracted from
   first-party documentation pages only.
-- `kind_hint` (optional) — `api` or `database`. (Storage kinds `file`,
-  `s3`, `stdout` are recognized by the schema but not yet supported by
-  the engine.)
+- `kind_hint` (optional) — `api` or `database`. Storage kinds are
+  declined; see **Hard rules**.
 - `mode` (optional) — `build` (default), `update`, or `validate`. See
   **Modes** below.
 - `connector_path` (required for `update` / `validate`) — path to the
@@ -41,8 +40,8 @@ identified by `connector_path`, so `provider` is optional.
 `build` (default) authors a fresh connector; `update` re-authors from
 *current* docs and re-versions against the existing tree (read only as
 the drift baseline, never edited in place); `validate` is a read-only
-diagnostics pass. Mode semantics, phase branching, and failure modes:
-`references/pipeline.md` §Modes.
+diagnostics pass. Mode semantics and phase branching: `references/pipeline.md`
+§Modes. Each phase states its own halt conditions, in that phase's section.
 
 ## Required reading
 
@@ -73,11 +72,11 @@ worklist protocol, and the on-disk layout — is `references/pipeline.md`
    by kind; always pass `provider_facts` (the creator's hard gate).
 4. **Validate the domain (barrier)** — `connector-schema-validator` over
    the connector body and type map(s); the domain must be clean before
-   any fan-out. At most 5 fix passes per artifact, findings passed
-   verbatim to the owning creator, which triages them — never you.
-5. **Endpoint fan-out (api only)** — a bounded worklist (default 10
-   concurrent); one researcher → endpoint-creator → validator branch per
-   resource; failed branches are surfaced, never dropped.
+   any fan-out. Findings are passed verbatim to the owning creator,
+   which triages them — never you.
+5. **Endpoint fan-out (api only)** — a bounded worklist; one researcher
+   → endpoint-creator → validator branch per resource; failed branches
+   are surfaced, never dropped.
 6. **Drift** — `connector-drift-classifier` computes `next_version` from
    the staged draft; apply it directly (never recompute the semver).
 7. **Write** — layout and filename rules: `references/pipeline.md` §7.
@@ -96,12 +95,9 @@ Report to the user:
 
 ## Hard rules
 
-- The plugin authors `connector_id` (the stable connector slug, same
-  value as the on-disk `{connector_id}/` directory name). The
-  registry-stamped fields `created_at` and
-  `updated_at` are written by the registry on insert/update and must
-  not appear in authored documents — `connector_id` is NOT in that
-  set.
+- The plugin authors `connector_id` — the stable slug the document, the
+  registry repo and the release directory all carry (`RULE-CTOR-023`,
+  `RULE-CTOR-045`, `RULE-CTOR-042`).
 - Do not author the connector body yourself. Always dispatch to the
   matching creator sub-agent.
 - **The orchestrator never diagnoses findings and never reads spec
@@ -114,15 +110,13 @@ Report to the user:
   and fix. Your only specs are the orchestrator references
   (`pipeline.md`, `io-contracts.md`, `enum-mappers.md`, plus
   `value-expressions.md` for scope lookups).
-- All cross-cutting context references (`secrets.*`, `connection.*`,
-  `auth.*`, `runtime.*`, `stream.*`) must come from the documented
-  scopes in `references/value-expressions.md`. Unknown scope = stop and
-  ask.
-- Authored documents declare `$schema` with the published host
-  (`https://schemas.analitiq.ai/...`). The validator matches on this URL
-  offline; it does not fetch it.
-- Storage kinds (`file`, `s3`, `stdout`) currently produce a structured
-  refusal. If the user asks for one, surface the refusal note and stop.
+- Every cross-cutting context reference comes from the documented scopes
+  in `references/value-expressions.md` (`RULE-SHRD-008`). Unknown scope =
+  stop and ask.
+- Authored documents declare `$schema` (`RULE-SHRD-003`) with the
+  published host (`https://schemas.analitiq.ai/...`).
+- Storage kinds produce a structured refusal (`RULE-CTOR-037`). If the
+  user asks for one, surface the refusal note and stop.
 - In `build` mode, never overwrite an existing `{connector_id}/`
   directory — the phase-0 check halts the run and asks the user to
   remove it manually. In `update` mode, regeneration replaces the

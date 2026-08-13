@@ -30,6 +30,7 @@ packages/
   contract-models/                # -> analitiq-contract-models (PyPI); the contract
   validator/                      # -> analitiq-validator (PyPI)
 schemas/                          # RENDERED public JSON Schemas -> schemas.analitiq.ai
+census/                           # catalogue of the contract's own prose; NOT shipped
 scripts/
   render_schemas.py               # renders schemas/ from packages/contract-models
 tests/
@@ -149,6 +150,43 @@ Running a plugin helper from a checkout would otherwise trigger the bootstrap
 conftest sets `ANALITIQ_VALIDATOR_FROM_SOURCE=1` to short-circuit that; without
 it, the bootstrap would replace the pytest process mid-run.
 
+## The stores of record
+
+Each store holds a different **unit**. That is what separates them — not subject
+matter, which crosses all of them. A fact belongs where its unit belongs, and a
+store that could only hold it by taking a second kind of unit is the wrong one.
+
+| Store | Unit | It belongs here when |
+|---|---|---|
+| `packages/*/src` | a **model field** | a machine can reject one document with it |
+| `schemas/` | a **resource version** | never — rendered, never authored |
+| `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
+| `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
+| `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
+| `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
+| `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |
+| `.claude/rules/*.md` | an **obligation on a contributor here** | its verdict needs a person reading a sentence |
+
+The vendored engine grammar is a store too; "The canonical Arrow type
+vocabulary is engine-owned" above says why nothing here may author it.
+
+**The registry and the census are halves of one question.** The registry
+catalogues rules; the census catalogues the sentences the contract publishes
+about itself. Every registry check starts from a registered rule, so an
+obligation stated in a field description and never registered was invisible —
+the census is what makes that case fail. Its entries carry no prose of their
+own: a `prose_hash` fingerprints the wording, and a disposition names what
+rejects a document that ignores it — a rule id, the model's own shape, a
+written waiver, or `descriptive` for a sentence asking nothing. It lives
+outside `packages/` because it is how this repo keeps its own wording honest,
+not part of the contract, and so does not ship in the wheel.
+
+**Where a new fact goes.** Something a document must satisfy is a model field,
+and a name for it is a record. Something an author must judge is plugin craft.
+Something a contributor must do while editing this repo is `.claude/rules/`. A
+sentence added to a contract field description is a census site whether or not
+you catalogue it — the lint finds it either way.
+
 ## Single source of truth (drift policy)
 
 The published schema is the single source of truth. **Never restate what it
@@ -164,6 +202,36 @@ defines — reference or load it.** Carry only craft the schema can't express
   validation agree on one contract. Where a plugin must restate a schema-owned
   enum as decision logic (e.g. the DSN-binding `encoding` set), the drift-check
   CI below pins it to the pinned contract models.
+- **The rule registry is the source of truth.** The registry contains one
+  machine-readable record per rule, with an immutable ID, where everything else
+  (docs, rendered references, prose citations) is generated from or validated
+  against that record. The registry is the source of truth; prose is commentary
+  that cites it, never the reverse.
+
+  It lives in `rules/records/*.yaml`, one file per rule, schema in
+  `rules/SCHEMA.md`. A record answers each of these independently — `tier`
+  (what kind of rule: structural, advisory, referential, procedural, judgment),
+  `validator` (what here rejects a violation, absent when nothing does),
+  and `severity` (what a violation costs) — plus the keys binding it to
+  the models and fields it governs, so the statement never restates a value the
+  contract owns.
+  Enforcement itself is ordinary Python, in one of two places depending on how
+  much a check must see. A rule one document settles on its own is a
+  `@model_validator` on that model, raising through `rules.violation` so the
+  finding names the rule its prose cites. A rule needing a second document in
+  hand — a sibling type map, the connector an endpoint ships beside, the
+  streams an assembled run pins — is a check in `analitiq.validator`, which is
+  the whole reason that package exists; `validator` names the function
+  emitting the finding. Nothing is dispatched from the record, so a rule is
+  applied by a symbol that exists or by nothing at all.
+
+  `scripts/render_rules.py` validates every record, resolves every `validator`
+  against the live models and the live validator, and compiles
+  `analitiq/contracts/shared/rules.json`,
+  the copy the wheel ships. `render_rule_reference.py` and the pipeline plugin's
+  `gen_contract_docs.py` render the registry into each plugin's prose. An
+  obligation with no record is a missing record, not a sentence to hand-write;
+  a citation that stops resolving fails the build.
 - **Fetch-once, pass-down** — an orchestrator hands the live contract schema URLs
   to its researcher (the mission spec) and the creators read the same schemas as
   vocabulary, so authoring and validation agree on one contract.
@@ -214,7 +282,7 @@ named heading, a generated-block marker, a name the contract owns, a probe id
 resolved against its registry. Deciding is semantic: does this sentence assert
 that the validator checks X, does this paragraph still teach the rule. If the verdict needs to know
 what the English means, it belongs in `.claude/rules/`, applied by a reader, not
-in a test. `.claude/rules/validator-claims.md` owns this rule and the worked
+in a test. `.claude/rules/guards.md` owns this rule and the worked
 cases; the short version is that hand-curated English regexes and phrase lists
 are banned outright, whatever property they claim to measure.
 
@@ -234,15 +302,20 @@ state and stays ignored). Read the one that matches what you are editing:
   has. Counts are the one restatement class every guard here is blind to. Also
   owns closure claims — the "and nothing else" a set's enumeration ends with.
 - `plugin-prose.md` — before editing any `.md` under `plugins/`, which ships
-  verbatim to users and is executed by agents.
+  verbatim to users and is executed by agents. Also carries the ladder a
+  sentence about what the validator checks has to land on.
 - `contract-prose.md` — before writing a field description or docstring under
   `analitiq.contracts`. It renders into a published schema, and a published
   `X.Y.Z.json` is immutable. Choosing its census disposition is the judgment
   the census itself cannot make.
 - `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
   count, "the rule above". The PR template asks you to attest you applied it.
-- `validator-claims.md` — before writing a sentence about what a tool checks or
-  refuses, and before writing any check that reads prose.
+- `guards.md` — before writing any check that reads prose this repo tracks.
+
+`plugin-prose.md` and `contract-prose.md` are keyed to the surface you are
+editing. `no-drift-surfaces.md`, `no-cardinality-restatements.md` and
+`resolvable-referents.md` are keyed to a class of sentence that rots on any
+surface. `guards.md` is keyed to the mechanism that reads them.
 
 ## Conventions
 

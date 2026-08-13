@@ -1,0 +1,21 @@
+id: RULE-TMAP-016
+statement: >
+  Every `${name}` a write rule's rendered native substitutes MUST name a
+  capture group its own `canonical` matcher declares.
+tier: advisory
+severity: error
+scope: type-map
+validator: null
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [TypeMapWriteRegexRule]
+rationale: >
+  This is the read side's capture-backing obligation with the keys swapped, and
+  the swap is the trap — the placeholders move to `native` and the captures to
+  `canonical`, so a rule copied across directions keeps both in the wrong
+  place and still parses. An unbacked placeholder is never substituted, so the
+  engine raises during type mapping, before any DDL is emitted, on a
+  destination table that may already exist. Only the read direction's backing
+  is checked here; the write correspondence is first exercised when the engine
+  renders DDL, which no document in this repo holds.
+status: active
+superseded_by: null

@@ -1,0 +1,19 @@
+id: RULE-ENDP-035
+statement: >
+  A write request body's `from_input` MUST NOT address a field through the batch
+  array; a dotted path is resolvable only against a single record.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [WriteOperation]
+rationale: >
+  A dotted path names one field of one record. Applied to the whole batch there
+  is no single record to read it from, and no fan-out is defined — the author is
+  imagining an array of that one field, a projection the binding grammar cannot
+  express and the engine has no rule for. It comes up with providers that want a
+  column-oriented payload; the shape for that is a literal envelope authored
+  around the whole batch, not a path into it.
+status: active
+superseded_by: null

@@ -1,0 +1,20 @@
+id: RULE-ENDP-018
+statement: >
+  An operations block MUST declare at least one operation, and any write map it
+  declares MUST carry at least one mode.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::Operations._at_least_one"
+owners: [connector-plugin]
+targets: [Operations]
+rationale: >
+  An endpoint declaring neither operation is a document the engine can neither
+  read from nor write to: it validates as configuration, attaches, and does
+  nothing at run time, which reads as a silently unusable resource rather than a
+  broken one. An empty write map is the same failure one level down. Omitting
+  the operation a resource genuinely lacks is the intended authoring — the rule
+  only refuses omitting both. The obligation is a presence requirement on one
+  block, mirrored into the published schema.
+status: active
+superseded_by: null

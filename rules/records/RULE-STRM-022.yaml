@@ -1,0 +1,22 @@
+id: RULE-STRM-022
+statement: >
+  Every field name a stream references MUST resolve to a field the endpoint
+  document on that side of the transfer declares.
+tier: referential
+severity: error
+scope: stream
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [StreamSource, Filter, AssignmentTarget, DatabaseConflictKeyedWrite]
+rationale: >
+  The declaring endpoint document is not part of the stream, so no
+  in-process check can resolve a name — the local validator proves only that
+  a name is well-formed, and resolution happens server-side when the stream
+  is saved. That gap is wide: a projection, a filter, a cursor, a pagination
+  order key, a mapping target and a conflict key are all just strings until
+  then, and a typo in any of them reads as a registry rejection long after
+  the document looked clean. Catching one before that means reading the name
+  back against the endpoint document that declares it, or back to the user
+  rather than guessing it.
+status: active
+superseded_by: null

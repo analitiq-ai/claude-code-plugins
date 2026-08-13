@@ -1,0 +1,20 @@
+id: RULE-PKG-015
+statement: >
+  A connector's `empty_table_sql` MUST NOT render `TRUNCATE`, whose
+  implicit commit breaks the staged write cycle.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  On most engines `TRUNCATE` commits the open transaction, so the
+  stage-then-merge cycle loses its atomicity and a failure after the
+  emptying leaves the target truncated with nothing to roll back to. It is
+  the obvious fast path and it reads as a pure optimisation, which is what
+  makes the rule non-obvious. The statement text is rendered by
+  `connector.py`, which no contract model sees, and no conformance test
+  asserts which statement a dialect chooses to empty a table — the implicit
+  commit surfaces as a broken write at run time.
+status: active
+superseded_by: null

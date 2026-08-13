@@ -1,0 +1,24 @@
+id: RULE-CTOR-026
+statement: >
+  Every provider fact a connector declares MUST be grounded in the target
+  system's own documentation, a wire-compatible system's documentation MUST NOT
+  be taken as evidence for it, and a fact those documents do not establish MUST
+  be reported as a gap rather than inferred.
+tier: procedural
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin]
+rationale: >
+  Provenance is research conduct, and no authored artifact records where a fact
+  came from: a TLS mode list or a bulk-load protocol borrowed from a
+  wire-compatible neighbour produces a connector that validates cleanly, reads
+  as well-researched, and fails against the real system's driver — wire
+  compatibility is not driver compatibility, and the option surfaces are
+  exactly where they diverge. The author is usually being helpful rather than
+  careless, filling a gap the docs left silent, which is why the rule makes
+  reporting the gap the required move. Catching a violation means re-running
+  the research against the vendor's own documentation, field by field; nothing
+  closer than that can see it.
+status: active
+superseded_by: null

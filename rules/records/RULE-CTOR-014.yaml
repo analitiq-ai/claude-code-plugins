@@ -1,0 +1,20 @@
+id: RULE-CTOR-014
+statement: >
+  A write_unit MUST declare at least one bound; a block declaring none states
+  no preference and MUST be omitted instead.
+tier: advisory
+severity: warning
+scope: connector
+validator: "analitiq.contracts.connector::WriteUnit._at_least_one_bound"
+owners: [engine, connector-plugin]
+targets: [WriteUnit]
+rationale: >
+  write_unit exists to tell the engine's batch coalescer what to aim for, and
+  absence of the whole block already means "no preference". An empty block is
+  therefore a second spelling of the default that reads like a declared one:
+  nothing breaks, the coalescer behaves exactly as it would with no block at
+  all, and only the bound the author meant to state is missing. That is why the
+  cost here is a lost preference rather than a broken run — unlike the rest of
+  the declared-capability rules, whose violations reach the write path.
+status: active
+superseded_by: null

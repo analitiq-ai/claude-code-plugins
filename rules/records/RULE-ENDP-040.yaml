@@ -1,0 +1,25 @@
+id: RULE-ENDP-040
+statement: >
+  An endpoint MUST declare only where the idempotency key goes; the key's value
+  is engine-owned and MUST NOT appear in a value expression, an input schema, or
+  a request slot.
+tier: procedural
+severity: error
+scope: api-endpoint
+validator: null
+owners: [connector-plugin, engine]
+targets: [Idempotency, WriteOperation]
+rationale: >
+  The engine derives the key from the record so that a replayed request carries
+  the one the provider already saw. Any author-supplied key breaks that in one
+  of two directions — varying per attempt, so a retry writes the record twice;
+  or constant across records, so distinct records collapse into one provider-side
+  write. The author is usually treating the key as just another field the
+  provider documents. Nothing catches it: an author-supplied key is an ordinary
+  header or body field the contract cannot tell from any other, and RULE-ENDP-016
+  catches only a collision with the declared key's name, not a hand-authored
+  value under a different one. Seeing it takes reading the provider's
+  idempotency documentation beside the request slots and recognising the field
+  for what it is.
+status: active
+superseded_by: null

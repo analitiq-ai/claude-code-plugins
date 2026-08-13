@@ -1,0 +1,21 @@
+id: RULE-ENDP-008
+statement: >
+  Every binding that names a declared parameter MUST name one the operation
+  declares, and that parameter's declared location MUST be the request slot the
+  binding sits in.
+tier: advisory
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin]
+targets: [ReadOperation, WriteOperation]
+rationale: >
+  A param declaration is the typed contract for one request input — its type,
+  its requiredness, the operators a stream may filter it with — and the binding
+  is what routes it onto the wire. When the binding site and the declared
+  location disagree there are two answers for where one value goes, and nothing
+  downstream can tell which the provider will see; when the name resolves to
+  nothing, the slot silently sends no value at all. Rejecting both at authoring
+  time is what makes the declaration worth reading.
+status: active
+superseded_by: null

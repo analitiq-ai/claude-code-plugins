@@ -1,0 +1,22 @@
+id: RULE-SHRD-014
+statement: >
+  An authored document MUST NOT declare a field the registry stamps on insert
+  or update; the authored models name the authorable fields and reject every
+  other key.
+tier: structural
+severity: error
+scope: any
+validator: "analitiq.contracts.shared.common::StrictModel"
+owners: [pipeline-plugin, engine]
+targets: [PipelineInput, StreamInput, ConnectionInput, DatabaseEndpointDoc]
+mechanism: closed_object
+rationale: >
+  A server-stamped name reads as ordinary metadata an author is expected to
+  fill, and a document fetched from the registry carries the stamps beside the
+  authored fields with nothing marking which half is which — so an edit that
+  starts from a stored record reproduces them by default. One authored by hand
+  is either overwritten or contradicts the row it describes. Reserving a name on
+  an artifact reserves it only there: a database column named `version` or an
+  operation parameter named `org_id` is provider-owned and copied verbatim.
+status: active
+superseded_by: null

@@ -89,12 +89,12 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "resources": {
           "type": "array",
-          "description": "The data resources the connector should expose — the domain branch's resource list. The orchestrator enumerates these into the endpoint fan-out worklist; each becomes one `endpoint-creator` branch fed by its own `EndpointFacts`. Carries only what the domain pass can know without deep-diving each resource's fields; the per-resource response field schema is researched per endpoint (see `EndpointFacts`).",
+          "description": "The data resources the connector should expose — the domain branch's resource list. The orchestrator enumerates these into the endpoint fan-out worklist; each becomes one `endpoint-creator` branch fed by its own `EndpointFacts`. Carries only what the domain pass can know without deep-diving each resource's fields.",
           "items": {
             "type": "object",
             "required": ["key"],
             "properties": {
-              "key": { "type": "string", "description": "Stable resource id — becomes the endpoint_id and the on-disk filename `endpoints/{key}.json` (pattern ^[a-z0-9][a-z0-9_-]*$). DERIVE it, do not free-pick it: flatten the resource's full locator, lowercased, with `__` between path levels so the full path — not just the leaf — distinguishes the id. API: every path segment in order, with path-params dropped (they are operation-level) — `/v1/blah/something/customer` → `v1__blah__something__customer`, `/v2/blah/something/customer` → `v2__blah__something__customer`. Deterministic: the same locator yields the same key on every re-author. (Database resources are not authored here — `resource_discovery` generates their endpoints at runtime, where `endpoint_id` is only a sanitized/hashed lookup handle; the object's identity is stored verbatim in the endpoint's `database_object` (name/schema/catalog, exact case and characters), never encoded in the id.)" },
+              "key": { "type": "string", "description": "Stable resource id — becomes the endpoint_id and the on-disk filename `endpoints/{key}.json` (pattern ^[a-z0-9][a-z0-9_-]*$). DERIVE it, do not free-pick it (`RULE-ENDP-046`): flatten the resource's full locator, lowercased, with `__` between path levels so the full path — not just the leaf — distinguishes the id. API: every path segment in order, with path-params dropped (they are operation-level) — `/v1/blah/something/customer` → `v1__blah__something__customer`, `/v2/blah/something/customer` → `v2__blah__something__customer`. Deterministic: the same locator yields the same key on every re-author. (Database resources are not authored here — `RULE-DBEP-006`; the ids runtime discovery derives are opaque handles over a verbatim `database_object` — `RULE-DBEP-007`.)" },
               "label": { "type": "string" },
               "method": { "type": "string" },
               "path": { "type": "string" },
@@ -106,7 +106,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "native_type_vocabulary": {
           "type": "array",
-          "description": "Connector-wide set of native wire-type tokens observed across the provider's resources (e.g. `string`, `integer`, `date-time`, `number`, `boolean`, provider-specific scalar names). Researched at the domain level so the creator can author a COMPLETE `type-map-read` before fan-out; every endpoint field must resolve through that map. A genuinely new native surfaced by an endpoint is a domain-level type-map addition, never an endpoint-local one.",
+          "description": "Connector-wide set of native wire-type tokens observed across the provider's resources (e.g. `string`, `integer`, `date-time`, `number`, `boolean`, provider-specific scalar names). Researched at the domain level so the creator can author a COMPLETE `type-map-read` before fan-out — every endpoint field must resolve through that map (`RULE-PKG-033`). A genuinely new native surfaced by an endpoint is a domain-level type-map addition, never an endpoint-local one.",
           "items": { "type": "string" }
         },
         "pagination": {
@@ -182,7 +182,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "sqlalchemy_driver": {
           "type": "string",
-          "description": "The SQLAlchemy 'dialect+driver' for the SQLAlchemy transport, sync or async (e.g. 'postgresql+asyncpg', 'mysql+aiomysql', 'redshift+redshift_connector'); no driver allow-list — see connector-spec-db/spec-driver-selection.md for the sync/async dispatch constraints."
+          "description": "The SQLAlchemy 'dialect+driver' for the SQLAlchemy transport, sync or async (e.g. 'postgresql+asyncpg', 'mysql+aiomysql', 'redshift+redshift_connector'); connector-spec-db/spec-driver-selection.md owns which forms are authorable and the sync/async dispatch constraints."
         },
         "dsn": {
           "type": "object",
@@ -214,9 +214,8 @@ fan-out and returned as `EndpointFacts` (below).
 One `EndpointFacts` object per data resource: the researcher's
 **per-endpoint** pass in the fan-out grounds the researched fields, the
 orchestrator injects the connector-level `pagination` (echoed from
-`ProviderFacts.pagination`), and `endpoint-creator` consumes it. This
-is the category that `ProviderFacts` deliberately does **not** carry: the
-field-level truths about one resource's response — including whether each
+`ProviderFacts.pagination`), and `endpoint-creator` consumes it. It carries
+the field-level truths about one resource's response — including whether each
 datetime field is zone-aware, which decides `Timestamp(MICROSECOND, UTC)`
 versus the naive `Timestamp(MICROSECOND)`. Every field fact is grounded on
 the resource's own documentation / a real sample; an
@@ -238,7 +237,7 @@ access and may not guess field types).
       "type": "object",
       "description": "The connector-wide pagination style + params (echoed from ProviderFacts.pagination into the branch), so endpoint-creator — which sees only EndpointFacts + the connector body — can author the per-endpoint pagination block. Present whenever `paginated` is true.",
       "properties": {
-        "style": { "type": "string", "enum": ["offset", "page", "cursor", "link", "keyset"] },
+        "style": { "type": "string", "description": "The style `ProviderFacts.pagination.style` enumerates." },
         "params": { "type": "array", "items": { "type": "string" } }
       }
     },
@@ -251,7 +250,7 @@ access and may not guess field types).
       "required": ["in", "name"],
       "description": "Provider-documented idempotency-key placement for this resource's write operation, when the provider exposes one. Placement only — the key value is engine-owned. endpoint-creator carries `in`/`name` into the write mode's `idempotency` block; `required` informs whether to declare it on `upsert`.",
       "properties": {
-        "in": { "type": "string", "enum": ["header", "body"], "description": "Where the provider accepts the key: an HTTP request header or a top-level JSON body field." },
+        "in": { "type": "string", "description": "Where the provider accepts the key, from the placement vocabulary `RULE-ENDP-039` renders — a body placement means a top-level JSON body field, never a nested one." },
         "name": { "type": "string", "minLength": 1, "description": "The documented header name (e.g. `Idempotency-Key`) or top-level body field name (e.g. `idempotency_key`), verbatim." },
         "required": { "type": "boolean", "description": "true when the provider mandates the key on this operation (e.g. Square UpsertCatalogObject)." }
       }
@@ -266,12 +265,12 @@ access and may not guess field types).
         "properties": {
           "name": { "type": "string" },
           "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`)." },
-          "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness: a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`. Never default date-time to tz-aware." },
+          "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness (`RULE-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`." },
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },
           "format": { "type": "string", "description": "Documented string format (e.g. `email`, `uri`, `uuid`, `date`)." },
           "sample_value": { "type": "string", "description": "A real wire sample. REQUIRED for any temporal field so zone-awareness is decided on evidence, not guessed." },
-          "tz_aware": { "type": "boolean", "description": "For date-time fields: true iff the wire value carries a zone/offset. Set from `sample_value`, not assumed." }
+          "tz_aware": { "type": "boolean", "description": "For date-time fields: true iff the wire value carries a zone/offset." }
         }
       }
     },
@@ -298,7 +297,7 @@ access and may not guess field types).
         "properties": {
           "validator": {
             "type": "string",
-            "description": "Validator id. Owned by `analitiq.validator.VALIDATOR_IDS` and pinned by tests/connector_builder/. Most rules — including every ADV-* cross-field rule — report under `contract-model`; the rest cover cross-file relationships the contract models cannot see.",
+            "description": "Validator id.",
             "enum": [
               "contract-model",
               "document",
@@ -349,11 +348,11 @@ access and may not guess field types).
               "input-enum-narrowed", "storage-changed",
               "non-optional-input-added", "auth-shape-changed",
               "discovery-shape-changed", "sql-capabilities-changed",
-              "type-map-rule-removed", "type-map-canonical-changed",
-              "optional-input-added", "optional-output-added",
-              "optional-endpoint-added", "type-map-rule-added", "bug-fix",
-              "doc-fix", "tuning", "capability-block-added",
-              "type-map-rule-reordered"
+              "endpoint-removed", "type-map-rule-removed",
+              "type-map-canonical-changed", "optional-input-added",
+              "optional-output-added", "optional-endpoint-added",
+              "type-map-rule-added", "bug-fix", "doc-fix", "tuning",
+              "capability-block-added", "type-map-rule-reordered"
             ]
           },
           "note": { "type": "string" }
@@ -385,19 +384,8 @@ Returned by `api-connector-creator` and `db-connector-creator`.
     "type_map_read": {
       "anyOf": [
         {
-          "type": "array",
-          "minItems": 1,
-          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): a top-level, non-empty array of {match, native, canonical} rule objects where `native` is the matcher (regex patterns authored UPPERCASE) and `canonical` is the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native`). Written by the orchestrator to {connector_id}/definition/type-map-read.json and validated against https://schemas.analitiq.ai/type-map-read/latest.json.",
-          "items": {
-            "type": "object",
-            "required": ["match", "native", "canonical"],
-            "additionalProperties": false,
-            "properties": {
-              "match":     { "enum": ["exact", "regex"] },
-              "native":    { "type": "string", "minLength": 1 },
-              "canonical": { "type": "string", "minLength": 1 }
-            }
-          }
+          "$ref": "https://schemas.analitiq.ai/type-map-read/latest.json",
+          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): `native` is the matcher (regex patterns authored UPPERCASE) and `canonical` is the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native`). Written by the orchestrator to {connector_id}/definition/type-map-read.json."
         },
         { "type": "null", "description": "Returned by stub agents that decline to author." }
       ]
@@ -405,19 +393,8 @@ Returned by `api-connector-creator` and `db-connector-creator`.
     "type_map_write": {
       "anyOf": [
         {
-          "type": "array",
-          "minItems": 1,
-          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). REQUIRED for kind=database; MUST be null for kind=api. Same rule shape but the direction inverts: `canonical` is the matcher (regex with ECMA named captures for parameterized types) and `native` is the rendered DDL (may carry ${name} substitutions backed by captures in `canonical`). Must cover the full canonical vocabulary; deliberate gaps are allowed only when the dialect overrides render_column_type for that family. Written to {connector_id}/definition/type-map-write.json and validated against https://schemas.analitiq.ai/type-map-write/latest.json (full contract-model + semantic pass; direction derived from the filename).",
-          "items": {
-            "type": "object",
-            "required": ["match", "native", "canonical"],
-            "additionalProperties": false,
-            "properties": {
-              "match":     { "enum": ["exact", "regex"] },
-              "native":    { "type": "string", "minLength": 1 },
-              "canonical": { "type": "string", "minLength": 1 }
-            }
-          }
+          "$ref": "https://schemas.analitiq.ai/type-map-write/latest.json",
+          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Same rule shape as the read map but the direction inverts: `canonical` is the matcher (regex with ECMA named captures for parameterized types) and `native` is the rendered DDL (may carry ${name} substitutions backed by captures in `canonical`). Canonical-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
         },
         { "type": "null", "description": "kind=api connectors and stub agents return null — the write direction is a database-package concept." }
       ]
@@ -428,12 +405,12 @@ Returned by `api-connector-creator` and `db-connector-creator`.
           "type": "object",
           "required": ["connector_py", "init_py", "requirements_txt", "pyproject_toml"],
           "additionalProperties": false,
-          "description": "Python package files for kind=database connectors (the connector root IS the package). MUST be null for kind=api. Written by the orchestrator to {connector_id}/connector.py, __init__.py, requirements.txt, pyproject.toml. Contents follow the connector-package contract in connector-spec-db/spec-connector-package.md; enforcement (wheel build, entry points) is registry CI's job, not the schema validator's.",
+          "description": "Python package files for kind=database connectors — the connector root IS the package (`RULE-PKG-002`). MUST be null for kind=api. Written by the orchestrator to {connector_id}/connector.py, __init__.py, requirements.txt, pyproject.toml. Contents follow the connector-package contract in connector-spec-db/spec-connector-package.md, whose section Enforcement owns how they are checked.",
           "properties": {
-            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector); imports per connector-spec-db/spec-connector-package.md section Import rules." },
-            "init_py":          { "type": "string", "minLength": 1, "description": "Re-exports the connector + dialect classes." },
-            "requirements_txt": { "type": "string", "minLength": 1, "description": "THIS connector's driver(s) only — the SQLAlchemy DBAPI (sync or async) and/or adbc-driver-{driver} wheel." },
-            "pyproject_toml":   { "type": "string", "minLength": 1, "description": "name=analitiq-connector-{connector_id}; dynamic dependencies from requirements.txt; package-dir maps the repo root; entry points named {connector_id} under analitiq.source_connectors AND analitiq.destination_connectors." }
+            "connector_py":     { "type": "string", "minLength": 1, "description": "{Name}Dialect(SqlDialect) + {Name}Connector(GenericSQLConnector) — `RULE-PKG-010`; imports: `RULE-PKG-011`." },
+            "init_py":          { "type": "string", "minLength": 1, "description": "See `RULE-PKG-009`." },
+            "requirements_txt": { "type": "string", "minLength": 1, "description": "See `RULE-PKG-027`." },
+            "pyproject_toml":   { "type": "string", "minLength": 1, "description": "Names derived from connector_id: `RULE-PKG-007`. Dependencies: `RULE-PKG-006`. Entry-point groups: `RULE-PKG-008`. Copy the template in connector-spec-db/spec-connector-package.md." }
           }
         },
         { "type": "null", "description": "kind=api connectors and stub agents return null — API connectors carry only the definition." }

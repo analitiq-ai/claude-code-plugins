@@ -1,0 +1,21 @@
+id: RULE-CTOR-055
+statement: >
+  A DSN `template` MUST NOT contain `${...}` value-expression syntax; a
+  substitution point is a `{name}` placeholder declared in `bindings`.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::UrlTemplateDsn._reject_template_expressions"
+owners: [connector-plugin]
+targets: [UrlTemplateDsn]
+rationale: >
+  Two substitution grammars meet on this one field. The endpoint side of the
+  contract spells a value expression `${scope.path}`, so an author moving
+  between the two documents writes the one they used last, and a DSN is
+  precisely where the resulting string is never read by a human before it is
+  used — it goes to a driver, which reports a connection failure naming the
+  host it could not reach. Refusing the other grammar outright is also what
+  lets the bindings check treat a bare `{name}` as unambiguous, rather than
+  having to decide which of two syntaxes an author meant.
+status: active
+superseded_by: null

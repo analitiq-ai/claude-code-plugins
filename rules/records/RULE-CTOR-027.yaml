@@ -1,0 +1,23 @@
+id: RULE-CTOR-027
+statement: >
+  A database connector's transport and driver MUST be chosen by applying the
+  decision order in `connector-spec-db/spec-driver-selection.md` and stopping at
+  the first tier the target system satisfies.
+tier: judgment
+severity: warning
+scope: connector
+validator: null
+owners: [connector-plugin]
+rationale: >
+  The order ranks write paths, not connectivity: every tier yields a
+  `transports` block the contract accepts and a connector that connects and
+  syncs, so skipping one buys a slower landing path rather than a broken run —
+  a connector that fell through to executemany while its system documents a
+  native bulk protocol is correct today and stops scaling on the first large
+  table. That is what makes it a warning and also what makes it invisible:
+  nothing can distinguish a connector that skipped a tier from one whose target
+  genuinely fell through it, so catching a violation means re-reading the
+  researched driver facts against the tier the connector declared, which is
+  why the definition of done asks for the skip rationale in writing.
+status: active
+superseded_by: null

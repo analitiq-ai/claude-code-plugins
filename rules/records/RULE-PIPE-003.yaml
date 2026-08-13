@@ -1,0 +1,19 @@
+id: RULE-PIPE-003
+statement: >
+  A pipeline MUST NOT list two streams that reduce to the same version-stripped
+  base id.
+tier: advisory
+severity: error
+scope: pipeline
+validator: "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base"
+owners: [pipeline-plugin]
+targets: [PipelineAuthored]
+rationale: >
+  Two versions of one stream inside a single pipeline replicate the same
+  source into the same destinations twice, and the two versions will disagree
+  about the shape of what they write. The literal ids differ, so plain string
+  uniqueness passes and only the version-stripped comparison catches it. The
+  way in is routine: a stream is edited to a new version and the new reference
+  is appended beside the old one rather than replacing it.
+status: active
+superseded_by: null

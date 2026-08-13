@@ -2,15 +2,26 @@
 paths:
   - "plugins/**/*.md"
   - "packages/**/*.py"
+  - "rules/records/*.yaml"
 ---
 
 # Rule: state the mechanism, not the cardinality
 
 Applies when editing prose that describes a shape a model carries — plugin
-markdown, contract-model docstrings and field descriptions. Companion to
+markdown, contract-model docstrings and field descriptions, and the
+`statement` and `rationale` of a rule record. Companion to
 `plugin-prose.md`, which classifies every sentence as craft or fact: **a
 cardinality is always a fact**, and this rule is how that one fact class is
 written.
+
+A record is the surface where a count rots furthest from the reader who could
+catch it. Its `statement` renders verbatim into the plugin references agents
+author against, and its `rationale` ships to PyPI inside the wheel's
+`rules.json` — so a count written once here reaches users through two
+surfaces, neither of which re-reads the sentence. `RULE-ENDP-037` said
+predicates were used in two places while the contract read them in every
+paginator's stop condition, in a write response's success condition, and in
+every cross-input validation rule — and every gate in this repo stayed green.
 
 ## The invariant
 
@@ -73,10 +84,8 @@ A closure claim over a set no test reads has no mechanical half at all.
 
 **What you cover.** Whether the sentence still closes the set. Deleting "and
 nothing else" leaves a sentence that is weaker, still true, and no longer
-teaching the thing it exists to teach. That verdict needs someone reading the
-sentence: a check for the phrase fires on prose that was reworded better, and
-passes on prose that says the opposite (`validator-claims.md` carries the
-argument).
+teaching the thing it exists to teach. No check can take that verdict, and
+`guards.md` carries the argument.
 
 So on any edit to a spec carrying a closure claim, and on any change to the set
 it closes:

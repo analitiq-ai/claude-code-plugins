@@ -1,0 +1,20 @@
+id: RULE-ENDP-047
+statement: >
+  Every `transport_ref` an endpoint document names MUST resolve to a transport
+  declared by the connector it ships beside.
+tier: referential
+severity: error
+scope: api-endpoint
+validator: "analitiq.validator.connectors::_endpoint_transport_ref_findings"
+owners: [connector-plugin, engine]
+rationale: >
+  This is the half of transport resolution that `RULE-CTOR-005` cannot reach:
+  that rule resolves every ref site inside the connector document, and an
+  endpoint is a separate file, structurally invisible to a validator on the
+  connector model. An endpoint ref that resolves to nothing takes the same
+  shape as one that resolves — a string naming a transport — and the failure
+  arrives when the operation runs, carrying the connection's credentials
+  nowhere or carrying them to the default transport instead of the one the
+  author picked. Both documents have to be in hand to tell the two apart.
+status: active
+superseded_by: null

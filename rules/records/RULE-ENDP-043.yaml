@@ -1,0 +1,23 @@
+id: RULE-ENDP-043
+statement: >
+  A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes
+  ships as a new endpoint document alongside the removal of the old one.
+tier: referential
+severity: error
+scope: api-endpoint
+validator: null
+owners: [connector-plugin, pipeline-plugin]
+rationale: >
+  Streams pin endpoints by id, so a rename detaches every stream that referenced
+  it — and it does not detach loudly, the pin simply resolves to nothing.
+  Shipping the move as an addition plus a removal is what makes the break
+  visible at the version boundary where an operator can see it. Because the
+  handle is derived from the resource's locator, this also makes a
+  non-deterministic derivation a correctness bug rather than a style one: the
+  same locator has to yield the same handle on every re-author, or ids get
+  renamed by accident. Nothing catches it: a rename is visible only against the
+  previously released version of the same connector and against the streams
+  pinning the id, and no single-release validation run has either in hand — it
+  takes a diff against the last release.
+status: active
+superseded_by: null

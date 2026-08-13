@@ -1,0 +1,20 @@
+id: RULE-CTOR-005
+statement: >
+  Every transport_ref a connector declares MUST resolve to a transport declared
+  in the same document.
+tier: advisory
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::ConnectorBase._transport_refs_resolvable"
+owners: [engine, connector-plugin]
+targets: [ConnectorBase]
+rationale: >
+  A transport_ref is how an auth operation, a discovery run or a post-auth
+  request picks something other than the default transport, and it is resolved
+  by name at runtime. An unresolved one is indistinguishable from a correct
+  document until the operation carrying it actually runs — which, for an auth
+  or post-auth ref, means during a user's connection attempt rather than
+  during authoring. Resolving every ref site at parse time is what turns that
+  into an authoring-time failure.
+status: active
+superseded_by: null

@@ -1,0 +1,27 @@
+id: RULE-CTOR-046
+statement: >
+  A connector document MUST reach credential material only through the
+  `secrets` scope: a DSN binding's `value` refs a secret rather than a
+  connection parameter, and a discovery `options` block carries no
+  secret-shaped key.
+tier: advisory
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [DsnBinding, ResourceDiscovery]
+rationale: >
+  The scope a value is read from is what decides whether it is stored
+  encrypted and kept out of logs, so routing a password through
+  `connection.parameters` — or parking one in the open `options` map because
+  discovery needed credentials of its own — does not merely mislabel the
+  value, it exposes it wherever connection state is persisted or printed, and
+  the connector works perfectly meanwhile. Known enforcement gap:
+  `ConnectionStoredMaps._validate_no_secret_keys` (RULE-CONN-004) runs the
+  secret-shaped-key detector on the connection document only. Nothing runs it
+  over the connector document: `DsnBinding.value` is walked for the leading
+  scope of each ref and placeholder (RULE-CTOR-057) and for nothing else, and
+  the free-form `ResourceDiscovery.options` is not walked at all — so which
+  scope a value is read from goes unchecked in both.
+status: active
+superseded_by: null

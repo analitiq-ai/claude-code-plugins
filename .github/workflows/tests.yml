@@ -11,8 +11,8 @@ name: tests
 #       - enum/vocabulary pins: values the plugin restates as decision logic
 #         (enum-mappers.md, skill prose, io-contracts.md) must match the
 #         contract, including validator ids and resolution scopes;
-#       - generated-reference sync: references/advisory-rules.md is rendered from
-#         the contract's advisory registry and must not be stale;
+#       - generated-reference sync: references/rules.md is rendered from
+#         the contract's rule registry and must not be stale;
 #       - example validity: every connector/endpoint under skills/*/examples/
 #         must validate, since creator agents copy them as archetypes.
 #   pipeline_builder/  - the same problem solved the other way: contract-owned
@@ -86,18 +86,30 @@ jobs:
           # runs the script directly.
           DOMAIN: analitiq.ai
         run: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check
-      - name: Check the generated advisory reference is current
-        # references/advisory-rules.md is rendered from the contract's advisory
-        # registry; stale prose here misleads every creator agent that reads it.
+      - name: Check the rule registry is valid and compiled
+        # `rules/records/*.yaml` is the source of truth for every RULE-* rule. This
+        # validates each record against rules/SCHEMA.md, resolves every
+        # `validator` binding against the live models — a rule claiming an
+        # enforcement it lost is what this catches — and fails when the
+        # `rules.json` the wheel ships no longer matches the records.
+        # Runs BEFORE the renderers below: they all read the compiled registry,
+        # so a failure here explains any failure there.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        run: python3 scripts/render_advisory.py check
+        env:
+          DOMAIN: analitiq.ai
+        run: python3 scripts/render_rules.py check
+      - name: Check the generated rule reference is current
+        # references/rules.md is rendered from the contract's rule registry;
+        # stale prose here misleads every creator agent that reads it.
+        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
+        run: python3 scripts/render_rule_reference.py check
       - name: Check the prose census is complete and current
         # Every prose site under analitiq.contracts — each field description
         # and docstring of every pydantic model and every Enum, membership by
         # category (private helper enums ride along; plain classes and enum
         # member docstrings publish nothing and are out of scope) — must carry
         # a hash-pinned census entry; this prints the same diff
-        # tests/unit/test_advisory_prose.py asserts on, grouped for reading.
+        # tests/census/test_prose_census.py asserts on, grouped for reading.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         run: python3 scripts/render_prose_census.py check
       - name: Check validator-behavior claims against the in-repo contract
@@ -105,7 +117,7 @@ jobs:
         # check. This runs the probes behind those sentences, re-renders the
         # generated blocks, and resolves every PROBE fence against the
         # registry. It does not decide which sentences make a claim — that is
-        # a reader's job, per .claude/rules/validator-claims.md.
+        # a reader's job, per .claude/rules/guards.md.
         # tests/connector_builder/test_validator_claims.py computes the same
         # predicate, so on a failure pytest goes red first and this step is
         # what prints the diff and the unresolved fences.

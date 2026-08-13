@@ -1,6 +1,7 @@
 # `schedule` block
 
-Omitting `schedule` is equivalent to authoring its defaults.
+Omit `schedule`, and any field within it, wherever the user named no value
+(`RULE-PIPE-006`, `RULE-SHRD-004`).
 
 <!-- BEGIN GENERATED: fields-schedule -->
 `analitiq.contracts.pipelines.config.Schedule` — closed (`additionalProperties: false`); required: none
@@ -12,12 +13,12 @@ Omitting `schedule` is equivalent to authoring its defaults.
 | `interval_minutes` | no | integer \| null | `None` | `min=1` |
 | `cron_expression` | no | string \| null | `None` | `pattern=^cron\(.+\)$` |
 
-Carries 3 declarative cross-field `if`/`then` rule(s) — see the advisory rules for their prose.
+Carries 3 declarative cross-field `if`/`then` rule(s) — see the registered rules for their prose.
 <!-- END GENERATED: fields-schedule -->
 
-Which fields each `type` admits is a cross-field rule — `ADV-PIPE-002` in the
-table in `SKILL.md`. Author only the fields the chosen type calls for; leave the
-other type's field out entirely rather than setting it to `null`.
+Author only the fields the chosen type calls for (`RULE-PIPE-002`); leave every
+field belonging to a type you did not choose out entirely rather than setting it
+to `null`.
 
 ## `type: manual`
 
@@ -26,7 +27,7 @@ other type's field out entirely rather than setting it to `null`.
 {"type": "manual"}
 ```
 
-Runs only on an explicit user trigger. Nothing schedules it.
+Runs only on an explicit user trigger.
 
 ## `type: interval`
 
@@ -37,10 +38,9 @@ Runs only on an explicit user trigger. Nothing schedules it.
 
 Runs on a fixed cadence of `interval_minutes`. That cadence is
 **timezone-invariant**: a fixed period is unaffected by the zone the pipeline
-names or by a DST transition inside it. The contract bounds only positivity —
-the shortest interval a source can actually sustain is engine- and
-provider-dependent, so pick one the source can serve, not the smallest the
-contract accepts.
+names or by a DST transition inside it. The shortest interval a source can
+actually sustain is engine- and provider-dependent, so pick one the source can
+serve, not the smallest the contract accepts.
 
 ## `type: cron`
 
@@ -49,31 +49,18 @@ contract accepts.
 {"type": "cron", "timezone": "Europe/Berlin", "cron_expression": "cron(0 2 * * ? *)"}
 ```
 
-Fires on an AWS EventBridge cron expression, interpreted in `timezone`. The
-contract's pattern check is deliberately coarse — it verifies the `cron(…)`
-wrapper, not the inner spec. Full validity of the inner spec is the scheduler's
-responsibility, not the plugin's, so a syntactically accepted expression can
-still be rejected downstream.
+Fires on an AWS EventBridge cron expression, interpreted in `timezone`
+(`RULE-PIPE-009`).
 
 ## `timezone`
 
-A valid IANA tz-database name (e.g., `UTC`, `Europe/Berlin`, `America/New_York`).
+`RULE-PIPE-015`. Examples: `UTC`, `Europe/Berlin`, `America/New_York`.
 
-It is validated for **every** `schedule.type`, including the types where it has
-no scheduling effect: an unknown name is rejected on a `manual` or `interval`
-schedule just as it is on a `cron` one. Only `type: cron` interprets it — for
-the other two it is accepted and stored as metadata, so never author a non-UTC
-value there expecting it to shift when a run happens.
+Only `type: cron` interprets it; on the other types it is accepted and stored as
+metadata, so never author a non-UTC value there expecting it to shift when a run
+happens.
 
 ## Status interaction
 
-`schedule` is **declarative**; the pipeline's `status` controls
-whether the scheduler actually picks it up:
-
-| `status` | scheduled execution |
-|---|---|
-| `draft` | disabled |
-| `active` | enabled (subject to stream-side runnability) |
-| `inactive` | disabled |
-
-See `spec-streams-and-status.md`.
+`schedule` is **declarative**; the pipeline's `status` is what decides whether
+the scheduler picks it up — see `spec-streams-and-status.md`.

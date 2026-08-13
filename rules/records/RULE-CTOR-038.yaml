@@ -1,0 +1,20 @@
+id: RULE-CTOR-038
+statement: >
+  Each `post_auth_outputs` entry MUST resolve on its own, referencing no
+  value another entry produces.
+tier: advisory
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [PostAuthOutput, ConnectorBase]
+rationale: >
+  Authors reach for a chain — fetch the account, then use its id to fetch the
+  tenant domain — and the block gives no way to express one: the engine
+  decides dispatch order at connect time, so a dependent output may resolve
+  against a value that does not exist yet and the connection activates with
+  that field silently empty. A chain is indistinguishable in the document
+  from independent entries, so catching it means reading every entry's refs
+  against every other entry's key.
+status: active
+superseded_by: null

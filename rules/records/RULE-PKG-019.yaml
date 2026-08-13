@@ -1,0 +1,21 @@
+id: RULE-PKG-019
+statement: >
+  A `bulk_land` implementation MUST target the stage's full address rather
+  than its bare table name, so a real-scope stage lands in the schema the
+  engine qualified it with.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  A mechanism handed only the table name resolves it against whatever the
+  session default happens to be, so it works on a temp-scope stage — whose
+  address carries no schema — and silently lands the batch in the wrong
+  schema on a real-scope one. Caught by nobody: the engine verifies the
+  landed row count and not where the rows landed, no contract model sees
+  `bulk_land`, and a stage's scope shows up only in whether its address is
+  qualified, so testing against a temp stage proves nothing about a
+  real-scope one.
+status: active
+superseded_by: null

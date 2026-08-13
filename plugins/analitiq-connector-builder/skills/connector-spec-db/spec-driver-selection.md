@@ -1,21 +1,19 @@
 # Driver selection
 
-Every database connector package ships its own driver in
-`requirements.txt` and picks its transport in `definition/connector.json`
-via `transport_type` (`sqlalchemy` or `adbc`). This is the decision
-guide for choosing the driver and bulk-write path when authoring a
-connector for a new system.
+Every database connector package ships its own driver (`RULE-PKG-027`) and
+picks its transport in `definition/connector.json` via `transport_type`.
+This is the decision guide for choosing the driver and bulk-write path when
+authoring a connector for a new system.
 
 **It is a decision procedure, not a lookup table.** What a given system
 supports is a researched fact — `provider_facts.adbc_driver_package`,
 `.flight_sql_endpoint`, `.bulk_load_protocol`, `.sqlalchemy_driver`,
-grounded from the vendor's own documentation at author time. This file
-supplies the *order* and the *closed vocabularies* the contract owns; it
-deliberately does not carry a per-system capability table, because a
-frozen copy of researched facts rots silently and biases authoring
-toward whichever systems happen to be listed. Never infer a system's
-capability from a similar one, however wire-compatible
-(`spec-tls.md` states the same rule for TLS vocabularies).
+grounded from the vendor's own documentation at author time
+(`RULE-CTOR-026`). This file supplies the *order* and the *closed
+vocabularies* the contract owns; it deliberately does not carry a
+per-system capability table, because a frozen copy of researched facts
+rots silently and biases authoring toward whichever systems happen to be
+listed.
 
 ## Decision order
 
@@ -26,7 +24,7 @@ Apply in order; stop at the first match.
    directly to the system's native bulk protocol; no row-by-row path at
    all.
 2. **The server exposes an Arrow Flight SQL endpoint** → ADBC via the
-   generic Flight SQL driver. Currently unreachable — see §2.
+   generic Flight SQL driver, subject to the same enum — see §2.
 3. **Neither, but the system has a native bulk-load protocol** →
    SQLAlchemy transport for connect/DDL, with the bulk path **declared**
    in `sql_capabilities.bulk_load` and implemented in the dialect's
@@ -43,12 +41,11 @@ tier 4.
 
 `cursor.adbc_ingest(...)` hands Arrow buffers to the system's own bulk
 protocol with no row-by-row path. This tier is reachable only for the
-values the contract's `AdbcTransport.driver` enum admits — currently
-`postgresql`, `snowflake`, `bigquery` — so the enum, not a curated list
-of systems, is what decides eligibility. Confirm the system has a
-production ADBC driver via `provider_facts.adbc_driver_package`; an
-upstream driver that exists but is absent from the enum does not qualify
-(see below).
+values the contract's `AdbcTransport.driver` enum admits (`RULE-CTOR-016`,
+whose reference row prints them) — so the enum, not a curated list of
+systems, is what decides eligibility. Confirm the system has a production
+ADBC driver via `provider_facts.adbc_driver_package`; an upstream driver
+that exists but is absent from the enum does not qualify (see below).
 
 An ADBC transport declares that landing as
 `sql_capabilities.bulk_load: {"adbc": "adbc_ingest"}`. It is the backend's
@@ -56,11 +53,11 @@ own native path, so — unlike every other mechanism — it obliges **no**
 dialect code, which is what makes this tier cheap
 (`spec-sql-write-path.md`).
 
-That enum is the **sole validator** for ADBC driver values.
-The engine derives the dbapi module from the `driver` value by the
-upstream packaging convention `adbc_driver_{driver}.dbapi` — the
-connector's `requirements.txt` must ship the matching
-`adbc-driver-{driver}` wheel (plus `adbc-driver-manager`).
+The enum is what rejects an unknown driver, and it names the field rather
+than the rule (`RULE-CTOR-016`). The engine derives the dbapi module from
+the `driver` value by the upstream packaging convention
+`adbc_driver_{driver}.dbapi`; the wheels follow from the same convention
+(`RULE-PKG-027`).
 
 If the system's driver is not yet in the enum, that is a **contract gap to
 raise, not a freeform workaround** — and it is not a one-line change. Adding a
@@ -80,17 +77,15 @@ system's own canonical path even when a compatible driver exists.
 
 `adbc-driver-flightsql` reaches any server implementing the Arrow Flight
 SQL protocol, which is what makes it a tier of its own rather than a
-per-system entry. Two caveats: the target must genuinely expose a Flight
-SQL endpoint — established from the vendor's docs into
+per-system entry. The target must genuinely expose a Flight SQL endpoint —
+established from the vendor's docs into
 `provider_facts.flight_sql_endpoint`, never assumed from a system being
-"modern" — and `flightsql` is not currently in the `AdbcTransport.driver`
-enum, so this tier needs the same contract change as any other missing
-driver before it can be declared.
+"modern".
 
-Today this tier is **unreachable**: `flightsql` is not in the
-`AdbcTransport.driver` enum, so selecting it is the same contract-gap
-path as §1. Record the server's Flight SQL support in research; do not
-author the transport.
+This tier is reachable only once `flightsql` is a member of the
+`AdbcTransport.driver` enum (`RULE-CTOR-016`); until then, selecting it is
+the same contract-gap path as §1. Record the server's Flight SQL support in
+research; do not author the transport.
 
 ## Do not use the JDBC bridge
 
@@ -105,8 +100,7 @@ SQLAlchemy transport instead, at tier 3 or 4.
 The connect/DDL layer stays on the SQLAlchemy transport; the bulk write
 goes through the **declared** mechanism — the connector names it under
 `sql_capabilities.bulk_load.sqlalchemy` and implements the dialect's
-`bulk_land` hook. Declaring a mechanism without the hook (or the hook
-without a declaration) fails the CDK conformance kit.
+`bulk_land` hook (`RULE-PKG-016`).
 
 The mechanism vocabulary is **closed and contract-owned**, so this tier
 is reachable only when the system's documented protocol maps onto one of:
@@ -140,24 +134,25 @@ from this file — see the note at the top.
 
 - SQLAlchemy transports accept a **sync or async** DBAPI. The engine
   builds the sync vs async SQLAlchemy engine automatically from the
-  dialect's own `is_async` capability — there is no driver allow-list.
-  Async drivers (`postgresql+asyncpg`, `mysql+aiomysql`) run on the
-  async engine; sync drivers (`redshift+redshift_connector`,
-  `postgresql+psycopg2`) run on the sync engine, in a worker thread off
-  the event loop. Prefer async where the system has
-  a working async driver; use a sync driver when that is the system's
-  viable path (Redshift's `redshift_connector` is the canonical sync
-  case). The declared `driver` must be a real SQLAlchemy
-  `dialect+driver` registration — e.g. `redshift_connector` registers
-  under the `redshift` dialect, so `postgresql+redshift_connector` is
-  invalid and fails at transport build.
-- The driver lives ONLY in the connector's `requirements.txt`. The
-  engine image ships no database drivers.
+  dialect's own `is_async` capability — the `driver` value is an open
+  `dialect+driver` pattern, not an allow-list. Async drivers
+  (`postgresql+asyncpg`, `mysql+aiomysql`) run on the async engine; sync
+  drivers (`redshift+redshift_connector`, `postgresql+psycopg2`) run on
+  the sync engine, in a worker thread off the event loop. Prefer async
+  where the system has a working async driver; use a sync driver when
+  that is the system's viable path (Redshift's `redshift_connector` is
+  the canonical sync case). The declared `driver` must name a registration that actually
+  exists (`RULE-CTOR-039`) — e.g. `redshift_connector` registers under
+  the `redshift` dialect, so `postgresql+redshift_connector` is invalid
+  and fails at transport build.
+- The driver lives ONLY in the connector's `requirements.txt`
+  (`RULE-PKG-027`) — the engine image ships no database drivers.
 - Known pin: aiomysql's adapter still passes the deprecated positional
-  argument to PyMySQL's `Connection.ping()`; pin `pymysql<1.2` until
-  aiomysql ships a fix (the reference `mysql`/`mariadb` connectors do
-  this).
+  argument to PyMySQL's `Connection.ping()`; pin `pymysql<1.2` in the
+  connector's `requirements.txt` until aiomysql ships a fix.
 - A connector may ship more than one driver when it declares (or is
-  expected to grow) more than one transport — the reference `postgres`
-  connector ships `asyncpg` for the SQLAlchemy transport plus
-  `adbc-driver-postgresql`/`adbc-driver-manager` for the ADBC path.
+  expected to grow) more than one transport: an `asyncpg` wheel for a
+  SQLAlchemy transport beside `adbc-driver-postgresql` and
+  `adbc-driver-manager` for an ADBC one (`RULE-PKG-027`). The archetypes
+  under `examples/` declare one transport each, so neither models the
+  multi-transport case.

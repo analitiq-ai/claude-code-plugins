@@ -1,0 +1,21 @@
+id: RULE-PKG-003
+statement: >
+  A connector's dialect MUST implement every hook the transports and
+  `sql_capabilities` its `connector.json` declares require, in the form the
+  CDK's hook surface defines.
+tier: referential
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  A declaration with no hook behind it is inert: the CDK base raises for
+  every unimplemented hook, so the connector validates clean here and dies
+  at connect or at the first write. The declaration is JSON this repo
+  checks and the hooks are Python it never opens, and the hook names and
+  signatures are engine-owned — the CDK is the authority and this repo can
+  pin nothing about it. The CDK conformance kit run by registry CI is what
+  catches a missing or mis-signed hook, after the plugin has already
+  returned the package.
+status: active
+superseded_by: null

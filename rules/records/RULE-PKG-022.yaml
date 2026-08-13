@@ -1,0 +1,20 @@
+id: RULE-PKG-022
+statement: >
+  A dialect's TLS hook MUST raise rather than connect when a
+  certificate-verification mode resolves with an empty CA certificate.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  The mode promises the server certificate is checked against a CA; with no
+  CA to check against, the only alternative to raising is an unverified
+  session the user believes is verified — a silent downgrade, which is
+  worse than a refused connection. Falling back reads like resilience,
+  which is why the fail-closed direction has to be stated. Caught by
+  nobody: the contract's TLS block is deliberately vocabulary-agnostic and
+  checks no CA pairing, no conformance test supplies an empty CA, and the
+  hook is dialect code no contract model sees.
+status: active
+superseded_by: null

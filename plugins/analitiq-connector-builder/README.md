@@ -67,7 +67,7 @@ agent owns the authoring vocabulary for its kind via a dedicated spec skill
 |---|---|---|---|
 | `api` | shipped | `api_key`, `basic_auth`, `oauth2_authorization_code`, `oauth2_client_credentials`, `jwt`, `credentials`, `aws_iam`, `none` | Stripe, Pipedrive, Wise, Xero |
 | `database` | shipped | `db` | PostgreSQL, MySQL, Snowflake |
-| `nosql` / `document` | not authored | n/a | Recognized by schema; a document/NoSQL provider is authored as `database`. |
+| `nosql` / `document` | not authored | n/a | Recognized by schema; a document/NoSQL provider is authored as `database` (`RULE-CTOR-033`). |
 | `file` / `s3` / `stdout` | stubbed | n/a | Recognized by schema; engine support pending. |
 
 ## Validation
@@ -79,17 +79,20 @@ which the `connector-schema-validator` agent **self-installs at runtime**. It is
 contract models (`analitiq-contract-models`), the same models the published JSON
 Schemas are generated from — so there is no schema fetch. It runs:
 
-1. **Contract-model validation** — structure **and** every cross-field rule for
-   the document's kind, keyed by its declared `$schema`:
+1. **Contract-model validation** — structure, plus the cross-field rules the
+   models themselves apply, keyed by the document's declared `$schema`:
    - Connector → `https://schemas.analitiq.ai/connector/latest.json`
    - Read map (`type-map-read.json`) → `https://schemas.analitiq.ai/type-map-read/latest.json`
    - Write map (`type-map-write.json`, database only) → `https://schemas.analitiq.ai/type-map-write/latest.json`
      (direction derives from the filename)
    - API endpoint → `https://schemas.analitiq.ai/api-endpoint/latest.json`
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
-   Cross-field rules are part of this pass and report under `contract-model`;
-   they are catalogued by id in
-   `skills/connector-builder/references/advisory-rules.md`.
+   Findings from this pass report under `contract-model`. Every rule an author
+   must satisfy is catalogued by id in
+   `skills/connector-builder/references/rules.md`. That reference deliberately
+   does not say which rules anything applies — an author satisfies all of them
+   either way, and some hold only at connect or run time, so a clean run is
+   not proof they do.
 2. **Checks the contract models can't express** — cross-file relationships
    (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
    `endpoint-id-locator`, `endpoint-transport-ref`), embedded-schema validity
@@ -151,8 +154,8 @@ For each successfully built connector:
 ```
 
 `connector_id` is the stable connector slug; the plugin authors it into
-`connector.json` and uses the same value as the on-disk directory name. Registry-stamped fields (`created_at`, `updated_at`) are
-NEVER written to disk.
+`connector.json` (`RULE-CTOR-042`). Registry-stamped fields (`created_at`,
+`updated_at`) are NEVER written to disk.
 
 ### Existing directories (build vs. update)
 

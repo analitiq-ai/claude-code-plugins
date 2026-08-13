@@ -4,19 +4,8 @@ Authoring patterns for `operations.read.pagination` in API endpoints.
 
 The exact shape — property names, required keys, and the `stop_when`
 predicate grammar — is owned by the published api-endpoint contract, not
-by this page. Each strategy is a discriminated branch on `type`, and each
-has its own definition in
-`https://schemas.analitiq.ai/api-endpoint/latest.json`:
-
-- `offset` → `#/$defs/OffsetPagination`
-- `page` → `#/$defs/PagePagination`
-- `cursor` → `#/$defs/CursorPagination`
-- `link` → `#/$defs/LinkPagination`
-- `keyset` → `#/$defs/KeysetPagination`
-
-This page covers only the authoring decisions the schema can't express —
-which strategy fits a provider, and how to wire it.
-
+by this page. Each strategy is a discriminated branch on `type`; the
+sections below take one branch each.
 
 ## Pagination is wired in three places
 
@@ -27,35 +16,34 @@ request binding on its own**. Every param it names must be:
 2. **`controlled_by: "pagination"`** on that param, and
 3. **bound** into the request with `{"from_param": …}`.
 
-Miss any one and validation fails (ADV-ENDP-009 — every declared param needs
-exactly one binding; ADV-ENDP-010 — a pagination param reference must exist and
-be marked `controlled_by`). A `controlled_by` param must **not** declare
-`operators`: pagination owns it, so a stream may not also filter on it
-(ADV-ENDP-002).
+Miss any one and validation fails (RULE-ENDP-009, RULE-ENDP-010). A
+`controlled_by` param must **not** declare `operators`: pagination owns it, so a
+stream may not also filter on it (RULE-ENDP-002).
 
 See `examples/api-key/endpoints/v1__items.json` for the full three-place
-wiring — every endpoint example (api-key, jwt, oauth2-authorization-code)
-declares `type: "page"` pagination with its `controlled_by` params declared
-and bound this way.
+wiring — every endpoint example under `examples/*/endpoints/` declares
+`type: "page"` pagination with its `controlled_by` params declared and bound
+this way.
 
 ## `limit`: `max` is the provider's cap, `default` is ours
 
 - **`max`** is the largest page the provider permits. Read it from their docs;
   never guess it upward.
 - **`default`** is the page size actually requested. Prefer
-  `{"ref": "runtime.batch_size"}` so the run's configured batch size flows
-  through, rather than hardcoding a number and overriding the operator's
-  choice. Hardcode only when the provider's usable page size is genuinely
-  fixed, and then write it as a **bare positive integer** (`"default": 50`) —
+  `{"ref": "runtime.batch_size"}` (`connector-builder/references/value-expressions.md`
+  §Logical scopes) over hardcoding a number, which overrides the operator's
+  configured batch size. Hardcode only when the provider's usable page size is
+  genuinely fixed, and then write it as a **bare positive integer**
+  (`"default": 50`) —
   <!-- PROBE: pagination-limit-bare-zero-rejected -->
   that spelling is bounded by the contract, so a zero or negative size is
   rejected at authoring time rather than at the first request.
 
 ## `stop_when` is a predicate, not a keyword
 
-Every strategy requires a `stop_when` — the condition that ends the page
-loop. It is **not** a string like `"page_empty"`; it is a predicate object
-from the contract's predicate grammar. Predicate keys (closed set): `eq`,
+`stop_when` is the condition that ends the page loop. It is **not** a string
+like `"page_empty"`; it is a predicate object from the contract's predicate
+grammar. Predicate keys (closed set): `eq`,
 `neq`, `lt`, `lte`, `gt`, `gte`, `exists`, `missing`, `empty`, `not_empty`,
 and the combinators `and`, `or`, `not` — exactly one key per predicate
 object. The same grammar backs a write mode's `success_when`. Each leaf
@@ -66,10 +54,11 @@ wraps a single key over a value expression:
 - `{ "missing": <expr> }` — stop when the field is absent (no next
   cursor / no next link in the response).
 
-> The predicate **wrappers** are contract-checked. Their **operands** (which
-> `ref` resolves to the page's record array or the next-page token) are runtime
-> semantics the schema leaves open — match them to the actual response shape of
-> the endpoint you're authoring.
+> The predicate **wrappers** are contract-checked, and so is every
+> `response.body` path an operand resolves (RULE-ENDP-023). What an operand
+> *means* — that this `ref` is the page's record array, that one the next-page
+> token — is yours: match it to the actual response shape of the endpoint
+> you're authoring.
 
 ## Pagination is not sync scoping
 
@@ -80,10 +69,8 @@ range or an account id in a pagination block, it belongs elsewhere.
 
 ## `offset`
 
-Fixed-size pages addressed by an integer offset. `offset.increment_by` is
-**required, with no default** — the two offset families read identically in a
-document, so the contract makes you state the step. Match it to what the
-provider's `offset` counts:
+Fixed-size pages addressed by an integer offset. Match `offset.increment_by` to
+what the provider's `offset` counts (RULE-ENDP-058):
 
 - **records returned** → `{ "ref": "response.record_count" }`
 - **the requested window** → the page size actually sent:
@@ -105,14 +92,16 @@ provider's `offset` counts:
 
 ## `page`
 
-Pages addressed by a page number. `page.increment_by` defaults to 1; `initial`
-is usually 1, but some providers are 0-based — check.
+Pages addressed by a page number. Omit `page.increment_by` unless the provider
+advances page numbers by more than one per request; `initial` is usually 1, but
+some providers are 0-based — check.
 
 ## `cursor`
 
 Server returns an opaque token in each response; the next request passes it
-back. **Omit the cursor param on the first request** — there is no token yet;
-the runtime sends it only from page two onward.
+back. The cursor param is declared, marked and bound like every other paging
+param (see "Pagination is wired in three places" above), and needs no
+`default` — there is no token before the first response.
 
 <!-- validate: api-endpoint#/operations/read/pagination -->
 ```json
@@ -131,10 +120,9 @@ and **replaces the entire request URL**, so it must resolve to a bare,
 **absolute** URL — a relative one cannot be followed. Only the first request is
 built from `path` + params.
 
-`limit` is therefore **first-request-only**: it binds the page size into that
-initial request; followed links are used verbatim, never modified. Wire it like
-every other strategy (see "Pagination is wired in three places" above).
-Providers usually echo the page size back in each next link.
+`limit` binds only into that first request, and is wired like every other
+strategy (see "Pagination is wired in three places" above). Providers usually
+echo the page size back in each next link.
 
 Prefer a body field that already holds the bare URL:
 
@@ -166,10 +154,10 @@ that field.
 **`order_by_field` is not a `cursor_field`.** It is pagination's ordering key
 within one result set; replication's `cursor_field` is the incremental
 watermark across runs. They are often the same field and still mean different
-things — declaring one does not imply the other. Dotted paths preserve the
-response's casing, and a literal dot in a field name cannot be addressed.
+things — declaring one does not imply the other.
 
-Omit `initial` entirely for the first page — never write `null`.
+Omit `initial` entirely for the first page — never write `null`
+(RULE-ENDP-044).
 
 <!-- validate: api-endpoint#/operations/read/pagination -->
 ```json

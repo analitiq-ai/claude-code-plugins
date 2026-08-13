@@ -1,0 +1,22 @@
+id: RULE-PKG-001
+statement: >
+  A connector's dialect MUST override a structural default only where the
+  CDK's portable form is genuinely invalid on the target system, and MUST
+  override type rendering only for logic the write map's rules cannot
+  express.
+tier: judgment
+severity: warning
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  An override freezes a copy of behaviour the CDK base owns, so an
+  unnecessary one stops tracking the base as it improves and, for type
+  rendering, quietly takes the write direction away from the map that is
+  actually validated. Only the target system's own SQL decides whether the
+  portable form was already valid — the author's instinct is that
+  overriding is safer — and the override usually works, so nothing fails.
+  No contract model sees the package, and the CDK conformance kit audits
+  which hooks are overridden, never whether the override was needed.
+status: active
+superseded_by: null

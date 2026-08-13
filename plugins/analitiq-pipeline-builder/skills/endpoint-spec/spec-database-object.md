@@ -14,17 +14,11 @@
 Which provider concept lands in `catalog` and `schema` is dialect-specific — see
 the tables below.
 
-## Identifier preservation
+## Identifier preservation (`RULE-DBEP-009`)
 
-**All identifier strings are stored verbatim from introspection** — no
-case-folding, quoting, or normalization. PostgreSQL is case-sensitive
-when quoted, BigQuery names are case-sensitive in the catalog API,
-and MongoDB collection names are case-sensitive throughout. Whatever
-the source database reports, that's what goes here.
-
-The hashing layer (`schema_hash`, server-managed) relies on this
-verbatim preservation. Normalizing breaks the hash and triggers false
-drift.
+PostgreSQL is case-sensitive when quoted, BigQuery names are case-sensitive in
+the catalog API, and MongoDB collection names are case-sensitive throughout.
+Whatever the source database reports, that's what goes here.
 
 ## Derived `endpoint_id`
 
@@ -41,32 +35,25 @@ A database `endpoint_id` is **derived**, not chosen: it is a deterministic handl
 Derivation must stay deterministic: a handle that changes for an unchanged resource mints a new endpoint and breaks every stream pinned to the old one. Never hand-write one — call the helper (`scripts/endpoint_id.py` wraps it).
 <!-- END GENERATED: endpoint-id-derivation -->
 
-The hash is taken over the **verbatim** identifiers, so compute both together
-with `scripts/endpoint_id.py` (see `private-endpoint-creator`) and they always
-agree with what the validator recomputes.
+Compute both together with `scripts/endpoint_id.py` (see
+`private-endpoint-creator`): the id must equal the handle derived from the
+verbatim locator (`RULE-DBEP-011`).
 
-`endpoint_id` is an Analitiq **slug**, not a database object name. Nothing may
-parse database identity back out of it: the segments are slugified (lossy) and
-the trailing hash is not reversible, so a consumer that splits the handle to
-recover a schema or table name will be wrong the moment an identifier contains a
-character slugging folds away. Anything needing the catalog / schema / name
-reads `database_object` — that is what the block is for.
-
-The trailing `<hash8>` is **not** `schema_hash`, and the two must never be
-substituted for one another. `<hash8>` identifies the *object*: it is taken over
-`catalog.schema.name` and does not move while the object keeps its name, whatever
-happens to its columns. `schema_hash` (server-managed) versions a *captured
-snapshot* of that object's shape and changes whenever a column does. One answers
-"which object is this", the other "which capture of it".
+Read database identity from `database_object`, never by splitting `endpoint_id`
+(`RULE-DBEP-007`) — slugging folds case and punctuation away, so a consumer that
+splits the handle is right for plain lowercase identifiers and wrong for the
+first quoted one.
 
 ## `name`
 
-The provider-native object identifier. No quoting or escaping — the value is the
-raw identifier as it appears in the catalog.
+The provider-native object identifier, as it appears in the catalog
+(`RULE-DBEP-009`).
 
 ## `catalog`
 
-The outermost containment level, when the dialect has one:
+The outermost containment level, when the dialect has one. Record every level the
+system actually has and invent none it lacks (`RULE-DBEP-005`). A level the
+dialect lacks is omitted, never authored as null (`RULE-ENDP-031`):
 
 | Dialect | what goes in `catalog` |
 |---|---|
@@ -90,14 +77,7 @@ The intermediate namespace:
 
 ## `object_type`
 
-Descriptive — **not** a closed enum. Common values:
-`table`, `view`, `materialized_view`, `collection`, `external_table`,
-`stream`. The catalog stores this verbatim; downstream tools may inspect
-it for behavioral hints (e.g., "don't write to a view").
-
-## Uniqueness
-
-The tuple `(catalog, schema, name)` must be unique within the owner (the
-connection that owns this endpoint). Column-name and primary-key issues are
-caught by the contract model at the document level; cross-file uniqueness of
-`database_object` tuples is enforced server-side at catalog-merge time.
+The label the provider's catalog gives the object, stored verbatim. It is
+descriptive only — nothing may branch on it to decide whether the object can be
+read or written (`RULE-DBEP-013`). Common values: `table`, `view`,
+`materialized_view`, `collection`, `external_table`, `stream`.

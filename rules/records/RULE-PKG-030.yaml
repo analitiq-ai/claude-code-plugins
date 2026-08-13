@@ -1,0 +1,22 @@
+id: RULE-PKG-030
+statement: >
+  A connector MUST ship the sibling type-map documents its `kind` calls for
+  under the filenames the engine reads them by, and MUST NOT ship one for a
+  direction its kind has no use for.
+tier: referential
+severity: error
+scope: connector-package
+validator: "analitiq.validator.connectors::check_coverage"
+owners: [connector-plugin, engine]
+rationale: >
+  The maps are separate documents from `connector.json`, so nothing about the
+  connector document is wrong when one is missing — the connector simply has no
+  type vocabulary, and the failure arrives at the first stream that resolves a
+  column instead of at authoring. Shipping a spare map is the same defect wearing
+  the opposite sign: a direction the connector never renders reads as a
+  capability, and the rules in it are graded by nobody and trusted by the next
+  author. The pre-split single-map filename is rejected outright rather than
+  read as a read map, because a connector that still carries it has a write
+  direction nobody has looked at.
+status: active
+superseded_by: null

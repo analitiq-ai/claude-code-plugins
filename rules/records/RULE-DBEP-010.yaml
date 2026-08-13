@@ -1,0 +1,20 @@
+id: RULE-DBEP-010
+statement: >
+  A database endpoint for a table that does not exist yet MUST target a
+  namespace discovery returned.
+tier: referential
+severity: error
+scope: database-endpoint
+validator: null
+owners: [pipeline-plugin, engine]
+targets: [DatabaseObject, DatabaseEndpointDoc]
+rationale: >
+  Whether a missing schema is created along with the table is dialect-owned —
+  it happens only where the connector declares a pre-DDL hook for it — so a
+  namespace nobody has seen is a table creation that succeeds on one dialect
+  and fails on the next, and a discovered namespace is the only target that
+  works everywhere. The legal set comes from a discovery result rather than
+  from any document, so nothing the endpoint carries records which namespaces
+  exist; the mismatch surfaces on the first run, as a create that never lands.
+status: active
+superseded_by: null

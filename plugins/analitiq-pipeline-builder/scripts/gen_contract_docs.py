@@ -62,18 +62,21 @@ class UnknownBlock(KeyError):
 def _md_escape(text: str) -> str:
     """Make a value safe for a markdown table cell.
 
-    Escapes `|` (which would end the cell) and flattens newlines. Deliberately
+    Escapes `|` (which would end the cell) and flattens every run of
+    whitespace, newlines included — a markdown row is one line, so a cell
+    carrying a newline ends the row early and orphans every later column onto a
+    line that renders as body text. Deliberately
     does NOT escape backslashes: the values that reach here are either wrapped in
     a code span by `_code()`, where a backslash is literal, or are published rule
     prose. Escaping would corrupt the very regexes this generator exists to
     reproduce faithfully.
 
-    The plain-cell callers (advisory prose, type summaries) are therefore only as
+    The plain-cell callers (rule statements, type summaries) are therefore only as
     safe as the pinned contract's own text. That holds for every rule rc10 ships;
     if a future rule's prose contains markdown metacharacters, escape at that
     call site rather than here.
     """
-    return text.replace("|", "\\|").replace("\n", " ")
+    return " ".join(text.replace("|", "\\|").split())
 
 
 def _code(value: object) -> str:
@@ -263,64 +266,122 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-# Advisory families this plugin is in the lane of — every one is rendered into
-# the prose by a renderer below.
-IN_SCOPE_ADVISORY_FAMILIES = ("ADV-DBEP-", "ADV-PIPE-", "ADV-RETRY-", "ADV-STRM-")
-
-# Families deliberately NOT rendered: they govern connector / api-endpoint
-# documents or server-side run records, none of which this plugin authors.
-# Recorded rather than merely omitted so the judgment is reviewable, and so a
-# family the contract adds later matches neither list and fails the test that
-# pins these two — forcing a decision instead of a silent omission.
-OUT_OF_SCOPE_ADVISORY_FAMILIES = (
-    "ADV-CONN-", "ADV-CTOR-", "ADV-DSYNC-", "ADV-ENDP-", "ADV-HTTP-", "ADV-TMAP-",
-)
+# Which plugin this generator renders for. A rule belongs in this plugin's
+# prose when its record names this owner — the registry's own answer to "who
+# has to know this", decided once per rule where the rule is authored.
+#
+# `scope` decides only WHERE it lands (see `_RULE_BLOCKS`), never whether
+# it appears. The two are different questions and used to be conflated: a rule
+# grading a document this plugin does not author can still bind an author here,
+# which is why an id-prefix allowlist needed a hand-kept list of exceptions
+# beside it. Ownership answers it directly, so both lists are gone.
+PLUGIN_OWNER = "pipeline-plugin"
 
 
-def _advisory_block(prefixes: tuple[str, ...]) -> str:
-    from analitiq.contracts.shared.advisory import all_rules
+def _owned() -> list:
+    """Every rule this plugin owns — the whole of what its prose may cite."""
+    from analitiq.contracts.shared.rules import all_rules
 
-    rules = sorted(
-        (r for r in all_rules() if r.id.startswith(prefixes)),
-        key=lambda r: r.id,
-    )
-    # Per-prefix, not just overall: a sibling family still matching would
-    # otherwise mask one that vanished (dropping ADV-RETRY-* still leaves the
-    # four ADV-PIPE-* rules, and the block would render as if nothing were lost).
-    for prefix in prefixes:
-        if not any(r.id.startswith(prefix) for r in rules):
-            raise RuntimeError(f"no advisory rules matched {prefix!r}")
+    return [r for r in all_rules() if PLUGIN_OWNER in r.owners]
+
+
+def _block_rules(block_id: str) -> list:
+    """The owned rules that land in one block, ordered by id.
+
+    Placement is by `scope`, the document a rule grades, because that is what
+    decides which spec a reader is holding when they need it. The block claiming
+    no scopes takes the remainder, so the blocks partition the owned set by
+    construction: every rule lands exactly once, and a rule whose scope is new
+    to this plugin surfaces in the shared block instead of vanishing.
+    """
+    scopes = _RULE_BLOCKS[block_id]
+    claimed = {s for spec in _RULE_BLOCKS.values() for s in spec}
+    rules = [
+        r for r in _owned()
+        if (r.scope in scopes if scopes else r.scope not in claimed)
+    ]
+    return sorted(rules, key=lambda r: r.id)
+
+
+def _rule_block(block_id: str) -> str:
+    """The registry's rules for one block: id and obligation, nothing else.
+
+    No column says whether anything applies a rule, because that changes
+    nothing an agent does — every rule here has to be satisfied either way,
+    and a row reading "nothing here" invites skipping one. The single fact
+    enforcement decides is whether a clean validation run finishes the job, and
+    that is about the whole set, so the prose above says it once.
+
+    The record still carries `validator`; it is resolved by
+    `render_rules.py` and read by the enforcer census. They just do not ship.
+    """
+    rules = _block_rules(block_id)
+    if not rules:
+        raise RuntimeError(
+            f"{block_id} renders no rules — its scopes match nothing this "
+            "plugin owns, so the heading above it now introduces an empty table"
+        )
+
     out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.prose)} |" for r in rules]
+    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in rules]
     return "\n".join(out) + "\n"
 
 
-# Which families each advisory block emits. Single-sourced: the renderers read
-# from here and `advisory_families_rendered()` derives its answer from the same
-# map, so the two cannot drift — a second hardcoded tuple would reintroduce
-# exactly the dead-constant defect this map exists to remove.
-_ADVISORY_BLOCK_FAMILIES: dict[str, tuple[str, ...]] = {
-    "advisory-pipeline": ("ADV-PIPE-", "ADV-RETRY-"),
-    "advisory-stream": ("ADV-STRM-",),
-    "advisory-endpoint": ("ADV-DBEP-",),
+# Where each owned rule lands, keyed by the document it grades. Placement only
+# — membership is `owners`, decided in the record. An endpoint block claims both
+# endpoint scopes because the two documents share the `Column` model, so a rule
+# filed against one grades the other.
+#
+# The empty tuple is the remainder: whatever this plugin owns that no block
+# above claims renders once in the orchestrator skill rather than being copied
+# into each spec. That is what makes the map a partition instead of a filter —
+# a scope nobody claims cannot fall out of the prose unnoticed.
+_RULE_BLOCKS: dict[str, tuple[str, ...]] = {
+    "rules-pipeline": ("pipeline",),
+    "rules-stream": ("stream",),
+    "rules-endpoint": ("database-endpoint", "api-endpoint"),
+    "rules-connection": ("connection",),
+    "rules-type-map": ("type-map",),
+    "rules-shared": (),
 }
 
 
-def advisory_families_rendered() -> tuple[str, ...]:
-    """Every family the advisory renderers actually emit, derived not restated."""
-    return tuple(sorted({f for fams in _ADVISORY_BLOCK_FAMILIES.values() for f in fams}))
+def rendered_ids() -> set[str]:
+    """Every id this plugin's prose makes readable, as the generator knows it.
+
+    The generator is the authority on what it rendered. Asking it beats
+    searching its output for row-shaped text, which can only find the malformed
+    rows somebody already thought of.
+    """
+    return {r.id for b in _RULE_BLOCKS for r in _block_rules(b)}
 
 
-def render_advisory_pipeline() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-pipeline"])
+def _render_block(block_id: str) -> str:
+    return _rule_block(block_id)
 
 
-def render_advisory_stream() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-stream"])
+def render_rule_reference_pipeline() -> str:
+    return _render_block("rules-pipeline")
 
 
-def render_advisory_endpoint() -> str:
-    return _advisory_block(_ADVISORY_BLOCK_FAMILIES["advisory-endpoint"])
+def render_rule_reference_stream() -> str:
+    return _render_block("rules-stream")
+
+
+def render_rule_reference_endpoint() -> str:
+    return _render_block("rules-endpoint")
+
+
+def render_rule_reference_connection() -> str:
+    return _render_block("rules-connection")
+
+
+def render_rule_reference_type_map() -> str:
+    return _render_block("rules-type-map")
+
+
+def render_rule_reference_shared() -> str:
+    return _render_block("rules-shared")
 
 
 def render_validator_ids() -> str:
@@ -390,9 +451,27 @@ FIELD_TABLE_MODELS = {
     "fields-column": ("analitiq.contracts.endpoints", "Column"),
     "fields-stream-source": ("analitiq.contracts.stream", "StreamSource"),
     "fields-stream-execution": ("analitiq.contracts.stream", "Execution"),
+    # `Replication` and `DatabasePagination` are discriminated unions like
+    # `AssignmentValue` below, and take the same per-variant treatment: the
+    # requiredness that separates the variants (`cursor_field` on incremental,
+    # `order_by_field` on keyset) is exactly what an author needs, and a single
+    # merged table cannot state it.
+    "fields-stream-replication-full-refresh": (
+        "analitiq.contracts.stream", "FullRefreshReplication",
+    ),
+    "fields-stream-replication-incremental": (
+        "analitiq.contracts.stream", "IncrementalReplication",
+    ),
+    "fields-stream-pagination-offset": (
+        "analitiq.contracts.stream", "OffsetDatabasePagination",
+    ),
+    "fields-stream-pagination-keyset": (
+        "analitiq.contracts.stream", "KeysetDatabasePagination",
+    ),
     "fields-connector-endpoint-ref": ("analitiq.contracts.stream", "ConnectorEndpointRef"),
     "fields-connection-endpoint-ref": ("analitiq.contracts.stream", "ConnectionEndpointRef"),
     "fields-stream-mapping": ("analitiq.contracts.stream", "StreamMapping"),
+    "fields-assignment": ("analitiq.contracts.stream", "Assignment"),
     "fields-assignment-target": ("analitiq.contracts.stream", "AssignmentTarget"),
     # `AssignmentValue` is a `kind`-discriminated union, not a model class, so it
     # has no single field table. Each variant gets its own block: the reader sees
@@ -404,6 +483,11 @@ FIELD_TABLE_MODELS = {
     "fields-assignment-value-constant": (
         "analitiq.contracts.stream", "ConstantAssignmentValue",
     ),
+    # The payload each variant above admits: `ConstantValue` is what a
+    # `kind: "constant"` value carries, so the discriminator table names it and
+    # this one shows its shape.
+    "fields-constant-value": ("analitiq.contracts.stream", "ConstantValue"),
+    "fields-validation": ("analitiq.contracts.stream", "Validation"),
     "fields-validation-rule": ("analitiq.contracts.stream", "ValidationRule"),
 }
 
@@ -602,7 +686,7 @@ def _field_table(model) -> str:
         )
     if schema.get("allOf"):
         out += ["", f"Carries {len(schema['allOf'])} declarative cross-field "
-                    "`if`/`then` rule(s) — see the advisory rules for their prose."]
+                    "`if`/`then` rule(s) — see the registered rules for their prose."]
     return "\n".join(out) + "\n"
 
 
@@ -611,9 +695,18 @@ def _field_table(model) -> str:
 def published_vocabularies() -> dict[str, dict]:
     """Every closed vocabulary an author picks a value from, read off the package.
 
-    Single source for both the generated `enum-vocabulary` block and the prose
-    gate in tests/pipeline_builder/test_prose_vocabulary.py. Restating this list in either place
-    would recreate exactly the drift this module exists to prevent.
+    Editorial, and deliberately narrower than the contract: this is what the
+    `enum-vocabulary` block shows a reader, so it names the fields a pipeline
+    author actually chooses a value for. The members are read off the live
+    models, so the curation can go stale in coverage but never in content.
+
+    It is NOT what the prose gate polices. That question — which vocabularies
+    may never be hand-typed — has to cover everything the contract owns, and
+    answering it from this list made the gate's reach a by-product of an
+    editorial choice: a wrong copy of any unlisted vocabulary was invisible.
+    `tests/pipeline_builder/test_prose_vocabulary.py` derives its own set from
+    the models and folds this one in for the vocabularies a field walk cannot
+    see, namely those spread across a discriminated union's branches.
 
     Each value is {label, members, published_as}.
     """
@@ -791,9 +884,12 @@ RENDERERS = {
     "shared-vocabulary": render_shared_vocabulary,
     "secret-ref-grammar": render_secret_ref_grammar,
     "filter-operators": render_filter_operators,
-    "advisory-pipeline": render_advisory_pipeline,
-    "advisory-stream": render_advisory_stream,
-    "advisory-endpoint": render_advisory_endpoint,
+    "rules-pipeline": render_rule_reference_pipeline,
+    "rules-stream": render_rule_reference_stream,
+    "rules-endpoint": render_rule_reference_endpoint,
+    "rules-connection": render_rule_reference_connection,
+    "rules-type-map": render_rule_reference_type_map,
+    "rules-shared": render_rule_reference_shared,
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,

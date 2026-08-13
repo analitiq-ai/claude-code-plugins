@@ -1166,12 +1166,12 @@
             }
           ],
           "default": null,
-          "description": "Positive integer read page size; pipeline batch-size default applies when omitted.",
+          "description": "Positive integer read page size. Declaring one does not change how much a read fetches: the size is the pipeline runtime's batching value for every stream, and no engine release consumes this field.",
           "title": "Page Size"
         },
         "type": {
           "const": "keyset",
-          "description": "Database pagination strategy.",
+          "description": "Database pagination strategy. It selects which variant's shape the document must satisfy; it does not select a read path \u2014 every database source read is offset-paged, whichever variant is declared.",
           "title": "Type",
           "type": "string"
         }
@@ -1212,12 +1212,12 @@
             }
           ],
           "default": null,
-          "description": "Positive integer read page size; pipeline batch-size default applies when omitted.",
+          "description": "Positive integer read page size. Declaring one does not change how much a read fetches: the size is the pipeline runtime's batching value for every stream, and no engine release consumes this field.",
           "title": "Page Size"
         },
         "type": {
           "const": "offset",
-          "description": "Database pagination strategy.",
+          "description": "Database pagination strategy. It selects which variant's shape the document must satisfy; it does not select a read path \u2014 every database source read is offset-paged, whichever variant is declared.",
           "title": "Type",
           "type": "string"
         }
@@ -1744,5 +1744,5 @@
   ],
   "title": "Analitiq Stream",
   "type": "object",
-  "version": "18.0.1"
+  "version": "18.0.2"
 }

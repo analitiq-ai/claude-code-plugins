@@ -1,12 +1,20 @@
-# Rule: don't create drift surfaces
+---
+paths:
+  - "*.md"
+  - "plugins/**/*.md"
+  - "packages/**/*.py"
+  - "census/**/*.py"
+  - "scripts/**/*.py"
+  - "tests/**/*.py"
+  - "rules/records/*.yaml"
+  - ".github/workflows/*.yml"
+---
+
+# Don't create drift surfaces
 
 **Purpose:** avoid adding new places where a fact must be kept in sync by hand.
 Every hand-maintained copy of something a single source already owns is a *drift
 surface* — it silently rots when the source changes.
-
-This rule is the *how-to-behave* checklist. The *why* and the canonical policy
-live in `CLAUDE.md` → **"## Single source of truth (drift policy)"** — read it,
-don't restate it here.
 
 ## The rule
 
@@ -30,6 +38,13 @@ A "value some other source owns" includes at least:
    decision/mapping logic (e.g. `enum-mappers.md`), a test's assertion target,
    or a curated human-facing summary (e.g. the README support matrix). If it's
    none of those, you're making a drift surface — reference instead.
+
+   "Nothing enforces it, so I have to write it down" is **not** one of the
+   three. The rule registry carries unenforced rules too: a record with
+   no `validator`, whose `rationale` says what would
+   have to be read to catch a violation. Give the obligation an id in
+   `rules/records/` and cite it; keep in prose only the craft the record does not
+   carry.
 3. **If the copy is unavoidable, is it pinned?** An unavoidable restatement of a
    contract-owned value **must** be pinned by a drift test that reads the
    contract package — `tests/connector_builder/test_schema_drift.py` is the
@@ -47,5 +62,5 @@ A "value some other source owns" includes at least:
 > "If the owning source changes tomorrow, how many places must a human remember
 > to edit — and will anything fail loudly if they forget?"
 
-Answer should be **as few as possible**, and **each of them pinned by a test**.
+Answer should be **one**, and **each of them pinned by a test**.
 If editing here adds an unpinned place, reference the owner instead.

@@ -14,7 +14,10 @@ This module is the fix, in three parts:
    (`analitiq.validator.validate_document`, the same entry the plugins invoke),
    each asserting an outcome: rejected with a message, accepted clean, or
    accepted silent (zero findings). A probe is a *measurement*; if the contract
-   moves under it, `verify_probes()` fails and CI goes red.
+   moves under it, `verify_probes()` fails and CI goes red. A claim about what
+   a plugin's own adapter does — the pipeline plugin chooses `require_runnable`
+   from the pipeline's status — is measured through that adapter instead, which
+   is the entry its agent runs; the findings list is the same shape either way.
 2. **Claims** — the prose sentences themselves, authored ONCE here, each naming
    the probes that prove it. Marked regions in the plugin docs
    (`<!-- BEGIN GENERATED: <block-id> -->` … `END GENERATED`, the same marker
@@ -32,9 +35,9 @@ This module is the fix, in three parts:
 
    What is NOT here: a gate deciding whether a SENTENCE asserts validator
    behavior. That was a list of hand-curated English regexes, and the rule
-   against it is in `.claude/rules/validator-claims.md` — which also states the
-   authoring obligation the regexes were standing in for. Pinning a claim is
-   still required; noticing that a sentence makes one is a reader's job.
+   against it is in `.claude/rules/guards.md`, and the authoring obligation the
+   regexes were standing in for is in `.claude/rules/plugin-prose.md`. Pinning a
+   claim is still required; noticing that a sentence makes one is a reader's job.
 
 Stated limits (deliberate, in the repo tradition of measured gates):
 
@@ -42,7 +45,7 @@ Stated limits (deliberate, in the repo tradition of measured gates):
   and nothing checks that the sentence beside it describes what the probe
   measures. A probe can keep passing while the prose says something else. A
   generated block cannot drift that way, which is why it is the first rung of
-  the authoring ladder in `.claude/rules/validator-claims.md` — prefer one
+  the validator-claim ladder in `.claude/rules/plugin-prose.md` — prefer one
   whenever a whole section states validator behavior. Most sites are fenced
   rather than generated because generating readable English for one spot in one
   document is more work than pointing at a probe, not because fencing is
@@ -73,7 +76,7 @@ from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Same bootstrap as render_advisory.py: this repo is the contract's source, so
+# Same bootstrap as render_rule_reference.py: this repo is the contract's source, so
 # put the in-repo trees on the path rather than relying on an installed wheel.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
@@ -90,6 +93,16 @@ PIPELINE_EXAMPLE = (
 )
 STREAM_EXAMPLE = (
     PIPELINE_PLUGIN / "skills" / "stream-spec" / "examples" / "api-full-refresh-insert.example.json"
+)
+#: The two connection documents `STREAM_EXAMPLE` and `PIPELINE_EXAMPLE` already
+#: reference by `connection_id`, plus the endpoint document a database
+#: destination has to resolve to. Staged together they make an on-disk bundle
+#: out of documents `tests/pipeline_builder/test_examples.py` already validates.
+CONNECTION_EXAMPLES = PIPELINE_PLUGIN / "skills" / "connection-spec" / "examples"
+SOURCE_CONNECTION_EXAMPLE = CONNECTION_EXAMPLES / "none.example.json"
+DESTINATION_CONNECTION_EXAMPLE = CONNECTION_EXAMPLES / "db.example.json"
+ENDPOINT_EXAMPLE = (
+    PIPELINE_PLUGIN / "skills" / "endpoint-spec" / "examples" / "postgres-table.example.json"
 )
 
 
@@ -377,9 +390,39 @@ def _p_write_truncate_insert() -> list[dict]:
 
 # --- connector-document probes ---------------------------------------------
 
-def _p_connector_refs_unchecked() -> list[dict]:
+def _p_connector_default_header_scope_checked() -> list[dict]:
+    # `transport_defaults` rather than a transport entry: it is the merge layer
+    # that reaches every request, and it was the last of the resolved header
+    # maps to be covered — so this is the probe that fails first if the
+    # coverage claim in the blind-spot block stops being true.
     def mutate(doc: dict) -> dict:
-        _first_transport(doc).setdefault("headers", {})["X-Weird"] = {"ref": "garbage.nonsense"}
+        doc.setdefault("transport_defaults", {}).setdefault("headers", {})["X-Bad"] = {
+            "ref": "garbage_nonsense"
+        }
+        return doc
+    return _staged_connector(mutate, API_EXAMPLE)
+
+
+def _p_connector_literal_field_unchecked() -> list[dict]:
+    # The other half of the same sentence: a field no runtime resolves takes a
+    # `${...}` without complaint, because scoping it would not make it resolve.
+    def mutate(doc: dict) -> dict:
+        _first_transport(doc)["rate_limit"] = {
+            "max_requests": 10, "time_window_seconds": "${garbage_nonsense}",
+        }
+        return doc
+    return _staged_connector(mutate, API_EXAMPLE)
+
+
+def _p_connector_ref_tail_unchecked() -> list[dict]:
+    # The leading scope is contract-checked; what follows it is not. This is
+    # the connector-side twin of `scope-tail-unchecked`, and it is what keeps
+    # the phase-resolvability claim honest now that the scope itself is
+    # refused — the ref names a real scope and an output nothing produces.
+    def mutate(doc: dict) -> dict:
+        _first_transport(doc).setdefault("headers", {})["X-Weird"] = {
+            "ref": "connection.discovered.nothing_produces_this"
+        }
         return doc
     return _staged_connector(mutate, API_EXAMPLE)
 
@@ -583,11 +626,188 @@ def _p_pipeline_active_empty() -> list[dict]:
     return _validate(doc)
 
 
-def _p_pipeline_draft_runnability() -> list[dict]:
+def _p_pipeline_schema_pinned_url() -> list[dict]:
+    # The connection/stream/pipeline families declare `$schema` as a const, so
+    # the pinned spelling of the SAME family is refused exactly like a foreign
+    # host is on an endpoint (`endpoint-schema-host-locked`). `schema-hosts.md`
+    # tells authors there is no pinned form to reach for; this is why.
     doc = json.loads(PIPELINE_EXAMPLE.read_text())
-    doc["status"] = "draft"
-    doc["streams"] = []
+    doc["$schema"] = "https://schemas.analitiq.ai/pipeline/1.0.0.json"
     return _validate(doc)
+
+
+def _p_pipeline_cron_inner_spec() -> list[dict]:
+    # RULE-PIPE-009 carries no `validator`: the contract patterns the `cron(…)`
+    # wrapper and stops, so a schedule that can never fire validates clean and
+    # the pipeline looks merely idle at the scheduler.
+    doc = json.loads(PIPELINE_EXAMPLE.read_text())
+    doc["schedule"] = {
+        "type": "cron",
+        "cron_expression": "cron(not a spec any scheduler accepts)",
+        "timezone": doc["schedule"]["timezone"],
+    }
+    return _validate(doc)
+
+
+def _p_pipeline_copied_default() -> list[dict]:
+    # RULE-SHRD-004 carries no `validator` either, and cannot: a copied default
+    # is byte-identical to a value the user chose. Read off the model so the
+    # probe restates no default of its own.
+    from analitiq.contracts.pipelines.config import PipelineInput, Schedule
+
+    doc = json.loads(PIPELINE_EXAMPLE.read_text())
+    doc["status"] = PipelineInput.model_fields["status"].default
+    doc["schedule"] = {
+        **doc["schedule"],
+        "type": Schedule.model_fields["type"].default,
+        "timezone": Schedule.model_fields["timezone"].default,
+    }
+    return _validate(doc)
+
+
+def _staged_pipeline_bundle(
+    status: str,
+    mutate_stream: Callable[[dict], None] | None = None,
+    publish_connector_endpoints: bool = False,
+) -> list[dict]:
+    """The shipped examples laid out on disk as a bundle, graded at `status`.
+
+    Runnability is the one verdict the pipeline plugin asks for conditionally:
+    `scripts/validate.py` passes `require_runnable` off the pipeline's own
+    status, so measuring the claim means calling the adapter the agent runs,
+    not `validate_document`. Everything but the wiring comes from the bundled
+    examples — the pipeline's `streams` list and the destination ref are
+    repointed because no example pair ships pre-stitched.
+
+    `mutate_stream` runs after that repointing, so a probe can break exactly one
+    cross-document agreement in a bundle that is otherwise the shipped set.
+
+    `publish_connector_endpoints` writes the source connector's endpoint set
+    under `connectors/<slug>/definition/endpoints/`, which is the only thing
+    that makes the plugin's `connector-endpoint-ref` check verify rather than
+    skip: it omits a connector whose endpoints are absent, because an unknown
+    set must not read as "no endpoints". The id published is the one the stream
+    example's source already names, read back rather than typed, so a probe
+    that mutates the ref still has a real endpoint to be measured against.
+    """
+    pipeline = json.loads(PIPELINE_EXAMPLE.read_text())
+    stream = json.loads(STREAM_EXAMPLE.read_text())
+    endpoint = json.loads(ENDPOINT_EXAMPLE.read_text())
+    source = json.loads(SOURCE_CONNECTION_EXAMPLE.read_text())
+    destination = json.loads(DESTINATION_CONNECTION_EXAMPLE.read_text())
+
+    pipeline["status"] = status
+    pipeline["streams"] = [stream["stream_id"]]
+    destination_ref = stream["destinations"][0]["endpoint_ref"]
+    destination_ref["endpoint_id"] = endpoint["endpoint_id"]
+    destination_ref["database_object"] = endpoint["database_object"]
+    published = stream["source"]["endpoint_ref"]["endpoint_id"]
+    if mutate_stream is not None:
+        mutate_stream(stream)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "pipelines" / "p" / "streams").mkdir(parents=True)
+        document = root / "pipelines" / "p" / "pipeline.json"
+        document.write_text(json.dumps(pipeline))
+        (root / "pipelines" / "p" / "streams" / "s.json").write_text(json.dumps(stream))
+        for connection in (source, destination):
+            slug = connection["connector_id"]
+            (root / "connections" / slug).mkdir(parents=True)
+            (root / "connections" / slug / "connection.json").write_text(json.dumps(connection))
+            definition = root / "connectors" / slug / "definition"
+            definition.mkdir(parents=True)
+            (definition / "connector.json").write_text(json.dumps({"connector_id": slug}))
+        endpoints = (root / "connections" / destination["connector_id"]
+                     / "definition" / "endpoints")
+        endpoints.mkdir(parents=True)
+        (endpoints / f"{endpoint['endpoint_id']}.json").write_text(json.dumps(endpoint))
+        if publish_connector_endpoints:
+            published_dir = (root / "connectors" / source["connector_id"]
+                             / "definition" / "endpoints")
+            published_dir.mkdir(parents=True)
+            (published_dir / f"{published}.json").write_text(
+                json.dumps({"endpoint_id": published}))
+        return _pipeline_adapter().diagnostics_for(
+            "pipeline", document, bundle_root=root)["findings"]
+
+
+def _p_pipeline_draft_runnability() -> list[dict]:
+    return _staged_pipeline_bundle("draft")
+
+
+def _p_pipeline_active_runnability() -> list[dict]:
+    return _staged_pipeline_bundle("active")
+
+
+# --- stream mutations, each breaking one cross-document agreement -----------
+
+def _wrong_connection_role(stream: dict) -> None:
+    """Read from the connection the pipeline declares a destination.
+
+    Both connections are real and both are named by the pipeline; only the role
+    is swapped, which is the shape neither document can settle alone.
+    """
+    stream["source"]["endpoint_ref"]["connection_id"] = (
+        stream["destinations"][0]["endpoint_ref"]["connection_id"])
+
+
+def _unbacked_connection_endpoint(stream: dict) -> None:
+    """Point the destination at a database object no endpoint document declares."""
+    from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
+
+    ref = stream["destinations"][0]["endpoint_ref"]
+    obj = {**ref["database_object"], "name": "no_such_table_anywhere"}
+    ref["database_object"] = obj
+    # Derived, never typed: a handle inconsistent with its object is refused by
+    # the contract on the stream document alone, and the probe would then be
+    # measuring that rejection instead of the missing endpoint document.
+    ref["endpoint_id"] = derive_db_endpoint_id(
+        obj.get("catalog"), obj.get("schema"), obj["name"])
+
+
+def _near_miss_connector_endpoint(stream: dict) -> None:
+    """Misspell the connector endpoint the source names, by one character.
+
+    Derived from the id the connector publishes rather than written out, so the
+    probe states neither spelling and the closest-match suggestion has
+    something to find.
+    """
+    ref = stream["source"]["endpoint_ref"]
+    ref["endpoint_id"] = ref["endpoint_id"][:-1]
+
+
+def _p_stream_cross_document_unchecked_alone() -> list[dict]:
+    """One stream document carrying both defects, graded as a stream document.
+
+    The entity the agent passes for a stream never receives a bundle root, so
+    this is the whole of what a stream validation can see.
+    """
+    stream = json.loads(STREAM_EXAMPLE.read_text())
+    _wrong_connection_role(stream)
+    _unbacked_connection_endpoint(stream)
+    with tempfile.TemporaryDirectory() as tmp:
+        document = Path(tmp) / "stream.json"
+        document.write_text(json.dumps(stream))
+        return _pipeline_adapter().diagnostics_for("stream", document)["findings"]
+
+
+def _p_stream_connection_role_bundle() -> list[dict]:
+    return _staged_pipeline_bundle("draft", mutate_stream=_wrong_connection_role)
+
+
+def _p_stream_connection_endpoint_bundle() -> list[dict]:
+    return _staged_pipeline_bundle("draft", mutate_stream=_unbacked_connection_endpoint)
+
+
+def _p_connector_endpoint_ref_warned() -> list[dict]:
+    return _staged_pipeline_bundle(
+        "draft", mutate_stream=_near_miss_connector_endpoint,
+        publish_connector_endpoints=True)
+
+
+def _p_connector_endpoint_ref_skipped() -> list[dict]:
+    return _staged_pipeline_bundle("draft", mutate_stream=_near_miss_connector_endpoint)
 
 
 def _p_stream_filter_field_local() -> list[dict]:
@@ -647,7 +867,14 @@ PROBES: tuple[Probe, ...] = (
     # connector documents. The forbid_re on the "nothing checks X" probes is
     # what expect="clean" alone cannot give: a warning-tier check for X would
     # falsify the sentence while leaving the document error-free.
-    Probe("connector-refs-unchecked", "clean", _p_connector_refs_unchecked),
+    Probe("connector-default-header-scope-checked", "error",
+          _p_connector_default_header_scope_checked,
+          message_re=r"garbage_nonsense"),
+    Probe("connector-literal-field-unchecked", "clean",
+          _p_connector_literal_field_unchecked,
+          forbid_re=r"garbage_nonsense"),
+    Probe("connector-ref-tail-unchecked", "clean", _p_connector_ref_tail_unchecked,
+          forbid_re=r"(?i)nothing_produces_this|discovered"),
     # The closed-value-set error names the ALLOWED values, not the field, so the
     # pattern pins the vocabulary rather than the key — which is the half of the
     # sentence that matters ("closed value sets").
@@ -692,8 +919,48 @@ PROBES: tuple[Probe, ...] = (
           forbid_re=r"(?i)sidecar"),
     Probe("pipeline-active-empty-streams-rejected", "error", _p_pipeline_active_empty,
           message_re=r"at least one stream"),
+    Probe("pipeline-schema-pinned-url-rejected", "error", _p_pipeline_schema_pinned_url,
+          message_re=r"schemas\.analitiq\.ai/pipeline/latest\.json"),
+    # The pair: the SAME staged bundle, graded at each status. Without the
+    # active half, "runnability is enforced once the pipeline is active" would
+    # rest on nothing — a build that stopped asking for runnability entirely
+    # keeps the draft probe green.
     Probe("pipeline-draft-runnability-unchecked", "clean", _p_pipeline_draft_runnability,
           forbid_re=r"(?i)runnab"),
+    Probe("pipeline-active-runnability-enforced", "error", _p_pipeline_active_runnability,
+          message_re=r"at least one runnable stream"),
+    # Two rules the registry carries with no `validator`, so the prose warning
+    # that a clean run proves nothing about them has something behind it.
+    Probe("pipeline-cron-inner-spec-unchecked", "clean", _p_pipeline_cron_inner_spec,
+          forbid_re=r"(?i)cron"),
+    Probe("pipeline-copied-default-unchecked", "clean", _p_pipeline_copied_default,
+          forbid_re=r"(?i)default"),
+    # The cross-document trio: one stream document breaking both agreements is
+    # graded alone and found clean, then each agreement is graded again inside
+    # the assembled bundle. Without the first, "only with --bundle-root" rests
+    # on nothing; without the other two, so does "checked" — and because all
+    # three drive the same mutations, a mutation that stopped biting fails the
+    # bundle halves rather than leaving the clean half passing over an
+    # untouched document.
+    Probe("stream-cross-document-unchecked-alone", "clean",
+          _p_stream_cross_document_unchecked_alone,
+          forbid_re=r"connections\.source|bundled endpoint document"),
+    Probe("stream-connection-role-bundle-rejected", "error",
+          _p_stream_connection_role_bundle,
+          message_re=r"must match the pipeline's connections\.source"),
+    Probe("stream-connection-endpoint-bundle-rejected", "error",
+          _p_stream_connection_endpoint_bundle,
+          message_re=r"no matching bundled endpoint document"),
+    # The pair behind the endpoint-alignment warning: the same misspelled ref,
+    # with and without the connector's endpoints on disk. expect="clean" is
+    # what makes it a warning rather than a rejection, and require_re holds the
+    # suggestion in existence — an alignment the orchestrator offers a user is
+    # only offerable while the finding carries it.
+    Probe("connector-endpoint-ref-warned", "clean", _p_connector_endpoint_ref_warned,
+          require_re=r"Did you mean"),
+    Probe("connector-endpoint-ref-skipped-undownloaded", "clean",
+          _p_connector_endpoint_ref_skipped,
+          forbid_re=r"(?i)did you mean|published endpoints"),
     Probe("stream-filter-field-unresolved-locally", "clean", _p_stream_filter_field_local,
           forbid_re=r"(?i)filter"),
     Probe("stream-selected-columns-unresolved-locally", "clean", _p_stream_selected_columns,
@@ -779,10 +1046,11 @@ CLAIMS: tuple[Claim, ...] = (
         "> **This is entirely author-side.** No validator checks phase\n"
         "> resolvability: a transport referencing `connection.discovered.api_domain`\n"
         "> with no post-auth output producing it validates clean and fails at\n"
-        "> connect. On a connector document refs are not checked *at all* — even a\n"
-        "> nonsense scope passes — so there is no backstop here whatsoever. Walk\n"
+        "> connect. What a ref must name is the scope it starts from; whether\n"
+        "> anything ever puts a value at the rest of the path is not knowable\n"
+        "> from the document, on either the connector or the endpoint side. Walk\n"
         "> the phases by hand.",
-        ("connector-refs-unchecked", "scope-tail-unchecked"),
+        ("connector-ref-tail-unchecked", "scope-tail-unchecked"),
     ),
     Claim(
         "tls-coherence-unchecked",
@@ -819,7 +1087,7 @@ assert len(CLAIMS_BY_ID) == len(CLAIMS), "duplicate claim id"
 #: cell kind -> (expectation class every backing probe must land in, cell text).
 #: The class is binary: "error", or "clean" (a `silent` probe counts as clean).
 _CELL_KINDS: dict[str, tuple[str, str]] = {
-    "path-resolved": ("error", "resolved against `response.schema`, must declare a type (ADV-ENDP-023)"),
+    "path-resolved": ("error", "resolved against `response.schema`, must declare a type (RULE-ENDP-023)"),
     "declared-key": ("error", "must name a declared key"),
     "spelling-only": ("clean", "spelling only"),
     "not-resolved": ("clean", "**not resolved** — see below"),
@@ -905,7 +1173,7 @@ def render_scope_guarantees() -> str:
         "record counts are runtime values this document declares nothing about, and the",
         "`response.records` **scope** is not the `response.records` **field**. (That",
         "field — the `{ref: response.body.<path>}` selecting the record collection — IS",
-        "resolved, and must land on an array node, ADV-ENDP-012. Referencing",
+        "resolved, and must land on an array node, RULE-ENDP-012. Referencing",
         "`response.records.<something>` from a pagination or metadata expression is a",
         "different thing and is unchecked.)",
         "",
@@ -931,7 +1199,7 @@ def render_scope_guarantees() -> str:
 _SCOPE_GUARANTEES_EXTRA_PROBES: tuple[str, ...] = (
     "read-subscope-typo", "write-subscope-typo", "read-leading-scope-typo",
     "scope-tail-unchecked", "request-slot-response-ref",
-    "write-request-slot-response-ref", "connector-refs-unchecked",
+    "write-request-slot-response-ref", "connector-ref-tail-unchecked",
 )
 
 
@@ -951,9 +1219,14 @@ def render_validator_blind_spots() -> str:
         "  only, and a WRITE mode has no `response.schema`, so no write-side",
         "  `response.body` path is resolved — a `success_when` typo validates clean and",
         "  the predicate then holds unconditionally. Every remaining scope is checked",
-        "  on its leading token only, and a connector document is not ref-checked at",
-        "  all — so a `connection.discovered.*` ref with no post-auth output that",
-        "  produces it validates clean, on either document.",
+        "  on its leading token only — so a `connection.discovered.*` ref with no",
+        "  post-auth output that produces it validates clean, on either document.",
+        "- **A connector field nothing resolves is not scope-checked either.** The",
+        "  leading-token check covers the fields a runtime actually resolves — the",
+        "  transports, the default header map, the auth exchange, the post-auth",
+        "  request, the DSN bindings. A `${...}` in a field consumed literally, such",
+        "  as a rate-limit window or a SQLAlchemy `options` entry, is refused by",
+        "  nobody and substituted by nobody: it reaches the driver as written.",
         "- **TLS `ssl_mode` ↔ `ssl_ca_certificate` consistency is not checked.**",
     ]) + "\n"
 
@@ -963,8 +1236,42 @@ _BLIND_SPOT_PROBES: tuple[str, ...] = (
     "read-body-path-typo", "read-metadata-undeclared-key",
     "write-metadata-undeclared-key", "read-records-tail-unchecked",
     "read-headers-tail-unchecked", "write-body-path-typo-unresolved",
-    "scope-tail-unchecked", "connector-refs-unchecked", "tls-coherence-unchecked",
+    "scope-tail-unchecked", "connector-ref-tail-unchecked", "tls-coherence-unchecked",
+    "connector-default-header-scope-checked", "connector-literal-field-unchecked",
 )
+
+
+# Natives chosen to exhibit each thing the normalization does — surrounding
+# whitespace, an internal run, and casing — so an author reading the rendered
+# pairs can predict how their own native will be spelled at match time. The
+# right column is never typed: it is what the contract's own function returns.
+_NORMALIZATION_SAMPLES: tuple[str, ...] = (
+    " varchar ",
+    "CHARACTER  VARYING",
+    "numeric(10, 2)",
+)
+
+
+def render_native_normalization() -> str:
+    """The read-side normalization, shown as worked pairs off the live function.
+
+    The steps themselves are `analitiq.contracts.type_map.normalize_native_type`
+    and describing them in prose is a copy that goes stale silently — an author
+    who spells a `regex` literal against the wrong casing writes a rule that can
+    never match, and nothing rejects it. Rendering what the function actually
+    returns keeps the guidance and drops the copy.
+    """
+    from analitiq.contracts.type_map import normalize_native_type
+
+    rows = [
+        f"| `{sample}` | `{normalize_native_type(sample)}` |"
+        for sample in _NORMALIZATION_SAMPLES
+    ]
+    return "\n".join([
+        "| Authored or probed native | Spelled this way at match time |",
+        "|---|---|",
+        *rows,
+    ]) + "\n"
 
 
 def _render_claim(claim_id: str) -> str:
@@ -996,6 +1303,7 @@ def _release_table():
 _DEDICATED_RENDERERS: dict[str, Callable[[], str]] = {
     "scope-guarantees": render_scope_guarantees,
     "validator-blind-spots": render_validator_blind_spots,
+    "native-normalization": render_native_normalization,
 }
 _CLAIM_RENDERERS: dict[str, Callable[[], str]] = {
     f"claim:{c.id}": (lambda cid=c.id: _render_claim(cid)) for c in CLAIMS
@@ -1014,6 +1322,10 @@ def block_probe_ids(block_id: str) -> set[str]:
     """The probe ids one block stands on."""
     if block_id in _release_table().RENDERERS:
         return set()  # data-backed, not probe-backed — see `_release_table`
+    if block_id == "native-normalization":
+        # Contract-backed: the rows are what `normalize_native_type` returns,
+        # so the function is the pin. No validator behavior is asserted.
+        return set()
     if block_id == "scope-guarantees":
         return scope_table_probe_ids() | set(_SCOPE_GUARANTEES_EXTRA_PROBES)
     if block_id == "validator-blind-spots":
@@ -1062,6 +1374,32 @@ def _pipeline_gen():
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     sys.path.insert(0, scripts_dir)  # gen_contract_docs imports _bootstrap
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(scripts_dir)
+    return module
+
+
+@functools.lru_cache(maxsize=None)
+def _pipeline_adapter():
+    """The pipeline plugin's validator adapter, imported by path (cached).
+
+    One claim in that plugin's prose is about the adapter rather than about the
+    published validator: `require_runnable` is chosen from the pipeline's own
+    status in `scripts/validate.py`, so a probe that called
+    `validate_pipeline_bundle` directly would measure the wrong side of the
+    sentence. Import is side-effect-free — `_bootstrap`'s venv build and
+    re-exec only fire from the adapter's `main()`.
+    """
+    import importlib.util
+
+    scripts_dir = str(PIPELINE_PLUGIN / "scripts")
+    spec = importlib.util.spec_from_file_location(
+        "_pipeline_validate_adapter", PIPELINE_PLUGIN / "scripts" / "validate.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    sys.path.insert(0, scripts_dir)  # validate.py imports _bootstrap
     try:
         spec.loader.exec_module(module)
     finally:
@@ -1160,7 +1498,7 @@ def _fence_docs() -> list[Path]:
     """Every markdown document a probe fence could appear in.
 
     No exemptions. The old prose scan had two — a plugin's release-please
-    `CHANGELOG.md`, and `advisory-rules.md` while its first line still declared
+    `CHANGELOG.md`, and `rules.md` while its first line still declared
     itself generated — because both are prose nobody hand-writes claims into.
     Fence bookkeeping asks a different question, and for it those exemptions
     are not a narrowing but a blind spot: a fence naming a deleted probe goes
@@ -1175,7 +1513,7 @@ def dangling_fence_ids() -> list[str]:
     All that survives of the old prose scan, and the only part of it a
     mechanism could ever decide: a fence either names a registered probe or it
     does not. Whether a SENTENCE asserts validator behaviour is a judgment, and
-    judgments live in `.claude/rules/validator-claims.md`.
+    judgments live in `.claude/rules/guards.md`.
     """
     return [
         f"{path.relative_to(REPO_ROOT).as_posix()}: fence names unknown probe "

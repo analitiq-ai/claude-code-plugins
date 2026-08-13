@@ -1,0 +1,20 @@
+id: RULE-CTOR-035
+statement: >
+  A DSN binding's `value` MUST take one of the forms the value-expression
+  grammar defines, since the runtime resolves it at connection time.
+tier: structural
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [DsnBinding]
+rationale: >
+  The binding is the only path by which connection state reaches the DSN, so
+  a shape outside the grammar does not degrade into a literal — it resolves
+  to nothing and the DSN renders with a hole where the host or the credential
+  belonged. `DsnBinding.value` is typed `Any`, and the only thing the models
+  read inside it is the leading scope of each ref and placeholder
+  (RULE-CTOR-057), so an object outside the grammar carries no token to check
+  and passes — the failure surfaces when the engine builds the DSN.
+status: active
+superseded_by: null

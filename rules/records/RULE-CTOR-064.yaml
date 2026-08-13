@@ -1,0 +1,22 @@
+id: RULE-CTOR-064
+statement: >
+  An authored connector document MUST NOT declare `created_at` or
+  `updated_at`, which the registry stamps on insert and on update; the
+  connector model rejects any key it does not name.
+tier: structural
+severity: error
+scope: connector
+validator: "analitiq.contracts.connector::ConnectorBase"
+owners: [connector-plugin, engine]
+targets: [ConnectorBase]
+mechanism: closed_object
+rationale: >
+  The two names read as ordinary metadata an author is expected to fill, and a
+  provider response legitimately carrying a field of either name makes the
+  mistake feel confirmed — but the stamps belong to the registry row, not to
+  the document, and one authored by hand is either overwritten or contradicts
+  the row it describes. Reserving the names at the document's own top level
+  reserves nothing inside a provider-owned namespace: `response.schema`
+  describes the provider's data, so a `created_at` field there is fine.
+status: active
+superseded_by: null

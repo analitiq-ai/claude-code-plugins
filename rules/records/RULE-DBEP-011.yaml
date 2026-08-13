@@ -1,0 +1,19 @@
+id: RULE-DBEP-011
+statement: >
+  A database endpoint's `endpoint_id` MUST equal the handle the contract's
+  derivation produces from its verbatim `database_object`.
+tier: referential
+severity: error
+scope: database-endpoint
+validator: "analitiq.validator.connectors::_database_endpoint_locator_findings"
+owners: [connector-plugin, pipeline-plugin, engine]
+rationale: >
+  Discovery mints these ids through that derivation, so an id that does not
+  reproduce it names an endpoint discovery will never produce again: the next
+  run over the same table computes the real handle, and every stream pinned to
+  the authored one resolves to nothing. The derivation reads the identifiers
+  verbatim, which is why tidying a schema or table name into a nicer id breaks
+  the pin — the id looks better and points nowhere. `RULE-STRM-003` holds the
+  stream side of the same handle; this is the endpoint side.
+status: active
+superseded_by: null

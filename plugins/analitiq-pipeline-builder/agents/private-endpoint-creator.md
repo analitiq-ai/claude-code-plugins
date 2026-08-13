@@ -20,7 +20,7 @@ connection, return a structured refusal.
 
 ## Sub-modes (set by the orchestrator)
 
-The agent has four modes; one invocation runs exactly one mode.
+One invocation runs exactly one mode.
 
 ### Mode 1: `discover-schemas`
 
@@ -28,10 +28,15 @@ The agent has four modes; one invocation runs exactly one mode.
    `connections/<connection-slug>/connection.json`. Non-secret connection
    settings (host, port, database, username, ssl_mode, …) live in the
    `parameters` map.
-2. Resolve each secret the driver needs from `secret_refs`. A pointer is
-   `"env:<NAME>"` — read `<NAME>` from the environment; if unset, fall back to
-   `.secrets/credentials.json` keyed by `<NAME>` (the user fills this in). If a
-   required secret resolves nowhere, halt and tell the user to provision it.
+2. Resolve each secret the driver needs from `secret_refs`. Every value carries
+   an explicit scheme (the accepted set is the `secret-ref-grammar` block in
+   `skills/connection-spec/spec-envelope.md`). Resolve only `env:<NAME>`, the
+   plugin's default: read `<NAME>` from the environment, and if it is unset read
+   `<NAME>` from the connection's `.secrets/credentials.json`, which is keyed by
+   the same env-var name and which the user fills in. How any other scheme
+   resolves is engine-owned — never infer it from the prefix; halt and ask the
+   user to export the value into the environment instead. If a required secret
+   resolves nowhere, halt and tell the user to provision it.
 3. Connect to the database. Use the appropriate driver / CLI tool
    (`psql`, `mysql`, `mongosh`, `bq`, `sqlcmd`, etc.).
 4. Query the user-visible schemas / namespaces. Exclude system schemas
@@ -67,17 +72,12 @@ The agent has four modes; one invocation runs exactly one mode.
 1. Receive the orchestrator's user-picked table list, plus — on a re-invocation
    after a type-map ambiguity interview — `write_render_choices`
    (`{canonical: native}`, see step 7).
-2. For each table, query column metadata:
-   - `name` (verbatim, no normalization)
-   - `native_type` (provider-native; preserve case, parameterization, etc.)
-   - `nullable`
-   - `default` (if the engine exposes it)
-   - `comment` (if any)
-   - `ordinal_position` (the engine's reported order)
+2. For each table, query the per-column facts `skills/endpoint-spec/spec-columns.md`
+   documents, taking every identifier and provider type label verbatim
+   (`RULE-DBEP-009`) and omitting what the dialect does not expose.
 3. Query the primary-key columns (if any).
-4. **Derive the endpoint identity.** `endpoint_id` is not hand-authored — it is a
-   deterministic handle the validator's endpoint-id gate enforces. Compute it
-   (and the matching `database_object`) by reusing the published helper, passing
+4. **Derive the endpoint identity** (`RULE-DBEP-011`). Compute `endpoint_id`
+   and the matching `database_object` by reusing the published helper, passing
    the identifiers **verbatim** from introspection:
 
    ```bash
@@ -105,26 +105,17 @@ The agent has four modes; one invocation runs exactly one mode.
    the distinct native types through the type maps with
    `scripts/type_map_gaps.py --direction read` (maps in precedence order: the
    connection's own `definition/type-map-read.json` if present, then the
-   connector's) and freeze the rendered canonical for every covered native — the
-   maps are what the engine resolves with, so the frozen value must be theirs,
-   not a re-derivation. Only for natives in `gaps` derive the canonical
-   yourself, using `skills/endpoint-spec/spec-columns.md` as the mapping
-   reference. `arrow_type` is **required**, and parameterized types must carry
-   their parameters — `Timestamp(MICROSECOND, UTC)`, `Decimal128(p, s)`,
-   `Time64(MICROSECOND)`, etc.; bare `Timestamp` / `Decimal128` /
-   `Time64` are rejected. Carry precision/scale from `native_type` into
-   `Decimal128(p, s)` (use `Decimal256` when `p > 38`, and keep scale <=
-   precision — the validator enforces it). For structured/container natives
-   (arrays, STRUCTs, JSON), declare the authored shape — `Object` + sibling
-   `properties` or `List` + sibling `items` when introspected, `Json` when
-   opaque (MongoDB `BSON.Document`, uninspected `jsonb`); never a scalar like
-   `Utf8`, and never an angle-bracket form (`Struct<…>`, `List<…>` — outside
-   the canonical vocabulary, so the contract rejects them). Add a `notes[]`
-   entry when you fall back to `Json`.
+   connector's) and freeze the rendered canonical for every covered native
+   (`RULE-DBEP-004`). Only for natives in `gaps` derive the canonical yourself:
+   the vocabulary, the parameterized forms and the per-native mapping guidance
+   are `skills/endpoint-spec/spec-columns.md` §`arrow_type` — carry precision
+   and scale across from `native_type`, and derive nothing that file does not
+   show. For a structured or container native (arrays, STRUCTs, JSON) declare
+   the authored shape per that file's §"Nested data is authored-shape only"
+   (`RULE-ENDP-021`), and add a `notes[]` entry when you fall back to `Json`.
 7. **Author connection-scoped type-map gap rules** per
    `skills/endpoint-spec/spec-type-map-gaps.md`:
-   - For every read gap from step 6, a read rule whose rendered canonical
-     equals the `arrow_type` frozen into the endpoint documents.
+   - For every read gap from step 6, a read rule (`RULE-TMAP-021`).
    - Probe the distinct frozen `arrow_type` strings with `--direction write`
      against the write maps (connection first if present, then connector); for
      every write gap, a write rule rendering the discovered native that
@@ -134,7 +125,8 @@ The agent has four modes; one invocation runs exactly one mode.
      in `write_render_choices` (a `{canonical: native}` map from the user
      interview; honor it verbatim).
    - No gaps in a direction → that key is `null`. When the connection already
-     ships a map, return the existing rules with the new ones appended after.
+     ships a map, return its rules with the new ones appended after
+     (`RULE-TMAP-012`).
 8. Return a `CreatorOutput[]` (one per table) plus the type-map result:
 
    <!-- illustrative -->
@@ -185,7 +177,8 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
    `type_map_gaps.py --direction write` (connection map first if present,
    then the connector's): a rendered native becomes the column's
    `native_type`; an uncovered canonical follows `spec-new-table.md` —
-   dialect override → `"unknown"` plus a `type_maps.notes` entry; otherwise
+   dialect override → the fallback label the `native_type` field declares
+   (`RULE-DBEP-012`) plus a `type_maps.notes` entry; otherwise
    a `write_gaps` entry, or the `write_render_choices` value plus its
    connection-scoped write rule.
 4. Derive `endpoint_id` / `database_object` with `endpoint_id.py` exactly as
@@ -220,28 +213,24 @@ Load on demand:
 ## Hard rules
 
 - Identifier strings (`schema`, `name`, `catalog`, column `name`, `native_type`)
-  are preserved **verbatim** from introspection — in `author-new-table`, the
-  target identifiers from the orchestrator's user-supplied spelling and column
-  names from the source document — no case-folding, quoting, or
-  normalization. Pass them verbatim to `endpoint_id.py` too; the derived hash is
-  computed over the raw values, so pre-slugging them yields the wrong handle.
-- `endpoint_id` is the **derived** handle from `endpoint_id.py` — never a
-  hand-built `<schema>_<name>` slug. Any other value fails the validator's
-  `endpoint-id-locator` gate.
+  are preserved **verbatim** (`RULE-DBEP-009`) — in `author-new-table`, the target
+  identifiers come from the orchestrator's user-supplied spelling and column
+  names from the source document. Pass them verbatim to `endpoint_id.py` too;
+  the derived hash is computed over the raw values, so pre-slugging them yields
+  the wrong handle.
+- `endpoint_id` is the **derived** handle from `endpoint_id.py`, never a
+  hand-built `<schema>_<name>` slug (`RULE-DBEP-011`).
 - Never run DDL. Discovery is read-only. No `CREATE`, `ALTER`, `DROP`.
   `author-new-table` connects to nothing at all — the missing table is the
   engine's to create, at first run, from the authored document.
-- Never embed credentials. Resolve secrets via the connection's `secret_refs`
-  pointers (env var, or `.secrets/credentials.json`), never inline.
-- Skip system schemas in `discover-schemas`. Hard-coded exclusion list per dialect.
+- Never embed a credential (`RULE-SHRD-001`). Resolve what the driver needs
+  through the connection's `secret_refs` pointers, never inline.
 - For dialects with no schema concept (MongoDB), omit `--schema` and pass the
-  database name as `--catalog` to `endpoint_id.py`.
+  database name as `--catalog` to `endpoint_id.py` (`RULE-DBEP-005`).
 - If the connection cannot be reached (network error, bad credentials), surface
   the underlying error verbatim and stop. Do not retry.
-- Connection type-map rules are **gap-only**: never author a rule for a native
-  or canonical the connector's maps already resolve (a connection rule
-  overrides the connector for every stream on this connection), never return
-  an empty rule array, and never remove, reorder, or edit rules an existing
-  connection map already carries — only append.
-- Do **not** author `version`, `connection_id`, `connector_id`,
-  `connector_version`, or `schema_hash` — those are server-managed.
+- Connection type-map rules are **gap-only** (`RULE-TMAP-018`) and append-only
+  (`RULE-TMAP-012`).
+- Author only the fields the endpoint model declares — the model is closed, and
+  the server-managed fields are rejected, not ignored
+  (`skills/endpoint-spec/SKILL.md` §"Top-level shape").

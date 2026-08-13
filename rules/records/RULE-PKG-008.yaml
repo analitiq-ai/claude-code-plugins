@@ -1,0 +1,22 @@
+id: RULE-PKG-008
+statement: >
+  A database connector MUST register its connector class under
+  `connector_id` in the `analitiq.source_connectors` entry-point group and
+  in the `analitiq.destination_connectors` group, so it lands read and
+  write as one working unit.
+tier: structural
+severity: error
+scope: connector-package
+validator: null
+owners: [connector-plugin, engine]
+rationale: >
+  The engine discovers each direction by looking the connector up in that
+  direction's group, so registering one leaves the connector simply absent
+  when a pipeline points the other way — an omission no error names. This
+  is where the both-directions principle becomes concrete for a database
+  connector, and it is easy to lose when the driving request was
+  one-directional. Registry CI inspects the built wheel's entry points,
+  which is after the plugin has authored and returned a half connector;
+  nothing in this repo sees `pyproject.toml`.
+status: active
+superseded_by: null

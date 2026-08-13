@@ -93,21 +93,50 @@ jobs:
       - name: Build sdist + wheel
         run: python -m build --outdir "${{ runner.temp }}/cm-dist" "${{ runner.temp }}/cm-src"
 
-      - name: Smoke-test the built wheel (install + import)
-        # The package loads its vendored engine-grammar JSON at import time, so
-        # a wheel missing the package-data file cannot import AT ALL. build.py's
-        # import_guard exercises the staged source tree (copytree ships every
-        # file regardless of package-data), so only an install of the actual
-        # wheel proves the [tool.setuptools.package-data] declaration — and a
-        # broken rc published to PyPI is an immutable, burned version.
+      - name: Smoke-test the built wheel (install + read every shipped data file)
+        # build.py's import_guard exercises the staged source tree, which
+        # carries every file regardless of package-data, so only an install of
+        # the actual wheel shows what the declaration kept — and a broken rc
+        # published to PyPI is an immutable, burned version.
+        #
+        # The data-file check is DERIVED from the staged tree rather than
+        # listing filenames, so a file committed later is covered without
+        # anyone remembering this step. It has to be a comparison against the
+        # installed tree because the two files here are reached differently:
+        # the vendored grammar loads at import, so a wheel without it cannot
+        # import at all, while the rule registry loads on first use and only
+        # through `violation()` — a wheel without THAT imports, and validates a
+        # VALID document, exactly like a correct one. It raises FileNotFoundError
+        # in place of the finding, for the first document that breaks an
+        # in-process rule. The explicit loads below then prove the two files are
+        # readable, not merely present.
         run: |
           python -m venv "${{ runner.temp }}/cm-smoke"
           "${{ runner.temp }}/cm-smoke/bin/pip" install --quiet "${{ runner.temp }}"/cm-dist/*.whl
-          "${{ runner.temp }}/cm-smoke/bin/python" -c "
+          STAGED="${{ runner.temp }}/cm-src" "${{ runner.temp }}/cm-smoke/bin/python" -c "
+          import os, pathlib
+          import analitiq.contracts as c
           import analitiq.contracts.endpoints as ep
           import analitiq.contracts.arrow_grammar as ag
+          from analitiq.contracts.shared.rules import all_rules
+
+          staged = pathlib.Path(os.environ['STAGED']) / 'analitiq'
+          installed = pathlib.Path(c.__file__).parent.parent
+          expected = sorted(
+              p.relative_to(staged)
+              for p in staged.rglob('*')
+              if p.is_file() and p.suffix not in ('.py', '.pyc')
+              and '__pycache__' not in p.parts
+          )
+          assert expected, 'staged tree carries no data files — the walk broke'
+          missing = [str(r) for r in expected if not (installed / r).is_file()]
+          assert not missing, f'wheel dropped staged data files: {missing}'
+          print('data files shipped:', len(expected), '->', [str(r) for r in expected])
+
           assert ag.FAMILY_NAMES and ep.ARROW_TYPE_RE.fullmatch('Utf8')
+          assert all_rules(), 'rules.json shipped empty'
           print('wheel imports; grammar loaded:', len(ag.FAMILY_NAMES), 'families')
+          print('rule registry loaded:', len(all_rules()), 'rules')
           "
 
       - name: Publish to PyPI (Trusted Publishing, OIDC)

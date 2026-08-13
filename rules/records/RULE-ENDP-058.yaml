@@ -1,0 +1,26 @@
+id: RULE-ENDP-058
+statement: >
+  An offset strategy's per-page step MUST advance by the same quantity the
+  provider's offset counts — the records a page returned when the offset counts
+  records, and the page size the request actually asked for when it counts the
+  requested window.
+tier: judgment
+severity: error
+scope: api-endpoint
+validator: null
+owners: [connector-plugin]
+targets: [OffsetCursor]
+rationale: >
+  Neither offset family is distinguishable from the other in a document — both
+  name a param and a step — so the step is the only place the document says
+  which one the provider implements, and every spelling of it is a legal value
+  expression. A step larger than the window skips rows and a smaller one
+  re-reads them; neither raises, and the run reports success over a partial or
+  duplicated pull, so the only symptom is a row count nobody compares. Where a
+  cap clamps the window the effective size is the clamped one, not the batch
+  size the run was configured with, which is the case authors get wrong most
+  often. Nothing here can catch it: the offset semantics live in the provider's
+  documentation, so seeing the mistake means reading that beside the step
+  expression.
+status: active
+superseded_by: null

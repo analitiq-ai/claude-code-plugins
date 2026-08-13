@@ -6,7 +6,7 @@ Two layers, tested separately because they fail differently:
   algorithm that answers "does this dotted path address something the document
   actually declared?". Every `response.body[.<path>]` consumer calls it, so its
   behaviour is pinned here directly rather than only through a document.
-* ADV-ENDP-023 — the cross-block constraint that runs that algorithm over the
+* RULE-ENDP-023 — the cross-block constraint that runs that algorithm over the
   WHOLE `pagination` block and every `response.metadata` value. The bug it
   exists to catch is a one-character typo in a ref: before it, such a document
   validated and paging silently stopped after one page. Those typo cases are
@@ -492,7 +492,7 @@ class TestResolveLocalPointer:
 
 
 # ---------------------------------------------------------------------------
-# ADV-ENDP-023 end-to-end: pagination / metadata refs must resolve
+# RULE-ENDP-023 end-to-end: pagination / metadata refs must resolve
 # ---------------------------------------------------------------------------
 
 # One response body shape every strategy pages over. Each strategy's ref site
@@ -606,7 +606,7 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
 
 
 class TestPaginationRefsResolve:
-    """The bug ADV-ENDP-023 exists to catch: a one-character typo in a
+    """The bug RULE-ENDP-023 exists to catch: a one-character typo in a
     pagination ref used to validate, then paged exactly once at run time and
     silently returned a truncated dataset. It must now be rejected — for every
     strategy."""
@@ -893,7 +893,7 @@ class TestSchemaShapesTheRuleAccepts:
         assert "oneOf" in message
 
     def test_records_anchor_failure_is_reported_before_the_pagination_one(self):
-        """ADV-ENDP-023 runs LAST: a broken `response.records` is the more
+        """RULE-ENDP-023 runs LAST: a broken `response.records` is the more
         fundamental failure and must be what the author sees first."""
         payload = _read_payload(
             "cursor", ref="response.body.next_cursr", records="response.body.dta"
@@ -1060,7 +1060,7 @@ class TestKeysetOrderByFieldResolves:
 class TestCompositionIsLinearNotExponential:
     """A shared `$defs` reached through several `allOf` branches is a DAG, not a
     tree. Expanding each route separately was exponential in depth, and that
-    shape is what following ADV-ENDP-026's own advice produces at scale. The
+    shape is what following RULE-ENDP-026's own advice produces at scale. The
     existing recursion tests only cover CYCLES, which terminate by construction;
     sharing does not."""
 

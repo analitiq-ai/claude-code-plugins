@@ -1,0 +1,22 @@
+id: RULE-CTOR-052
+statement: >
+  Every connector-internal ref — to a secret, a connection parameter or a
+  discovered value — MUST name something the connection contract declares as
+  an input or as a post-auth output.
+tier: advisory
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [ConnectorBase]
+rationale: >
+  A ref is the connector's entire coupling to the values a user supplies, so
+  a name that drifts from the input declaring it — a rename on one side, a
+  typo, or a value the author assumed the platform provides for free —
+  resolves to nothing and ships a request missing that field rather than an
+  error naming the ref. Known enforcement gap: the registered internal-ref
+  rules resolve only the connection contract's own back-references
+  (RULE-CTOR-006 through RULE-CTOR-009); refs authored in transports, auth
+  templates and discovery requests are resolved nowhere.
+status: active
+superseded_by: null

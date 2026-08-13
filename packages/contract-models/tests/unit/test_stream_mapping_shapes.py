@@ -283,10 +283,10 @@ class TestAssignmentValueKind:
 
     @pytest.mark.parametrize("kind", ["expression", "constant"])
     def test_variant_payload_is_required(self, kind):
-        # The AT-LEAST-ONE half of retired ADV-STRM-008. "Exactly one of
+        # The AT-LEAST-ONE half of retired RULE-STRM-008. "Exactly one of
         # expression or constant" was two claims: at most one, which the union
         # now makes unrepresentable, and at least one, which is carried by the
-        # `...` on each variant's payload field. Retiring an advisory rule
+        # `...` on each variant's payload field. Retiring a registry rule
         # means pinning both halves of whatever replaces it.
         with pytest.raises(ValidationError):
             _ASSIGNMENT_VALUE.validate_python({"kind": kind})

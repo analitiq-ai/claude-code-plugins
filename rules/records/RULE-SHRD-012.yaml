@@ -1,0 +1,21 @@
+id: RULE-SHRD-012
+statement: >
+  A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or
+  trailing whitespace.
+tier: structural
+severity: error
+scope: any
+validator: "analitiq.contracts.connector::ConnectorBase._validate_tags_field"
+owners: [connector-plugin, pipeline-plugin]
+targets: [ConnectorBase, ConnectionAuthored, StreamAuthored, PipelineAuthored, _EndpointBase]
+rationale: >
+  Tags exist to be grouped and searched on, which makes them compared rather
+  than read. A padded tag is a different string from the one an author meant
+  to reuse, so it lands in a group of its own that looks identical to the real
+  one in every listing — the failure is silent and it is the search that
+  breaks, not the document. A repeat is the same defect arriving from the
+  other side: it changes no meaning and inflates every count taken over the
+  list, so the contract refuses it where a reader would have to notice it by
+  eye.
+status: active
+superseded_by: null

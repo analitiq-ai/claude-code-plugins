@@ -1,34 +1,25 @@
 # The connection envelope
 
-A connection document has **four author-time maps**, each keyed by a
-connection-contract input or post-auth-output name. There is no single `values`
-object — the plugin routes each key into the right map itself, driven entirely by
-the connector's contract:
-
-| Map | Holds | Sourced from a contract entry whose… |
-|---|---|---|
-| `parameters` | non-secret submitted values | input `storage: "connection.parameters"` |
-| `secret_refs` | pointers to secret values (never the value) | input/output `storage: "secrets"` |
-| `selections` | durable post-auth user choices | output `storage: "connection.selections"` |
-| `discovered` | provider-returned non-secret values | output `storage: "connection.discovered"` — **server-managed, never authored** |
-
-Omit any map that would be empty — the required set is the field table in
-`SKILL.md`.
+A connection document carries its values in the maps the field table in
+`SKILL.md` declares, each keyed by a connection-contract input or
+post-auth-output name. There is no single `values` object — the plugin routes
+each key into the right map itself, driven entirely by the connector's contract.
+Omit any map that would be empty (`RULE-SHRD-004`).
 
 ## Routing rule (the whole thing)
 
-Read the downloaded connector's `connection_contract`. For each
-`inputs.<key>` and `post_auth_outputs.<key>`, route by the **last segment of its
-`storage`** literal — this single rule covers every connector and auth type, so
-nothing here changes when a new connector ships:
+Read the downloaded connector's `connection_contract` and route each
+`inputs.<key>` and `post_auth_outputs.<key>` by its `storage` (`RULE-CONN-006`).
+One rule covers every connector and auth type — there are no auth-type branches,
+and nothing here changes when a new connector ships:
 
 - `connection.parameters` → `parameters.<key>` = the user's value.
 - `secrets` → `secret_refs.<key>` = a secret **pointer** (see below); the value
   goes in `.secrets/`, never the document.
 - `connection.selections` → `selections.<key>` **only if** the user supplies it
   up front; usually omit (a post-auth selection isn't known at authoring time).
-- `connection.discovered` → **never author.** The auto-discovery pipeline writes
-  this bucket; the connections API rejects a client-supplied value.
+- `connection.discovered` → **never author** (`RULE-CONN-005`); the connections
+  API rejects a client-supplied value.
 
 ### `selections` vs. `discovered`
 
@@ -43,53 +34,36 @@ not a selection.
 
 ## Type fidelity
 
-Each contract input declares a JSON `type`. The authored value must use that type
-verbatim — `port: 5432` (integer), not `"5432"`. The plugin does not coerce;
-read the type from the connector or ask the user. Inputs with `enum: [...]`
-accept only a listed value (e.g. `ssl_mode`). Optional inputs (`required: false`)
-may be omitted; do not copy a connector's `default` into the document unless the
-user is overriding it.
+Each contract input declares a JSON `type` (`RULE-CONN-007`) — `port: 5432`
+(integer), not `"5432"`. The plugin does not coerce; read the type from the
+connector or ask the user. Optional inputs (`required: false`) may be omitted
+(`RULE-SHRD-004`).
 
-## TLS verification needs its CA material
+## TLS verification needs its CA material (`RULE-CONN-008`)
 
-A database connection authored with any certificate-verification mode — a mode
-from the connector's declared `ssl_mode` enum that verifies the server
-certificate against a CA, whatever the connector's vocabulary names it
-(`verify-ca`/`verify-full` are the libpq-shaped example) — **must** also supply
-the contract's CA-material input (`ssl_ca_certificate` in the connectors that
-declare one), even where the driver would silently fall back to the host's trust
-store. The mode vocabulary is connector-defined: judge each enum value by what
-it does, not by these example spellings, and when a mode's meaning is not
-evident from the connector's contract, ask the user rather than guessing
-whether it verifies. Verifying against whatever CAs
-happen to be installed is not the mode the user asked for, and the fallback
-makes a misconfigured connection look healthy. If the user selects a verifying
-mode without supplying the certificate, ask for it rather than authoring the
-mode alone. The CA input routes like any other input — by its declared
-`storage`, which is normally `secrets`, so it becomes a pointer in
-`secret_refs`.
+A certificate-verification mode is one from the connector's declared `ssl_mode`
+enum that verifies the server certificate against a CA, whatever the connector's
+vocabulary names it (`verify-ca`/`verify-full` are the libpq-shaped example);
+the CA material is the contract's own input for it (`ssl_ca_certificate` in the
+connectors that declare one). The mode vocabulary is connector-defined: judge
+each enum value by what it does, not by these example spellings, and when a
+mode's meaning is not evident from the connector's contract, ask the user rather
+than guessing whether it verifies. A driver may silently fall back to the host's
+trust store, and verifying against whatever CAs happen to be installed is not
+the mode the user asked for — that fallback makes a misconfigured connection
+look healthy. If the user selects a verifying mode without supplying the
+certificate, ask for it rather than authoring the mode alone. The CA input
+routes like any other input — by its declared `storage`, which is normally
+`secrets`, so it becomes a pointer in `secret_refs`.
 
-## Secrets — reference, never embed
+## Secrets — reference, never embed (`RULE-CONN-009`)
 
-For every input/output the contract marks `storage: "secrets"`, write a
-**pointer** into `secret_refs.<key>`, and record the real value in a gitignored
-`.secrets/credentials.json` the user provisions. The plugin never holds, logs, or
-writes a secret value into the document.
+The real value goes in a gitignored `.secrets/credentials.json` the user
+provisions; the plugin never holds or logs one.
 
 Author an **`env:` pointer** by default — portable and resolved from the runtime
-environment:
-
-<!-- validate: connection -->
-```jsonc
-{
-  "connector_id": "postgresql",
-  "parameters": { "host": "db.example.com", "port": 5432, "database": "analytics", "ssl_mode": "verify-full" },
-  "secret_refs": {
-    "password": "env:ANALITIQ_POSTGRESQL_PASSWORD",
-    "ssl_ca_certificate": "env:ANALITIQ_POSTGRESQL_SSL_CA_CERTIFICATE"
-  }
-}
-```
+environment. `examples/db.example.json` is the worked document: one pointer per
+secret input, beside the `parameters` the same contract routes.
 
 Env-var name: `ANALITIQ_<connection-slug>_<key>`, upper-cased, every
 non-alphanumeric replaced with `_`. That composition is a **plugin convention**,
@@ -107,40 +81,41 @@ the user names their own variable. Emit the sibling template the user fills in:
 ```
 
 The user (or CI) exports these into the environment where the pipeline runs (or
-loads them into their secret store) before submission; the plugin never reads
-`.secrets/`.
+loads them into their secret store) before submission; nothing on the
+connection-authoring path reads `.secrets/` — only `private-endpoint-creator`
+does, as the fallback when an `env:` variable is unset.
 
 The file's shape is the published credentials-sidecar contract
-(`analitiq.contracts.credentials_file.CredentialsFile`): a **flat** top-level
-JSON object — no nesting into sections, no envelope. Keys are unconstrained and
-values may be any JSON type, but the engine string-coerces on read, so write
-strings, and JSON-encode a structured credential into a string rather than
-authoring a nested object.
+(`https://schemas.analitiq.ai/credentials/latest.json`): a flat map that
+constrains no key, which is why the env-var-keyed template above conforms to it.
+Write string values: the engine string-coerces on read, so JSON-encode a
+structured credential into a string rather than authoring a nested object.
 
 ### `.secrets/credentials.json` is not a `sidecar:` file
 
 The two look alike and resolve completely differently. Do not conflate them:
 
 - The plugin's template is keyed by **env-var name** and paired with `env:`
-  pointers. The user resolves it by exporting those variables; nothing reads the
-  file itself. This pairing is a plugin convention.
+  pointers. The user resolves it by exporting those variables; no `secret_refs`
+  scheme resolves against this file, and the plugin never writes over one the
+  user has already filled in. This pairing is a plugin convention.
 - <!-- PROBE: connection-sidecar-name-unconstrained -->
   The `sidecar:<name>` scheme names an entry in a credentials file the engine
   reads directly, keyed by the **connection-contract input name** — the same
-  `<name>` that keys `secret_refs`, not an env-var name. Alone among the
-  schemes it constrains nothing after its prefix, so a wrong name validates
-  cleanly and fails only at resolution time.
+  `<name>` that keys `secret_refs`, not an env-var name. The `<name>` part
+  constrains nothing after the prefix, so a wrong name validates cleanly and
+  fails only at resolution time.
 
-So never emit a `sidecar:` pointer against the env-keyed template: the pointer
-would look up `password` in a file whose only key is `ANALITIQ_…_PASSWORD`.
-Emit `sidecar:` pointers only when the user asks for that store, and then key
-the file by the contract input names.
+So a `sidecar:` pointer against the env-keyed template is never right
+(`RULE-CONN-010`): it would look up `password` in a file whose only key is
+`ANALITIQ_…_PASSWORD`. Emit `sidecar:` pointers only when the user asks for that
+store, and then key the file by the contract input names.
 
-Use `env:` unless the user asks for a specific store; substitute their pointer
-verbatim if so. Which resolver runs for a given scheme is **engine-owned** — the
-contract declares the scheme and nothing more. Author the pointer; never author,
-infer, or promise resolution behavior (lookup order, caching, rotation, failure
-mode) on the strength of the scheme name.
+Substitute the user's pointer verbatim if they ask for a specific store. Which
+resolver runs for a given scheme is **engine-owned** — the contract declares the
+scheme and nothing more. Author the pointer; never author, infer, or promise
+resolution behavior (lookup order, caching, rotation, failure mode) on the
+strength of the scheme name.
 
 <!-- BEGIN GENERATED: secret-ref-grammar -->
 Every `secret_refs` value must carry an explicit scheme — a bare token (a pasted raw secret) is rejected by the contract.

@@ -1,0 +1,22 @@
+id: RULE-ENDP-054
+statement: >
+  A parameter handed to a runtime mechanism MUST name that mechanism from the
+  vocabulary `Param` declares.
+tier: structural
+severity: error
+scope: api-endpoint
+validator: "analitiq.contracts.endpoints::Param.controlled_by"
+owners: [connector-plugin, engine]
+targets: [Param]
+fields: [controlled_by]
+mechanism: literal_enum
+rationale: >
+  The member says which machinery sets the value on every request, and each one
+  is a different piece of the engine reading a different part of the endpoint —
+  the paging state, or the incremental cursor. A value outside the set claims
+  an owner that never writes the param, so it is sent as whatever the author
+  defaulted it to and the run reports success over a page or a window nobody
+  advanced. The declaration is also what `RULE-ENDP-002` reads to refuse a
+  param that is both machine-owned and offered to stream filters.
+status: active
+superseded_by: null

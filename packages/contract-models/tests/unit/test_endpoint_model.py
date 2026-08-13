@@ -387,7 +387,7 @@ class TestPaginationExpressions:
                     "records": {"ref": "response.body.data"},
                     # `next` and `next_cursor` are declared because the pagination
                     # block reads them: every `response.body.*` path pagination
-                    # references must resolve here (ADV-ENDP-023).
+                    # references must resolve here (RULE-ENDP-023).
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
                         "next": {"type": "string"},
@@ -445,7 +445,7 @@ class TestPredicate:
                 "response": {
                     "records": {"ref": "response.body.data"},
                     # `has_more` / `next` are the fields this class's stop_when
-                    # predicates read; ADV-ENDP-023 requires them declared.
+                    # predicates read; RULE-ENDP-023 requires them declared.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
                         "has_more": {"type": "boolean"},
@@ -1208,7 +1208,7 @@ class TestRequestPathPlaceholders:
 
 class TestDatabaseCrossField:
     def test_duplicate_column_names_rejected(self):
-        with pytest.raises(ValidationError, match=r"ADV-DBEP-001|name must be unique"):
+        with pytest.raises(ValidationError, match=r"RULE-DBEP-001|name must be unique"):
             parse_endpoint(_minimal_database_payload(
                 columns=[
                     {"name": "id", "native_type": "uuid", "arrow_type": "Utf8"},
@@ -1226,7 +1226,7 @@ class TestDatabaseCrossField:
             ))
 
     def test_primary_keys_unknown_column_rejected(self):
-        with pytest.raises(ValidationError, match=r"ADV-DBEP-003|primary_keys must reference"):
+        with pytest.raises(ValidationError, match=r"RULE-DBEP-003|primary_keys must reference"):
             parse_endpoint(_minimal_database_payload(primary_keys=["missing"]))
 
     def test_invalid_arrow_type_case_rejected(self):
@@ -1737,17 +1737,25 @@ class TestExtensionOnNestedDictsClosed:
 
 
 class TestPredicateConstruction:
-    def test_construct_via_python_attribute(self):
-        # populate_by_name=True permits Python attr names.
-        p = PredicateAnd(and_=[PredicateEq(eq=[1, 2]), PredicateMissing(missing={"ref": "response.body.next"})])
-        assert len(p.and_) == 2
+    def test_python_attribute_is_not_a_field_name(self):
+        """`and_` is the attribute; `and` is the field. Only one is authorable.
+
+        The predicate operators are the clearest case of the wire-name policy
+        (`test_wire_name_policy.py`): every one of them is a Python keyword, so
+        every one carries an alias, and accepting the trailing-underscore
+        spelling would admit a document the published schema rejects.
+        """
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            PredicateAnd(and_=[PredicateEq(eq=[1, 2])])
 
     def test_construct_via_alias(self):
         p = PredicateAnd(**{"and": [PredicateEq(eq=[1, 2]), PredicateEq(eq=[3, 4])]})
         assert len(p.and_) == 2
 
     def test_predicate_round_trip_by_default_dump(self):
-        p = PredicateNot(not_=PredicateMissing(missing={"ref": "response.body.next"}))
+        # Constructed under the wire name, which is the only one accepted; the
+        # assertion is about serialization, which is a separate config.
+        p = PredicateNot(**{"not": PredicateMissing(missing={"ref": "response.body.next"})})
         # serialize_by_alias=True default → dump uses wire-format `not`/`missing`.
         assert "not" in p.model_dump()
         assert "not_" not in p.model_dump()
@@ -1916,7 +1924,7 @@ class TestPaginationStrategies:
                 "response": {
                     "records": {"ref": "response.body.data"},
                     # `links.next` is the path this pagination reads, so
-                    # ADV-ENDP-023 requires it declared here — nested objects
+                    # RULE-ENDP-023 requires it declared here — nested objects
                     # resolve segment by segment through `properties`.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
@@ -2324,7 +2332,7 @@ class TestLinkPaginationNoParams:
                 },
                 "response": {
                     "records": {"ref": "response.body.data"},
-                    # ADV-ENDP-023: `links.next` is read by both `link.next_url`
+                    # RULE-ENDP-023: `links.next` is read by both `link.next_url`
                     # and `stop_when`, so it must be declared.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},
@@ -2359,7 +2367,7 @@ class TestLinkPaginationLimit:
                 "pagination": pagination,
                 "response": {
                     "records": {"ref": "response.body.data"},
-                    # ADV-ENDP-023: every payload this helper builds paginates on
+                    # RULE-ENDP-023: every payload this helper builds paginates on
                     # `response.body.links.next`, so the path is declared here.
                     "schema": {"type": "object", "properties": {
                         "data": {"type": "array", "items": {"type": "object"}},

@@ -437,7 +437,7 @@
       "type": "string"
     },
     "streams": {
-      "description": "Ordered list of stream references. Typically versioned stream IDs (e.g. 'uuid_v1'); the schema accepts any non-empty string.",
+      "description": "The stream references this pipeline runs, as an unordered set \u2014 position encodes no dependency and no execution order. Typically versioned stream IDs (e.g. 'uuid_v1'); the schema accepts any non-empty string.",
       "items": {
         "minLength": 1,
         "pattern": "\\S",
@@ -474,5 +474,5 @@
   ],
   "title": "Analitiq Pipeline",
   "type": "object",
-  "version": "10.0.0"
+  "version": "10.0.1"
 }

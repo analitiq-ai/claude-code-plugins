@@ -1,0 +1,21 @@
+id: RULE-CTOR-039
+statement: >
+  A connector's declared SQLAlchemy `driver` MUST name a dialect-and-driver
+  registration that actually exists for the driver package the connector's
+  `requirements.txt` ships.
+tier: referential
+severity: error
+scope: connector
+validator: null
+owners: [connector-plugin, engine]
+targets: [SqlAlchemyTransport]
+rationale: >
+  A driver package does not always register under the dialect its system is
+  wire-compatible with — Redshift's driver registers under its own dialect,
+  not Postgres's — so a pair assembled from the family name rather than from
+  the driver's own registration reads as correct and cannot be built. Only
+  the `dialect+driver` form is structural here; whether the pair resolves is
+  decided when the engine builds the transport, against the packages that
+  connector installed.
+status: active
+superseded_by: null
