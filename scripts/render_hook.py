@@ -53,7 +53,7 @@ def main() -> int:
         return 0
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts" / "render_all.py"), "write"],
-        cwd=REPO_ROOT, capture_output=True, text=True,
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
         sys.stderr.write(result.stdout + result.stderr)

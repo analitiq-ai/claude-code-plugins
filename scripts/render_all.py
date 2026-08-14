@@ -66,11 +66,11 @@ PIPELINE = [
 def _run(script: str, argv: list[str]) -> int:
     cmd = [sys.executable, str(SCRIPTS / script), *argv]
     print(f"$ {script} {' '.join(argv)}".rstrip(), flush=True)
-    return subprocess.run(cmd, cwd=REPO_ROOT).returncode
+    return subprocess.run(cmd, cwd=REPO_ROOT, check=False).returncode
 
 
 def main(argv: list[str]) -> int:
-    if argv != ["write"] and argv != ["check"]:
+    if argv not in (["write"], ["check"]):
         print(__doc__.split("\n\n")[1], file=sys.stderr)
         return 2
     mode = argv[0]

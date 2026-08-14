@@ -24,7 +24,6 @@ from __future__ import annotations
 import typing
 from dataclasses import dataclass
 
-import pytest
 
 from _pins import require_contract_models
 

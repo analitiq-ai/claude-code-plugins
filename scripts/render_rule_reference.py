@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Render the rules the connector plugin authors against, tier by tier.
+"""Render each plugin's rule reference set, one file per artifact kind.
 
-The rules are `rules/records/*.yaml`, compiled into the pinned contract package and
-read here through `all_rules()`. That registry is the source of truth; this
-script only *renders* it, so agents have an offline-readable file to cite
-instead of hand-restating rules in prose.
+The rules are `rules/records/*.yaml`, compiled by `render_rules.py` and read
+here through `all_rules()`. That registry is the source of truth; this script
+only *renders* it — into `OUTPUT_DIRS`, split by the artifact a rule's
+`scopes` bind — so agents have offline-readable files to cite instead of
+hand-restating rules in prose.
 
 Tiers render as separate sections because a tier says what kind of obligation a
 rule is, which is what tells an agent how to go about satisfying it. What
@@ -17,13 +18,14 @@ The structural table's member lists are read off the **live models** rather
 than typed here: the point of that tier is to end the copy, so the renderer
 must not become one.
 
-The generated file is a **pinned copy**, not a second source: `tests/connector_builder`
-regenerates it and fails when it is stale, so a contract change surfaces as a red
-build rather than silent prose drift.
+The generated files are **pinned copies**, not second sources:
+`tests/registry/test_rule_reference_sync.py` regenerates every set and fails
+when a checked-in file is stale, missing, or orphaned, so a contract change
+surfaces as a red build rather than silent prose drift.
 
 Usage:
-    render_rule_reference.py write    # regenerate the markdown file in place
-    render_rule_reference.py check    # exit 1 if the file is stale (CI)
+    render_rule_reference.py write [--plugin <owner>]   # regenerate in place
+    render_rule_reference.py check [--plugin <owner>]   # exit 1 if stale (CI)
 """
 
 from __future__ import annotations
@@ -365,7 +367,7 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
     return [f"\n## {tier.capitalize()}\n{TIER_INTRO[tier]}\n", *_table(header, rows)]
 
 
-def render(owner: str, bucket: str, rules: list, models: dict | None = None) -> str:
+def render(bucket: str, rules: list, models: dict | None = None) -> str:
     from analitiq.contracts.shared.rule_record import TIERS
 
     import render_reference_toc
@@ -416,7 +418,7 @@ def render_all(owner: str) -> dict[Path, str]:
     sets = buckets(owner)
     root = OUTPUT_DIRS[owner]
     rendered = {
-        root / f"{bucket}.md": render(owner, bucket, rules, models)
+        root / f"{bucket}.md": render(bucket, rules, models)
         for bucket, rules in sets.items()
     }
 

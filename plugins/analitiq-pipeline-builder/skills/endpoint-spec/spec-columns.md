@@ -170,7 +170,7 @@ other's (`RULE-DBEP-002`). Omit for schemaless engines (MongoDB).
 
 ## Registered endpoint rules
 
-Every rule this plugin owns over a database endpoint document — the only
-endpoint kind this skill authors — is in
-`../pipeline-builder/references/rules/database-endpoint.md`. **Read it before
-authoring** and satisfy every row.
+This skill authors database endpoints. Every rule this plugin owns over a
+database endpoint document is in
+`../pipeline-builder/references/rules/database-endpoint.md` — **read it
+before authoring** and satisfy every row.
