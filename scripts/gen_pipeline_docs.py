@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Render contract-owned facts from the published package into the prose docs.
+"""Render contract-owned facts from the in-repo contract into the prose docs.
 
-The agent-facing prose under this plugin is normative (as is the sibling
-connector plugin's) —
-the schema contract itself is defined by the published ``analitiq-validator`` +
-``analitiq-contract-models`` packages. Anything an agent needs that those
-packages already state (enum members, regexes, required-field lists, bounds,
-defaults, cross-field rule text) is therefore **generated** into the prose from
-the installed package rather than retyped by hand, so a doc cannot drift from
-the contract it documents.
+The agent-facing prose under the pipeline plugin is normative (as is the
+sibling connector plugin's) — the schema contract itself is defined by the
+``analitiq-validator`` + ``analitiq-contract-models`` source trees under
+``packages/``. Anything an agent needs that those packages already state (enum
+members, regexes, required-field lists, bounds, defaults, cross-field rule
+text) is therefore **generated** into the prose from that source rather than
+retyped by hand, so a doc cannot drift from the contract it documents.
 
 Each generated region is delimited in the markdown by a marker pair::
 
@@ -24,17 +23,16 @@ Usage::
     python3 scripts/gen_pipeline_docs.py            # rewrite blocks in place
     python3 scripts/gen_pipeline_docs.py --check    # exit 1 if any block is stale
 
-``--check`` is what CI runs: it regenerates into memory and diffs, so a pin bump
-that changes the contract fails the build until the docs are regenerated.
+``--check`` is what CI runs: it regenerates into memory and diffs, so a model
+change fails the build until the docs are regenerated.
 """
 from __future__ import annotations
 
 import argparse
 import difflib
-import re
 import os
+import re
 import sys
-import pathlib
 from pathlib import Path
 
 
@@ -43,9 +41,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # Same bootstrap as render_rule_reference.py and render_validator_claims.py:
 # this repo is the contract's source, so put the in-repo trees on the path
 # rather than reaching for an installed wheel. This generator used to live
-# inside the plugin and bootstrap the published pin, which left the pipeline
-# plugin reading its rules from one contract and its enums from another
-# whenever the pin lagged the repo.
+# inside the plugin and bootstrap the published pin, while the rule renderer
+# read the in-repo source — so whenever the pin lagged the repo, this
+# plugin's rendered rules and its rendered enums came from two different
+# contract versions.
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
 sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -88,7 +87,8 @@ def _md_escape(text: str) -> str:
     reproduce faithfully.
 
     The plain-cell callers (rule statements, type summaries) are therefore only as
-    safe as the pinned contract's own text. That holds for every rule rc10 ships;
+    safe as the contract's own text. That holds for every rule the registry
+    carries today;
     if a future rule's prose contains markdown metacharacters, escape at that
     call site rather than here.
     """
@@ -104,12 +104,12 @@ def _unwrap_alternation(pattern: str) -> str:
 
     `removeprefix`/`removesuffix` silently no-op on a miss, which would leak the
     anchors into the docs as though they were part of the first alternative. The
-    wrapper shape is an assumption about the pinned contract, so assert it.
+    wrapper shape is an assumption about the contract source, so assert it.
     """
     if not (pattern.startswith("^(?:") and pattern.endswith(")$")):
         raise RuntimeError(
             f"expected an anchored '^(?:…)$' alternation, got {pattern[:40]!r}…; "
-            "the pinned contract changed shape and this renderer needs updating")
+            "the contract changed shape and this renderer needs updating")
     return pattern[len("^(?:"):-len(")$")]
 
 
@@ -286,9 +286,9 @@ def render_validator_ids() -> str:
     from analitiq.validator import VALIDATOR_IDS
 
     if not VALIDATOR_IDS:
-        raise RuntimeError("the published package exposed no validator ids")
+        raise RuntimeError("the validator exposed no finding ids")
     out = [
-        "Validator ids the published package can emit:",
+        "Finding ids the validator can emit:",
         "",
         ", ".join(f"`{v}`" for v in sorted(VALIDATOR_IDS)),
     ]
@@ -859,12 +859,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"regenerated {rel}")
 
     if args.check and stale:
-        print(f"\n{len(stale)} document(s) out of sync with the published contract: "
+        print(f"\n{len(stale)} document(s) out of sync with the contract source: "
               f"{', '.join(stale)}\nRun: python3 scripts/gen_pipeline_docs.py",
               file=sys.stderr)
         return 1
     if args.check:
-        print(f"{len(docs)} document(s) in sync with the published contract")
+        print(f"{len(docs)} document(s) in sync with the contract source")
     return 0
 
 

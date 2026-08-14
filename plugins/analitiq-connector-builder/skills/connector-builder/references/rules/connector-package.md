@@ -3,8 +3,8 @@
 
 # Rules binding a `connector-package` document
 
-Rendered from the rule registry (`rules/records/*.yaml`) as the pinned
-`analitiq-contract-models` package ships it. Prose cites a rule by id
+Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
+contract source compiles it. Prose cites a rule by id
 (`RULE-HTTP-001`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 

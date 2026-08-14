@@ -17,9 +17,12 @@ the Contents sections `render_reference_toc.py` derives come from documents
 the other renderers write into. `check` runs every generator regardless and
 reports all failures at once, since each check only compares committed state.
 
-`render_prose_census.py write` restamps hashes but never invents dispositions,
-and exits non-zero while manual work remains — so a run of this script cannot
-silently affirm a census judgment; it stops and says what is left.
+Two generators are only ever CHECKED here, never written, because their write
+modes press a judgment a pipeline must not press: `render_schemas.py write`
+cuts a new immutable schema version, and `render_prose_census.py write`
+restamps a changed prose site's hash — the re-affirmation the census exists
+to demand from a person. When either check fails, this script fails, and the
+author runs that generator's write deliberately and reads what it says.
 """
 from __future__ import annotations
 
@@ -50,9 +53,10 @@ PIPELINE = [
     # Probes the validator and renders the generated blocks behind every
     # prose claim about what it does or does not check.
     ("render_validator_claims.py", [["write"]], ["check"]),
-    # Restamps census hashes for changed contract prose; prints skeletons for
-    # uncatalogued sites and fails while a disposition is still a human's call.
-    ("render_prose_census.py", [["write"]], ["check"]),
+    # Checked in BOTH modes, never written here: `write` restamps a changed
+    # prose site's hash, which IS the re-affirmation the census exists to
+    # demand from a person — an automated restamp would press it silently.
+    ("render_prose_census.py", [["check"]], ["check"]),
     # Last: Contents sections derive from the documents' final headings, which
     # the renderers above may have just rewritten.
     ("render_reference_toc.py", [["write"]], ["check"]),
@@ -75,14 +79,17 @@ def main(argv: list[str]) -> int:
         for args in write_argvs if mode == "write" else [check_argv]:
             if _run(script, args) != 0:
                 if mode == "write":
-                    print(f"{script}: failed — stopping, later generators "
-                          "consume its output", file=sys.stderr)
+                    print(f"{script}: failed — stopping; nothing after it "
+                          "ran. Fix the failure it printed above.",
+                          file=sys.stderr)
                     return 1
                 failed.append(script)
                 break
     if failed:
-        print(f"stale or failing: {', '.join(failed)} — run "
-              "`python3 scripts/render_all.py write`", file=sys.stderr)
+        print(f"failing: {', '.join(failed)}. Stale output is fixed by "
+              "`python3 scripts/render_all.py write`; a crash or a "
+              "schemas/census failure needs what its own message says.",
+              file=sys.stderr)
         return 1
     return 0
 

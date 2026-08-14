@@ -3,20 +3,20 @@
 
 # Rules binding a `database-endpoint` document
 
-Rendered from the rule registry (`rules/records/*.yaml`) as the pinned
-`analitiq-contract-models` package ships it. Prose cites a rule by id
+Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
+contract source compiles it. Prose cites a rule by id
 (`RULE-DBEP-001`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
 Scope: every rule this plugin owns that binds a **`database-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 19 of the 28 below have no validator, so nothing rejects
+all hold: 20 of the 32 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **8** structural · **4** advisory · **6** referential · **7** procedural · **3** judgment.
+In this file: **9** structural · **6** advisory · **7** referential · **7** procedural · **3** judgment.
 
 ## Contents
 
@@ -38,6 +38,7 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
+| RULE-ENDP-031 | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. | `database-endpoint` `stream` | error | validator | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
@@ -59,6 +60,8 @@ single field looks wrong.
 | RULE-DBEP-001 | Every column a database endpoint declares MUST carry a name no other column in that document repeats. | `database-endpoint` | error | validator |
 | RULE-DBEP-002 | Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's. | `database-endpoint` | error | validator |
 | RULE-DBEP-003 | Every name in a database endpoint's `primary_keys` MUST name a column the same document declares. | `database-endpoint` | error | validator |
+| RULE-ENDP-020 | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `database-endpoint` | error | validator |
+| RULE-ENDP-021 | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `database-endpoint` | error | validator |
 | RULE-RETRY-001 | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. | `any` | error | validator |
 
 ## Referential
@@ -74,6 +77,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-DBEP-009 | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation. | `database-endpoint` | error | — |
 | RULE-DBEP-010 | A database endpoint for a table that does not exist yet MUST target a namespace discovery returned. | `database-endpoint` | error | — |
 | RULE-DBEP-011 | A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`. | `database-endpoint` | error | validator |
+| RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` `database-endpoint` | error | — |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

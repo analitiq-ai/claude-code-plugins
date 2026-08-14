@@ -1,4 +1,4 @@
-"""Every rule file is reachable from a SKILL.md, and no SKILL.md outgrew its budget.
+"""Every rule file is named by a SKILL.md or agent definition, and no SKILL.md outgrew its budget.
 
 The rule reference is a set of per-scope files now. That buys progressive
 disclosure — a file costs nothing until it is read — at the price of a new way
@@ -12,12 +12,13 @@ Both checks are authoring-standard properties rather than contract facts:
 * **One level deep.** A reference linked from a file that is itself linked from
   SKILL.md may be read partially — an agent previews a nested file with
   `head -100` rather than reading it whole, so a rule below the fold is a rule
-  it never sees. Every rule file must therefore be named by a SKILL.md, not by
-  a document a SKILL.md points at.
-* **Under 500 lines.** The published skill-authoring guidance puts SKILL.md's
-  budget there, and `pipeline-builder/SKILL.md` sat at 497 while its rule
-  tables were inline. Moving them out is what bought the headroom; this is what
-  keeps it.
+  it never sees. Every rule file must therefore be named by a SKILL.md or an
+  agent definition — a file an agent starts from — never only by a document
+  one of those points at.
+* **Under 500 lines.** Claude Code's skill-authoring guidance
+  (<https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices>)
+  puts SKILL.md's budget there; keeping rule tables out of SKILL.md is what
+  keeps every SKILL.md under it.
 
 Skips cleanly when the contract packages are absent, like the other guards.
 """
@@ -91,6 +92,37 @@ def test_every_rule_file_is_named_by_a_skill_document(owner: str) -> None:
         f"definition, so nothing sends an agent to them: {unreachable}. Link "
         "each from the skill whose agents author that document — one level "
         "deep, never through another reference."
+    )
+
+
+@pytest.mark.parametrize("owner", ["connector-plugin", "pipeline-plugin"])
+def test_every_named_rule_file_still_renders(owner: str) -> None:
+    """The reverse direction: prose must not name a file the set stopped
+    rendering.
+
+    Buckets come and go with the registry — a scope falling under the floor
+    folds into `shared.md` and its file is deleted — while the SKILL.md
+    indexes and agent reading lists naming the files are hand-written. This
+    is what fails when a bucket disappears and a pointer to it is left
+    behind, sending an agent to a file that no longer exists.
+    """
+    import re
+
+    renderer = _renderer()
+    root = renderer.OUTPUT_DIRS[owner]
+    plugin = root.parents[3]
+    rendered = {p.name for p in renderer.render_all(owner)}
+
+    dangling: dict[str, list[str]] = {}
+    for doc in [*_skill_docs(plugin), *_agent_docs(plugin)]:
+        text = doc.read_text(encoding="utf-8")
+        for name in set(re.findall(r"rules/([a-z0-9-]+\.md)", text)):
+            if name not in rendered:
+                dangling.setdefault(doc.relative_to(PLUGINS).as_posix(), []).append(name)
+    assert not dangling, (
+        f"{owner}: prose names rule files the renderer no longer produces: "
+        f"{dangling}. Remove the pointer, or re-check the record scoping that "
+        "made the bucket disappear."
     )
 
 

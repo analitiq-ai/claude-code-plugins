@@ -1,13 +1,15 @@
 """Tests for the contract-doc generator (scripts/gen_pipeline_docs.py).
 
-The prose under the plugin root is the only prose Analitiq still keeps, so the facts it
-states about the contract are generated from the pinned published package rather
-than typed by hand. The load-bearing test here is `test_generated_blocks_in_sync`:
-it is the drift gate. If a pin bump changes an enum, a regex, a bound, or an
-advisory rule, that test fails until the docs are regenerated.
+The prose under the plugin root is the only prose Analitiq still keeps, so the
+facts it states about the contract are generated from the in-repo contract
+source rather than typed by hand. The load-bearing test here is
+`test_generated_blocks_in_sync`: it is the drift gate. If a model change moves
+an enum, a regex, a bound, or an advisory rule, that test fails until the docs
+are regenerated.
 
-Like the adapter tests, this module skips cleanly when the published packages are
-absent so a bare `pytest` never fails confusingly.
+The `importorskip` below skips this module when the contract's runtime deps
+are missing (`pip install -r requirements-dev.txt` not run) so a bare `pytest`
+never fails confusingly; CI hard-requires it via the repo conftest.
 """
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ pytest.importorskip("analitiq.validator",
 
 
 def test_generated_blocks_in_sync():
-    """Every generated block in every doc matches what the pinned package emits.
+    """Every generated block in every doc matches what the contract source emits.
 
     This is the drift gate. On failure, run:
         python3 scripts/gen_pipeline_docs.py
@@ -39,7 +41,7 @@ def test_generated_blocks_in_sync():
         if p.read_text() != G.render_text(p.read_text(), str(p))
     ]
     assert not stale, (
-        "generated blocks are out of sync with the published contract in: "
+        "generated blocks are out of sync with the contract source in: "
         f"{', '.join(stale)}. Run: python3 scripts/gen_pipeline_docs.py"
     )
 
@@ -114,7 +116,7 @@ def test_every_schema_url_in_prose_is_published():
     Some `$schema` mentions live in imperative prose ("Declare `$schema`: …")
     where a generated block does not fit. They are still a drift surface, so this
     pins them: every schemas.analitiq.ai URL appearing anywhere under the plugin root must be
-    one the pinned package actually emits.
+    one the contract source actually emits.
     """
     from analitiq.contracts.shared.common import schema_url_for
 

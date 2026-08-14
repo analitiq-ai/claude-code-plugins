@@ -1,18 +1,18 @@
-"""Drift guard for the generated cross-field-rule reference.
+"""Drift guard for the generated per-scope rule reference sets.
 
-`plugins/analitiq-connector-builder/skills/connector-builder/references/rules.md` is rendered from the
-pinned contract models' advisory registry so agent prose can cite a rule by id
-instead of restating it. A generated copy is only safe while it is pinned: this
-test regenerates it and fails when the checked-in file is stale, so a contract
-change lands as a red build instead of silently-wrong authoring guidance.
+Each plugin's `skills/<skill>/references/rules/` set is rendered from the rule
+registry so agent prose can cite a rule by id instead of restating it. A
+generated copy is only safe while it is pinned: this test regenerates every
+set and fails when a checked-in file is stale, missing, or orphaned, so a
+contract change lands as a red build instead of silently-wrong authoring
+guidance.
 
-It also guards the *citations*: prose cites rules by id (`RULE-ENDP-009`) instead
-of restating them, so a retired or renumbered id must not be allowed to leave
-dangling references behind a green build. That gate spans EVERY plugin under
-`plugins/`, not just this suite's — the advisory registry is one shared source,
-so one scan pins every citation site the prose currently has, all plugins plus
-the repo-root docs; a per-plugin copy of the scanner would itself be a drift
-surface.
+It also guards the *citations*: prose cites rules by id (`RULE-ENDP-009`)
+instead of restating them, so a retired or renumbered id must not be allowed
+to leave dangling references behind a green build. That gate spans EVERY
+plugin under `plugins/` plus the repo-root docs — the registry is one shared
+source, so one scan pins every citation site; a per-plugin copy of the
+scanner would itself be a drift surface.
 
 Same environment contract as `test_schema_drift.py`: skipped when the pinned
 package is absent (offline dev), hard-failed in CI via
@@ -78,8 +78,9 @@ def test_every_owned_rule_reaches_a_file() -> None:
 
     A rule can name several scopes and so land in several files; what must not
     happen is landing in none, because then the plugin's prose can cite an id
-    that resolves nowhere. `render_all` raises on that, so this is the guard
-    that runs it for every plugin rather than the one that happens to be first.
+    that resolves nowhere. `render_all` raises on that at render time; this
+    recomputes the same invariant from `buckets()` directly, so it fails with
+    the offending ids even for a plugin whose set was never rendered.
     """
     renderer = _load_renderer()
     for owner in renderer.OUTPUT_DIRS:

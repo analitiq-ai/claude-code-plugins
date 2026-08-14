@@ -5,7 +5,7 @@ statement: >
   arrow_type is not a container marker.
 tier: advisory
 severity: error
-scopes: [api-endpoint]
+scopes: [database-endpoint]
 validator: "analitiq.contracts.endpoints::Column._validate_container_shape"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [Column]

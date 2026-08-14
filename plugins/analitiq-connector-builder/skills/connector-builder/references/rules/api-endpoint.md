@@ -3,20 +3,20 @@
 
 # Rules binding an `api-endpoint` document
 
-Rendered from the rule registry (`rules/records/*.yaml`) as the pinned
-`analitiq-contract-models` package ships it. Prose cites a rule by id
+Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
+contract source compiles it. Prose cites a rule by id
 (`RULE-ENDP-001`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 17 of the 71 below have no validator, so nothing rejects
+all hold: 17 of the 68 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **30** structural · **27** advisory · **7** referential · **4** procedural · **3** judgment.
+In this file: **29** structural · **25** advisory · **7** referential · **4** procedural · **3** judgment.
 
 ## Contents
 
@@ -46,7 +46,6 @@ than edited.
 | RULE-ENDP-022 | An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-027 | A request.path_params binding MUST NOT apply a wire-encoding function, because the engine percent-encodes every substituted path segment. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-029 | A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | — |
-| RULE-ENDP-031 | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-037 | A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | `api-endpoint` | error | validator | `supported_methods`: `full_refresh`, `incremental` |
@@ -92,8 +91,6 @@ single field looks wrong.
 | RULE-ENDP-016 | An idempotency key's name MUST NOT collide with any header the same write request declares, nor with any field of the body it resolves to. | `api-endpoint` | error | validator |
 | RULE-ENDP-017 | A write mode's request body MUST address the record scope its batching declaration implies — the whole batch when batching is declared, a single record or one of its fields otherwise — and any field path it addresses MUST be declared in that mode's input schema. | `api-endpoint` | error | validator |
 | RULE-ENDP-019 | The upsert write mode MUST declare conflict keys, and every other write mode MUST NOT declare them. | `api-endpoint` | error | validator |
-| RULE-ENDP-020 | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `api-endpoint` | error | validator |
-| RULE-ENDP-021 | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `api-endpoint` | error | validator |
 | RULE-ENDP-023 | Every response reference a read operation makes MUST resolve by declared-path resolution against that operation's response schema onto a node declaring a type — the field a keyset strategy orders by included — and MUST NOT sit in a request slot, name an unrecognised response sub-scope, or name a metadata key the operation does not declare. | `api-endpoint` | error | validator |
 | RULE-ENDP-024 | A `from_input` path_params binding MUST NOT appear on a read operation, and on a write MUST address one dotted record field that the mode's input schema declares, never the whole record and never the batch. | `api-endpoint` | error | validator |
 | RULE-ENDP-025 | A write mode MUST NOT declare both a `from_input` path_params binding and `batching`. | `api-endpoint` | error | validator |
@@ -116,7 +113,7 @@ both artifacts, which is more than you are authoring at the moment.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-ENDP-041 | Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names. | `api-endpoint` | error | — |
-| RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` | error | — |
+| RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` `database-endpoint` | error | — |
 | RULE-ENDP-045 | An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL. | `api-endpoint` | error | — |
 | RULE-ENDP-046 | An API endpoint's `endpoint_id` MUST equal the handle derived from the resource locator its operations declare, and that locator MUST be one a handle can be derived from. | `api-endpoint` | error | validator |
 | RULE-ENDP-047 | Every `transport_ref` an endpoint document names MUST resolve to a transport declared by the connector it ships beside. | `api-endpoint` | error | validator |

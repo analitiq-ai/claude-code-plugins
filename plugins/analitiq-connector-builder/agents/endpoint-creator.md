@@ -25,6 +25,11 @@ not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
   (the whole of what an endpoint document must satisfy. Read it before
   authoring, and satisfy every row.)
+- Cited `RULE-PKG-*` ids resolve in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`,
+  and `RULE-DBEP-*` ids in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md` —
+  open those only to resolve a citation; you author neither artifact.
 
 ## Inputs
 

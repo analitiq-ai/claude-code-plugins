@@ -579,7 +579,7 @@ def _grading_entity(marker: Marker, label: str) -> str:
     """The published resource a block grades as.
 
     A ``validate:`` marker states it. An ``invalid:`` marker states only the
-    rule id; the registry's ``scope`` supplies the resource — which also makes
+    rule id; the registry's ``scopes`` supply the resource — which also makes
     a dangling rule id fail the build, the same property a citation carries
     (`plugin-prose.md` rung 1).
     """

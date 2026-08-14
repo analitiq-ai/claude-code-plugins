@@ -2593,7 +2593,7 @@
    "tier": "advisory",
    "severity": "error",
    "scopes": [
-    "api-endpoint"
+    "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::ColumnFieldSpec._validate_container_shape",
    "owners": [
@@ -2617,7 +2617,7 @@
    "tier": "advisory",
    "severity": "error",
    "scopes": [
-    "api-endpoint"
+    "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::Column._validate_container_shape",
    "owners": [
@@ -2852,7 +2852,8 @@
    "tier": "structural",
    "severity": "error",
    "scopes": [
-    "api-endpoint"
+    "database-endpoint",
+    "stream"
    ],
    "validator": "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces",
    "owners": [
@@ -3149,7 +3150,8 @@
    "tier": "referential",
    "severity": "error",
    "scopes": [
-    "api-endpoint"
+    "api-endpoint",
+    "database-endpoint"
    ],
    "validator": null,
    "owners": [

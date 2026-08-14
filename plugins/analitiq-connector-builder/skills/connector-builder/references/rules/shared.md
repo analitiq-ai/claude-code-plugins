@@ -3,20 +3,20 @@
 
 # Rules with no file of their own
 
-Rendered from the rule registry (`rules/records/*.yaml`) as the pinned
-`analitiq-contract-models` package ships it. Prose cites a rule by id
+Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
+contract source compiles it. Prose cites a rule by id
 (`RULE-CONN-008`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: the rules this plugin owns whose artifact kinds are too few to carry their own file, plus the rules that bind every authored document. Read it alongside the file for the document you are authoring, never instead of it.
+Scope: the artifact kinds named in no other file of this set — those with too few rules to carry a file of their own — plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what it must satisfy; a document whose kind has its own file needs only that file.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 11 of the 15 below have no validator, so nothing rejects
+all hold: 11 of the 16 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **6** structural · **2** advisory · **3** referential · **2** procedural · **2** judgment.
+In this file: **7** structural · **2** advisory · **3** referential · **2** procedural · **2** judgment.
 
 ## Contents
 
@@ -38,6 +38,7 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
+| RULE-ENDP-031 | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. | `database-endpoint` `stream` | error | validator | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |

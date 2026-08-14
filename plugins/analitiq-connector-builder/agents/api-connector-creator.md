@@ -67,9 +67,12 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
-  (one rule file per artifact you author. Each is the whole of what that
-  document must satisfy — read it before authoring the document and satisfy
-  every row.)
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/type-map.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`
+  (one rule file per artifact you author or ship. Each is the whole of what
+  that document must satisfy — read it before authoring the document and
+  satisfy every row. `connector-package.md` binds the repository you assemble,
+  not a document you author.)
 
 ## Authoring order
 

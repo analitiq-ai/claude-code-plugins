@@ -217,6 +217,11 @@ class RuleRecord:
                 # list belongs would bind the rule to three one-letter model
                 # names and match nothing, silently.
                 self._fail(f"{name} is a list of names, not the string {value!r}")
+            if isinstance(value, dict):
+                # `tuple(dict)` is the dict's KEYS — a YAML mapping where a
+                # list belongs would validate on the key names alone, with
+                # the author's value structure silently discarded.
+                self._fail(f"{name} is a list of names, not the mapping {value!r}")
             object.__setattr__(self, name, tuple(value) if value else ())
         self._validate()
 

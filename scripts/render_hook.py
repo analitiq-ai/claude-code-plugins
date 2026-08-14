@@ -2,14 +2,17 @@
 """Claude Code PostToolUse hook: regenerate derived artifacts after an edit.
 
 Wired in `.claude/settings.json` on Edit|Write. Reads the hook payload from
-stdin and, when the edited file is a generator SOURCE — a rule record or a
-file in the contract packages — runs `render_all.py write`, so the diff a
-session reviews already carries the rendered output. Any other edit exits
-immediately.
+stdin and, when the edited file can feed a generator, runs
+`render_all.py write`, so the diff a session reviews already carries the
+rendered output. Any other edit exits immediately.
 
-Exit 0 on success or a non-matching path. Exit 2 on a generator failure so
-the harness feeds the error back to the session that made the edit — an
-invalid record is that session's finding to fix.
+Exit 0 on success or a non-matching path; the generators' output passes
+through so a consequential success — a regenerated file, a deleted orphan —
+is visible in the transcript. Exit 2 on a generator failure so the harness
+feeds the error back to the session that made the edit: an invalid record is
+that session's finding to fix, and so is a census check failing after a
+contract-prose edit — re-affirming the census entry is the deliberate act
+`render_all.py`'s docstring describes.
 
 The pre-commit hook in `.githooks/` covers edits made outside a session, and
 CI's `render_all.py check` covers both being bypassed.
@@ -23,7 +26,12 @@ import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 
-SOURCE_PREFIXES = ("rules/records/", "packages/")
+#: Kept identical to the staged-path gate in `.githooks/pre-commit` — the two
+#: hooks guard the same generator inputs at different moments, so the lists
+#: move together.
+SOURCE_PREFIXES = (
+    "rules/", "packages/", "plugins/", "schemas/", "scripts/", "census/",
+)
 
 
 def main() -> int:
@@ -31,7 +39,12 @@ def main() -> int:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, UnicodeDecodeError):
         return 0
-    file_path = (payload.get("tool_input") or {}).get("file_path") or ""
+    if not isinstance(payload, dict):
+        return 0
+    tool_input = payload.get("tool_input")
+    file_path = (tool_input or {}).get("file_path") if isinstance(tool_input, dict) else ""
+    if not file_path:
+        return 0
     try:
         rel = pathlib.Path(file_path).resolve().relative_to(REPO_ROOT)
     except ValueError:
@@ -46,8 +59,9 @@ def main() -> int:
         sys.stderr.write(result.stdout + result.stderr)
         sys.stderr.write(
             f"\nrender_all.py write failed after editing {rel} — "
-            "fix the source or the record before continuing.\n")
+            "fix what its output names before continuing.\n")
         return 2
+    sys.stdout.write(result.stdout)
     return 0
 
 

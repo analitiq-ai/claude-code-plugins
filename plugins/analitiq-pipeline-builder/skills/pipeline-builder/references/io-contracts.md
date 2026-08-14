@@ -143,7 +143,7 @@ For unsupported cases (e.g., a connector kind the engine can't run —
 does not fail validation.
 
 <!-- BEGIN GENERATED: validator-ids -->
-Validator ids the published package can emit:
+Finding ids the validator can emit:
 
 `bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
 <!-- END GENERATED: validator-ids -->

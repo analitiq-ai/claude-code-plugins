@@ -94,7 +94,6 @@ that document must satisfy — nothing in the other files applies to it, and eve
 - `references/rules/stream.md` — a stream document
 - `references/rules/connection.md` — a connection document
 - `references/rules/database-endpoint.md` — a database endpoint document
-- `references/rules/api-endpoint.md` — an API endpoint this plugin references
 - `references/rules/type-map.md` — a read or write type map
 - `references/rules/shared.md` — the artifact kinds too small for a file of
   their own
