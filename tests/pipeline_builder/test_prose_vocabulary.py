@@ -100,11 +100,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
-import gen_contract_docs as G  # noqa: E402
+import gen_pipeline_docs as G  # noqa: E402
 
 from _rule_files import rule_reference_root  # noqa: E402
 

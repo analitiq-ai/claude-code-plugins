@@ -1,4 +1,4 @@
-"""Tests for the contract-doc generator (plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py).
+"""Tests for the contract-doc generator (scripts/gen_pipeline_docs.py).
 
 The prose under the plugin root is the only prose Analitiq still keeps, so the facts it
 states about the contract are generated from the pinned published package rather
@@ -20,8 +20,8 @@ import pytest
 from _rule_files import rule_reference_root
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(ROOT / "scripts"))
-import gen_contract_docs as G  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import gen_pipeline_docs as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
@@ -31,7 +31,7 @@ def test_generated_blocks_in_sync():
     """Every generated block in every doc matches what the pinned package emits.
 
     This is the drift gate. On failure, run:
-        python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py
+        python3 scripts/gen_pipeline_docs.py
     """
     stale = [
         p.relative_to(ROOT).as_posix()
@@ -40,7 +40,7 @@ def test_generated_blocks_in_sync():
     ]
     assert not stale, (
         "generated blocks are out of sync with the published contract in: "
-        f"{', '.join(stale)}. Run: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py"
+        f"{', '.join(stale)}. Run: python3 scripts/gen_pipeline_docs.py"
     )
 
 

@@ -66,17 +66,20 @@ def _load(path: Path, name: str):
     return module
 
 
-def _renderers() -> dict[str, object]:
-    """Each plugin's renderer, keyed by the plugin directory it writes into."""
-    return {
-        "analitiq-connector-builder": _load(
-            REPO_ROOT / "scripts" / "render_rule_reference.py", "render_rule_reference"
-        ),
-        "analitiq-pipeline-builder": _load(
-            PLUGINS / "analitiq-pipeline-builder" / "scripts" / "gen_contract_docs.py",
-            "gen_contract_docs",
-        ),
-    }
+#: Plugin directory -> the `owners` member whose rules render into it. One
+#: renderer answers for both: asking two modules "what do you render" was how
+#: the plugins drifted apart in the first place, and a second module answering
+#: for one of them is a second definition of the same fact.
+PLUGIN_OWNERS = {
+    "analitiq-connector-builder": "connector-plugin",
+    "analitiq-pipeline-builder": "pipeline-plugin",
+}
+
+
+def _renderer():
+    return _load(
+        REPO_ROOT / "scripts" / "render_rule_reference.py", "render_rule_reference"
+    )
 
 
 def _cited(plugin: Path) -> dict[str, set[str]]:
@@ -93,8 +96,9 @@ def _cited(plugin: Path) -> dict[str, set[str]]:
 
 def test_every_cited_rule_is_readable_in_the_plugin_that_cites_it() -> None:
     unreadable: dict[str, dict[str, list[str]]] = {}
-    for name, renderer in _renderers().items():
-        rendered = renderer.rendered_ids()
+    renderer = _renderer()
+    for name, owner in PLUGIN_OWNERS.items():
+        rendered = renderer.rendered_ids(owner)
         cited = _cited(PLUGINS / name)
         missing = {i: sorted(s) for i, s in sorted(cited.items()) if i not in rendered}
         if missing:
@@ -113,9 +117,10 @@ def test_each_plugin_cites_and_renders() -> None:
     The check above passes trivially over a plugin whose prose cites nothing,
     and over one whose renderer has stopped claiming any rule at all.
     """
-    for name, renderer in _renderers().items():
+    renderer = _renderer()
+    for name, owner in PLUGIN_OWNERS.items():
         assert _cited(PLUGINS / name), f"{name}: no RULE-* citations found in its prose"
-        assert renderer.rendered_ids(), f"{name}: its renderer claims no rules"
+        assert renderer.rendered_ids(owner), f"{name}: the renderer claims no rules for it"
 
 
 def test_every_rule_reaches_the_plugins_that_own_it() -> None:
@@ -128,14 +133,11 @@ def test_every_rule_reaches_the_plugins_that_own_it() -> None:
     """
     from analitiq.contracts.shared.rules import all_rules
 
-    owner_of = {
-        "analitiq-connector-builder": "connector-plugin",
-        "analitiq-pipeline-builder": "pipeline-plugin",
-    }
     dropped: dict[str, list[str]] = {}
-    for name, renderer in _renderers().items():
-        rendered = renderer.rendered_ids()
-        owed = {r.id for r in all_rules() if owner_of[name] in r.owners}
+    renderer = _renderer()
+    for name, owner in PLUGIN_OWNERS.items():
+        rendered = renderer.rendered_ids(owner)
+        owed = {r.id for r in all_rules() if owner in r.owners}
         if owed - rendered:
             dropped[name] = sorted(owed - rendered)
     assert not dropped, (

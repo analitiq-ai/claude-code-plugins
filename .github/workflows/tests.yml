@@ -71,21 +71,18 @@ jobs:
         # - including the test step, i.e. exactly the runs it exists to explain.
         # test_generated_blocks_in_sync computes the same predicate, so on a
         # stale block pytest fails first and this step is what prints the diff.
-        # The one carve-out worth keeping: if the install failed, this script
-        # would re-enter its dependency bootstrap and bury the real error.
-        #
-        # The env vars stop that bootstrap. Without them the generator installs
-        # the PUBLISHED wheel into a venv and re-execs, grading the docs against
-        # the last release rather than this PR's source.
+        # The dependency bootstrap this used to need is gone: the generator
+        # moved to scripts/ and reads packages/*/src like every other renderer,
+        # so it can no longer grade this PR's docs against the last release.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
         env:
-          ANALITIQ_VALIDATOR_FROM_SOURCE: '1'
-          PYTHONPATH: packages/contract-models/src:packages/validator/src
           # analitiq.contracts.shared.common reads os.environ["DOMAIN"] at
           # import; the repo-root conftest sets it for pytest, but this step
-          # runs the script directly.
+          # runs the script directly. No FROM_SOURCE flag: this is a repo-root
+          # generator now and bootstraps the in-repo trees itself, like every
+          # other renderer below.
           DOMAIN: analitiq.ai
-        run: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check
+        run: python3 scripts/gen_pipeline_docs.py --check
       - name: Check the rule registry is valid and compiled
         # `rules/records/*.yaml` is the source of truth for every RULE-* rule. This
         # validates each record against rules/SCHEMA.md, resolves every

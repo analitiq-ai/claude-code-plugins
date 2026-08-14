@@ -21,8 +21,8 @@ to ask the user, what the plugin refuses to do) — this script never touches it
 
 Usage::
 
-    python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py            # rewrite blocks in place
-    python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check    # exit 1 if any block is stale
+    python3 scripts/gen_pipeline_docs.py            # rewrite blocks in place
+    python3 scripts/gen_pipeline_docs.py --check    # exit 1 if any block is stale
 
 ``--check`` is what CI runs: it regenerates into memory and diffs, so a pin bump
 that changes the contract fails the build until the docs are regenerated.
@@ -32,15 +32,30 @@ from __future__ import annotations
 import argparse
 import difflib
 import re
+import os
 import sys
 import pathlib
 from pathlib import Path
 
-from _bootstrap import ensure_deps_or_reexec
 
-# Docs the generator is allowed to rewrite: everything under the plugin root. A block id
-# may appear in more than one file; every occurrence is rendered identically.
-DOCS_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Same bootstrap as render_rule_reference.py and render_validator_claims.py:
+# this repo is the contract's source, so put the in-repo trees on the path
+# rather than reaching for an installed wheel. This generator used to live
+# inside the plugin and bootstrap the published pin, which left the pipeline
+# plugin reading its rules from one contract and its enums from another
+# whenever the pin lagged the repo.
+sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
+sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import.
+os.environ.setdefault("DOMAIN", "analitiq.ai")
+
+# Docs the generator is allowed to rewrite: everything under the pipeline
+# plugin. A block id may appear in more than one file; every occurrence is
+# rendered identically.
+DOCS_ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
 
 _BLOCK_RE = re.compile(
     r"(?P<begin><!-- BEGIN GENERATED: (?P<id>[a-z0-9][a-z0-9-]*) -->\n)"
@@ -265,27 +280,6 @@ def render_filter_operators() -> str:
         "every other operator requires it.",
     ]
     return "\n".join(out) + "\n"
-
-
-def rendered_ids() -> set[str]:
-    """Every rule id this plugin makes readable.
-
-    Rule tables no longer live in this generator's blocks: they are the
-    generated set under `skills/pipeline-builder/references/rules/`, rendered
-    by `scripts/render_rule_reference.py` and split by the artifact each rule
-    binds. This function stays because the reachability guard asks each plugin
-    what it renders, and the answer for this plugin is now that renderer's.
-    """
-    import importlib.util
-
-    path = (
-        pathlib.Path(__file__).resolve().parents[3]
-        / "scripts" / "render_rule_reference.py"
-    )
-    spec = importlib.util.spec_from_file_location("render_rule_reference", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.rendered_ids("pipeline-plugin")
 
 
 def render_validator_ids() -> str:
@@ -842,7 +836,6 @@ def main(argv: list[str] | None = None) -> int:
                         help="Do not write; exit 1 if any generated block is stale.")
     args = parser.parse_args(argv)
 
-    ensure_deps_or_reexec(__file__)
 
     docs = generated_docs()
     if not docs:
@@ -867,7 +860,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check and stale:
         print(f"\n{len(stale)} document(s) out of sync with the published contract: "
-              f"{', '.join(stale)}\nRun: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py",
+              f"{', '.join(stale)}\nRun: python3 scripts/gen_pipeline_docs.py",
               file=sys.stderr)
         return 1
     if args.check:

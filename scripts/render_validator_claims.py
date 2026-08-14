@@ -21,7 +21,7 @@ This module is the fix, in three parts:
 2. **Claims** — the prose sentences themselves, authored ONCE here, each naming
    the probes that prove it. Marked regions in the plugin docs
    (`<!-- BEGIN GENERATED: <block-id> -->` … `END GENERATED`, the same marker
-   grammar as the pipeline plugin's `gen_contract_docs.py`) are rendered from
+   grammar as `gen_pipeline_docs.py`) are rendered from
    this registry — `claim:<id>` blocks from the `Claim` records, the dense
    clusters (the response-scope table, the validator blind-spot list) by the
    dedicated `render_*` functions whose probe couplings sit beside them — so
@@ -1369,16 +1369,13 @@ def _pipeline_gen():
     """
     import importlib.util
 
-    scripts_dir = str(PIPELINE_PLUGIN / "scripts")
+    # A repo-root generator now, like this one: it puts its own directory on
+    # the path at import, so nothing here has to arrange for its imports.
     spec = importlib.util.spec_from_file_location(
-        "_pipeline_gen_contract_docs", PIPELINE_PLUGIN / "scripts" / "gen_contract_docs.py")
+        "_pipeline_gen_docs", REPO_ROOT / "scripts" / "gen_pipeline_docs.py")
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
-    sys.path.insert(0, scripts_dir)  # gen_contract_docs imports _bootstrap
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(scripts_dir)
+    spec.loader.exec_module(module)
     return module
 
 
@@ -1479,7 +1476,7 @@ def generated_docs() -> list[Path]:
 
     Any block id found here must have a renderer in this script — an unknown
     id fails loud (`UnknownBlock`), never skips. The pipeline plugin's
-    generated blocks belong to its own `gen_contract_docs.py`; this renderer
+    generated blocks belong to `gen_pipeline_docs.py`; this renderer
     never touches that tree.
     """
     return sorted(
