@@ -251,6 +251,13 @@ the field's frozen `arrow_type` (`RULE-PKG-033`).
 an endpoint field with `arrow_type: "Object"` paired with a native that
 maps to `Json` is **not** a mismatch.
 
+The natives below are lowercase. Rule style follows from the read-map case
+rules (see "Uppercase rule (read maps)"): author uppercase `exact` rules,
+and where a rule genuinely needs `regex`, spell its literals the way the
+probe is spelled (`^STRING$`, never `^string$` — `RULE-TMAP-014`); a
+pattern copied from this lowercase vocabulary is the dead-rule shape that
+section warns about.
+
 Common API natives:
 
 | Native | Source | Typical canonical |
