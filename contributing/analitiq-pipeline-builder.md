@@ -63,8 +63,8 @@ pipeline-builder (skill, orchestrator)
 
 ## Generated prose — the CI gate
 
-This plugin does not restate contract facts in prose; it **generates** them from
-the pinned package into marked regions:
+This plugin does not restate contract facts in prose; it **generates** them
+from the in-repo contract source (`packages/*/src`) into marked regions:
 
 ```bash
 python3 scripts/gen_pipeline_docs.py          # rewrite in place

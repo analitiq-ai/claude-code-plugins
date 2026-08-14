@@ -15,8 +15,9 @@ files.
 — for the `Diagnostics` envelope this agent returns and the finding-id
 vocabulary it may use. A cited `RULE-*` id resolves in one of the rule files
 under `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the
-index in `skills/connector-builder/SKILL.md` § "Registered rules for every
-document" says which file carries which artifact.
+index in `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/SKILL.md`
+§ "Registered rules for every document" says which file carries which
+artifact.
 
 ## Inputs
 

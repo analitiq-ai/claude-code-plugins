@@ -79,6 +79,7 @@ Run this loop for each document, and do not skip step 4:
         reads `—`; nothing rejects those, so step 3 says nothing about them
 ```
 
+<!-- PROBE: connector-secret-literal-undetected, runtime-tail-unchecked -->
 A clean validation run is not proof every rule holds — some are applied only at
 connect or run time, and those are exactly the ones an agent gets wrong by
 writing a plausible value that validates.

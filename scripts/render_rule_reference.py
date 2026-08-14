@@ -215,11 +215,6 @@ def buckets(owner: str) -> dict[str, list]:
     return out
 
 
-def output_paths(owner: str) -> dict[str, pathlib.Path]:
-    root = OUTPUT_DIRS[owner]
-    return {bucket: root / f"{bucket}.md" for bucket in buckets(owner)}
-
-
 def rendered_ids(owner: str | None = None) -> set[str]:
     """Every id this renderer makes readable, as the renderer knows it.
 

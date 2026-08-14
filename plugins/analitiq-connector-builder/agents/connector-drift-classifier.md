@@ -22,8 +22,8 @@ resolves against this list. The input paths below are elsewhere on disk.
 
 A cited `RULE-*` id resolves in one of the rule files under
 `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the index
-in `skills/connector-builder/SKILL.md` § "Registered rules for every document"
-says which file carries which artifact.
+in `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/SKILL.md` § "Registered
+rules for every document" says which file carries which artifact.
 
 ## Inputs
 

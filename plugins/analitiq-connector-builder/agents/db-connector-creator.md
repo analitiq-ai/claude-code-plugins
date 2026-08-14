@@ -83,7 +83,9 @@ artifacts, not the plugin's.
   (one rule file per artifact you author or ship. Each is the whole of what
   that document must satisfy — read it before authoring the document and
   satisfy every row. `connector-package.md` binds the release itself, not a
-  document you author.)
+  document you author; `database-endpoint.md` binds the documents your
+  `resource_discovery` block produces, which never ship in the release —
+  read it before authoring that block.)
 
 ## Authoring order
 
