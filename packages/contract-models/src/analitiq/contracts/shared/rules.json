@@ -1458,7 +1458,7 @@
   {
    "id": "RULE-CTOR-053",
    "statement": "A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it.\n",
-   "tier": "advisory",
+   "tier": "referential",
    "severity": "warning",
    "scopes": [
     "connector",

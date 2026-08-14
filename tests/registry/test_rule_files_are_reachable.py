@@ -169,6 +169,7 @@ def test_every_id_an_agent_cites_is_in_a_file_it_can_reach(owner: str) -> None:
     id_ref = re.compile(r"RULE-[A-Z]+-\d+")
 
     unresolved: dict[str, list[str]] = {}
+    total_cited = 0
     for agent in _agent_docs(plugin):
         text = agent.read_text(encoding="utf-8")
         reach_texts = [text]
@@ -185,11 +186,15 @@ def test_every_id_an_agent_cites_is_in_a_file_it_can_reach(owner: str) -> None:
             for chunk in reach_texts
             for name in set(file_ref.findall(chunk))
         )
-        missing = sorted(
-            rid for rid in set(id_ref.findall(text)) if rid not in reachable
-        )
+        cited = set(id_ref.findall(text))
+        total_cited += len(cited)
+        missing = sorted(rid for rid in cited if rid not in reachable)
         if missing:
             unresolved[agent.name] = missing
+    assert total_cited, (
+        f"{owner}: no agent cites any RULE-* id — the extractor stopped "
+        "measuring, which reads as success and is not."
+    )
     assert not unresolved, (
         f"{owner}: agents cite rule ids no file they can reach carries: "
         f"{unresolved}. Name the rule file (or the SKILL.md index) in the "

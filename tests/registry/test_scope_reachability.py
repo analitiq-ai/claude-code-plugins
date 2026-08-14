@@ -3,8 +3,8 @@
 The defect class this closes: a rule whose statement binds one artifact's
 author while its `scopes` name another, so the reference renders it into a
 file that author never opens — and the per-scope headers tell them no other
-file applies. Nothing compared `scopes` against `targets` before; each
-instance was found by a person reading one record.
+file applies. Without this comparison, each instance is only ever found by a
+person reading one record.
 
 The comparison is structural, not semantic: for every scope there is a set of
 document root models, and a model is *reachable* from a scope when some root's
@@ -51,17 +51,15 @@ def _roots() -> dict[str, tuple[type, ...]]:
     }
 
 
-def _unrooted() -> set[str]:
-    """Scopes with no document root here, derived so the list cannot rot.
-
-    `connector-package` is a repository layout no model renders, `any` binds
-    every document by fiat, and the data-sync scopes describe wire payloads
-    whose schemas are hand-maintained outside the model tree. A record scoped
-    to one of these is out of this guard's reach on that scope.
-    """
-    from analitiq.contracts.shared.rule_record import SCOPES
-
-    return set(SCOPES) - set(_roots())
+#: Scopes deliberately given no document root: `connector-package` is a
+#: repository layout no model renders, `any` binds every document by fiat, and
+#: `data-sync-run-status` describes a wire payload whose schema is
+#: hand-maintained outside the model tree. Declared rather than derived — a
+#: new SCOPES member must be classified here or in `_roots()`, and the
+#: partition test below is what refuses an unclassified one. Deriving this as
+#: SCOPES-minus-roots would silently exempt a new document family whose root
+#: nobody wired in.
+UNROOTED = {"connector-package", "any", "data-sync-run-status"}
 
 #: Records whose statement semantically narrows a structurally wider reach —
 #: the model is reachable from these scopes too, but the sentence does not
@@ -134,7 +132,6 @@ def _mismatches() -> list[_Verdict]:
     from analitiq.contracts.shared.rules import all_rules
 
     roots = _roots()
-    unrooted = _unrooted()
     reachable = {scope: _reachable_names(classes) for scope, classes in roots.items()}
     out: list[_Verdict] = []
     for rule in all_rules():
@@ -144,7 +141,7 @@ def _mismatches() -> list[_Verdict]:
             scope for scope, names in reachable.items()
             if any(target in names for target in rule.targets)
         }
-        declared = set(rule.scopes) - unrooted
+        declared = set(rule.scopes) - UNROOTED
         for scope in sorted(implied - declared):
             if (rule.id, scope) not in NARROWED:
                 out.append(_Verdict(rule.id, scope, "missing"))
@@ -195,3 +192,12 @@ def test_the_guard_is_not_vacuous() -> None:
     assert len(compared) > 100, len(compared)
     reachable = _reachable_names(_roots()["stream"])
     assert "ConnectionEndpointRef" in reachable and "DatabaseObject" in reachable
+
+
+def test_every_scope_is_rooted_or_declared_unrooted() -> None:
+    """The partition that keeps a new SCOPES member from being silently
+    exempt: it must gain a root in `_roots()` or a reasoned UNROOTED entry."""
+    from analitiq.contracts.shared.rule_record import SCOPES
+
+    assert set(_roots()) | UNROOTED == set(SCOPES)
+    assert not set(_roots()) & UNROOTED

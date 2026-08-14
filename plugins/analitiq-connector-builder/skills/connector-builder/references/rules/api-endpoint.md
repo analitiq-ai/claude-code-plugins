@@ -16,7 +16,7 @@ a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **29** structural · **26** advisory · **7** referential · **4** procedural · **3** judgment.
+In this file: **29** structural · **25** advisory · **8** referential · **4** procedural · **3** judgment.
 
 ## Contents
 
@@ -77,7 +77,6 @@ single field looks wrong.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` `api-endpoint` | warning | — |
 | RULE-ENDP-001 | A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | `api-endpoint` | error | validator |
 | RULE-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
@@ -113,6 +112,7 @@ both artifacts, which is more than you are authoring at the moment.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
+| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` `api-endpoint` | warning | — |
 | RULE-ENDP-041 | Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names. | `api-endpoint` | error | — |
 | RULE-ENDP-043 | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. | `api-endpoint` `database-endpoint` | error | — |
 | RULE-ENDP-045 | An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL. | `api-endpoint` | error | — |

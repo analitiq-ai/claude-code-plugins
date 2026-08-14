@@ -16,7 +16,7 @@ a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **28** structural · **30** advisory · **9** referential · **8** procedural · **6** judgment.
+In this file: **28** structural · **29** advisory · **10** referential · **8** procedural · **6** judgment.
 
 ## Contents
 
@@ -103,7 +103,6 @@ single field looks wrong.
 | RULE-CTOR-050 | A transport MUST be invoked no earlier than the phase at which every scope its expressions reference becomes available, and an input a transport references MUST declare a phase no later than that transport's first use. | `connector` | error | — |
 | RULE-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
 | RULE-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |
-| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` `api-endpoint` | warning | — |
 | RULE-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | `connector` | error | — |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
@@ -123,6 +122,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-CTOR-044 | A `database` connector's release MUST NOT ship endpoint documents, because a database endpoint is produced from resource-discovery output rather than authored. | `connector` | warning | — |
 | RULE-CTOR-045 | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. | `connector` | error | — |
 | RULE-CTOR-049 | A database connector whose class satisfies a write capability MUST declare `sql_capabilities`. | `connector` | error | — |
+| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` `api-endpoint` | warning | — |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

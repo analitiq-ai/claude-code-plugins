@@ -146,8 +146,8 @@ def test_hook_ignores_an_in_repo_path_no_generator_reads(monkeypatch):
 
 def test_hook_and_pre_commit_gate_on_the_same_prefixes():
     """Both hooks claim their prefix lists are kept identical; this is the
-    pin that claim was missing. The hook's tuple is the owner; the shell
-    hook's `grep -qE` alternation is read back lexically and compared."""
+    pin that claim needs. The hook's tuple is the owner; the shell hook's
+    `grep -qE` alternation is read back lexically and compared."""
     import re
 
     hook = _load("render_hook")
