@@ -18,16 +18,21 @@ offline test can see:
      guard never certifies a baseline the render check already rejects — a
      mismatch is a GuardError naming the render, not a verdict).
   2. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai is
-     byte-identical to the committed stamp. Because the stamp carries the
-     tree digest, this holds exactly when the published tree is the
-     committed render — a publish that silently failed or never ran (its
-     `schemas` environment holds deployments for reviewer approval, so the
-     stamp-changing push itself reaches this guard before the upload; a
-     failed run retriggers only on the next schemas/ push), and an
-     out-of-band bucket write, all land here. The remediation is the same
-     flow the validator release already uses: land or re-run the publish,
-     wait out the pointer TTL (`.github/workflows/schemas-publish.yml` owns
-     the cache-control), then re-run this job.
+     byte-identical to the committed stamp. The stamp carries the tree
+     digest and the publish uploads it dead last, so byte equality
+     establishes: the last publish to COMPLETE was of a tree identical to
+     the current committed one. A publish that silently failed, died
+     mid-tree, or never ran (its `schemas` environment holds deployments
+     for reviewer approval, so the stamp-changing push itself reaches this
+     guard before the upload; a failed run retriggers only on the next
+     schemas/ push) all leave a stale or absent stamp and land here. What
+     this deliberately does NOT reach: an out-of-band write to some OTHER
+     published object after a completed publish leaves the stamp intact —
+     the stamp witnesses the last completed publish, not the bucket's
+     current contents. The remediation is the same flow the validator
+     release already uses: land or re-run the publish, wait out the pointer
+     TTL (`.github/workflows/schemas-publish.yml` owns the cache-control),
+     then re-run this job.
   3. `VALIDATOR_PIN` (`plugins/analitiq-pipeline-builder/scripts/_bootstrap.py`
      — the validator end users actually install) agrees with the published
      fact. The guard asserts EQUALITY only and never orders versions: the
@@ -52,13 +57,14 @@ expression, and typo-refusal — matches `check_validator_pin_contract.py`;
 the verdicts behind it are this guard's own):
 
   - CONTRACTS_VERSION_GUARD_STRICT=1 (CI sets it on pushes and on
-    release-please branches): every divergence FAILS. A red main while a
-    package-release window is open — publish awaiting approval, or the pin
-    catch-up pending — is deliberate, and deliberately TIGHTER than the
-    offline "at or behind" tolerance (root CLAUDE.md, "The contract, and the
-    runtime pin", which governs the merge gate): the red is the reminder
-    that finishes the release, cleared by re-running this job once the
-    publish and the catch-up land.
+    release-please branches): every divergence FAILS. A red strict run is
+    the standing signal that the committed render has not been published —
+    every schemas-touching push reds until the `schemas` deployment is
+    approved, the pointer TTL passes, and this job is re-run. The pin
+    catch-up window is one case of it, and that one is deliberately TIGHTER
+    than the offline "at or behind" tolerance (root CLAUDE.md, "The
+    contract, and the runtime pin", which governs the merge gate): the red
+    is the reminder that finishes the release.
   - unset (ordinary PRs): divergences WARN (checks-UI annotation) and the
     job passes — a stale published fact is main's problem, and a release
     PR's stamp legitimately runs ahead of the published tree until it

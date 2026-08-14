@@ -56,11 +56,18 @@ def _fact(guard, version: str) -> bytes:
 
 
 def _redigested_stamp(guard) -> bytes:
-    """The committed stamp with only its tree digest altered — the state a
-    publish leaves behind when a render landed but the upload did not."""
+    """The committed stamp with ONLY its tree digest altered — the state a
+    publish leaves behind when a render landed but the upload did not.
+
+    Serialized exactly as the renderer writes (indent, key order, trailing
+    newline) so the digest value is the sole differing byte range — anything
+    looser and these tests would pass on any serialization difference
+    without isolating the digest at all."""
     doc = json.loads(guard.COMMITTED_PATH.read_bytes())
     doc["tree_sha256"] = "0" * 64
-    return json.dumps(doc).encode()
+    rendered = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
+    assert rendered != guard.COMMITTED_PATH.read_bytes()
+    return rendered
 
 
 def _stub_fetch(guard, monkeypatch, stamp, sentinel=b"{}") -> list:
@@ -378,12 +385,21 @@ def test_strictness_expression_is_identical_to_the_validator_guards():
     )
 
 
-def test_publish_workflow_serves_the_stamp_as_json():
-    # The upload's Content-Type case arm carries the stamp's basename in a
-    # file no other test reads; if the document is renamed or the arm edited,
-    # the stamp silently ships as application/schema+json.
+def test_publish_workflow_uploads_the_stamp_last_as_json():
+    # The stamp is the tree-wide pointer: it must land only after every
+    # other object, or a publish that dies mid-tree leaves a fresh stamp
+    # over a half-uploaded bucket and the guard reads green over exactly
+    # the state it exists to catch. Pinned here because no other test reads
+    # this workflow: the loop's find must exclude the stamp, and the
+    # dedicated upload after the count check must serve it as JSON.
     publish = _PUBLISH_WORKFLOW.read_text()
-    case_line = next(
-        line for line in publish.splitlines() if 'ctype="application/json"' in line
+    lines = publish.splitlines()
+    find_line = next(l for l in lines if "! -name 'contracts-version.json'" in l)
+    assert "find ." in find_line
+    stamp_cp = next(
+        l for l in lines if "aws s3 cp ./contracts-version.json" in l
     )
-    assert "contracts-version.json" in case_line
+    assert 'application/json' in stamp_cp
+    assert lines.index(stamp_cp) > lines.index(find_line), (
+        "the stamp upload must sit after the loop it is excluded from"
+    )
