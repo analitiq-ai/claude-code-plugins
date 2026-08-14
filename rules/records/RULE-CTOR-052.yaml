@@ -5,7 +5,7 @@ statement: >
   an input or as a post-auth output.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [ConnectorBase]

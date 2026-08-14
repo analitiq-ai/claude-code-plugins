@@ -4,7 +4,7 @@ statement: >
   also supply the CA material the connector declares an input for.
 tier: referential
 severity: error
-scope: connection
+scopes: [connection]
 validator: null
 owners: [pipeline-plugin, connector-plugin]
 targets: [ConnectionAuthored, ConnectionInput]

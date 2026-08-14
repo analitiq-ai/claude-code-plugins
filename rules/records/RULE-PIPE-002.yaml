@@ -4,7 +4,7 @@ statement: >
   for, and MUST omit the fields belonging to the types it did not choose.
 tier: advisory
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::Schedule._validate_schedule_fields"
 owners: [pipeline-plugin]
 targets: [Schedule]

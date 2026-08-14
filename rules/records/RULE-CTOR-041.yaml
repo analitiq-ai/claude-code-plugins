@@ -5,7 +5,7 @@ statement: >
   from a similar or wire-compatible system.
 tier: procedural
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [SqlCapabilities]

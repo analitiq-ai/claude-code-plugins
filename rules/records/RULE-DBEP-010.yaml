@@ -4,7 +4,7 @@ statement: >
   namespace discovery returned.
 tier: referential
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [DatabaseObject, DatabaseEndpointDoc]

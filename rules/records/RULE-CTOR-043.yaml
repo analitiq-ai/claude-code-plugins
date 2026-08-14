@@ -3,7 +3,7 @@ statement: >
   An `api` connector's release MUST NOT carry connector-package Python files.
 tier: referential
 severity: warning
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

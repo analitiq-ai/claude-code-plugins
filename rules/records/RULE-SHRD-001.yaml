@@ -4,7 +4,7 @@ statement: >
   expression into the secret scope, never as a literal value.
 tier: structural
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

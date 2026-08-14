@@ -4,7 +4,7 @@ statement: >
   the connection map its own declaration's `storage` names.
 tier: referential
 severity: error
-scope: connection
+scopes: [connection]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ConnectionAuthored, ConnectionInput]

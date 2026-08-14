@@ -4,7 +4,7 @@ statement: >
   has nothing to open a connection with.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs"
 owners: [engine, connector-plugin]
 targets: [AdbcTransport]

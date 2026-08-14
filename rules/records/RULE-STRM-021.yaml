@@ -3,7 +3,7 @@ statement: >
   A validation rule's value MUST carry the payload shape its type requires.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ValidationRule]

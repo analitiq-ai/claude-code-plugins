@@ -4,7 +4,7 @@ statement: >
   contract's vocabulary admits, and discovery MUST write nothing outside it.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscovery.produces"
 owners: [engine, connector-plugin]
 targets: [ResourceDiscovery]

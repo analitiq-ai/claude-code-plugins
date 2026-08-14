@@ -5,7 +5,7 @@ statement: >
   declares.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryTriggers.list_resources"
 owners: [connector-plugin, engine]
 targets: [ResourceDiscoveryTriggers]

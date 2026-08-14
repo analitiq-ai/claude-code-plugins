@@ -4,7 +4,7 @@ statement: >
   substitution point is a `{name}` placeholder declared in `bindings`.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::UrlTemplateDsn._reject_template_expressions"
 owners: [connector-plugin]
 targets: [UrlTemplateDsn]

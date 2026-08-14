@@ -4,7 +4,7 @@ statement: >
   vocabulary `Operations` declares.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Operations.write"
 owners: [connector-plugin, engine]
 targets: [Operations]

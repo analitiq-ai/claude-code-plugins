@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Render contract-owned facts from the published package into the prose docs.
+"""Render contract-owned facts from the in-repo contract into the prose docs.
 
-The agent-facing prose under this plugin is normative (as is the sibling
-connector plugin's) —
-the schema contract itself is defined by the published ``analitiq-validator`` +
-``analitiq-contract-models`` packages. Anything an agent needs that those
-packages already state (enum members, regexes, required-field lists, bounds,
-defaults, cross-field rule text) is therefore **generated** into the prose from
-the installed package rather than retyped by hand, so a doc cannot drift from
-the contract it documents.
+The agent-facing prose under the pipeline plugin is normative (as is the
+sibling connector plugin's) — the schema contract itself is defined by the
+``analitiq-validator`` + ``analitiq-contract-models`` source trees under
+``packages/``. Anything an agent needs that those packages already state (enum
+members, regexes, required-field lists, bounds, defaults, cross-field rule
+text) is therefore **generated** into the prose from that source rather than
+retyped by hand, so a doc cannot drift from the contract it documents.
 
 Each generated region is delimited in the markdown by a marker pair::
 
@@ -21,25 +20,41 @@ to ask the user, what the plugin refuses to do) — this script never touches it
 
 Usage::
 
-    python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py            # rewrite blocks in place
-    python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check    # exit 1 if any block is stale
+    python3 scripts/gen_pipeline_docs.py            # rewrite blocks in place
+    python3 scripts/gen_pipeline_docs.py --check    # exit 1 if any block is stale
 
-``--check`` is what CI runs: it regenerates into memory and diffs, so a pin bump
-that changes the contract fails the build until the docs are regenerated.
+``--check`` is what CI runs: it regenerates into memory and diffs, so a model
+change fails the build until the docs are regenerated.
 """
 from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import re
 import sys
 from pathlib import Path
 
-from _bootstrap import ensure_deps_or_reexec
 
-# Docs the generator is allowed to rewrite: everything under the plugin root. A block id
-# may appear in more than one file; every occurrence is rendered identically.
-DOCS_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Same bootstrap as render_rule_reference.py and render_validator_claims.py:
+# this repo is the contract's source, so put the in-repo trees on the path
+# rather than reaching for an installed wheel. This generator used to live
+# inside the plugin and bootstrap the published pin, while the rule renderer
+# read the in-repo source — so whenever the pin lagged the repo, this
+# plugin's rendered rules and its rendered enums came from two different
+# contract versions.
+sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
+sys.path.insert(0, str(REPO_ROOT / "packages" / "validator" / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import.
+os.environ.setdefault("DOMAIN", "analitiq.ai")
+
+# Docs the generator is allowed to rewrite: everything under the pipeline
+# plugin. A block id may appear in more than one file; every occurrence is
+# rendered identically.
+DOCS_ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
 
 _BLOCK_RE = re.compile(
     r"(?P<begin><!-- BEGIN GENERATED: (?P<id>[a-z0-9][a-z0-9-]*) -->\n)"
@@ -72,7 +87,8 @@ def _md_escape(text: str) -> str:
     reproduce faithfully.
 
     The plain-cell callers (rule statements, type summaries) are therefore only as
-    safe as the pinned contract's own text. That holds for every rule rc10 ships;
+    safe as the contract's own text. That holds for every rule the registry
+    carries today;
     if a future rule's prose contains markdown metacharacters, escape at that
     call site rather than here.
     """
@@ -88,12 +104,12 @@ def _unwrap_alternation(pattern: str) -> str:
 
     `removeprefix`/`removesuffix` silently no-op on a miss, which would leak the
     anchors into the docs as though they were part of the first alternative. The
-    wrapper shape is an assumption about the pinned contract, so assert it.
+    wrapper shape is an assumption about the contract source, so assert it.
     """
     if not (pattern.startswith("^(?:") and pattern.endswith(")$")):
         raise RuntimeError(
             f"expected an anchored '^(?:…)$' alternation, got {pattern[:40]!r}…; "
-            "the pinned contract changed shape and this renderer needs updating")
+            "the contract changed shape and this renderer needs updating")
     return pattern[len("^(?:"):-len(")$")]
 
 
@@ -266,131 +282,13 @@ def render_filter_operators() -> str:
     return "\n".join(out) + "\n"
 
 
-# Which plugin this generator renders for. A rule belongs in this plugin's
-# prose when its record names this owner — the registry's own answer to "who
-# has to know this", decided once per rule where the rule is authored.
-#
-# `scope` decides only WHERE it lands (see `_RULE_BLOCKS`), never whether
-# it appears. The two are different questions and used to be conflated: a rule
-# grading a document this plugin does not author can still bind an author here,
-# which is why an id-prefix allowlist needed a hand-kept list of exceptions
-# beside it. Ownership answers it directly, so both lists are gone.
-PLUGIN_OWNER = "pipeline-plugin"
-
-
-def _owned() -> list:
-    """Every rule this plugin owns — the whole of what its prose may cite."""
-    from analitiq.contracts.shared.rules import all_rules
-
-    return [r for r in all_rules() if PLUGIN_OWNER in r.owners]
-
-
-def _block_rules(block_id: str) -> list:
-    """The owned rules that land in one block, ordered by id.
-
-    Placement is by `scope`, the document a rule grades, because that is what
-    decides which spec a reader is holding when they need it. The block claiming
-    no scopes takes the remainder, so the blocks partition the owned set by
-    construction: every rule lands exactly once, and a rule whose scope is new
-    to this plugin surfaces in the shared block instead of vanishing.
-    """
-    scopes = _RULE_BLOCKS[block_id]
-    claimed = {s for spec in _RULE_BLOCKS.values() for s in spec}
-    rules = [
-        r for r in _owned()
-        if (r.scope in scopes if scopes else r.scope not in claimed)
-    ]
-    return sorted(rules, key=lambda r: r.id)
-
-
-def _rule_block(block_id: str) -> str:
-    """The registry's rules for one block: id and obligation, nothing else.
-
-    No column says whether anything applies a rule, because that changes
-    nothing an agent does — every rule here has to be satisfied either way,
-    and a row reading "nothing here" invites skipping one. The single fact
-    enforcement decides is whether a clean validation run finishes the job, and
-    that is about the whole set, so the prose above says it once.
-
-    The record still carries `validator`; it is resolved by
-    `render_rules.py` and read by the enforcer census. They just do not ship.
-    """
-    rules = _block_rules(block_id)
-    if not rules:
-        raise RuntimeError(
-            f"{block_id} renders no rules — its scopes match nothing this "
-            "plugin owns, so the heading above it now introduces an empty table"
-        )
-
-    out = ["| Rule | Constraint |", "|---|---|"]
-    out += [f"| {_code(r.id)} | {_md_escape(r.statement)} |" for r in rules]
-    return "\n".join(out) + "\n"
-
-
-# Where each owned rule lands, keyed by the document it grades. Placement only
-# — membership is `owners`, decided in the record. An endpoint block claims both
-# endpoint scopes because the two documents share the `Column` model, so a rule
-# filed against one grades the other.
-#
-# The empty tuple is the remainder: whatever this plugin owns that no block
-# above claims renders once in the orchestrator skill rather than being copied
-# into each spec. That is what makes the map a partition instead of a filter —
-# a scope nobody claims cannot fall out of the prose unnoticed.
-_RULE_BLOCKS: dict[str, tuple[str, ...]] = {
-    "rules-pipeline": ("pipeline",),
-    "rules-stream": ("stream",),
-    "rules-endpoint": ("database-endpoint", "api-endpoint"),
-    "rules-connection": ("connection",),
-    "rules-type-map": ("type-map",),
-    "rules-shared": (),
-}
-
-
-def rendered_ids() -> set[str]:
-    """Every id this plugin's prose makes readable, as the generator knows it.
-
-    The generator is the authority on what it rendered. Asking it beats
-    searching its output for row-shaped text, which can only find the malformed
-    rows somebody already thought of.
-    """
-    return {r.id for b in _RULE_BLOCKS for r in _block_rules(b)}
-
-
-def _render_block(block_id: str) -> str:
-    return _rule_block(block_id)
-
-
-def render_rule_reference_pipeline() -> str:
-    return _render_block("rules-pipeline")
-
-
-def render_rule_reference_stream() -> str:
-    return _render_block("rules-stream")
-
-
-def render_rule_reference_endpoint() -> str:
-    return _render_block("rules-endpoint")
-
-
-def render_rule_reference_connection() -> str:
-    return _render_block("rules-connection")
-
-
-def render_rule_reference_type_map() -> str:
-    return _render_block("rules-type-map")
-
-
-def render_rule_reference_shared() -> str:
-    return _render_block("rules-shared")
-
-
 def render_validator_ids() -> str:
     from analitiq.validator import VALIDATOR_IDS
 
     if not VALIDATOR_IDS:
-        raise RuntimeError("the published package exposed no validator ids")
+        raise RuntimeError("the validator exposed no finding ids")
     out = [
-        "Validator ids the published package can emit:",
+        "Finding ids the validator can emit:",
         "",
         ", ".join(f"`{v}`" for v in sorted(VALIDATOR_IDS)),
     ]
@@ -884,12 +782,6 @@ RENDERERS = {
     "shared-vocabulary": render_shared_vocabulary,
     "secret-ref-grammar": render_secret_ref_grammar,
     "filter-operators": render_filter_operators,
-    "rules-pipeline": render_rule_reference_pipeline,
-    "rules-stream": render_rule_reference_stream,
-    "rules-endpoint": render_rule_reference_endpoint,
-    "rules-connection": render_rule_reference_connection,
-    "rules-type-map": render_rule_reference_type_map,
-    "rules-shared": render_rule_reference_shared,
     "validator-ids": render_validator_ids,
     "endpoint-id-derivation": render_endpoint_id_derivation,
     "enum-vocabulary": render_enum_vocabulary,
@@ -944,7 +836,6 @@ def main(argv: list[str] | None = None) -> int:
                         help="Do not write; exit 1 if any generated block is stale.")
     args = parser.parse_args(argv)
 
-    ensure_deps_or_reexec(__file__)
 
     docs = generated_docs()
     if not docs:
@@ -968,12 +859,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"regenerated {rel}")
 
     if args.check and stale:
-        print(f"\n{len(stale)} document(s) out of sync with the published contract: "
-              f"{', '.join(stale)}\nRun: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py",
+        print(f"\n{len(stale)} document(s) out of sync with the contract source: "
+              f"{', '.join(stale)}\nRun: python3 scripts/gen_pipeline_docs.py",
               file=sys.stderr)
         return 1
     if args.check:
-        print(f"{len(docs)} document(s) in sync with the published contract")
+        print(f"{len(docs)} document(s) in sync with the contract source")
     return 0
 
 

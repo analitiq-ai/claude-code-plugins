@@ -5,7 +5,7 @@ statement: >
   the strategy is already shipped by the runtime.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ResourceDiscoveryImplementation._entrypoint_matches_type"
 owners: [engine, connector-plugin]
 targets: [ResourceDiscoveryImplementation]

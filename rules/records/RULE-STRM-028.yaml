@@ -4,7 +4,7 @@ statement: >
   declared type exactly, its parameters included.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [AssignmentTarget]

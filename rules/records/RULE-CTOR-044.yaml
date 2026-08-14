@@ -5,7 +5,7 @@ statement: >
   authored.
 tier: referential
 severity: warning
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

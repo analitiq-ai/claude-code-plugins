@@ -4,7 +4,7 @@ statement: >
   document declares a write operation for.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ApiWrite]

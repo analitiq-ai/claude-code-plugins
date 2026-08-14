@@ -4,7 +4,7 @@ statement: >
   source reports it, with no case-folding, quoting or other normalisation.
 tier: referential
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject, DatabaseEndpointDoc]

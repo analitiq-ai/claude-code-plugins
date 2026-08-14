@@ -4,7 +4,7 @@ statement: >
   operator that takes none MUST NOT carry one.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::Filter._validate_value_presence"
 owners: [pipeline-plugin]
 targets: [Filter]

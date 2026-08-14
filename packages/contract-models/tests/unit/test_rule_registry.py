@@ -349,7 +349,7 @@ def test_descriptive_prose_cannot_take_a_rule_id():
             statement="A connector MUST be versioned by git tag.",
             tier=DESCRIPTIVE_TIER,
             severity="info",
-            scope="connector",
+            scopes=("connector",),
             rationale="—",
             owners=("connector-plugin",),
         )

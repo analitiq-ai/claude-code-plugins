@@ -10,5 +10,5 @@ This skill is a placeholder for the kinds `storage-connector-creator` declines
 (`RULE-CTOR-037`). It carries no authoring vocabulary, because nothing here is
 authored.
 
-See also `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md` —
+See also `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md` —
 where `RULE-CTOR-037` resolves.

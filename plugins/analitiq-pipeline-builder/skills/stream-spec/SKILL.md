@@ -102,52 +102,13 @@ vocabulary table above and from nowhere else (`RULE-STRM-035`).
 
 ## Registered rules for a stream
 
-Satisfy every rule below, and cite one by id rather than restating it.
+Every rule binding a stream document is in
+`../pipeline-builder/references/rules/stream.md` — **read it before
+authoring**, satisfy every row, and cite one by id rather than restating it.
 <!-- PROBE: stream-filter-field-unresolved-locally -->
 A clean validation run is not proof they all hold — some are applied only at
 connect or run time.
 
-<!-- BEGIN GENERATED: rules-stream -->
-| Rule | Constraint |
-|---|---|
-| `RULE-STRM-001` | Each entry in a stream's destinations MUST address an endpoint no other entry addresses. |
-| `RULE-STRM-002` | Each assignment in a mapping MUST own a destination path no other assignment in that mapping writes. |
-| `RULE-STRM-003` | A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces. |
-| `RULE-STRM-004` | A filter MUST carry a value unless its operator takes no operand, and an operator that takes none MUST NOT carry one. |
-| `RULE-STRM-005` | A pipe expression's arguments MUST begin with the source-read node that seeds it and continue only with conversion stages applied left to right. |
-| `RULE-STRM-006` | An arrow field spec MUST declare the inner shape its arrow_type calls for and no other: a container marker carries its own inner declaration, and any other type carries none. |
-| `RULE-STRM-007` | A constant MUST carry a value of the JSON kind its declared arrow_type admits, and MUST declare the inner shape that type calls for and no other. |
-| `RULE-STRM-009` | A validation rule MUST carry a value when its type takes a parameter, and MUST omit one when its type takes none. |
-| `RULE-STRM-010` | An assignment target MUST declare the inner shape its arrow_type calls for and no other: a container marker carries its own inner declaration, and any other type carries none. |
-| `RULE-STRM-012` | A filter's operator MUST belong to the operator vocabulary of the scope its source endpoint reference declares. |
-| `RULE-STRM-014` | A stream source bound to a connector-scoped endpoint MUST NOT declare any read feature the source model reserves for database sources. |
-| `RULE-STRM-015` | A validation rule's field MUST resolve within its own mapping: the first token naming an assignment target the mapping declares, and each later token a field declared beneath the one before it. |
-| `RULE-STRM-016` | A stream destination's write block MUST take the shape its mode selects and carry only the fields that shape declares. |
-| `RULE-STRM-017` | A stream's replication block MUST take the shape its method selects and carry only the fields that shape declares. |
-| `RULE-STRM-018` | A connection-scoped endpoint reference SHOULD carry the derived endpoint_id whenever the author can compute it, so the cross-document bundle check can resolve the reference. |
-| `RULE-STRM-019` | A mapping's assignments MUST be kept in the order they were authored and MUST NOT be re-sorted, because the engine applies them in that order. |
-| `RULE-STRM-020` | An assignment whose source and target types form a conversion the engine classifies as explicit MUST name that conversion function in a pipe stage rather than reading the field bare. |
-| `RULE-STRM-021` | A validation rule's value MUST carry the payload shape its type requires. |
-| `RULE-STRM-022` | Every field name a stream references MUST resolve to a field the endpoint document on that side of the transfer declares. |
-| `RULE-STRM-023` | A stream MUST reproduce every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization. |
-| `RULE-STRM-024` | An API destination's write mode MUST be one the referenced api-endpoint document declares a write operation for. |
-| `RULE-STRM-025` | An API source's replication method MUST be one the referenced endpoint declares in its supported set. |
-| `RULE-STRM-026` | A filter on an API source MUST name a read parameter the referenced endpoint declares filterable — one that publishes its own operator set and is not reserved to the runtime. |
-| `RULE-STRM-027` | A filter's value MUST carry the type the referenced field declares, and a membership operator MUST carry an array of such values. |
-| `RULE-STRM-028` | An assignment target's arrow_type MUST reproduce the destination column's declared type exactly, its parameters included. |
-| `RULE-STRM-029` | A stream source MUST declare a replication policy unless the referenced source endpoint supports full refresh. |
-| `RULE-STRM-030` | A stream MUST declare source primary keys when the transfer needs record identity and the source endpoint carries no primary-key metadata of its own, and MUST NOT declare keys that contradict the endpoint's. |
-| `RULE-STRM-031` | A stream's reference to an API endpoint MUST use connector scope; connection scope refers to a database endpoint only. |
-| `RULE-STRM-032` | A stream MUST name as its parent the pipeline that references it. |
-| `RULE-STRM-033` | A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination. |
-| `RULE-STRM-034` | A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names. |
-| `RULE-STRM-035` | A stream MUST name its lifecycle state from the vocabulary `StreamAuthored` declares. |
-| `RULE-STRM-036` | A stream filter MUST name its operator from the vocabulary `Filter` declares. |
-| `RULE-STRM-037` | A validation rule MUST name its kind from the vocabulary `ValidationRule` declares. |
-| `RULE-STRM-038` | A stream destination's write block MUST name its mode from the write-mode vocabulary the block it selects declares. |
-| `RULE-STRM-039` | An incremental stream's late-arrival safety window MUST be sized from how late the source's own records arrive, and MUST NOT be authored as a rewind the stream can count on: whether a window shifts a read at all is decided by the source, not by the stream document. |
-| `RULE-STRM-040` | A mapping assignment's validation `error_handling` MUST NOT be authored as the policy for the failures its own rules raise; how a run answers a validation failure is what the pipeline's runtime error handling declares, for every assignment. |
-<!-- END GENERATED: rules-stream -->
 
 ## Output rules
 

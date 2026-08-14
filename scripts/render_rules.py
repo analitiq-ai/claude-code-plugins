@@ -60,6 +60,7 @@ from analitiq.contracts.shared.rule_record import (  # noqa: E402
     OWNERS,
     RETIRED_BEFORE_THE_REGISTRY,
     RULES_PATH,
+    SCOPES,
     RuleRecord,
 )
 
@@ -200,10 +201,10 @@ def compile_registry(records: list[RuleRecord]) -> str:
                 "statement": r.statement,
                 "tier": r.tier,
                 "severity": r.severity,
-                "scope": r.scope,
-                "validator": r.validator,
                 # Canonical order, so the compiled copy does not churn on the
                 # order somebody happened to type into the YAML.
+                "scopes": [s for s in SCOPES if s in r.scopes],
+                "validator": r.validator,
                 "owners": [o for o in OWNERS if o in r.owners],
                 "targets": list(r.targets),
                 "fields": list(r.fields),

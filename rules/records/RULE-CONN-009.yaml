@@ -4,7 +4,7 @@ statement: >
   secret storage is authored as a pointer in `secret_refs`.
 tier: referential
 severity: error
-scope: connection
+scopes: [connection]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ConnectionAuthored, ConnectionInput]

@@ -5,7 +5,7 @@ statement: >
   vocabularies `SingleCursorMapping` declares for each.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::SingleCursorMapping.format"
 owners: [connector-plugin, engine]
 targets: [SingleCursorMapping]

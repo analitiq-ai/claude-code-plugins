@@ -58,7 +58,7 @@ order, stopping at the first match (`RULE-CTOR-027`; full guide:
 `connector-spec-db/spec-driver-selection.md`):
 
 1. **A first-class ADBC driver exists and is in the schema's
-   `AdbcTransport.driver` enum** (`RULE-CTOR-016` in `references/rules.md`
+   `AdbcTransport.driver` enum** (`RULE-CTOR-016` in `references/rules/connector.md`
    prints the current members off the live model; rationale and packaging:
    `spec-driver-selection.md` §1) → `adbc`. Redshift is
    postgres-wire-compatible but does NOT take this tier: its canonical

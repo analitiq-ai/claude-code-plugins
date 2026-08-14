@@ -4,7 +4,7 @@ statement: >
   carry only the fields that shape declares.
 tier: structural
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::FullRefreshReplication"
 owners: [pipeline-plugin]
 targets: [FullRefreshReplication, IncrementalReplication]

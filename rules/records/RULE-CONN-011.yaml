@@ -4,7 +4,7 @@ statement: >
   the connection is assembled into.
 tier: referential
 severity: error
-scope: connection
+scopes: [connection]
 validator: "analitiq.validator.pipelines::_check_connection_connector_refs"
 owners: [pipeline-plugin, engine]
 rationale: >

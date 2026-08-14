@@ -579,7 +579,7 @@ def _grading_entity(marker: Marker, label: str) -> str:
     """The published resource a block grades as.
 
     A ``validate:`` marker states it. An ``invalid:`` marker states only the
-    rule id; the registry's ``scope`` supplies the resource — which also makes
+    rule id; the registry's ``scopes`` supply the resource — which also makes
     a dangling rule id fail the build, the same property a citation carries
     (`plugin-prose.md` rung 1).
     """
@@ -589,7 +589,18 @@ def _grading_entity(marker: Marker, label: str) -> str:
         assert marker.rule in rules, (
             f"{label}: '<!-- invalid: {marker.rule} -->' names no rule in the "
             "rule registry — a dangling id pins nothing.")
-        entity = rules[marker.rule].scope
+        # A rule may bind more than one artifact kind, but a fence grades ONE
+        # document, so the marker resolves to the scope naming a document this
+        # gate can validate. Two of them is an ambiguous marker — a defect to
+        # report rather than a coin to flip. None falls through to the
+        # membership assertion below, which already says what to do instead.
+        scopes = rules[marker.rule].scopes
+        hosted = [s for s in scopes if s in ENTITY_SCHEMA]
+        assert len(hosted) < 2, (
+            f"{label}: '<!-- invalid: {marker.rule} -->' binds {hosted}, so "
+            "which document this block grades is ambiguous — use a 'validate:' "
+            "marker naming the one the block carries.")
+        entity = hosted[0] if hosted else scopes[0]
     else:
         entity = marker.entity
     assert entity in ENTITY_SCHEMA, (
@@ -760,9 +771,15 @@ def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
 
 def _endpoint_rule() -> str:
     from analitiq.contracts.shared.rules import all_rules
+    # Hosted by api-endpoint ALONE: a rule also hosted by a second document is
+    # the ambiguous-marker case `_grading_entity` refuses, so it cannot serve
+    # as this fixture.
     # StopIteration here is the failure signal working, not a case to guard:
-    # the registry losing every api-endpoint rule is the defect to report.
-    return next(r.id for r in all_rules() if r.scope == "api-endpoint")  # skipcq: PTC-W0063
+    # the registry losing every api-endpoint-only rule is the defect to report.
+    return next(  # skipcq: PTC-W0063
+        r.id for r in all_rules()
+        if [s for s in r.scopes if s in ENTITY_SCHEMA] == ["api-endpoint"]
+    )
 
 
 def test_invalid_disposition_requires_the_failure(tmp_path):
@@ -793,7 +810,9 @@ def test_invalid_disposition_rejects_a_resource_with_no_document():
     a type map whose direction the id does not state) must fail on the
     resource, not deeper — a KeyError in the splice would misdirect."""
     from analitiq.contracts.shared.rules import all_rules
-    rule = next((r for r in all_rules() if r.scope not in ENTITY_SCHEMA), None)
+    rule = next(
+        (r for r in all_rules()
+         if not any(s in ENTITY_SCHEMA for s in r.scopes)), None)
     if rule is None:  # every scope gained a document: real blocks cover it
         pytest.skip("no rule scoped outside the published documents")
     with pytest.raises(AssertionError, match="cannot validate as a document"):

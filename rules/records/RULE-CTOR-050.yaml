@@ -5,7 +5,7 @@ statement: >
   references MUST declare a phase no later than that transport's first use.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [ConnectorBase]

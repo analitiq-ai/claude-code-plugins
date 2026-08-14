@@ -4,7 +4,7 @@ statement: >
   declared resolution scope.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::TemplateExpression._placeholders_qualified"
 owners: [connector-plugin]
 rationale: >

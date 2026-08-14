@@ -4,7 +4,7 @@ statement: >
   follows, MUST land on the origin of the transport its `transport_ref` names.
 tier: referential
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: null
 owners: [connector-plugin, engine]
 targets: [_RequestBase]

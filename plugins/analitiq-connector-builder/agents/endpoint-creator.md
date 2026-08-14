@@ -22,10 +22,14 @@ not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-pagination.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
-  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
-  Grades column says which artifact each one binds, and a rule graded `any`
-  binds every document you author.)
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
+  (the whole of what an endpoint document must satisfy. Read it before
+  authoring, and satisfy every row.)
+- Cited `RULE-PKG-*` ids resolve in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`,
+  and `RULE-DBEP-*` ids in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md` —
+  open those only to resolve a citation; you author neither artifact.
 
 ## Inputs
 
@@ -177,7 +181,7 @@ was raised.
    - `idempotency` (optional) — where the provider's idempotency key goes on
      each write request, and what it is called. The placement vocabulary is
      `RULE-ENDP-039`, printed from the live model in
-     `connector-builder/references/rules.md`; pick by what the provider
+     `connector-builder/references/rules/api-endpoint.md`; pick by what the provider
      documents — a request header (Stripe's `Idempotency-Key`) or a top-level
      body field (Square's `idempotency_key`, which requires a JSON-object
      request body).

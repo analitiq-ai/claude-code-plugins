@@ -4,7 +4,7 @@ statement: >
   `PublicRunError` declares.
 tier: structural
 severity: error
-scope: data-sync-run-status
+scopes: [data-sync-run-status]
 validator: "analitiq.contracts.pipelines.data_sync::PublicRunError.code"
 owners: [engine]
 targets: [PublicRunError]

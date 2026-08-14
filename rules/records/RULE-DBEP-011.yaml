@@ -4,7 +4,7 @@ statement: >
   derivation produces from its verbatim `database_object`.
 tier: referential
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: "analitiq.validator.connectors::_database_endpoint_locator_findings"
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

@@ -4,7 +4,7 @@ statement: >
   transport vocabulary `TransportDefaults` declares.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::TransportDefaults.transport_type"
 owners: [connector-plugin, engine]
 targets: [TransportDefaults]

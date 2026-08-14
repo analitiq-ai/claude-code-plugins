@@ -4,7 +4,7 @@ statement: >
   header with a value that resolves to null or empty is not a deletion.
 tier: structural
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [HttpTransport, TransportDefaults, _RequestBase]

@@ -6,7 +6,7 @@ statement: >
   be declared in that mode's input schema.
 tier: advisory
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [WriteOperation]

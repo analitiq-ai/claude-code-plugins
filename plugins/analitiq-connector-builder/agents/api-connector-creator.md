@@ -65,10 +65,14 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
-- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules.md`
-  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
-  Grades column says which artifact each one binds, and a rule graded `any`
-  binds every document you author.)
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/type-map.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`
+  (one rule file per artifact you author or ship. Each is the whole of what
+  that document must satisfy — read it before authoring the document and
+  satisfy every row. `connector-package.md` binds the repository you assemble,
+  not a document you author.)
 
 ## Authoring order
 

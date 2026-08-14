@@ -4,7 +4,7 @@ statement: >
   document already froze for the native it matches.
 tier: referential
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [TypeMapReadExactRule, TypeMapReadRegexRule]

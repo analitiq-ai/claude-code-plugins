@@ -6,7 +6,7 @@ statement: >
   requested window.
 tier: judgment
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: null
 owners: [connector-plugin]
 targets: [OffsetCursor]

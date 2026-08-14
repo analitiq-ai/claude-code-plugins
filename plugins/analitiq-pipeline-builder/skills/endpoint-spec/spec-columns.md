@@ -170,28 +170,7 @@ other's (`RULE-DBEP-002`). Omit for schemaless engines (MongoDB).
 
 ## Registered endpoint rules
 
-Every rule this plugin owns over an endpoint document, whichever endpoint scope
-it is filed at:
-
-<!-- BEGIN GENERATED: rules-endpoint -->
-| Rule | Constraint |
-|---|---|
-| `RULE-DBEP-001` | Every column a database endpoint declares MUST carry a name no other column in that document repeats. |
-| `RULE-DBEP-002` | Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's. |
-| `RULE-DBEP-003` | Every name in a database endpoint's `primary_keys` MUST name a column the same document declares. |
-| `RULE-DBEP-004` | A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical. |
-| `RULE-DBEP-005` | A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks. |
-| `RULE-DBEP-006` | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. |
-| `RULE-DBEP-007` | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. |
-| `RULE-DBEP-008` | An authored endpoint MUST NOT declare a column the engine synthesises when it creates a table, and MUST drop such a column from a mirrored source's column list. |
-| `RULE-DBEP-009` | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation. |
-| `RULE-DBEP-010` | A database endpoint for a table that does not exist yet MUST target a namespace discovery returned. |
-| `RULE-DBEP-011` | A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`. |
-| `RULE-DBEP-012` | A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type. |
-| `RULE-DBEP-013` | A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label. |
-| `RULE-ENDP-020` | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
-| `RULE-ENDP-021` | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. |
-| `RULE-ENDP-031` | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. |
-| `RULE-ENDP-043` | A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one. |
-| `RULE-ENDP-055` | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. |
-<!-- END GENERATED: rules-endpoint -->
+This skill authors database endpoints. Every rule this plugin owns over a
+database endpoint document is in
+`../pipeline-builder/references/rules/database-endpoint.md` — **read it
+before authoring** and satisfy every row.

@@ -5,7 +5,7 @@ statement: >
   time.
 tier: procedural
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseEndpointDoc]

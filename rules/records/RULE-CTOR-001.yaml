@@ -4,7 +4,7 @@ statement: >
   declares.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._default_transport_declared"
 owners: [engine, connector-plugin]
 targets: [ConnectorBase]

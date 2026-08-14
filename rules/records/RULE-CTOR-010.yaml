@@ -5,7 +5,7 @@ statement: >
   them.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::FileConnector._validate_no_post_auth_contract"
 owners: [connector-plugin]
 targets: [FileConnector, S3Connector, StdoutConnector]

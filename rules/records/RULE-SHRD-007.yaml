@@ -4,7 +4,7 @@ statement: >
   including where documentation describes an unregistered one as planned.
 tier: referential
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

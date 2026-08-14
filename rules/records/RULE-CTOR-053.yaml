@@ -2,12 +2,12 @@ id: RULE-CTOR-053
 statement: >
   A `lookup` function's inline `map` MUST declare a key for every value of
   the referenced input's `enum`, and no key outside it.
-tier: advisory
+tier: referential
 severity: warning
-scope: connector
+scopes: [connector, api-endpoint]
 validator: null
 owners: [connector-plugin]
-targets: [FunctionExpression, ConnectionContractInput]
+targets: [FunctionExpression, LookupDerived, ConnectionContractInput]
 rationale: >
   The map is how a user-facing vocabulary reaches the wire, and a missing key
   is not a fallback: the value resolves to nothing and the request goes out

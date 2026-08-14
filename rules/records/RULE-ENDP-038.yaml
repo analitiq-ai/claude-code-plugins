@@ -5,7 +5,7 @@ statement: >
   carry a separate default-method key.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Replication.supported_methods"
 owners: [connector-plugin, engine]
 targets: [Replication]

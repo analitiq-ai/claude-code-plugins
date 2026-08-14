@@ -4,7 +4,7 @@ statement: >
   streams, and MUST NOT be presented to the user as one.
 tier: procedural
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [PipelineAuthored]

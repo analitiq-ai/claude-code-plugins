@@ -4,7 +4,7 @@ statement: >
   read feature the source model reserves for database sources.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_database_only_read_features"
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

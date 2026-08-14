@@ -18,7 +18,7 @@ than from a copy here.
 
 `source`, `phase`, `storage` and `type` each draw from a closed vocabulary the
 model declares (`RULE-CTOR-021`). Read the members off that rule's Values column
-in `rules.md`, which prints them from the live model; what each choice *decides*
+in `rules/connector.md`, which prints them from the live model; what each choice *decides*
 is below.
 
 | Field | What the choice decides |
@@ -62,7 +62,7 @@ is never "where is this interpolated from?" but "whose value is this?":
 
 `post_auth_outputs` are the single source of truth for durable post-auth
 context. `RULE-CTOR-022` carries the vocabulary for `mode`, `storage` and `type`
-alike, printed from the live model in `rules.md`. Which pairings of `mode` and
+alike, printed from the live model in `rules/connector.md`. Which pairings of `mode` and
 `storage` are legal, and each mode's required and forbidden request fields, are
 `RULE-CTOR-002`.
 

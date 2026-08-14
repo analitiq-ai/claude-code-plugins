@@ -4,7 +4,7 @@ statement: >
   actually has, and MUST invent none the system lacks.
 tier: judgment
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject]

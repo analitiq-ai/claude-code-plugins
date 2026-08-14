@@ -4,7 +4,7 @@ statement: >
   are exhausted, from the vocabulary `RetryErrorHandlingBase` declares.
 tier: structural
 severity: error
-scope: any
+scopes: [any]
 validator: "analitiq.contracts.shared.common::RetryErrorHandlingBase.strategy"
 owners: [pipeline-plugin, engine]
 targets: [RetryErrorHandlingBase]

@@ -50,8 +50,10 @@ What to read instead:
   likely to fail validation).
 - `spec-pagination.md` / `spec-replication.md` — choosing and wiring those
   blocks.
-- `connector-builder/references/rules.md` — every rule this plugin owns,
-  citable by id. Satisfy all of them.
+- `connector-builder/references/rules/connector.md` — every rule binding the
+  connector document, citable by id. Satisfy all of them.
+- `connector-builder/references/rules/api-endpoint.md` — the same, for each
+  endpoint document this skill produces.
 
 ## What this skill does NOT cover
 

@@ -5,7 +5,7 @@ statement: >
   MUST take a storage its mode admits.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::PostAuthOutput._mode_consistency"
 owners: [engine, connector-plugin]
 targets: [PostAuthOutput]

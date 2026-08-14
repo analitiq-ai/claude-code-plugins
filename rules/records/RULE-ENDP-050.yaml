@@ -5,7 +5,7 @@ statement: >
   is written under the field's `in` alias.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Param.location"
 owners: [connector-plugin, engine]
 targets: [Param]

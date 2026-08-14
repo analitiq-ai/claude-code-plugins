@@ -4,7 +4,7 @@ statement: >
   canonical its connector's own map leaves unresolved.
 tier: referential
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

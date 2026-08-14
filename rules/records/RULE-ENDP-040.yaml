@@ -5,7 +5,7 @@ statement: >
   a request slot.
 tier: procedural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: null
 owners: [connector-plugin, engine]
 targets: [Idempotency, WriteOperation]

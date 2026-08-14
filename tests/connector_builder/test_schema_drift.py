@@ -426,8 +426,8 @@ def test_adbc_drivers_match_schema(connector_schema: dict) -> None:
         schema_set,
         EXPECTED_ADBC_DRIVERS,
         "the members render from `RULE-CTOR-016` (mechanism literal_enum) into "
-        "plugins/analitiq-connector-builder/skills/connector-builder/references/rules.md "
-        "— re-render it, then re-read the tiered decision order in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/rules/connector.md "
+        "— re-render the set, then re-read the tiered decision order in "
         "plugins/analitiq-connector-builder/skills/connector-spec-db/spec-driver-selection.md, "
         "whose tiers reason from which drivers are members.",
     )
@@ -1297,8 +1297,8 @@ def test_idempotency_targets_match_schema(api_endpoint_schema: dict) -> None:
         EXPECTED_IDEMPOTENCY_TARGETS,
         "the placement members render from `RULE-ENDP-039` (mechanism "
         "literal_enum) into "
-        "plugins/analitiq-connector-builder/skills/connector-builder/references/rules.md "
-        "— re-render it, then re-read the per-placement guidance in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/rules/api-endpoint.md "
+        "— re-render the set, then re-read the per-placement guidance in "
         "plugins/analitiq-connector-builder/agents/endpoint-creator.md, which "
         "tells the author what each placement means.",
     )

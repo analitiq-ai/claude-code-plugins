@@ -1,13 +1,15 @@
-"""Tests for the contract-doc generator (plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py).
+"""Tests for the contract-doc generator (scripts/gen_pipeline_docs.py).
 
-The prose under the plugin root is the only prose Analitiq still keeps, so the facts it
-states about the contract are generated from the pinned published package rather
-than typed by hand. The load-bearing test here is `test_generated_blocks_in_sync`:
-it is the drift gate. If a pin bump changes an enum, a regex, a bound, or an
-advisory rule, that test fails until the docs are regenerated.
+The prose under the plugin root is the only prose Analitiq still keeps, so the
+facts it states about the contract are generated from the in-repo contract
+source rather than typed by hand. The load-bearing test here is
+`test_generated_blocks_in_sync`: it is the drift gate. If a model change moves
+an enum, a regex, a bound, or an advisory rule, that test fails until the docs
+are regenerated.
 
-Like the adapter tests, this module skips cleanly when the published packages are
-absent so a bare `pytest` never fails confusingly.
+The `importorskip` below skips this module when the contract's runtime deps
+are missing (`pip install -r requirements-dev.txt` not run) so a bare `pytest`
+never fails confusingly; CI hard-requires it via the repo conftest.
 """
 from __future__ import annotations
 
@@ -17,19 +19,21 @@ from pathlib import Path
 
 import pytest
 
+from _rule_files import rule_reference_root
+
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(ROOT / "scripts"))
-import gen_contract_docs as G  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+import gen_pipeline_docs as G  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
 
 
 def test_generated_blocks_in_sync():
-    """Every generated block in every doc matches what the pinned package emits.
+    """Every generated block in every doc matches what the contract source emits.
 
     This is the drift gate. On failure, run:
-        python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py
+        python3 scripts/gen_pipeline_docs.py
     """
     stale = [
         p.relative_to(ROOT).as_posix()
@@ -37,8 +41,8 @@ def test_generated_blocks_in_sync():
         if p.read_text() != G.render_text(p.read_text(), str(p))
     ]
     assert not stale, (
-        "generated blocks are out of sync with the published contract in: "
-        f"{', '.join(stale)}. Run: python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py"
+        "generated blocks are out of sync with the contract source in: "
+        f"{', '.join(stale)}. Run: python3 scripts/gen_pipeline_docs.py"
     )
 
 
@@ -89,7 +93,14 @@ def test_no_malformed_markers():
     # contributes nothing either way — so the arithmetic still holds; the looseness
     # is what catches a marker mangled inside its own prefix.
     loose = re.compile(r"<!--.*?GENERATED.*?-->", re.IGNORECASE | re.DOTALL)
+    # The per-scope rule files are generated whole by render_rule_reference.py
+    # — their header comment names that script, not a BEGIN/END pair — and
+    # test_rule_reference_sync.py fails on any byte of drift in them, so this
+    # marker arithmetic does not apply there.
+    rule_files_root = rule_reference_root()
     for path in sorted(G.DOCS_ROOT.rglob("*.md")):
+        if path.is_relative_to(rule_files_root):
+            continue
         text = path.read_text()
         markers = len(loose.findall(text))
         parsed = len(G._BLOCK_RE.findall(text))
@@ -105,7 +116,7 @@ def test_every_schema_url_in_prose_is_published():
     Some `$schema` mentions live in imperative prose ("Declare `$schema`: …")
     where a generated block does not fit. They are still a drift surface, so this
     pins them: every schemas.analitiq.ai URL appearing anywhere under the plugin root must be
-    one the pinned package actually emits.
+    one the contract source actually emits.
     """
     from analitiq.contracts.shared.common import schema_url_for
 
@@ -185,44 +196,3 @@ def test_filter_operator_scopes_are_disjoint_and_complete():
         "API-only operators are no longer connector-scope-only")
     assert {"eq", "neq", "in", "not_in"} <= connection & connector, (
         "common operators are no longer accepted in both scopes")
-
-
-def test_every_owned_rule_lands_in_exactly_one_block():
-    """The block map partitions what this plugin owns — no gaps, no doubles.
-
-    Placement is by `scope`, so a rule whose scope no block claims would render
-    nowhere and fail nothing: the rule would simply be missing from every
-    agent's instructions. The remainder block is what makes that impossible, and
-    this is what proves the remainder is still wired to a document.
-
-    The double-render half matters as much: an id in two blocks is one rule an
-    agent meets twice with two surrounding explanations, which is how a spec
-    starts contradicting itself.
-    """
-    owned = {r.id for r in G._owned()}
-    placed = [rule.id for block in G._RULE_BLOCKS for rule in G._block_rules(block)]
-
-    assert sorted(placed) == sorted(owned), (
-        "the blocks no longer partition what this plugin owns: "
-        f"unplaced={sorted(owned - set(placed))}, "
-        f"unknown={sorted(set(placed) - owned)}"
-    )
-    duplicated = sorted({i for i in placed if placed.count(i) > 1})
-    assert not duplicated, (
-        f"these rules render in more than one block: {duplicated}. Two scopes "
-        "claim the same rule, so an agent meets it twice."
-    )
-
-
-def test_rule_block_keys_are_real_renderer_blocks():
-    """Each block must be claimed by a renderer that actually reaches a doc.
-
-    Without this, a block can hold rules while reaching no agent — which reads
-    as coverage in the partition test above and is not.
-    `test_every_renderer_is_referenced_by_a_doc` carries it the rest of the way
-    to an actual document.
-    """
-    orphans = sorted(set(G._RULE_BLOCKS) - set(G.RENDERERS))
-    assert not orphans, (
-        f"advisory map claims block ids with no renderer: {orphans}; "
-        "their rules would count as rendered while reaching no agent")

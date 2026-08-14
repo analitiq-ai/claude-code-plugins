@@ -4,7 +4,7 @@ statement: >
   secret storage path.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs"
 owners: [engine, connector-plugin]
 targets: [ConnectorBase]

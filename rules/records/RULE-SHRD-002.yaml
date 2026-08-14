@@ -5,7 +5,7 @@ statement: >
   zone-aware.
 tier: judgment
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin]
 rationale: >

@@ -5,7 +5,7 @@ statement: >
   validates and resolves to nothing.
 tier: referential
 severity: error
-scope: any
+scopes: [any]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

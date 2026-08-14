@@ -6,7 +6,9 @@
    "statement": "A connection-contract input's `ui.options` MUST offer exactly the value set its `enum` declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput._options_offer_the_enum",
    "owners": [
     "connector-plugin"
@@ -26,7 +28,9 @@
    "statement": "An input's `default` MUST be a member of the `enum` declared beside it.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput._default_is_an_enum_member",
    "owners": [
     "engine",
@@ -47,7 +51,9 @@
    "statement": "An input MUST mark itself secret exactly when its declared `storage` routes the value into secret storage.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput._consistency",
    "owners": [
     "engine",
@@ -68,7 +74,9 @@
    "statement": "A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": "analitiq.contracts.connection::ConnectionStoredMaps._validate_no_secret_keys",
    "owners": [
     "pipeline-plugin"
@@ -88,7 +96,9 @@
    "statement": "A connection MUST NOT author a value into its `discovered` map, which the connections service owns and fills from the connector's post-auth discovery.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -110,7 +120,9 @@
    "statement": "Every connection-contract input and post-auth output MUST be authored into the connection map its own declaration's `storage` names.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -132,7 +144,9 @@
    "statement": "A connection MUST author each value in the JSON type its connection-contract input declares, uncoerced, and within that input's declared allowed-value list where it declares one.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -154,7 +168,9 @@
    "statement": "A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -176,7 +192,9 @@
    "statement": "A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -198,7 +216,9 @@
    "statement": "A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -220,7 +240,9 @@
    "statement": "A connection's `connector_id` MUST resolve to a connector present in the run the connection is assembled into.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connection",
+   "scopes": [
+    "connection"
+   ],
    "validator": "analitiq.validator.pipelines::_check_connection_connector_refs",
    "owners": [
     "engine",
@@ -239,7 +261,9 @@
    "statement": "A connector's default_transport MUST name a transport the same document declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._default_transport_declared",
    "owners": [
     "engine",
@@ -260,7 +284,9 @@
    "statement": "A post-auth output MUST declare the request its mode consumes, MUST omit the request and the response-extraction paths belonging to the other mode, and MUST take a storage its mode admits.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::PostAuthOutput._mode_consistency",
    "owners": [
     "engine",
@@ -281,7 +307,9 @@
    "statement": "A resource-discovery implementation MUST declare an entrypoint exactly when the strategy code ships inside the connector package, and MUST omit one when the strategy is already shipped by the runtime.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ResourceDiscoveryImplementation._entrypoint_matches_type",
    "owners": [
     "engine",
@@ -302,7 +330,9 @@
    "statement": "An ADBC transport MUST carry connection state; a transport that declares none has nothing to open a connection with.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::AdbcTransport._require_dsn_or_kwargs",
    "owners": [
     "engine",
@@ -323,7 +353,9 @@
    "statement": "Every transport_ref a connector declares MUST resolve to a transport declared in the same document.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._transport_refs_resolvable",
    "owners": [
     "engine",
@@ -344,7 +376,9 @@
    "statement": "Two declarations in one connection contract MUST NOT resolve to the same secret storage path.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "engine",
@@ -365,7 +399,9 @@
    "statement": "Every path in required_for_activation MUST resolve to a storage path that some declared input or post-auth output materializes.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "engine",
@@ -386,7 +422,9 @@
    "statement": "A cross-input validation rule's predicate MUST test an input the same connection contract declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "connector-plugin"
@@ -406,7 +444,9 @@
    "statement": "The fields a cross-input validation rule requires or forbids MUST be inputs the same connection contract declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._connection_contract_internal_refs",
    "owners": [
     "connector-plugin"
@@ -426,7 +466,9 @@
    "statement": "A connector whose kind runs no post-authentication phase MUST NOT declare post-auth outputs, nor the activation prerequisites that would resolve from them.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::FileConnector._validate_no_post_auth_contract",
    "owners": [
     "connector-plugin"
@@ -448,7 +490,9 @@
    "statement": "Every placeholder in a url_template DSN MUST have a binding, and every binding MUST be referenced by the template.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::UrlTemplateDsn._validate_placeholder_bindings",
    "owners": [
     "engine",
@@ -469,7 +513,9 @@
    "statement": "A connection condition predicate MUST name the input it tests and MUST declare exactly one operator key per predicate.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectionConditionPredicate._exactly_one_operator",
    "owners": [
     "connector-plugin"
@@ -489,7 +535,9 @@
    "statement": "A stage placed in a schema of its own MUST name that schema, and a stage co-located with the target MUST NOT name one.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::SqlStageCapabilities._dedicated_schema_matches_scope",
    "owners": [
     "engine",
@@ -510,7 +558,9 @@
    "statement": "A write_unit MUST declare at least one bound; a block declaring none states no preference and MUST be omitted instead.\n",
    "tier": "advisory",
    "severity": "warning",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::WriteUnit._at_least_one_bound",
    "owners": [
     "engine",
@@ -531,7 +581,9 @@
    "statement": "A transport family that lands through the default path MUST be omitted from the bulk-load declaration rather than declared with a null mechanism.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::SqlBulkLoad._null_is_not_a_mechanism",
    "owners": [
     "engine",
@@ -552,7 +604,9 @@
    "statement": "An ADBC transport's `driver` MUST name a member of the closed vocabulary the contract declares for it; a driver the vocabulary does not name cannot be declared at all.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::AdbcTransport.driver",
    "owners": [
     "engine",
@@ -575,7 +629,9 @@
    "statement": "A bulk-load family key MUST name a mechanism the contract admits under that family — the families' vocabularies differ, so a mechanism is declarable only under the family whose field carries it — and a mechanism outside them is not declarable at all.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::SqlBulkLoad.sqlalchemy",
    "owners": [
     "engine",
@@ -599,7 +655,9 @@
    "statement": "Every binding in a `url_template` DSN MUST declare an `encoding` from the closed vocabulary the contract carries, selected for the URL position the value is substituted into.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::DsnBinding.encoding",
    "owners": [
     "engine",
@@ -622,7 +680,9 @@
    "statement": "A `resource_discovery.produces` entry MUST name an artifact kind the contract's vocabulary admits, and discovery MUST write nothing outside it.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ResourceDiscovery.produces",
    "owners": [
     "engine",
@@ -645,7 +705,9 @@
    "statement": "Each discovery action a connector configures on `ResourceDiscoveryTriggers` MUST name its trigger from the closed vocabulary that model's matching field declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ResourceDiscoveryTriggers.list_resources",
    "owners": [
     "engine",
@@ -669,7 +731,9 @@
    "statement": "A connection-contract input MUST state how it is provisioned, when in the connection lifecycle it is provisioned, where its resolved value is durably stored and what value type it carries using only the vocabulary `ConnectionContractInput` declares for each.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectionContractInput.source",
    "owners": [
     "engine",
@@ -695,7 +759,9 @@
    "statement": "A post-auth output MUST state how its value is produced, where it is durably stored and what value type it carries using only the vocabulary `PostAuthOutput` declares for each; which pairings of the mode and the storage are legal is RULE-CTOR-002.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::PostAuthOutput.mode",
    "owners": [
     "engine",
@@ -720,7 +786,9 @@
    "statement": "A connector document's `connector_id` MUST match the slug pattern `ConnectorBase.connector_id` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase.connector_id",
    "owners": [
     "engine",
@@ -743,7 +811,9 @@
    "statement": "A connector's `auth` block MUST carry only the children declared by the union branch its `type` selects, so a child belonging to a different auth type is rejected rather than ignored.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ApiKeyAuth",
    "owners": [
     "engine",
@@ -772,7 +842,9 @@
    "statement": "An auth operation slot MUST hold an `AuthOperationTemplate`, which admits only the request fields that model names and rejects any other key.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::AuthOperationTemplate",
    "owners": [
     "engine",
@@ -793,7 +865,9 @@
    "statement": "Every provider fact a connector declares MUST be grounded in the target system's own documentation, a wire-compatible system's documentation MUST NOT be taken as evidence for it, and a fact those documents do not establish MUST be reported as a gap rather than inferred.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -811,7 +885,9 @@
    "statement": "A database connector's transport and driver MUST be chosen by applying the decision order in `connector-spec-db/spec-driver-selection.md` and stopping at the first tier the target system satisfies.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -829,7 +905,9 @@
    "statement": "A connector document MUST declare the shape of an input and MUST NOT carry a value that belongs to one customer or tenant, which the connection instantiating the connector supplies instead.\n",
    "tier": "judgment",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -847,7 +925,9 @@
    "statement": "A connector whose `ssl_mode` input enum admits a mode that verifies the server certificate MUST also declare a CA-certificate input in the same connection contract.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -865,7 +945,9 @@
    "statement": "A database connector's `resource_discovery` strategy MUST enumerate every namespace level the target system actually has, because a strategy that folds a level away leaves every object outside that level's default unreachable.\n",
    "tier": "judgment",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -884,7 +966,9 @@
    "statement": "A connector's `sql_capabilities` catalog level MUST state whether one connection can address across the target system's catalogs rather than how deep that system's object hierarchy is, and a system whose statements can name a catalog MUST expose that level in `resource_discovery` too.\n",
    "tier": "judgment",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -903,7 +987,9 @@
    "statement": "A connector's first release MUST declare `version` as `1.0.0`.\n",
    "tier": "procedural",
    "severity": "info",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -921,7 +1007,9 @@
    "statement": "A document-store or NoSQL provider MUST be authored as a `database` connector, and this plugin MUST NOT author a connector under the contract's separate document-store kinds even though the contract models them.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -939,7 +1027,9 @@
    "statement": "A DSN binding's `value` MUST resolve to the unencoded value, because the binding's declared `encoding` is applied once, by the runtime, when the DSN is rendered.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -960,7 +1050,9 @@
    "statement": "A DSN binding's `value` MUST take one of the forms the value-expression grammar defines, since the runtime resolves it at connection time.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -981,7 +1073,9 @@
    "statement": "A `resource_discovery.strategy` MUST name a strategy the engine has registered, unless the connector ships that strategy itself through its own `connector_plugin` implementation.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1002,7 +1096,10 @@
    "statement": "A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector",
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1022,7 +1119,9 @@
    "statement": "Each `post_auth_outputs` entry MUST resolve on its own, referencing no value another entry produces.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1044,7 +1143,9 @@
    "statement": "A connector's declared SQLAlchemy `driver` MUST name a dialect-and-driver registration that actually exists for the driver package the connector's `requirements.txt` ships.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1065,7 +1166,9 @@
    "statement": "A `database` connector MUST declare its `sql_capabilities` block, which the contract leaves optional and the engine requires before it will run any write mode.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1086,7 +1189,9 @@
    "statement": "A capability fact the provider's own documentation does not establish MUST be left undeclared and reported as a research gap, and MUST NOT be inferred from a similar or wire-compatible system.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1107,7 +1212,9 @@
    "statement": "The directory a connector release ships as MUST be named for the `connector_id` its `connector.json` declares.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1126,7 +1233,9 @@
    "statement": "An `api` connector's release MUST NOT carry connector-package Python files.\n",
    "tier": "referential",
    "severity": "warning",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1145,7 +1254,9 @@
    "statement": "A `database` connector's release MUST NOT ship endpoint documents, because a database endpoint is produced from resource-discovery output rather than authored.\n",
    "tier": "referential",
    "severity": "warning",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1164,7 +1275,9 @@
    "statement": "A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1184,7 +1297,9 @@
    "statement": "A connector document MUST reach credential material only through the `secrets` scope: a DSN binding's `value` refs a secret rather than a connection parameter, and a discovery `options` block carries no secret-shaped key.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1206,7 +1321,9 @@
    "statement": "A transport's `tls.mode` MUST resolve to a value the same connector's ssl-mode connection-contract input admits, and that input MUST declare the `enum` the mode is drawn from.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -1227,7 +1344,9 @@
    "statement": "Every transport family keyed in `sql_capabilities.bulk_load` MUST name a transport family the same connector declares in `transports`.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1249,7 +1368,9 @@
    "statement": "A database connector whose class satisfies a write capability MUST declare `sql_capabilities`.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1270,7 +1391,9 @@
    "statement": "A transport MUST be invoked no earlier than the phase at which every scope its expressions reference becomes available, and an input a transport references MUST declare a phase no later than that transport's first use.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1291,7 +1414,9 @@
    "statement": "A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1312,7 +1437,9 @@
    "statement": "Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1331,15 +1458,19 @@
   {
    "id": "RULE-CTOR-053",
    "statement": "A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it.\n",
-   "tier": "advisory",
+   "tier": "referential",
    "severity": "warning",
-   "scope": "connector",
+   "scopes": [
+    "connector",
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
    ],
    "targets": [
     "FunctionExpression",
+    "LookupDerived",
     "ConnectionContractInput"
    ],
    "fields": [],
@@ -1354,7 +1485,9 @@
    "statement": "A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1375,7 +1508,9 @@
    "statement": "A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::UrlTemplateDsn._reject_template_expressions",
    "owners": [
     "connector-plugin"
@@ -1395,7 +1530,9 @@
    "statement": "A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectionConditionPredicate._present_is_strictly_boolean",
    "owners": [
     "connector-plugin"
@@ -1415,7 +1552,9 @@
    "statement": "In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ValueExpressionScopes._expressions_qualified",
    "owners": [
     "engine",
@@ -1442,7 +1581,9 @@
    "statement": "Every entry in a connector's error map MUST name its failure category from the vocabulary `ErrorMap` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ErrorMap.exception",
    "owners": [
     "engine",
@@ -1468,7 +1609,9 @@
    "statement": "A destination's SQL capability block MUST state its catalog support, its upsert grammar and how a write selects its target schema using only the vocabulary `SqlCapabilities` declares for each.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::SqlCapabilities.catalog",
    "owners": [
     "engine",
@@ -1493,7 +1636,9 @@
    "statement": "A destination's stage-relation block MUST state where stage relations live and how long they survive using only the vocabulary `SqlStageCapabilities` declares for each.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::SqlStageCapabilities.scope",
    "owners": [
     "engine",
@@ -1517,7 +1662,9 @@
    "statement": "The transport type a connector declares as its default MUST come from the transport vocabulary `TransportDefaults` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::TransportDefaults.transport_type",
    "owners": [
     "engine",
@@ -1540,7 +1687,9 @@
    "statement": "A resource-discovery implementation MUST name where its strategy comes from using the vocabulary `ResourceDiscoveryImplementation` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ResourceDiscoveryImplementation.type",
    "owners": [
     "engine",
@@ -1563,7 +1712,9 @@
    "statement": "A transport's `tls` values MUST be declarations the runtime resolves to plain strings, never a driver-specific object, a filesystem path, or code; converting a resolved mode into driver connect arguments belongs to the connector package's dialect.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1584,7 +1735,9 @@
    "statement": "An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase",
    "owners": [
     "engine",
@@ -1605,7 +1758,9 @@
    "statement": "Every column a database endpoint declares MUST carry a name no other column in that document repeats.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._column_names_unique",
    "owners": [
     "engine",
@@ -1626,7 +1781,9 @@
    "statement": "Where a database endpoint's columns carry an ordinal position, each column's ordinal MUST differ from every other's.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._ordinal_positions_unique",
    "owners": [
     "engine",
@@ -1647,7 +1804,9 @@
    "statement": "Every name in a database endpoint's `primary_keys` MUST name a column the same document declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::DatabaseEndpointDoc._primary_keys_name_columns",
    "owners": [
     "engine",
@@ -1668,7 +1827,9 @@
    "statement": "A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1690,7 +1851,9 @@
    "statement": "A discovered object MUST record every namespace level the system it came from actually has, and MUST invent none the system lacks.\n",
    "tier": "judgment",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1712,7 +1875,9 @@
    "statement": "A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1734,7 +1899,10 @@
    "statement": "Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint",
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1758,7 +1926,9 @@
    "statement": "An authored endpoint MUST NOT declare a column the engine synthesises when it creates a table, and MUST drop such a column from a mirrored source's column list.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1780,7 +1950,9 @@
    "statement": "A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1803,7 +1975,9 @@
    "statement": "A database endpoint for a table that does not exist yet MUST target a namespace discovery returned.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1825,7 +1999,9 @@
    "statement": "A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": "analitiq.validator.connectors::_database_endpoint_locator_findings",
    "owners": [
     "engine",
@@ -1845,7 +2021,9 @@
    "statement": "A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1869,7 +2047,9 @@
    "statement": "A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "database-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -1893,7 +2073,9 @@
    "statement": "A run status MUST carry `error` when its `status` is one the contract gates as a failure, and MUST NOT carry `error` under any other status.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "data-sync-run-status",
+   "scopes": [
+    "data-sync-run-status"
+   ],
    "validator": "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData._error_matches_status",
    "owners": [
     "engine"
@@ -1913,7 +2095,9 @@
    "statement": "A run error's `message` MUST be exactly the canonical customer-safe text the contract maps to its `code`, never text derived from the failure itself.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "data-sync-run-status",
+   "scopes": [
+    "data-sync-run-status"
+   ],
    "validator": "analitiq.contracts.pipelines.data_sync::PublicRunError._message_matches_code",
    "owners": [
     "engine"
@@ -1933,7 +2117,9 @@
    "statement": "A run status payload MUST report its coarse state from the vocabulary `PipelineRunStatusData` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "data-sync-run-status",
+   "scopes": [
+    "data-sync-run-status"
+   ],
    "validator": "analitiq.contracts.pipelines.data_sync::PipelineRunStatusData.status",
    "owners": [
     "engine"
@@ -1955,7 +2141,9 @@
    "statement": "A run error MUST report its category from the code vocabulary `PublicRunError` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "data-sync-run-status",
+   "scopes": [
+    "data-sync-run-status"
+   ],
    "validator": "analitiq.contracts.pipelines.data_sync::PublicRunError.code",
    "owners": [
     "engine"
@@ -1977,7 +2165,9 @@
    "statement": "A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
    "owners": [
     "connector-plugin"
@@ -1997,7 +2187,9 @@
    "statement": "A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Param._validate",
    "owners": [
     "engine",
@@ -2018,7 +2210,9 @@
    "statement": "A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Param._validate",
    "owners": [
     "engine",
@@ -2039,7 +2233,9 @@
    "statement": "A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Replication._reject_mixed_cursor_forms",
    "owners": [
     "connector-plugin"
@@ -2059,7 +2255,9 @@
    "statement": "Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
    "owners": [
     "engine",
@@ -2080,7 +2278,9 @@
    "statement": "Every node of a write mode's input schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteInput._validate",
    "owners": [
     "engine",
@@ -2101,7 +2301,9 @@
    "statement": "A read operation issued as GET MUST NOT declare a parameter located in the request body.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -2121,7 +2323,9 @@
    "statement": "Every binding that names a declared parameter MUST name one the operation declares, and that parameter's declared location MUST be the request slot the binding sits in.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -2142,7 +2346,9 @@
    "statement": "Every parameter an operation declares MUST be referenced by exactly one request binding.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -2163,7 +2369,9 @@
    "statement": "Every parameter a pagination block names MUST be declared by the same operation and MUST declare itself controlled by pagination.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2184,7 +2392,9 @@
    "statement": "Every parameter a replication cursor mapping names MUST be declared by the same operation and MUST declare itself controlled by replication.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2205,7 +2415,9 @@
    "statement": "A read operation's records reference MUST resolve, against that operation's declared response schema, to an array node whose record shape declares something.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2226,7 +2438,9 @@
    "statement": "Every replication cursor field MUST resolve to a field declared in the record shape the operation's response schema describes.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2247,7 +2461,9 @@
    "statement": "Every conflict key a write mode declares MUST name a top-level field of that mode's input schema.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "connector-plugin"
@@ -2267,7 +2483,9 @@
    "statement": "A write mode MUST NOT declare both an idempotency key placement and batching.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2288,7 +2506,9 @@
    "statement": "An idempotency key's name MUST NOT collide with any header the same write request declares, nor with any field of the body it resolves to.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2309,7 +2529,9 @@
    "statement": "A write mode's request body MUST address the record scope its batching declaration implies — the whole batch when batching is declared, a single record or one of its fields otherwise — and any field path it addresses MUST be declared in that mode's input schema.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2330,7 +2552,9 @@
    "statement": "An operations block MUST declare at least one operation, and any write map it declares MUST carry at least one mode.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Operations._at_least_one",
    "owners": [
     "connector-plugin"
@@ -2350,7 +2574,9 @@
    "statement": "The upsert write mode MUST declare conflict keys, and every other write mode MUST NOT declare them.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Operations._conflict_keys_by_mode",
    "owners": [
     "connector-plugin"
@@ -2370,7 +2596,9 @@
    "statement": "A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ColumnFieldSpec._validate_container_shape",
    "owners": [
     "engine",
@@ -2392,7 +2620,9 @@
    "statement": "A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "database-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Column._validate_container_shape",
    "owners": [
     "engine",
@@ -2414,7 +2644,9 @@
    "statement": "An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2436,7 +2668,9 @@
    "statement": "Every response reference a read operation makes MUST resolve by declared-path resolution against that operation's response schema onto a node declaring a type — the field a keyset strategy orders by included — and MUST NOT sit in a request slot, name an unrecognised response sub-scope, or name a metadata key the operation does not declare.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2457,7 +2691,9 @@
    "statement": "A `from_input` path_params binding MUST NOT appear on a read operation, and on a write MUST address one dotted record field that the mode's input schema declares, never the whole record and never the batch.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2479,7 +2715,9 @@
    "statement": "A write mode MUST NOT declare both a `from_input` path_params binding and `batching`.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2500,7 +2738,9 @@
    "statement": "Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
    "owners": [
     "engine",
@@ -2522,7 +2762,9 @@
    "statement": "A request.path_params binding MUST NOT apply a wire-encoding function, because the engine percent-encodes every substituted path segment.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2544,7 +2786,9 @@
    "statement": "A `from_param` path_params binding on a write operation MUST name a param that declares a default.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2565,7 +2809,9 @@
    "statement": "A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteResponse._metadata_keys",
    "owners": [
     "engine",
@@ -2586,7 +2832,9 @@
    "statement": "A write operation's response expressions MUST NOT reference `response.record_count`, a scope only a read response carries.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteResponse._reject_record_count",
    "owners": [
     "engine",
@@ -2607,7 +2855,10 @@
    "statement": "A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "database-endpoint",
+    "stream"
+   ],
    "validator": "analitiq.contracts.endpoints::DatabaseObject._reject_explicit_null_namespaces",
    "owners": [
     "engine",
@@ -2629,7 +2880,9 @@
    "statement": "A request slot MUST NOT ref a per-run scope directly; a per-run value MUST reach the request through a declared param.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2651,7 +2904,9 @@
    "statement": "Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2673,7 +2928,9 @@
    "statement": "A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
@@ -2695,7 +2952,9 @@
    "statement": "A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteOperation._wiring",
    "owners": [
     "engine",
@@ -2716,7 +2975,10 @@
    "statement": "An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint",
+    "database-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::_EndpointBase.endpoint_id",
    "owners": [
     "connector-plugin"
@@ -2738,7 +3000,9 @@
    "statement": "A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::PredicateEq",
    "owners": [
     "connector-plugin"
@@ -2770,7 +3034,9 @@
    "statement": "An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Replication.supported_methods",
    "owners": [
     "engine",
@@ -2793,7 +3059,9 @@
    "statement": "A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries and written under that field's `in` alias, and MUST NOT carry anything that produces the key's value.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Idempotency.location",
    "owners": [
     "engine",
@@ -2816,7 +3084,9 @@
    "statement": "An endpoint MUST declare only where the idempotency key goes; the key's value is engine-owned and MUST NOT appear in a value expression, an input schema, or a request slot.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -2838,7 +3108,9 @@
    "statement": "Every URL an endpoint's request produces, including a next-page link it follows, MUST land on the origin of the transport its `transport_ref` names.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -2859,7 +3131,9 @@
    "statement": "An endpoint MUST declare only how a watermark is sent, and MUST NOT bake sync policy — a lookback, an overlap, a backfill depth — into a cursor mapping.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -2880,7 +3154,10 @@
    "statement": "A released `endpoint_id` MUST NOT be renamed; a resource whose locator changes ships as a new endpoint document alongside the removal of the old one.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint",
+    "database-endpoint"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -2899,7 +3176,9 @@
    "statement": "A keyset pagination block MUST omit `initial` when there is no first-page key, and MUST NOT spell that absence as an explicit null.\n",
    "tier": "structural",
    "severity": "warning",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -2919,7 +3198,9 @@
    "statement": "An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -2940,7 +3221,9 @@
    "statement": "An API endpoint's `endpoint_id` MUST equal the handle derived from the resource locator its operations declare, and that locator MUST be one a handle can be derived from.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.validator.connectors::_endpoint_locator_findings",
    "owners": [
     "engine",
@@ -2961,7 +3244,9 @@
    "statement": "Every `transport_ref` an endpoint document names MUST resolve to a transport declared by the connector it ships beside.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.validator.connectors::_endpoint_transport_ref_findings",
    "owners": [
     "engine",
@@ -2980,7 +3265,9 @@
    "statement": "An embedded request or response schema MUST be valid against the JSON Schema draft this contract is written in, and MUST NOT declare a different draft.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.validator.connectors::_embedded_schema_findings",
    "owners": [
     "engine",
@@ -2999,7 +3286,9 @@
    "statement": "Every `${...}` placeholder in a template expression MUST begin with a declared resolution scope.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::TemplateExpression._placeholders_qualified",
    "owners": [
     "connector-plugin"
@@ -3017,7 +3306,9 @@
    "statement": "A parameter MUST declare where it is sent on the request and what value type it carries using only the vocabulary `Param` declares for each; the placement is written under the field's `in` alias.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Param.location",
    "owners": [
     "engine",
@@ -3041,7 +3332,9 @@
    "statement": "A read operation's request MUST name its HTTP method from the vocabulary the read-request branches declare; the branch that method selects is what decides whether the request may declare a body at all.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::GetReadRequest.method",
    "owners": [
     "engine",
@@ -3065,7 +3358,9 @@
    "statement": "A write mode's request MUST name its HTTP method from the vocabulary `WriteRequest.method` carries.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WriteRequest.method",
    "owners": [
     "engine",
@@ -3088,7 +3383,9 @@
    "statement": "Every key of an endpoint's write map MUST name a write mode from the vocabulary `Operations` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Operations.write",
    "owners": [
     "engine",
@@ -3111,7 +3408,9 @@
    "statement": "A parameter handed to a runtime mechanism MUST name that mechanism from the vocabulary `Param` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Param.controlled_by",
    "owners": [
     "engine",
@@ -3134,7 +3433,9 @@
    "statement": "The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::Param.operators",
    "owners": [
     "engine",
@@ -3158,7 +3459,9 @@
    "statement": "A single-bound cursor mapping MUST state the wire format it sends the cursor value as, and the comparison the provider applies to it, using only the vocabularies `SingleCursorMapping` declares for each.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::SingleCursorMapping.format",
    "owners": [
     "engine",
@@ -3182,7 +3485,9 @@
    "statement": "A windowed cursor mapping MUST state the wire format it sends its bounds as, and the comparison the provider applies at each end of the window, using only the vocabularies `WindowCursorMapping` declares for each.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": "analitiq.contracts.endpoints::WindowCursorMapping.format",
    "owners": [
     "engine",
@@ -3207,7 +3512,9 @@
    "statement": "An offset strategy's per-page step MUST advance by the same quantity the provider's offset counts — the records a page returned when the offset counts records, and the page size the request actually asked for when it counts the requested window.\n",
    "tier": "judgment",
    "severity": "error",
-   "scope": "api-endpoint",
+   "scopes": [
+    "api-endpoint"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3227,7 +3534,9 @@
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": "analitiq.contracts.shared.rules::HeaderMergeRules._headers_not_both_set_and_removed",
    "owners": [
     "engine",
@@ -3251,7 +3560,9 @@
    "statement": "A pipeline's destination list MUST NOT name the same connection more than once.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::PipelineConnections._destinations_unique",
    "owners": [
     "pipeline-plugin"
@@ -3271,7 +3582,9 @@
    "statement": "A pipeline's schedule MUST author exactly the fields its chosen `type` calls for, and MUST omit the fields belonging to the types it did not choose.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::Schedule._validate_schedule_fields",
    "owners": [
     "pipeline-plugin"
@@ -3291,7 +3604,9 @@
    "statement": "A pipeline MUST NOT list two streams that reduce to the same version-stripped base id.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::PipelineAuthored._validate_streams_unique_base",
    "owners": [
     "pipeline-plugin"
@@ -3311,7 +3626,9 @@
    "statement": "A pipeline in the status that schedules it MUST reference at least one stream.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams",
    "owners": [
     "pipeline-plugin"
@@ -3331,7 +3648,9 @@
    "statement": "A pipeline's `schedule.type` MUST be a member of the vocabulary `Schedule.type` declares; the member chosen then gates which schedule fields are legal (RULE-PIPE-002).\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::Schedule.type",
    "owners": [
     "pipeline-plugin"
@@ -3353,7 +3672,9 @@
    "statement": "A pipeline MAY omit any schedule field `Schedule` declares a default for, and a document that omits one takes that default.\n",
    "tier": "structural",
    "severity": "info",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::Schedule.type",
    "owners": [
     "pipeline-plugin"
@@ -3376,7 +3697,9 @@
    "statement": "A stream's per-destination `execution` block MUST NOT be authored as a way to change how much a run writes at a time; the batch size a run uses is the one the pipeline's runtime declares, for every stream.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "pipeline",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3397,7 +3720,9 @@
    "statement": "Every connection a pipeline references MUST belong to the same organization as the pipeline.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3418,7 +3743,9 @@
    "statement": "A `cron_expression` MUST carry an inner spec the scheduler that runs it accepts; the contract constrains the wrapper alone.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3439,7 +3766,9 @@
    "statement": "The order of a pipeline's `streams` MUST NOT encode a dependency between streams, and MUST NOT be presented to the user as one.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3460,7 +3789,9 @@
    "statement": "Every stream a pipeline references MUST resolve to exactly one stream document in the run assembled from it, and the pipeline MUST NOT reference the same stream twice.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.validator.pipelines::_check_stream_refs",
    "owners": [
     "engine",
@@ -3479,7 +3810,9 @@
    "statement": "Every connection a pipeline references MUST resolve to exactly one connection document in the run assembled from it.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.validator.pipelines::_check_connections_present",
    "owners": [
     "engine",
@@ -3498,7 +3831,9 @@
    "statement": "A pipeline MUST NOT reference two connections that reduce to the same version-stripped base id.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.validator.pipelines::_check_connection_version_conflicts",
    "owners": [
     "engine",
@@ -3517,7 +3852,9 @@
    "statement": "A pipeline in the status that schedules it MUST reference at least one stream that is itself in a runnable status.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.validator.pipelines::_check_pipeline_active_gate",
    "owners": [
     "engine",
@@ -3536,7 +3873,9 @@
    "statement": "A schedule's `timezone` MUST name a zone in the IANA database.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::Schedule._validate_timezone",
    "owners": [
     "pipeline-plugin"
@@ -3556,7 +3895,9 @@
    "statement": "A pipeline MUST name its lifecycle state from the vocabulary `PipelineAuthored` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::PipelineAuthored.status",
    "owners": [
     "engine",
@@ -3579,7 +3920,9 @@
    "statement": "A pipeline's logging block MUST name its level from the vocabulary `Logging` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "pipeline",
+   "scopes": [
+    "pipeline"
+   ],
    "validator": "analitiq.contracts.pipelines.config::Logging.log_level",
    "owners": [
     "engine",
@@ -3602,7 +3945,9 @@
    "statement": "A connector's dialect MUST override a structural default only where the CDK's portable form is genuinely invalid on the target system, and MUST override type rendering only for logic the write map's rules cannot express.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3621,7 +3966,9 @@
    "statement": "A database connector's repository root MUST be its importable Python package: the definition documents sit under `definition/`, and `__init__.py`, `connector.py`, `requirements.txt` and `pyproject.toml` sit at the root beside it.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3640,7 +3987,9 @@
    "statement": "A connector's dialect MUST implement every hook the transports and `sql_capabilities` its `connector.json` declares require, in the form the CDK's hook surface defines.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3659,7 +4008,9 @@
    "statement": "A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3678,7 +4029,9 @@
    "statement": "A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned.\n",
    "tier": "structural",
    "severity": "warning",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3696,7 +4049,9 @@
    "statement": "Every name in a database connector's `pyproject.toml` MUST derive from its `connector_id`: the distribution `analitiq-connector-{connector_id}`, the importable package `analitiq_connector_{connector_id}` mapped to the repository root, and the entry-point name `{connector_id}` the engine resolves.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3715,7 +4070,9 @@
    "statement": "A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3734,7 +4091,9 @@
    "statement": "A database connector's `__init__.py` MUST re-export the package's connector class and its dialect class.\n",
    "tier": "structural",
    "severity": "info",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -3752,7 +4111,9 @@
    "statement": "`connector.py` MUST define the connector's dialect class on the CDK `SqlDialect` base and its connector class on `GenericSQLConnector`, and that connector class MUST carry `dialect_class` and no other member, not even an `__init__`.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3771,7 +4132,9 @@
    "statement": "A connector's `connector.py` MUST import only the CDK, the standard library, its own driver, and — inside an async `bulk_land` — `sqlalchemy.util.await_only`, and MUST NOT import another connector, any other third-party package, or an engine or runtime.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3790,7 +4153,9 @@
    "statement": "A connector's dialect MUST override only the public hooks `SqlDialect` itself declares — never a private CDK member, and never the framework-owned `table_address` factory or `capabilities` attribute — and MUST add no public attribute of its own, giving each helper it needs a leading underscore and a name the base does not use.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3809,7 +4174,9 @@
    "statement": "A dialect override MUST accept every call shape the base admits — the same parameter names, the same keyword-only markers, and the same synchronous form, since the engine calls every dialect hook synchronously.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3828,7 +4195,9 @@
    "statement": "A connector's `empty_table_sql` MUST NOT render `TRUNCATE`, whose implicit commit breaks the staged write cycle.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3847,7 +4216,9 @@
    "statement": "A database connector's dialect MUST implement exactly the hooks its `sql_capabilities` declaration obliges, so a declared fact with no hook behind it and a hook nothing routes to are both violations.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3866,7 +4237,9 @@
    "statement": "Every write-capable database connector MUST implement `stage_table_sql`, whatever the rest of its `sql_capabilities` declare.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3885,7 +4258,9 @@
    "statement": "`merge_statement_sql` MUST render a valid statement when every landed column is a conflict key, degrading to its merge form's insert-only variant rather than an empty update clause.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3904,7 +4279,9 @@
    "statement": "A `bulk_land` implementation MUST target the stage's full address rather than its bare table name, so a real-scope stage lands in the schema the engine qualified it with.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3923,7 +4300,9 @@
    "statement": "A connector MUST NOT invent a stage name; stage naming is engine-owned and deterministic, and a name the connector chose breaks the idempotency a retried batch depends on.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3942,7 +4321,9 @@
    "statement": "A connector declaring a transport `tls` block MUST ship a package whose dialect implements the TLS connect-argument hook and, with it, the post-connect TLS-state verification hook, and a connector that ships no package MUST NOT declare `tls` at all.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3961,7 +4342,9 @@
    "statement": "A dialect's TLS hook MUST raise rather than connect when a certificate-verification mode resolves with an empty CA certificate.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3980,7 +4363,9 @@
    "statement": "A connector's write direction MUST live in `type-map-write.json`: the package ships no Python type-rendering table, and a `render_column_type` override exists only for logic the map's rules cannot express, delegating every other type back to the map.\n",
    "tier": "structural",
    "severity": "warning",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -3999,7 +4384,9 @@
    "statement": "A connector release MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run.\n",
    "tier": "procedural",
    "severity": "warning",
-   "scope": "connector",
+   "scopes": [
+    "connector"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin"
@@ -4017,7 +4404,9 @@
    "statement": "A connector package's `requirements.txt` MUST pin the driver distribution each transport its `connector.json` declares needs — the DBAPI named by a SQLAlchemy transport's `dialect+driver`, and the `adbc-driver-{driver}` wheel plus `adbc-driver-manager` for an ADBC transport's `driver` — and nothing else, neither an engine pin nor the CDK the engine environment provides.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4036,7 +4425,9 @@
    "statement": "The mode vocabulary a connector's `ssl_mode` input declares and the vocabulary its dialect's TLS hook interprets MUST be the same set: every declared mode is one the dialect handles, and the dialect handles no mode the input does not declare.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4055,7 +4446,9 @@
    "statement": "A connector MUST ship the sibling type-map documents its `kind` calls for under the filenames the engine reads them by, and MUST NOT ship one for a direction its kind has no use for.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
@@ -4074,7 +4467,9 @@
    "statement": "An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the connector release or the connection that carries it, directly in that directory rather than in a subdirectory of it.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": "analitiq.validator.connectors::endpoint_filename_findings",
    "owners": [
     "engine",
@@ -4094,7 +4489,9 @@
    "statement": "Every endpoint document in a connector release MUST declare an `endpoint_id` no other document in that release declares.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
@@ -4113,7 +4510,9 @@
    "statement": "A connector's read map MUST resolve every `native_type` its endpoint documents declare, and MUST resolve each one to the canonical type the endpoint froze beside it.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": "analitiq.validator.connectors::check_coverage",
    "owners": [
     "engine",
@@ -4132,7 +4531,9 @@
    "statement": "A connector MUST NOT keep its own record of which batches it has already written; record identity is content-derived and the stage relation's name is engine-owned and deterministic, and together they are the whole idempotency mechanism.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "connector-package",
+   "scopes": [
+    "connector-package"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4151,7 +4552,9 @@
    "statement": "A block that allows no retry attempts MUST NOT declare a non-zero retry delay.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": "analitiq.contracts.shared.common::RetryErrorHandlingBase._validate_retry_fields",
    "owners": [
     "engine",
@@ -4172,7 +4575,9 @@
    "statement": "A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4192,7 +4597,9 @@
    "statement": "A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware.\n",
    "tier": "judgment",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -4211,7 +4618,9 @@
    "statement": "Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional.\n",
    "tier": "structural",
    "severity": "warning",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -4230,7 +4639,9 @@
    "statement": "A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -4249,7 +4660,9 @@
    "statement": "An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "connector-plugin",
@@ -4268,7 +4681,9 @@
    "statement": "A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4291,7 +4706,9 @@
    "statement": "A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4311,7 +4728,9 @@
    "statement": "A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4331,7 +4750,9 @@
    "statement": "A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4353,7 +4774,9 @@
    "statement": "An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4377,7 +4800,9 @@
    "statement": "A `display_name` MUST NOT carry leading or trailing whitespace.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._validate_display_name_field",
    "owners": [
     "connector-plugin",
@@ -4402,7 +4827,9 @@
    "statement": "A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": "analitiq.contracts.connector::ConnectorBase._validate_tags_field",
    "owners": [
     "connector-plugin",
@@ -4427,7 +4854,9 @@
    "statement": "An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": "analitiq.contracts.shared.common::RetryErrorHandlingBase.strategy",
    "owners": [
     "engine",
@@ -4450,7 +4879,9 @@
    "statement": "An authored document MUST NOT declare a field the registry stamps on insert or update; the authored models name the authorable fields and reject every other key.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "any",
+   "scopes": [
+    "any"
+   ],
    "validator": "analitiq.contracts.shared.common::StrictModel",
    "owners": [
     "engine",
@@ -4474,7 +4905,9 @@
    "statement": "Each entry in a stream's destinations MUST address an endpoint no other entry addresses.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::StreamAuthored._destinations_unique",
    "owners": [
     "pipeline-plugin"
@@ -4498,7 +4931,9 @@
    "statement": "Each assignment in a mapping MUST own a destination path no other assignment in that mapping writes.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::StreamMapping._assignment_targets_unique",
    "owners": [
     "pipeline-plugin"
@@ -4518,7 +4953,9 @@
    "statement": "A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id",
    "owners": [
     "engine",
@@ -4540,7 +4977,9 @@
    "statement": "A filter MUST carry a value unless its operator takes no operand, and an operator that takes none MUST NOT carry one.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::Filter._validate_value_presence",
    "owners": [
     "pipeline-plugin"
@@ -4560,7 +4999,9 @@
    "statement": "A pipe expression's arguments MUST begin with the source-read node that seeds it and continue only with conversion stages applied left to right.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::PipeExpression._validate_positional_grammar",
    "owners": [
     "engine",
@@ -4581,7 +5022,9 @@
    "statement": "An arrow field spec MUST declare the inner shape its arrow_type calls for and no other: a container marker carries its own inner declaration, and any other type carries none.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::ArrowFieldSpec._validate_container_shape",
    "owners": [
     "pipeline-plugin"
@@ -4601,7 +5044,9 @@
    "statement": "A constant MUST carry a value of the JSON kind its declared arrow_type admits, and MUST declare the inner shape that type calls for and no other.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::ConstantValue._validate_container_shape",
    "owners": [
     "pipeline-plugin"
@@ -4621,7 +5066,9 @@
    "statement": "A validation rule MUST carry a value when its type takes a parameter, and MUST omit one when its type takes none.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::ValidationRule._validate_value_for_rule",
    "owners": [
     "pipeline-plugin"
@@ -4641,7 +5088,9 @@
    "statement": "An assignment target MUST declare the inner shape its arrow_type calls for and no other: a container marker carries its own inner declaration, and any other type carries none.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::AssignmentTarget._validate_container_shape",
    "owners": [
     "pipeline-plugin"
@@ -4661,7 +5110,9 @@
    "statement": "A filter's operator MUST belong to the operator vocabulary of the scope its source endpoint reference declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope",
    "owners": [
     "engine",
@@ -4682,7 +5133,9 @@
    "statement": "A stream source bound to a connector-scoped endpoint MUST NOT declare any read feature the source model reserves for database sources.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::StreamSource._validate_database_only_read_features",
    "owners": [
     "engine",
@@ -4703,7 +5156,9 @@
    "statement": "A validation rule's field MUST resolve within its own mapping: the first token naming an assignment target the mapping declares, and each later token a field declared beneath the one before it.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::StreamMapping._validate_rule_fields_resolve",
    "owners": [
     "pipeline-plugin"
@@ -4723,7 +5178,9 @@
    "statement": "A stream destination's write block MUST take the shape its mode selects and carry only the fields that shape declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::DatabaseKeylessWrite",
    "owners": [
     "pipeline-plugin"
@@ -4745,7 +5202,9 @@
    "statement": "A stream's replication block MUST take the shape its method selects and carry only the fields that shape declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::FullRefreshReplication",
    "owners": [
     "pipeline-plugin"
@@ -4766,7 +5225,9 @@
    "statement": "A connection-scoped endpoint reference SHOULD carry the derived endpoint_id whenever the author can compute it, so the cross-document bundle check can resolve the reference.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "pipeline-plugin"
@@ -4784,7 +5245,9 @@
    "statement": "A mapping's assignments MUST be kept in the order they were authored and MUST NOT be re-sorted, because the engine applies them in that order.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4805,7 +5268,9 @@
    "statement": "An assignment whose source and target types form a conversion the engine classifies as explicit MUST name that conversion function in a pipe stage rather than reading the field bare.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4827,7 +5292,9 @@
    "statement": "A validation rule's value MUST carry the payload shape its type requires.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4848,7 +5315,9 @@
    "statement": "Every field name a stream references MUST resolve to a field the endpoint document on that side of the transfer declares.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4872,7 +5341,9 @@
    "statement": "A stream MUST reproduce every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4893,7 +5364,9 @@
    "statement": "An API destination's write mode MUST be one the referenced api-endpoint document declares a write operation for.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4914,7 +5387,9 @@
    "statement": "An API source's replication method MUST be one the referenced endpoint declares in its supported set.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4936,7 +5411,9 @@
    "statement": "A filter on an API source MUST name a read parameter the referenced endpoint declares filterable — one that publishes its own operator set and is not reserved to the runtime.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4957,7 +5434,9 @@
    "statement": "A filter's value MUST carry the type the referenced field declares, and a membership operator MUST carry an array of such values.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4978,7 +5457,9 @@
    "statement": "An assignment target's arrow_type MUST reproduce the destination column's declared type exactly, its parameters included.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -4999,7 +5480,9 @@
    "statement": "A stream source MUST declare a replication policy unless the referenced source endpoint supports full refresh.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5020,7 +5503,9 @@
    "statement": "A stream MUST declare source primary keys when the transfer needs record identity and the source endpoint carries no primary-key metadata of its own, and MUST NOT declare keys that contradict the endpoint's.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5041,7 +5526,9 @@
    "statement": "A stream's reference to an API endpoint MUST use connector scope; connection scope refers to a database endpoint only.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5063,7 +5550,9 @@
    "statement": "A stream MUST name as its parent the pipeline that references it.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.validator.pipelines::_check_stream_parent_pipeline",
    "owners": [
     "engine",
@@ -5082,7 +5571,9 @@
    "statement": "A stream's source connection MUST be the one its pipeline declares as the source, and each of its destination connections MUST be one the pipeline declares as a destination.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.validator.pipelines::_check_stream_connection_roles",
    "owners": [
     "engine",
@@ -5101,7 +5592,9 @@
    "statement": "A connection-scoped endpoint reference MUST resolve to an endpoint document belonging to the connection it names.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.validator.pipelines::_check_connection_scoped_endpoints",
    "owners": [
     "engine",
@@ -5120,7 +5613,9 @@
    "statement": "A stream MUST name its lifecycle state from the vocabulary `StreamAuthored` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::StreamAuthored.status",
    "owners": [
     "engine",
@@ -5143,7 +5638,9 @@
    "statement": "A stream filter MUST name its operator from the vocabulary `Filter` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::Filter.operator",
    "owners": [
     "engine",
@@ -5166,7 +5663,9 @@
    "statement": "A validation rule MUST name its kind from the vocabulary `ValidationRule` declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::ValidationRule.type",
    "owners": [
     "engine",
@@ -5189,7 +5688,9 @@
    "statement": "A stream destination's write block MUST name its mode from the write-mode vocabulary the block it selects declares.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": "analitiq.contracts.stream::ApiWrite.mode",
    "owners": [
     "engine",
@@ -5214,7 +5715,9 @@
    "statement": "An incremental stream's late-arrival safety window MUST be sized from how late the source's own records arrive, and MUST NOT be authored as a rewind the stream can count on: whether a window shifts a read at all is decided by the source, not by the stream document.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5237,7 +5740,9 @@
    "statement": "A mapping assignment's validation `error_handling` MUST NOT be authored as the policy for the failures its own rules raise; how a run answers a validation failure is what the pipeline's runtime error handling declares, for every assignment.\n",
    "tier": "judgment",
    "severity": "warning",
-   "scope": "stream",
+   "scopes": [
+    "stream"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5260,7 +5765,9 @@
    "statement": "An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadExactRule._check",
    "owners": [
     "engine",
@@ -5282,7 +5789,9 @@
    "statement": "A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
@@ -5304,7 +5813,9 @@
    "statement": "Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -5325,7 +5836,9 @@
    "statement": "A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -5346,7 +5859,9 @@
    "statement": "A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -5367,7 +5882,9 @@
    "statement": "A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
@@ -5389,7 +5906,9 @@
    "statement": "A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -5410,7 +5929,9 @@
    "statement": "A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapWriteExactRule._check",
    "owners": [
     "engine",
@@ -5432,7 +5953,9 @@
    "statement": "A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapWriteRegexRule._check",
    "owners": [
     "connector-plugin",
@@ -5453,7 +5976,9 @@
    "statement": "A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.contracts.type_map::TypeMapReadRegexRule._check",
    "owners": [
     "engine",
@@ -5475,7 +6000,9 @@
    "statement": "A type map MUST NOT carry a catch-all rule standing in for whatever the map's earlier-resolving rules leave uncovered.\n",
    "tier": "structural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5495,7 +6022,9 @@
    "statement": "New rules on a connection-scoped type map MUST be appended after the rules already present, and a rule already there MUST NOT be removed, reordered or rewritten.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "pipeline-plugin"
@@ -5513,7 +6042,9 @@
    "statement": "A type map's rules MUST be authored in the order they are meant to resolve, with a narrow rule ahead of any broader rule that would also match its input.\n",
    "tier": "procedural",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5533,7 +6064,9 @@
    "statement": "A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored.\n",
    "tier": "procedural",
    "severity": "warning",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
    "owners": [
     "engine",
@@ -5555,7 +6088,9 @@
    "statement": "A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not.\n",
    "tier": "procedural",
    "severity": "warning",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5578,7 +6113,9 @@
    "statement": "Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares.\n",
    "tier": "advisory",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5600,7 +6137,9 @@
    "statement": "A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals.\n",
    "tier": "structural",
    "severity": "warning",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.validator.connectors::_write_vocabulary_findings",
    "owners": [
     "engine",
@@ -5620,7 +6159,9 @@
    "statement": "A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5640,7 +6181,9 @@
    "statement": "A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope.\n",
    "tier": "referential",
    "severity": "warning",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5660,7 +6203,9 @@
    "statement": "A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches.\n",
    "tier": "referential",
    "severity": "error",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": null,
    "owners": [
     "engine",
@@ -5682,7 +6227,9 @@
    "statement": "A type map MUST NOT carry two rules an earlier one already resolves for — the same match kind over the same matcher, compared the way the reader compares it.\n",
    "tier": "advisory",
    "severity": "warning",
-   "scope": "type-map",
+   "scopes": [
+    "type-map"
+   ],
    "validator": "analitiq.validator.connectors::_type_map_rule_warnings",
    "owners": [
     "engine",

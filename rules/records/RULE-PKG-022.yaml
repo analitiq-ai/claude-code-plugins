@@ -4,7 +4,7 @@ statement: >
   certificate-verification mode resolves with an empty CA certificate.
 tier: structural
 severity: error
-scope: connector-package
+scopes: [connector-package]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

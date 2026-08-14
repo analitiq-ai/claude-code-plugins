@@ -5,7 +5,7 @@ statement: >
   own `connector_plugin` implementation.
 tier: referential
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [ResourceDiscovery]

@@ -4,7 +4,7 @@ statement: >
   declare exactly one operator key per predicate.
 tier: advisory
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectionConditionPredicate._exactly_one_operator"
 owners: [connector-plugin]
 targets: [ConnectionConditionPredicate]

@@ -5,7 +5,7 @@ statement: >
   map covers the native or the canonical.
 tier: referential
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [Column, DatabaseEndpointDoc]

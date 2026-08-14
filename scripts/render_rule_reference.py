@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Render the rules the connector plugin authors against, tier by tier.
+"""Render each plugin's rule reference set, one file per artifact kind.
 
-The rules are `rules/records/*.yaml`, compiled into the pinned contract package and
-read here through `all_rules()`. That registry is the source of truth; this
-script only *renders* it, so agents have an offline-readable file to cite
-instead of hand-restating rules in prose.
+The rules are `rules/records/*.yaml`, compiled by `render_rules.py` and read
+here through `all_rules()`. That registry is the source of truth; this script
+only *renders* it — into `OUTPUT_DIRS`, split by the artifact a rule's
+`scopes` bind — so agents have offline-readable files to cite instead of
+hand-restating rules in prose.
 
 Tiers render as separate sections because a tier says what kind of obligation a
 rule is, which is what tells an agent how to go about satisfying it. What
@@ -17,19 +18,21 @@ The structural table's member lists are read off the **live models** rather
 than typed here: the point of that tier is to end the copy, so the renderer
 must not become one.
 
-The generated file is a **pinned copy**, not a second source: `tests/connector_builder`
-regenerates it and fails when it is stale, so a contract change surfaces as a red
-build rather than silent prose drift.
+The generated files are **pinned copies**, not second sources:
+`tests/registry/test_rule_reference_sync.py` regenerates every set and fails
+when a checked-in file is stale, missing, or orphaned, so a contract change
+surfaces as a red build rather than silent prose drift.
 
 Usage:
-    render_rule_reference.py write    # regenerate the markdown file in place
-    render_rule_reference.py check    # exit 1 if the file is stale (CI)
+    render_rule_reference.py write [--plugin <owner>]   # regenerate in place
+    render_rule_reference.py check [--plugin <owner>]   # exit 1 if stale (CI)
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import pathlib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -39,46 +42,95 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # deliberately does not install one. Keeps the script runnable standalone (CI
 # calls it directly, outside pytest and its conftest).
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
+# `render_reference_toc` is a sibling script, imported lazily inside `render`.
+# Put its directory on the path HERE rather than relying on the caller's cwd:
+# a consumer that imports this module by path (the guards do) has no reason
+# to know the renderer reaches sideways, and the failure is an ImportError
+# raised halfway through rendering.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 # `analitiq.contracts.shared.common` reads os.environ["DOMAIN"] at import and
 # raises KeyError without it.
 os.environ.setdefault("DOMAIN", "analitiq.ai")
-OUTPUT_PATH = (
-    REPO_ROOT / "plugins" / "analitiq-connector-builder" / "skills" / "connector-builder" / "references" / "rules.md"
-)
+#: Where each plugin's rule reference set lands, keyed by the `owners` member
+#: that puts a rule in it. A rule reaches a plugin when its record names that
+#: plugin as an owner — the record's own answer to "who applies this", so a
+#: rule an agent here has to know is rendered here because the record says so,
+#: and nothing downstream has to check that a citation resolved.
+#:
+#: `scopes` deliberately does NOT decide THAT. Scope is which artifact a rule
+#: grades; ownership is who has to know it, and the two differ exactly where it
+#: matters: the connector plugin never authors a database endpoint, but its
+#: `resource_discovery` produces one, so a database-endpoint rule whose record
+#: names this plugin binds an author there.
+#: Scope decides only WHICH FILE inside the set the rule lands in.
+OUTPUT_DIRS = {
+    "connector-plugin": (
+        REPO_ROOT / "plugins" / "analitiq-connector-builder"
+        / "skills" / "connector-builder" / "references" / "rules"
+    ),
+    "pipeline-plugin": (
+        REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
+        / "skills" / "pipeline-builder" / "references" / "rules"
+    ),
+}
 
-# Which plugin this file belongs to. A rule reaches it when its `owners` name
-# that plugin — the record's own answer to "who applies this", so a rule an
-# agent here has to know is rendered here because the record says so, and
-# nothing downstream has to check that a citation resolved.
-#
-# `scope` deliberately does NOT decide this. Scope is which artifact a rule
-# grades; ownership is who has to know it, and the two differ exactly where it
-# matters: this plugin never authors a database endpoint, but its
-# `resource_discovery` produces one, so `RULE-DBEP-*` binds an author here.
-PLUGIN_OWNER = "connector-plugin"
+#: Scopes owning fewer than this many rules in a plugin do not get their own
+#: file. A one-rule document is a file an agent has to find, open and close to
+#: learn one thing, and the Contents section of the set has to carry its name
+#: — cost with no navigation benefit. They fold into `shared.md` instead, which
+#: also absorbs any scope this renderer has never seen, so a new SCOPES member
+#: surfaces in a file rather than vanishing.
+BUCKET_FLOOR = 5
+SHARED_BUCKET = "shared"
+
+#: The scope that binds every authored document. It is not a bucket: rules
+#: scoped `any` are appended to EVERY file in the set, because the premise of
+#: splitting by scope is that one file is the whole of what its reader must
+#: satisfy. Every `any`-scoped rule duplicated into every file is the price of
+#: that premise, and the rows are generated, so the duplication is a
+#: rendering, not a second source.
+ANY_SCOPE = "any"
 
 HEADER = """<!-- GENERATED by scripts/render_rule_reference.py — do not edit.
      Run `python scripts/render_rule_reference.py write` to regenerate. -->
 
-# The rule registry — every rule you can cite by id
+# {title}
 
-Rendered from the rule registry (`rules/records/*.yaml`) as the pinned
-`analitiq-contract-models` package ships it. Prose cites a rule by id
-(`RULE-ENDP-009`) instead of restating it; an id that stops resolving fails the
+Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
+contract source compiles it. Prose cites a rule by id
+({example}) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: every rule this plugin owns. A rule is here because its record names
-`{owner}` as an owner, so any id you meet in this plugin's prose is a row
-below — including rules on documents authored elsewhere that an author here
-still has to satisfy, like the endpoints `resource_discovery` produces.
+{scope_line}
 
-Satisfy every rule here. A clean validation run is not proof they all hold —
-some are applied only at connect or run time. **Tier** is what kind of
-obligation a rule is, **Grades** the document it binds, **Severity** what a
-violation costs.
+**Satisfy every rule in this file.** A clean validation run is not proof they
+all hold: {unchecked} of the {total} below have no validator, so nothing rejects
+a violation and the only thing that catches one is reading for it. Those rows
+carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
+is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
 {counts}
 """
+
+#: What the file's scope line says, per bucket. The wording is per-scope because
+#: "every rule binding the document you are authoring" is only true for a real
+#: artifact bucket — `shared` is a remainder, and saying otherwise would tell an
+#: author their file is complete for a document it does not cover.
+SCOPE_LINE = (
+    "Scope: every rule this plugin owns that binds {article} **`{bucket}`** "
+    "document, "
+    "plus the rules that bind every authored document. If you are authoring "
+    "one, this file is the whole of what you must satisfy — no other rule file "
+    "in this set applies to it."
+)
+SHARED_LINE = (
+    "Scope: every rule this plugin owns whose artifact kind has no file of "
+    "its own in this set, plus the rules that bind every authored document. "
+    "For a document of one of those kinds, this file is the whole of what "
+    "this plugin's rules ask of it; a document whose kind has its own file "
+    "needs only that file, even where a rule graded for it also appears here "
+    "under another of its kinds."
+)
 
 TIER_INTRO = {
     "structural": """
@@ -115,21 +167,67 @@ not just the statement.
 """,
 }
 
-def _load_rules():
+def _load_rules(owner: str) -> list:
     from analitiq.contracts.shared.rules import all_rules
 
-    return [r for r in all_rules() if PLUGIN_OWNER in r.owners]
+    return [r for r in all_rules() if owner in r.owners]
 
 
-def rendered_ids() -> set[str]:
-    """Every id this file makes readable, as the renderer knows it.
+def buckets(owner: str) -> dict[str, list]:
+    """The plugin's owned rules, split into the files they render into.
+
+    Placement is by `scopes`, the artifact kinds a rule grades, because that is
+    what decides which document a reader is holding when they need it. A rule
+    naming two kinds lands in both files: it binds both authors, and a reader
+    of either must be able to satisfy their document from one file.
+
+    `any` is not a bucket — it is appended to every file, so no file is a
+    partial answer for the document it names. Buckets under `BUCKET_FLOOR`
+    fold into `shared`, which also takes any scope with no bucket of its own,
+    so a new SCOPES member surfaces somewhere instead of vanishing.
+    """
+    rules = _load_rules(owner)
+    universal = sorted(
+        (r for r in rules if ANY_SCOPE in r.scopes), key=lambda r: r.id
+    )
+
+    by_scope: dict[str, list] = {}
+    for rule in rules:
+        for scope in rule.scopes:
+            if scope != ANY_SCOPE:
+                by_scope.setdefault(scope, []).append(rule)
+
+    out: dict[str, list] = {}
+    shared: list = []
+    for scope, owned in sorted(by_scope.items()):
+        (out.setdefault(scope, []) if len(owned) >= BUCKET_FLOOR else shared).extend(owned)
+    if shared:
+        out[SHARED_BUCKET] = shared
+    if not out:
+        # Every owned rule is `any`. One file still has to exist, or the
+        # plugin's prose cites ids nothing renders.
+        out[SHARED_BUCKET] = []
+
+    for bucket, owned in out.items():
+        merged = {r.id: r for r in owned}
+        merged.update({r.id: r for r in universal})
+        out[bucket] = sorted(merged.values(), key=lambda r: r.id)
+    return out
+
+
+def rendered_ids(owner: str | None = None) -> set[str]:
+    """Every id this renderer makes readable, as the renderer knows it.
 
     The renderer is the authority on what it rendered, so a consumer asks it
     rather than searching its output for row-shaped text. That search is what a
     guard here used to do, and it could only ever find the malformed rows
     somebody had already thought of.
+
+    With no owner it answers for every plugin at once — the union, because a
+    caller asking the module what it renders is asking about all of it.
     """
-    return {r.id for r in _load_rules()}
+    owners = [owner] if owner else list(OUTPUT_DIRS)
+    return {r.id for o in owners for r in _load_rules(o)}
 
 
 def _model_index() -> dict:
@@ -234,9 +332,14 @@ def _table(header: list[str], rows: list[str]) -> list[str]:
     return [_row(header), "|" + "---|" * len(header) + "\n", *rows]
 
 
+def _article(word: str) -> str:
+    """`an api-endpoint`, `a connector`. Rendered prose is read, so it reads."""
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
 def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
     structural = tier == "structural"
-    header = ["ID", "Rule", "Grades", "Severity"]
+    header = ["ID", "Rule", "Grades", "Severity", "Checked"]
     if structural:
         header.append("Values")
     rows = []
@@ -244,8 +347,14 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
         cells = [
             r.id,
             _cell(r.statement),
-            f"`{r.scope}`",
+            " ".join(f"`{s}`" for s in r.scopes),
             r.severity,
+            # `mechanized` is derived from `validator`, so this column cannot
+            # disagree with what actually rejects a violation. A rule with no
+            # validator is not a lesser rule — it is one whose enforcement
+            # lives where this repo cannot reach, which is exactly why an
+            # author has to read for it.
+            "validator" if r.mechanized else "—",
         ]
         if structural:
             cells.append(_cell(_live_values(r, models)))
@@ -253,49 +362,140 @@ def _tier_section(tier: str, rules: list, models: dict) -> list[str]:
     return [f"\n## {tier.capitalize()}\n{TIER_INTRO[tier]}\n", *_table(header, rows)]
 
 
-def render() -> str:
+def render(bucket: str, rules: list, models: dict | None = None) -> str:
     from analitiq.contracts.shared.rule_record import TIERS
 
     import render_reference_toc
 
-    rules = _load_rules()
-    models = _model_index()
+    models = _model_index() if models is None else models
     by_tier = {tier: [r for r in rules if r.tier == tier] for tier in TIERS}
     counts = " · ".join(f"**{len(by_tier[t])}** {t}" for t in TIERS if by_tier[t])
+    unchecked = sum(1 for r in rules if not r.mechanized)
 
-    out = [HEADER.format(owner=PLUGIN_OWNER, counts=f"Owned here: {counts}.\n")]
+    title = (
+        "Rules with no file of their own"
+        if bucket == SHARED_BUCKET
+        else f"Rules binding {_article(bucket)} `{bucket}` document"
+    )
+    scope_line = (
+        SHARED_LINE
+        if bucket == SHARED_BUCKET
+        else SCOPE_LINE.format(bucket=bucket, article=_article(bucket))
+    )
+    # The example id is read off THIS file rather than typed, so a header can
+    # never name an id the plugin does not own — which the reachability guard
+    # reads as prose citing a rule no agent here can resolve.
+    example = f"`{rules[0].id}`" if rules else "`RULE-<AREA>-<NNN>`"
+    out = [
+        HEADER.format(
+            title=title,
+            example=example,
+            scope_line=scope_line,
+            unchecked=unchecked,
+            total=len(rules),
+            counts=f"In this file: {counts}." if counts else "This file is empty.",
+        )
+    ]
     for tier in TIERS:
         if by_tier[tier]:
             out += _tier_section(tier, by_tier[tier], models)
-    # This document is long enough to need a Contents section and is generated
-    # in full, so it is the one place that section cannot be rendered by
-    # `render_reference_toc` writing into the file. Call the same function
-    # instead of formatting a second copy of the section by hand — the two
-    # would otherwise be free to disagree, and its `check` grades this file.
+    # These documents are long enough to need a Contents section and are
+    # generated in full, so they are the one place that section cannot be
+    # rendered by `render_reference_toc` writing into the file. Call the same
+    # function instead of formatting a second copy of the section by hand — the
+    # two would otherwise be free to disagree, and its `check` grades these.
     return render_reference_toc.render_text("".join(out))
 
 
+def render_all(owner: str) -> dict[Path, str]:
+    """Every file this plugin's set is made of, keyed by where it lands."""
+    models = _model_index()
+    sets = buckets(owner)
+    root = OUTPUT_DIRS[owner]
+    rendered = {
+        root / f"{bucket}.md": render(bucket, rules, models)
+        for bucket, rules in sets.items()
+    }
+
+    # Coverage, asserted rather than assumed. With plural scopes a rule can
+    # land in several files, so "exactly once" is no longer the invariant —
+    # "at least once" is, and it is the one that matters: an owned rule in no
+    # file is an id the plugin's prose can cite and no agent can resolve.
+    placed = {r.id for rules in sets.values() for r in rules}
+    missing = sorted({r.id for r in _load_rules(owner)} - placed)
+    if missing:
+        raise ValueError(
+            f"{owner}: {len(missing)} owned rule(s) reach no file — {missing}. "
+            "Every owned rule must render somewhere; check SCOPES against the "
+            "bucket map."
+        )
+    return rendered
+
+
 def main(argv: list[str]) -> int:
-    mode = argv[1] if len(argv) > 1 else "check"
-    if mode not in ("write", "check"):
-        print(f"usage: {argv[0]} [write|check]", file=sys.stderr)
+    usage = f"usage: {argv[0]} [write|check] [--plugin <owner>]"
+    mode = "check"
+    owners = list(OUTPUT_DIRS)
+    tokens = list(argv[1:])
+    positionals: list[str] = []
+    while tokens:
+        token = tokens.pop(0)
+        if token == "--plugin":
+            if not tokens:
+                print(f"--plugin needs an owner\n{usage}", file=sys.stderr)
+                return 2
+            owners = [tokens.pop(0)]
+        elif token.startswith("--plugin="):
+            owners = [token.split("=", 1)[1]]
+        else:
+            positionals.append(token)
+    if positionals:
+        mode = positionals.pop(0)
+    # An unrecognized leftover must refuse, not silently render both plugins
+    # or the wrong mode — a caller scoping a write would otherwise write into
+    # the other plugin's shipped tree with no message saying so.
+    if mode not in ("write", "check") or positionals:
+        print(usage, file=sys.stderr)
+        return 2
+    unknown = [o for o in owners if o not in OUTPUT_DIRS]
+    if unknown:
+        print(f"unknown plugin(s) {unknown}; expected from {list(OUTPUT_DIRS)}", file=sys.stderr)
         return 2
 
-    rendered = render()
+    stale: list[str] = []
+    for owner in owners:
+        rendered = render_all(owner)
+        root = OUTPUT_DIRS[owner]
+        if mode == "write":
+            root.mkdir(parents=True, exist_ok=True)
+            # A bucket that stops existing (its scope fell under the floor, or
+            # lost its last rule) must lose its file too, or the set keeps
+            # serving a document no rule renders into any more.
+            for orphan in sorted(root.glob("*.md")):
+                if orphan not in rendered:
+                    orphan.unlink()
+                    print(f"removed {orphan.relative_to(REPO_ROOT)}")
+            for path, text in sorted(rendered.items()):
+                path.write_text(text, encoding="utf-8")
+            print(f"{owner}: wrote {len(rendered)} file(s) to {root.relative_to(REPO_ROOT)}")
+            continue
 
-    if mode == "write":
-        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        OUTPUT_PATH.write_text(rendered, encoding="utf-8")
-        print(f"wrote {OUTPUT_PATH.relative_to(REPO_ROOT)}")
-        return 0
+        for path, text in sorted(rendered.items()):
+            if not path.exists():
+                stale.append(f"{path.relative_to(REPO_ROOT)} is missing")
+            elif path.read_text(encoding="utf-8") != text:
+                stale.append(f"{path.relative_to(REPO_ROOT)} is stale")
+        if root.exists():
+            for orphan in sorted(root.glob("*.md")):
+                if orphan not in rendered:
+                    stale.append(f"{orphan.relative_to(REPO_ROOT)} renders no rules any more")
 
-    if not OUTPUT_PATH.exists():
-        print(f"{OUTPUT_PATH} is missing — run `render_rule_reference.py write`", file=sys.stderr)
-        return 1
-    if OUTPUT_PATH.read_text(encoding="utf-8") != rendered:
+    if stale:
+        for line in stale:
+            print(line, file=sys.stderr)
         print(
-            f"{OUTPUT_PATH.relative_to(REPO_ROOT)} is stale — "
-            "run `python scripts/render_rule_reference.py write`",
+            "run `python scripts/render_rule_reference.py write` and review any "
+            "prose that cites the affected rule ids",
             file=sys.stderr,
         )
         return 1

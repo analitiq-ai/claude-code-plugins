@@ -1,0 +1,49 @@
+#!/bin/sh
+# Keep every commit render-consistent: regenerate derived artifacts in the
+# working tree for the author's convenience, then grade THE INDEX — a copy of
+# exactly what the commit will contain — with `render_all.py check`. Grading
+# the index rather than the working tree is load-bearing: a stale index copy
+# behind an already-dirty working-tree file, or generated files never staged
+# at all, both pass any working-tree comparison and both fail this one.
+# CI re-runs the same check, so a bypassed or uninstalled hook fails loudly
+# there.
+#
+# Install once per clone:  git config core.hooksPath .githooks
+# Bypass for one commit:   git commit --no-verify
+
+set -u
+
+staged=$(git diff --cached --name-only) || {
+    echo "pre-commit: git diff --cached failed; commit aborted." >&2
+    exit 1
+}
+[ -z "$staged" ] && exit 0
+
+# Only run when a staged file can feed a generator. Kept identical to
+# SOURCE_PREFIXES in scripts/render_hook.py — the two hooks guard the same
+# generator inputs at different moments, so the lists move together.
+echo "$staged" | grep -qE '^(rules/|packages/|plugins/|schemas/|scripts/|census/)' || exit 0
+
+python3 scripts/render_all.py write || {
+    echo "" >&2
+    echo "pre-commit: render_all.py write failed; commit aborted." >&2
+    exit 1
+}
+
+tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$tmp"' EXIT
+
+git checkout-index -a --prefix="$tmp/" || {
+    echo "pre-commit: git checkout-index failed; commit aborted." >&2
+    exit 1
+}
+
+if ! python3 "$tmp/scripts/render_all.py" check; then
+    echo "" >&2
+    echo "pre-commit: the tree this commit records is stale — the check above" >&2
+    echo "names what. The working tree was just regenerated; review the" >&2
+    echo "changes, 'git add' them, and commit again." >&2
+    exit 1
+fi
+
+exit 0

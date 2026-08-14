@@ -4,7 +4,7 @@ statement: >
   draft this contract is written in, and MUST NOT declare a different draft.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_embedded_schema_findings"
 owners: [connector-plugin, engine]
 rationale: >

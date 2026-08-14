@@ -5,7 +5,7 @@ statement: >
   object produces.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::ConnectionEndpointRef._derive_or_verify_endpoint_id"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ConnectionEndpointRef]

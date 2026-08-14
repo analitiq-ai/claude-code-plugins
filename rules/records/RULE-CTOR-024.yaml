@@ -5,7 +5,7 @@ statement: >
   rejected rather than ignored.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ApiKeyAuth"
 owners: [connector-plugin, engine]
 targets: [ApiKeyAuth, BasicAuth, OAuth2AuthorizationCodeAuth, OAuth2ClientCredentialsAuth, JwtAuth, DbAuth, CredentialsAuth, AwsIamAuth, NoneAuth]

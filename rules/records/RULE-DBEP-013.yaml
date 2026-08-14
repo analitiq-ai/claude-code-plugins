@@ -5,7 +5,7 @@ statement: >
   protocol conformance, and execution MUST NOT branch on the label.
 tier: procedural
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [DatabaseObject]

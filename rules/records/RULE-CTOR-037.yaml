@@ -5,7 +5,7 @@ statement: >
   even though the contract accepts the kind.
 tier: procedural
 severity: error
-scope: connector
+scopes: [connector, stream]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >

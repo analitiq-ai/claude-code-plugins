@@ -4,7 +4,7 @@ statement: >
   container MUST NOT render a scalar canonical.
 tier: advisory
 severity: error
-scope: type-map
+scopes: [type-map]
 validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]

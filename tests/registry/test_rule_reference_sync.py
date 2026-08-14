@@ -1,18 +1,18 @@
-"""Drift guard for the generated cross-field-rule reference.
+"""Drift guard for the generated per-scope rule reference sets.
 
-`plugins/analitiq-connector-builder/skills/connector-builder/references/rules.md` is rendered from the
-pinned contract models' advisory registry so agent prose can cite a rule by id
-instead of restating it. A generated copy is only safe while it is pinned: this
-test regenerates it and fails when the checked-in file is stale, so a contract
-change lands as a red build instead of silently-wrong authoring guidance.
+Each plugin's `skills/<skill>/references/rules/` set is rendered from the rule
+registry so agent prose can cite a rule by id instead of restating it. A
+generated copy is only safe while it is pinned: this test regenerates every
+set and fails when a checked-in file is stale, missing, or orphaned, so a
+contract change lands as a red build instead of silently-wrong authoring
+guidance.
 
-It also guards the *citations*: prose cites rules by id (`RULE-ENDP-009`) instead
-of restating them, so a retired or renumbered id must not be allowed to leave
-dangling references behind a green build. That gate spans EVERY plugin under
-`plugins/`, not just this suite's — the advisory registry is one shared source,
-so one scan pins every citation site the prose currently has, all plugins plus
-the repo-root docs; a per-plugin copy of the scanner would itself be a drift
-surface.
+It also guards the *citations*: prose cites rules by id (`RULE-ENDP-009`)
+instead of restating them, so a retired or renumbered id must not be allowed
+to leave dangling references behind a green build. That gate spans EVERY
+plugin under `plugins/` plus the repo-root docs — the registry is one shared
+source, so one scan pins every citation site; a per-plugin copy of the
+scanner would itself be a drift surface.
 
 Same environment contract as `test_schema_drift.py`: skipped when the pinned
 package is absent (offline dev), hard-failed in CI via
@@ -43,19 +43,52 @@ def _load_renderer():
 
 
 def test_rule_reference_is_in_sync() -> None:
-    renderer = _load_renderer()
-    expected = renderer.render()
-    output_path = renderer.OUTPUT_PATH
+    """Every file in every plugin's rule set matches what the renderer emits.
 
-    assert output_path.exists(), (
-        f"{output_path.relative_to(REPO_ROOT)} is missing — "
-        "run `python scripts/render_rule_reference.py write`"
-    )
-    assert output_path.read_text(encoding="utf-8") == expected, (
-        f"{output_path.relative_to(REPO_ROOT)} is stale — the contract's advisory "
-        "registry changed. Run `python scripts/render_rule_reference.py write` and review "
-        "any prose that cites the affected rule ids."
-    )
+    The reference is a set of per-scope files now, not one document, so this
+    checks the whole set per plugin: a stale file, a missing one, and a file
+    left behind by a bucket that stopped existing are all the same defect —
+    prose citing an id an agent cannot resolve.
+    """
+    renderer = _load_renderer()
+    for owner in renderer.OUTPUT_DIRS:
+        rendered = renderer.render_all(owner)
+        for path, expected in sorted(rendered.items()):
+            assert path.exists(), (
+                f"{path.relative_to(REPO_ROOT)} is missing — "
+                "run `python scripts/render_rule_reference.py write`"
+            )
+            assert path.read_text(encoding="utf-8") == expected, (
+                f"{path.relative_to(REPO_ROOT)} is stale — the rule registry "
+                "changed. Run `python scripts/render_rule_reference.py write` "
+                "and review any prose that cites the affected rule ids."
+            )
+        orphans = sorted(
+            q for q in renderer.OUTPUT_DIRS[owner].glob("*.md") if q not in rendered
+        )
+        assert not orphans, (
+            f"{owner}: these files render no rules any more and would keep "
+            f"serving a document nothing grades: {[str(o) for o in orphans]}. "
+            "Run `python scripts/render_rule_reference.py write`."
+        )
+
+
+def test_every_owned_rule_reaches_a_file() -> None:
+    """Coverage, per plugin — the invariant that replaced 'exactly once'.
+
+    A rule can name several scopes and so land in several files; what must not
+    happen is landing in none, because then the plugin's prose can cite an id
+    that resolves nowhere. `render_all` raises on that at render time; this
+    recomputes the same invariant from `buckets()` directly, so it fails with
+    the offending ids even for a plugin whose set was never rendered.
+    """
+    renderer = _load_renderer()
+    for owner in renderer.OUTPUT_DIRS:
+        placed = {r.id for rules in renderer.buckets(owner).values() for r in rules}
+        assert renderer.rendered_ids(owner) <= placed, (
+            f"{owner}: owned rules reach no file: "
+            f"{sorted(renderer.rendered_ids(owner) - placed)}"
+        )
 
 
 # Prose abbreviates groups of ids two ways: `RULE-TMAP-001/002` for a handful and
@@ -101,13 +134,18 @@ def test_prose_rule_citations_resolve() -> None:
     from analitiq.contracts.shared.rules import all_rules
 
     known = {rule.id for rule in all_rules()}
-    generated = _load_renderer().OUTPUT_PATH
+    renderer = _load_renderer()
+    generated = {
+        path
+        for owner in renderer.OUTPUT_DIRS
+        for path in renderer.render_all(owner)
+    }
 
     dangling: dict[str, set[str]] = {}
     plugins_root = REPO_ROOT / "plugins"
     plugin_cited = 0
     for path in [*REPO_ROOT.glob("*.md"), *plugins_root.rglob("*.md")]:
-        if path == generated:
+        if path in generated:
             continue  # generated from the registry; covered by the sync test
         ids = _cited_ids(path.read_text(encoding="utf-8"))
         if plugins_root in path.parents:
@@ -239,9 +277,10 @@ def test_one_field_renders_as_one_row_across_a_rules_targets() -> None:
 def test_the_header_warning_describes_a_registry_that_still_has_unapplied_rules() -> None:
     """The reference's header tells an author a clean run proves nothing.
 
-    That sentence is a claim about this plugin's rule set, not about the
-    validator's code path: it is true exactly while some rule rendered here has
-    nothing applying it, which the record states as an absent `validator`. So it
+    That sentence is a claim about each plugin's rule set, not about the
+    validator's code path: it is true exactly while some rule rendered for that
+    plugin has nothing applying it, which the record states as an absent
+    `validator`. So it
     is pinned by reading the registry rather than by a probe — the same split
     `.claude/rules/guards.md` asks for, with the contract deciding.
 
@@ -250,10 +289,13 @@ def test_the_header_warning_describes_a_registry_that_still_has_unapplied_rules(
     this fails, and it fails in the direction of good news.
     """
     renderer = _load_renderer()
-    unapplied = sorted(r.id for r in renderer._load_rules() if not r.validator)
-    assert unapplied, (
-        "every rule this plugin owns now names something that applies it, so "
-        "the header's 'a clean validation run is not proof they all hold' no "
-        "longer describes the registry. Reword the HEADER template in "
-        "scripts/render_rule_reference.py and re-render."
-    )
+    for owner in renderer.OUTPUT_DIRS:
+        unapplied = sorted(
+            r.id for r in renderer._load_rules(owner) if not r.validator
+        )
+        assert unapplied, (
+            f"every rule {owner} owns now names something that applies it, so "
+            "the header's 'a clean validation run is not proof they all hold' no "
+            "longer describes that registry. Reword the HEADER template in "
+            "scripts/render_rule_reference.py and re-render."
+        )

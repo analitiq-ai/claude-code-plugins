@@ -3,7 +3,7 @@ statement: >
   A stream MUST name as its parent the pipeline that references it.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.validator.pipelines::_check_stream_parent_pipeline"
 owners: [pipeline-plugin, engine]
 rationale: >

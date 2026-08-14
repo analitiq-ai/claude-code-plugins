@@ -5,7 +5,7 @@ statement: >
   placeholder and never a guessed type.
 tier: procedural
 severity: error
-scope: database-endpoint
+scopes: [database-endpoint]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [Column]

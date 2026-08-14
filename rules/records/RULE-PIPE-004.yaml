@@ -4,7 +4,7 @@ statement: >
   stream.
 tier: advisory
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: "analitiq.contracts.pipelines.config::PipelineAuthored._check_active_requires_streams"
 owners: [pipeline-plugin]
 targets: [PipelineAuthored]

@@ -6,7 +6,7 @@ statement: >
   sit at the root beside it.
 tier: procedural
 severity: error
-scope: connector-package
+scopes: [connector-package]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

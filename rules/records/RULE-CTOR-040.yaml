@@ -5,7 +5,7 @@ statement: >
   write mode.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 targets: [DatabaseConnector]

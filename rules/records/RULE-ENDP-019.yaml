@@ -4,7 +4,7 @@ statement: >
   MUST NOT declare them.
 tier: advisory
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Operations._conflict_keys_by_mode"
 owners: [connector-plugin]
 targets: [Operations]

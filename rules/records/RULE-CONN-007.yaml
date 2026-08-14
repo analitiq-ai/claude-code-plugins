@@ -5,7 +5,7 @@ statement: >
   list where it declares one.
 tier: referential
 severity: error
-scope: connection
+scopes: [connection]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [ConnectionAuthored, ConnectionInput]

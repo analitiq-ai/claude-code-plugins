@@ -5,7 +5,7 @@ statement: >
   the vocabularies `WindowCursorMapping` declares for each.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WindowCursorMapping.format"
 owners: [connector-plugin, engine]
 targets: [WindowCursorMapping]

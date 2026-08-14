@@ -63,23 +63,13 @@ never here.
 
 ## Registered rules for a connection
 
-Satisfy every rule below, and cite one by id rather than restating it. A rule
+Every rule binding a connection document is in
+`../pipeline-builder/references/rules/connection.md` — **read it before
+authoring**, satisfy every row, and cite one by id rather than restating it. A rule
 whose statement names the connector's `connection_contract` is judged against
 that document, so read the downloaded connector beside the connection while
 authoring.
 
-<!-- BEGIN GENERATED: rules-connection -->
-| Rule | Constraint |
-|---|---|
-| `RULE-CONN-004` | A connection's non-secret maps MUST NOT carry a key that names credential material; such a value lives in secret storage and is reached through `secret_refs`. |
-| `RULE-CONN-005` | A connection MUST NOT author a value into its `discovered` map, which the connections service owns and fills from the connector's post-auth discovery. |
-| `RULE-CONN-006` | Every connection-contract input and post-auth output MUST be authored into the connection map its own declaration's `storage` names. |
-| `RULE-CONN-007` | A connection MUST author each value in the JSON type its connection-contract input declares, uncoerced, and within that input's declared allowed-value list where it declares one. |
-| `RULE-CONN-008` | A connection selecting a TLS mode that verifies the server certificate MUST also supply the CA material the connector declares an input for. |
-| `RULE-CONN-009` | A connection MUST NOT carry a secret value; an input the connector routes to secret storage is authored as a pointer in `secret_refs`. |
-| `RULE-CONN-010` | A `sidecar:` pointer MUST name an entry in a credentials file keyed by connection-contract input name, never a key of the env-var-keyed template the plugin emits. |
-| `RULE-CONN-011` | A connection's `connector_id` MUST resolve to a connector present in the run the connection is assembled into. |
-<!-- END GENERATED: rules-connection -->
 
 ## What this skill does NOT cover
 

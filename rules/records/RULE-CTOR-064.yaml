@@ -5,7 +5,7 @@ statement: >
   connector model rejects any key it does not name.
 tier: structural
 severity: error
-scope: connector
+scopes: [connector]
 validator: "analitiq.contracts.connector::ConnectorBase"
 owners: [connector-plugin, engine]
 targets: [ConnectorBase]

@@ -63,12 +63,12 @@ pipeline-builder (skill, orchestrator)
 
 ## Generated prose — the CI gate
 
-This plugin does not restate contract facts in prose; it **generates** them from
-the pinned package into marked regions:
+This plugin does not restate contract facts in prose; it **generates** them
+from the in-repo contract source (`packages/*/src`) into marked regions:
 
 ```bash
-python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py          # rewrite in place
-python3 plugins/analitiq-pipeline-builder/scripts/gen_contract_docs.py --check  # CI gate
+python3 scripts/gen_pipeline_docs.py          # rewrite in place
+python3 scripts/gen_pipeline_docs.py --check  # CI gate
 ```
 
 Rules when editing this plugin's prose:
@@ -101,7 +101,7 @@ Two things specific to this plugin:
   rendered **only into the connector plugin's tree**. Never author one here:
   this plugin's generator cannot parse those ids, nothing would render it, and
   the gate fails the build on the orphaned markers.
-- `gen_contract_docs.py` blocks in this plugin's docs stay exempt from the
+- `gen_pipeline_docs.py` blocks in this plugin's docs stay exempt from the
   scan — they are pinned by their own `--check`.
 
 ## Fenced JSON examples

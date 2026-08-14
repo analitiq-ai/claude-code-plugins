@@ -4,7 +4,7 @@ statement: >
   connector class and its dialect class.
 tier: structural
 severity: info
-scope: connector-package
+scopes: [connector-package]
 validator: null
 owners: [connector-plugin]
 rationale: >

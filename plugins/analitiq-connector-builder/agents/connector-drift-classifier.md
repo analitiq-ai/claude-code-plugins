@@ -20,6 +20,11 @@ resolves against this list. The input paths below are elsewhere on disk.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
   — the release table the bump classification follows.
 
+A cited `RULE-*` id resolves in one of the rule files under
+`${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/`; the index
+in `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/SKILL.md` § "Registered
+rules for every document" says which file carries which artifact.
+
 ## Inputs
 
 - `previous_release_path` — absolute path to the prior released

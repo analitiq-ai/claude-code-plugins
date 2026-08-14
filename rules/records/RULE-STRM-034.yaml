@@ -4,7 +4,7 @@ statement: >
   belonging to the connection it names.
 tier: referential
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.validator.pipelines::_check_connection_scoped_endpoints"
 owners: [pipeline-plugin, engine]
 rationale: >

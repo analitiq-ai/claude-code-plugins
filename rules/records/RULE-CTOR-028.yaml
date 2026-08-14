@@ -5,7 +5,7 @@ statement: >
   instantiating the connector supplies instead.
 tier: judgment
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 rationale: >

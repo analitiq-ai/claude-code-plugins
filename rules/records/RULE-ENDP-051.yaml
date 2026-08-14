@@ -5,7 +5,7 @@ statement: >
   whether the request may declare a body at all.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::GetReadRequest.method"
 owners: [connector-plugin, engine]
 targets: [GetReadRequest, PostReadRequest]

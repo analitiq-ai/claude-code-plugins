@@ -6,7 +6,7 @@ statement: >
   unreachable.
 tier: judgment
 severity: error
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin, engine]
 rationale: >

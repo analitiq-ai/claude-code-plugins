@@ -15,6 +15,7 @@ writing files.
 
 - Inputs to collect
 - Modes
+- Registered rules for every document
 - Required reading
 - Pipeline
 - Output
@@ -51,6 +52,37 @@ identified by `connector_path`, so `provider` is optional.
 the drift baseline, never edited in place); `validate` is a read-only
 diagnostics pass. Mode semantics and phase branching: `references/pipeline.md`
 §Modes. Each phase states its own halt conditions, in that phase's section.
+
+## Registered rules for every document
+
+Every rule this plugin owns is rendered under `references/rules/`, split by the
+artifact it binds. The file for the document being authored is the whole of what
+that document must satisfy — nothing in the other files applies to it, and every
+`RULE-*` id this plugin's prose cites resolves in one of them:
+
+- `references/rules/connector.md` — the connector document
+- `references/rules/api-endpoint.md` — an API endpoint document
+- `references/rules/database-endpoint.md` — a database endpoint document, such
+  as the ones `resource_discovery` produces
+- `references/rules/connector-package.md` — the repository the connector ships as
+- `references/rules/type-map.md` — a read or write type map
+- `references/rules/shared.md` — the artifact kinds too small for a file of
+  their own
+
+Run this loop for each document, and do not skip step 4:
+
+```
+- [ ] 1. Read the rule file for the document being authored
+- [ ] 2. Author it
+- [ ] 3. Run `connector-schema-validator`; fix findings; repeat until clean
+- [ ] 4. Re-read the rule file and confirm every row whose Checked column
+        reads `—`; nothing rejects those, so step 3 says nothing about them
+```
+
+<!-- PROBE: connector-secret-literal-undetected, runtime-tail-unchecked -->
+A clean validation run is not proof every rule holds — some are applied only at
+connect or run time, and those are exactly the ones an agent gets wrong by
+writing a plausible value that validates.
 
 ## Required reading
 

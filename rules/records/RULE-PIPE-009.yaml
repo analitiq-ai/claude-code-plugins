@@ -4,7 +4,7 @@ statement: >
   accepts; the contract constrains the wrapper alone.
 tier: structural
 severity: error
-scope: pipeline
+scopes: [pipeline]
 validator: null
 owners: [pipeline-plugin, engine]
 targets: [Schedule]

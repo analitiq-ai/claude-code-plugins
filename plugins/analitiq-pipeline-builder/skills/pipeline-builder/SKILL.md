@@ -85,35 +85,33 @@ carries the phrasing tables — and halt rather than inventing a member:
 
 ## Registered rules for every document
 
-These bind whatever you are authoring — pipeline, stream, connection or
-database endpoint — so they are not repeated in the per-document specs. Satisfy
-every one.
-<!-- PROBE: pipeline-copied-default-unchecked -->
-A clean validation run is not proof they all hold, and most of these are things
-an agent gets wrong by writing a plausible value that validates.
+Every rule this plugin owns is rendered under `references/rules/`, split by the
+artifact it binds. The file for the document being authored is the whole of what
+that document must satisfy — nothing in the other files applies to it, and every
+`RULE-*` id this plugin's prose cites resolves in one of them:
 
-<!-- BEGIN GENERATED: rules-shared -->
-| Rule | Constraint |
-|---|---|
-| `RULE-CTOR-037` | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. |
-| `RULE-CTOR-045` | A connector's slug MUST name the same entity in its document, its registry repository and its on-disk directory, and MUST NOT change — rewriting a `connector_id`, or a derived `endpoint_id`, mints a different entity rather than editing this one. |
-| `RULE-PKG-031` | An endpoint document MUST ship at `endpoints/{endpoint_id}.json` under the connector release or the connection that carries it, directly in that directory rather than in a subdirectory of it. |
-| `RULE-RETRY-001` | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. |
-| `RULE-SHRD-001` | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. |
-| `RULE-SHRD-002` | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. |
-| `RULE-SHRD-003` | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. |
-| `RULE-SHRD-004` | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. |
-| `RULE-SHRD-005` | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. |
-| `RULE-SHRD-006` | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. |
-| `RULE-SHRD-007` | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. |
-| `RULE-SHRD-008` | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. |
-| `RULE-SHRD-009` | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. |
-| `RULE-SHRD-010` | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. |
-| `RULE-SHRD-011` | A `display_name` MUST NOT carry leading or trailing whitespace. |
-| `RULE-SHRD-012` | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. |
-| `RULE-SHRD-013` | An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares. |
-| `RULE-SHRD-014` | An authored document MUST NOT declare a field the registry stamps on insert or update; the authored models name the authorable fields and reject every other key. |
-<!-- END GENERATED: rules-shared -->
+- `references/rules/pipeline.md` — the pipeline document
+- `references/rules/stream.md` — a stream document
+- `references/rules/connection.md` — a connection document
+- `references/rules/database-endpoint.md` — a database endpoint document
+- `references/rules/type-map.md` — a read or write type map
+- `references/rules/shared.md` — the artifact kinds too small for a file of
+  their own
+
+Run this loop for each document, and do not skip step 4:
+
+```
+- [ ] 1. Read the rule file for the document being authored
+- [ ] 2. Author it
+- [ ] 3. Run `pipeline-schema-validator`; fix findings; repeat until clean
+- [ ] 4. Re-read the rule file and confirm every row whose Checked column
+        reads `—`; nothing rejects those, so step 3 says nothing about them
+```
+
+<!-- PROBE: pipeline-copied-default-unchecked -->
+A clean validation run is not proof they all hold, and most of the unchecked
+ones are things an agent gets wrong by writing a plausible value that validates.
+
 
 ## Required reading
 

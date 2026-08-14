@@ -45,7 +45,9 @@ Detection limits of the heuristic, stated so nobody over-trusts it:
     day some larger vocabulary happened to contain it.
   * a restatement inside a fenced code block using bare (unticked) members is not
     seen. `FENCED_RESTATEMENTS` records the ones that exist today.
-  * scope is `*.md` under the plugin root.
+  * scope is `*.md` under the plugin root, minus the per-scope rule files,
+    which are generated whole and byte-pinned by their own sync test —
+    `_authored_docs` carries the argument.
   * `_sections()` does not track fenced blocks, so a column-0 `#` inside a fence
     would split a section early. Zero occurrences across the 26 fenced blocks in `src/`
     today; the failure mode is a missed detection, never a false one.
@@ -98,11 +100,26 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
-import gen_contract_docs as G  # noqa: E402
+import gen_pipeline_docs as G  # noqa: E402
+
+from _rule_files import rule_reference_root  # noqa: E402
+
+
+def _authored_docs() -> list[Path]:
+    """Every doc these gates scan: the plugin's markdown minus the rule files.
+
+    The per-scope rule files are generated whole from the registry with live
+    contract values substituted in, and their sync test fails on any byte of
+    drift — so a vocabulary appearing there is a rendering of the contract,
+    not a hand-typed copy. `_rule_files` carries the argument.
+    """
+    root = rule_reference_root()
+    return sorted(p for p in G.DOCS_ROOT.rglob("*.md")
+                  if not p.is_relative_to(root))
 
 # Which generated blocks each doc must carry. A block deleted from the doc that
 # owns it is the drift no content heuristic can catch, so this manifest is what
@@ -111,24 +128,23 @@ import gen_contract_docs as G  # noqa: E402
 # reality in both directions so it cannot rot.
 REQUIRED_BLOCKS = {
     "skills/connection-spec/SKILL.md": {
-        "rules-connection", "fields-connection", "schema-urls"},
+        "fields-connection", "schema-urls"},
     "skills/connection-spec/spec-envelope.md": {"secret-ref-grammar"},
     "skills/endpoint-spec/SKILL.md": {"fields-database-endpoint", "schema-urls"},
-    "skills/endpoint-spec/spec-columns.md": {"rules-endpoint", "arrow-types", "fields-column"},
+    "skills/endpoint-spec/spec-columns.md": {"arrow-types", "fields-column"},
     "skills/endpoint-spec/spec-database-object.md": {"endpoint-id-derivation", "fields-database-object"},
-    "skills/endpoint-spec/spec-type-map-gaps.md": {"rules-type-map"},
-    "skills/pipeline-builder/SKILL.md": {"rules-shared", "enum-vocabulary"},
+    "skills/pipeline-builder/SKILL.md": {"enum-vocabulary"},
     "skills/pipeline-builder/references/enum-mappers.md": {"enum-vocabulary"},
     "skills/pipeline-builder/references/identity-and-versioning.md": {"shared-vocabulary"},
     "skills/pipeline-builder/references/io-contracts.md": {"validator-ids"},
     "skills/pipeline-builder/references/schema-hosts.md": {"schema-urls"},
-    "skills/pipeline-spec/SKILL.md": {"rules-pipeline", "fields-pipeline", "schema-urls"},
+    "skills/pipeline-spec/SKILL.md": {"fields-pipeline", "schema-urls"},
     "skills/pipeline-spec/spec-connections.md": {"fields-pipeline-connections"},
     "skills/pipeline-spec/spec-engine-runtime.md": {
         "fields-batching", "fields-engine", "fields-error-handling", "fields-logging", "fields-runtime"},
     "skills/pipeline-spec/spec-schedule.md": {"fields-schedule"},
     "skills/stream-spec/SKILL.md": {
-        "rules-stream", "enum-vocabulary", "fields-stream", "schema-urls"},
+        "enum-vocabulary", "fields-stream", "schema-urls"},
     "skills/stream-spec/spec-destinations.md": {
         "fields-stream-destination", "fields-stream-execution", "fields-stream-write"},
     "skills/stream-spec/spec-endpoint-refs.md": {
@@ -329,7 +345,7 @@ def _restatements():
     """Every (doc, vocab, line) where a full vocabulary appears outside a block."""
     vocabularies = _gated_vocabularies()
     found = []
-    for path in sorted(G.DOCS_ROOT.rglob("*.md")):
+    for path in _authored_docs():
         # Replace each block with its own newline count rather than "": keeps
         # reported line numbers aligned with the real file, and stops prose that
         # abuts a block from being merged into one section.
@@ -475,7 +491,7 @@ def test_fenced_restatements_are_declared():
     """Bare-member restatements inside fenced examples, recorded not hidden."""
     vocabularies = _gated_vocabularies()
     found = set()
-    for path in sorted(G.DOCS_ROOT.rglob("*.md")):
+    for path in _authored_docs():
         outside = G._BLOCK_RE.sub("", path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()
         for fence in _FENCE.findall(outside):
@@ -583,7 +599,7 @@ def test_shared_patterns_are_not_hand_typed_outside_generated_blocks():
         f"the shared-vocabulary block emits constants the gate cannot see: "
         f"{missing}. A row names a non-string or renamed constant.")
     offenders = []
-    for path in sorted(G.DOCS_ROOT.rglob("*.md")):
+    for path in _authored_docs():
         outside = G._BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
                                   path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()

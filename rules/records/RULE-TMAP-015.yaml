@@ -5,7 +5,7 @@ statement: >
   where read-side matching does not.
 tier: procedural
 severity: warning
-scope: type-map
+scopes: [type-map]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapWriteExactRule, TypeMapWriteRegexRule]

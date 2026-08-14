@@ -4,7 +4,7 @@ statement: >
   source endpoint reference declares.
 tier: advisory
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::StreamSource._validate_filter_operator_scope"
 owners: [pipeline-plugin, engine]
 targets: [StreamSource]

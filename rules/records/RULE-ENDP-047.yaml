@@ -4,7 +4,7 @@ statement: >
   declared by the connector it ships beside.
 tier: referential
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.validator.connectors::_endpoint_transport_ref_findings"
 owners: [connector-plugin, engine]
 rationale: >

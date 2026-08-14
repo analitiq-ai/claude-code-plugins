@@ -5,7 +5,7 @@ statement: >
   the first tier the target system satisfies.
 tier: judgment
 severity: warning
-scope: connector
+scopes: [connector]
 validator: null
 owners: [connector-plugin]
 rationale: >

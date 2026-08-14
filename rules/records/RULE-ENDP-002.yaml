@@ -4,7 +4,7 @@ statement: >
   declare the operator set that makes it stream-filterable.
 tier: structural
 severity: error
-scope: api-endpoint
+scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::Param._validate"
 owners: [connector-plugin, engine]
 targets: [Param]

@@ -4,7 +4,7 @@ statement: >
   and carry only the fields that shape declares.
 tier: structural
 severity: error
-scope: stream
+scopes: [stream]
 validator: "analitiq.contracts.stream::DatabaseKeylessWrite"
 owners: [pipeline-plugin]
 targets: [DatabaseKeylessWrite, DatabaseConflictKeyedWrite, ApiWrite]
