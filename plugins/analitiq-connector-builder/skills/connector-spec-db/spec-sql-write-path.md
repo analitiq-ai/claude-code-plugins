@@ -282,10 +282,11 @@ conformance kit's job, run by registry CI. Getting the pairing wrong ships
 a connector that validates cleanly and is refused at handshake — which is
 why the two are authored together here.
 
+<!-- Maintainers: the sql_capabilities vocabularies above are pinned to the
+     contract models by `tests/connector_builder/test_schema_drift.py`. -->
 **The CDK is the authority on the hook surface; this document restates
 it** (`RULE-PKG-003`). The `sql_capabilities` vocabularies above are
-pinned to the contract models by
-`tests/connector_builder/test_schema_drift.py`, but the hook
+pinned to the contract models, but the hook
 names and signatures are engine-owned and nothing here can pin them —
 they describe the engine's **SQL write path v2** surface (the ADR of that
 name, in analitiq-core, is the source of record). Where the
