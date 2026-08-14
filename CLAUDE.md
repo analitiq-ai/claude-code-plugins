@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with
 code in this repository.
+A message ending in a question mark gets an answer and nothing else. No tool
+calls that change anything, no launching agents, until I give an explicit instruction.
 
 ## What This Repo Is
 
