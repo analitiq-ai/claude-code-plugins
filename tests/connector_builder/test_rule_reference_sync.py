@@ -276,9 +276,10 @@ def test_one_field_renders_as_one_row_across_a_rules_targets() -> None:
 def test_the_header_warning_describes_a_registry_that_still_has_unapplied_rules() -> None:
     """The reference's header tells an author a clean run proves nothing.
 
-    That sentence is a claim about this plugin's rule set, not about the
-    validator's code path: it is true exactly while some rule rendered here has
-    nothing applying it, which the record states as an absent `validator`. So it
+    That sentence is a claim about each plugin's rule set, not about the
+    validator's code path: it is true exactly while some rule rendered for that
+    plugin has nothing applying it, which the record states as an absent
+    `validator`. So it
     is pinned by reading the registry rather than by a probe — the same split
     `.claude/rules/guards.md` asks for, with the contract deciding.
 
@@ -287,10 +288,13 @@ def test_the_header_warning_describes_a_registry_that_still_has_unapplied_rules(
     this fails, and it fails in the direction of good news.
     """
     renderer = _load_renderer()
-    unapplied = sorted(r.id for r in renderer._load_rules() if not r.validator)
-    assert unapplied, (
-        "every rule this plugin owns now names something that applies it, so "
-        "the header's 'a clean validation run is not proof they all hold' no "
-        "longer describes the registry. Reword the HEADER template in "
-        "scripts/render_rule_reference.py and re-render."
-    )
+    for owner in renderer.OUTPUT_DIRS:
+        unapplied = sorted(
+            r.id for r in renderer._load_rules(owner) if not r.validator
+        )
+        assert unapplied, (
+            f"every rule {owner} owns now names something that applies it, so "
+            "the header's 'a clean validation run is not proof they all hold' no "
+            "longer describes that registry. Reword the HEADER template in "
+            "scripts/render_rule_reference.py and re-render."
+        )

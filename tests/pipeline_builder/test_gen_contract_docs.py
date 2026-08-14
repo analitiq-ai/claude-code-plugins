@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from _rule_files import rule_reference_root
+
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
 sys.path.insert(0, str(ROOT / "scripts"))
 import gen_contract_docs as G  # noqa: E402
@@ -89,7 +91,14 @@ def test_no_malformed_markers():
     # contributes nothing either way — so the arithmetic still holds; the looseness
     # is what catches a marker mangled inside its own prefix.
     loose = re.compile(r"<!--.*?GENERATED.*?-->", re.IGNORECASE | re.DOTALL)
+    # The per-scope rule files are generated whole by render_rule_reference.py
+    # — their header comment names that script, not a BEGIN/END pair — and
+    # test_rule_reference_sync.py fails on any byte of drift in them, so this
+    # marker arithmetic does not apply there.
+    rule_files_root = rule_reference_root()
     for path in sorted(G.DOCS_ROOT.rglob("*.md")):
+        if path.is_relative_to(rule_files_root):
+            continue
         text = path.read_text()
         markers = len(loose.findall(text))
         parsed = len(G._BLOCK_RE.findall(text))
