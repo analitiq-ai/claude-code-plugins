@@ -67,7 +67,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _guard_lib import (  # noqa: E402
-    PIN_SOURCE,
     GuardError,
     read_pin,
     read_pin_version,

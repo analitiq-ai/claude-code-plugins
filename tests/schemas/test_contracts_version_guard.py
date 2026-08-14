@@ -45,7 +45,7 @@ def _plain_env(monkeypatch):
     # No ambient strictness (CI pytest runs carry no
     # CONTRACTS_VERSION_GUARD_STRICT, but a dev shell might), and no Actions
     # annotations: on a real runner GITHUB_STEP_SUMMARY exists and
-    # `_surface_warning` would append to the live job summary — pytest
+    # `surface_warning` would append to the live job summary — pytest
     # captures stdout, not file writes.
     monkeypatch.delenv("CONTRACTS_VERSION_GUARD_STRICT", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
@@ -127,12 +127,10 @@ def test_reads_the_pin_from_its_single_source(guard):
 
 
 def test_pin_reader_agrees_with_the_validator_guard(guard):
-    # The pin's location and textual shape are also read by
-    # `check_validator_pin_contract.py`; the guard cannot import it without
-    # coupling two self-contained CI scripts, so this pins the copies to one
-    # behavior (`.claude/rules/no-drift-surfaces.md`).
+    # Both guards read the pin through `_guard_lib.read_pin_version`; this
+    # catches either one re-growing a local reader that diverges from the
+    # shared one.
     sibling = _load(_SIBLING)
-    assert guard.PIN_SOURCE == sibling.PIN_SOURCE
     assert guard.read_pin_version() == sibling.read_pin_version()
 
 
@@ -282,8 +280,13 @@ def test_other_http_statuses_classify_as_guard_errors(guard, monkeypatch):
             _http_error(guard.PUBLISHED_URL, 500)
         ),
     )
-    with pytest.raises(guard.GuardError):
+    with pytest.raises(guard.GuardError) as exc_info:
         guard._fetch(guard.PUBLISHED_URL)
+    # NotPublished subclasses GuardError, so the raises() alone would pass
+    # even if a 5xx were misclassified as a missing object — which would turn
+    # a CDN fault into warn-and-pass on PRs and a false divergence on strict
+    # runs. The exclusion is the discriminating half of this test.
+    assert not isinstance(exc_info.value, guard.NotPublished)
 
 
 # --- infrastructure failures are exit 2, never a verdict -------------------
