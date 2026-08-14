@@ -50,9 +50,9 @@ cache, so its citations resolve against the plugin tree. HTML comments are
 the tooling-metadata channel — GENERATED headers naming the renderer that
 wrote the file, maintainer notes naming the repo-side pin — read by the
 clone-holder, so bare path citations inside them resolve against the
-git-tracked repo tree, scoped to keep sibling plugins' files out of reach
-(`_comment_universes` owns the mapping; the `${CLAUDE_PLUGIN_ROOT}` form
-keeps the plugin universe in either channel). Both passes read one
+git-tracked repo tree — with suffix resolution stopped at sibling plugin
+trees (`_comment_resolvers` owns the mapping; the `${CLAUDE_PLUGIN_ROOT}`
+form keeps the plugin universe in either channel). Both passes read one
 splitter, `_channels`, so they can never disagree about where a span ends.
 A fenced code block is in neither channel, and the release-please CHANGELOG
 is read by neither pass (`_docs`).
@@ -73,7 +73,7 @@ from __future__ import annotations
 import re
 import subprocess
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import cache
 from pathlib import Path
 
@@ -353,48 +353,61 @@ def _repo_paths() -> tuple[str, ...]:
     return tuple(sorted(filter(None, listed.split("\0"))))
 
 
-def _comment_universes(root: Path) -> dict[str, tuple[Sequence[str], Path]]:
-    """Each comment-citation form's (universe, root) for one plugin.
+def _comment_resolvers(root: Path) -> dict[str, Callable[[str], bool]]:
+    """Whether a comment citation's target resolves, per form, for one
+    plugin.
 
-    The "repo" universe is the tracked tree minus the sibling plugin trees:
-    the suffix rule would otherwise let a plugin-relative citation heal
-    through another plugin's identically named file — the same cross-plugin
-    reach the prose pass forecloses by resolving inside one plugin root. A
-    comment may still cite anything outside `plugins/` and anything its own
-    plugin ships.
+    "repo": suffix resolution stops at the sibling plugin trees — a bare
+    citation must not heal through another plugin's identically named file,
+    the same cross-plugin reach the prose pass forecloses by resolving
+    inside one plugin root — but an exact repo-root-relative path resolves
+    anywhere tracked, because fully qualified it is unambiguous to the
+    clone reader.
 
-    The "plugin-cache" universe is `_plugin_paths`, exactly as in prose:
-    the `${CLAUDE_PLUGIN_ROOT}` prefix promises a file in the installed
-    plugin, so a repo file no plugin ships must not satisfy it, and a
-    directory reference must resolve even though `git ls-files` can never
-    name a directory."""
-    own = root.relative_to(REPO_ROOT).as_posix() + "/"
+    "plugin-cache": `_plugin_paths`, exactly as in prose — the
+    `${CLAUDE_PLUGIN_ROOT}` prefix promises a file in the installed plugin,
+    so a repo file no plugin ships must not satisfy it, and a directory
+    reference must resolve even though `git ls-files` can never name a
+    directory."""
     siblings = tuple(
         other.relative_to(REPO_ROOT).as_posix() + "/"
         for other in PLUGIN_ROOTS
         if other != root
     )
-    repo = [
-        path
-        for path in _repo_paths()
-        if path.startswith(own) or not path.startswith(siblings)
+    suffix_reach = [
+        path for path in _repo_paths() if not path.startswith(siblings)
     ]
+    tracked = frozenset(_repo_paths())
+    plugin_paths = _plugin_paths(root)
     return {
-        "plugin-cache": (_plugin_paths(root), root),
-        "repo": (repo, REPO_ROOT),
+        "plugin-cache": lambda target: _resolves(target, plugin_paths, root),
+        "repo": lambda target: (
+            _resolves(target, suffix_reach, REPO_ROOT)
+            or _cleaned(target, REPO_ROOT) in tracked
+        ),
     }
 
 
 def _dangling_comments_in(
-    text: str, universes: dict[str, tuple[Sequence[str], Path]]
-) -> list[tuple[int, str]]:
+    text: str, resolvers: dict[str, Callable[[str], bool]]
+) -> list[tuple[int, str, str]]:
     """The scan-and-resolve pipeline of `test_comment_citations_resolve`, on
-    one document's text — each citation graded in its form's universe."""
+    one document's text — each citation graded by its form's resolver."""
     return [
-        (lineno, target)
+        (lineno, target, form)
         for lineno, target, form in _comment_refs_in(text)
-        if _is_dangling(target, *universes[form])
+        if not resolvers[form](target)
     ]
+
+
+# The failure hint is part of the guard (`.claude/rules/guards.md`), and the
+# right fix differs by form: a repo-form citation names a file the tracked
+# tree lacks, a plugin-cache one names a file the plugin does not ship.
+_FORM_HINTS = {
+    "repo": "fix the path, or git-add the file before a comment cites it",
+    "plugin-cache": "the ${CLAUDE_PLUGIN_ROOT} prefix promises a file the "
+    "plugin ships — fix the path or drop the prefix",
+}
 
 
 @pytest.mark.parametrize("root", PLUGIN_ROOTS, ids=lambda r: r.name)
@@ -406,24 +419,23 @@ def test_comment_citations_resolve(root: Path) -> None:
     own header constant on regeneration, so it resolves as long as the
     renderer still lives at the path it states — and this sweep, not
     regeneration, is what notices when it does not."""
-    universes = _comment_universes(root)
+    resolvers = _comment_resolvers(root)
     dangling = [
-        (path.relative_to(root).as_posix(), lineno, target)
+        (path.relative_to(root).as_posix(), lineno, target, form)
         for path in _docs(root)
-        for lineno, target in _dangling_comments_in(
-            path.read_text(encoding="utf-8"), universes
+        for lineno, target, form in _dangling_comments_in(
+            path.read_text(encoding="utf-8"), resolvers
         )
     ]
     prefix = root.relative_to(REPO_ROOT).as_posix()
     assert not dangling, (
-        "maintainer comments point at repo files that do not exist:\n"
+        "maintainer comment citations do not resolve for their reader:\n"
         + "\n".join(
-            f"  {prefix}/{rel}:{lineno} -> {target}"
-            for rel, lineno, target in dangling
+            f"  {prefix}/{rel}:{lineno} -> {target} ({_FORM_HINTS[form]})"
+            for rel, lineno, target, form in dangling
         )
-        + "\nFix the path (a new file must be git-added before a comment can "
-        "cite it), or state the fact the comment was carrying instead of "
-        "pointing at it."
+        + "\nOr state the fact the comment was carrying instead of pointing "
+        "at it."
     )
 
 
@@ -977,9 +989,9 @@ def test_dangling_comment_citation_is_flagged() -> None:
         "     tests/nowhere/test_gone.py — renaming one side fails. -->\n"
         "<!-- see `skills/nowhere/also-gone.md` -->\n"
     )
-    assert _dangling_comments_in(doc, _comment_universes(_CONNECTOR_ROOT)) == [
-        (4, "tests/nowhere/test_gone.py"),
-        (5, "skills/nowhere/also-gone.md"),
+    assert _dangling_comments_in(doc, _comment_resolvers(_CONNECTOR_ROOT)) == [
+        (4, "tests/nowhere/test_gone.py", "repo"),
+        (5, "skills/nowhere/also-gone.md", "repo"),
     ]
 
 
@@ -995,21 +1007,25 @@ def test_resolving_comment_citations_pass() -> None:
         "tests/plugins/test_plugin_root_references.py",
         _EXISTING,
     ]
-    assert _dangling_comments_in(doc, _comment_universes(_CONNECTOR_ROOT)) == []
+    assert _dangling_comments_in(doc, _comment_resolvers(_CONNECTOR_ROOT)) == []
 
 
 def test_comment_citation_cannot_heal_through_a_sibling_plugin() -> None:
-    """Acceptance for the repo universe's scoping: a bare comment citation
+    """Acceptance for the repo resolver's scoping: a bare comment citation
     resolves through the repo and its own plugin's tree, never through a
     sibling plugin's identically named file — the suffix rule would
-    otherwise keep a citation green after its own tree renamed the file."""
+    otherwise keep a citation green after its own tree renamed the file.
+    Written exactly, a `plugins/<sibling>/…` path still resolves: fully
+    qualified, it is unambiguous to the clone reader."""
     pipeline_only = "skills/pipeline-spec/spec-schedule.md"
     doc = f"<!-- see {pipeline_only} -->\n"
     pipeline_root = PLUGINS_ROOT / "analitiq-pipeline-builder"
-    assert _dangling_comments_in(doc, _comment_universes(pipeline_root)) == []
-    assert _dangling_comments_in(doc, _comment_universes(_CONNECTOR_ROOT)) == [
-        (1, pipeline_only)
+    assert _dangling_comments_in(doc, _comment_resolvers(pipeline_root)) == []
+    assert _dangling_comments_in(doc, _comment_resolvers(_CONNECTOR_ROOT)) == [
+        (1, pipeline_only, "repo")
     ]
+    exact = f"<!-- see plugins/analitiq-pipeline-builder/{pipeline_only} -->\n"
+    assert _dangling_comments_in(exact, _comment_resolvers(_CONNECTOR_ROOT)) == []
 
 
 def test_plugin_root_form_in_a_comment_keeps_the_plugin_universe() -> None:
@@ -1017,13 +1033,13 @@ def test_plugin_root_form_in_a_comment_keeps_the_plugin_universe() -> None:
     installed plugin whichever channel it sits in. In a comment it must not
     heal through a repo file no plugin ships, and a directory reference must
     resolve although the tracked-file universe holds no directories."""
-    universes = _comment_universes(_CONNECTOR_ROOT)
+    resolvers = _comment_resolvers(_CONNECTOR_ROOT)
     repo_only = "<!-- run ${CLAUDE_PLUGIN_ROOT}/scripts/render_rule_reference.py -->\n"
-    assert _dangling_comments_in(repo_only, universes) == [
-        (1, "scripts/render_rule_reference.py")
+    assert _dangling_comments_in(repo_only, resolvers) == [
+        (1, "scripts/render_rule_reference.py", "plugin-cache")
     ]
     directory = "<!-- see ${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-db/examples/ -->\n"
-    assert _dangling_comments_in(directory, universes) == []
+    assert _dangling_comments_in(directory, resolvers) == []
 
 
 def test_unterminated_comment_runs_to_eof() -> None:
