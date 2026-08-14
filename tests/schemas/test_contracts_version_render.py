@@ -93,9 +93,10 @@ def test_full_check_gates_the_stamp(monkeypatch, tmp_path):
 def test_renderer_and_guard_agree_on_key_paths_and_host(guard):
     """The guard reads what the renderer writes, without importing it.
 
-    The fact key, the file paths, the serving host, and the sentinel's
-    basename therefore exist in the guard as copies of renderer-owned (or
-    contract-owned) values; these pins are what make each copy one value
+    The fact key, the file paths, the serving host (carried for every guard
+    by `scripts/_guard_lib.py`), and the sentinel's basename therefore exist
+    guard-side as copies of renderer-owned (or contract-owned) values; these
+    pins are what make each copy one value
     (`.claude/rules/no-drift-surfaces.md`).
     """
     assert guard.CONTRACTS_VERSION_KEY == render_schemas.CONTRACTS_VERSION_KEY

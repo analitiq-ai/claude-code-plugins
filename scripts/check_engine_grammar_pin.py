@@ -70,20 +70,20 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import http.client
 import json
 import re
 import sys
-import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "packages" / "contract-models" / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-
-class GuardError(RuntimeError):
-    """Infrastructure failure — the guard could not run to a verdict."""
-
+from _guard_lib import BASE_URL, GuardError  # noqa: E402
+# A 403/404 arrives as `_guard_lib.ObjectMissing`, a GuardError subclass:
+# this guard has no state where a missing object is anything but
+# infrastructure, so it needs no special case — exit 2 either way.
+from _guard_lib import fetch as _fetch  # noqa: E402
 
 # The import itself is part of the guard: `arrow_grammar` loads and derives
 # from the vendored manifest at import time, so a missing/corrupt vendored
@@ -99,27 +99,7 @@ except Exception as exc:  # noqa: BLE001 — see comment above
 else:
     _IMPORT_ERROR = None
 
-BASE_URL = "https://schemas.analitiq.ai"
-
 _VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-def _fetch(url: str) -> bytes:
-    # The trailing slash matters: a bare prefix would admit a host that merely
-    # STARTS with the pinned one (schemas.analitiq.ai.evil.example).
-    if not url.startswith(f"{BASE_URL}/"):
-        raise GuardError(f"refusing non-{BASE_URL} URL: {url}")
-    try:
-        # Scheme pinned by the BASE_URL check above.
-        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310  # skipcq: BAN-B310
-            return resp.read()
-    except (
-        # URLError and TimeoutError are OSError subclasses; HTTPException
-        # (IncompleteRead/BadStatusLine) is not.
-        http.client.HTTPException,
-        OSError,
-    ) as exc:
-        raise GuardError(f"fetch failed for {url}: {exc}") from exc
 
 
 def _parse_object(raw: bytes, *, context: str) -> dict:

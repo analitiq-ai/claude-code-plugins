@@ -160,7 +160,7 @@ jobs:
           # dead last, below — a run that dies on any other object leaves the
           # published stamp stale, which is exactly what contracts-version-
           # guard exists to catch; C-sort alone would land it mid-tree.
-          if [ "$((uploaded + skipped + 1))" -ne "$expected" ] || [ "$expected" -eq 0 ]; then
+          if [ "$((uploaded + skipped + 1))" -ne "$expected" ]; then
             echo "::error::processed $((uploaded + skipped)) of $((expected - 1)) non-stamp schema files — the find/loop plumbing is broken" >&2
             exit 1
           fi

@@ -15,6 +15,7 @@ import io
 import json
 import re
 import urllib.error
+import urllib.request
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -63,11 +64,19 @@ def _redigested_stamp(guard) -> bytes:
     newline) so the digest value is the sole differing byte range — anything
     looser and these tests would pass on any serialization difference
     without isolating the digest at all."""
-    doc = json.loads(guard.COMMITTED_PATH.read_bytes())
+    committed = guard.COMMITTED_PATH.read_bytes()
+    doc = json.loads(committed)
+
+    def render(d: dict) -> bytes:
+        return (json.dumps(d, indent=2, sort_keys=True) + "\n").encode()
+
+    # The round-trip pin: these serialization args are a copy of the
+    # renderer's write format, and this is what fails if the renderer's
+    # format ever moves — without it the fixture silently degrades into a
+    # generic byte-mismatch and stops isolating the digest.
+    assert render(doc) == committed, "fixture serialization drifted from the renderer's"
     doc["tree_sha256"] = "0" * 64
-    rendered = (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode()
-    assert rendered != guard.COMMITTED_PATH.read_bytes()
-    return rendered
+    return render(doc)
 
 
 def _stub_fetch(guard, monkeypatch, stamp, sentinel=b"{}") -> list:
@@ -254,9 +263,10 @@ def test_missing_object_statuses_classify_as_not_published(
     # Every verdict test stubs `_fetch` wholesale, so the 403/404 split —
     # which decides warn-and-pass vs GuardError on every ordinary PR until
     # the stamp reaches main — must be executed here or it is never executed
-    # at all.
+    # at all. Patched on urllib.request itself: the fetch lives in
+    # _guard_lib, and both resolve the same module object.
     monkeypatch.setattr(
-        guard.urllib.request,
+        urllib.request,
         "urlopen",
         lambda url, timeout: (_ for _ in ()).throw(_http_error(url, code)),
     )
@@ -266,7 +276,7 @@ def test_missing_object_statuses_classify_as_not_published(
 
 def test_other_http_statuses_classify_as_guard_errors(guard, monkeypatch):
     monkeypatch.setattr(
-        guard.urllib.request,
+        urllib.request,
         "urlopen",
         lambda url, timeout: (_ for _ in ()).throw(
             _http_error(guard.PUBLISHED_URL, 500)

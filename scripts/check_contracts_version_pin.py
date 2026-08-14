@@ -52,9 +52,10 @@ offline test can see:
      step 2 holds, so it always grades the version the published tree was
      actually rendered with.
 
-Strict-vs-warn windows (the STRICT env contract — name shape, the CI trigger
-expression, and typo-refusal — matches `check_validator_pin_contract.py`;
-the verdicts behind it are this guard's own):
+Strict-vs-warn windows (the STRICT env contract — typo-refusal and all — is
+`_guard_lib.read_strict_env`, shared with `check_validator_pin_contract.py`,
+and the CI trigger expression is pinned identical to that guard's; the
+verdicts behind it are this guard's own):
 
   - CONTRACTS_VERSION_GUARD_STRICT=1 (CI sets it on pushes and on
     release-please branches): every divergence FAILS. A red strict run is
@@ -86,79 +87,47 @@ mint the exit-1 verdict for a fault that is not a divergence.
 
 Wiring: the `contracts-version-guard` job in `.github/workflows/tests.yml`;
 `tests/schemas/test_contracts_version_guard.py` pins every verdict branch
-offline with the fetch stubbed, plus the CI wiring.
+offline with the fetch stubbed, plus the CI wiring. Shared plumbing (the
+host-pinned fetch, the exception split, the strict-env and warning
+contracts, the pin reader) lives in `scripts/_guard_lib.py`.
 """
 from __future__ import annotations
 
-import http.client
 import json
-import os
-import re
 import sys
 import tomllib
 import traceback
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _guard_lib  # noqa: E402
+from _guard_lib import BASE_URL, PIN_SOURCE, GuardError  # noqa: E402
+# ObjectMissing subclasses GuardError, so anywhere this guard fails to
+# special-case a missing object it still exits 2; `fetch_published` catches
+# it first, because HERE absence is a verdict input, not infrastructure.
+from _guard_lib import ObjectMissing as NotPublished  # noqa: E402
+from _guard_lib import fetch as _fetch  # noqa: E402
+from _guard_lib import read_strict_env, surface_warning  # noqa: E402
 
 COMMITTED_PATH = REPO_ROOT / "schemas" / "contracts-version.json"
 PYPROJECT_PATH = REPO_ROOT / "packages" / "contract-models" / "pyproject.toml"
-PIN_SOURCE = (
-    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_bootstrap.py"
-)
+STRICT_ENV = "CONTRACTS_VERSION_GUARD_STRICT"
 
-# The serving host is owned by `analitiq.contracts.shared.common.SCHEMA_BASE_URL`;
-# this script cannot import it (the guard job installs nothing, and the
-# contract package needs pydantic), so the copy here — and the sentinel's
-# basename, owned by the renderer as `CANONICAL_TYPES_PATH` — are pinned to
-# their owners by `tests/schemas/test_contracts_version_render.py`.
-BASE_URL = "https://schemas.analitiq.ai"
 PUBLISHED_URL = f"{BASE_URL}/{COMMITTED_PATH.name}"
 #: A versionless object published since before the stamp existed. Fetched only
 #: when the stamp comes back 403/404: served sentinel = the stamp is genuinely
-#: absent; missing sentinel = the CDN/bucket access itself is broken.
+#: absent; missing sentinel = the CDN/bucket access itself is broken. The
+#: basename is a copy of the renderer's `CANONICAL_TYPES_PATH` (this script
+#: cannot import the renderer — it needs pydantic, and guard jobs install
+#: nothing); `tests/schemas/test_contracts_version_render.py` pins it.
 SENTINEL_URL = f"{BASE_URL}/canonical-types.json"
 
 # The stamp's fact key — the PyPI distribution name. `render_schemas.py` owns
 # the document and states the same key (`CONTRACTS_VERSION_KEY`);
 # `tests/schemas/test_contracts_version_render.py` pins the copies equal.
-CONTRACTS_VERSION_KEY = "analitiq-contract-models"
-
-
-class GuardError(RuntimeError):
-    """Infrastructure failure — the guard could not run to a verdict."""
-
-
-class NotPublished(Exception):
-    """The published object does not exist (HTTP 403/404) — a verdict input,
-    not an infrastructure failure."""
-
-
-def _fetch(url: str) -> bytes:
-    # The trailing slash matters: a bare prefix would admit a host that merely
-    # STARTS with the pinned one (schemas.analitiq.ai.evil.example).
-    if not url.startswith(f"{BASE_URL}/"):
-        raise GuardError(f"refusing non-{BASE_URL} URL: {url}")
-    try:
-        # Scheme pinned by the BASE_URL check above.
-        with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310  # skipcq: BAN-B310
-            return resp.read()
-    except urllib.error.HTTPError as exc:
-        # CloudFront-over-S3 reports a missing key as 404, or as 403 when the
-        # origin policy denies ListBucket. Each means "no such object"; every
-        # other status is the CDN misbehaving, which no verdict may rest on.
-        if exc.code in (403, 404):
-            raise NotPublished(f"{url} → HTTP {exc.code}") from exc
-        raise GuardError(f"fetch failed for {url}: HTTP {exc.code}") from exc
-    except (
-        # URLError and TimeoutError are OSError subclasses; HTTPException
-        # (IncompleteRead/BadStatusLine) is not.
-        http.client.HTTPException,
-        OSError,
-    ) as exc:
-        raise GuardError(f"fetch failed for {url}: {exc}") from exc
+CONTRACTS_VERSION_KEY = "analitiq-contract-models"  # skipcq: SCT-A000 — a PyPI distribution name, not a credential
 
 
 def _read_fact(raw: bytes, *, context: str) -> str:
@@ -227,49 +196,13 @@ def read_shipped_version() -> str:
 
 
 def read_pin_version() -> str:
-    """The version half of `VALIDATOR_PIN` in `_bootstrap.py` — the one place
-    the runtime pin is stated (root CLAUDE.md, "The contract, and the
-    runtime pin")."""
-    try:
-        source = PIN_SOURCE.read_text()
-    except OSError as exc:
-        raise GuardError(f"cannot read {PIN_SOURCE}: {exc}") from exc
-    match = re.search(
-        r'^VALIDATOR_PIN = "analitiq-validator==([^"]+)"$', source, re.MULTILINE
-    )
-    if not match:
-        raise GuardError(f"VALIDATOR_PIN not found in {PIN_SOURCE}")
-    return match.group(1)
+    """The version half of `VALIDATOR_PIN`, via the shared reader.
 
-
-def read_strict_env() -> bool:
-    """The CONTRACTS_VERSION_GUARD_STRICT override. Only '1' or unset/'' parse.
-
-    Anything else raises: a typo like `true` must not silently downgrade a
-    strict run to warn-only.
+    Wrapped rather than re-exported so the module-level `PIN_SOURCE` is what
+    the reader consults — the tests point it at a synthetic pin to keep the
+    suite green through a real release window.
     """
-    value = os.environ.get("CONTRACTS_VERSION_GUARD_STRICT", "")
-    if value not in ("", "1"):
-        raise GuardError(
-            f"CONTRACTS_VERSION_GUARD_STRICT={value!r} not recognized — "
-            "set '1' for strict or leave unset"
-        )
-    return value == "1"
-
-
-def _surface_warning(text: str) -> None:
-    """Print the window warning where someone will actually see it.
-
-    A plain print in a green job is read by no one; on Actions, also emit a
-    workflow annotation (shows on the PR checks UI) and a step summary.
-    """
-    print(text)
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        print(f"::warning title=contracts version::{' '.join(text.split())}")
-        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-        if summary_path:
-            with open(summary_path, "a", encoding="utf-8") as fh:
-                fh.write(f"⚠️ {text}\n")
+    return _guard_lib.read_pin_version(PIN_SOURCE)
 
 
 _REPUBLISH = (
@@ -291,7 +224,7 @@ def run() -> int:
             "to agree before it can say anything about the published copy)"
         )
     pin_version = read_pin_version()
-    strict = read_strict_env()
+    strict = read_strict_env(STRICT_ENV)
     print(f"committed: {committed}  validator pin: {pin_version}  strict: {strict}")
 
     committed_bytes = COMMITTED_PATH.read_bytes()
@@ -352,9 +285,10 @@ def run() -> int:
     if strict:
         print(f"DIVERGENCE: {strict_text}", file=sys.stderr)
         return 1
-    _surface_warning(
+    surface_warning(
         f"WINDOW: {warn_text} Strict runs (pushes to main, release-please "
-        "branches) enforce this."
+        "branches) enforce this.",
+        title="contracts version",
     )
     return 0
 

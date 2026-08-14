@@ -64,10 +64,18 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-PIN_SOURCE = (
-    REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_bootstrap.py"
+from _guard_lib import (  # noqa: E402
+    PIN_SOURCE,
+    GuardError,
+    read_pin,
+    read_pin_version,
+    read_strict_env,
+    surface_warning,
 )
+
+STRICT_ENV = "VALIDATOR_PIN_GUARD_STRICT"
 CANON_SOURCE = (
     REPO_ROOT
     / "plugins"
@@ -100,10 +108,6 @@ print(json.dumps(rejected))
 """
 
 
-class GuardError(RuntimeError):
-    """The guard could not run — infrastructure, not a verdict. Exits 2."""
-
-
 class PinNotPublished(RuntimeError):
     """The pinned version is not on PyPI yet. Exits 3.
 
@@ -113,22 +117,6 @@ class PinNotPublished(RuntimeError):
     the tag rather than by fixing anything. Collapsing it into exit 2 would train
     people to wave through the code that also means "the runner is broken".
     """
-
-
-def read_pin() -> str:
-    """The full `analitiq-validator==X` requirement from `_bootstrap.py`."""
-    match = re.search(
-        r'^VALIDATOR_PIN = "(analitiq-validator==[^"]+)"$',
-        PIN_SOURCE.read_text(encoding="utf-8"),
-        re.MULTILINE,
-    )
-    if not match:
-        raise GuardError(f"VALIDATOR_PIN not found in {PIN_SOURCE}")
-    return match.group(1)
-
-
-def read_pin_version() -> str:
-    return read_pin().split("==", 1)[1]
 
 
 def read_shipped_version() -> str:
@@ -185,21 +173,6 @@ def read_canonical_drivers() -> list[str]:
             )
         drivers.append(cell_match.group(1))
     return drivers
-
-
-def read_strict_env() -> bool:
-    """The VALIDATOR_PIN_GUARD_STRICT override. Only '1' or unset/'' parse.
-
-    Anything else raises: a typo like `true` must not silently downgrade a
-    strict run to warn-only.
-    """
-    value = os.environ.get("VALIDATOR_PIN_GUARD_STRICT", "")
-    if value not in ("", "1"):
-        raise GuardError(
-            f"VALIDATOR_PIN_GUARD_STRICT={value!r} not recognized — "
-            "set '1' for strict or leave unset"
-        )
-    return value == "1"
 
 
 def _raise_if_unpublished(pin: str, output: str) -> None:
@@ -262,28 +235,13 @@ def probe_pinned_wheel(pin: str, drivers: list[str]) -> list[str]:
             ) from exc
 
 
-def _surface_warning(text: str) -> None:
-    """Print the window warning where someone will actually see it.
-
-    A plain print in a green job is read by no one; on Actions, also emit a
-    workflow annotation (shows on the PR checks UI) and a step summary.
-    """
-    print(text)
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        print(f"::warning title=validator pin::{' '.join(text.split())}")
-        summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-        if summary_path:
-            with open(summary_path, "a", encoding="utf-8") as fh:
-                fh.write(f"⚠️ {text}\n")
-
-
 def main() -> int:
     try:
         pin = read_pin()
         pin_version = read_pin_version()
         shipped = read_shipped_version()
         drivers = read_canonical_drivers()
-        strict = read_strict_env() or pin_version == shipped
+        strict = read_strict_env(STRICT_ENV) or pin_version == shipped
 
         print(f"pin: {pin}  shipped: {shipped}  strict: {strict}")
         print(f"canonical drivers ({CANON_SOURCE.name}): {', '.join(drivers)}")
@@ -322,11 +280,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    _surface_warning(
+    surface_warning(
         f"WARNING (release window, pin {pin_version} != shipped {shipped}): {verdict}\n"
         "Allowed on an ordinary PR while the new package version publishes; the "
         "pin bump follow-up must land before any plugin Release PR merges, and "
-        "main stays red (strict on push) until it does."
+        "main stays red (strict on push) until it does.",
+        title="validator pin",
     )
     return 0
 
