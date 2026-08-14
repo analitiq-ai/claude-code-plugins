@@ -149,3 +149,31 @@ jobs:
         env:
           VALIDATOR_PIN_GUARD_STRICT: ${{ (github.event_name == 'push' || startsWith(github.head_ref, 'release-please--')) && '1' || '' }}
         run: python3 scripts/check_validator_pin_contract.py
+
+  contracts-version-guard:
+    # schemas/contracts-version.json stamps the analitiq-contract-models
+    # release the committed tree renders from (the render check pins the
+    # stamp to the pyproject version). This job is the network half: the
+    # PUBLISHED copy at schemas.analitiq.ai must state the same release, and
+    # VALIDATOR_PIN must agree with it — otherwise "does my pinned validator
+    # agree with the published schema?" is answered on trust, and a silently
+    # failed schemas publish stays invisible until two gates disagree on one
+    # PR. Strict on push and on release-please branches, warn-only on
+    # ordinary PRs (a stale published fact is main's problem, not the PR's);
+    # strict runs poll past the publish + 5-minute pointer TTL before
+    # failing, so the push that bumps the version cannot lose a race with
+    # its own publish. A red main during a package-release window (pin
+    # catch-up pending) is by design — the same window, and the same red, as
+    # pinned-validator-guard above. The script owns the full semantics;
+    # stdlib-only, so no dependency install step.
+    name: published contracts-version matches the repo's pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check the published provenance stamp against the repo
+        env:
+          CONTRACTS_VERSION_GUARD_STRICT: ${{ (github.event_name == 'push' || startsWith(github.head_ref, 'release-please--')) && '1' || '' }}
+        run: python3 scripts/check_contracts_version_pin.py

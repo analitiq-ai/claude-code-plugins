@@ -27,12 +27,12 @@ name: Publish schemas to schemas.analitiq.ai
 #     the run. That covers data-sync-run-response/1.0.0.json too — hand-
 #     authored but VERSIONED, so changing it means renaming to a new triple,
 #     never editing in place.
-#   * everything else (latest.json, index.json, and the two versionless
-#     hand-authored files) is mutable with a 5-minute TTL. There is no
+#   * everything else — latest.json, index.json, and every versionless
+#     document — is mutable with a 5-minute TTL. There is no
 #     CloudFront invalidation; the short TTL is the only refresh path.
 #   * Content-Type follows the served convention: application/schema+json
-#     for schema documents, application/json for the index.json manifests
-#     and the data-sync-api OpenAPI doc.
+#     for schema documents, application/json for the index.json and
+#     contracts-version.json manifests and the data-sync-api OpenAPI doc.
 #
 # The committed tree is rendered for DOMAIN=analitiq.ai (render_schemas.py
 # refuses any other), so this workflow publishes the PROD host's content.
@@ -84,7 +84,9 @@ jobs:
         # tests.yml already gates merges with these; running them again here
         # means a hand-edited tree can't publish even if that gate is
         # bypassed. Coverage, stated precisely: the render check covers the 13
-        # rendered resources, the pytest guard covers canonical-types.json.
+        # rendered resources plus the generated versionless documents
+        # (canonical-types.json and the contracts-version.json provenance
+        # stamp); the pytest guard re-covers canonical-types.json.
         # The two remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json
@@ -111,7 +113,7 @@ jobs:
           while IFS= read -r -d '' f; do
             key="${f#./}"
             case "$(basename "$f")" in
-              index.json|openapi.json) ctype="application/json" ;;
+              index.json|openapi.json|contracts-version.json) ctype="application/json" ;;
               *) ctype="application/schema+json" ;;
             esac
             if [[ "$(basename "$f")" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.json$ ]]; then

@@ -52,7 +52,14 @@ re-renders and fails on any diff, and CI runs it. Never hand-edit a file under
 still generated: `render_schemas.py canonical-types` builds it from the
 vendored engine grammar (see "The canonical Arrow type vocabulary is
 engine-owned" below), and `check` covers
-it. Two files are exceptions, hand-authored and outside the registry:
+it. `contracts-version.json` is the tree's provenance stamp, versionless and
+generated the same way: `render_schemas.py contracts-version` records the
+`analitiq-contract-models` release the tree renders from (read from that
+package's own `pyproject.toml`), `check` covers it, and the
+`contracts-version-guard` CI job holds the published copy — and
+`VALIDATOR_PIN` — to it, so "which models release produced this schema?" is a
+fetchable fact instead of trust. Two files are exceptions, hand-authored and
+outside the registry:
 `data-sync-api/openapi.json`, which has no version triple, and
 `data-sync-run-response/1.0.0.json`, which is versioned but hand-maintained —
 the publish treats every pinned `X.Y.Z.json` as immutable, so changing it means
@@ -88,8 +95,9 @@ generator) — never by hand-editing the vocabulary.
 The publish is additive — pinned `X.Y.Z.json` objects are first-write-wins
 (byte-compared on re-runs; divergence fails the publish) and never overwritten,
 nothing is ever deleted — and mutable pointers (`latest.json`, `index.json`,
-and `data-sync-api/openapi.json`, the one hand-authored file with no version
-triple) rely on a 5-minute TTL, not CloudFront invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
+and every versionless document, among them `data-sync-api/openapi.json`, the
+one hand-authored file with no version triple) rely on a 5-minute TTL, not
+CloudFront invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
 
 Only the 13 public resources render here. The ~40 internal-audience schemas stay
 in the infra repo with the private half of the renderer;
