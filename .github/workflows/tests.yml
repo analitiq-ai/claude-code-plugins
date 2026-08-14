@@ -149,3 +149,27 @@ jobs:
         env:
           VALIDATOR_PIN_GUARD_STRICT: ${{ (github.event_name == 'push' || startsWith(github.head_ref, 'release-please--')) && '1' || '' }}
         run: python3 scripts/check_validator_pin_contract.py
+
+  contracts-version-guard:
+    # `schemas/contracts-version.json` stamps the committed tree's
+    # provenance: the analitiq-contract-models version it renders from plus
+    # a digest of the tree, so the stamp moves with every render (the render
+    # check keeps it current). This job is the network half: the PUBLISHED
+    # copy at schemas.analitiq.ai must be byte-identical to the committed
+    # stamp, and VALIDATOR_PIN must agree with it — a silently failed
+    # schemas publish or a lagging pin surfaces here instead of at a
+    # consumer. The script owns the full verdict semantics, windows, and
+    # remediation; stdlib-only, so no dependency install step. The
+    # strictness expression is identical to pinned-validator-guard's above,
+    # and `tests/schemas/test_contracts_version_guard.py` pins them equal.
+    name: published contracts-version matches the repo's pins
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check the published provenance stamp against the repo
+        env:
+          CONTRACTS_VERSION_GUARD_STRICT: ${{ (github.event_name == 'push' || startsWith(github.head_ref, 'release-please--')) && '1' || '' }}
+        run: python3 scripts/check_contracts_version_pin.py

@@ -27,12 +27,14 @@ name: Publish schemas to schemas.analitiq.ai
 #     the run. That covers data-sync-run-response/1.0.0.json too — hand-
 #     authored but VERSIONED, so changing it means renaming to a new triple,
 #     never editing in place.
-#   * everything else (latest.json, index.json, and the two versionless
-#     hand-authored files) is mutable with a 5-minute TTL. There is no
-#     CloudFront invalidation; the short TTL is the only refresh path.
+#   * everything else — latest.json, index.json, and every versionless
+#     document — is mutable with a short TTL (the upload's cache-control
+#     arms below state it). There is no CloudFront invalidation; the short
+#     TTL is the only refresh path.
 #   * Content-Type follows the served convention: application/schema+json
-#     for schema documents, application/json for the index.json manifests
-#     and the data-sync-api OpenAPI doc.
+#     for schema documents, application/json for the index.json manifests,
+#     the contracts-version.json provenance stamp, and the data-sync-api
+#     OpenAPI doc.
 #
 # The committed tree is rendered for DOMAIN=analitiq.ai (render_schemas.py
 # refuses any other), so this workflow publishes the PROD host's content.
@@ -83,9 +85,11 @@ jobs:
       - name: Verify schemas/ matches the contract models
         # tests.yml already gates merges with these; running them again here
         # means a hand-edited tree can't publish even if that gate is
-        # bypassed. Coverage, stated precisely: the render check covers the 13
-        # rendered resources, the pytest guard covers canonical-types.json.
-        # The two remaining hand-authored files have no content gate in this
+        # bypassed. Coverage, stated precisely: the render check covers every
+        # registered resource plus the generated versionless documents
+        # (canonical-types.json and the contracts-version.json provenance
+        # stamp); the pytest guard re-covers canonical-types.json.
+        # The remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json
         # only by PR review.
@@ -106,6 +110,7 @@ jobs:
           set -euo pipefail
           : "${BUCKET:?SCHEMAS_BUCKET is unset or empty — check the schemas environment variables}"
           uploaded=0 skipped=0
+          mutable_cache="public, max-age=300, must-revalidate"
           cd schemas
           expected=$(find . -name '*.json' -type f | wc -l | tr -d ' ')
           while IFS= read -r -d '' f; do
@@ -139,19 +144,26 @@ jobs:
               fi
               cache="public, max-age=31536000, immutable"
             else
-              cache="public, max-age=300, must-revalidate"
+              cache="$mutable_cache"
             fi
             aws s3 cp "$f" "s3://$BUCKET/$key" \
               --content-type "$ctype" \
               --cache-control "$cache" \
               --no-progress
             uploaded=$((uploaded + 1))
-          done < <(find . -name '*.json' -type f -print0 | LC_ALL=C sort -z)
+          done < <(find . -name '*.json' -type f ! -name 'contracts-version.json' -print0 | LC_ALL=C sort -z)
           # sort -z (LC_ALL=C): digits < 'i' < 'l', so within each resource the
           # pinned X.Y.Z.json lands before index.json and latest.json — a
           # mid-run failure never leaves a pointer at content that isn't up.
-          if [ "$((uploaded + skipped))" -ne "$expected" ] || [ "$expected" -eq 0 ]; then
-            echo "::error::processed $((uploaded + skipped)) of $expected schema files — the find/loop plumbing is broken" >&2
+          # contracts-version.json is exempt from the sort for the same
+          # reason at tree scope: it is the TREE-WIDE pointer, so it lands
+          # dead last, below — a run that dies on any other object leaves the
+          # published stamp stale, which is exactly what contracts-version-
+          # guard exists to catch; C-sort alone would land it mid-tree.
+          if [ "$((uploaded + skipped + 1))" -ne "$expected" ]; then
+            echo "::error::processed $((uploaded + skipped)) of $((expected - 1)) non-stamp schema files — the find/loop plumbing is broken" >&2
             exit 1
           fi
+          aws s3 cp ./contracts-version.json "s3://$BUCKET/contracts-version.json" --content-type "application/json" --cache-control "$mutable_cache" --no-progress
+          uploaded=$((uploaded + 1))
           echo "uploaded=$uploaded skipped-existing-pinned=$skipped"

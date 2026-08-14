@@ -8,11 +8,16 @@ itself (`--bump` raises it, upward only); CI's `bump-check` re-derives the same
 floor and rejects any committed bump below it.
 
 Output trees:
-    Rendered into the committed tree, published to schemas.<domain> by the
-    infra repo's Terraform (the bucket and CDN are not defined here):
+    Rendered into the committed tree, uploaded to the serving bucket behind
+    schemas.<domain> by `.github/workflows/schemas-publish.yml` (the bucket
+    and CDN live in the infra repo's Terraform):
         schemas/<resource>/{X.Y.Z}.json   (immutable per version)
         schemas/<resource>/latest.json     (mutable; mirrors current X.Y.Z)
         schemas/<resource>/index.json       (manifest: latest + versions)
+        schemas/canonical-types.json        (mutable; generated from the vendored
+                                             engine grammar)
+        schemas/contracts-version.json      (mutable; the analitiq-contract-models
+                                             release the whole tree renders from)
 
 Resources are declared in the `RESOURCES` registry below. Adding a schema is one
 entry there + a `paths:` filter line in the CI workflow.
@@ -26,14 +31,22 @@ Subcommands:
     bump-check  Exit 1 if the committed version bump (base→head) is below the
                 detected floor or is a rollback (CI gate; replaces labels).
     list        Print registered resource names (one per line) — used by CI.
+    canonical-types
+                Render schemas/canonical-types.json from the vendored engine
+                grammar (versionless + mutable; covered by the full `check`).
+    contracts-version
+                Render schemas/contracts-version.json — the tree's provenance
+                stamp (versionless + mutable; covered by the full `check`).
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
+import tomllib
 import inspect
 import typing
 from dataclasses import dataclass
@@ -1468,6 +1481,148 @@ def cmd_canonical_types(args: argparse.Namespace) -> int:
         return 2
     CANONICAL_TYPES_PATH.write_text(rendered)
     print(f"wrote {CANONICAL_TYPES_PATH.relative_to(REPO_ROOT)}")
+    _refresh_contracts_version()
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# contracts-version.json — the tree's provenance stamp
+# ---------------------------------------------------------------------------
+# Not a registry Resource: versionless and mutable, like canonical-types.json
+# (it rides the publish workflow's `**/*.json` glob as a mutable pointer).
+# The document carries the facts a consumer needs to check that the schema it
+# fetched and the validator it pinned came from the same contract: the
+# `analitiq-contract-models` version the contract source tree DECLARED at
+# render time (READ from the package's `pyproject.toml`, never
+# hand-maintained), plus a digest of every other document in the tree. The
+# digest is what makes the stamp move with EVERY render — the version alone
+# changes only on a package bump, so without it a publish that failed to
+# land a re-render would be undetectable from the stamp. The full `check`
+# fails when the committed stamp lags either fact, and the
+# `contracts-version-guard` CI job holds the PUBLISHED copy byte-identical
+# to the committed one (`scripts/check_contracts_version_pin.py` owns those
+# semantics).
+
+CONTRACTS_VERSION_PATH = SCHEMAS_ROOT / "contracts-version.json"
+CONTRACT_MODELS_PYPROJECT = (
+    REPO_ROOT / "packages" / "contract-models" / "pyproject.toml"
+)
+#: The document's fact key: the PyPI distribution name, so the fetched
+#: object is unambiguous to a consumer holding nothing else.
+#: `scripts/check_contracts_version_pin.py` reads the published copy under
+#: this same key (it cannot import this module — guard jobs are stdlib-only,
+#: and this module imports pydantic);
+#: `tests/schemas/test_contracts_version_render.py` pins the copies equal.
+CONTRACTS_VERSION_KEY = "analitiq-contract-models"  # skipcq: SCT-A000 — a PyPI distribution name, not a credential
+
+
+def contract_models_version() -> str:
+    """The version `packages/contract-models/pyproject.toml` declares.
+
+    tomllib rather than a regex: the pyproject is the owning source, and a
+    parse that silently mis-read it would stamp a wrong provenance fact into
+    the published tree. Every failure shape is re-raised as the RuntimeError
+    the check/CLI paths classify, so an unreadable or malformed pyproject
+    reports as "cannot render" rather than a raw traceback.
+    """
+    try:
+        data = tomllib.loads(CONTRACT_MODELS_PYPROJECT.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise RuntimeError(f"cannot read {CONTRACT_MODELS_PYPROJECT}: {exc}") from exc
+    version = data.get("project", {}).get("version")
+    if not isinstance(version, str) or not version:
+        raise RuntimeError(
+            f"{CONTRACT_MODELS_PYPROJECT} declares no [project] version — "
+            "the provenance stamp cannot be rendered"
+        )
+    return version
+
+
+def schemas_tree_digest() -> str:
+    """sha256 over every `schemas/**/*.json` except the stamp itself.
+
+    This is the half of the stamp that moves with EVERY render: paths and
+    bytes, sorted, so any document changing, appearing, or disappearing —
+    including the hand-authored ones — re-stamps the tree.
+    """
+    hasher = hashlib.sha256()
+    for path in sorted(SCHEMAS_ROOT.rglob("*.json")):
+        if path == CONTRACTS_VERSION_PATH:
+            continue
+        hasher.update(path.relative_to(SCHEMAS_ROOT).as_posix().encode())
+        hasher.update(b"\0")
+        hasher.update(path.read_bytes())
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
+def build_contracts_version_doc() -> dict[str, Any]:
+    return {
+        "$comment": (
+            "GENERATED by scripts/render_schemas.py — the "
+            "analitiq-contract-models version the contract source tree "
+            "declared when this schema tree was rendered, plus a sha256 over "
+            "every other document in the tree (so the stamp changes with "
+            "every render, not only on a version bump). Do not hand-edit; "
+            "`render_schemas.py contracts-version` re-renders it."
+        ),
+        CONTRACTS_VERSION_KEY: contract_models_version(),
+        "tree_sha256": schemas_tree_digest(),
+    }
+
+
+def _contracts_version_text() -> str:
+    return json.dumps(build_contracts_version_doc(), indent=2, sort_keys=True) + "\n"
+
+
+def check_contracts_version() -> tuple[bool, str]:
+    """(ok, message) — committed contracts-version.json vs rendered output."""
+    hint = "`scripts/render_schemas.py contracts-version`"
+    if not CONTRACTS_VERSION_PATH.exists():
+        return (False, f"contracts-version: {CONTRACTS_VERSION_PATH} is missing; run {hint}")
+    try:
+        rendered = _contracts_version_text()
+    except RuntimeError as exc:
+        return (False, f"contracts-version: cannot render — {exc}")
+    if CONTRACTS_VERSION_PATH.read_text() != rendered:
+        return (
+            False,
+            "contracts-version: contracts-version.json is stale or hand-edited "
+            "(the stamp derives from the contract-models [project] version "
+            "and the bytes of every other schemas/ document); "
+            f"re-run {hint}",
+        )
+    return (
+        True,
+        "contracts-version: OK — contracts-version.json matches the "
+        "contract-models version",
+    )
+
+
+def _refresh_contracts_version() -> None:
+    """Re-render the stamp after a write that changed the tree.
+
+    Every path that writes under schemas/ ends here, so an author never has
+    to remember the digest half by hand; hand edits to the hand-authored
+    documents are the one path this cannot cover, and the full `check`'s
+    stale-stamp failure names the fix for those.
+    """
+    CONTRACTS_VERSION_PATH.write_text(_contracts_version_text())
+    print(f"wrote {CONTRACTS_VERSION_PATH.relative_to(REPO_ROOT)} (tree re-stamped)")
+
+
+def cmd_contracts_version(args: argparse.Namespace) -> int:
+    if args.check:
+        ok, msg = check_contracts_version()
+        print(msg, file=None if ok else sys.stderr)
+        return 0 if ok else 1
+    try:
+        rendered = _contracts_version_text()
+    except RuntimeError as exc:
+        print(f"contracts-version: cannot render — {exc}", file=sys.stderr)
+        return 2
+    CONTRACTS_VERSION_PATH.write_text(rendered)
+    print(f"wrote {CONTRACTS_VERSION_PATH.relative_to(REPO_ROOT)}")
     return 0
 
 
@@ -1805,6 +1960,7 @@ def cmd_write(args: argparse.Namespace) -> int:
         f"wrote {resource.name}/{version}.json + latest.json + index.json "
         f"(bump {base_version} → {version}, '{severity}')"
     )
+    _refresh_contracts_version()
     return 0
 
 
@@ -1891,19 +2047,21 @@ def cmd_check(args: argparse.Namespace) -> int:
             print(msg, file=sys.stderr)
         else:
             print(msg)
-    # canonical-types.json is generated but not a registry Resource (versionless
-    # + mutable); a full check covers it so CI needs no extra invocation.
+    # canonical-types.json and contracts-version.json are generated but not
+    # registry Resources (versionless + mutable); a full check covers them so
+    # CI needs no extra invocation.
     if not args.resource:
-        ok, msg = check_canonical_types()
-        if not ok:
-            failed = True
-            print(msg, file=sys.stderr)
-        else:
-            print(msg)
+        for extra_check in (check_canonical_types, check_contracts_version):
+            ok, msg = extra_check()
+            if not ok:
+                failed = True
+                print(msg, file=sys.stderr)
+            else:
+                print(msg)
     else:
         print(
-            "note: canonical-types.json not checked with --resource; run a "
-            "full `check` (CI does) to cover it"
+            "note: canonical-types.json and contracts-version.json not "
+            "checked with --resource; run a full `check` (CI does) to cover them"
         )
     return 1 if failed else 0
 
@@ -2100,6 +2258,20 @@ def main(argv: list[str] | None = None) -> int:
         "(also part of the full `check` run)",
     )
     p_ct.set_defaults(func=cmd_canonical_types)
+
+    p_cv = sub.add_parser(
+        "contracts-version",
+        help="render schemas/contracts-version.json — the analitiq-contract-models "
+        "release the tree renders from (versionless + mutable, so no "
+        "write/{X.Y.Z} machinery)",
+    )
+    p_cv.add_argument(
+        "--check",
+        action="store_true",
+        help="exit 1 if the committed file differs from rendered output "
+        "(also part of the full `check` run)",
+    )
+    p_cv.set_defaults(func=cmd_contracts_version)
 
     p_classify = sub.add_parser(
         "classify",

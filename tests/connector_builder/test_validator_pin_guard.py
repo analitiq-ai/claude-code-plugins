@@ -93,7 +93,7 @@ def test_extraction_is_all_or_error(guard, tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolate_actions_env(monkeypatch):
-    # In CI these are always set, and `_surface_warning` writes DIRECTLY to
+    # In CI these are always set, and `surface_warning` writes DIRECTLY to
     # the GITHUB_STEP_SUMMARY file — pytest captures stdout, not file writes,
     # so without this a warn-branch test would publish its fabricated
     # rejection into the real job summary.
