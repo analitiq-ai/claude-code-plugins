@@ -3,15 +3,18 @@
 Closed-enum decision rules used by the orchestrator to classify provider
 facts into schema-bound enum values. When none fits, see §Failing closed.
 
+<!-- Maintainers: every target column below is compared to the pinned
+     contract models, offline and in both directions, by
+     `tests/connector_builder/test_schema_drift.py` — changing a member in
+     one place without the other fails the build. -->
+
 > **Source of truth.** The target columns below map onto enums **owned by the
 > published schema** — `auth.type` (the `*Auth` `$defs`) and the transport/kind
 > discriminators. This file is the *mapping logic*, not a second source for the
 > values; when the schema's enum changes, these tables change with it. Each
-> target column is compared to the **pinned contract models**
-> (`analitiq-contract-models`, the same models the validator validates against)
-> by `tests/connector_builder/test_schema_drift.py` (the drift-check CI,
-> offline), in both directions. Do not treat a stale copy here as authoritative
-> over the contract.
+> target column is held to the **pinned contract models**
+> (`analitiq-contract-models`, the same models the validator validates
+> against). Do not treat a stale copy here as authoritative over the contract.
 
 ## KindMapper
 
