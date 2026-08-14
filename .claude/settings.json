@@ -1,0 +1,21 @@
+{
+  "enabledPlugins": {
+    "plugin-dev@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/scripts/render_hook.py",
+            "timeout": 120,
+            "statusMessage": "Regenerating derived artifacts"
+          }
+        ]
+      }
+    ]
+  }
+}

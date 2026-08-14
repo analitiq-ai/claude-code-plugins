@@ -26,6 +26,11 @@ coverage.xml
 !.claude/skills/
 .claude/skills/*
 !.claude/skills/rules-audit/
+# `settings.json` is tracked because it carries the project hooks — the
+# render hook that regenerates derived artifacts after a session edits a rule
+# record or a contract package. Personal overrides go in settings.local.json,
+# which stays ignored.
+!.claude/settings.json
 
 # Python packaging build artifacts
 build/

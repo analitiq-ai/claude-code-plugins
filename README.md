@@ -63,8 +63,20 @@ tests/<plugin>/                   # one suite per plugin (package suites live be
 
 ```bash
 pip install -r requirements-dev.txt
+git config core.hooksPath .githooks   # once per clone — see below
 pytest
 ```
+
+Much of this repo is rendered output — the compiled rule registry, each
+plugin's rule reference, the pipeline plugin's generated prose blocks, the
+prose census, the Contents sections. `python3 scripts/render_all.py write`
+regenerates all of it in dependency order, and `check` verifies it (CI runs
+that). The tracked pre-commit hook in `.githooks/` runs `write` for you
+whenever a commit stages a file a generator reads, and aborts the commit if
+regeneration changed files it does not carry — hence the `core.hooksPath`
+line above. Sessions in Claude Code get the same regeneration from the
+project hook in `.claude/settings.json` after any edit to a rule record or a
+contract package.
 
 Contributor guidance lives in `CLAUDE.md` (repo-wide) and
 `contributing/<plugin-name>.md` (per plugin);

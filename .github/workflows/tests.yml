@@ -64,71 +64,23 @@ jobs:
         env:
           DRIFT_REQUIRE_CONTRACT_MODELS: '1'
         run: pytest -v -rs
-      - name: Check generated prose blocks match the pinned contract
+      - name: Check every generated artifact is current
+        # scripts/render_all.py owns the generator set and its order; this
+        # step runs every generator's check through it, so a generator added
+        # there is gated here without editing this file. It runs them all and
+        # reports every stale one at once. What each check catches is
+        # documented beside its PIPELINE entry and in each script's docstring.
+        # Most of these predicates are also computed by a pytest module, so on
+        # a stale artifact pytest goes red first and this step is what prints
+        # the diff — which is why it runs even after a test failure.
         # Gated on the INSTALL, and `!cancelled()` is load-bearing: an `if:`
         # containing no status-check function gets an implicit `success() &&`
-        # prepended, which would skip this step whenever ANY earlier step failed
-        # - including the test step, i.e. exactly the runs it exists to explain.
-        # test_generated_blocks_in_sync computes the same predicate, so on a
-        # stale block pytest fails first and this step is what prints the diff.
-        # The dependency bootstrap this used to need is gone: the generator
-        # moved to scripts/ and reads packages/*/src like every other renderer,
-        # so it can no longer grade this PR's docs against the last release.
+        # prepended, which would skip this step whenever ANY earlier step
+        # failed - including the test step, i.e. exactly the runs it exists
+        # to explain. No DOMAIN env and no FROM_SOURCE flag: these are
+        # repo-root generators that bootstrap the in-repo trees themselves.
         if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        env:
-          # analitiq.contracts.shared.common reads os.environ["DOMAIN"] at
-          # import; the repo-root conftest sets it for pytest, but this step
-          # runs the script directly. No FROM_SOURCE flag: this is a repo-root
-          # generator now and bootstraps the in-repo trees itself, like every
-          # other renderer below.
-          DOMAIN: analitiq.ai
-        run: python3 scripts/gen_pipeline_docs.py --check
-      - name: Check the rule registry is valid and compiled
-        # `rules/records/*.yaml` is the source of truth for every RULE-* rule. This
-        # validates each record against rules/SCHEMA.md, resolves every
-        # `validator` binding against the live models — a rule claiming an
-        # enforcement it lost is what this catches — and fails when the
-        # `rules.json` the wheel ships no longer matches the records.
-        # Runs BEFORE the renderers below: they all read the compiled registry,
-        # so a failure here explains any failure there.
-        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        env:
-          DOMAIN: analitiq.ai
-        run: python3 scripts/render_rules.py check
-      - name: Check the generated rule reference is current
-        # Each plugin's references/rules/ set is rendered from the rule registry;
-        # stale prose here misleads every creator agent that reads it.
-        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        run: python3 scripts/render_rule_reference.py check
-      - name: Check every long skill document's Contents section
-        # A skill document over 100 lines is previewed as often as it is read,
-        # so its Contents section is what tells a reader the rest exists. The
-        # section is derived from the document's own `##` headings, so this
-        # catches one thing: a heading renamed, added or removed above a
-        # Contents left behind. tests/plugins/test_reference_toc.py asserts the
-        # same predicate; this step prints the offending files.
-        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        run: python3 scripts/render_reference_toc.py check
-      - name: Check the prose census is complete and current
-        # Every prose site under analitiq.contracts — each field description
-        # and docstring of every pydantic model and every Enum, membership by
-        # category (private helper enums ride along; plain classes and enum
-        # member docstrings publish nothing and are out of scope) — must carry
-        # a hash-pinned census entry; this prints the same diff
-        # tests/census/test_prose_census.py asserts on, grouped for reading.
-        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        run: python3 scripts/render_prose_census.py check
-      - name: Check validator-behavior claims against the in-repo contract
-        # Prose in both plugins states what the validator checks and does not
-        # check. This runs the probes behind those sentences, re-renders the
-        # generated blocks, and resolves every PROBE fence against the
-        # registry. It does not decide which sentences make a claim — that is
-        # a reader's job, per .claude/rules/guards.md.
-        # tests/connector_builder/test_validator_claims.py computes the same
-        # predicate, so on a failure pytest goes red first and this step is
-        # what prints the diff and the unresolved fences.
-        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        run: python3 scripts/render_validator_claims.py check
+        run: python3 scripts/render_all.py check
       - name: Package build guards
         # These are what keep the private runtime out of the public wheels:
         # build.py AST-scans for imports outside (stdlib + pydantic/jsonschema),
@@ -140,13 +92,6 @@ jobs:
         run: |
           python3 packages/contract-models/scripts/build.py --check
           python3 packages/validator/scripts/build.py --check
-      - name: Check published schemas match the contract models
-        # schemas/ is RENDERED OUTPUT of packages/contract-models. Without this
-        # gate the two drift silently: a model change that never reaches the
-        # published JSON is invisible until something downstream breaks.
-        # Same reasoning as the step above, hence the same condition.
-        if: ${{ !cancelled() && steps.install.conclusion == 'success' }}
-        run: python3 scripts/render_schemas.py check
 
   engine-grammar-pin-guard:
     # The canonical Arrow type vocabulary derives from a VENDORED copy of the

@@ -1,0 +1,36 @@
+#!/bin/sh
+# Regenerate every derived artifact before a commit is recorded, so the tip
+# of a branch always carries rendered output matching its sources and the
+# reviewer sees the rendered diff before it is pushed. CI re-verifies with
+# `render_all.py check`, so a bypassed or uninstalled hook fails loudly there.
+#
+# Install once per clone:  git config core.hooksPath .githooks
+# Bypass for one commit:   git commit --no-verify
+
+staged=$(git diff --cached --name-only)
+[ -z "$staged" ] && exit 0
+
+# Only run when a staged file can feed a generator: rule records, the contract
+# packages, plugin prose, schemas, or the generators themselves.
+echo "$staged" | grep -qE '^(rules/|packages/|plugins/|schemas/|scripts/)' || exit 0
+
+before=$(git status --porcelain)
+
+python3 scripts/render_all.py write || {
+    echo "" >&2
+    echo "pre-commit: render_all.py write failed; commit aborted." >&2
+    exit 1
+}
+
+after=$(git status --porcelain)
+if [ "$before" != "$after" ]; then
+    echo "" >&2
+    echo "pre-commit: the generators updated files your commit does not carry:" >&2
+    printf '%s\n' "$after" | while IFS= read -r line; do
+        printf '%s\n' "$before" | grep -Fxq "$line" || echo "  $line" >&2
+    done
+    echo "Review the changes, 'git add' them, and commit again." >&2
+    exit 1
+fi
+
+exit 0
