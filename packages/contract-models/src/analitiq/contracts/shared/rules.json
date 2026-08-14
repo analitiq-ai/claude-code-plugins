@@ -1097,7 +1097,8 @@
    "tier": "procedural",
    "severity": "error",
    "scopes": [
-    "connector"
+    "connector",
+    "stream"
    ],
    "validator": null,
    "owners": [
@@ -1460,7 +1461,8 @@
    "tier": "advisory",
    "severity": "warning",
    "scopes": [
-    "connector"
+    "connector",
+    "api-endpoint"
    ],
    "validator": null,
    "owners": [
@@ -1468,6 +1470,7 @@
    ],
    "targets": [
     "FunctionExpression",
+    "LookupDerived",
     "ConnectionContractInput"
    ],
    "fields": [],
@@ -1897,7 +1900,8 @@
    "tier": "procedural",
    "severity": "error",
    "scopes": [
-    "database-endpoint"
+    "database-endpoint",
+    "stream"
    ],
    "validator": null,
    "owners": [
@@ -2972,7 +2976,8 @@
    "tier": "structural",
    "severity": "error",
    "scopes": [
-    "api-endpoint"
+    "api-endpoint",
+    "database-endpoint"
    ],
    "validator": "analitiq.contracts.endpoints::_EndpointBase.endpoint_id",
    "owners": [
@@ -3693,7 +3698,7 @@
    "tier": "judgment",
    "severity": "warning",
    "scopes": [
-    "pipeline"
+    "stream"
    ],
    "validator": null,
    "owners": [

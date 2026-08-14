@@ -103,7 +103,7 @@ single field looks wrong.
 | RULE-CTOR-050 | A transport MUST be invoked no earlier than the phase at which every scope its expressions reference becomes available, and an input a transport references MUST declare a phase no later than that transport's first use. | `connector` | error | — |
 | RULE-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
 | RULE-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |
-| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` | warning | — |
+| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` `api-endpoint` | warning | — |
 | RULE-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | `connector` | error | — |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
@@ -137,7 +137,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 | RULE-CTOR-026 | Every provider fact a connector declares MUST be grounded in the target system's own documentation, a wire-compatible system's documentation MUST NOT be taken as evidence for it, and a fact those documents do not establish MUST be reported as a gap rather than inferred. | `connector` | error | — |
 | RULE-CTOR-032 | A connector's first release MUST declare `version` as `1.0.0`. | `connector` | info | — |
 | RULE-CTOR-033 | A document-store or NoSQL provider MUST be authored as a `database` connector, and this plugin MUST NOT author a connector under the contract's separate document-store kinds even though the contract models them. | `connector` | error | — |
-| RULE-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` | error | — |
+| RULE-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` `stream` | error | — |
 | RULE-CTOR-041 | A capability fact the provider's own documentation does not establish MUST be left undeclared and reported as a research gap, and MUST NOT be inferred from a similar or wire-compatible system. | `connector` | error | — |
 | RULE-PKG-025 | A connector release MUST ship a README describing the system it connects to, its authentication, and any setup the user has to perform before the connector will run. | `connector` | warning | — |
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |

@@ -135,6 +135,28 @@ def test_hook_ignores_a_path_outside_the_repo(monkeypatch):
     assert code == 0 and not invoked
 
 
+def test_hook_ignores_an_in_repo_path_no_generator_reads(monkeypatch):
+    """The prefix branch, distinctly from the outside-the-repo branch: an
+    in-repo file outside SOURCE_PREFIXES must not trigger — widening the
+    tuple to match everything would otherwise leave this module green."""
+    payload = json.dumps({"tool_input": {"file_path": str(REPO_ROOT / "README.md")}})
+    code, invoked = _run_hook(monkeypatch, payload)
+    assert code == 0 and not invoked
+
+
+def test_hook_and_pre_commit_gate_on_the_same_prefixes():
+    """Both hooks claim their prefix lists are kept identical; this is the
+    pin that claim was missing. The hook's tuple is the owner; the shell
+    hook's `grep -qE` alternation is read back lexically and compared."""
+    import re
+
+    hook = _load("render_hook")
+    script = (REPO_ROOT / ".githooks" / "pre-commit").read_text()
+    match = re.search(r"grep -qE '\^\(([^']+)\)'", script)
+    assert match, "pre-commit no longer gates staged paths with grep -qE '^(...)'"
+    assert set(match.group(1).split("|")) == set(hook.SOURCE_PREFIXES)
+
+
 def test_hook_swallows_a_malformed_payload(monkeypatch):
     for payload in ("not json", "null", "[]", '"x"', "{}"):
         code, invoked = _run_hook(monkeypatch, payload)

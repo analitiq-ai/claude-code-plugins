@@ -90,7 +90,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-DBEP-006 | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. | `database-endpoint` | error | — |
-| RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` | error | — |
+| RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` `stream` | error | — |
 | RULE-DBEP-008 | An authored endpoint MUST NOT declare a column the engine synthesises when it creates a table, and MUST drop such a column from a mirrored source's column list. | `database-endpoint` | error | — |
 | RULE-DBEP-012 | A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type. | `database-endpoint` | error | — |
 | RULE-DBEP-013 | A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label. | `database-endpoint` | error | — |

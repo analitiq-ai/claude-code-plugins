@@ -8,7 +8,7 @@ contract source compiles it. Prose cites a rule by id
 (`RULE-CTOR-037`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: the artifact kinds named in no other file of this set — those with too few rules to carry a file of their own — plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what it must satisfy; a document whose kind has its own file needs only that file.
+Scope: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
 all hold: 13 of the 20 below have no validator, so nothing rejects
@@ -82,7 +82,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` | error | — |
+| RULE-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` `stream` | error | — |
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 

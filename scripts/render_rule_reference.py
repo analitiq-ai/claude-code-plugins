@@ -122,11 +122,12 @@ SCOPE_LINE = (
     "in this set applies to it."
 )
 SHARED_LINE = (
-    "Scope: the artifact kinds named in no other file of this set — those "
-    "with too few rules to carry a file of their own — plus the rules that "
-    "bind every authored document. For a document of one of those kinds, this "
-    "file is the whole of what it must satisfy; a document whose kind has its "
-    "own file needs only that file."
+    "Scope: every rule this plugin owns whose artifact kind has no file of "
+    "its own in this set, plus the rules that bind every authored document. "
+    "For a document of one of those kinds, this file is the whole of what "
+    "this plugin's rules ask of it; a document whose kind has its own file "
+    "needs only that file, even where a rule graded for it also appears here "
+    "under another of its kinds."
 )
 
 TIER_INTRO = {

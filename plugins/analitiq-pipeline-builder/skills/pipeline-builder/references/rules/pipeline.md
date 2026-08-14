@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`pipeline`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 14 of the 32 below have no validator, so nothing rejects
+all hold: 13 of the 31 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **14** structural · **5** advisory · **7** referential · **3** procedural · **3** judgment.
+In this file: **14** structural · **5** advisory · **7** referential · **3** procedural · **2** judgment.
 
 ## Contents
 
@@ -106,6 +106,5 @@ not just the statement.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-PIPE-007 | A stream's per-destination `execution` block MUST NOT be authored as a way to change how much a run writes at a time; the batch size a run uses is the one the pipeline's runtime declares, for every stream. | `pipeline` | warning | — |
 | RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |

@@ -5,18 +5,18 @@
 
 Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
 contract source compiles it. Prose cites a rule by id
-(`RULE-ENDP-001`) instead of restating it; an id that stops resolving fails the
+(`RULE-CTOR-053`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 17 of the 68 below have no validator, so nothing rejects
+all hold: 18 of the 69 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **29** structural · **25** advisory · **7** referential · **4** procedural · **3** judgment.
+In this file: **29** structural · **26** advisory · **7** referential · **4** procedural · **3** judgment.
 
 ## Contents
 
@@ -46,7 +46,7 @@ than edited.
 | RULE-ENDP-022 | An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-027 | A request.path_params binding MUST NOT apply a wire-encoding function, because the engine percent-encodes every substituted path segment. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-029 | A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | — |
-| RULE-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` `database-endpoint` | error | validator | — |
 | RULE-ENDP-037 | A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | `api-endpoint` | error | validator | `supported_methods`: `full_refresh`, `incremental` |
 | RULE-ENDP-039 | A write operation's `idempotency` MUST declare only where the provider's key is placed, from the placement vocabulary `Idempotency.location` carries and written under that field's `in` alias, and MUST NOT carry anything that produces the key's value. | `api-endpoint` | error | validator | `in`: `header`, `body` |
@@ -77,6 +77,7 @@ single field looks wrong.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
+| RULE-CTOR-053 | A `lookup` function's inline `map` MUST declare a key for every value of the referenced input's `enum`, and no key outside it. | `connector` `api-endpoint` | warning | — |
 | RULE-ENDP-001 | A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | `api-endpoint` | error | validator |
 | RULE-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |

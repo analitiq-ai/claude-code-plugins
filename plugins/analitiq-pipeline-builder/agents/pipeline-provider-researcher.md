@@ -19,6 +19,11 @@ file's bare name; resolve each against this list.
 - `skills/pipeline-builder/references/identity-and-versioning.md`
 - `skills/pipeline-builder/references/enum-mappers.md`
 
+A cited `RULE-*` id resolves in one of the rule files under
+`skills/pipeline-builder/references/rules/`; the index in
+`skills/pipeline-builder/SKILL.md` § "Registered rules for every document"
+says which file carries which artifact.
+
 ## Process
 
 1. Read `skills/pipeline-builder/references/io-contracts.md` to know

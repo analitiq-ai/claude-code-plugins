@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`database-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 17 of the 24 below have no validator, so nothing rejects
+all hold: 17 of the 25 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **7** structural · **3** advisory · **5** referential · **6** procedural · **3** judgment.
+In this file: **8** structural · **3** advisory · **5** referential · **6** procedural · **3** judgment.
 
 ## Contents
 
@@ -39,6 +39,7 @@ than edited.
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
 | RULE-ENDP-031 | A `database_object` MUST omit a namespace qualifier the provider does not have, and MUST NOT declare that absence as an explicit null. | `database-endpoint` `stream` | error | validator | — |
+| RULE-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` `database-endpoint` | error | validator | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
@@ -83,7 +84,7 @@ one usually produces a document that validates and then behaves unexpectedly.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-DBEP-006 | A connector release MUST NOT contain a database endpoint document; the connector's resource discovery produces one per connection at connection time. | `database-endpoint` | error | — |
-| RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` | error | — |
+| RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` `stream` | error | — |
 | RULE-DBEP-012 | A discovered column whose provider type could not be read MUST carry the fallback label its `native_type` field declares, never an invented placeholder and never a guessed type. | `database-endpoint` | error | — |
 | RULE-DBEP-013 | A discovered object's recorded type label is descriptive only: whether the object can be read or written MUST be decided by the connector class's protocol conformance, and execution MUST NOT branch on the label. | `database-endpoint` | error | — |
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |

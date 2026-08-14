@@ -8,15 +8,15 @@ contract source compiles it. Prose cites a rule by id
 (`RULE-CONN-008`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
-Scope: the artifact kinds named in no other file of this set — those with too few rules to carry a file of their own — plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what it must satisfy; a document whose kind has its own file needs only that file.
+Scope: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 11 of the 16 below have no validator, so nothing rejects
+all hold: 13 of the 18 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **7** structural · **2** advisory · **3** referential · **2** procedural · **2** judgment.
+In this file: **7** structural · **2** advisory · **3** referential · **4** procedural · **2** judgment.
 
 ## Contents
 
@@ -79,6 +79,8 @@ one usually produces a document that validates and then behaves unexpectedly.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
+| RULE-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` `stream` | error | — |
+| RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` `stream` | error | — |
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 

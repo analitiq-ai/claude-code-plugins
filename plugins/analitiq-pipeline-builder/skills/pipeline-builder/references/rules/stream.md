@@ -5,18 +5,18 @@
 
 Rendered from the rule registry (`rules/records/*.yaml`) as this repo's
 contract source compiles it. Prose cites a rule by id
-(`RULE-ENDP-031`) instead of restating it; an id that stops resolving fails the
+(`RULE-CTOR-037`) instead of restating it; an id that stops resolving fails the
 build, a restated rule rots in silence.
 
 Scope: every rule this plugin owns that binds a **`stream`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 26 of the 53 below have no validator, so nothing rejects
+all hold: 29 of the 56 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** structural · **14** advisory · **16** referential · **3** procedural · **5** judgment.
+In this file: **15** structural · **14** advisory · **16** referential · **5** procedural · **6** judgment.
 
 ## Contents
 
@@ -112,6 +112,8 @@ one usually produces a document that validates and then behaves unexpectedly.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
+| RULE-CTOR-037 | A connector, or a stream binding, for a connector kind the engine does not execute MUST be declined with a structured refusal rather than authored, even though the contract accepts the kind. | `connector` `stream` | error | — |
+| RULE-DBEP-007 | Database identity MUST be read from an endpoint's `database_object`; the derived `endpoint_id` is an opaque handle and MUST NOT be parsed back into the identifiers it was derived from. | `database-endpoint` `stream` | error | — |
 | RULE-SHRD-005 | An identity handle MUST be treated as opaque: no version, tenant or object identity is encoded into one, and none is parsed back out of one. | `any` | error | — |
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 | RULE-STRM-019 | A mapping's assignments MUST be kept in the order they were authored and MUST NOT be re-sorted, because the engine applies them in that order. | `stream` | error | — |
@@ -125,6 +127,7 @@ not just the statement.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
+| RULE-PIPE-007 | A stream's per-destination `execution` block MUST NOT be authored as a way to change how much a run writes at a time; the batch size a run uses is the one the pipeline's runtime declares, for every stream. | `stream` | warning | — |
 | RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |
 | RULE-STRM-018 | A connection-scoped endpoint reference SHOULD carry the derived endpoint_id whenever the author can compute it, so the cross-document bundle check can resolve the reference. | `stream` | warning | — |

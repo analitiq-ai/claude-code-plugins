@@ -4,10 +4,10 @@ statement: >
   the referenced input's `enum`, and no key outside it.
 tier: advisory
 severity: warning
-scopes: [connector]
+scopes: [connector, api-endpoint]
 validator: null
 owners: [connector-plugin]
-targets: [FunctionExpression, ConnectionContractInput]
+targets: [FunctionExpression, LookupDerived, ConnectionContractInput]
 rationale: >
   The map is how a user-facing vocabulary reaches the wire, and a missing key
   is not a fallback: the value resolves to nothing and the request goes out

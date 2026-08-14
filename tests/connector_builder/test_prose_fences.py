@@ -771,9 +771,15 @@ def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
 
 def _endpoint_rule() -> str:
     from analitiq.contracts.shared.rules import all_rules
+    # Hosted by api-endpoint ALONE: a rule also hosted by a second document is
+    # the ambiguous-marker case `_grading_entity` refuses, so it cannot serve
+    # as this fixture.
     # StopIteration here is the failure signal working, not a case to guard:
-    # the registry losing every api-endpoint rule is the defect to report.
-    return next(r.id for r in all_rules() if "api-endpoint" in r.scopes)  # skipcq: PTC-W0063
+    # the registry losing every api-endpoint-only rule is the defect to report.
+    return next(  # skipcq: PTC-W0063
+        r.id for r in all_rules()
+        if [s for s in r.scopes if s in ENTITY_SCHEMA] == ["api-endpoint"]
+    )
 
 
 def test_invalid_disposition_requires_the_failure(tmp_path):

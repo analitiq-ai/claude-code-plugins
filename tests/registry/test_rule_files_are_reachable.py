@@ -101,10 +101,16 @@ def test_every_named_rule_file_still_renders(owner: str) -> None:
     rendering.
 
     Buckets come and go with the registry — a scope falling under the floor
-    folds into `shared.md` and its file is deleted — while the SKILL.md
-    indexes and agent reading lists naming the files are hand-written. This
-    is what fails when a bucket disappears and a pointer to it is left
-    behind, sending an agent to a file that no longer exists.
+    folds into `shared.md` and its file is deleted — while the prose naming
+    the files is hand-written. This is what fails when a bucket disappears
+    and a pointer to it is left behind, sending an agent to a file that no
+    longer exists.
+
+    The two directions deliberately scan different sets: the forward check
+    above is narrow (only a SKILL.md or agent definition counts as making a
+    file reachable), but a dangling pointer misleads from ANY document, so
+    this scans every markdown file in the plugin. The pattern is anchored to
+    `references/rules/` so a `.claude/rules/` citation never matches.
     """
     import re
 
@@ -114,15 +120,80 @@ def test_every_named_rule_file_still_renders(owner: str) -> None:
     rendered = {p.name for p in renderer.render_all(owner)}
 
     dangling: dict[str, list[str]] = {}
-    for doc in [*_skill_docs(plugin), *_agent_docs(plugin)]:
+    for doc in sorted(plugin.rglob("*.md")):
+        if doc.is_relative_to(root):
+            continue
         text = doc.read_text(encoding="utf-8")
-        for name in set(re.findall(r"rules/([a-z0-9-]+\.md)", text)):
+        for name in set(re.findall(r"references/rules/([a-z0-9-]+\.md)", text)):
             if name not in rendered:
                 dangling.setdefault(doc.relative_to(PLUGINS).as_posix(), []).append(name)
     assert not dangling, (
         f"{owner}: prose names rule files the renderer no longer produces: "
         f"{dangling}. Remove the pointer, or re-check the record scoping that "
         "made the bucket disappear."
+    )
+
+
+def _frontmatter_skills(text: str) -> list[str]:
+    """The `skills:` list of an agent definition — the skills preloaded into
+    its context, whose SKILL.md the agent reads without naming it."""
+    import re
+
+    match = re.match(r"\A---\n(.*?)\n---\n", text, re.DOTALL)
+    if not match:
+        return []
+    block = re.search(r"^skills:\n((?:\s+-\s+\S+\n)+)", match.group(1) + "\n", re.MULTILINE)
+    return re.findall(r"-\s+(\S+)", block.group(1)) if block else []
+
+
+@pytest.mark.parametrize("owner", ["connector-plugin", "pipeline-plugin"])
+def test_every_id_an_agent_cites_is_in_a_file_it_can_reach(owner: str) -> None:
+    """A `RULE-*` id cited in an agent definition must resolve in a rule file
+    that agent is sent to.
+
+    Plugin-level resolution (every cited id exists in the registry) already
+    holds; this is the per-reader half. An agent reaches a rule file by
+    naming it, by naming a SKILL.md that names it, or through the SKILL.md of
+    a skill its frontmatter preloads. An id cited outside that reach is a
+    finding the agent is told about and cannot look up.
+    """
+    import re
+
+    renderer = _renderer()
+    root = renderer.OUTPUT_DIRS[owner]
+    plugin = root.parents[3]
+    rendered = {p.name: text for p, text in renderer.render_all(owner).items()}
+    skills_dir = plugin / "skills"
+
+    file_ref = re.compile(r"references/rules/([a-z0-9-]+\.md)")
+    id_ref = re.compile(r"RULE-[A-Z]+-\d+")
+
+    unresolved: dict[str, list[str]] = {}
+    for agent in _agent_docs(plugin):
+        text = agent.read_text(encoding="utf-8")
+        reach_texts = [text]
+        for skill in _frontmatter_skills(text):
+            skill_md = skills_dir / skill / "SKILL.md"
+            if skill_md.is_file():
+                reach_texts.append(skill_md.read_text(encoding="utf-8"))
+        for named in set(re.findall(r"skills/([a-z0-9-]+)/SKILL\.md", text)):
+            skill_md = skills_dir / named / "SKILL.md"
+            if skill_md.is_file():
+                reach_texts.append(skill_md.read_text(encoding="utf-8"))
+        reachable = "\n".join(
+            rendered.get(name, "")
+            for chunk in reach_texts
+            for name in set(file_ref.findall(chunk))
+        )
+        missing = sorted(
+            rid for rid in set(id_ref.findall(text)) if rid not in reachable
+        )
+        if missing:
+            unresolved[agent.name] = missing
+    assert not unresolved, (
+        f"{owner}: agents cite rule ids no file they can reach carries: "
+        f"{unresolved}. Name the rule file (or the SKILL.md index) in the "
+        "agent, or re-check the record's scopes."
     )
 
 

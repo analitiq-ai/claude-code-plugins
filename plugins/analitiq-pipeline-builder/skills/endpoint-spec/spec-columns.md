@@ -170,7 +170,8 @@ other's (`RULE-DBEP-002`). Omit for schemaless engines (MongoDB).
 
 ## Registered endpoint rules
 
-Every rule this plugin owns over an endpoint document is in
+Every rule this plugin owns over a database endpoint document is in
 `../pipeline-builder/references/rules/database-endpoint.md` — **read it before
-authoring** and satisfy every row. An endpoint filed at the API scope is graded
-by `../pipeline-builder/references/rules/api-endpoint.md` instead.
+authoring** and satisfy every row. Rules graded at the API scope live where
+the index in `../pipeline-builder/SKILL.md` § "Registered rules for every
+document" places them; this skill authors only database endpoints.
