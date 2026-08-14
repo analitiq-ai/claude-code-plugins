@@ -89,7 +89,9 @@ Schemas are generated from — so there is no schema fetch. It runs:
    - Database endpoint → `https://schemas.analitiq.ai/database-endpoint/latest.json`
    Findings from this pass report under `contract-model`. Every rule an author
    must satisfy is catalogued by id in
-   `skills/connector-builder/references/rules/`. Some rules hold only at
+   `skills/connector-builder/references/rules/`.
+   <!-- PROBE: connector-secret-literal-undetected, runtime-tail-unchecked -->
+   Some rules hold only at
    connect or run time, so a clean run is not proof every rule holds.
 2. **Checks the contract models can't express** — cross-file relationships
    (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
