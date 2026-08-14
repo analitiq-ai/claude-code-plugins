@@ -23,9 +23,8 @@ not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
-  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
-  Grades column says which artifact each one binds, and a rule graded `any`
-  binds every document you author.)
+  (the whole of what an endpoint document must satisfy. Read it before
+  authoring, and satisfy every row.)
 
 ## Inputs
 

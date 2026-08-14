@@ -67,9 +67,9 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
-  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
-  Grades column says which artifact each one binds, and a rule graded `any`
-  binds every document you author.)
+  (one rule file per artifact you author. Each is the whole of what that
+  document must satisfy — read it before authoring the document and satisfy
+  every row.)
 
 ## Authoring order
 

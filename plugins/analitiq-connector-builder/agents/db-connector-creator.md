@@ -80,10 +80,10 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/type-map.md`
-  (every rule this plugin owns, ordered by tier. Satisfy all of them — the
-  Grades column says which artifact each one binds, and a rule graded `any`
-  binds every document you author. A rule graded for a document you do not
-  author can still bind the release you ship it in.)
+  (one rule file per artifact you author or ship. Each is the whole of what
+  that document must satisfy — read it before authoring the document and
+  satisfy every row. `connector-package.md` binds the release itself, not a
+  document you author.)
 
 ## Authoring order
 
