@@ -41,8 +41,17 @@ The `.md` and `.py` extensions bound the reach: those are the file kinds
 prose routes an agent to (a spec to read, a helper to run). The `_BARE_REF`
 comment states the `.py` directory-segment boundary, and `_cleaned` owns
 the `../` handling.
-Only prose is scanned — `_prose_text` blanks fenced code blocks and HTML
-comments — and the release-please CHANGELOG is not (`_docs`).
+
+The scan reads two channels, one per audience, under one invariant: every
+referent resolves for *its* reader (`.claude/rules/resolvable-referents.md`).
+Visible prose ships in the plugin cache, so its citations resolve against
+the plugin tree. HTML comments are the tooling-metadata channel — GENERATED
+headers naming the renderer that wrote the file, maintainer notes naming the
+repo-side pin — whose reader holds a clone, so the path citations inside
+them resolve against the git-tracked repo tree instead. `_channels` splits
+each document once, so the passes can never disagree about where a span
+ends. A fenced code block is in neither channel, and the release-please
+CHANGELOG is read by neither pass (`_docs`).
 
 The section-anchor pass: a `§` directly after a file reference carries a
 second claim — that the named heading exists in the cited file. Each such
@@ -57,7 +66,10 @@ guard — this always runs.
 from __future__ import annotations
 
 import re
+import subprocess
 from collections import Counter
+from collections.abc import Sequence
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -127,7 +139,7 @@ def _plugin_paths(root: Path) -> list[str]:
 
 
 def _cleaned(target: str, root: Path) -> str:
-    """The plugin-relative suffix a written reference names."""
+    """The root-relative suffix a written reference names."""
     cleaned = target.rstrip("/")
     while cleaned.startswith("../"):
         cleaned = cleaned[3:]
@@ -138,14 +150,14 @@ def _cleaned(target: str, root: Path) -> str:
 
 
 def _names(path: str, cleaned: str) -> bool:
-    """Does a plugin-relative `path` answer to a written suffix `cleaned`?
+    """Does a root-relative `path` answer to a written suffix `cleaned`?
     The `/` boundary is load-bearing: `driver-selection.md` names a
     different file than `spec-driver-selection.md`, and a bare `endswith`
     would let the shorter spelling resolve through the longer file."""
     return path == cleaned or path.endswith("/" + cleaned)
 
 
-def _resolves(target: str, paths: list[str], root: Path) -> bool:
+def _resolves(target: str, paths: Sequence[str], root: Path) -> bool:
     """Does `target` name something that exists?
 
     The prose writes references at whatever depth reads well from where it
@@ -155,7 +167,8 @@ def _resolves(target: str, paths: list[str], root: Path) -> bool:
     every one is unambiguous to a reader; a repo-root-relative
     `plugins/<name>/…` spelling, where prose uses one, resolves by the same
     rule. So resolve the way a reader does: a reference
-    resolves if it is a path suffix of something in the plugin. That
+    resolves if it is a path suffix of something in `paths` — the plugin
+    tree for prose, the tracked repo tree for comments. That
     deliberately does not check the reference was written from the right
     directory — only that the thing it names exists, which is the failure that
     silently starves an agent of its rules.
@@ -167,19 +180,23 @@ def _resolves(target: str, paths: list[str], root: Path) -> bool:
 _FENCE = re.compile(r"^[ \t]*(```|~~~)")
 
 
-def _prose_text(text: str) -> str:
-    """The document with its non-prose spans blanked, line count preserved.
+def _channels(text: str) -> tuple[str, str]:
+    """The document split into its two audience channels, line count
+    preserved in both: (visible prose, HTML-comment interiors).
 
-    Two spans are not prose, so nothing in them is a citation. A fenced code
-    block is sample input or output — a path inside one is a command to copy
-    (a README shows a repo-root `python3 plugins/…` invocation no plugin
-    cache contains), not a claim that the path ships in the plugin. An HTML
-    comment is the tooling-metadata channel — GENERATED headers name the
-    repo-root renderer that wrote the file, PROBE fences name probe ids,
-    maintainer notes name the repo-side pin — and no agent is routed by one.
-    Blanking rather than deleting keeps line numbers stable for the reports.
+    Each channel is the document with everything else blanked — blanked
+    rather than deleted, so the reports' line numbers stay stable. A fenced
+    code block lands in neither: a path inside one is sample input or output
+    — a command to copy (a README shows a repo-root `python3 plugins/…`
+    invocation no plugin cache contains), not a claim — and a `<!--` inside
+    one is sample text, not a comment opener, exactly as a fence marker
+    inside a comment opens nothing. One split, so the two passes can never
+    disagree about where a span ends. Comment interiors sharing a line keep
+    a space between them, so the join can never fuse two citations into one
+    token.
     """
-    out: list[str] = []
+    prose: list[str] = []
+    comments: list[str] = []
     fence: str | None = None
     in_comment = False
     for line in text.splitlines():
@@ -190,34 +207,59 @@ def _prose_text(text: str) -> str:
                     fence = marker.group(1)
                 elif line.lstrip().startswith(fence):
                     fence = None
-                out.append("")
+                prose.append("")
+                comments.append("")
                 continue
             if fence is not None:
-                out.append("")
+                prose.append("")
+                comments.append("")
                 continue
         kept: list[str] = []
+        inside: list[str] = []
         rest = line
         while rest:
             if in_comment:
-                _, closer, rest = rest.partition("-->")
+                body, closer, rest = rest.partition("-->")
+                inside.append(body)
                 in_comment = not closer
             else:
                 before, opener, rest = rest.partition("<!--")
                 kept.append(before)
                 in_comment = bool(opener)
-        out.append("".join(kept))
-    return "\n".join(out)
+        prose.append("".join(kept))
+        comments.append(" ".join(inside))
+    return "\n".join(prose), "\n".join(comments)
 
 
-def _scan_text(text: str) -> list[tuple[int, str]]:
-    """Every (lineno, target) doc reference in one document's prose — every
-    citation pattern, on every line outside fences and comments."""
+def _prose_text(text: str) -> str:
+    """The visible-prose channel: what the plugin-cache reader sees. No
+    agent is routed by an HTML comment, so nothing in one is a citation
+    here — the comment pass grades those against the repo tree instead."""
+    return _channels(text)[0]
+
+
+def _comment_text(text: str) -> str:
+    """The HTML-comment channel: the tooling-metadata surface — GENERATED
+    headers naming the renderer that wrote the file, maintainer notes naming
+    the repo-side pin — whose reader holds a clone, not a plugin cache."""
+    return _channels(text)[1]
+
+
+def _refs_in(masked: str) -> list[tuple[int, str]]:
+    """Every (lineno, target) doc reference in one masked channel — every
+    citation pattern, on every line. Both channels share the citation
+    patterns; only the resolution universe differs."""
     return [
         (lineno, match.group(1))
-        for lineno, line in enumerate(_prose_text(text).splitlines(), 1)
+        for lineno, line in enumerate(masked.splitlines(), 1)
         for pattern in (_PLUGIN_ROOT_REF, _BARE_REF, _BARE_PATH_REF)
         for match in pattern.finditer(line)
     ]
+
+
+def _scan_text(text: str) -> list[tuple[int, str]]:
+    """Every doc reference in one document's visible prose."""
+    return _refs_in(_prose_text(text))
 
 
 def _docs(root: Path) -> list[Path]:
@@ -238,7 +280,7 @@ def _references(root: Path) -> list[tuple[str, int, str]]:
     ]
 
 
-def _is_dangling(target: str, paths: list[str], root: Path) -> bool:
+def _is_dangling(target: str, paths: Sequence[str], root: Path) -> bool:
     """The one resolution predicate: a reference dangles unless it names a file
     that exists. Both the real-tree sweep and the synthetic acceptance tests go
     through this, so the acceptance tests exercise the predicate that ships."""
@@ -263,6 +305,67 @@ def test_doc_references_resolve(root: Path) -> None:
         )
         + "\nFix the path, restore the file the agent is told to read, or state "
         "the fact the citation was carrying instead of pointing at it."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The comment channel: the same citation patterns, resolved for the other
+# reader. A maintainer comment names the repo-side pin ("pinned by
+# tests/connector_builder/test_schema_drift.py") and a GENERATED header names
+# the renderer that wrote the file — paths whose reader holds a clone, not a
+# plugin cache, so they resolve against the git-tracked repo tree. Tracked,
+# not on-disk: a path only an untracked file answers to resolves only on the
+# machine that wrote it, which is the rot
+# `.claude/rules/resolvable-referents.md` names.
+
+
+@cache
+def _repo_paths() -> tuple[str, ...]:
+    """Every git-tracked file, as repo-root-relative posix paths."""
+    listed = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+    return tuple(sorted(filter(None, listed.split("\0"))))
+
+
+def _comment_references(root: Path) -> list[tuple[str, int, str]]:
+    """Every (relpath, lineno, target) doc reference in one plugin's comment
+    channel."""
+    return [
+        (path.relative_to(root).as_posix(), lineno, target)
+        for path in _docs(root)
+        for lineno, target in _refs_in(
+            _comment_text(path.read_text(encoding="utf-8"))
+        )
+    ]
+
+
+@pytest.mark.parametrize("root", PLUGIN_ROOTS, ids=lambda r: r.name)
+def test_comment_citations_resolve_in_repo(root: Path) -> None:
+    """A dangling comment citation rots more quietly than a prose one: no
+    agent reads the comment, so nothing downstream ever fails on it — only
+    the maintainer it was written for, holding a pointer to nowhere.
+    GENERATED headers are swept too: they cite the renderer that wrote them,
+    which regeneration keeps current, so they resolve as long as that
+    renderer exists."""
+    paths = _repo_paths()
+    dangling = [
+        (rel, lineno, target)
+        for rel, lineno, target in _comment_references(root)
+        if _is_dangling(target, paths, REPO_ROOT)
+    ]
+    prefix = root.relative_to(REPO_ROOT).as_posix()
+    assert not dangling, (
+        "maintainer comments point at repo files that do not exist:\n"
+        + "\n".join(
+            f"  {prefix}/{rel}:{lineno} -> {target}"
+            for rel, lineno, target in dangling
+        )
+        + "\nFix the path, or state the fact the comment was carrying instead "
+        "of pointing at it."
     )
 
 
@@ -528,6 +631,18 @@ def test_reference_detector_finds_every_citation_form(root: Path) -> None:
     )
 
 
+def test_comment_citation_pass_is_live() -> None:
+    """Guard the guard: the comment channel carries a path citation
+    somewhere. Spans the plugin set rather than binding per plugin — a
+    per-plugin floor would oblige every tree to carry a maintainer comment,
+    which is a convention, not an obligation — while zero sites anywhere
+    means the channel's extractor stopped measuring."""
+    assert any(_comment_references(root) for root in PLUGIN_ROOTS), (
+        "no path citation found in any plugin's HTML comments — the comment "
+        "channel's resolution pass is vacuous."
+    )
+
+
 def test_anchor_detector_finds_every_quoting_form() -> None:
     """Guard the guard, per anchor form: each quoting shape the extractor
     claims to read has a live site. Form floors span the plugin set rather
@@ -749,9 +864,10 @@ def test_headings_ignore_fenced_hash_lines() -> None:
 
 
 def test_masked_spans_are_not_scanned() -> None:
-    """A citation inside a fence (column-0 or indented) or an HTML comment
-    is a sample or tooling metadata, not a citation; the first prose line
-    after the span closes is scanned again."""
+    """The prose pass reads neither a fence (column-0 or indented) nor an
+    HTML comment — a fenced path is a sample, and a comment's citations are
+    the comment pass's to grade; the first prose line after the span closes
+    is scanned again."""
     doc = (
         "```bash\npython3 plugins/nowhere/scripts/gone.py\n"
         "see skills/nowhere/references/gone.md\n```\n"
@@ -770,7 +886,9 @@ def test_masking_survives_fence_and_comment_interleaving() -> None:
     """Acceptance for the interleavings with no live site yet: a fence
     marker inside a comment must not open a fence, and a comment opener
     inside a fence must not open a comment — either error blanks the rest
-    of the document and silently skips every later citation."""
+    of the document and silently skips every later citation, in the prose
+    channel and the comment channel alike (the second assertion pins that
+    the body citation never leaks into the comment channel)."""
     fence_in_comment = (
         "<!-- maintainer note\n```\n-->\n"
         "Body citing skills/nowhere/references/gone.md here.\n"
@@ -781,6 +899,61 @@ def test_masking_survives_fence_and_comment_interleaving() -> None:
     )
     for text in (fence_in_comment, comment_in_fence):
         assert _dangling_in(text) == ["skills/nowhere/references/gone.md"], text
+        assert _refs_in(_comment_text(text)) == [], text
+
+
+def test_dangling_comment_citation_is_flagged() -> None:
+    """Acceptance: a maintainer comment citing a repo path that does not
+    exist fails the comment pass — on the opening line and on a
+    continuation line of a multi-line comment, unbackticked and backticked,
+    each at its own line number."""
+    doc = (
+        "# Doc\n\n"
+        "<!-- Maintainers: the vocabulary below is pinned by\n"
+        "     tests/nowhere/test_gone.py — renaming one side fails. -->\n"
+        "<!-- see `skills/nowhere/also-gone.md` -->\n"
+    )
+    refs = _refs_in(_comment_text(doc))
+    assert refs == [
+        (4, "tests/nowhere/test_gone.py"),
+        (5, "skills/nowhere/also-gone.md"),
+    ]
+    assert all(
+        _is_dangling(target, _repo_paths(), REPO_ROOT) for _lineno, target in refs
+    )
+
+
+def test_resolving_comment_citations_pass() -> None:
+    """The twin: comments citing tracked files — the repo-root-relative pin
+    form and the plugin-relative form — are seen and resolve clean."""
+    doc = (
+        "<!-- pinned by tests/plugins/test_plugin_root_references.py -->\n"
+        f"<!-- see {_EXISTING} -->\n"
+    )
+    refs = _refs_in(_comment_text(doc))
+    assert [target for _lineno, target in refs] == [
+        "tests/plugins/test_plugin_root_references.py",
+        _EXISTING,
+    ]
+    assert not any(
+        _is_dangling(target, _repo_paths(), REPO_ROOT) for _lineno, target in refs
+    )
+
+
+def test_channels_partition_the_document() -> None:
+    """Acceptance: each pass reads only its channel — a prose citation never
+    reaches the comment pass — and comment interiors sharing a line stay
+    separate tokens (an empty join would fuse `a/b.md` into `a/b.mdc/d.py`,
+    which matches neither pattern, silently dropping both citations)."""
+    doc = (
+        "Prose citing skills/nowhere/gone.md here.\n"
+        "<!--a/b.md--><!--c/d.py-->\n"
+    )
+    assert [t for _lineno, t in _refs_in(_comment_text(doc))] == [
+        "a/b.md",
+        "c/d.py",
+    ]
+    assert [t for _lineno, t in _scan_text(doc)] == ["skills/nowhere/gone.md"]
 
 
 def test_anchored_forms_are_not_double_counted() -> None:
