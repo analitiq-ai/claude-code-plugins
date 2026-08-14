@@ -54,11 +54,12 @@ vendored engine grammar (see "The canonical Arrow type vocabulary is
 engine-owned" below), and `check` covers
 it. `contracts-version.json` is the tree's provenance stamp, versionless and
 generated the same way: `render_schemas.py contracts-version` records the
-`analitiq-contract-models` release the tree renders from (read from that
-package's own `pyproject.toml`), `check` covers it, and the
-`contracts-version-guard` CI job holds the published copy — and
-`VALIDATOR_PIN` — to it, so "which models release produced this schema?" is a
-fetchable fact instead of trust. The hand-authored exceptions, outside the
+`analitiq-contract-models` version the tree renders from (read from that
+package's own `pyproject.toml`) plus a digest of the tree, so the stamp moves
+with every render; `check` covers it, and the `contracts-version-guard` CI
+job holds the published copy — and `VALIDATOR_PIN` — to it, so "which models
+release produced this schema?" is a fetchable fact instead of trust and a
+publish that fails to land a render is caught. The hand-authored exceptions, outside the
 registry:
 `data-sync-api/openapi.json`, which has no version triple, and
 `data-sync-run-response/1.0.0.json`, which is versioned but hand-maintained —
@@ -96,8 +97,9 @@ The publish is additive — pinned `X.Y.Z.json` objects are first-write-wins
 (byte-compared on re-runs; divergence fails the publish) and never overwritten,
 nothing is ever deleted — and mutable pointers (`latest.json`, `index.json`,
 and every versionless document, among them the hand-authored
-`data-sync-api/openapi.json`) rely on a 5-minute TTL, not
-CloudFront invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
+`data-sync-api/openapi.json`) rely on a short TTL the publish workflow's
+cache-control states, not CloudFront invalidation. Auth is OIDC via the
+`schemas` environment — see "Releases and credentials".
 
 Only the 13 public resources render here. The ~40 internal-audience schemas stay
 in the infra repo with the private half of the renderer;
@@ -146,8 +148,9 @@ The pin must be **at or behind** `packages/validator/pyproject.toml`
 is the steady state; behind is tolerated because the pin names a version that
 must already be **on PyPI**, and the publish is a hand-pushed tag that fires
 *after* the version bump merges. Tolerated for **merging**, that is: the
-`contracts-version-guard` CI job reds pushes to main while the pin lags the
-published schema tree — deliberately tighter than this merge-gate tolerance,
+`contracts-version-guard` CI job reds its strict runs (pushes to main,
+release-please branches) while the pin lags the published schema tree —
+deliberately tighter than this merge-gate tolerance,
 as the standing reminder that finishes the release with the pin catch-up. The
 dangerous direction is a pin **ahead** of
 what this repo ships: marketplace installs track main HEAD, so a pin naming an

@@ -1,7 +1,7 @@
 """Pin the wiring and verdict semantics of `scripts/check_contracts_version_pin.py`.
 
 The guard's network half runs only in CI (`contracts-version-guard` job), so
-its verdict logic — published-vs-committed divergence, the pin comparison,
+its verdict logic — published-vs-committed byte equality, the pin comparison,
 strict-vs-warn windows, missing-object handling and its sentinel
 corroboration — would otherwise only ever execute against live healthy data,
 where an inverted comparison is a permanent false green. Same charter as
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import urllib.error
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -21,16 +22,21 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_contracts_version_pin.py"
+_SIBLING = REPO_ROOT / "scripts" / "check_validator_pin_contract.py"
 _WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "schemas-publish.yml"
 
 
-@pytest.fixture(scope="module")
-def guard():
-    spec = spec_from_file_location("check_contracts_version_pin", _SCRIPT)
+def _load(path: Path):
+    spec = spec_from_file_location(path.stem, path)
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(scope="module")
+def guard():
+    return _load(_SCRIPT)
 
 
 @pytest.fixture(autouse=True)
@@ -47,6 +53,14 @@ def _plain_env(monkeypatch):
 
 def _fact(guard, version: str) -> bytes:
     return json.dumps({guard.CONTRACTS_VERSION_KEY: version}).encode()
+
+
+def _redigested_stamp(guard) -> bytes:
+    """The committed stamp with only its tree digest altered — the state a
+    publish leaves behind when a render landed but the upload did not."""
+    doc = json.loads(guard.COMMITTED_PATH.read_bytes())
+    doc["tree_sha256"] = "0" * 64
+    return json.dumps(doc).encode()
 
 
 def _stub_fetch(guard, monkeypatch, stamp, sentinel=b"{}") -> list:
@@ -96,14 +110,24 @@ def test_reads_the_pin_from_its_single_source(guard):
     assert guard.read_pin_version() != ""
 
 
+def test_pin_reader_agrees_with_the_validator_guard(guard):
+    # The pin's location and textual shape are also read by
+    # `check_validator_pin_contract.py`; the guard cannot import it without
+    # coupling two self-contained CI scripts, so this pins the copies to one
+    # behavior (`.claude/rules/no-drift-surfaces.md`).
+    sibling = _load(_SIBLING)
+    assert guard.PIN_SOURCE == sibling.PIN_SOURCE
+    assert guard.read_pin_version() == sibling.read_pin_version()
+
+
 # --- verdicts, fetch stubbed ----------------------------------------------
 
 
 def test_healthy_publication_passes(guard, monkeypatch, tmp_path, capsys):
     _pin_matching_stamp(guard, monkeypatch, tmp_path)
-    calls = _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
+    calls = _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 0
-    assert "OK: published == committed == pin" in capsys.readouterr().out
+    assert "OK: published stamp == committed stamp" in capsys.readouterr().out
     assert calls == [guard.PUBLISHED_URL], "a served stamp needs no sentinel probe"
 
 
@@ -112,6 +136,8 @@ def test_published_mismatch_warns_on_ordinary_prs(guard, monkeypatch, capsys):
     assert guard.main() == 0
     out = capsys.readouterr().out
     assert "WINDOW:" in out and "0.0.0" in out
+    # The warn arm must not carry the strict arm's remediation.
+    assert "workflow_dispatch" not in out
     assert len(calls) == 1, "warn mode fetches once — no retry loop"
 
 
@@ -119,7 +145,25 @@ def test_published_mismatch_fails_strict(guard, monkeypatch, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
     _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
     assert guard.main() == 1
-    assert "DIVERGENCE" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "DIVERGENCE" in err and "workflow_dispatch" in err
+
+
+def test_same_release_stale_digest_fails_strict(guard, monkeypatch, capsys):
+    # The state the digest half exists to expose: a render landed on main,
+    # the publish did not, and the version half alone would read as green.
+    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
+    _stub_fetch(guard, monkeypatch, _redigested_stamp(guard))
+    assert guard.main() == 1
+    err = capsys.readouterr().err
+    assert "tree digest" in err and "workflow_dispatch" in err
+
+
+def test_same_release_stale_digest_warns_on_ordinary_prs(guard, monkeypatch, capsys):
+    _stub_fetch(guard, monkeypatch, _redigested_stamp(guard))
+    assert guard.main() == 0
+    out = capsys.readouterr().out
+    assert "WINDOW:" in out and "workflow_dispatch" not in out
 
 
 def test_unpublished_stamp_warns_on_ordinary_prs(guard, monkeypatch, capsys):
@@ -162,18 +206,21 @@ def test_pin_lag_fails_strict(guard, monkeypatch, tmp_path, capsys):
     stale_pin = tmp_path / "_bootstrap.py"
     stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
     monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
+    _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 1
-    assert "VALIDATOR_PIN" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    # The strict arm cites the tolerance it deliberately tightens.
+    assert "VALIDATOR_PIN" in err and "CLAUDE.md" in err
 
 
 def test_pin_lag_warns_on_ordinary_prs(guard, monkeypatch, tmp_path, capsys):
     stale_pin = tmp_path / "_bootstrap.py"
     stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
     monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
+    _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 0
-    assert "WINDOW:" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "WINDOW:" in out and "VALIDATOR_PIN" in out and "CLAUDE.md" not in out
 
 
 def test_warning_is_annotated_on_actions(guard, monkeypatch, tmp_path, capsys):
@@ -266,7 +313,7 @@ def test_committed_vs_pyproject_disagreement_is_a_guard_error(
 
 def test_unrecognized_strict_value_is_a_guard_error(guard, monkeypatch, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "true")
-    _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
+    _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 2
     assert "CONTRACTS_VERSION_GUARD_STRICT" in capsys.readouterr().err
 
@@ -297,7 +344,7 @@ def test_fetch_refuses_a_url_outside_the_pinned_base(guard):
         "https://schemas.analitiq.ai.evil.example/contracts-version.json",
         "http://schemas.analitiq.ai/contracts-version.json",
     ):
-        with pytest.raises(guard.GuardError, match="refusing non-"):
+        with pytest.raises(guard.GuardError, match=re.escape(guard.BASE_URL)):
             guard._fetch(url)
 
 

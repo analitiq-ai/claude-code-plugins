@@ -9,7 +9,7 @@ stamp, versionless pyproject) and pin the cross-file facts no import can
 carry: `scripts/check_contracts_version_pin.py` cannot import the renderer
 (the guard job installs nothing and the renderer imports pydantic), so the
 stamp's key, the paths, the serving host, and the sentinel's basename are
-stated in both files and pinned equal here.
+stated in the guard as copies of renderer-owned values and pinned equal here.
 """
 from __future__ import annotations
 
@@ -46,12 +46,48 @@ def test_committed_stamp_is_current():
     assert ok, msg
 
 
-def test_stamp_states_the_pyproject_version():
+def test_stamp_states_the_pyproject_version_and_the_tree_digest():
     doc = render_schemas.build_contracts_version_doc()
     assert (
         doc[render_schemas.CONTRACTS_VERSION_KEY]
         == render_schemas.contract_models_version()
     )
+    assert doc["tree_sha256"] == render_schemas.schemas_tree_digest()
+
+
+def test_tree_digest_moves_with_the_tree_and_ignores_the_stamp(
+    monkeypatch, tmp_path
+):
+    """The digest is what makes the stamp change on every render — without
+    that, a publish that failed to land a re-render is undetectable from the
+    stamp whenever the package version did not move."""
+    tree = tmp_path / "schemas"
+    (tree / "connector").mkdir(parents=True)
+    doc = tree / "connector" / "1.0.0.json"
+    doc.write_text("{}")
+    stamp = tree / "contracts-version.json"
+    monkeypatch.setattr(render_schemas, "SCHEMAS_ROOT", tree)
+    monkeypatch.setattr(render_schemas, "CONTRACTS_VERSION_PATH", stamp)
+
+    baseline = render_schemas.schemas_tree_digest()
+    stamp.write_text('{"anything": "at all"}')
+    assert render_schemas.schemas_tree_digest() == baseline, (
+        "the stamp must not feed its own digest"
+    )
+    doc.write_text('{"changed": true}')
+    assert render_schemas.schemas_tree_digest() != baseline
+
+
+def test_full_check_gates_the_stamp(monkeypatch, tmp_path):
+    """schemas-publish.yml's verify step runs only `render_schemas.py check`
+    (plus one canonical-types pytest module), so the stamp's only content
+    gate on the publish path is the full check reaching
+    check_contracts_version — dropping it from cmd_check must fail here, not
+    silently un-gate the publish."""
+    stale = tmp_path / "contracts-version.json"
+    stale.write_text('{"analitiq-contract-models": "0.0.0"}\n')
+    monkeypatch.setattr(render_schemas, "CONTRACTS_VERSION_PATH", stale)
+    assert render_schemas.main(["check"]) == 1
 
 
 def test_renderer_and_guard_agree_on_key_paths_and_host(guard):

@@ -28,8 +28,9 @@ name: Publish schemas to schemas.analitiq.ai
 #     authored but VERSIONED, so changing it means renaming to a new triple,
 #     never editing in place.
 #   * everything else — latest.json, index.json, and every versionless
-#     document — is mutable with a 5-minute TTL. There is no
-#     CloudFront invalidation; the short TTL is the only refresh path.
+#     document — is mutable with a short TTL (the upload's cache-control
+#     arms below state it). There is no CloudFront invalidation; the short
+#     TTL is the only refresh path.
 #   * Content-Type follows the served convention: application/schema+json
 #     for schema documents, application/json for the index.json manifests,
 #     the contracts-version.json provenance stamp, and the data-sync-api
@@ -88,7 +89,7 @@ jobs:
         # registered resource plus the generated versionless documents
         # (canonical-types.json and the contracts-version.json provenance
         # stamp); the pytest guard re-covers canonical-types.json.
-        # The two remaining hand-authored files have no content gate in this
+        # The remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json
         # only by PR review.

@@ -1,30 +1,33 @@
 #!/usr/bin/env python3
 """Guard: the published contracts-version fact must match the repo's pins.
 
-`schemas/contracts-version.json` stamps the `analitiq-contract-models` release
-the committed schema tree renders from (rendered by
-`scripts/render_schemas.py contracts-version`, whose full `check` pins the
-stamp to `packages/contract-models/pyproject.toml`). The publish workflow
+`schemas/contracts-version.json` stamps the committed schema tree's
+provenance (rendered by `scripts/render_schemas.py contracts-version`, whose
+full `check` keeps it current): the `analitiq-contract-models` version the
+contract source tree declared when the tree was rendered, plus a digest over
+every other document in the tree — the half that changes with EVERY render,
+where the version half changes only on a package bump. The publish workflow
 uploads it like every other mutable pointer, so consumers can fetch a
-machine-readable fact answering "which models release produced this tree?" —
-and check their own contract pin against it.
+machine-readable statement of which contract-models version rendered the
+published tree, and check their own contract pin against it.
 
 This guard is this repo answering the same question about itself, the half no
 offline test can see:
 
-  1. The committed stamp equals the pyproject version (re-derived here so the
+  1. The committed stamp states the pyproject version (re-derived here so the
      guard never certifies a baseline the render check already rejects — a
      mismatch is a GuardError naming the render, not a verdict).
-  2. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai equals the
-     committed stamp. Divergence means the schemas publish has not landed
-     (its `schemas` environment holds deployments for reviewer approval, so
-     the stamp-bumping push itself reaches this guard before the upload), or
-     it failed outright (the publish workflow retriggers only on the next
-     schemas/ push), or something wrote to the bucket out-of-band. The
-     remediation is the same flow the validator release already uses: land
-     or re-run the publish, wait out the pointer TTL
-     (`.github/workflows/schemas-publish.yml` owns the cache-control), then
-     re-run this job.
+  2. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai is
+     byte-identical to the committed stamp. Because the stamp carries the
+     tree digest, this holds exactly when the published tree is the
+     committed render — a publish that silently failed or never ran (its
+     `schemas` environment holds deployments for reviewer approval, so the
+     stamp-changing push itself reaches this guard before the upload; a
+     failed run retriggers only on the next schemas/ push), and an
+     out-of-band bucket write, all land here. The remediation is the same
+     flow the validator release already uses: land or re-run the publish,
+     wait out the pointer TTL (`.github/workflows/schemas-publish.yml` owns
+     the cache-control), then re-run this job.
   3. `VALIDATOR_PIN` (`plugins/analitiq-pipeline-builder/scripts/_bootstrap.py`
      — the validator end users actually install) agrees with the published
      fact. The guard asserts EQUALITY only and never orders versions: the
@@ -40,7 +43,9 @@ offline test can see:
      only be the pin lagging: the release-window state whose remediation is
      the pin catch-up PR. Ordering PEP 440 pre-releases (`1.0.0rc21`) in
      stdlib would re-implement `packaging` badly to distinguish states those
-     invariants already distinguish.
+     invariants already distinguish. And the pin comparison runs only after
+     step 2 holds, so it always grades the version the published tree was
+     actually rendered with.
 
 Strict-vs-warn windows (the STRICT env contract — name shape, the CI trigger
 expression, and typo-refusal — matches `check_validator_pin_contract.py`;
@@ -168,8 +173,8 @@ def _read_fact(raw: bytes, *, context: str) -> str:
     return value
 
 
-def fetch_published() -> str | None:
-    """The published fact, or None when the stamp is genuinely not published.
+def fetch_published() -> bytes | None:
+    """The published stamp's bytes, or None when it is genuinely unpublished.
 
     "Genuinely": a 403/404 on the stamp alone cannot distinguish an absent
     key from a site-wide access fault (a broken origin policy returns 403
@@ -179,7 +184,7 @@ def fetch_published() -> str | None:
     corroborated by the sentinel being served.
     """
     try:
-        return _read_fact(_fetch(PUBLISHED_URL), context=PUBLISHED_URL)
+        return _fetch(PUBLISHED_URL)
     except NotPublished as exc:
         print(f"stamp not served: {exc}")
         try:
@@ -217,7 +222,8 @@ def read_shipped_version() -> str:
 
 def read_pin_version() -> str:
     """The version half of `VALIDATOR_PIN` in `_bootstrap.py` — the one place
-    the runtime pin is stated (root CLAUDE.md, "The contract")."""
+    the runtime pin is stated (root CLAUDE.md, "The contract, and the
+    runtime pin")."""
     try:
         source = PIN_SOURCE.read_text()
     except OSError as exc:
@@ -282,13 +288,14 @@ def run() -> int:
     strict = read_strict_env()
     print(f"committed: {committed}  validator pin: {pin_version}  strict: {strict}")
 
-    published = fetch_published()
+    committed_bytes = COMMITTED_PATH.read_bytes()
+    published_bytes = fetch_published()
 
     # Per divergent state: (what strict runs are told, what warn runs are
     # told). The strict text carries the on-main remediation; the warn text
     # names the state an ordinary PR is most likely looking at.
     divergence: tuple[str, str] | None = None
-    if published is None:
+    if published_bytes is None:
         divergence = (
             f"{PUBLISHED_URL} is not published (the sentinel is served, so "
             f"this is a missing stamp, not an access fault) — the schemas "
@@ -296,31 +303,44 @@ def run() -> int:
             f"{PUBLISHED_URL} is not published — expected while the change "
             "introducing the stamp has not reached main.",
         )
-    elif published != committed:
-        divergence = (
-            f"published fact {published!r} != committed stamp {committed!r} — "
-            f"the schemas-publish deployment is awaiting its environment "
-            f"approval, failed, or the bucket was written out-of-band (the "
-            f"publish run history says which); {_REPUBLISH}.",
-            f"published fact {published!r} != committed stamp {committed!r} — "
-            "on a release PR the committed stamp legitimately runs ahead of "
-            "the published tree until it merges.",
-        )
-    elif pin_version != published:
+    elif published_bytes != committed_bytes:
+        published = _read_fact(published_bytes, context=PUBLISHED_URL)
+        if published != committed:
+            divergence = (
+                f"published fact {published!r} != committed stamp "
+                f"{committed!r} — the schemas-publish deployment is awaiting "
+                f"its environment approval, failed, or the bucket was "
+                f"written out-of-band (the publish run history says which); "
+                f"{_REPUBLISH}.",
+                f"published fact {published!r} != committed stamp "
+                f"{committed!r} — on a release PR the committed stamp "
+                "legitimately runs ahead of the published tree until it "
+                "merges.",
+            )
+        else:
+            divergence = (
+                f"the published stamp names the same release ({published}) "
+                f"but not the same tree digest — the publish has not landed "
+                f"the latest render; {_REPUBLISH}.",
+                f"the published stamp names the same release ({published}) "
+                "but not the same tree digest — expected on a PR that "
+                "re-renders schemas, until it merges and publishes.",
+            )
+    elif pin_version != committed:
         divergence = (
             f"VALIDATOR_PIN ({pin_version}) disagrees with the published "
-            f"contract ({published}) — land the pin catch-up so end users "
+            f"contract ({committed}) — land the pin catch-up so end users "
             "install the validator the published schemas were rendered from. "
             "Deliberately tighter than the offline at-or-behind tolerance "
             "(root CLAUDE.md, \"The contract, and the runtime pin\"): this "
             "red is the reminder that finishes the release.",
             f"VALIDATOR_PIN ({pin_version}) lags the published contract "
-            f"({published}) — a package-release window; the pin catch-up "
+            f"({committed}) — a package-release window; the pin catch-up "
             "clears it.",
         )
 
     if divergence is None:
-        print(f"OK: published == committed == pin == {committed}")
+        print(f"OK: published stamp == committed stamp, pin == {committed}")
         return 0
     strict_text, warn_text = divergence
     if strict:
