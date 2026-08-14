@@ -8,11 +8,14 @@ itself (`--bump` raises it, upward only); CI's `bump-check` re-derives the same
 floor and rejects any committed bump below it.
 
 Output trees:
-    Rendered into the committed tree, published to schemas.<domain> by the
-    infra repo's Terraform (the bucket and CDN are not defined here):
+    Rendered into the committed tree, uploaded to the serving bucket behind
+    schemas.<domain> by .github/workflows/schemas-publish.yml (the bucket and
+    CDN live in the infra repo's Terraform):
         schemas/<resource>/{X.Y.Z}.json   (immutable per version)
         schemas/<resource>/latest.json     (mutable; mirrors current X.Y.Z)
         schemas/<resource>/index.json       (manifest: latest + versions)
+        schemas/canonical-types.json        (mutable; generated from the vendored
+                                             engine grammar)
         schemas/contracts-version.json      (mutable; the analitiq-contract-models
                                              release the whole tree renders from)
 
@@ -1484,26 +1487,26 @@ def cmd_canonical_types(args: argparse.Namespace) -> int:
 # contracts-version.json — the tree's provenance stamp
 # ---------------------------------------------------------------------------
 # Not a registry Resource: versionless and mutable, like canonical-types.json
-# (it rides the publish workflow's `**/*.json` glob with a 5-minute TTL).
+# (it rides the publish workflow's `**/*.json` glob as a mutable pointer).
 # The document states which `analitiq-contract-models` release rendered the
 # published tree — the fact a consumer needs to check that the schema it
 # fetched and the validator it pinned came from the same contract. The value
-# is READ from the contract package's pyproject.toml at render time, never
+# is READ from the contract package's `pyproject.toml` at render time, never
 # hand-maintained; the full `check` fails when the committed stamp lags a
 # version bump, and the `contracts-version-guard` CI job holds the PUBLISHED
-# copy to the committed one (scripts/check_contracts_version_pin.py owns
+# copy to the committed one (`scripts/check_contracts_version_pin.py` owns
 # those semantics).
 
 CONTRACTS_VERSION_PATH = SCHEMAS_ROOT / "contracts-version.json"
 CONTRACT_MODELS_PYPROJECT = (
     REPO_ROOT / "packages" / "contract-models" / "pyproject.toml"
 )
-#: The document's single fact key: the PyPI distribution name, so the fetched
+#: The document's fact key: the PyPI distribution name, so the fetched
 #: object is unambiguous to a consumer holding nothing else.
-#: scripts/check_contracts_version_pin.py reads the published copy under this
-#: same key (it cannot import this module — guard jobs are stdlib-only, and
-#: this module imports pydantic); tests/schemas/test_contracts_version_render.py
-#: pins the two constants equal.
+#: `scripts/check_contracts_version_pin.py` reads the published copy under
+#: this same key (it cannot import this module — guard jobs are stdlib-only,
+#: and this module imports pydantic);
+#: `tests/schemas/test_contracts_version_render.py` pins the copies equal.
 CONTRACTS_VERSION_KEY = "analitiq-contract-models"
 
 
@@ -1999,7 +2002,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         else:
             print(msg)
     # canonical-types.json and contracts-version.json are generated but not
-    # registry Resources (versionless + mutable); a full check covers both so
+    # registry Resources (versionless + mutable); a full check covers them so
     # CI needs no extra invocation.
     if not args.resource:
         for extra_check in (check_canonical_types, check_contracts_version):

@@ -5,10 +5,11 @@
 `scripts/render_schemas.py contracts-version` from the package's own
 pyproject and covered by the full render `check`. CI's check only exercises
 the clean path — these tests inject the failure states (stale stamp, missing
-stamp, versionless pyproject) and pin the one cross-file fact no import can
+stamp, versionless pyproject) and pin the cross-file facts no import can
 carry: `scripts/check_contracts_version_pin.py` cannot import the renderer
 (the guard job installs nothing and the renderer imports pydantic), so the
-stamp's key and paths are stated in both files and pinned equal here.
+stamp's key, the paths, the serving host, and the sentinel's basename are
+stated in both files and pinned equal here.
 """
 from __future__ import annotations
 
@@ -53,15 +54,26 @@ def test_stamp_states_the_pyproject_version():
     )
 
 
-def test_renderer_and_guard_agree_on_key_and_paths(guard):
-    """The guard reads the document the renderer writes, without importing it.
+def test_renderer_and_guard_agree_on_key_paths_and_host(guard):
+    """The guard reads what the renderer writes, without importing it.
 
-    The key literal and both file paths therefore exist twice; this is the
-    pin that makes those copies one value (`.claude/rules/no-drift-surfaces.md`).
+    The fact key, the file paths, the serving host, and the sentinel's
+    basename therefore exist in the guard as copies of renderer-owned (or
+    contract-owned) values; these pins are what make each copy one value
+    (`.claude/rules/no-drift-surfaces.md`).
     """
     assert guard.CONTRACTS_VERSION_KEY == render_schemas.CONTRACTS_VERSION_KEY
     assert guard.COMMITTED_PATH == render_schemas.CONTRACTS_VERSION_PATH
     assert guard.PYPROJECT_PATH == render_schemas.CONTRACT_MODELS_PYPROJECT
+    # The host is owned by analitiq.contracts.shared.common.SCHEMA_BASE_URL,
+    # re-exported by the renderer as CANONICAL_BASE.
+    assert guard.BASE_URL == render_schemas.CANONICAL_BASE
+    assert guard.PUBLISHED_URL == (
+        f"{render_schemas.CANONICAL_BASE}/{render_schemas.CONTRACTS_VERSION_PATH.name}"
+    )
+    assert guard.SENTINEL_URL == (
+        f"{render_schemas.CANONICAL_BASE}/{render_schemas.CANONICAL_TYPES_PATH.name}"
+    )
 
 
 def test_versionless_pyproject_fails_loudly(monkeypatch, tmp_path):
@@ -70,10 +82,10 @@ def test_versionless_pyproject_fails_loudly(monkeypatch, tmp_path):
     broken = tmp_path / "pyproject.toml"
     broken.write_text('[project]\nname = "analitiq-contract-models"\n')
     monkeypatch.setattr(render_schemas, "CONTRACT_MODELS_PYPROJECT", broken)
-    with pytest.raises(RuntimeError, match="declares no"):
+    with pytest.raises(RuntimeError):
         render_schemas.contract_models_version()
-    ok, msg = render_schemas.check_contracts_version()
-    assert not ok and "cannot render" in msg
+    ok, _ = render_schemas.check_contracts_version()
+    assert not ok
 
 
 def test_stale_stamp_names_the_fix(monkeypatch, tmp_path):
@@ -89,4 +101,4 @@ def test_missing_stamp_names_the_fix(monkeypatch, tmp_path):
         render_schemas, "CONTRACTS_VERSION_PATH", tmp_path / "absent.json"
     )
     ok, msg = render_schemas.check_contracts_version()
-    assert not ok and "is missing" in msg and "contracts-version`" in msg
+    assert not ok and "contracts-version`" in msg

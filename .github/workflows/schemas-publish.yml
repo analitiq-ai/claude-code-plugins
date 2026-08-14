@@ -31,8 +31,9 @@ name: Publish schemas to schemas.analitiq.ai
 #     document — is mutable with a 5-minute TTL. There is no
 #     CloudFront invalidation; the short TTL is the only refresh path.
 #   * Content-Type follows the served convention: application/schema+json
-#     for schema documents, application/json for the index.json and
-#     contracts-version.json manifests and the data-sync-api OpenAPI doc.
+#     for schema documents, application/json for the index.json manifests,
+#     the contracts-version.json provenance stamp, and the data-sync-api
+#     OpenAPI doc.
 #
 # The committed tree is rendered for DOMAIN=analitiq.ai (render_schemas.py
 # refuses any other), so this workflow publishes the PROD host's content.
@@ -83,8 +84,8 @@ jobs:
       - name: Verify schemas/ matches the contract models
         # tests.yml already gates merges with these; running them again here
         # means a hand-edited tree can't publish even if that gate is
-        # bypassed. Coverage, stated precisely: the render check covers the 13
-        # rendered resources plus the generated versionless documents
+        # bypassed. Coverage, stated precisely: the render check covers every
+        # registered resource plus the generated versionless documents
         # (canonical-types.json and the contracts-version.json provenance
         # stamp); the pytest guard re-covers canonical-types.json.
         # The two remaining hand-authored files have no content gate in this

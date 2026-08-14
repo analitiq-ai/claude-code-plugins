@@ -58,8 +58,8 @@ generated the same way: `render_schemas.py contracts-version` records the
 package's own `pyproject.toml`), `check` covers it, and the
 `contracts-version-guard` CI job holds the published copy — and
 `VALIDATOR_PIN` — to it, so "which models release produced this schema?" is a
-fetchable fact instead of trust. Two files are exceptions, hand-authored and
-outside the registry:
+fetchable fact instead of trust. The hand-authored exceptions, outside the
+registry:
 `data-sync-api/openapi.json`, which has no version triple, and
 `data-sync-run-response/1.0.0.json`, which is versioned but hand-maintained —
 the publish treats every pinned `X.Y.Z.json` as immutable, so changing it means
@@ -95,8 +95,8 @@ generator) — never by hand-editing the vocabulary.
 The publish is additive — pinned `X.Y.Z.json` objects are first-write-wins
 (byte-compared on re-runs; divergence fails the publish) and never overwritten,
 nothing is ever deleted — and mutable pointers (`latest.json`, `index.json`,
-and every versionless document, among them `data-sync-api/openapi.json`, the
-one hand-authored file with no version triple) rely on a 5-minute TTL, not
+and every versionless document, among them the hand-authored
+`data-sync-api/openapi.json`) rely on a 5-minute TTL, not
 CloudFront invalidation. Auth is OIDC via the `schemas` environment — see "Credentials".
 
 Only the 13 public resources render here. The ~40 internal-audience schemas stay
@@ -145,7 +145,11 @@ The pin must be **at or behind** `packages/validator/pyproject.toml`
 (`test_validator_pin_matches_the_package_this_repo_ships`). Equal is allowed and
 is the steady state; behind is tolerated because the pin names a version that
 must already be **on PyPI**, and the publish is a hand-pushed tag that fires
-*after* the version bump merges. The dangerous direction is a pin **ahead** of
+*after* the version bump merges. Tolerated for **merging**, that is: the
+`contracts-version-guard` CI job reds pushes to main while the pin lags the
+published schema tree — deliberately tighter than this merge-gate tolerance,
+as the standing reminder that finishes the release with the pin catch-up. The
+dangerous direction is a pin **ahead** of
 what this repo ships: marketplace installs track main HEAD, so a pin naming an
 unpublished version means every user's `pip install` fails outright and the
 plugin cannot run at all.

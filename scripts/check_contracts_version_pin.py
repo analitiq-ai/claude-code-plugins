@@ -5,7 +5,7 @@
 the committed schema tree renders from (rendered by
 `scripts/render_schemas.py contracts-version`, whose full `check` pins the
 stamp to `packages/contract-models/pyproject.toml`). The publish workflow
-uploads it like every other mutable pointer, so consumers can fetch ONE
+uploads it like every other mutable pointer, so consumers can fetch a
 machine-readable fact answering "which models release produced this tree?" —
 and check their own contract pin against it.
 
@@ -16,40 +16,56 @@ offline test can see:
      guard never certifies a baseline the render check already rejects — a
      mismatch is a GuardError naming the render, not a verdict).
   2. The PUBLISHED `contracts-version.json` at schemas.analitiq.ai equals the
-     committed stamp. Divergence means the publish silently failed or never
-     ran (the publish workflow retriggers only on the next schemas/ push), or
-     something wrote to the bucket out-of-band — both are exactly the states
-     this guard exists to surface.
-  3. `VALIDATOR_PIN` (plugins/analitiq-pipeline-builder/scripts/_bootstrap.py
+     committed stamp. Divergence means the schemas publish has not landed
+     (its `schemas` environment holds deployments for reviewer approval, so
+     the stamp-bumping push itself reaches this guard before the upload), or
+     it failed outright (the publish workflow retriggers only on the next
+     schemas/ push), or something wrote to the bucket out-of-band. The
+     remediation is the same flow the validator release already uses: land
+     or re-run the publish, wait out the pointer TTL
+     (`.github/workflows/schemas-publish.yml` owns the cache-control), then
+     re-run this job.
+  3. `VALIDATOR_PIN` (`plugins/analitiq-pipeline-builder/scripts/_bootstrap.py`
      — the validator end users actually install) agrees with the published
-     fact. The guard asserts EQUALITY only and never orders versions: with
-     step 2 green, the offline invariants (the pin is at or behind what this
-     repo ships — `test_validator_pin_matches_the_package_this_repo_ships` —
-     and the stamp equals what it ships, step 1) mean a mismatch here can
+     fact. The guard asserts EQUALITY only and never orders versions: the
+     offline invariants close every other direction. The pin is at or behind
+     the validator this repo ships
+     (`test_validator_pin_matches_the_package_this_repo_ships`), the shipped
+     validator and contract-models versions are held equal
+     (`test_validator_version_matches_contract_models_version` in
+     `packages/validator/tests/test_contract_models_pin.py` — the bridge that
+     makes an `analitiq-validator` version comparable to the stamp's
+     `analitiq-contract-models` version at all), and the stamp equals the
+     contract-models version (step 1). With step 2 green, a mismatch here can
      only be the pin lagging: the release-window state whose remediation is
      the pin catch-up PR. Ordering PEP 440 pre-releases (`1.0.0rc21`) in
-     stdlib would re-implement `packaging` badly to distinguish states the
+     stdlib would re-implement `packaging` badly to distinguish states those
      invariants already distinguish.
 
-Windows, mirroring `check_validator_pin_contract.py`:
+Strict-vs-warn windows (the STRICT env contract — name shape, the CI trigger
+expression, and typo-refusal — matches `check_validator_pin_contract.py`;
+the verdicts behind it are this guard's own):
 
   - CONTRACTS_VERSION_GUARD_STRICT=1 (CI sets it on pushes and on
-    release-please branches): every divergence FAILS. A red main during a
-    package-release window (bump merged, pin catch-up pending) is by design —
-    the same red, for the same window, as `pinned-validator-guard`.
-  - unset (ordinary PRs): divergences WARN (checks-UI annotation) and the job
-    passes — a stale published fact is main's problem, and a release PR's
-    stamp legitimately runs ahead of the published tree until it merges.
-  - A published object that is MISSING (HTTP 403/404 — CloudFront serves
-    both for an absent key, depending on bucket-policy shape) is the same
-    verdict pair: strict fails, non-strict warns. It is the expected state
-    only while the change introducing the stamp has not reached main.
-
-Strict runs poll before failing (`POLL_*` below): the push that changes the
-stamp triggers this job and the schemas publish on the same commit, and the
-pointer relies on a 5-minute TTL, not invalidation — so the deadline outlasts
-upload + TTL, making a strict failure mean "did not converge", never "lost a
-race with its own publish".
+    release-please branches): every divergence FAILS. A red main while a
+    package-release window is open — publish awaiting approval, or the pin
+    catch-up pending — is deliberate, and deliberately TIGHTER than the
+    offline "at or behind" tolerance (root CLAUDE.md, "The contract, and the
+    runtime pin", which governs the merge gate): the red is the reminder
+    that finishes the release, cleared by re-running this job once the
+    publish and the catch-up land.
+  - unset (ordinary PRs): divergences WARN (checks-UI annotation) and the
+    job passes — a stale published fact is main's problem, and a release
+    PR's stamp legitimately runs ahead of the published tree until it
+    merges.
+  - A published stamp that is MISSING (HTTP 403/404 — CloudFront serves
+    either status for an absent key, depending on bucket-policy shape) gets
+    the same treatment: strict fails, non-strict warns. It is the expected
+    state only while the change introducing the stamp has not reached main.
+    Because a 403 is also what a site-wide access fault returns for objects
+    that DO exist, a missing stamp is believed only after a sentinel object
+    that predates it (`canonical-types.json`) is confirmed served; a sentinel
+    that is also missing is a GuardError, never a verdict.
 
 Exit codes: 0 ok (including warn-mode divergences), 1 divergence, 2
 GuardError. Every infrastructure failure — unreadable repo files, a fetch
@@ -57,8 +73,8 @@ error that is not a missing object, malformed JSON, anything unclassified —
 is a GuardError: a guard that cannot run must never read as green, and never
 mint the exit-1 verdict for a fault that is not a divergence.
 
-Wiring: the `contracts-version-guard` job in .github/workflows/tests.yml;
-tests/schemas/test_contracts_version_guard.py pins every verdict branch
+Wiring: the `contracts-version-guard` job in `.github/workflows/tests.yml`;
+`tests/schemas/test_contracts_version_guard.py` pins every verdict branch
 offline with the fetch stubbed, plus the CI wiring.
 """
 from __future__ import annotations
@@ -68,16 +84,13 @@ import json
 import os
 import re
 import sys
-import time
 import tomllib
+import traceback
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-BASE_URL = "https://schemas.analitiq.ai"
-PUBLISHED_URL = f"{BASE_URL}/contracts-version.json"
 
 COMMITTED_PATH = REPO_ROOT / "schemas" / "contracts-version.json"
 PYPROJECT_PATH = REPO_ROOT / "packages" / "contract-models" / "pyproject.toml"
@@ -85,16 +98,22 @@ PIN_SOURCE = (
     REPO_ROOT / "plugins" / "analitiq-pipeline-builder" / "scripts" / "_bootstrap.py"
 )
 
-# The stamp's fact key — the PyPI distribution name. render_schemas.py owns the
-# document and states the same key (`CONTRACTS_VERSION_KEY`); this script
-# cannot import it (render_schemas imports pydantic, and this job installs
-# nothing), so test_contracts_version_render.py pins the two constants equal.
-CONTRACTS_VERSION_KEY = "analitiq-contract-models"
+# The serving host is owned by `analitiq.contracts.shared.common.SCHEMA_BASE_URL`;
+# this script cannot import it (the guard job installs nothing, and the
+# contract package needs pydantic), so the copy here — and the sentinel's
+# basename, owned by the renderer as `CANONICAL_TYPES_PATH` — are pinned to
+# their owners by `tests/schemas/test_contracts_version_render.py`.
+BASE_URL = "https://schemas.analitiq.ai"
+PUBLISHED_URL = f"{BASE_URL}/{COMMITTED_PATH.name}"
+#: A versionless object published since before the stamp existed. Fetched only
+#: when the stamp comes back 403/404: served sentinel = the stamp is genuinely
+#: absent; missing sentinel = the CDN/bucket access itself is broken.
+SENTINEL_URL = f"{BASE_URL}/canonical-types.json"
 
-# Strict-mode convergence window: schemas-publish uploads in seconds, the
-# mutable pointer refreshes on a 5-minute TTL, so 8 minutes outlasts both.
-POLL_DEADLINE_SECONDS = 480.0
-POLL_INTERVAL_SECONDS = 30.0
+# The stamp's fact key — the PyPI distribution name. `render_schemas.py` owns
+# the document and states the same key (`CONTRACTS_VERSION_KEY`);
+# `tests/schemas/test_contracts_version_render.py` pins the copies equal.
+CONTRACTS_VERSION_KEY = "analitiq-contract-models"
 
 
 class GuardError(RuntimeError):
@@ -117,7 +136,7 @@ def _fetch(url: str) -> bytes:
             return resp.read()
     except urllib.error.HTTPError as exc:
         # CloudFront-over-S3 reports a missing key as 404, or as 403 when the
-        # origin policy denies ListBucket. Both mean "no such object"; every
+        # origin policy denies ListBucket. Each means "no such object"; every
         # other status is the CDN misbehaving, which no verdict may rest on.
         if exc.code in (403, 404):
             raise NotPublished(f"{url} → HTTP {exc.code}") from exc
@@ -150,11 +169,27 @@ def _read_fact(raw: bytes, *, context: str) -> str:
 
 
 def fetch_published() -> str | None:
-    """The published fact, or None when the object is not published at all."""
+    """The published fact, or None when the stamp is genuinely not published.
+
+    "Genuinely": a 403/404 on the stamp alone cannot distinguish an absent
+    key from a site-wide access fault (a broken origin policy returns 403
+    for EVERY key, existing or not), and misreading the latter as "not
+    published" would mint the divergence verdict — with a re-run-the-publish
+    remediation that cannot fix it. So the missing-stamp reading must be
+    corroborated by the sentinel being served.
+    """
     try:
         return _read_fact(_fetch(PUBLISHED_URL), context=PUBLISHED_URL)
     except NotPublished as exc:
-        print(f"published object missing: {exc}")
+        print(f"stamp not served: {exc}")
+        try:
+            _fetch(SENTINEL_URL)
+        except NotPublished as sentinel_exc:
+            raise GuardError(
+                f"the sentinel is not served either ({sentinel_exc}) — a "
+                "CDN/bucket access fault, not a missing stamp; fix the "
+                "serving side before believing any verdict"
+            ) from sentinel_exc
         return None
 
 
@@ -225,19 +260,10 @@ def _surface_warning(text: str) -> None:
                 fh.write(f"⚠️ {text}\n")
 
 
-def poll_published(expected: str) -> str | None:
-    """Re-fetch until the published fact equals `expected` or the deadline
-    passes; returns the last observed value (None = still unpublished)."""
-    deadline = time.monotonic() + POLL_DEADLINE_SECONDS
-    published = fetch_published()
-    while published != expected and time.monotonic() < deadline:
-        print(
-            f"published fact is {published!r}, waiting for {expected!r} "
-            f"(publish + pointer TTL window; retry in {POLL_INTERVAL_SECONDS:g}s)"
-        )
-        time.sleep(POLL_INTERVAL_SECONDS)
-        published = fetch_published()
-    return published
+_REPUBLISH = (
+    "approve or re-run schemas-publish.yml (workflow_dispatch), wait out the "
+    "pointer TTL it documents, then re-run this job"
+)
 
 
 def run() -> int:
@@ -249,55 +275,61 @@ def run() -> int:
         raise GuardError(
             f"committed stamp {committed!r} != pyproject version {shipped!r} — "
             "run `scripts/render_schemas.py contracts-version` (the render "
-            "check gates this; this guard needs the two to agree before it "
-            "can say anything about the published copy)"
+            "check gates this; this guard needs the stamp and the pyproject "
+            "to agree before it can say anything about the published copy)"
         )
     pin_version = read_pin_version()
     strict = read_strict_env()
     print(f"committed: {committed}  validator pin: {pin_version}  strict: {strict}")
 
-    published = poll_published(committed) if strict else fetch_published()
+    published = fetch_published()
 
-    divergences: list[str] = []
+    # Per divergent state: (what strict runs are told, what warn runs are
+    # told). The strict text carries the on-main remediation; the warn text
+    # names the state an ordinary PR is most likely looking at.
+    divergence: tuple[str, str] | None = None
     if published is None:
-        divergences.append(
-            f"{PUBLISHED_URL} is not published. Expected only while the "
-            "change introducing contracts-version.json has not reached main; "
-            "on main, the schemas publish did not land — re-run "
-            "schemas-publish.yml via workflow_dispatch."
+        divergence = (
+            f"{PUBLISHED_URL} is not published (the sentinel is served, so "
+            f"this is a missing stamp, not an access fault) — the schemas "
+            f"publish never landed the stamp; {_REPUBLISH}.",
+            f"{PUBLISHED_URL} is not published — expected while the change "
+            "introducing the stamp has not reached main.",
         )
     elif published != committed:
-        divergences.append(
-            f"published fact {published!r} != committed stamp {committed!r} "
-            "(held past the publish + pointer-TTL window on strict runs). "
-            "Either the schemas publish failed — re-run schemas-publish.yml "
-            "via workflow_dispatch — or the bucket was written out-of-band; "
-            "the publish workflow's run history says which."
+        divergence = (
+            f"published fact {published!r} != committed stamp {committed!r} — "
+            f"the schemas-publish deployment is awaiting its environment "
+            f"approval, failed, or the bucket was written out-of-band (the "
+            f"publish run history says which); {_REPUBLISH}.",
+            f"published fact {published!r} != committed stamp {committed!r} — "
+            "on a release PR the committed stamp legitimately runs ahead of "
+            "the published tree until it merges.",
         )
     elif pin_version != published:
-        # Equality-only by design: with the published fact equal to the
-        # committed stamp, the offline pin invariants leave exactly one
-        # mismatch state — the pin lagging a release (see module docstring).
-        divergences.append(
+        divergence = (
             f"VALIDATOR_PIN ({pin_version}) disagrees with the published "
-            f"contract ({published}) — the release-window state; land the pin "
-            "catch-up so end users install the validator the published "
-            "schemas were rendered from. A red main here during a package "
-            "release window is by design, exactly as pinned-validator-guard."
+            f"contract ({published}) — land the pin catch-up so end users "
+            "install the validator the published schemas were rendered from. "
+            "Deliberately tighter than the offline at-or-behind tolerance "
+            "(root CLAUDE.md, \"The contract, and the runtime pin\"): this "
+            "red is the reminder that finishes the release.",
+            f"VALIDATOR_PIN ({pin_version}) lags the published contract "
+            f"({published}) — a package-release window; the pin catch-up "
+            "clears it.",
         )
 
-    if not divergences:
+    if divergence is None:
         print(f"OK: published == committed == pin == {committed}")
         return 0
+    strict_text, warn_text = divergence
     if strict:
-        for d in divergences:
-            print(f"DIVERGENCE: {d}", file=sys.stderr)
+        print(f"DIVERGENCE: {strict_text}", file=sys.stderr)
         return 1
-    for d in divergences:
-        _surface_warning(
-            f"WINDOW: {d} Strict runs (pushes to main, release-please "
-            "branches) enforce this."
-        )
+    _surface_warning(
+        f"WINDOW: {warn_text} Strict runs (pushes to main, release-please "
+        "branches) enforce this."
+    )
     return 0
 
 
@@ -307,10 +339,13 @@ def main() -> int:
     except GuardError as exc:
         print(f"GUARD ERROR (not a verdict): {exc}", file=sys.stderr)
         return 2
-    except Exception as exc:  # noqa: BLE001 — a guard that cannot run must
-        # never read as green NOR mint the divergence verdict (exit 1) for a
-        # crash; everything unclassified is infrastructure (exit 2).
-        print(f"GUARD ERROR (unexpected): {exc!r}", file=sys.stderr)
+    except Exception:  # noqa: BLE001 — a guard that cannot run must never
+        # read as green NOR mint the divergence verdict (exit 1) for a crash;
+        # everything unclassified is infrastructure (exit 2). The traceback
+        # is the debugging surface: this script runs only in CI, where a bare
+        # repr would leave no file/line to start from.
+        print("GUARD ERROR (unexpected):", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return 2
 
 

@@ -1,16 +1,19 @@
-"""Pin the wiring and verdict semantics of scripts/check_contracts_version_pin.py.
+"""Pin the wiring and verdict semantics of `scripts/check_contracts_version_pin.py`.
 
 The guard's network half runs only in CI (`contracts-version-guard` job), so
 its verdict logic — published-vs-committed divergence, the pin comparison,
-strict-vs-warn windows, missing-object handling — would otherwise only ever
-execute against live healthy data, where an inverted comparison is a
-permanent false green. Same charter as test_engine_grammar_guard.py next
-door: every verdict branch offline, with the fetch monkeypatched out, plus
-the readers against the real working tree and the CI job's wiring.
+strict-vs-warn windows, missing-object handling and its sentinel
+corroboration — would otherwise only ever execute against live healthy data,
+where an inverted comparison is a permanent false green. Same charter as
+`test_engine_grammar_guard.py` next door: every verdict branch offline, with
+the fetch monkeypatched out, plus the readers against the real working tree
+and the CI job's wiring.
 """
 from __future__ import annotations
 
+import io
 import json
+import urllib.error
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -19,6 +22,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = REPO_ROOT / "scripts" / "check_contracts_version_pin.py"
 _WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
+_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "schemas-publish.yml"
 
 
 @pytest.fixture(scope="module")
@@ -41,33 +45,39 @@ def _plain_env(monkeypatch):
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
 
 
-@pytest.fixture(autouse=True)
-def _no_real_polling(guard, monkeypatch):
-    # Strict-mode tests exercise the poll loop's LOGIC; a real 8-minute
-    # deadline or 30-second sleep would hang the suite on the branches that
-    # deliberately never converge.
-    monkeypatch.setattr(guard, "POLL_DEADLINE_SECONDS", 0.0)
-    monkeypatch.setattr(guard, "POLL_INTERVAL_SECONDS", 0.0)
-
-
 def _fact(guard, version: str) -> bytes:
     return json.dumps({guard.CONTRACTS_VERSION_KEY: version}).encode()
 
 
-def _stub_fetch(guard, monkeypatch, responses: list) -> list:
-    """Serve `responses` in order (bytes returned, exceptions raised; the
-    last one repeats); record every call."""
+def _stub_fetch(guard, monkeypatch, stamp, sentinel=b"{}") -> list:
+    """Stub `_fetch` per URL: `stamp` serves the stamp URL (bytes returned,
+    exception raised), `sentinel` the sentinel URL. Returns the call log."""
     calls: list[str] = []
 
     def fetch(url: str) -> bytes:
         calls.append(url)
-        item = responses[min(len(calls), len(responses)) - 1]
+        item = stamp if url == guard.PUBLISHED_URL else sentinel
         if isinstance(item, Exception):
             raise item
         return item
 
     monkeypatch.setattr(guard, "_fetch", fetch)
     return calls
+
+
+def _pin_matching_stamp(guard, monkeypatch, tmp_path) -> None:
+    """Point PIN_SOURCE at a pin equal to the committed stamp.
+
+    The real `_bootstrap.py` pin legitimately lags the stamp on a
+    package-release PR (root CLAUDE.md, "The contract, and the runtime pin"),
+    and the offline suite must stay green through that window — so tests
+    asserting the all-equal verdict must not read the real pin.
+    """
+    stamped = tmp_path / "_bootstrap.py"
+    stamped.write_text(
+        f'VALIDATOR_PIN = "analitiq-validator=={guard.read_committed_stamp()}"\n'
+    )
+    monkeypatch.setattr(guard, "PIN_SOURCE", stamped)
 
 
 # --- the readers, against the real working tree ---------------------------
@@ -89,74 +99,79 @@ def test_reads_the_pin_from_its_single_source(guard):
 # --- verdicts, fetch stubbed ----------------------------------------------
 
 
-def test_healthy_publication_passes(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, [_fact(guard, guard.read_committed_stamp())])
+def test_healthy_publication_passes(guard, monkeypatch, tmp_path, capsys):
+    _pin_matching_stamp(guard, monkeypatch, tmp_path)
+    calls = _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
     assert guard.main() == 0
     assert "OK: published == committed == pin" in capsys.readouterr().out
+    assert calls == [guard.PUBLISHED_URL], "a served stamp needs no sentinel probe"
 
 
 def test_published_mismatch_warns_on_ordinary_prs(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, [_fact(guard, "0.0.0")])
+    calls = _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
     assert guard.main() == 0
     out = capsys.readouterr().out
     assert "WINDOW:" in out and "0.0.0" in out
+    assert len(calls) == 1, "warn mode fetches once — no retry loop"
 
 
-def test_published_mismatch_fails_strict_after_the_poll_window(
-    guard, monkeypatch, capsys
-):
+def test_published_mismatch_fails_strict(guard, monkeypatch, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
-    _stub_fetch(guard, monkeypatch, [_fact(guard, "0.0.0")])
+    _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
     assert guard.main() == 1
     assert "DIVERGENCE" in capsys.readouterr().err
 
 
-def test_strict_polls_past_a_publish_in_flight(guard, monkeypatch, capsys):
-    """The push that bumps the stamp races its own schemas publish; the poll
-    is what turns that race into a wait instead of a false red."""
-    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
-    monkeypatch.setattr(guard, "POLL_DEADLINE_SECONDS", 30.0)
-    committed = guard.read_committed_stamp()
-    calls = _stub_fetch(
-        guard, monkeypatch, [_fact(guard, "0.0.0"), _fact(guard, committed)]
-    )
-    assert guard.main() == 0
-    assert len(calls) == 2, "the second fetch is the poll retry"
-    assert "OK: published == committed == pin" in capsys.readouterr().out
-
-
-def test_unpublished_object_warns_on_ordinary_prs(guard, monkeypatch, capsys):
+def test_unpublished_stamp_warns_on_ordinary_prs(guard, monkeypatch, capsys):
     # The bootstrap state: the change introducing the stamp has not reached
-    # main yet, so the CDN has no object to serve. CloudFront reports that as
-    # 403 or 404 depending on bucket policy; both arrive here as NotPublished.
-    _stub_fetch(guard, monkeypatch, [guard.NotPublished("HTTP 403")])
+    # main yet, so the CDN has no stamp to serve — corroborated by the
+    # sentinel, which IS served.
+    calls = _stub_fetch(guard, monkeypatch, guard.NotPublished("HTTP 403"))
     assert guard.main() == 0
-    assert "not published" in capsys.readouterr().out
+    assert guard.PUBLISHED_URL in capsys.readouterr().out
+    assert calls == [guard.PUBLISHED_URL, guard.SENTINEL_URL]
 
 
-def test_unpublished_object_fails_strict(guard, monkeypatch, capsys):
+def test_unpublished_stamp_fails_strict(guard, monkeypatch, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
-    _stub_fetch(guard, monkeypatch, [guard.NotPublished("HTTP 404")])
+    _stub_fetch(guard, monkeypatch, guard.NotPublished("HTTP 404"))
     assert guard.main() == 1
-    assert "schemas-publish" in capsys.readouterr().err
+    assert "schemas-publish.yml" in capsys.readouterr().err
 
 
-def test_pin_lag_fails_strict_naming_the_catch_up(guard, monkeypatch, tmp_path, capsys):
+def test_missing_sentinel_is_a_guard_error_not_a_missing_stamp(
+    guard, monkeypatch, capsys
+):
+    """A 403 on every key is an access fault. Believing the stamp-side 403
+    would mint the divergence verdict with a re-run-the-publish remediation
+    that cannot fix it — the exact conflation the sentinel exists to refuse.
+    """
+    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        guard.NotPublished("HTTP 403"),
+        sentinel=guard.NotPublished("HTTP 403"),
+    )
+    assert guard.main() == 2
+    assert "GUARD ERROR" in capsys.readouterr().err
+
+
+def test_pin_lag_fails_strict(guard, monkeypatch, tmp_path, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
     stale_pin = tmp_path / "_bootstrap.py"
     stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
     monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    _stub_fetch(guard, monkeypatch, [_fact(guard, guard.read_committed_stamp())])
+    _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
     assert guard.main() == 1
-    err = capsys.readouterr().err
-    assert "VALIDATOR_PIN" in err and "catch-up" in err
+    assert "VALIDATOR_PIN" in capsys.readouterr().err
 
 
 def test_pin_lag_warns_on_ordinary_prs(guard, monkeypatch, tmp_path, capsys):
     stale_pin = tmp_path / "_bootstrap.py"
     stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
     monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    _stub_fetch(guard, monkeypatch, [_fact(guard, guard.read_committed_stamp())])
+    _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
     assert guard.main() == 0
     assert "WINDOW:" in capsys.readouterr().out
 
@@ -165,29 +180,71 @@ def test_warning_is_annotated_on_actions(guard, monkeypatch, tmp_path, capsys):
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_ACTIONS", "true")
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
-    _stub_fetch(guard, monkeypatch, [_fact(guard, "0.0.0")])
+    _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
     assert guard.main() == 0
     assert "::warning" in capsys.readouterr().out
     assert summary.read_text().startswith("⚠️")
+
+
+# --- the HTTP classification `_fetch` itself performs ----------------------
+
+
+def _http_error(url: str, code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(url, code, "status", None, io.BytesIO(b""))
+
+
+@pytest.mark.parametrize("code", [403, 404])
+def test_missing_object_statuses_classify_as_not_published(
+    guard, monkeypatch, code
+):
+    # Every verdict test stubs `_fetch` wholesale, so the 403/404 split —
+    # which decides warn-and-pass vs GuardError on every ordinary PR until
+    # the stamp reaches main — must be executed here or it is never executed
+    # at all.
+    monkeypatch.setattr(
+        guard.urllib.request,
+        "urlopen",
+        lambda url, timeout: (_ for _ in ()).throw(_http_error(url, code)),
+    )
+    with pytest.raises(guard.NotPublished):
+        guard._fetch(guard.PUBLISHED_URL)
+
+
+def test_other_http_statuses_classify_as_guard_errors(guard, monkeypatch):
+    monkeypatch.setattr(
+        guard.urllib.request,
+        "urlopen",
+        lambda url, timeout: (_ for _ in ()).throw(
+            _http_error(guard.PUBLISHED_URL, 500)
+        ),
+    )
+    with pytest.raises(guard.GuardError):
+        guard._fetch(guard.PUBLISHED_URL)
 
 
 # --- infrastructure failures are exit 2, never a verdict -------------------
 
 
 def test_malformed_published_json_is_a_guard_error(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, [b"not json"])
+    _stub_fetch(guard, monkeypatch, b"not json")
+    assert guard.main() == 2
+    assert "GUARD ERROR" in capsys.readouterr().err
+
+
+def test_non_object_published_json_is_a_guard_error(guard, monkeypatch, capsys):
+    _stub_fetch(guard, monkeypatch, b"[1, 2]")
     assert guard.main() == 2
     assert "GUARD ERROR" in capsys.readouterr().err
 
 
 def test_published_object_without_the_key_is_a_guard_error(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, [b'{"something": "else"}'])
+    _stub_fetch(guard, monkeypatch, b'{"something": "else"}')
     assert guard.main() == 2
     assert guard.CONTRACTS_VERSION_KEY in capsys.readouterr().err
 
 
 def test_fetch_failure_is_a_guard_error(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, [guard.GuardError("fetch failed: timeout")])
+    _stub_fetch(guard, monkeypatch, guard.GuardError("fetch failed: timeout"))
     assert guard.main() == 2
     assert "GUARD ERROR" in capsys.readouterr().err
 
@@ -201,7 +258,7 @@ def test_committed_vs_pyproject_disagreement_is_a_guard_error(
     diverged = tmp_path / "pyproject.toml"
     diverged.write_text('[project]\nversion = "999.0.0"\n')
     monkeypatch.setattr(guard, "PYPROJECT_PATH", diverged)
-    calls = _stub_fetch(guard, monkeypatch, [_fact(guard, "999.0.0")])
+    calls = _stub_fetch(guard, monkeypatch, _fact(guard, "999.0.0"))
     assert guard.main() == 2
     assert "render_schemas.py contracts-version" in capsys.readouterr().err
     assert not calls, "no verdict input may be fetched for an unusable baseline"
@@ -209,20 +266,22 @@ def test_committed_vs_pyproject_disagreement_is_a_guard_error(
 
 def test_unrecognized_strict_value_is_a_guard_error(guard, monkeypatch, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "true")
-    _stub_fetch(guard, monkeypatch, [_fact(guard, guard.read_committed_stamp())])
+    _stub_fetch(guard, monkeypatch, _fact(guard, guard.read_committed_stamp()))
     assert guard.main() == 2
-    assert "not recognized" in capsys.readouterr().err
+    assert "CONTRACTS_VERSION_GUARD_STRICT" in capsys.readouterr().err
 
 
-def test_unexpected_exception_is_a_guard_error_not_a_verdict(
+def test_unexpected_exception_is_a_guard_error_with_a_traceback(
     guard, monkeypatch, capsys
 ):
     def boom(*_args, **_kwargs):
-        raise ValueError("boom")
+        raise ValueError("boom-sentinel")
 
     monkeypatch.setattr(guard, "fetch_published", boom)
     assert guard.main() == 2
-    assert "unexpected" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "boom-sentinel" in err
+    assert "DIVERGENCE" not in err
 
 
 def test_fetch_refuses_a_url_outside_the_pinned_base(guard):
@@ -249,12 +308,35 @@ def test_ci_job_runs_the_guard_with_the_strictness_key():
     workflow = _WORKFLOW.read_text()
     assert "contracts-version-guard:" in workflow
     assert "check_contracts_version_pin.py" in workflow
-    assert "CONTRACTS_VERSION_GUARD_STRICT" in workflow
-    # Strict exactly where pinned-validator-guard is strict: pushes (a stale
-    # published fact on main is live divergence) and release-please branches.
     strict_line = next(
         line for line in workflow.splitlines()
         if "CONTRACTS_VERSION_GUARD_STRICT:" in line
     )
     assert "github.event_name == 'push'" in strict_line
     assert "release-please--" in strict_line
+
+
+def test_strictness_expression_is_identical_to_the_validator_guards():
+    # The job comment promises the strict window matches
+    # pinned-validator-guard's; without this pin, editing either expression
+    # leaves the other — and the promise — behind silently.
+    workflow = _WORKFLOW.read_text()
+
+    def expression(env_key: str) -> str:
+        line = next(l for l in workflow.splitlines() if f"{env_key}:" in l)
+        return line.split(f"{env_key}:", 1)[1].strip()
+
+    assert expression("CONTRACTS_VERSION_GUARD_STRICT") == expression(
+        "VALIDATOR_PIN_GUARD_STRICT"
+    )
+
+
+def test_publish_workflow_serves_the_stamp_as_json():
+    # The upload's Content-Type case arm carries the stamp's basename in a
+    # file no other test reads; if the document is renamed or the arm edited,
+    # the stamp silently ships as application/schema+json.
+    publish = _PUBLISH_WORKFLOW.read_text()
+    case_line = next(
+        line for line in publish.splitlines() if 'ctype="application/json"' in line
+    )
+    assert "contracts-version.json" in case_line
