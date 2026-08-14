@@ -362,7 +362,9 @@ def test_ci_job_runs_the_guard_with_the_strictness_key():
     workflow = _WORKFLOW.read_text()
     assert "contracts-version-guard:" in workflow
     assert "check_contracts_version_pin.py" in workflow
-    strict_line = next(
+    # A vanished anchor must red the build, not be handled — the StopIteration
+    # IS the non-vacuity check on every bare next() in this module.
+    strict_line = next(  # skipcq: PTC-W0063
         line for line in workflow.splitlines()
         if "CONTRACTS_VERSION_GUARD_STRICT:" in line
     )
@@ -377,7 +379,9 @@ def test_strictness_expression_is_identical_to_the_validator_guards():
     workflow = _WORKFLOW.read_text()
 
     def expression(env_key: str) -> str:
-        line = next(l for l in workflow.splitlines() if f"{env_key}:" in l)
+        line = next(  # skipcq: PTC-W0063
+            l for l in workflow.splitlines() if f"{env_key}:" in l
+        )
         return line.split(f"{env_key}:", 1)[1].strip()
 
     assert expression("CONTRACTS_VERSION_GUARD_STRICT") == expression(
@@ -394,9 +398,11 @@ def test_publish_workflow_uploads_the_stamp_last_as_json():
     # dedicated upload after the count check must serve it as JSON.
     publish = _PUBLISH_WORKFLOW.read_text()
     lines = publish.splitlines()
-    find_line = next(l for l in lines if "! -name 'contracts-version.json'" in l)
+    find_line = next(  # skipcq: PTC-W0063
+        l for l in lines if "! -name 'contracts-version.json'" in l
+    )
     assert "find ." in find_line
-    stamp_cp = next(
+    stamp_cp = next(  # skipcq: PTC-W0063
         l for l in lines if "aws s3 cp ./contracts-version.json" in l
     )
     assert 'application/json' in stamp_cp

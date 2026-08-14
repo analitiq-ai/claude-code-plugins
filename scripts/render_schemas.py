@@ -1513,7 +1513,7 @@ CONTRACT_MODELS_PYPROJECT = (
 #: this same key (it cannot import this module — guard jobs are stdlib-only,
 #: and this module imports pydantic);
 #: `tests/schemas/test_contracts_version_render.py` pins the copies equal.
-CONTRACTS_VERSION_KEY = "analitiq-contract-models"
+CONTRACTS_VERSION_KEY = "analitiq-contract-models"  # skipcq: SCT-A000 — a PyPI distribution name, not a credential
 
 
 def contract_models_version() -> str:
