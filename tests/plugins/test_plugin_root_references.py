@@ -254,7 +254,7 @@ def _refs_in(
 ) -> list[tuple[int, str]]:
     """Every (lineno, target) reference one channel's `patterns` find in one
     masked document. The channels share the citation patterns; what differs
-    is the universe each form resolves in (`_comment_universes`)."""
+    is how each form's target is resolved (`_comment_resolvers`)."""
     return [
         (lineno, match.group(1))
         for lineno, line in enumerate(masked.splitlines(), 1)
