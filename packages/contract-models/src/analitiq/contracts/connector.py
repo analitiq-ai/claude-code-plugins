@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Any, ClassVar, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union, get_args
 
 from pydantic import (
     BaseModel,
@@ -51,6 +51,7 @@ from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
     unqualified_tokens,
+    validate_expression_shapes,
 )
 
 CONNECTOR_SCHEMA_URL = schema_url_for("connector")
@@ -69,9 +70,11 @@ def _dumped(node: Any) -> Any:
 class ValueExpressionScopes:
     """A block carrying value expressions a runtime resolves.
 
-    Enforces RULE-CTOR-057 wherever it applies. Mixed in rather than repeated,
-    for the reason `HeaderMergeRules` is: the check is one check, and a model
-    gains it by inheriting.
+    Enforces RULE-CTOR-057 (every ref/placeholder names a resolution scope)
+    and RULE-CTOR-065 (every expression dict is the documented shape) wherever
+    they apply. Mixed in rather than repeated, for the reason
+    `HeaderMergeRules` is: each check is one check, and a model gains them by
+    inheriting.
 
     Each model names its own fields, because which of them a runtime resolves
     is not visible from the annotation. `rate_limit.time_window_seconds` is
@@ -104,6 +107,28 @@ class ValueExpressionScopes:
             for key, value in (getattr(self, name) or {}).items():
                 _reject_unqualified(_dumped(value), f"{name}.{key}")
         return self
+
+    @model_validator(mode="after")
+    def _expressions_well_formed(self):
+        for name in self.EXPRESSION_FIELDS:
+            _reject_malformed(_dumped(getattr(self, name)), name)
+        for name in self.EXPRESSION_MAPS:
+            for key, value in (getattr(self, name) or {}).items():
+                _reject_malformed(_dumped(value), f"{name}.{key}")
+        return self
+
+
+def _reject_malformed(node: Any, where: str) -> None:
+    """Refuse a value expression that is not the documented shape.
+
+    The shared walker (`validate_expression_shapes`) carries the rule; this
+    binds it to the connector document's grammar. The expression keys are the
+    resolver's own, and no `x-*` sibling is admitted because the authored
+    connector contract is closed — there is no extension policy for one to
+    ride on. `where` names the field — or, for a map, the key — for the same
+    reason `_reject_unqualified`'s does.
+    """
+    validate_expression_shapes(node, where, function_fields=_DERIVED_VALUE_FIELDS)
 
 
 def _reject_unqualified(node: Any, where: str) -> None:
@@ -915,6 +940,18 @@ Per-function input shapes are enforced at the model level — connectors that
 reference a function must use that function's required input shape, and `map`
 is exclusive to `lookup`.
 """
+
+
+# The sibling set the expression-shape walk permits on a `function` node in an
+# untyped site, read off the union's own members so extending a function model
+# extends the walk automatically. A union: per-function argument shapes are the
+# typed union's job, and only where a field carries it — see the note above on
+# where that union does and does not reach.
+_DERIVED_VALUE_FIELDS: frozenset[str] = frozenset(
+    name
+    for member in get_args(get_args(DerivedValue)[0])
+    for name in get_args(member)[0].model_fields
+)
 
 
 # --- String-valued value expressions (spec: §Value Expressions) ---

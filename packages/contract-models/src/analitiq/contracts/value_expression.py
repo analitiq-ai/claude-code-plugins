@@ -52,6 +52,7 @@ _TEMPLATE_RE = re.compile(r"\$\{([^}]+)\}")
 # can be authored as `{"literal": {...}}`, which passes the wrapped value
 # through verbatim.
 _EXPRESSION_KEYS = ("template", "function", "literal", "ref")
+_EXPRESSION_KEYS_SET: frozenset[str] = frozenset(_EXPRESSION_KEYS)
 
 # The complete value-expression resolution-scope vocabulary (spec: §Value
 # Expressions). A `ref` path and every `${...}` template placeholder addresses
@@ -93,6 +94,99 @@ def has_known_scope(token: str) -> bool:
 def _is_expression_node(value: Any) -> bool:
     """True when a value is a value-expression object form (not structural JSON)."""
     return isinstance(value, dict) and any(k in value for k in _EXPRESSION_KEYS)
+
+
+def validate_expression_shapes(
+    node: Any,
+    where: str,
+    *,
+    expression_keys: frozenset[str] | None = None,
+    function_fields: frozenset[str],
+    extension_siblings: bool = False,
+) -> None:
+    """Walk ``node``; raise when a dict has expression-like keys but is
+    structurally malformed (spec: §Value Expressions).
+
+    An expression dict declares exactly one expression key. The singleton
+    forms permit no sibling beyond the named key; ``function`` permits the
+    argument fields the caller's function models declare. Why a malformed
+    node must be refused at its own site is the rule's rationale, not this
+    docstring's — RULE-ENDP-022 on an endpoint document, RULE-CTOR-065 on a
+    connector document.
+
+    One grammar, shared by every document that feeds the resolver — hence the
+    parameters. ``expression_keys`` defaults to this module's value-expression
+    forms; the endpoint document widens it with its binding forms.
+    ``function_fields`` is the caller's permitted sibling set for a
+    ``function`` node, read off its own function models so extending a model
+    only touches one place. ``extension_siblings`` tolerates ``x-*`` siblings
+    where the document's extension policy admits them (the endpoint document);
+    the authored connector contract is closed, so its sites leave the default.
+    """
+    if isinstance(node, dict):
+        keys = _EXPRESSION_KEYS_SET if expression_keys is None else expression_keys
+        present_expr_keys = [k for k in node if k in keys]
+        if present_expr_keys:
+            if len(present_expr_keys) > 1:
+                raise ValueError(
+                    f"{where}: expression dict declares multiple expression keys "
+                    f"{sorted(present_expr_keys)!r}; spec requires exactly one "
+                    "(spec: §Value Expressions)"
+                )
+            primary = present_expr_keys[0]
+            allowed_siblings = (
+                function_fields if primary == "function" else {primary}
+            )
+            non_x_others = sorted(
+                k for k in node
+                if k not in allowed_siblings and not (
+                    extension_siblings
+                    and isinstance(k, str) and k.startswith("x-")
+                )
+            )
+            if non_x_others:
+                raise ValueError(
+                    f"{where}: {primary!r} expression has unexpected siblings "
+                    f"{non_x_others!r}; expressions must be the documented shape "
+                    "(spec: §Value Expressions)"
+                )
+            if primary == "literal":
+                # A `literal` payload is opaque data — `resolve_value_expression`
+                # returns it verbatim, and `iter_expression_strings` skips it.
+                # So this walker must not RECURSE into it (a provider-shaped
+                # default carrying a field named `template`/`function`/`ref` was
+                # otherwise unauthorable with no working escape) — but it must
+                # still CHECK the dict that carries it. Skipping the dict too
+                # accepted `{"ref": "totally.bogus", "literal": 5}`: the resolver
+                # dispatches `literal` before `ref`, so the value went out as 5
+                # and the author's ref was silently inert.
+                return
+            # Recurse into the expression's argument(s). For `function`, this
+            # walks `input` (which may itself be an expression) and `map`'s
+            # values; for `template`/`ref` the inner is leaf data.
+            for v_inner in node.values():
+                validate_expression_shapes(
+                    v_inner, f"{where}.<{primary}>",
+                    expression_keys=expression_keys,
+                    function_fields=function_fields,
+                    extension_siblings=extension_siblings,
+                )
+            return
+        for k, v_inner in node.items():
+            validate_expression_shapes(
+                v_inner, f"{where}.{k}",
+                expression_keys=expression_keys,
+                function_fields=function_fields,
+                extension_siblings=extension_siblings,
+            )
+    elif isinstance(node, list):
+        for i, item in enumerate(node):
+            validate_expression_shapes(
+                item, f"{where}[{i}]",
+                expression_keys=expression_keys,
+                function_fields=function_fields,
+                extension_siblings=extension_siblings,
+            )
 
 
 def iter_expression_strings(node: Any) -> Iterator[tuple[str, str]]:
