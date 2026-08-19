@@ -73,6 +73,7 @@ from analitiq.contracts.shared.types import (
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
     iter_expression_strings,
     template_placeholders,
@@ -777,6 +778,17 @@ if _union_tags(Expression) != frozenset(_EXPRESSION_KEYS):
     raise AssertionError(
         f"Expression Union members {sorted(_union_tags(Expression))!r} do not match "
         f"_EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r}")
+# The resolver's dispatch keys own this vocabulary; this module keeps its own
+# copy only because the union discriminator needs its own precedence order.
+# Membership must agree, or the two documents' shape walks diverge inside the
+# shared walker: it defaults to the resolver's set on a connector document and
+# takes this module's widened set on an endpoint one, so a form added to one
+# copy alone would be graded on one document and walked as structural JSON on
+# the other.
+if frozenset(_EXPRESSION_KEYS) != frozenset(_RESOLVER_EXPRESSION_KEYS):
+    raise AssertionError(
+        f"endpoint _EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r} do not match "
+        f"the resolver's expression keys {sorted(_RESOLVER_EXPRESSION_KEYS)!r}")
 # `NumericExpression` is `Expression` minus exactly the unboundable form,
 # checked against the same tag list so the two cannot drift apart silently.
 # This is an equality, not a widening: adding an expression form FAILS this
