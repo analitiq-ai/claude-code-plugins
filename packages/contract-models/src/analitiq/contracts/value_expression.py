@@ -169,13 +169,19 @@ def validate_expression_shapes(
                     # dispatches `literal` before `ref`, so the value went out as 5
                     # and the author's ref was silently inert.
                     return
-                # Recurse into the expression's argument(s). For `function`, this
-                # walks `input` (which may itself be an expression) and `map`'s
-                # values; for `template`/`ref` the inner is leaf data. A `map`'s
-                # values are data the resolver returns verbatim; the walk still
-                # grades them — one boundary for both documents rather than a
-                # per-caller carve-out.
-                for v_inner in node.values():
+                # Recurse into the expression's argument(s). For `function`,
+                # this walks `input`, which may itself be an expression; a
+                # `map` is a lookup table whose values the resolver returns
+                # verbatim, never resolved — the boundary
+                # `iter_expression_strings` draws — so its subtree is data
+                # this walk does not grade. Unlike a `literal` payload, a map
+                # value has no wrapping escape (the resolver would emit the
+                # wrapper itself), so grading it would make a provider-shaped
+                # output unauthorable. For `template`/`ref` the inner is leaf
+                # data.
+                for k_inner, v_inner in node.items():
+                    if primary == "function" and k_inner == "map":
+                        continue
                     walk(v_inner, f"{where}.<{primary}>")
                 return
             for k, v_inner in node.items():

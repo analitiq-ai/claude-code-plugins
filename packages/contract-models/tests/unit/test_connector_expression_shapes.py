@@ -101,10 +101,11 @@ def test_a_function_node_with_an_undeclared_sibling_is_refused():
 
 
 def test_a_database_tls_field_is_shape_checked():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc:
         DatabaseTls.model_validate(
             {"mode": {"ref": "connection.parameters.ssl_mode", "extra": 1}}
         )
+    assert "[RULE-CTOR-065]" in str(exc.value)
 
 
 def test_a_post_auth_request_header_is_shape_checked():
@@ -198,6 +199,29 @@ def test_a_function_with_its_documented_argument_fields_is_accepted():
         },
     })
     assert transport.headers
+
+
+def test_a_lookup_map_value_is_data_not_an_expression():
+    # `map` is a lookup table whose values the resolver returns verbatim —
+    # a provider-shaped output carrying expression-like keys is data, and
+    # unlike a `literal` payload it has no wrapping escape, so the walk must
+    # not grade it.
+    transport = _http(headers={"X-Region": {
+        "function": "lookup",
+        "input": {"ref": "connection.parameters.region"},
+        "map": {"eu": {"ref": "eu-west-1", "region_name": "Europe"}},
+    }})
+    assert transport.headers
+
+
+def test_a_node_both_malformed_and_unscoped_is_diagnosed_by_shape():
+    # Definition order on the mixin is the only thing sequencing the two
+    # validators; this pins it, so a reorder cannot silently flip the
+    # diagnosis to the scope rule's.
+    with pytest.raises(ValidationError) as exc:
+        _http(headers={"X-K": {"ref": "garbage_nonsense", "rogue": 1}})
+    message = str(exc.value)
+    assert "[RULE-CTOR-065]" in message and "RULE-CTOR-057" not in message
 
 
 def test_a_literal_payload_stays_opaque():
