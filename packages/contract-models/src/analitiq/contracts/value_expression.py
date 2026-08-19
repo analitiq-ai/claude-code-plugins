@@ -123,70 +123,68 @@ def validate_expression_shapes(
     where the document's extension policy admits them (the endpoint document);
     the authored connector contract is closed, so its sites leave the default.
     """
-    if isinstance(node, dict):
-        keys = _EXPRESSION_KEYS_SET if expression_keys is None else expression_keys
-        present_expr_keys = [k for k in node if k in keys]
-        if present_expr_keys:
-            if len(present_expr_keys) > 1:
-                raise ValueError(
-                    f"{where}: expression dict declares multiple expression keys "
-                    f"{sorted(present_expr_keys)!r}; spec requires exactly one "
-                    "(spec: §Value Expressions)"
+    keys = _EXPRESSION_KEYS_SET if expression_keys is None else expression_keys
+
+    def walk(node: Any, where: str) -> None:
+        if isinstance(node, dict):
+            present_expr_keys = [k for k in node if k in keys]
+            if present_expr_keys:
+                if len(present_expr_keys) > 1:
+                    raise ValueError(
+                        f"{where}: expression dict declares multiple expression keys "
+                        f"{sorted(present_expr_keys)!r}; spec requires exactly one "
+                        "(spec: §Value Expressions)"
+                    )
+                primary = present_expr_keys[0]
+                allowed_siblings = (
+                    function_fields if primary == "function" else {primary}
                 )
-            primary = present_expr_keys[0]
-            allowed_siblings = (
-                function_fields if primary == "function" else {primary}
-            )
-            non_x_others = sorted(
-                k for k in node
-                if k not in allowed_siblings and not (
-                    extension_siblings
-                    and isinstance(k, str) and k.startswith("x-")
+                # key=repr: a walked dict can carry non-str keys beside an
+                # expression key, and a cross-type sorted() would escape as a
+                # raw TypeError instead of this refusal.
+                non_x_others = sorted(
+                    (
+                        k for k in node
+                        if k not in allowed_siblings and not (
+                            extension_siblings
+                            and isinstance(k, str) and k.startswith("x-")
+                        )
+                    ),
+                    key=repr,
                 )
-            )
-            if non_x_others:
-                raise ValueError(
-                    f"{where}: {primary!r} expression has unexpected siblings "
-                    f"{non_x_others!r}; expressions must be the documented shape "
-                    "(spec: §Value Expressions)"
-                )
-            if primary == "literal":
-                # A `literal` payload is opaque data — `resolve_value_expression`
-                # returns it verbatim, and `iter_expression_strings` skips it.
-                # So this walker must not RECURSE into it (a provider-shaped
-                # default carrying a field named `template`/`function`/`ref` was
-                # otherwise unauthorable with no working escape) — but it must
-                # still CHECK the dict that carries it. Skipping the dict too
-                # accepted `{"ref": "totally.bogus", "literal": 5}`: the resolver
-                # dispatches `literal` before `ref`, so the value went out as 5
-                # and the author's ref was silently inert.
+                if non_x_others:
+                    raise ValueError(
+                        f"{where}: {primary!r} expression has unexpected siblings "
+                        f"{non_x_others!r}; expressions must be the documented shape "
+                        "(spec: §Value Expressions)"
+                    )
+                if primary == "literal":
+                    # A `literal` payload is opaque data — `resolve_value_expression`
+                    # returns it verbatim, and `iter_expression_strings` skips it.
+                    # So this walker must not RECURSE into it (a provider-shaped
+                    # default carrying a field named `template`/`function`/`ref` was
+                    # otherwise unauthorable with no working escape) — but it must
+                    # still CHECK the dict that carries it. Skipping the dict too
+                    # accepted `{"ref": "totally.bogus", "literal": 5}`: the resolver
+                    # dispatches `literal` before `ref`, so the value went out as 5
+                    # and the author's ref was silently inert.
+                    return
+                # Recurse into the expression's argument(s). For `function`, this
+                # walks `input` (which may itself be an expression) and `map`'s
+                # values; for `template`/`ref` the inner is leaf data. A `map`'s
+                # values are data the resolver returns verbatim; the walk still
+                # grades them — one boundary for both documents rather than a
+                # per-caller carve-out.
+                for v_inner in node.values():
+                    walk(v_inner, f"{where}.<{primary}>")
                 return
-            # Recurse into the expression's argument(s). For `function`, this
-            # walks `input` (which may itself be an expression) and `map`'s
-            # values; for `template`/`ref` the inner is leaf data.
-            for v_inner in node.values():
-                validate_expression_shapes(
-                    v_inner, f"{where}.<{primary}>",
-                    expression_keys=expression_keys,
-                    function_fields=function_fields,
-                    extension_siblings=extension_siblings,
-                )
-            return
-        for k, v_inner in node.items():
-            validate_expression_shapes(
-                v_inner, f"{where}.{k}",
-                expression_keys=expression_keys,
-                function_fields=function_fields,
-                extension_siblings=extension_siblings,
-            )
-    elif isinstance(node, list):
-        for i, item in enumerate(node):
-            validate_expression_shapes(
-                item, f"{where}[{i}]",
-                expression_keys=expression_keys,
-                function_fields=function_fields,
-                extension_siblings=extension_siblings,
-            )
+            for k, v_inner in node.items():
+                walk(v_inner, f"{where}.{k}")
+        elif isinstance(node, list):
+            for i, item in enumerate(node):
+                walk(item, f"{where}[{i}]")
+
+    walk(node, where)
 
 
 def iter_expression_strings(node: Any) -> Iterator[tuple[str, str]]:

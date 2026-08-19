@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Any, ClassVar, Literal, Union, get_args
+from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from pydantic import (
     BaseModel,
@@ -89,9 +89,15 @@ class ValueExpressionScopes:
     Keeping them apart is not only about the message. Walking an expression as
     though it were a map drops a check: the entries of `{"ref": "token"}` are
     the string `"token"`, and a bare string is the TEMPLATE form, so it carries
-    no placeholder and passes. The reverse — walking a map whole — stays
+    no placeholder and passes — and the shape walk is dropped the same way,
+    because the dict itself, the node carrying the siblings, is never handed
+    to the walker. The reverse — walking a map whole — stays
     correct, because the grammar walker recurses through a plain object into
     the expressions under it, and costs only the key name in the message.
+
+    The shape validator is defined first so it runs first: a node that is both
+    malformed and unscoped is diagnosed by its structure, pointing at the bad
+    fragment, before the scope rule reads tokens out of it.
     """
 
     #: Fields whose whole value is one value expression.
@@ -100,21 +106,21 @@ class ValueExpressionScopes:
     EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ()
 
     @model_validator(mode="after")
-    def _expressions_qualified(self):
-        for name in self.EXPRESSION_FIELDS:
-            _reject_unqualified(_dumped(getattr(self, name)), name)
-        for name in self.EXPRESSION_MAPS:
-            for key, value in (getattr(self, name) or {}).items():
-                _reject_unqualified(_dumped(value), f"{name}.{key}")
-        return self
-
-    @model_validator(mode="after")
     def _expressions_well_formed(self):
         for name in self.EXPRESSION_FIELDS:
             _reject_malformed(_dumped(getattr(self, name)), name)
         for name in self.EXPRESSION_MAPS:
             for key, value in (getattr(self, name) or {}).items():
                 _reject_malformed(_dumped(value), f"{name}.{key}")
+        return self
+
+    @model_validator(mode="after")
+    def _expressions_qualified(self):
+        for name in self.EXPRESSION_FIELDS:
+            _reject_unqualified(_dumped(getattr(self, name)), name)
+        for name in self.EXPRESSION_MAPS:
+            for key, value in (getattr(self, name) or {}).items():
+                _reject_unqualified(_dumped(value), f"{name}.{key}")
         return self
 
 
@@ -128,7 +134,10 @@ def _reject_malformed(node: Any, where: str) -> None:
     ride on. `where` names the field — or, for a map, the key — for the same
     reason `_reject_unqualified`'s does.
     """
-    validate_expression_shapes(node, where, function_fields=_DERIVED_VALUE_FIELDS)
+    try:
+        validate_expression_shapes(node, where, function_fields=_DERIVED_VALUE_FIELDS)
+    except ValueError as detail:
+        raise violation("RULE-CTOR-065", str(detail)) from None
 
 
 def _reject_unqualified(node: Any, where: str) -> None:
@@ -139,7 +148,8 @@ def _reject_unqualified(node: Any, where: str) -> None:
     """
     unqualified = unqualified_tokens(node)
     if unqualified:
-        raise ValueError(
+        raise violation(
+            "RULE-CTOR-057",
             f"{where}: {', '.join(sorted(set(unqualified)))} "
             f"names no resolution scope ({', '.join(RESOLUTION_SCOPES)}); "
             "without one the value read is whatever the resolver finds under "
@@ -950,7 +960,9 @@ is exclusive to `lookup`.
 _DERIVED_VALUE_FIELDS: frozenset[str] = frozenset(
     name
     for member in get_args(get_args(DerivedValue)[0])
-    for name in get_args(member)[0].model_fields
+    for name in (
+        get_args(member)[0] if get_origin(member) is Annotated else member
+    ).model_fields
 )
 
 

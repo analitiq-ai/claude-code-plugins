@@ -20,6 +20,7 @@ from pydantic import ValidationError
 from analitiq.contracts.connector import (
     AdbcTransport,
     AuthOperationTemplate,
+    DatabaseTls,
     DsnBinding,
     HttpTransport,
     PostAuthOperationRequest,
@@ -75,6 +76,37 @@ def test_an_auth_template_body_is_shape_checked_recursively():
     assert "body.secret" in str(exc.value)
 
 
+def test_a_malformed_node_inside_a_list_is_reached():
+    # Arrays are ordinary in a body payload, and the walker is shared — this
+    # one refusal guards list recursion for the endpoint document too.
+    with pytest.raises(ValidationError) as exc:
+        AuthOperationTemplate.model_validate(
+            {"path": "/t", "body": {"items": [{"ref": "secrets.s", "rogue": 1}]}}
+        )
+    assert "body.items[0]" in str(exc.value)
+
+
+def test_a_function_node_with_an_undeclared_sibling_is_refused():
+    # The refusal side of the sibling set: a name no function model declares
+    # is refused, so deriving the set too wide fails here the way deriving it
+    # too narrow fails the acceptance test beside it.
+    with pytest.raises(ValidationError) as exc:
+        _http(headers={"X-Region": {
+            "function": "lookup",
+            "input": {"ref": "connection.parameters.region"},
+            "map": {"eu": "eu-1"},
+            "rogue": 1,
+        }})
+    assert "unexpected siblings" in str(exc.value) and "rogue" in str(exc.value)
+
+
+def test_a_database_tls_field_is_shape_checked():
+    with pytest.raises(ValidationError):
+        DatabaseTls.model_validate(
+            {"mode": {"ref": "connection.parameters.ssl_mode", "extra": 1}}
+        )
+
+
 def test_a_post_auth_request_header_is_shape_checked():
     with pytest.raises(ValidationError):
         PostAuthOperationRequest.model_validate(
@@ -98,8 +130,8 @@ def test_a_dsn_binding_value_is_shape_checked():
 
 
 def test_a_function_input_is_shape_checked_through_the_typed_union():
-    # `base_url` is graded by the typed expression union, but a function's
-    # `input` is `Any` inside those models — the walk is what reaches it.
+    # `base_url` is graded by the typed expression union, but `url_encode`'s
+    # `input` is `Any` inside its model — the walk is what reaches it.
     with pytest.raises(ValidationError):
         _http(base_url={
             "function": "url_encode",
@@ -112,6 +144,26 @@ def test_an_extension_key_sibling_is_refused():
     # on models, and an untyped header map is not a way around that.
     with pytest.raises(ValidationError):
         _http(headers={"X-K": {"ref": "secrets.k", "x-note": "why"}})
+
+
+def test_a_non_string_sibling_key_is_still_a_refusal():
+    # A body is arbitrary JSON to pydantic, so a walked dict can carry non-str
+    # keys beside an expression key; the refusal must be the contract's, not a
+    # cross-type sort escaping as a raw TypeError.
+    with pytest.raises(ValidationError) as exc:
+        AuthOperationTemplate.model_validate(
+            {"path": "/t", "body": {"ref": "secrets.k", 1: "x", "z": 2}}
+        )
+    assert "unexpected siblings" in str(exc.value)
+
+
+def test_an_endpoint_binding_form_is_structural_here():
+    # `from_param` / `from_input` are endpoint request-slot bindings, not
+    # connector expression keys: on this document a dict carrying one is
+    # structural JSON, walked through rather than graded as an expression.
+    # This is the parameterization boundary between the shared walker's
+    # callers — widen the connector's key set and this header is refused.
+    assert _http(headers={"X-B": {"from_param": "page", "extra": 1}}).headers
 
 
 # --- the documented shapes still author --------------------------------------
