@@ -1754,6 +1754,35 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-CTOR-065",
+   "statement": "An expression dict in a connector field a runtime resolves MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "connector"
+   ],
+   "validator": "analitiq.contracts.connector::ValueExpressionScopes._expressions_well_formed",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "HttpTransport",
+    "TransportDefaults",
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest",
+    "AdbcTransport",
+    "DatabaseTls",
+    "DsnBinding"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": null,
+   "rationale": "The endpoint document refuses this shape in its request slots (RULE-ENDP-022), and the grammar is why the shape matters everywhere: resolution dispatches on the one expression key it recognises, so of two markers only one can win and a stray sibling is an edit with nothing to take effect on. This rule is what grades the expression dicts in transport header maps, auth-exchange bodies, DSN bindings and driver kwargs, so the finding lands at the author's validation run, naming the site, instead of wherever a resolver first reads the node. The covered fields are the fields a runtime resolves — the same traced set RULE-CTOR-057 covers — and RULE-CTOR-057's rationale carries the transport blast-radius argument, which binds here too. Unlike the endpoint document, no `x-*` sibling is admitted: the authored connector contract is closed, so there is no extension policy for one to ride on. The permitted `function` siblings are the union of the argument fields across the function models, mirroring the dispatch, which reads them whichever function is named; per-function argument shapes are the typed union's job, and only where a field carries that union. The shape is the whole of this rule — whether a well-formed function node names a function the engine registers is RULE-SHRD-007, deliberately out of reach here.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-DBEP-001",
    "statement": "Every column a database endpoint declares MUST carry a name no other column in that document repeats.\n",
    "tier": "advisory",

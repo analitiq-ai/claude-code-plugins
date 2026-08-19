@@ -1,9 +1,9 @@
 # Value expressions
 
-Shared invariant both creator agents must follow. The scopes below are owned by
-`analitiq.contracts.value_expression`, the expression shapes by
-`analitiq.contracts.endpoints` and the function forms by
-`analitiq.contracts.connector`; this page is the authoring guide to them.
+Shared invariant every creator agent must follow. The scopes and expression
+shapes below are owned by `analitiq.contracts.value_expression` and the
+function forms by `analitiq.contracts.connector`; this page is the authoring
+guide to them.
 
 ## Contents
 
@@ -24,9 +24,10 @@ A value expression is one of:
 | `function` | `{"function": "<name>", "input": {...}}` | Call a registered function with named inputs. |
 
 Anywhere the schema accepts a value expression, exactly one of the shapes
-above is allowed. (Endpoint request slots additionally admit the binding
-forms `from_param` / `from_input`; the exactly-one-key rule there is
-RULE-ENDP-022 — see `connector-spec-api/spec-request-binding.md`.)
+above is allowed — on a connector `RULE-CTOR-065`, on an endpoint
+`RULE-ENDP-022`. (Endpoint request slots additionally admit the binding
+forms `from_param` / `from_input` — see
+`connector-spec-api/spec-request-binding.md`.)
 
 <!-- PROBE: pagination-limit-literal-rejected, pagination-offset-step-literal-rejected, pagination-offset-step-bare-accepted, pagination-page-step-literal-rejected -->
 A slot may admit a narrower set. A numeric pagination slot (`limit.default`,

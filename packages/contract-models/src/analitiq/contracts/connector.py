@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from typing import Annotated, Any, ClassVar, Literal, Union
+from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from pydantic import (
     BaseModel,
@@ -51,6 +51,7 @@ from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
     unqualified_tokens,
+    validate_expression_shapes,
 )
 
 CONNECTOR_SCHEMA_URL = schema_url_for("connector")
@@ -69,9 +70,9 @@ def _dumped(node: Any) -> Any:
 class ValueExpressionScopes:
     """A block carrying value expressions a runtime resolves.
 
-    Enforces RULE-CTOR-057 wherever it applies. Mixed in rather than repeated,
-    for the reason `HeaderMergeRules` is: the check is one check, and a model
-    gains it by inheriting.
+    Enforces RULE-CTOR-057 and RULE-CTOR-065 wherever they apply. Mixed in
+    rather than repeated, for the reason `HeaderMergeRules` is: each check is
+    one check, and a model gains them by inheriting.
 
     Each model names its own fields, because which of them a runtime resolves
     is not visible from the annotation. `rate_limit.time_window_seconds` is
@@ -86,15 +87,30 @@ class ValueExpressionScopes:
     Keeping them apart is not only about the message. Walking an expression as
     though it were a map drops a check: the entries of `{"ref": "token"}` are
     the string `"token"`, and a bare string is the TEMPLATE form, so it carries
-    no placeholder and passes. The reverse — walking a map whole — stays
+    no placeholder and passes — and the shape walk is dropped the same way,
+    because the dict itself, the node carrying the siblings, is never handed
+    to the walker. The reverse — walking a map whole — stays
     correct, because the grammar walker recurses through a plain object into
     the expressions under it, and costs only the key name in the message.
+
+    The shape validator is defined first so it runs first: a node that is both
+    malformed and unscoped is diagnosed by its structure, pointing at the bad
+    fragment, before the scope rule reads tokens out of it.
     """
 
     #: Fields whose whole value is one value expression.
     EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ()
     #: Fields holding a map of name -> value expression.
     EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ()
+
+    @model_validator(mode="after")
+    def _expressions_well_formed(self):
+        for name in self.EXPRESSION_FIELDS:
+            _reject_malformed(_dumped(getattr(self, name)), name)
+        for name in self.EXPRESSION_MAPS:
+            for key, value in (getattr(self, name) or {}).items():
+                _reject_malformed(_dumped(value), f"{name}.{key}")
+        return self
 
     @model_validator(mode="after")
     def _expressions_qualified(self):
@@ -106,6 +122,21 @@ class ValueExpressionScopes:
         return self
 
 
+def _reject_malformed(node: Any, where: str) -> None:
+    """Refuse a value expression that is not the documented shape.
+
+    The shared walker (`validate_expression_shapes`) carries the rule; this
+    binds it to the connector document's grammar — the resolver's own
+    expression keys, no `x-*` siblings. RULE-CTOR-065's rationale carries
+    why. `where` names the field — or, for a map, the key — for the same
+    reason `_reject_unqualified`'s does.
+    """
+    try:
+        validate_expression_shapes(node, where, function_fields=_DERIVED_VALUE_FIELDS)
+    except ValueError as detail:
+        raise violation("RULE-CTOR-065", str(detail)) from None
+
+
 def _reject_unqualified(node: Any, where: str) -> None:
     """Refuse a value expression whose ref/placeholder names no resolution scope.
 
@@ -114,7 +145,8 @@ def _reject_unqualified(node: Any, where: str) -> None:
     """
     unqualified = unqualified_tokens(node)
     if unqualified:
-        raise ValueError(
+        raise violation(
+            "RULE-CTOR-057",
             f"{where}: {', '.join(sorted(set(unqualified)))} "
             f"names no resolution scope ({', '.join(RESOLUTION_SCOPES)}); "
             "without one the value read is whatever the resolver finds under "
@@ -915,6 +947,20 @@ Per-function input shapes are enforced at the model level — connectors that
 reference a function must use that function's required input shape, and `map`
 is exclusive to `lookup`.
 """
+
+
+# The sibling set the expression-shape walk permits on a `function` node in an
+# untyped site, read off the union's own members so extending a function model
+# extends the walk automatically. Why the set is a union rather than
+# per-function is RULE-CTOR-065's rationale; the note above says where the
+# typed union does and does not reach.
+_DERIVED_VALUE_FIELDS: frozenset[str] = frozenset(
+    name
+    for member in get_args(get_args(DerivedValue)[0])
+    for name in (
+        get_args(member)[0] if get_origin(member) is Annotated else member
+    ).model_fields
+)
 
 
 # --- String-valued value expressions (spec: §Value Expressions) ---

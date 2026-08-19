@@ -73,9 +73,11 @@ from analitiq.contracts.shared.types import (
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
     iter_expression_strings,
     template_placeholders,
+    validate_expression_shapes,
 )
 
 
@@ -776,6 +778,17 @@ if _union_tags(Expression) != frozenset(_EXPRESSION_KEYS):
     raise AssertionError(
         f"Expression Union members {sorted(_union_tags(Expression))!r} do not match "
         f"_EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r}")
+# The resolver's dispatch keys own this vocabulary; this module's tuple is a
+# second copy, pinned to its Expression union just above. Membership must
+# also agree with the owner, or the documents' shape walks diverge inside the
+# shared walker: it defaults to the resolver's set on a connector document
+# and takes this module's widened set on an endpoint one, so a form added to
+# one copy alone would be graded wherever that copy feeds the walk and pass
+# as structural JSON everywhere else.
+if frozenset(_EXPRESSION_KEYS) != frozenset(_RESOLVER_EXPRESSION_KEYS):
+    raise AssertionError(
+        f"endpoint _EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r} do not match "
+        f"the resolver's expression keys {sorted(_RESOLVER_EXPRESSION_KEYS)!r}")
 # `NumericExpression` is `Expression` minus exactly the unboundable form,
 # checked against the same tag list so the two cannot drift apart silently.
 # This is an equality, not a widening: adding an expression form FAILS this
@@ -2686,55 +2699,16 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
     Surfacing malformed expression dicts here gives the author a precise
     pointer to the bad fragment instead of a downstream "param not
     referenced" error from the param-binding walk that runs after.
+
+    The walk itself is the shared grammar's — `validate_expression_shapes`,
+    handed this document's key set and extension policy, each stated above.
     """
-    if isinstance(value, dict):
-        present_expr_keys = [k for k in value if k in _ALL_EXPRESSION_KEYS]
-        if present_expr_keys:
-            if len(present_expr_keys) > 1:
-                raise ValueError(
-                    f"{where}: expression dict declares multiple expression keys "
-                    f"{sorted(present_expr_keys)!r}; spec requires exactly one "
-                    "(spec: §Value Expressions)"
-                )
-            primary = present_expr_keys[0]
-            allowed_siblings = (
-                _FUNCTION_EXPRESSION_FIELDS if primary == "function" else {primary}
-            )
-            non_x_others = sorted(
-                k for k in value
-                if k not in allowed_siblings and not (
-                    isinstance(k, str) and k.startswith("x-")
-                )
-            )
-            if non_x_others:
-                raise ValueError(
-                    f"{where}: {primary!r} expression has unexpected siblings "
-                    f"{non_x_others!r}; expressions must be the documented shape "
-                    "(spec: §Value Expressions)"
-                )
-            if primary == "literal":
-                # A `literal` payload is opaque data — `resolve_value_expression`
-                # returns it verbatim, and `_collect_singleton_values`,
-                # `_collect_function_names` and `_expression_tokens` all skip it.
-                # So this walker must not RECURSE into it (a provider-shaped
-                # default carrying a field named `template`/`function`/`ref` was
-                # otherwise unauthorable with no working escape) — but it must
-                # still CHECK the dict that carries it. Skipping the dict too
-                # accepted `{"ref": "totally.bogus", "literal": 5}`: the resolver
-                # dispatches `literal` before `ref`, so the value went out as 5
-                # and the author's ref was silently inert.
-                return
-            # Recurse into the expression's argument(s). For `function`, this
-            # walks `input` (which may itself be an expression) and `map`'s
-            # values; for `template`/`ref` the inner is leaf data.
-            for v_inner in value.values():
-                _validate_expression_shapes(v_inner, f"{where}.<{primary}>")
-            return
-        for k, v_inner in value.items():
-            _validate_expression_shapes(v_inner, f"{where}.{k}")
-    elif isinstance(value, list):
-        for i, item in enumerate(value):
-            _validate_expression_shapes(item, f"{where}[{i}]")
+    validate_expression_shapes(
+        value, where,
+        expression_keys=_ALL_EXPRESSION_KEYS,
+        function_fields=_FUNCTION_EXPRESSION_FIELDS,
+        extension_siblings=True,
+    )
 
 
 def _matches_singleton(value: Any, key: str) -> bool:
