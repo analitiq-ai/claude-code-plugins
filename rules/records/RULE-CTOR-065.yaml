@@ -17,29 +17,24 @@ targets:
   - DatabaseTls
   - DsnBinding
 rationale: >
-  The endpoint document has refused this shape in its request slots since the
-  shape walk landed there (RULE-ENDP-022), and the grammar is why the shape
-  matters everywhere: resolution dispatches on the one expression key it
-  recognises, so of two markers only one can win and a stray sibling is an
-  edit with nothing to take effect on. What a malformed node costs depends on
-  which resolver reads it — the engine's transport resolver refuses the node
-  while materializing the transport, at connect time, per connection, after
-  the connector was published and validated clean; the resolution paths that
-  dispatch instead carry the winning marker to the wire and drop the author's
-  other edit without a trace. The connector document feeds both from untyped
-  sites — its transport header maps, its auth-exchange bodies, its DSN
-  bindings and driver kwargs — so no annotation grades these dicts, and both
-  failure modes escaped authoring. On a transport the blast radius is the
-  whole surface at once, because the default header map folds into every
-  transport before any of it resolves. Which fields this covers is which
-  fields a runtime resolves, the same traced set the scope rule covers.
-  Unlike the endpoint document, no `x-*` sibling is admitted: the authored
-  connector contract is closed, so there is no extension policy for one to
-  ride on. The permitted `function` siblings are the union of the argument
-  fields across the function models, mirroring the dispatch, which reads
-  them whichever function is named; per-function argument shapes are the
-  typed union's job, where a field carries it. The shape is the whole of
-  this rule — whether a well-formed function node names a function the
-  engine registers is RULE-SHRD-007, deliberately out of reach here.
+  The endpoint document refuses this shape in its request slots
+  (RULE-ENDP-022), and the grammar is why the shape matters everywhere:
+  resolution dispatches on the one expression key it recognises, so of two
+  markers only one can win and a stray sibling is an edit with nothing to
+  take effect on. This rule is what grades the expression dicts in transport
+  header maps, auth-exchange bodies, DSN bindings and driver kwargs, so the
+  finding lands at the author's validation run, naming the site, instead of
+  wherever a resolver first reads the node. The covered fields are the
+  fields a runtime resolves — the same traced set RULE-CTOR-057 covers — and
+  RULE-CTOR-057's rationale carries the transport blast-radius argument,
+  which binds here too. Unlike the endpoint document, no `x-*` sibling is
+  admitted: the authored connector contract is closed, so there is no
+  extension policy for one to ride on. The permitted `function` siblings are
+  the union of the argument fields across the function models, mirroring the
+  dispatch, which reads them whichever function is named; per-function
+  argument shapes are the typed union's job, and only where a field carries
+  that union. The shape is the whole of this rule — whether a well-formed
+  function node names a function the engine registers is RULE-SHRD-007,
+  deliberately out of reach here.
 status: active
 superseded_by: null

@@ -1,16 +1,11 @@
 """Every expression dict a connector authors is the documented shape
-(RULE-CTOR-065).
+(RULE-CTOR-065; the endpoint document's counterpart is RULE-ENDP-022).
 
-The endpoint document has refused a malformed expression dict in its request
-slots since the shape walk landed there (RULE-ENDP-022). The connector
-document feeds the *same* resolver from its transports, its auth exchange and
-its DSN bindings, and shape-checked none of it — `{"ref": "secrets.k",
-"extra": 1}` in a transport header validated clean while the identical node in
-an endpoint request map was refused. The records carry what a malformed node
-costs; what these tests pin is the sites the connector-side walk must reach,
-both directions — the documented shapes still author — and the rule's
-deliberate boundary: the shape is checked, the function NAME is not (nothing
-here can read the engine's function registry — RULE-SHRD-007).
+The records carry the rule and its why. What these tests pin is the
+connector-side walk itself: the untyped sites it must reach, both directions
+— the documented shapes still author — and the rule's deliberate boundary:
+the shape is checked, the function NAME is not (nothing here can read the
+engine's function registry — RULE-SHRD-007).
 """
 from __future__ import annotations
 
@@ -43,8 +38,8 @@ def test_a_transport_header_with_a_stray_sibling_is_refused():
 
 
 def test_a_transport_header_with_two_expression_markers_is_refused():
-    # The resolver dispatches `literal` before `ref`, so this node resolves to
-    # "x" and the author's ref is silently inert — refused as multi-key.
+    # Refused as multi-key; the walker's literal-payload comment carries why
+    # one marker would otherwise silently win.
     with pytest.raises(ValidationError) as exc:
         _http(headers={"X-K": {"ref": "secrets.k", "literal": "x"}})
     assert "exactly one" in str(exc.value)
@@ -89,7 +84,8 @@ def test_a_malformed_node_inside_a_list_is_reached():
 def test_a_function_node_with_an_undeclared_sibling_is_refused():
     # The refusal side of the sibling set: a name no function model declares
     # is refused, so deriving the set too wide fails here the way deriving it
-    # too narrow fails the acceptance test beside it.
+    # too narrow fails
+    # test_a_function_with_its_documented_argument_fields_is_accepted.
     with pytest.raises(ValidationError) as exc:
         _http(headers={"X-Region": {
             "function": "lookup",
@@ -202,10 +198,8 @@ def test_a_function_with_its_documented_argument_fields_is_accepted():
 
 
 def test_a_lookup_map_value_is_data_not_an_expression():
-    # `map` is a lookup table whose values the resolver returns verbatim —
-    # a provider-shaped output carrying expression-like keys is data, and
-    # unlike a `literal` payload it has no wrapping escape, so the walk must
-    # not grade it.
+    # A provider-shaped lookup output is data the walk must not grade;
+    # `validate_expression_shapes` draws this boundary and carries why.
     transport = _http(headers={"X-Region": {
         "function": "lookup",
         "input": {"ref": "connection.parameters.region"},
@@ -215,9 +209,9 @@ def test_a_lookup_map_value_is_data_not_an_expression():
 
 
 def test_a_node_both_malformed_and_unscoped_is_diagnosed_by_shape():
-    # Definition order on the mixin is the only thing sequencing the two
-    # validators; this pins it, so a reorder cannot silently flip the
-    # diagnosis to the scope rule's.
+    # Definition order on the mixin is the only thing putting the shape
+    # check before the scope check; this pins it, so a reorder cannot
+    # silently flip the diagnosis to the scope rule's.
     with pytest.raises(ValidationError) as exc:
         _http(headers={"X-K": {"ref": "garbage_nonsense", "rogue": 1}})
     message = str(exc.value)

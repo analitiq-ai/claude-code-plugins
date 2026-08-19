@@ -70,11 +70,9 @@ def _dumped(node: Any) -> Any:
 class ValueExpressionScopes:
     """A block carrying value expressions a runtime resolves.
 
-    Enforces RULE-CTOR-057 (every ref/placeholder names a resolution scope)
-    and RULE-CTOR-065 (every expression dict is the documented shape) wherever
-    they apply. Mixed in rather than repeated, for the reason
-    `HeaderMergeRules` is: each check is one check, and a model gains them by
-    inheriting.
+    Enforces RULE-CTOR-057 and RULE-CTOR-065 wherever they apply. Mixed in
+    rather than repeated, for the reason `HeaderMergeRules` is: each check is
+    one check, and a model gains them by inheriting.
 
     Each model names its own fields, because which of them a runtime resolves
     is not visible from the annotation. `rate_limit.time_window_seconds` is
@@ -128,10 +126,9 @@ def _reject_malformed(node: Any, where: str) -> None:
     """Refuse a value expression that is not the documented shape.
 
     The shared walker (`validate_expression_shapes`) carries the rule; this
-    binds it to the connector document's grammar. The expression keys are the
-    resolver's own, and no `x-*` sibling is admitted because the authored
-    connector contract is closed — there is no extension policy for one to
-    ride on. `where` names the field — or, for a map, the key — for the same
+    binds it to the connector document's grammar — the resolver's own
+    expression keys, no `x-*` siblings. RULE-CTOR-065's rationale carries
+    why. `where` names the field — or, for a map, the key — for the same
     reason `_reject_unqualified`'s does.
     """
     try:
@@ -954,9 +951,9 @@ is exclusive to `lookup`.
 
 # The sibling set the expression-shape walk permits on a `function` node in an
 # untyped site, read off the union's own members so extending a function model
-# extends the walk automatically. A union: per-function argument shapes are the
-# typed union's job, and only where a field carries it — see the note above on
-# where that union does and does not reach.
+# extends the walk automatically. Why the set is a union rather than
+# per-function is RULE-CTOR-065's rationale; the note above says where the
+# typed union does and does not reach.
 _DERIVED_VALUE_FIELDS: frozenset[str] = frozenset(
     name
     for member in get_args(get_args(DerivedValue)[0])

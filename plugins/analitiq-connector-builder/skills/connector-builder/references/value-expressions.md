@@ -1,6 +1,6 @@
 # Value expressions
 
-Shared invariant both creator agents must follow. The scopes and expression
+Shared invariant every creator agent must follow. The scopes and expression
 shapes below are owned by `analitiq.contracts.value_expression` and the
 function forms by `analitiq.contracts.connector`; this page is the authoring
 guide to them.

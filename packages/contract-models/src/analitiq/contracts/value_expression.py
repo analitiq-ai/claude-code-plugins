@@ -115,13 +115,13 @@ def validate_expression_shapes(
     connector document.
 
     One grammar, shared by every document that feeds the resolver — hence the
-    parameters. ``expression_keys`` defaults to this module's value-expression
-    forms; the endpoint document widens it with its binding forms.
-    ``function_fields`` is the caller's permitted sibling set for a
-    ``function`` node, read off its own function models so extending a model
-    only touches one place. ``extension_siblings`` tolerates ``x-*`` siblings
-    where the document's extension policy admits them (the endpoint document);
-    the authored connector contract is closed, so its sites leave the default.
+    parameters, each stating a policy its caller owns. ``expression_keys``
+    defaults to this module's value-expression forms; a caller with more
+    forms widens it. ``function_fields`` is the caller's permitted sibling
+    set for a ``function`` node, read off its own function models so
+    extending a model only touches one place. ``extension_siblings``
+    tolerates ``x-*`` siblings where the calling document's extension policy
+    admits them.
     """
     keys = _EXPRESSION_KEYS_SET if expression_keys is None else expression_keys
 

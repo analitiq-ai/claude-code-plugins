@@ -778,13 +778,13 @@ if _union_tags(Expression) != frozenset(_EXPRESSION_KEYS):
     raise AssertionError(
         f"Expression Union members {sorted(_union_tags(Expression))!r} do not match "
         f"_EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r}")
-# The resolver's dispatch keys own this vocabulary; this module keeps its own
-# copy only because the union discriminator needs its own precedence order.
-# Membership must agree, or the two documents' shape walks diverge inside the
-# shared walker: it defaults to the resolver's set on a connector document and
-# takes this module's widened set on an endpoint one, so a form added to one
-# copy alone would be graded on one document and walked as structural JSON on
-# the other.
+# The resolver's dispatch keys own this vocabulary; this module's tuple is a
+# second copy, pinned to its Expression union just above. Membership must
+# also agree with the owner, or the documents' shape walks diverge inside the
+# shared walker: it defaults to the resolver's set on a connector document
+# and takes this module's widened set on an endpoint one, so a form added to
+# one copy alone would be graded wherever that copy feeds the walk and pass
+# as structural JSON everywhere else.
 if frozenset(_EXPRESSION_KEYS) != frozenset(_RESOLVER_EXPRESSION_KEYS):
     raise AssertionError(
         f"endpoint _EXPRESSION_KEYS {sorted(_EXPRESSION_KEYS)!r} do not match "
@@ -2700,10 +2700,8 @@ def _validate_expression_shapes(value: Any, where: str) -> None:
     pointer to the bad fragment instead of a downstream "param not
     referenced" error from the param-binding walk that runs after.
 
-    The walk itself is the shared grammar's (`validate_expression_shapes`),
-    so the connector document refuses the same malformed node the same way;
-    this document widens the expression keys with its binding forms and
-    admits ``x-*`` per its extension policy.
+    The walk itself is the shared grammar's — `validate_expression_shapes`,
+    handed this document's key set and extension policy, each stated above.
     """
     validate_expression_shapes(
         value, where,
