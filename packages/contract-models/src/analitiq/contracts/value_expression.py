@@ -572,6 +572,49 @@ def select_transport(connector: dict, template: dict) -> dict | None:
     return transports.get(ref) if ref else None
 
 
+def authored_url_text(node: Any) -> str | None:
+    """The URL text an author wrote, for the expression forms that carry any.
+
+    A bare string and a `{literal}` are the whole URL verbatim; a `{template}`
+    is the URL with its placeholders still in it, so its literal parts — the
+    scheme and whatever of the authority no placeholder stands in — are the
+    author's own text. A `{ref}` and a function node carry no URL at all: the
+    string arrives at resolution, and they read back as None.
+
+    One reader for the forms, so a form the grammar gains is taught here
+    rather than to each caller. Its callers want the text for unrelated
+    reasons — `resolve_transport_base_url` joins it with an operation path,
+    and the connector model reads the authority out of it to refuse
+    credentials — and a second copy of "a `{template}`'s text lives under
+    `template`" is a copy that stops agreeing the day a form is added. The
+    node is named rather than the field holding it, for the same reason: a
+    diagnostic naming one caller's field misnames every other caller's.
+    """
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return None
+    if "template" in node:
+        template = node["template"]
+        if not isinstance(template, str):
+            # A `{template}` node whose value isn't a string is malformed —
+            # surface a clean error rather than the raw TypeError a caller's
+            # own string handling would raise on it.
+            raise ValueError(
+                f"value-expression has a non-string template: {node!r}"
+            )
+        return template
+    if "literal" in node:
+        # A literal is context-free — readable without a resolution context,
+        # so a `{"literal": "https://…"}` base_url works in oauth-start too.
+        # It must still be a non-empty URL string.
+        literal = node["literal"]
+        if not isinstance(literal, str) or not literal:
+            raise ValueError(f"literal must be a non-empty string: {node!r}")
+        return literal
+    return None
+
+
 def resolve_transport_base_url(
     transport: dict | None, context: dict[str, Any] | None = None
 ) -> str:
@@ -602,26 +645,9 @@ def resolve_transport_base_url(
     base = (transport or {}).get("base_url")
     if not isinstance(base, dict):
         return base or ""
-    template = base.get("template")
-    if isinstance(template, str):
-        return template
-    if "template" in base:
-        # A `{template}` node whose value isn't a string is malformed — surface
-        # a clean error rather than the raw TypeError `resolve_template_string`
-        # would raise on a non-string.
-        raise ValueError(
-            f"base_url value-expression has a non-string template: {base!r}"
-        )
-    if "literal" in base:
-        # A literal is context-free — resolve it without requiring a context, so
-        # a `{"literal": "https://…"}` base_url works in oauth-start too. It must
-        # still be a non-empty URL string.
-        literal = base["literal"]
-        if not isinstance(literal, str) or not literal:
-            raise ValueError(
-                f"base_url literal must be a non-empty string: {base!r}"
-            )
-        return literal
+    authored = authored_url_text(base)
+    if authored is not None:
+        return authored
     if context is None:
         raise ValueError(
             f"base_url value-expression {base!r} requires a resolution context"
@@ -670,11 +696,20 @@ DEFAULT_AUTH_CONTENT_TYPE = "application/x-www-form-urlencoded"
 def apply_operation_content_type(headers: dict[str, str], operation: dict) -> str:
     """Stamp the operation's media type onto a built header map, and return it.
 
-    The operation declares it in `content_type` and a header map cannot
-    (RULE-HTTP-003), so there is nothing here to merge or override: the map is
-    stamped, and the same value comes back for the body encoder to key on.
+    The operation declares it in `content_type`, and a header map a connector
+    authors cannot (RULE-HTTP-003), so there is no precedence to apply: the
+    declared value wins over nothing and the same value comes back for the
+    body encoder to key on.
+
+    This map is assembled at dispatch rather than read off a document, so the
+    contract's refusal does not reach it and any casing of the name is dropped
+    before the stamp. Header names are case-insensitive on the wire but dict
+    keys are not, so leaving one behind puts the header on the request twice
+    and the provider reads whichever it sees first.
     """
     content_type = operation.get("content_type") or DEFAULT_AUTH_CONTENT_TYPE
+    for key in [k for k in headers if k.lower() == "content-type"]:
+        del headers[key]
     headers["Content-Type"] = content_type
     return content_type
 

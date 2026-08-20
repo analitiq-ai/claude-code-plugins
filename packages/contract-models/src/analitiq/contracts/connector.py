@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import re
 from enum import Enum
-from urllib.parse import urlsplit
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from pydantic import (
@@ -55,6 +54,7 @@ from analitiq.contracts.shared.types import StrictPositiveInt
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    authored_url_text,
     unqualified_tokens,
     validate_expression_shapes,
 )
@@ -1066,22 +1066,26 @@ class TransportRateLimit(StrictModel):
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
-def _authored_url_text(value: Any) -> str | None:
-    """The URL text an author wrote, for the forms that carry any.
+def _url_authority(text: str) -> str:
+    """The authority of a URL, sliced rather than parsed.
 
-    A bare string and a `{literal}` are the whole URL verbatim; a `{template}`
-    is the URL with placeholders left in it, and its authority is still the
-    author's own text wherever no placeholder stands in that part. A `{ref}`
-    and a function node carry no URL at all — the string arrives at
-    resolution — so they read back as None and the checks over this skip them.
+    Sliced because a rule over the authority must hold for a string the
+    parser rejects exactly as it holds for one the parser accepts.
+    `urlsplit` raises on a bad IPv6 literal, and a caller that treated the
+    raise as "nothing to read here" would pass the very userinfo it is
+    looking for. Slicing has no such state: the authority runs from `//` to
+    whichever of `/`, `?` or `#` ends it, and a string carrying no `//`
+    declares no authority at all.
+
+    Whether what comes back is a well-formed authority is nobody's question
+    here — the engine settles that at connect, against the resolved URL.
     """
-    if isinstance(value, str):
-        return value
-    if isinstance(value, TemplateExpression):
-        return value.template
-    if isinstance(value, LiteralStringExpression):
-        return value.literal
-    return None
+    _, separator, rest = text.partition("//")
+    if not separator:
+        return ""
+    for delimiter in "/?#":
+        rest = rest.split(delimiter, 1)[0]
+    return rest
 
 
 class HttpTransport(
@@ -1130,19 +1134,17 @@ class HttpTransport(
 
     @model_validator(mode="after")
     def _base_url_declares_no_credentials(self):
-        """RULE-CTOR-066 over the authored forms of `base_url`."""
-        text = _authored_url_text(self.base_url)
+        """RULE-CTOR-066 over the authored forms of `base_url`.
+
+        `@` decides it: the authority admits userinfo only ahead of one, and
+        a host or port carrying it unencoded is not an authority at all.
+        """
+        text = authored_url_text(_dumped(self.base_url))
         if text is None:
             return self
-        try:
-            parsed = urlsplit(text)
-        except ValueError:
-            # Not a parseable URL, so it has no authority to read. Whether a
-            # base URL is well-formed at all is the engine's at connect, and
-            # guessing here would report this rule for a different defect.
-            return self
-        if parsed.username or parsed.password:
-            raise violation("RULE-CTOR-066", f"base_url authority {parsed.netloc!r}")
+        authority = _url_authority(text)
+        if "@" in authority:
+            raise violation("RULE-CTOR-066", f"base_url authority {authority!r}")
         return self
 
 

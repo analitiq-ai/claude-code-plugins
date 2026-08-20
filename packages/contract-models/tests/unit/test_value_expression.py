@@ -19,6 +19,7 @@ from analitiq.contracts.value_expression import (
     OAUTH_TOKEN_PAYLOAD_KEY,
     DEFAULT_AUTH_CONTENT_TYPE,
     apply_operation_content_type,
+    authored_url_text,
     build_resolution_context,
     resolve_body_template,
     resolve_operation_url,
@@ -565,9 +566,11 @@ class TestBuildResolutionContext:
 class TestApplyOperationContentType:
     """The operation's declared `content_type`, else the form default.
 
-    There is no third source to rank against these two: RULE-HTTP-003 refuses
-    the header name in every map a connector can declare, so a built header
-    map reaches this function with nothing under `Content-Type` to inherit.
+    No third source ranks against those: RULE-HTTP-003 refuses the header name
+    in every map a connector can declare, so nothing an author wrote reaches
+    this function under `Content-Type` to be inherited. The map itself is
+    still assembled at dispatch, which is why a key arriving under some other
+    casing is dropped rather than trusted to be absent.
     """
 
     def test_the_declared_media_type_is_what_is_stamped_and_returned(self):
@@ -584,13 +587,37 @@ class TestApplyOperationContentType:
         assert headers["Content-Type"] == DEFAULT_AUTH_CONTENT_TYPE
 
     def test_a_declared_media_type_replaces_a_stamp_from_an_earlier_call(self):
-        # The map is built per dispatch, so this is the only way a
-        # `Content-Type` can already be in one when the function runs.
         headers = {}
         apply_operation_content_type(headers, {})
         ct = apply_operation_content_type(headers, {"content_type": "application/json"})
         assert ct == "application/json"
         assert headers["Content-Type"] == "application/json"
+
+    @pytest.mark.parametrize("spelling", ["content-type", "CONTENT-TYPE", "Content-type"])
+    def test_a_key_under_another_casing_is_dropped_not_left_beside_the_stamp(
+        self, spelling
+    ):
+        # Header names are case-insensitive on the wire and dict keys are not,
+        # so a survivor puts the header on the request twice and the provider
+        # reads whichever it sees first. The contract refuses the name in every
+        # map an author writes; this map is assembled at dispatch, so the
+        # refusal does not reach it.
+        headers = {spelling: "text/plain", "Accept": "application/json"}
+        apply_operation_content_type(headers, {"content_type": "application/json"})
+        assert [k for k in headers if k.lower() == "content-type"] == ["Content-Type"]
+        assert headers["Content-Type"] == "application/json"
+        assert headers["Accept"] == "application/json"
+
+    def test_the_authored_forms_of_a_url_have_one_reader(self):
+        # `resolve_transport_base_url` and the connector model's credentials
+        # rule both need the text an author wrote; a second copy of which key
+        # each form keeps it under stops agreeing the day a form is added.
+        assert authored_url_text("https://h/v1") == "https://h/v1"
+        assert authored_url_text({"template": "https://${x}/v1"}) == "https://${x}/v1"
+        assert authored_url_text({"literal": "https://h"}) == "https://h"
+        assert authored_url_text({"ref": "connection.discovered.api_url"}) is None
+        assert authored_url_text({"function": "lookup", "input": {}}) is None
+        assert authored_url_text(None) is None
 
 
 class TestResolveBodyTemplate:

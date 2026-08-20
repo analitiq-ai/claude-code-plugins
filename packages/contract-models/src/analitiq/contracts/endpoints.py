@@ -1089,14 +1089,15 @@ class GetReadRequest(_RequestBase):
     method: Literal["GET"] = Field(..., description="Read HTTP method.")
 
 
-class PostReadRequest(_RequestBase):
-    """Provider request for a POST-method API read operation (query-in-body reads)."""
+class _BodyBearingRequest(_RequestBase):
+    """A request branch that declares a body, and so a media type for it.
 
-    method: Literal["POST"] = Field(..., description="Read HTTP method.")
-    body: Any | None = Field(
-        default=None,
-        description="Request body. May mix literals with `{from_param}`.",
-    )
+    `content_type` sits here rather than on `_RequestBase` because a branch
+    with no `body` field has no body to describe: the GET read is that branch,
+    and the same construction that keeps a body off it keeps the media type
+    off it too.
+    """
+
     content_type: str | None = Field(
         default=None,
         description=(
@@ -1106,6 +1107,16 @@ class PostReadRequest(_RequestBase):
             "Omitted, the engine sends JSON. The header map is not a second "
             "way to say this (RULE-HTTP-003)."
         ),
+    )
+
+
+class PostReadRequest(_BodyBearingRequest):
+    """Provider request for a POST-method API read operation (query-in-body reads)."""
+
+    method: Literal["POST"] = Field(..., description="Read HTTP method.")
+    body: Any | None = Field(
+        default=None,
+        description="Request body. May mix literals with `{from_param}`.",
     )
 
 
@@ -1119,7 +1130,7 @@ ReadRequest = Annotated[
 ]
 
 
-class WriteRequest(_RequestBase):
+class WriteRequest(_BodyBearingRequest):
     """Provider request for an API write mode."""
 
     method: Literal["POST", "PUT", "PATCH"] = Field(
@@ -1152,16 +1163,6 @@ class WriteRequest(_RequestBase):
     body: Any | None = Field(
         default=None,
         description="Request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
-    )
-    content_type: str | None = Field(
-        default=None,
-        description=(
-            "Media type of `body`, sent as the request's `Content-Type` and "
-            "selecting how the body is encoded — the field to declare when a "
-            "provider takes a form-encoded or otherwise non-JSON body. "
-            "Omitted, the engine sends JSON. The header map is not a second "
-            "way to say this (RULE-HTTP-003)."
-        ),
     )
 
 

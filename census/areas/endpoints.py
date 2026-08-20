@@ -272,10 +272,20 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         rule_ids=("RULE-ENDP-022",),
     ),
     ProseObligation(
-        model="PostReadRequest", field="content_type",
+        model="_BodyBearingRequest", field="content_type",
         prose_hash="a2a16d61a1d1",
         rule_ids=("RULE-HTTP-003",),
         waiver=ENGINE_OWNED_DEFAULTING,
+    ),
+    ProseObligation(
+        model="_BodyBearingRequest",
+        prose_hash="d96843e0b1e0",
+        structural=(
+            "the branch is the mechanism: `content_type` is declared on the "
+            "base the body-bearing request branches share, so the GET read — "
+            "which does not inherit it — refuses the key through extra='forbid' "
+            "exactly as it refuses `body`"
+        ),
     ),
     ProseObligation(model="PostReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
     ProseObligation(model="ReadOperation", prose_hash="ec0e00d340de", descriptive=True),
@@ -311,12 +321,6 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="WriteRequest", field="body",
         prose_hash="6dce4339b994",
         rule_ids=("RULE-ENDP-017", "RULE-ENDP-022"),
-    ),
-    ProseObligation(
-        model="WriteRequest", field="content_type",
-        prose_hash="a2a16d61a1d1",
-        rule_ids=("RULE-HTTP-003",),
-        waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(
         model="WriteRequest", field="method",
