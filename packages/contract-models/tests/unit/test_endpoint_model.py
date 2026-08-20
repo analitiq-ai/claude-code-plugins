@@ -1071,6 +1071,23 @@ class TestWriteIdempotency:
         with pytest.raises(ValidationError, match="also declared\\s+in request.headers"):
             parse_endpoint(self._payload({"insert": op}))
 
+    @pytest.mark.parametrize(
+        "spelling", ["Idempotency-Key", "idempotency-key", " Idempotency-Key",
+                     "Idempotency-Key "],
+    )
+    def test_header_idempotency_collision_is_found_however_it_is_spelled(
+        self, spelling
+    ):
+        # The engine owns the key's value, so the same wire header carrying an
+        # authored one is the contradiction — whichever way either side spells
+        # it.
+        op = self._write_op(idempotency={"in": "header", "name": "Idempotency-Key"})
+        op["request"]["headers"][spelling] = {"from_param": "key"}
+        op["params"] = {"key": {"in": "header", "type": "string", "required": True,
+                                "default": {"ref": "connection.selections.k"}}}
+        with pytest.raises(ValidationError, match="also declared"):
+            parse_endpoint(self._payload({"insert": op}))
+
     def test_header_idempotency_with_unrelated_headers_accepted(self):
         # The helper already declares a header; only a same-name one is
         # a collision.

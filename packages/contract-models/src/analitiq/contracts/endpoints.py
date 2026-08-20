@@ -75,6 +75,7 @@ from analitiq.contracts.shared.types import (
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    header_name_key,
     _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
     iter_expression_strings,
@@ -2224,8 +2225,10 @@ class WriteOperation(_EndpointModel):
                     "(spec: §Write Modes)"
                 )
             if self.idempotency.location == "header":
-                declared = {h.lower() for h in (self.request.headers or {})}
-                if self.idempotency.name.lower() in declared:
+                declared = {
+                    header_name_key(h) for h in (self.request.headers or {})
+                }
+                if header_name_key(self.idempotency.name) in declared:
                     raise ValueError(
                         f"idempotency header {self.idempotency.name!r} is also declared "
                         "in request.headers — the key value is engine-owned, so the "
