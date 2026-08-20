@@ -1,7 +1,8 @@
 id: RULE-HTTP-003
 statement: >
-  A block that names an HTTP header MUST NOT name `Content-Type`, matched
-  case-insensitively; a request body's media type is declared by the request's
+  A block that names an HTTP header MUST NOT name `Content-Type`, matched as a
+  reader of the wire sees a header name — case-folded, and with the space
+  around it ignored; a request body's media type is declared by the request's
   own `content_type` field.
 tier: structural
 severity: error

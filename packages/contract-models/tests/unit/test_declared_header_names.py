@@ -49,16 +49,22 @@ REFUSED = [
 ]
 
 
+def _spellings(canonical: str, lowercased: str) -> tuple[str, ...]:
+    """Every way of writing one header name that a wire reader cannot tell apart.
+
+    The padded ones matter as much as the cased ones: letting the spelling
+    decide whether a rule applies is the whole of the bypass.
+    """
+    return (canonical, lowercased, canonical.upper(),
+            f" {canonical}", f"{canonical} ", f"\t{lowercased}")
+
+
 @pytest.mark.parametrize("label, model, kwargs", HEADER_MAP_BLOCKS)
 @pytest.mark.parametrize("rule_id, canonical, lowercased", REFUSED)
 def test_every_header_map_refuses_the_name(
     label, model, kwargs, rule_id, canonical, lowercased
 ):
-    # The padded spellings matter as much as the cased ones: a wire reader
-    # sees the same header, so letting the spelling decide whether the rule
-    # applies is the whole of the bypass.
-    for spelling in (canonical, lowercased, canonical.upper(),
-                     f" {canonical}", f"{canonical} ", f"\t{lowercased}"):
+    for spelling in _spellings(canonical, lowercased):
         with pytest.raises(ValidationError) as exc:
             model(**kwargs, headers={spelling: "x"})
         assert rule_id in str(exc.value), f"{label}: {spelling} not refused by {rule_id}"
@@ -84,7 +90,9 @@ def test_the_finding_names_the_header_the_author_wrote(rule_id, canonical, _lowe
 
 @pytest.mark.parametrize("rule_id, canonical, lowercased", REFUSED)
 def test_an_idempotency_key_is_a_header_name_too(rule_id, canonical, lowercased):
-    for spelling in (canonical, lowercased):
+    # The same matrix the header maps take: this name reaches the wire the
+    # same way, so a spelling that slips here slips everywhere.
+    for spelling in _spellings(canonical, lowercased):
         with pytest.raises(ValidationError) as exc:
             Idempotency.model_validate({"in": "header", "name": spelling})
         assert rule_id in str(exc.value)
@@ -97,6 +105,24 @@ def test_a_body_field_of_that_name_is_not_a_header(rule_id, canonical, _lowercas
     # and the rules have nothing to say.
     block = Idempotency.model_validate({"in": "body", "name": canonical})
     assert block.name == canonical
+
+
+@pytest.mark.parametrize(
+    "label, headers, removals",
+    [
+        ("padded on the declaring side", {" Accept": "a"}, ["Accept"]),
+        ("padded on the removing side", {"Accept": "a"}, [" Accept"]),
+        ("cased only", {"Accept": "a"}, ["accept"]),
+    ],
+)
+def test_declaring_and_removing_one_header_is_refused_however_it_is_spelled(
+    label, headers, removals
+):
+    # RULE-HTTP-001 reads a name the same way the refusal rules do — one
+    # normaliser, so a spelling refused at one site cannot pass at the next.
+    with pytest.raises(ValidationError) as exc:
+        HttpTransport(transport_type="http", headers=headers, headers_remove=removals)
+    assert "RULE-HTTP-001" in str(exc.value), label
 
 
 def test_every_block_naming_headers_carries_the_checks():
@@ -157,6 +183,14 @@ def test_a_bodiless_read_declares_no_media_type():
         "application/x-www-form-urlencoded",
         "multipart/form-data",
         "text/csv; charset=utf-8",
+        "text/csv;charset=utf-8",
+        # Case is not normalised away: a provider that documents its media
+        # type in capitals is quoted as it documents it.
+        "APPLICATION/JSON",
+        # The whole RFC 9110 token set, so a narrowing of the character class
+        # fails here rather than at a provider that documents an unusual one.
+        "application/x-my_thing.v2+json",
+        "x-t!#$%&'*+^_`|~-oken/x-t!#$%&'*+^_`|~-oken",
     ],
 )
 def test_any_media_type_is_declarable(media_type):
@@ -176,6 +210,13 @@ def test_any_media_type_is_declarable(media_type):
         ("prose", "not a media type"),
         ("the header line rather than its value", "Content-Type: application/json"),
         ("type with no subtype", "application"),
+        ("subtype with no type", "/json"),
+        ("a third part", "application/json/extra"),
+        # A published pattern is read by JSON-Schema consumers too, so the
+        # injection shapes are pinned here rather than trusted to the engine.
+        ("a header injected after a newline", "application/json\nX-Evil: 1"),
+        ("the same with CRLF", "application/json\r\nX-Evil: 1"),
+        ("a trailing newline", "application/json\n"),
     ],
 )
 def test_a_value_that_is_not_a_media_type_is_refused(label, value):

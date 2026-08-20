@@ -1,7 +1,8 @@
 id: RULE-HTTP-002
 statement: >
-  A block that names an HTTP header MUST NOT name `Content-Length`, matched
-  case-insensitively.
+  A block that names an HTTP header MUST NOT name `Content-Length`, matched as a
+  reader of the wire sees a header name — case-folded, and with the space
+  around it ignored.
 tier: structural
 severity: error
 scopes: [any]

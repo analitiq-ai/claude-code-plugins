@@ -551,6 +551,23 @@ def resolve_header_value(name: str, value: Any, context: dict[str, Any]) -> str 
     return str(resolved)
 
 
+def header_name_key(name: str) -> str:
+    """A header name reduced to what a reader of the wire compares.
+
+    Case-folded, because header names are case-insensitive on the wire, and
+    stripped, because the space around a name is not part of it: ` Accept` is
+    that header written carelessly, not a different one.
+
+    Every comparison of two header names goes through here — the rules that
+    refuse a name, the merge rule that refuses declaring and removing one, and
+    the dispatch-time sweep that keeps a map from carrying the same header
+    twice. They disagreed once, in the direction that matters: one normalised
+    the padding away and the others did not, so a padded name was refused at
+    one site and waved through at the next.
+    """
+    return name.strip().lower()
+
+
 def is_json_content_type(content_type: str | None) -> bool:
     """True when a Content-Type selects JSON body encoding.
 
@@ -728,7 +745,7 @@ def apply_operation_content_type(headers: dict[str, str], operation: dict) -> st
     # reading it as "declared nothing" would send a body under the default the
     # author was overriding.
     content_type = DEFAULT_AUTH_CONTENT_TYPE if declared is None else declared
-    for key in [k for k in headers if k.lower() == "content-type"]:
+    for key in [k for k in headers if header_name_key(k) == "content-type"]:
         del headers[key]
     headers["Content-Type"] = content_type
     return content_type

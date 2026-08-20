@@ -28,6 +28,8 @@ from typing import Any, Callable
 
 from pydantic import model_validator
 
+from analitiq.contracts.value_expression import header_name_key
+
 from .rule_record import RuleRecord, load_records
 
 
@@ -102,9 +104,12 @@ class HeaderMergeRules:
         headers, removals = self.headers, self.headers_remove
         if not headers or not removals:
             return self
-        # Header names are case-insensitive on the wire, so `Accept` in one list
-        # and `accept` in the other is the same contradiction.
-        overlap = sorted({h.lower() for h in headers} & {h.lower() for h in removals})
+        # `Accept` in one list and `accept` — or ` Accept` — in the other is
+        # the same contradiction, so both sides reduce to what the wire reads.
+        overlap = sorted(
+            {header_name_key(h) for h in headers}
+            & {header_name_key(h) for h in removals}
+        )
         if overlap:
             raise violation("RULE-HTTP-001", f"overlap={overlap!r}")
         return self
@@ -130,13 +135,12 @@ class DeclaredHeaderNames:
     def _matches(name: str, refused: str) -> bool:
         """Whether an authored name is `refused`, as a wire reader sees it.
 
-        Case-folded because header names are case-insensitive on the wire, and
-        stripped because the surrounding space is not part of the name a
-        reader sees: ` Content-Type` is that header written carelessly, and
-        matching it literally would let the spelling decide whether a rule
-        applies.
+        Reduced through `header_name_key`, so matching a name here and
+        matching one anywhere else in the contract mean the same thing;
+        letting the spelling decide whether a rule applies is what that
+        function exists to prevent.
         """
-        return name.strip().lower() == refused
+        return header_name_key(name) == refused
 
     def declared_header_names(self) -> list[tuple[str, str]]:
         """Each header name this block names, paired with where it named it.

@@ -20,6 +20,7 @@ from analitiq.contracts.value_expression import (
     DEFAULT_AUTH_CONTENT_TYPE,
     apply_operation_content_type,
     authored_url_text,
+    header_name_key,
     build_resolution_context,
     resolve_body_template,
     resolve_operation_url,
@@ -601,7 +602,10 @@ class TestApplyOperationContentType:
         assert ct == "application/json"
         assert headers["Content-Type"] == "application/json"
 
-    @pytest.mark.parametrize("spelling", ["content-type", "CONTENT-TYPE", "Content-type"])
+    @pytest.mark.parametrize(
+        "spelling",
+        ["content-type", "CONTENT-TYPE", "Content-type", " Content-Type", "Content-Type "],
+    )
     def test_a_key_under_another_casing_is_dropped_not_left_beside_the_stamp(
         self, spelling
     ):
@@ -612,7 +616,12 @@ class TestApplyOperationContentType:
         # refusal does not reach it.
         headers = {spelling: "text/plain", "Accept": "application/json"}
         apply_operation_content_type(headers, {"content_type": "application/json"})
-        assert [k for k in headers if k.lower() == "content-type"] == ["Content-Type"]
+        # Compared through the shared normaliser, not `.lower()`: an assertion
+        # that reads a name the way the bug does cannot see the bug — a padded
+        # survivor is invisible to a bare `.lower()` on both sides.
+        assert [
+            k for k in headers if header_name_key(k) == "content-type"
+        ] == ["Content-Type"]
         assert headers["Content-Type"] == "application/json"
         assert headers["Accept"] == "application/json"
 

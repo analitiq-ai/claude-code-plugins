@@ -214,7 +214,9 @@ class ParseOnly:
 #: no contract here owns. What it refuses is a value that is not a media type
 #: at all, the empty string among them: absent and "declared as nothing" are
 #: the same request to a reader and different values to a resolver.
-MEDIA_TYPE_PATTERN = r"^[A-Za-z0-9!#$%&\'*+.^_`|~-]+/[A-Za-z0-9!#$%&\'*+.^_`|~-]+ *(;.*)?$"
+MEDIA_TYPE_PATTERN = (
+    r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+ *(;.*)?$"
+)
 
 MediaType = Annotated[str, StringConstraints(pattern=MEDIA_TYPE_PATTERN)]
 

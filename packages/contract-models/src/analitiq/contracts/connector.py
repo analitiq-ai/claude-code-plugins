@@ -1142,8 +1142,11 @@ class HttpTransport(
     def _base_url_declares_no_credentials(self):
         """RULE-CTOR-066 over the authored forms of `base_url`.
 
-        `@` decides it: the authority admits userinfo only ahead of one, and
-        a host or port carrying it unencoded is not an authority at all.
+        `@` is decisive by the URL grammar rather than by choice: userinfo
+        is the only thing an authority admits ahead of an `@`, and a host may
+        not carry one unencoded, so an `@` in the authority is userinfo and
+        nothing else. Which is why the test is a membership check and not a
+        parse.
         """
         text = authored_url_text(_dumped(self.base_url))
         if text is None:
