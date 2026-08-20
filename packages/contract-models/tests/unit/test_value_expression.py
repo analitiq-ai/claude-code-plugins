@@ -17,7 +17,11 @@ import base64
 import pytest
 from analitiq.contracts.value_expression import (
     OAUTH_TOKEN_PAYLOAD_KEY,
+    DEFAULT_AUTH_CONTENT_TYPE,
     apply_operation_content_type,
+    authored_url_text,
+    build_effective_headers,
+    header_name_key,
     build_resolution_context,
     resolve_body_template,
     resolve_operation_url,
@@ -562,24 +566,132 @@ class TestBuildResolutionContext:
 
 
 class TestApplyOperationContentType:
-    """Operation-level `content_type` shortcut > inherited header > form default."""
+    """The operation's declared `content_type`, else the form default.
 
-    def test_operation_shortcut_overrides_inherited_case_insensitively(self):
-        headers = {"content-type": "text/plain", "Accept": "application/json"}
+    No third source ranks against those: RULE-HTTP-003 refuses the header name
+    in every map a connector can declare, so nothing an author wrote reaches
+    this function under `Content-Type` to be inherited. The map itself is
+    still assembled at dispatch, which is why a key arriving under some other
+    casing is dropped rather than trusted to be absent.
+    """
+
+    def test_the_declared_media_type_is_what_is_stamped_and_returned(self):
+        headers = {"Accept": "application/json"}
         ct = apply_operation_content_type(headers, {"content_type": "application/json"})
         assert ct == "application/json"
         assert headers["Content-Type"] == "application/json"
-        assert "content-type" not in headers
+        assert headers["Accept"] == "application/json"
 
-    def test_inherited_header_wins_when_no_shortcut(self):
-        headers = {"Content-Type": "application/json"}
-        assert apply_operation_content_type(headers, {}) == "application/json"
+    def test_a_declared_empty_media_type_is_not_read_as_undeclared(self):
+        # The contract refuses an empty `content_type`, so one arriving here
+        # came from a dict nothing graded. Reading it as "declared nothing"
+        # would encode the body under the default the author was overriding.
+        headers = {}
+        assert apply_operation_content_type(headers, {"content_type": ""}) == ""
+        assert headers["Content-Type"] == ""
 
-    def test_form_default_when_nothing_sets_it(self):
+    def test_form_default_when_the_operation_declares_none(self):
         headers = {}
         ct = apply_operation_content_type(headers, {})
-        assert ct == "application/x-www-form-urlencoded"
-        assert headers["Content-Type"] == "application/x-www-form-urlencoded"
+        assert ct == DEFAULT_AUTH_CONTENT_TYPE
+        assert headers["Content-Type"] == DEFAULT_AUTH_CONTENT_TYPE
+
+    def test_a_declared_media_type_replaces_a_stamp_from_an_earlier_call(self):
+        headers = {}
+        apply_operation_content_type(headers, {})
+        ct = apply_operation_content_type(headers, {"content_type": "application/json"})
+        assert ct == "application/json"
+        assert headers["Content-Type"] == "application/json"
+
+    @pytest.mark.parametrize(
+        "spelling",
+        ["content-type", "CONTENT-TYPE", "Content-type", " Content-Type", "Content-Type "],
+    )
+    def test_a_key_under_another_casing_is_dropped_not_left_beside_the_stamp(
+        self, spelling
+    ):
+        # Header names are case-insensitive on the wire and dict keys are not,
+        # so a survivor puts the header on the request twice and the provider
+        # reads whichever it sees first. The contract refuses the name in every
+        # map an author writes; this map is assembled at dispatch, so the
+        # refusal does not reach it.
+        headers = {spelling: "text/plain", "Accept": "application/json"}
+        apply_operation_content_type(headers, {"content_type": "application/json"})
+        # Compared through the shared normaliser, not `.lower()`: an assertion
+        # that reads a name the way the bug does cannot see the bug — a padded
+        # survivor is invisible to a bare `.lower()` on both sides.
+        assert [
+            k for k in headers if header_name_key(k) == "content-type"
+        ] == ["Content-Type"]
+        assert headers["Content-Type"] == "application/json"
+        assert headers["Accept"] == "application/json"
+
+    @pytest.mark.parametrize(
+        "label, defaults, template, surviving",
+        [
+            ("a padded name is overridden by the plain one",
+             {"headers": {" Accept": "foo"}}, {"headers": {"Accept": "bar"}}, "bar"),
+            ("and the other way round",
+             {"headers": {"Accept": "foo"}}, {"headers": {" Accept": "bar"}}, "bar"),
+            ("cased, as before",
+             {"headers": {"accept": "foo"}}, {"headers": {"Accept": "bar"}}, "bar"),
+        ],
+    )
+    def test_a_merge_layer_overrides_a_name_however_the_other_spelled_it(
+        self, label, defaults, template, surviving
+    ):
+        # A survivor is the same header on the wire twice, and the provider
+        # reads whichever it sees first — the merge decides what is sent, so a
+        # name compared its own way here undoes the rules that graded it.
+        headers = build_effective_headers(
+            template, {}, transport=None, transport_defaults=defaults
+        )
+        assert [k for k in headers if header_name_key(k) == "accept"] == list(headers)
+        assert list(headers.values()) == [surviving], label
+
+    @pytest.mark.parametrize("declared", [" Accept", "Accept ", "accept", "Accept"])
+    @pytest.mark.parametrize("removed", [" Accept", "Accept ", "accept", "Accept"])
+    def test_headers_remove_drops_a_name_however_either_side_spelled_it(
+        self, declared, removed
+    ):
+        # Both spellings vary: the declaring side and the removing side reduce
+        # through the same reader, so neither one's carelessness decides
+        # whether an inherited header is dropped.
+        headers = build_effective_headers(
+            {"headers_remove": [removed]},
+            {},
+            transport=None,
+            transport_defaults={"headers": {declared: "foo"}},
+        )
+        assert headers == {}
+
+    def test_the_authored_forms_of_a_url_have_one_reader(self):
+        # `resolve_transport_base_url` and the connector model's credentials
+        # rule both need the text an author wrote; a second copy of which key
+        # each form keeps it under stops agreeing the day a form is added.
+        assert authored_url_text("https://h/v1") == "https://h/v1"
+        assert authored_url_text({"template": "https://${x}/v1"}) == "https://${x}/v1"
+        assert authored_url_text({"literal": "https://h"}) == "https://h"
+        assert authored_url_text({"ref": "connection.discovered.api_url"}) is None
+        assert authored_url_text({"function": "lookup", "input": {}}) is None
+        assert authored_url_text(None) is None
+
+    def test_a_form_this_reader_was_never_taught_fails_loudly(self):
+        # Reading an unknown form back as "carries no authored text" would
+        # retire every rule written over that text, silently, the day the
+        # grammar gains a form.
+        with pytest.raises(ValueError, match="names no form this reader knows"):
+            authored_url_text({"pkce_challenge_s256": {}})
+
+    def test_a_parsed_model_is_refused_rather_than_read_as_empty(self):
+        # The trap this closes: `self.base_url` is already a parsed model, so
+        # handing it over directly is the obvious edit — and it would read back
+        # as None, disabling the credentials rule with nothing to notice.
+        class _NotJson:
+            pass
+
+        with pytest.raises(TypeError, match="plain-JSON node"):
+            authored_url_text(_NotJson())
 
 
 class TestResolveBodyTemplate:

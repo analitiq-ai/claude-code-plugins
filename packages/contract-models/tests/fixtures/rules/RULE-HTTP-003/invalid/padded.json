@@ -1,0 +1,6 @@
+{
+  "path": "/token",
+  "headers": {
+    "Content-Type ": "application/json"
+  }
+}

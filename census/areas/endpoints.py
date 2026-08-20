@@ -267,9 +267,32 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="Param", field="type", prose_hash="e716f55ea092", descriptive=True),
     ProseObligation(model="PostReadRequest", prose_hash="ec73f959a39b", descriptive=True),
     ProseObligation(
-        model="PostReadRequest", field="body",
-        prose_hash="958783250f0b",
+        model="_BodyBearingRequest", field="body",
+        prose_hash="806a08ec23e9",
         rule_ids=("RULE-ENDP-022",),
+    ),
+    ProseObligation(
+        model="_BodyBearingRequest", field="content_type",
+        prose_hash="a2a16d61a1d1",
+        rule_ids=("RULE-HTTP-003",),
+        waiver=ENGINE_OWNED_DEFAULTING,
+    ),
+    ProseObligation(
+        model="_BodyBearingRequest",
+        prose_hash="71036cdb33f8",
+        structural=(
+            "the branch is the mechanism: `body` and `content_type` are "
+            "declared on the base the body-bearing request branches share, so "
+            "the GET read — which does not inherit it — refuses both keys "
+            "through extra='forbid'"
+        ),
+        waiver=(
+            "the pairing is deliberately not enforced: a media type declared "
+            "beside no body is a legal HTTP request and a statement about what "
+            "would be sent, which the engine settles at dispatch, so the "
+            "docstring says the fields are optional rather than promising a "
+            "check nothing performs"
+        ),
     ),
     ProseObligation(model="PostReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
     ProseObligation(model="ReadOperation", prose_hash="ec0e00d340de", descriptive=True),
@@ -303,7 +326,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="WriteRequest", prose_hash="c2059bccd496", descriptive=True),
     ProseObligation(
         model="WriteRequest", field="body",
-        prose_hash="191d279412ec",
+        prose_hash="6dce4339b994",
         rule_ids=("RULE-ENDP-017", "RULE-ENDP-022"),
     ),
     ProseObligation(

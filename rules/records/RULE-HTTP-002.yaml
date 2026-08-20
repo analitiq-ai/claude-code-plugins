@@ -1,0 +1,36 @@
+id: RULE-HTTP-002
+statement: >
+  A block that names an HTTP header MUST NOT name `Content-Length`, matched as a
+  reader of the wire sees a header name — case-folded, and with the space
+  around it ignored.
+tier: structural
+severity: error
+scopes: [any]
+validator: "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_length_header"
+owners: [connector-plugin, engine]
+targets:
+  - _RequestBase
+  - AuthOperationTemplate
+  - PostAuthOperationRequest
+  - HttpTransport
+  - TransportDefaults
+  - Idempotency
+fixture_model: AuthOperationTemplate
+rationale: >
+  The value is the size of a body nobody has built yet — one record or a page
+  of them, different on every request — so no value an author can write is
+  right for more than one dispatch. The HTTP client the engine sends with does
+  not recompute it: a declared length is put on the wire beside whatever body
+  was actually serialized, so the provider reads a truncated body and the
+  connection's framing is corrupt, after the connection test has already
+  reported success. The rule binds the name wherever a connector names one,
+  because every such name reaches the same wire header through the same merge:
+  a transport's map and the shared defaults are merged into every request, an
+  operation template's map is the last layer merged, and a write mode's
+  idempotency declaration names a header directly. Owning it here rather than
+  at the consumer is what makes that coverage a property of the check instead
+  of a list somebody extends each time a route is noticed — the whole
+  connector and every endpoint document beside it are in hand at one
+  validation run.
+status: active
+superseded_by: null

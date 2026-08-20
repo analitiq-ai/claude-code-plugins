@@ -30,9 +30,14 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.rules import HeaderMergeRules, violation
+from analitiq.contracts.shared.rules import (
+    DeclaredHeaderNames,
+    HeaderMergeRules,
+    violation,
+)
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    MediaType,
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
@@ -50,6 +55,7 @@ from analitiq.contracts.shared.types import StrictPositiveInt
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    authored_url_text,
     unqualified_tokens,
     validate_expression_shapes,
 )
@@ -187,7 +193,9 @@ class FormFieldOption(StrictModel):
 # --- Auth Models (discriminated union) ---
 
 
-class AuthOperationTemplate(ValueExpressionScopes, HeaderMergeRules, StrictModel):
+class AuthOperationTemplate(
+    ValueExpressionScopes, HeaderMergeRules, DeclaredHeaderNames, StrictModel
+):
     """Operation template for auth `authorize` / `token_exchange` / `refresh` / `test`.
 
     The HTTP `base_url` lives on the named transport; this template selects the
@@ -221,6 +229,15 @@ class AuthOperationTemplate(ValueExpressionScopes, HeaderMergeRules, StrictModel
     headers_remove: list[str] | None = Field(
         default=None,
         description="Header names to delete from inherited transport defaults",
+    )
+    content_type: MediaType | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded. Omitted, the engine sends the "
+            "form encoding an OAuth token request is specified in. The header "
+            "map is not a second way to say this."
+        ),
     )
     body: Any | None = Field(default=None, description="Request body; type depends on transport/encoding")
 
@@ -612,7 +629,9 @@ class ConnectionContractValidation(StrictModel):
     )
 
 
-class PostAuthOperationRequest(ValueExpressionScopes, StrictModel):
+class PostAuthOperationRequest(
+    ValueExpressionScopes, DeclaredHeaderNames, StrictModel
+):
     """Request template used by `options_request` / `discovery_request` to populate
     a post-auth output. Spec: §Post-Auth Outputs.
     """
@@ -644,6 +663,16 @@ class PostAuthOperationRequest(ValueExpressionScopes, StrictModel):
     headers: dict[str, Any] | None = Field(
         default=None,
         description="Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
+    )
+    content_type: MediaType | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded. Resolved the way the auth "
+            "block's own operations resolve it, this request being dispatched "
+            "through the same path. The header map is not a second way to say "
+            "this."
+        ),
     )
     body: Any | None = Field(default=None, description="Request body; type depends on transport/encoding")
 
@@ -1038,7 +1067,36 @@ class TransportRateLimit(StrictModel):
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
-class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
+def _url_authority(text: str) -> str:
+    """The authority of a URL, sliced rather than parsed.
+
+    Sliced because a rule over the authority must hold for a string the
+    parser rejects exactly as it holds for one the parser accepts.
+    `urlsplit` raises on a bad IPv6 literal, and a caller that treated the
+    raise as "nothing to read here" would pass the very userinfo it is
+    looking for. Slicing has no such state.
+
+    An authority opens at a `//` that nothing has already closed the way for,
+    and runs to whichever of `/`, `?` or `#` ends it. Both halves are
+    load-bearing: a `//` reached only after one of those delimiters is inside
+    a path, a query or a fragment, so `/search?q=https://a@b` declares no
+    authority and the `@` in it is somebody's data. A string carrying no `//`
+    at all declares none either.
+
+    Whether what comes back is a well-formed authority is nobody's question
+    here — the engine settles that at connect, against the resolved URL.
+    """
+    scheme, separator, rest = text.partition("//")
+    if not separator or any(delimiter in scheme for delimiter in "/?#"):
+        return ""
+    for delimiter in "/?#":
+        rest = rest.split(delimiter, 1)[0]
+    return rest
+
+
+class HttpTransport(
+    ValueExpressionScopes, HeaderMergeRules, DeclaredHeaderNames, StrictModel
+):
     """HTTP transport contract. Spec: §Transport Contracts."""
 
     transport_type: Literal["http"] = Field(description="Transport type discriminator")
@@ -1050,7 +1108,11 @@ class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
             "connection-materialization time (e.g. a per-tenant host taken from "
             "`connection.parameters` or discovered post-auth via "
             "`connection.discovered`). May be omitted when this entry exists "
-            "only to extend `transport_defaults`."
+            "only to extend `transport_defaults`. Credentials belong in `auth` "
+            "or in a declared header, never in the URL's authority: "
+            "RULE-CTOR-066 refuses them in the URL text authored here, and a "
+            "value that only resolves to them is refused at connect, not by "
+            "this contract."
         ),
     )
     headers: dict[str, Any] | None = Field(
@@ -1075,6 +1137,24 @@ class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     # `rate_limit` sit beside them and are read literally by both.
     EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("base_url",)
     EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
+
+    @model_validator(mode="after")
+    def _base_url_declares_no_credentials(self):
+        """RULE-CTOR-066 over the authored forms of `base_url`.
+
+        `@` is decisive by the URL grammar rather than by choice: userinfo
+        is the only thing an authority admits ahead of an `@`, and a host may
+        not carry one unencoded, so an `@` in the authority is userinfo and
+        nothing else. Which is why the test is a membership check and not a
+        parse.
+        """
+        text = authored_url_text(_dumped(self.base_url))
+        if text is None:
+            return self
+        authority = _url_authority(text)
+        if "@" in authority:
+            raise violation("RULE-CTOR-066", f"base_url authority {authority!r}")
+        return self
 
 
 class DsnBinding(ValueExpressionScopes, StrictModel):
@@ -1397,7 +1477,9 @@ Transport = Annotated[
 """Named transport contract entry. Spec: §Transport Contracts."""
 
 
-class TransportDefaults(ValueExpressionScopes, HeaderMergeRules, StrictModel):
+class TransportDefaults(
+    ValueExpressionScopes, HeaderMergeRules, DeclaredHeaderNames, StrictModel
+):
     """Defaults merged into every entry of `transports`. Spec: §Transport Contracts."""
 
     # Merge layer one: this map is folded into every transport entry before any

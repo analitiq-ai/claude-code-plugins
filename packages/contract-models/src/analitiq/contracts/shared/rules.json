@@ -1783,6 +1783,31 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-CTOR-066",
+   "statement": "An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the connector author writes — the bare-string form, the `{literal}` form, or the authority of a `{template}`.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "connector"
+   ],
+   "validator": "analitiq.contracts.connector::HttpTransport._base_url_declares_no_credentials",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "HttpTransport"
+   ],
+   "fields": [
+    "base_url"
+   ],
+   "mechanism": null,
+   "fixture_model": "HttpTransport",
+   "rationale": "The HTTP client the engine sends with derives Basic authentication from the request URL, so a base URL carrying userinfo authenticates the first request and nothing after it: a provider-supplied absolute continuation link is same-origin and omits the credentials, the client sends no authorization header, and the provider answers 401 — which reads as a credential or provider fault rather than a connector-definition one. The origin guard that already grades a next link cannot report it, because origin comparison strips userinfo, so the link that dropped the credentials is same-origin by construction. Credentials in a URL are also logged wherever the URL is, which is why the remedy is the transport's `auth` block or its declared headers rather than a safer-looking URL. The rule reaches as far as the author's own text: a `{ref}` or a function node resolves per connection, and a `{template}` whose host arrives through a placeholder can carry userinfo that no reading of the document reveals. Those are refused again at connect time, where the resolved URL is in hand — passing this rule is not a sanctioned way to reach a provider with credentials in the host.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-DBEP-001",
    "statement": "Every column a database endpoint declares MUST carry a name no other column in that document repeats.\n",
    "tier": "advisory",
@@ -3581,6 +3606,62 @@
    "mechanism": null,
    "fixture_model": "AuthOperationTemplate",
    "rationale": "Removal and merge are separate steps of header resolution, so a name on both sides is never reported as a conflict at run time — one step simply wins and the author goes on believing the request carries something it does not. The pairing usually appears when a block is edited to drop an inherited header and the local override that replaced it is left behind. Rejecting the pair forces the author to say which of the two they meant.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-HTTP-002",
+   "statement": "A block that names an HTTP header MUST NOT name `Content-Length`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "any"
+   ],
+   "validator": "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_length_header",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "_RequestBase",
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest",
+    "HttpTransport",
+    "TransportDefaults",
+    "Idempotency"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": "AuthOperationTemplate",
+   "rationale": "The value is the size of a body nobody has built yet — one record or a page of them, different on every request — so no value an author can write is right for more than one dispatch. The HTTP client the engine sends with does not recompute it: a declared length is put on the wire beside whatever body was actually serialized, so the provider reads a truncated body and the connection's framing is corrupt, after the connection test has already reported success. The rule binds the name wherever a connector names one, because every such name reaches the same wire header through the same merge: a transport's map and the shared defaults are merged into every request, an operation template's map is the last layer merged, and a write mode's idempotency declaration names a header directly. Owning it here rather than at the consumer is what makes that coverage a property of the check instead of a list somebody extends each time a route is noticed — the whole connector and every endpoint document beside it are in hand at one validation run.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-HTTP-003",
+   "statement": "A block that names an HTTP header MUST NOT name `Content-Type`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored; a request body's media type is declared by the request's own `content_type` field.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "any"
+   ],
+   "validator": "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_type_header",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "_RequestBase",
+    "AuthOperationTemplate",
+    "PostAuthOperationRequest",
+    "HttpTransport",
+    "TransportDefaults",
+    "Idempotency"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "fixture_model": "AuthOperationTemplate",
+   "rationale": "`Content-Type` describes the entity body of one request, and it is what selects how that body is serialized. Reaching it through a header map makes the serializer's input a merge result — the shared defaults, then the transport, then the operation — so which encoder runs depends on a layer the author of the operation may not be looking at, and a transport that names it states a body property on an object that has no body, reaching bodiless requests as readily as the rest. A typed field on the request that carries the body puts the media type at the one layer that owns it, and refusing the header name is what keeps it the only route: two ways to say it is two values that can disagree, which is the resolution order the auth path had to grow and the data path never had at all. `Accept` is the contrast that shows where the line falls — it states what the client will take back, a property of the client rather than of one body, so it stays an ordinary declared header.\n",
    "status": "active",
    "superseded_by": null
   },

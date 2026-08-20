@@ -214,10 +214,11 @@ was raised.
 - Reuse the connector's transports via `request.transport_ref`
   (`RULE-ENDP-047`); never author an absolute URL as a `request.path`
   (`RULE-ENDP-045`).
-- For an ordinary JSON `request.body`, declare `Content-Type:
-  application/json` in `request.headers` unless the selected transport
-  already provides an equivalent default. Provider-specific JSON media types
-  (e.g. `application/vnd.api+json`) are allowed when the provider requires them.
+- A body's media type is `request.content_type`, never a header
+  (`RULE-HTTP-003`). Declare it when the provider takes anything other than
+  JSON — a form-encoded POST body, a vendor media type such as
+  `application/vnd.api+json` — and leave it off for an ordinary JSON body.
+  Take the media type from the provider's own documentation for that endpoint.
 - Do not author database endpoints (`RULE-DBEP-006`).
 - When skill prose and the live contract disagree, the contract wins: author to
   the contract and report the prose defect.

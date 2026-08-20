@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 18 of the 69 below have no validator, so nothing rejects
+all hold: 18 of the 71 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **29** structural · **25** advisory · **8** referential · **4** procedural · **3** judgment.
+In this file: **31** structural · **25** advisory · **8** referential · **4** procedural · **3** judgment.
 
 ## Contents
 
@@ -61,6 +61,8 @@ than edited.
 | RULE-ENDP-055 | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. | `api-endpoint` | error | validator | `operators`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
 | RULE-ENDP-056 | A single-bound cursor mapping MUST state the wire format it sends the cursor value as, and the comparison the provider applies to it, using only the vocabularies `SingleCursorMapping` declares for each. | `api-endpoint` | error | validator | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `operator`: `gt`, `gte`, `lt`, `lte` |
 | RULE-ENDP-057 | A windowed cursor mapping MUST state the wire format it sends its bounds as, and the comparison the provider applies at each end of the window, using only the vocabularies `WindowCursorMapping` declares for each. | `api-endpoint` | error | validator | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `start_operator`: `gt`, `gte`, `lt`, `lte` · `end_operator`: `gt`, `gte`, `lt`, `lte` |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator | — |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |

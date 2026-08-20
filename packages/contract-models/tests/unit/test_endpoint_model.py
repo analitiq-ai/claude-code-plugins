@@ -580,7 +580,7 @@ class TestOperationsAtLeastOne:
         parse_endpoint(_minimal_api_payload(
             endpoint_id="x",
             operations={"write": {"insert": {
-                "request": {"method": "POST", "path": "/v1/x", "headers": {"Content-Type": "application/json"}, "body": {"r": {"from_input": "record"}}},
+                "request": {"method": "POST", "path": "/v1/x", "headers": {"Accept": "application/json"}, "body": {"r": {"from_input": "record"}}},
                 "params": {},
                 "input": {"schema": {"type": "object"}},
             }}},
@@ -591,7 +591,7 @@ class TestOperationsAtLeastOne:
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"write": {"upsert_with_replace": {
-                    "request": {"method": "POST", "path": "/v1/x", "headers": {"Content-Type": "application/json"}, "body": {"r": {"from_input": "record"}}},
+                    "request": {"method": "POST", "path": "/v1/x", "headers": {"Accept": "application/json"}, "body": {"r": {"from_input": "record"}}},
                     "params": {},
                     "input": {"schema": {"type": "object"}},
                 }}},
@@ -599,7 +599,7 @@ class TestOperationsAtLeastOne:
 
 
 # ---------------------------------------------------------------------------
-# §Request Bodies: GET no body, Content-Type can be supplied by transport defaults
+# §Request Bodies: GET declares no body; a body's media type is `content_type`
 # ---------------------------------------------------------------------------
 
 
@@ -611,13 +611,13 @@ class TestRequestBody:
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"read": {
-                    "request": {"method": "GET", "path": "/v1/x", "headers": {"Content-Type": "application/json"}, "body": {"foo": 1}},
+                    "request": {"method": "GET", "path": "/v1/x", "headers": {"Accept": "application/json"}, "body": {"foo": 1}},
                     "params": {},
                     "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
                 }},
             ))
 
-    def test_write_body_without_content_type_accepted_for_transport_default(self):
+    def test_write_body_without_content_type_accepted(self):
         parse_endpoint(_minimal_api_payload(
             endpoint_id="x",
             operations={"write": {"insert": {
@@ -643,7 +643,7 @@ class TestRequestBody:
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"write": {"insert": {
-                    "request": {"method": "POST", "path": "/v1/x", "headers": {"Content-Type": "application/json"}, "body": {"r": {"from_input": "record"}}},
+                    "request": {"method": "POST", "path": "/v1/x", "headers": {"Accept": "application/json"}, "body": {"r": {"from_input": "record"}}},
                     "params": {},
                     "input": {"schema": {"type": "object"}},
                     "batching": {"max_records": 100},
@@ -655,7 +655,7 @@ class TestRequestBody:
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"write": {"insert": {
-                    "request": {"method": "POST", "path": "/v1/x", "headers": {"Content-Type": "application/json"}, "body": {"r": {"from_input": "records"}}},
+                    "request": {"method": "POST", "path": "/v1/x", "headers": {"Accept": "application/json"}, "body": {"r": {"from_input": "records"}}},
                     "params": {},
                     "input": {"schema": {"type": "object"}},
                 }}},
@@ -683,7 +683,7 @@ class TestWriteFromInputFieldExistence:
             "request": {
                 "method": "POST",
                 "path": "/v1/x",
-                "headers": {"Content-Type": "application/json"},
+                "headers": {"Accept": "application/json"},
                 "body": body,
             },
             "params": {},
@@ -794,7 +794,7 @@ class TestWriteConflictKeys:
             "request": {
                 "method": "POST",
                 "path": "/v1/x",
-                "headers": {"Content-Type": "application/json"},
+                "headers": {"Accept": "application/json"},
                 "body": {"r": {"from_input": "record"}},
             },
             "params": {},
@@ -882,7 +882,7 @@ class TestPublishedSchemaConflictKeysRule:
     def _doc(mode, conflict_keys="omit"):
         block = {
             "request": {"method": "POST", "path": "/v1/x",
-                        "headers": {"Content-Type": "application/json"},
+                        "headers": {"Accept": "application/json"},
                         "body": {"r": {"from_input": "record"}}},
             "params": {},
             "input": {"schema": {"type": "object", "properties": {"email": {"type": "string"}}}},
@@ -932,7 +932,7 @@ class TestWriteIdempotency:
             "request": {
                 "method": "POST",
                 "path": "/v1/x",
-                "headers": {"Content-Type": "application/json"},
+                "headers": {"Accept": "application/json"},
                 "body": {"r": {"from_input": "records" if batched else "record"}},
             },
             "params": {},
@@ -1071,8 +1071,25 @@ class TestWriteIdempotency:
         with pytest.raises(ValidationError, match="also declared\\s+in request.headers"):
             parse_endpoint(self._payload({"insert": op}))
 
+    @pytest.mark.parametrize(
+        "spelling", ["Idempotency-Key", "idempotency-key", " Idempotency-Key",
+                     "Idempotency-Key "],
+    )
+    def test_header_idempotency_collision_is_found_however_it_is_spelled(
+        self, spelling
+    ):
+        # The engine owns the key's value, so the same wire header carrying an
+        # authored one is the contradiction — whichever way either side spells
+        # it.
+        op = self._write_op(idempotency={"in": "header", "name": "Idempotency-Key"})
+        op["request"]["headers"][spelling] = {"from_param": "key"}
+        op["params"] = {"key": {"in": "header", "type": "string", "required": True,
+                                "default": {"ref": "connection.selections.k"}}}
+        with pytest.raises(ValidationError, match="also declared"):
+            parse_endpoint(self._payload({"insert": op}))
+
     def test_header_idempotency_with_unrelated_headers_accepted(self):
-        # The helper already declares Content-Type; only a same-name header is
+        # The helper already declares a header; only a same-name one is
         # a collision.
         parse_endpoint(self._payload({"insert": self._write_op(
             idempotency={"in": "header", "name": "Idempotency-Key"})}))
@@ -1094,7 +1111,7 @@ class TestPublishedSchemaIdempotencyRule:
         batched = isinstance(batching, dict)
         block = {
             "request": {"method": "POST", "path": "/v1/x",
-                        "headers": {"Content-Type": "application/json"}},
+                        "headers": {"Accept": "application/json"}},
             "params": {},
             "input": {"schema": {"type": "object", "properties": {"email": {"type": "string"}}}},
         }
@@ -1848,7 +1865,7 @@ class TestDisallowedDynamicRefs:
             operations={"write": {"insert": {
                 "request": {
                     "method": "POST", "path": "/v1/x",
-                    "headers": {"Content-Type": "application/json"},
+                    "headers": {"Accept": "application/json"},
                     "body": {"records": [{"r": {"from_input": "record"}, "rid": {"ref": "runtime.invocation_id"}}]},
                 },
                 "params": {},
@@ -1871,7 +1888,7 @@ class TestFromInputRecordsDotted:
             operations={"write": {"insert": {
                 "request": {
                     "method": "POST", "path": "/v1/x",
-                    "headers": {"Content-Type": "application/json"},
+                    "headers": {"Accept": "application/json"},
                     "body": {"r": {"from_input": "records.id"}},
                 },
                 "params": {},
@@ -2068,12 +2085,12 @@ class TestPaginationStrategies:
 
 
 # ---------------------------------------------------------------------------
-# Read POST body; Content-Type may be inherited from transport defaults
+# Read POST body, and the media type it is encoded with
 # ---------------------------------------------------------------------------
 
 
 class TestReadPostBody:
-    def test_read_post_body_without_content_type_accepted_for_transport_default(self):
+    def test_read_post_body_without_content_type_accepted(self):
         parse_endpoint(_minimal_api_payload(
             endpoint_id="x",
             operations={"read": {
@@ -2083,15 +2100,32 @@ class TestReadPostBody:
             }},
         ))
 
-    def test_read_post_body_with_content_type_accepted(self):
+    def test_read_post_body_with_a_declared_content_type_accepted(self):
         parse_endpoint(_minimal_api_payload(
             endpoint_id="x",
             operations={"read": {
-                "request": {"method": "POST", "path": "/v1/search", "headers": {"Content-Type": "application/json"}, "body": {"q": "hello"}},
+                "request": {"method": "POST", "path": "/v1/search",
+                            "content_type": "application/x-www-form-urlencoded",
+                            "body": {"q": "hello"}},
                 "params": {},
                 "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
             }},
         ))
+
+    def test_a_get_read_declares_no_content_type(self):
+        # `content_type` is the media type OF a body, so it lands on the
+        # branches that declare one — the same construction that keeps `body`
+        # off a GET.
+        with pytest.raises(ValidationError, match=r"content_type"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": "/v1/search",
+                                "content_type": "application/json"},
+                    "params": {},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
 
 
 # ---------------------------------------------------------------------------
@@ -2130,7 +2164,7 @@ class TestWriteResponse:
         return _minimal_api_payload(
             endpoint_id="x",
             operations={"write": {"insert": {
-                "request": {"method": "POST", "path": "/v1/x", "headers": {"Content-Type": "application/json"}, "body": {"r": {"from_input": "record"}}},
+                "request": {"method": "POST", "path": "/v1/x", "headers": {"Accept": "application/json"}, "body": {"r": {"from_input": "record"}}},
                 "params": {},
                 "input": {"schema": {"type": "object"}},
                 "response": response_block,

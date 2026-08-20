@@ -398,6 +398,20 @@
           "description": "Request body; type depends on transport/encoding",
           "title": "Body"
         },
+        "content_type": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+ *(;.*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Media type of `body`, sent as the request's `Content-Type` and selecting how the body is encoded. Omitted, the engine sends the form encoding an OAuth token request is specified in. The header map is not a second way to say this.",
+          "title": "Content Type"
+        },
         "headers": {
           "anyOf": [
             {
@@ -2291,7 +2305,7 @@
             }
           ],
           "default": null,
-          "description": "Base URL: a non-empty literal string, or a value-expression (`{template}`/`{ref}`/`{literal}`/function) resolving to one at connection-materialization time (e.g. a per-tenant host taken from `connection.parameters` or discovered post-auth via `connection.discovered`). May be omitted when this entry exists only to extend `transport_defaults`.",
+          "description": "Base URL: a non-empty literal string, or a value-expression (`{template}`/`{ref}`/`{literal}`/function) resolving to one at connection-materialization time (e.g. a per-tenant host taken from `connection.parameters` or discovered post-auth via `connection.discovered`). May be omitted when this entry exists only to extend `transport_defaults`. Credentials belong in `auth` or in a declared header, never in the URL's authority: RULE-CTOR-066 refuses them in the URL text authored here, and a value that only resolves to them is refused at connect, not by this contract.",
           "title": "Base Url"
         },
         "headers": {
@@ -2869,6 +2883,20 @@
           "default": null,
           "description": "Request body; type depends on transport/encoding",
           "title": "Body"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+ *(;.*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Media type of `body`, sent as the request's `Content-Type` and selecting how the body is encoded. Resolved the way the auth block's own operations resolve it, this request being dispatched through the same path. The header map is not a second way to say this.",
+          "title": "Content Type"
         },
         "headers": {
           "anyOf": [
@@ -4479,5 +4507,5 @@
     }
   ],
   "title": "Analitiq Connector",
-  "version": "21.0.1"
+  "version": "21.1.0"
 }

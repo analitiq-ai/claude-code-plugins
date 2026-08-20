@@ -37,6 +37,14 @@ A region or subdomain the user supplies before auth:
 The matching `region` input must be declared in `connection_contract.inputs`
 with `phase: "pre_auth"` (`RULE-CTOR-050`), so the template resolves before auth.
 
+Credentials never go in the URL (`RULE-CTOR-066`), in any form — a literal
+`https://user:pass@host` or a template that builds one out of inputs. The
+client derives Basic auth from the URL, so such a connector authenticates its
+first request and then silently loses the credentials on the first
+provider-supplied continuation link, which carries none; and the URL is logged
+wherever URLs are. Put them in the transport's `auth` block or its
+`Authorization` header.
+
 A per-tenant host discovered *after* auth: see the `api` transport in
 `examples/oauth2-authorization-code/oauth2-authorization-code.example.json`,
 whose `base_url` templates `${connection.discovered.api_domain}` into the host.
@@ -64,3 +72,10 @@ Header names match case-insensitively for override and removal.
 Removal is governed by `RULE-SHRD-010` and `RULE-HTTP-001`. An endpoint
 operation request removes an inherited default the same way a transport does —
 that is how one endpoint drops an auth header a public sub-resource rejects.
+
+`Content-Length` and `Content-Type` never enter any of these maps.
+`Content-Length` describes a body the engine has not built yet
+(`RULE-HTTP-002`), and `Content-Type` describes one request's body, so it
+belongs to the operation that carries it — declare it as that request's
+`content_type` (`RULE-HTTP-003`). `Accept` is the contrast: it says what the
+client will take back, whatever the request carries.

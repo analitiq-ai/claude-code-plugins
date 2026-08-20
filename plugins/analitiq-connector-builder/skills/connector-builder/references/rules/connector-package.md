@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`connector-package`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 34 of the 41 below have no validator, so nothing rejects
+all hold: 34 of the 43 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **21** structural · **1** advisory · **12** referential · **4** procedural · **3** judgment.
+In this file: **23** structural · **1** advisory · **12** referential · **4** procedural · **3** judgment.
 
 ## Contents
 
@@ -38,6 +38,8 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator | — |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
 | RULE-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — | — |
 | RULE-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — | — |
 | RULE-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — | — |

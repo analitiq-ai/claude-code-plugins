@@ -94,7 +94,6 @@ def _read_endpoint(transport_ref=..., endpoint_id="widgets", path="/widgets"):
 
 def _write_endpoint(transport_ref=..., endpoint_id="widgets", path="/widgets"):
     request = {"method": "POST", "path": path,
-               "headers": {"Content-Type": "application/json"},
                "body": {"r": {"from_input": "record"}}}
     if transport_ref is not ...:
         request["transport_ref"] = transport_ref

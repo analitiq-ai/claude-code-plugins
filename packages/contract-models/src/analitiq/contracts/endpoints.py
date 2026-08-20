@@ -43,6 +43,7 @@ from analitiq.contracts.arrow_grammar import (
     validate_cross_params,
 )
 from analitiq.contracts.shared.rules import (
+    DeclaredHeaderNames,
     HeaderMergeRules,
     find_duplicates,
     violation,
@@ -53,6 +54,7 @@ from analitiq.contracts.shared.arrow_shape import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    MediaType,
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
@@ -73,6 +75,7 @@ from analitiq.contracts.shared.types import (
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
+    header_name_key,
     _EXPRESSION_KEYS as _RESOLVER_EXPRESSION_KEYS,
     has_known_scope,
     iter_expression_strings,
@@ -970,7 +973,7 @@ _REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
 )
 
 
-class _RequestBase(HeaderMergeRules, _EndpointModel):
+class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
     """Common request fields shared by read and write operations."""
 
     model_config = ConfigDict(json_schema_extra=_REQUEST_SCHEMA_RULES)
@@ -1088,14 +1091,37 @@ class GetReadRequest(_RequestBase):
     method: Literal["GET"] = Field(..., description="Read HTTP method.")
 
 
-class PostReadRequest(_RequestBase):
+class _BodyBearingRequest(_RequestBase):
+    """A request branch that declares a body, and the media type describing it.
+
+    Both sit here rather than on `_RequestBase` because a branch with no body
+    has nothing for a media type to describe: the GET read is that branch, and
+    one construction keeps the pair off it. A body is still optional on the
+    branches that may have one — a POST that sends none is an ordinary
+    request, and a media type declared beside no body is a statement about
+    what would be sent, which the engine settles rather than this document.
+    """
+
+    body: Any | None = Field(
+        default=None,
+        description="Request body. May mix literals with `{from_param}`.",
+    )
+    content_type: MediaType | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded — the field to declare when a "
+            "provider takes a form-encoded or otherwise non-JSON body. "
+            "Omitted, the engine sends JSON. The header map is not a second "
+            "way to say this (RULE-HTTP-003)."
+        ),
+    )
+
+
+class PostReadRequest(_BodyBearingRequest):
     """Provider request for a POST-method API read operation (query-in-body reads)."""
 
     method: Literal["POST"] = Field(..., description="Read HTTP method.")
-    body: Any | None = Field(
-        default=None,
-        description="JSON request body. May mix literals with `{from_param}`.",
-    )
 
 
 # `method`-discriminated read request: only the POST branch declares `body`, so
@@ -1108,7 +1134,7 @@ ReadRequest = Annotated[
 ]
 
 
-class WriteRequest(_RequestBase):
+class WriteRequest(_BodyBearingRequest):
     """Provider request for an API write mode."""
 
     method: Literal["POST", "PUT", "PATCH"] = Field(
@@ -1140,7 +1166,7 @@ class WriteRequest(_RequestBase):
     )
     body: Any | None = Field(
         default=None,
-        description="JSON request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
+        description="Request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
     )
 
 
@@ -1738,7 +1764,7 @@ class Batching(_EndpointModel):
     )
 
 
-class Idempotency(_EndpointModel):
+class Idempotency(DeclaredHeaderNames, _EndpointModel):
     """Idempotency-key placement declaration for a write mode.
 
     The author declares only *where* the provider's idempotency key goes on
@@ -1763,6 +1789,12 @@ class Idempotency(_EndpointModel):
         min_length=1,
         description="Header name or top-level body field name that carries the key.",
     )
+
+    def declared_header_names(self) -> list[tuple[str, str]]:
+        """`name` is a header name, and only when `in` says it is."""
+        if self.location != "header":
+            return []
+        return [(self.name, "idempotency.name")]
 
 
 class WriteResponse(_EndpointModel):
@@ -2193,8 +2225,10 @@ class WriteOperation(_EndpointModel):
                     "(spec: §Write Modes)"
                 )
             if self.idempotency.location == "header":
-                declared = {h.lower() for h in (self.request.headers or {})}
-                if self.idempotency.name.lower() in declared:
+                declared = {
+                    header_name_key(h) for h in (self.request.headers or {})
+                }
+                if header_name_key(self.idempotency.name) in declared:
                     raise ValueError(
                         f"idempotency header {self.idempotency.name!r} is also declared "
                         "in request.headers — the key value is engine-owned, so the "
