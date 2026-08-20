@@ -207,6 +207,18 @@ class ParseOnly:
         return super().model_copy(deep=deep)
 
 
+#: A media type's shape, as RFC 9110 writes one: a type and a subtype of
+#: token characters, optionally followed by parameters. It constrains the
+#: SHAPE and deliberately not the vocabulary — `application/vnd.api+json`
+#: passes — because which media types a provider accepts is a provider fact
+#: no contract here owns. What it refuses is a value that is not a media type
+#: at all, the empty string among them: absent and "declared as nothing" are
+#: the same request to a reader and different values to a resolver.
+MEDIA_TYPE_PATTERN = r"^[A-Za-z0-9!#$%&\'*+.^_`|~-]+/[A-Za-z0-9!#$%&\'*+.^_`|~-]+ *(;.*)?$"
+
+MediaType = Annotated[str, StringConstraints(pattern=MEDIA_TYPE_PATTERN)]
+
+
 class StrictModel(ParseOnly, BaseModel):
     """Base for authored sub-models. Rejects all unknown keys, and is parse-only.
 

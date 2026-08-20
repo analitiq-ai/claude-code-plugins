@@ -37,6 +37,7 @@ from analitiq.contracts.shared.rules import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    MediaType,
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
@@ -229,7 +230,7 @@ class AuthOperationTemplate(
         default=None,
         description="Header names to delete from inherited transport defaults",
     )
-    content_type: str | None = Field(
+    content_type: MediaType | None = Field(
         default=None,
         description=(
             "Media type of `body`, sent as the request's `Content-Type` and "
@@ -663,7 +664,7 @@ class PostAuthOperationRequest(
         default=None,
         description="Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
     )
-    content_type: str | None = Field(
+    content_type: MediaType | None = Field(
         default=None,
         description=(
             "Media type of `body`, sent as the request's `Content-Type` and "
@@ -1073,15 +1074,20 @@ def _url_authority(text: str) -> str:
     parser rejects exactly as it holds for one the parser accepts.
     `urlsplit` raises on a bad IPv6 literal, and a caller that treated the
     raise as "nothing to read here" would pass the very userinfo it is
-    looking for. Slicing has no such state: the authority runs from `//` to
-    whichever of `/`, `?` or `#` ends it, and a string carrying no `//`
-    declares no authority at all.
+    looking for. Slicing has no such state.
+
+    An authority opens at a `//` that nothing has already closed the way for,
+    and runs to whichever of `/`, `?` or `#` ends it. Both halves are
+    load-bearing: a `//` reached only after one of those delimiters is inside
+    a path, a query or a fragment, so `/search?q=https://a@b` declares no
+    authority and the `@` in it is somebody's data. A string carrying no `//`
+    at all declares none either.
 
     Whether what comes back is a well-formed authority is nobody's question
     here — the engine settles that at connect, against the resolved URL.
     """
-    _, separator, rest = text.partition("//")
-    if not separator:
+    scheme, separator, rest = text.partition("//")
+    if not separator or any(delimiter in scheme for delimiter in "/?#"):
         return ""
     for delimiter in "/?#":
         rest = rest.split(delimiter, 1)[0]

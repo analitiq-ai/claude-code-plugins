@@ -572,7 +572,7 @@ def select_transport(connector: dict, template: dict) -> dict | None:
     return transports.get(ref) if ref else None
 
 
-def authored_url_text(node: Any) -> str | None:
+def authored_url_text(node: "str | dict[str, Any] | None") -> str | None:
     """The URL text an author wrote, for the expression forms that carry any.
 
     A bare string and a `{literal}` are the whole URL verbatim; a `{template}`
@@ -590,10 +590,17 @@ def authored_url_text(node: Any) -> str | None:
     node is named rather than the field holding it, for the same reason: a
     diagnostic naming one caller's field misnames every other caller's.
     """
+    if node is None:
+        return None
     if isinstance(node, str):
         return node
     if not isinstance(node, dict):
-        return None
+        # A parsed model is the shape that would otherwise arrive here and read
+        # back as None — silently disabling whatever rule the caller wrote over
+        # the text. Dump it first; the caller knows which of the two it holds.
+        raise TypeError(
+            f"authored_url_text reads a plain-JSON node, not {type(node).__name__}"
+        )
     if "template" in node:
         template = node["template"]
         if not isinstance(template, str):
@@ -612,7 +619,15 @@ def authored_url_text(node: Any) -> str | None:
         if not isinstance(literal, str) or not literal:
             raise ValueError(f"literal must be a non-empty string: {node!r}")
         return literal
-    return None
+    if "ref" in node or "function" in node:
+        # The forms whose string arrives at resolution. They carry no authored
+        # text, which is the answer, not an absence.
+        return None
+    raise ValueError(
+        f"value-expression names no form this reader knows: {node!r}. A form "
+        "the grammar gains is taught here once; reading it back as carrying "
+        "no text would retire every rule written over the authored text."
+    )
 
 
 def resolve_transport_base_url(
@@ -707,7 +722,12 @@ def apply_operation_content_type(headers: dict[str, str], operation: dict) -> st
     keys are not, so leaving one behind puts the header on the request twice
     and the provider reads whichever it sees first.
     """
-    content_type = operation.get("content_type") or DEFAULT_AUTH_CONTENT_TYPE
+    declared = operation.get("content_type")
+    # `is None`, not truthiness: the contract refuses an empty `content_type`
+    # (`MediaType`), so one reaching here came from a dict nothing graded, and
+    # reading it as "declared nothing" would send a body under the default the
+    # author was overriding.
+    content_type = DEFAULT_AUTH_CONTENT_TYPE if declared is None else declared
     for key in [k for k in headers if k.lower() == "content-type"]:
         del headers[key]
     headers["Content-Type"] = content_type

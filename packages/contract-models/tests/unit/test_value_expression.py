@@ -580,6 +580,14 @@ class TestApplyOperationContentType:
         assert headers["Content-Type"] == "application/json"
         assert headers["Accept"] == "application/json"
 
+    def test_a_declared_empty_media_type_is_not_read_as_undeclared(self):
+        # The contract refuses an empty `content_type`, so one arriving here
+        # came from a dict nothing graded. Reading it as "declared nothing"
+        # would encode the body under the default the author was overriding.
+        headers = {}
+        assert apply_operation_content_type(headers, {"content_type": ""}) == ""
+        assert headers["Content-Type"] == ""
+
     def test_form_default_when_the_operation_declares_none(self):
         headers = {}
         ct = apply_operation_content_type(headers, {})
@@ -618,6 +626,23 @@ class TestApplyOperationContentType:
         assert authored_url_text({"ref": "connection.discovered.api_url"}) is None
         assert authored_url_text({"function": "lookup", "input": {}}) is None
         assert authored_url_text(None) is None
+
+    def test_a_form_this_reader_was_never_taught_fails_loudly(self):
+        # Reading an unknown form back as "carries no authored text" would
+        # retire every rule written over that text, silently, the day the
+        # grammar gains a form.
+        with pytest.raises(ValueError, match="names no form this reader knows"):
+            authored_url_text({"pkce_challenge_s256": {}})
+
+    def test_a_parsed_model_is_refused_rather_than_read_as_empty(self):
+        # The trap this closes: `self.base_url` is already a parsed model, so
+        # handing it over directly is the obvious edit — and it would read back
+        # as None, disabling the credentials rule with nothing to notice.
+        class _NotJson:
+            pass
+
+        with pytest.raises(TypeError, match="plain-JSON node"):
+            authored_url_text(_NotJson())
 
 
 class TestResolveBodyTemplate:

@@ -54,6 +54,7 @@ from analitiq.contracts.shared.arrow_shape import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    MediaType,
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
@@ -1090,15 +1091,21 @@ class GetReadRequest(_RequestBase):
 
 
 class _BodyBearingRequest(_RequestBase):
-    """A request branch that declares a body, and so a media type for it.
+    """A request branch that declares a body, and the media type describing it.
 
-    `content_type` sits here rather than on `_RequestBase` because a branch
-    with no `body` field has no body to describe: the GET read is that branch,
-    and the same construction that keeps a body off it keeps the media type
-    off it too.
+    Both sit here rather than on `_RequestBase` because a branch with no body
+    has nothing for a media type to describe: the GET read is that branch, and
+    one construction keeps the pair off it. A body is still optional on the
+    branches that may have one — a POST that sends none is an ordinary
+    request, and a media type declared beside no body is a statement about
+    what would be sent, which the engine settles rather than this document.
     """
 
-    content_type: str | None = Field(
+    body: Any | None = Field(
+        default=None,
+        description="Request body. May mix literals with `{from_param}`.",
+    )
+    content_type: MediaType | None = Field(
         default=None,
         description=(
             "Media type of `body`, sent as the request's `Content-Type` and "
@@ -1114,10 +1121,6 @@ class PostReadRequest(_BodyBearingRequest):
     """Provider request for a POST-method API read operation (query-in-body reads)."""
 
     method: Literal["POST"] = Field(..., description="Read HTTP method.")
-    body: Any | None = Field(
-        default=None,
-        description="Request body. May mix literals with `{from_param}`.",
-    )
 
 
 # `method`-discriminated read request: only the POST branch declares `body`, so
@@ -1790,7 +1793,7 @@ class Idempotency(DeclaredHeaderNames, _EndpointModel):
         """`name` is a header name, and only when `in` says it is."""
         if self.location != "header":
             return []
-        return [(self.name, f"idempotency.name={self.name!r}")]
+        return [(self.name, "idempotency.name")]
 
 
 class WriteResponse(_EndpointModel):

@@ -72,6 +72,24 @@ def test_the_finding_points_at_the_authority():
 UNPARSEABLE = "https://{}[not-an-ip/v1"
 
 
+def test_a_schemeless_base_url_is_out_of_this_rule_s_reach():
+    """A declared gap, pinned so it stays reviewable rather than unnoticed.
+
+    `user:pass@host/v1` has no `//`, so by the URL grammar it declares no
+    authority at all — its leading segment is a path segment, and this rule is
+    about the authority. What it really is is a base URL that lost its scheme,
+    and refusing THAT is a different obligation with a different diagnostic:
+    an HTTP transport's base URL is an HTTP URL. Until a rule states that, the
+    engine refuses it at connect, and the credentials sit in a tracked file in
+    the meantime — which is why this is pinned here rather than left silent.
+    The census waiver on `HttpTransport.base_url` records the same gap.
+    """
+    transport = HttpTransport(
+        transport_type="http", base_url="user:pass@api.example.test/v1"
+    )
+    assert transport.base_url == "user:pass@api.example.test/v1"
+
+
 def test_credentials_are_found_in_a_url_the_parser_rejects():
     with pytest.raises(ValidationError) as exc:
         HttpTransport(transport_type="http", base_url=UNPARSEABLE.format("u:p@"))
@@ -106,6 +124,12 @@ def test_the_authority_ends_where_the_url_grammar_ends_it(label, base_url, autho
         ("@ in the query", "https://h/v1?notify=a@b"),
         ("@ in the fragment", "https://h/v1#a@b"),
         ("no authority at all", "mailto:a@b"),
+        # A `//` that does not follow a scheme opens no authority, so the `@`
+        # after it is somebody's data. Reading it as userinfo would refuse a
+        # URL that has none and send the author hunting for credentials.
+        ("// inside a query", "/search?q=https://a@b"),
+        ("// inside a fragment", "#frag//u@h"),
+        ("// inside a path", "/redirect/https://a@b"),
     ],
 )
 def test_an_at_sign_outside_the_authority_is_not_userinfo(label, base_url):

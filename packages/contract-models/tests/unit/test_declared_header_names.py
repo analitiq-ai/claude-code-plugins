@@ -54,7 +54,11 @@ REFUSED = [
 def test_every_header_map_refuses_the_name(
     label, model, kwargs, rule_id, canonical, lowercased
 ):
-    for spelling in (canonical, lowercased, canonical.upper()):
+    # The padded spellings matter as much as the cased ones: a wire reader
+    # sees the same header, so letting the spelling decide whether the rule
+    # applies is the whole of the bypass.
+    for spelling in (canonical, lowercased, canonical.upper(),
+                     f" {canonical}", f"{canonical} ", f"\t{lowercased}"):
         with pytest.raises(ValidationError) as exc:
             model(**kwargs, headers={spelling: "x"})
         assert rule_id in str(exc.value), f"{label}: {spelling} not refused by {rule_id}"
@@ -143,10 +147,37 @@ def test_a_bodiless_read_declares_no_media_type():
         GetReadRequest(method="GET", path="/v1/x", content_type="application/json")
 
 
-def test_the_media_type_is_free_text():
-    # A vendor media type is a provider fact, so the contract names none —
-    # an enum here would need editing per provider.
-    block = WriteRequest(
-        method="POST", path="/v1/x", content_type="application/vnd.api+json"
-    )
-    assert block.content_type == "application/vnd.api+json"
+@pytest.mark.parametrize(
+    "media_type",
+    [
+        "application/json",
+        # A vendor media type is a provider fact, so the contract names no
+        # vocabulary — an enum here would need editing per provider.
+        "application/vnd.api+json",
+        "application/x-www-form-urlencoded",
+        "multipart/form-data",
+        "text/csv; charset=utf-8",
+    ],
+)
+def test_any_media_type_is_declarable(media_type):
+    assert WriteRequest(
+        method="POST", path="/v1/x", content_type=media_type
+    ).content_type == media_type
+
+
+@pytest.mark.parametrize(
+    "label, value",
+    [
+        # The empty string is the sharp one: a second spelling of absent, which
+        # a resolver reading `content_type or <default>` silently turns into
+        # the default the author was overriding.
+        ("empty", ""),
+        ("whitespace", "   "),
+        ("prose", "not a media type"),
+        ("the header line rather than its value", "Content-Type: application/json"),
+        ("type with no subtype", "application"),
+    ],
+)
+def test_a_value_that_is_not_a_media_type_is_refused(label, value):
+    with pytest.raises(ValidationError, match="content_type"):
+        WriteRequest(method="POST", path="/v1/x", content_type=value)
