@@ -150,6 +150,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(model="AuthOperationTemplate", field="body", prose_hash="a267b5b40716", descriptive=True),
+    ProseObligation(
+        model="AuthOperationTemplate", field="content_type",
+        prose_hash="d7af16e90260",
+        rule_ids=("RULE-HTTP-003",),
+        waiver=ENGINE_OWNED_DEFAULTING,
+    ),
     ProseObligation(model="AuthOperationTemplate", field="headers", prose_hash="5ee760ce7f16", descriptive=True),
     ProseObligation(model="AuthOperationTemplate", field="headers_remove", prose_hash="6588e039a44e", descriptive=True),
     ProseObligation(
@@ -366,6 +372,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="OAuth2ClientCredentialsAuth", field="type", prose_hash="8ff1f9a47f14", descriptive=True),
     ProseObligation(model="PostAuthOperationRequest", prose_hash="dec0035f939a", descriptive=True),
     ProseObligation(model="PostAuthOperationRequest", field="body", prose_hash="a267b5b40716", descriptive=True),
+    ProseObligation(
+        model="PostAuthOperationRequest", field="content_type",
+        prose_hash="eb87061409ca",
+        rule_ids=("RULE-HTTP-003",),
+        waiver=ENGINE_CONDUCT,
+    ),
     ProseObligation(model="PostAuthOperationRequest", field="headers", prose_hash="5ee760ce7f16", descriptive=True),
     ProseObligation(
         model="PostAuthOperationRequest", field="method",

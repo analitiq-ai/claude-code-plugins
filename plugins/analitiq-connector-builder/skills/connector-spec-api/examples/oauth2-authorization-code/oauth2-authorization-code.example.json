@@ -62,9 +62,7 @@
       "transport_ref": "auth",
       "method": "POST",
       "path": "/oauth/token",
-      "headers": {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      "content_type": "application/x-www-form-urlencoded",
       "body": {
         "template": "grant_type=authorization_code&code=${runtime.oauth.code}&redirect_uri=${runtime.oauth.redirect_uri}"
       }
@@ -73,9 +71,7 @@
       "transport_ref": "auth",
       "method": "POST",
       "path": "/oauth/token",
-      "headers": {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
+      "content_type": "application/x-www-form-urlencoded",
       "body": {
         "template": "grant_type=refresh_token&refresh_token=${auth.refresh_token}"
       }

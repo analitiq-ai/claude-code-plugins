@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
+from urllib.parse import urlsplit
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from pydantic import (
@@ -30,7 +31,11 @@ from pydantic import (
     model_validator,
 )
 
-from analitiq.contracts.shared.rules import HeaderMergeRules, violation
+from analitiq.contracts.shared.rules import (
+    DeclaredHeaderNames,
+    HeaderMergeRules,
+    violation,
+)
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
     DISPLAY_NAME_MAX,
@@ -187,7 +192,9 @@ class FormFieldOption(StrictModel):
 # --- Auth Models (discriminated union) ---
 
 
-class AuthOperationTemplate(ValueExpressionScopes, HeaderMergeRules, StrictModel):
+class AuthOperationTemplate(
+    ValueExpressionScopes, HeaderMergeRules, DeclaredHeaderNames, StrictModel
+):
     """Operation template for auth `authorize` / `token_exchange` / `refresh` / `test`.
 
     The HTTP `base_url` lives on the named transport; this template selects the
@@ -221,6 +228,15 @@ class AuthOperationTemplate(ValueExpressionScopes, HeaderMergeRules, StrictModel
     headers_remove: list[str] | None = Field(
         default=None,
         description="Header names to delete from inherited transport defaults",
+    )
+    content_type: str | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded. Omitted, the engine sends the "
+            "form encoding an OAuth token request is specified in. The header "
+            "map is not a second way to say this."
+        ),
     )
     body: Any | None = Field(default=None, description="Request body; type depends on transport/encoding")
 
@@ -612,7 +628,9 @@ class ConnectionContractValidation(StrictModel):
     )
 
 
-class PostAuthOperationRequest(ValueExpressionScopes, StrictModel):
+class PostAuthOperationRequest(
+    ValueExpressionScopes, DeclaredHeaderNames, StrictModel
+):
     """Request template used by `options_request` / `discovery_request` to populate
     a post-auth output. Spec: §Post-Auth Outputs.
     """
@@ -644,6 +662,16 @@ class PostAuthOperationRequest(ValueExpressionScopes, StrictModel):
     headers: dict[str, Any] | None = Field(
         default=None,
         description="Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
+    )
+    content_type: str | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded. Resolved the way the auth "
+            "block's own operations resolve it, this request being dispatched "
+            "through the same path. The header map is not a second way to say "
+            "this."
+        ),
     )
     body: Any | None = Field(default=None, description="Request body; type depends on transport/encoding")
 
@@ -1038,7 +1066,27 @@ class TransportRateLimit(StrictModel):
     time_window_seconds: Any = Field(..., description="Window length in seconds (int or value-expression)")
 
 
-class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
+def _authored_url_text(value: Any) -> str | None:
+    """The URL text an author wrote, for the forms that carry any.
+
+    A bare string and a `{literal}` are the whole URL verbatim; a `{template}`
+    is the URL with placeholders left in it, and its authority is still the
+    author's own text wherever no placeholder stands in that part. A `{ref}`
+    and a function node carry no URL at all — the string arrives at
+    resolution — so they read back as None and the checks over this skip them.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, TemplateExpression):
+        return value.template
+    if isinstance(value, LiteralStringExpression):
+        return value.literal
+    return None
+
+
+class HttpTransport(
+    ValueExpressionScopes, HeaderMergeRules, DeclaredHeaderNames, StrictModel
+):
     """HTTP transport contract. Spec: §Transport Contracts."""
 
     transport_type: Literal["http"] = Field(description="Transport type discriminator")
@@ -1050,7 +1098,11 @@ class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
             "connection-materialization time (e.g. a per-tenant host taken from "
             "`connection.parameters` or discovered post-auth via "
             "`connection.discovered`). May be omitted when this entry exists "
-            "only to extend `transport_defaults`."
+            "only to extend `transport_defaults`. Credentials belong in `auth` "
+            "or in a declared header, never in the URL's authority: "
+            "RULE-CTOR-066 refuses them in the URL text authored here, and a "
+            "value that only resolves to them is refused at connect, not by "
+            "this contract."
         ),
     )
     headers: dict[str, Any] | None = Field(
@@ -1075,6 +1127,23 @@ class HttpTransport(ValueExpressionScopes, HeaderMergeRules, StrictModel):
     # `rate_limit` sit beside them and are read literally by both.
     EXPRESSION_FIELDS: ClassVar[tuple[str, ...]] = ("base_url",)
     EXPRESSION_MAPS: ClassVar[tuple[str, ...]] = ("headers",)
+
+    @model_validator(mode="after")
+    def _base_url_declares_no_credentials(self):
+        """RULE-CTOR-066 over the authored forms of `base_url`."""
+        text = _authored_url_text(self.base_url)
+        if text is None:
+            return self
+        try:
+            parsed = urlsplit(text)
+        except ValueError:
+            # Not a parseable URL, so it has no authority to read. Whether a
+            # base URL is well-formed at all is the engine's at connect, and
+            # guessing here would report this rule for a different defect.
+            return self
+        if parsed.username or parsed.password:
+            raise violation("RULE-CTOR-066", f"base_url authority {parsed.netloc!r}")
+        return self
 
 
 class DsnBinding(ValueExpressionScopes, StrictModel):
@@ -1397,7 +1466,9 @@ Transport = Annotated[
 """Named transport contract entry. Spec: §Transport Contracts."""
 
 
-class TransportDefaults(ValueExpressionScopes, HeaderMergeRules, StrictModel):
+class TransportDefaults(
+    ValueExpressionScopes, HeaderMergeRules, DeclaredHeaderNames, StrictModel
+):
     """Defaults merged into every entry of `transports`. Spec: §Transport Contracts."""
 
     # Merge layer one: this map is folded into every transport entry before any

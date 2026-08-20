@@ -108,3 +108,44 @@ class HeaderMergeRules:
         if overlap:
             raise violation("RULE-HTTP-001", f"overlap={overlap!r}")
         return self
+
+
+class DeclaredHeaderNames:
+    """A block that names an HTTP header the engine puts on a request.
+
+    Enforces RULE-HTTP-002 and RULE-HTTP-003 for every such block. Mixed in
+    rather than repeated, for the reason `HeaderMergeRules` is: each check is
+    one check, and a model gains it by inheriting.
+
+    A rule here is about the NAME a block writes down, never the value, so
+    each reads the same list — which is why the mixin exposes the names rather
+    than the map. A block that names a header somewhere other than a `headers`
+    map overrides `declared_header_names` and inherits the checks unchanged;
+    the write mode's idempotency declaration is the case that exists.
+    """
+
+    def declared_header_names(self) -> list[tuple[str, str]]:
+        """Each header name this block names, paired with where it named it.
+
+        The site travels with the name so the finding lands on the header the
+        author wrote rather than on the block holding it — the same reason
+        `ValueExpressionScopes` walks a map per entry.
+        """
+        # Direct attribute access, so a class mixing this in without the field
+        # fails at construction rather than silently enforcing nothing.
+        return [(name, f"headers.{name}") for name in (self.headers or {})]
+
+    @model_validator(mode="after")
+    def _no_content_length_header(self):
+        for name, where in self.declared_header_names():
+            # Header names are case-insensitive on the wire.
+            if name.lower() == "content-length":
+                raise violation("RULE-HTTP-002", where)
+        return self
+
+    @model_validator(mode="after")
+    def _no_content_type_header(self):
+        for name, where in self.declared_header_names():
+            if name.lower() == "content-type":
+                raise violation("RULE-HTTP-003", where)
+        return self

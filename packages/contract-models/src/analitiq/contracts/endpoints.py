@@ -43,6 +43,7 @@ from analitiq.contracts.arrow_grammar import (
     validate_cross_params,
 )
 from analitiq.contracts.shared.rules import (
+    DeclaredHeaderNames,
     HeaderMergeRules,
     find_duplicates,
     violation,
@@ -970,7 +971,7 @@ _REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
 )
 
 
-class _RequestBase(HeaderMergeRules, _EndpointModel):
+class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
     """Common request fields shared by read and write operations."""
 
     model_config = ConfigDict(json_schema_extra=_REQUEST_SCHEMA_RULES)
@@ -1094,7 +1095,17 @@ class PostReadRequest(_RequestBase):
     method: Literal["POST"] = Field(..., description="Read HTTP method.")
     body: Any | None = Field(
         default=None,
-        description="JSON request body. May mix literals with `{from_param}`.",
+        description="Request body. May mix literals with `{from_param}`.",
+    )
+    content_type: str | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded — the field to declare when a "
+            "provider takes a form-encoded or otherwise non-JSON body. "
+            "Omitted, the engine sends JSON. The header map is not a second "
+            "way to say this (RULE-HTTP-003)."
+        ),
     )
 
 
@@ -1140,7 +1151,17 @@ class WriteRequest(_RequestBase):
     )
     body: Any | None = Field(
         default=None,
-        description="JSON request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
+        description="Request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
+    )
+    content_type: str | None = Field(
+        default=None,
+        description=(
+            "Media type of `body`, sent as the request's `Content-Type` and "
+            "selecting how the body is encoded — the field to declare when a "
+            "provider takes a form-encoded or otherwise non-JSON body. "
+            "Omitted, the engine sends JSON. The header map is not a second "
+            "way to say this (RULE-HTTP-003)."
+        ),
     )
 
 
@@ -1738,7 +1759,7 @@ class Batching(_EndpointModel):
     )
 
 
-class Idempotency(_EndpointModel):
+class Idempotency(DeclaredHeaderNames, _EndpointModel):
     """Idempotency-key placement declaration for a write mode.
 
     The author declares only *where* the provider's idempotency key goes on
@@ -1763,6 +1784,12 @@ class Idempotency(_EndpointModel):
         min_length=1,
         description="Header name or top-level body field name that carries the key.",
     )
+
+    def declared_header_names(self) -> list[tuple[str, str]]:
+        """`name` is a header name, and only when `in` says it is."""
+        if self.location != "header":
+            return []
+        return [(self.name, f"idempotency.name={self.name!r}")]
 
 
 class WriteResponse(_EndpointModel):

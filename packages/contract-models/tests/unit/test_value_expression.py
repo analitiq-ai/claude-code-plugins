@@ -17,6 +17,7 @@ import base64
 import pytest
 from analitiq.contracts.value_expression import (
     OAUTH_TOKEN_PAYLOAD_KEY,
+    DEFAULT_AUTH_CONTENT_TYPE,
     apply_operation_content_type,
     build_resolution_context,
     resolve_body_template,
@@ -562,24 +563,34 @@ class TestBuildResolutionContext:
 
 
 class TestApplyOperationContentType:
-    """Operation-level `content_type` shortcut > inherited header > form default."""
+    """The operation's declared `content_type`, else the form default.
 
-    def test_operation_shortcut_overrides_inherited_case_insensitively(self):
-        headers = {"content-type": "text/plain", "Accept": "application/json"}
+    There is no third source to rank against these two: RULE-HTTP-003 refuses
+    the header name in every map a connector can declare, so a built header
+    map reaches this function with nothing under `Content-Type` to inherit.
+    """
+
+    def test_the_declared_media_type_is_what_is_stamped_and_returned(self):
+        headers = {"Accept": "application/json"}
         ct = apply_operation_content_type(headers, {"content_type": "application/json"})
         assert ct == "application/json"
         assert headers["Content-Type"] == "application/json"
-        assert "content-type" not in headers
+        assert headers["Accept"] == "application/json"
 
-    def test_inherited_header_wins_when_no_shortcut(self):
-        headers = {"Content-Type": "application/json"}
-        assert apply_operation_content_type(headers, {}) == "application/json"
-
-    def test_form_default_when_nothing_sets_it(self):
+    def test_form_default_when_the_operation_declares_none(self):
         headers = {}
         ct = apply_operation_content_type(headers, {})
-        assert ct == "application/x-www-form-urlencoded"
-        assert headers["Content-Type"] == "application/x-www-form-urlencoded"
+        assert ct == DEFAULT_AUTH_CONTENT_TYPE
+        assert headers["Content-Type"] == DEFAULT_AUTH_CONTENT_TYPE
+
+    def test_a_declared_media_type_replaces_a_stamp_from_an_earlier_call(self):
+        # The map is built per dispatch, so this is the only way a
+        # `Content-Type` can already be in one when the function runs.
+        headers = {}
+        apply_operation_content_type(headers, {})
+        ct = apply_operation_content_type(headers, {"content_type": "application/json"})
+        assert ct == "application/json"
+        assert headers["Content-Type"] == "application/json"
 
 
 class TestResolveBodyTemplate:

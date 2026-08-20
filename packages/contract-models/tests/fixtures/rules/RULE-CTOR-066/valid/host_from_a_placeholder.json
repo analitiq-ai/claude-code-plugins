@@ -1,0 +1,6 @@
+{
+  "transport_type": "http",
+  "base_url": {
+    "template": "https://${connection.parameters.host}/v1"
+  }
+}

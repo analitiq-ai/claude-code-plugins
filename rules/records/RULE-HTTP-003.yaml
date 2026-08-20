@@ -1,0 +1,35 @@
+id: RULE-HTTP-003
+statement: >
+  A block that names an HTTP header MUST NOT name `Content-Type`, matched
+  case-insensitively; a request body's media type is declared by the request's
+  own `content_type` field.
+tier: structural
+severity: error
+scopes: [any]
+validator: "analitiq.contracts.shared.rules::DeclaredHeaderNames._no_content_type_header"
+owners: [connector-plugin, engine]
+targets:
+  - _RequestBase
+  - AuthOperationTemplate
+  - PostAuthOperationRequest
+  - HttpTransport
+  - TransportDefaults
+  - Idempotency
+fixture_model: AuthOperationTemplate
+rationale: >
+  `Content-Type` describes the entity body of one request, and it is what
+  selects how that body is serialized. Reaching it through a header map makes
+  the serializer's input a merge result — the shared defaults, then the
+  transport, then the operation — so which encoder runs depends on a layer the
+  author of the operation may not be looking at, and a transport that names it
+  states a body property on an object that has no body, reaching bodiless
+  requests as readily as the rest. A typed field on the request that carries
+  the body puts the media type at the one layer that owns it, and refusing the
+  header name is what keeps it the only route: two ways to say it is two
+  values that can disagree, which is the resolution order the auth path had to
+  grow and the data path never had at all. `Accept` is the contrast that
+  shows where the line falls — it states what the client will take back, a
+  property of the client rather than of one body, so it stays an ordinary
+  declared header.
+status: active
+superseded_by: null

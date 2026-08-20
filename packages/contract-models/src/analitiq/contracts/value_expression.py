@@ -661,26 +661,22 @@ def resolve_operation_url(
     return resolve_template_string(url, context)
 
 
-def apply_operation_content_type(headers: dict[str, str], operation: dict) -> str:
-    """Apply the operation-level `content_type` shortcut to a built header
-    map (mutating it) and return the effective Content-Type.
+#: What an auth operation's body is encoded as when it declares no
+#: `content_type`. Form encoding because that is what a token request is
+#: specified in, which is what these operations overwhelmingly are.
+DEFAULT_AUTH_CONTENT_TYPE = "application/x-www-form-urlencoded"
 
-    The shortcut overrides any inherited Content-Type; otherwise an
-    inherited header wins; else the historical form default so legacy
-    string bodies still get urlencoded. Matched case-insensitively.
+
+def apply_operation_content_type(headers: dict[str, str], operation: dict) -> str:
+    """Stamp the operation's media type onto a built header map, and return it.
+
+    The operation declares it in `content_type` and a header map cannot
+    (RULE-HTTP-003), so there is nothing here to merge or override: the map is
+    stamped, and the same value comes back for the body encoder to key on.
     """
-    operation_ct = operation.get("content_type")
-    if operation_ct:
-        for k in list(headers):
-            if k.lower() == "content-type":
-                del headers[k]
-        headers["Content-Type"] = operation_ct
-    elif not any(k.lower() == "content-type" for k in headers):
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-    return next(
-        (v for k, v in headers.items() if k.lower() == "content-type"),
-        "application/x-www-form-urlencoded",
-    )
+    content_type = operation.get("content_type") or DEFAULT_AUTH_CONTENT_TYPE
+    headers["Content-Type"] = content_type
+    return content_type
 
 
 def resolve_body_template(

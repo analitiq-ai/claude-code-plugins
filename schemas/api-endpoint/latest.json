@@ -1457,8 +1457,21 @@
             }
           ],
           "default": null,
-          "description": "JSON request body. May mix literals with `{from_param}`.",
+          "description": "Request body. May mix literals with `{from_param}`.",
           "title": "Body"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Media type of `body`, sent as the request's `Content-Type` and selecting how the body is encoded \u2014 the field to declare when a provider takes a form-encoded or otherwise non-JSON body. Omitted, the engine sends JSON. The header map is not a second way to say this (RULE-HTTP-003).",
+          "title": "Content Type"
         },
         "headers": {
           "anyOf": [
@@ -2563,8 +2576,21 @@
             }
           ],
           "default": null,
-          "description": "JSON request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
+          "description": "Request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
           "title": "Body"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Media type of `body`, sent as the request's `Content-Type` and selecting how the body is encoded \u2014 the field to declare when a provider takes a form-encoded or otherwise non-JSON body. Omitted, the engine sends JSON. The header map is not a second way to say this (RULE-HTTP-003).",
+          "title": "Content Type"
         },
         "headers": {
           "anyOf": [
@@ -2916,5 +2942,5 @@
   ],
   "title": "Analitiq API Endpoint",
   "type": "object",
-  "version": "17.0.1"
+  "version": "17.1.0"
 }

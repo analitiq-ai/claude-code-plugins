@@ -268,8 +268,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="PostReadRequest", prose_hash="ec73f959a39b", descriptive=True),
     ProseObligation(
         model="PostReadRequest", field="body",
-        prose_hash="958783250f0b",
+        prose_hash="806a08ec23e9",
         rule_ids=("RULE-ENDP-022",),
+    ),
+    ProseObligation(
+        model="PostReadRequest", field="content_type",
+        prose_hash="a2a16d61a1d1",
+        rule_ids=("RULE-HTTP-003",),
+        waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(model="PostReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
     ProseObligation(model="ReadOperation", prose_hash="ec0e00d340de", descriptive=True),
@@ -303,8 +309,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="WriteRequest", prose_hash="c2059bccd496", descriptive=True),
     ProseObligation(
         model="WriteRequest", field="body",
-        prose_hash="191d279412ec",
+        prose_hash="6dce4339b994",
         rule_ids=("RULE-ENDP-017", "RULE-ENDP-022"),
+    ),
+    ProseObligation(
+        model="WriteRequest", field="content_type",
+        prose_hash="a2a16d61a1d1",
+        rule_ids=("RULE-HTTP-003",),
+        waiver=ENGINE_OWNED_DEFAULTING,
     ),
     ProseObligation(
         model="WriteRequest", field="method",
