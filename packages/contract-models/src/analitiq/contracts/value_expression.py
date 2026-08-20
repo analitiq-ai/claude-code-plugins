@@ -558,12 +558,13 @@ def header_name_key(name: str) -> str:
     stripped, because the space around a name is not part of it: ` Accept` is
     that header written carelessly, not a different one.
 
-    Every comparison of two header names goes through here — the rules that
-    refuse a name, the merge rule that refuses declaring and removing one, and
-    the dispatch-time sweep that keeps a map from carrying the same header
-    twice. They disagreed once, in the direction that matters: one normalised
-    the padding away and the others did not, so a padded name was refused at
-    one site and waved through at the next.
+    Any code asking whether two header names are the same header asks it here.
+    A site that answers it privately answers it differently sooner or later,
+    and the two answers are both plausible and both partial: one refuses a
+    spelling the next accepts, so a name is graded at one layer and merged at
+    another as though it were two. Which sites there are is not something a
+    check can settle — deciding whether a `.lower()` is comparing a header
+    name takes a reader — so it is a reader who keeps this true.
     """
     return name.strip().lower()
 
@@ -805,9 +806,11 @@ def build_effective_headers(
       3. operation `headers_remove` (drops inherited names only)
       4. operation `headers`
 
-    Header names are matched case-insensitively for override and removal. The
-    casing of the latest merge layer to set a name is the casing sent on the
-    wire; `headers_remove` does not re-establish casing on its own.
+    Names are matched through `header_name_key` for override and removal, so
+    a layer that writes a name carelessly still overrides — and is still
+    removed by — the same name written plainly. The spelling of the latest
+    layer to set a name is the spelling sent on the wire; `headers_remove`
+    does not re-establish one on its own.
     """
     effective: dict[str, str] = {}
     casing: dict[str, str] = {}
@@ -817,7 +820,7 @@ def build_effective_headers(
             resolved = resolve_header_value(name, value, context)
             if resolved is None:
                 continue
-            lk = name.lower()
+            lk = header_name_key(name)
             prior = casing.pop(lk, None)
             if prior is not None and prior != name:
                 effective.pop(prior, None)
@@ -833,7 +836,7 @@ def build_effective_headers(
                 type(name).__name__,
             )
             continue
-        prior = casing.pop(name.lower(), None)
+        prior = casing.pop(header_name_key(name), None)
         if prior is not None:
             effective.pop(prior, None)
     _merge(template.get("headers"))

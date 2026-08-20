@@ -1,0 +1,9 @@
+{
+  "path": "/x",
+  "headers": {
+    " Accept": "1"
+  },
+  "headers_remove": [
+    "Accept"
+  ]
+}

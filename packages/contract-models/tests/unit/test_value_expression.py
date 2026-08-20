@@ -20,6 +20,7 @@ from analitiq.contracts.value_expression import (
     DEFAULT_AUTH_CONTENT_TYPE,
     apply_operation_content_type,
     authored_url_text,
+    build_effective_headers,
     header_name_key,
     build_resolution_context,
     resolve_body_template,
@@ -624,6 +625,45 @@ class TestApplyOperationContentType:
         ] == ["Content-Type"]
         assert headers["Content-Type"] == "application/json"
         assert headers["Accept"] == "application/json"
+
+    @pytest.mark.parametrize(
+        "label, defaults, template, surviving",
+        [
+            ("a padded name is overridden by the plain one",
+             {"headers": {" Accept": "foo"}}, {"headers": {"Accept": "bar"}}, "bar"),
+            ("and the other way round",
+             {"headers": {"Accept": "foo"}}, {"headers": {" Accept": "bar"}}, "bar"),
+            ("cased, as before",
+             {"headers": {"accept": "foo"}}, {"headers": {"Accept": "bar"}}, "bar"),
+        ],
+    )
+    def test_a_merge_layer_overrides_a_name_however_the_other_spelled_it(
+        self, label, defaults, template, surviving
+    ):
+        # A survivor is the same header on the wire twice, and the provider
+        # reads whichever it sees first — the merge decides what is sent, so a
+        # name compared its own way here undoes the rules that graded it.
+        headers = build_effective_headers(
+            template, {}, transport=None, transport_defaults=defaults
+        )
+        assert [k for k in headers if header_name_key(k) == "accept"] == list(headers)
+        assert list(headers.values()) == [surviving], label
+
+    @pytest.mark.parametrize("declared", [" Accept", "Accept ", "accept", "Accept"])
+    @pytest.mark.parametrize("removed", [" Accept", "Accept ", "accept", "Accept"])
+    def test_headers_remove_drops_a_name_however_either_side_spelled_it(
+        self, declared, removed
+    ):
+        # Both spellings vary: the declaring side and the removing side reduce
+        # through the same reader, so neither one's carelessness decides
+        # whether an inherited header is dropped.
+        headers = build_effective_headers(
+            {"headers_remove": [removed]},
+            {},
+            transport=None,
+            transport_defaults={"headers": {declared: "foo"}},
+        )
+        assert headers == {}
 
     def test_the_authored_forms_of_a_url_have_one_reader(self):
         # `resolve_transport_base_url` and the connector model's credentials
