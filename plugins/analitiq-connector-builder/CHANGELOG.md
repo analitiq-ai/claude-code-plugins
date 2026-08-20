@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.2](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.2.1...analitiq-connector-builder-v0.2.2) (2026-08-20)
+
+
+### Bug Fixes
+
+* land the rules audit's prose findings ([23343f2](https://github.com/analitiq-ai/claude-code-plugins/commit/23343f27a72d4120efa87d33287732714bc39fcd))
+* shape-check the connector document's untyped expression sites ([e485461](https://github.com/analitiq-ai/claude-code-plugins/commit/e48546108858b9c5157de301c674b49f5b530a48))
+* shape-check the connector document's untyped expression sites ([5a7d481](https://github.com/analitiq-ai/claude-code-plugins/commit/5a7d48128aa0b975f6891a75130a828c51110a33)), closes [#172](https://github.com/analitiq-ai/claude-code-plugins/issues/172)
+* teach the case rule for API read maps — uppercase exact, cased regex ([5c2caf9](https://github.com/analitiq-ai/claude-code-plugins/commit/5c2caf95e84d2735671702a69774a3ca3cdee6e3))
+* teach the case rule for API read maps — uppercase exact, never regex ([135921f](https://github.com/analitiq-ai/claude-code-plugins/commit/135921ffbb2f1d1b360478df66854de184464fbe))
+
 ## [0.2.1](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-connector-builder-v0.2.0...analitiq-connector-builder-v0.2.1) (2026-08-14)
 
 
