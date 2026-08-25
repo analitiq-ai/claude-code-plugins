@@ -60,7 +60,7 @@ single field looks wrong.
 |---|---|---|---|---|
 | RULE-ENDP-020 | A column field spec MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `database-endpoint` | error | validator |
 | RULE-ENDP-021 | A database column MUST declare the sibling shape key its arrow_type's container marker takes, and MUST declare no shape key at all when its arrow_type is not a container marker. | `database-endpoint` | error | validator |
-| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
+| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator |
 
 ## Referential
 

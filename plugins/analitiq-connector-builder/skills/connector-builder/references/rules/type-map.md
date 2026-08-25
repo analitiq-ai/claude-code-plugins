@@ -63,7 +63,7 @@ single field looks wrong.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
+| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator |
 | RULE-TMAP-001 | An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | validator |
 | RULE-TMAP-002 | A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | validator |
 | RULE-TMAP-003 | Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares. | `type-map` | error | validator |

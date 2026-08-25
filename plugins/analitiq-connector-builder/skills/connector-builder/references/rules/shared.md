@@ -57,7 +57,7 @@ single field looks wrong.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
+| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator |
 | RULE-STRM-003 | A connection-scoped endpoint reference that supplies an endpoint_id MUST supply the handle the contract's derivation over its verbatim database object produces. | `stream` | error | validator |
 
 ## Referential

@@ -108,7 +108,7 @@ single field looks wrong.
 | RULE-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
 | RULE-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |
 | RULE-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | `connector` | error | — |
-| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
+| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator |
 
 ## Referential
 
