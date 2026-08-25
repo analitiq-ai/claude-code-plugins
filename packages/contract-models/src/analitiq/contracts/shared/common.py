@@ -234,8 +234,8 @@ HEADER_NAME_PROPERTY_NAMES: dict[str, Any] = {
     "propertyNames": {"pattern": HEADER_NAME_PATTERN}
 }
 
-#: A media type, as RFC 9110 writes one: a type and a subtype of token
-#: characters, optionally followed by parameters. It constrains the SHAPE and
+#: A media type, as RFC 9110 writes one: a type and a subtype, each a token,
+#: optionally followed by parameters. It constrains the SHAPE and
 #: deliberately not the vocabulary — `application/vnd.api+json` passes —
 #: because which media types a provider accepts is a provider fact no contract
 #: here owns. What it refuses is a value that is not a media type at all, the

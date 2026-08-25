@@ -62,8 +62,8 @@ than edited.
 | RULE-CTOR-064 | An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name. | `connector` | error | validator | — |
 | RULE-CTOR-065 | An expression dict in a connector field a runtime resolves MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares. | `connector` | error | validator | — |
 | RULE-CTOR-066 | An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the connector author writes — the bare-string form, the `{literal}` form, or the authority of a `{template}`. | `connector` | error | validator | — |
-| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator | — |
-| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | — |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
@@ -108,7 +108,7 @@ single field looks wrong.
 | RULE-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
 | RULE-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |
 | RULE-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | `connector` | error | — |
-| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored. | `any` | error | validator |
+| RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential
 

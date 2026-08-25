@@ -1,8 +1,7 @@
 id: RULE-HTTP-001
 statement: >
   A block MUST NOT both declare a header and list that same header name for
-  removal, matched as a reader of the wire sees a header name — case-folded,
-  and with the space around it ignored.
+  removal, matched case-insensitively.
 tier: advisory
 severity: error
 scopes: [any]

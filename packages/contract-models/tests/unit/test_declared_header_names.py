@@ -160,10 +160,30 @@ def test_a_name_that_is_not_a_header_name_is_refused(name, label, model, kwargs)
         model(**kwargs, headers={name: "x"})
 
 
+#: The blocks whose `headers_remove` names a header to drop. Not every block
+#: that declares headers has one — a post-auth request inherits nothing to
+#: remove — so this is its own list rather than a filter over the one above.
+REMOVAL_BLOCKS = [
+    ("HttpTransport", HttpTransport, {"transport_type": "http"}),
+    ("TransportDefaults", TransportDefaults, {}),
+    ("AuthOperationTemplate", AuthOperationTemplate, {"path": "/t"}),
+    ("WriteRequest", WriteRequest, {"method": "POST", "path": "/v1/x"}),
+]
+
+
 @pytest.mark.parametrize("name", NOT_HEADER_NAMES)
-def test_a_removal_naming_no_header_name_is_refused(name):
+@pytest.mark.parametrize("label, model, kwargs", REMOVAL_BLOCKS)
+def test_a_removal_naming_no_header_name_is_refused(name, label, model, kwargs):
+    # Every block, not just the one: a removal entry names a header the same
+    # way a declaration does, so a site left loose would take a name the
+    # declaring side refuses.
     with pytest.raises(ValidationError):
-        HttpTransport(transport_type="http", headers_remove=[name])
+        model(**kwargs, headers_remove=[name])
+
+
+@pytest.mark.parametrize("label, model, kwargs", REMOVAL_BLOCKS)
+def test_a_removal_naming_a_header_parses(label, model, kwargs):
+    assert model(**kwargs, headers_remove=["Accept"]).headers_remove == ["Accept"]
 
 
 @pytest.mark.parametrize("name", ["Accept", "X-Api-Key", "content-type-ish"])

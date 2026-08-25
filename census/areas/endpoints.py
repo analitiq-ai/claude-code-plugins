@@ -232,8 +232,11 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "which of the two kinds of name this is depends on `location`, "
             "and the field is one annotation for both, so the header case is "
             "not held to a header name's token shape here; the maps that key "
-            "on `HeaderName` are, and closing this one takes splitting the "
-            "model on its placement discriminator"
+            "on `HeaderName` are. Closing it takes splitting the model on its "
+            "placement discriminator, which also re-mechanises RULE-ENDP-039 "
+            "— that rule binds this field as a closed vocabulary, and each "
+            "branch of the split would carry a single-member Literal that is "
+            "a discriminator tag instead"
         ),
     ),
     ProseObligation(

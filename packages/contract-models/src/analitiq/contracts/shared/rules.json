@@ -3585,7 +3585,7 @@
   },
   {
    "id": "RULE-HTTP-001",
-   "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored.\n",
+   "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3611,7 +3611,7 @@
   },
   {
    "id": "RULE-HTTP-002",
-   "statement": "A block that names an HTTP header MUST NOT name `Content-Length`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored.\n",
+   "statement": "A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -3639,7 +3639,7 @@
   },
   {
    "id": "RULE-HTTP-003",
-   "statement": "A block that names an HTTP header MUST NOT name `Content-Type`, matched as a reader of the wire sees a header name — case-folded, and with the space around it ignored; a request body's media type is declared by the request's own `content_type` field.\n",
+   "statement": "A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [

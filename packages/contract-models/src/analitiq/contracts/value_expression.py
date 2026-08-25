@@ -556,7 +556,10 @@ def header_name_key(name: str) -> str:
 
     Case-folded, because header names are case-insensitive on the wire, and
     stripped, because the space around a name is not part of it: ` Accept` is
-    that header written carelessly, not a different one.
+    that header written carelessly, not a different one. An authored document
+    cannot reach here carrying one — `HeaderName` refuses it as a name at all
+    — so the strip earns its place on the maps assembled at dispatch, which
+    this module builds and merges without any model having graded them.
 
     Any code asking whether two header names are the same header asks it here.
     A site that answers it privately answers it differently sooner or later,
