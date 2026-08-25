@@ -565,6 +565,40 @@ class TestBuildResolutionContext:
         assert "runtime" not in ctx
 
 
+class TestHeaderNameKey:
+    """The one reduction every header-name comparison in the contract asks for."""
+
+    @pytest.mark.parametrize(
+        "written, key",
+        [
+            ("Content-Type", "content-type"),
+            ("content-type", "content-type"),
+            ("CONTENT-TYPE", "content-type"),
+            (" Content-Type", "content-type"),
+            ("Content-Type ", "content-type"),
+            ("\tContent-Type\n", "content-type"),
+        ],
+    )
+    def test_one_header_written_several_ways_reduces_to_one_key(self, written, key):
+        assert header_name_key(written) == key
+
+    def test_two_headers_do_not_reduce_to_the_same_key(self):
+        assert header_name_key("Accept") != header_name_key("Accept-Encoding")
+
+    @pytest.mark.parametrize("blank", ["", " ", "  ", "\t"])
+    def test_a_name_that_is_only_space_reduces_to_nothing(self, blank):
+        """Pinned because it is a state the contract can still reach.
+
+        No rule requires an authored header name to be a token, so a blank one
+        parses, and every blank one reduces alike — which makes two of them the
+        same header to the merge, and one displaces the other. Refusing a name
+        that is not a header name is a separate obligation this reduction
+        cannot take on: it answers whether two names match, not whether either
+        is a name.
+        """
+        assert header_name_key(blank) == ""
+
+
 class TestApplyOperationContentType:
     """The operation's declared `content_type`, else the form default.
 
@@ -617,37 +651,64 @@ class TestApplyOperationContentType:
         # refusal does not reach it.
         headers = {spelling: "text/plain", "Accept": "application/json"}
         apply_operation_content_type(headers, {"content_type": "application/json"})
-        # Compared through the shared normaliser, not `.lower()`: an assertion
-        # that reads a name the way the bug does cannot see the bug — a padded
-        # survivor is invisible to a bare `.lower()` on both sides.
-        assert [
-            k for k in headers if header_name_key(k) == "content-type"
-        ] == ["Content-Type"]
-        assert headers["Content-Type"] == "application/json"
-        assert headers["Accept"] == "application/json"
+        # The whole map, by equality. Reducing a name here the way the code
+        # reduces it would hide the survivor the reduction failed to remove —
+        # both sides would agree, and a second `Content-Type` would go out.
+        # Only the exact keys prove one header was sent rather than two.
+        assert headers == {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
 
     @pytest.mark.parametrize(
-        "label, defaults, template, surviving",
+        "label, defaults, template, expected",
         [
             ("a padded name is overridden by the plain one",
-             {"headers": {" Accept": "foo"}}, {"headers": {"Accept": "bar"}}, "bar"),
+             {" Accept": "foo"}, {"Accept": "bar"}, {"Accept": "bar"}),
+            # The later layer's spelling is the one sent, carelessness and all.
             ("and the other way round",
-             {"headers": {"Accept": "foo"}}, {"headers": {" Accept": "bar"}}, "bar"),
+             {"Accept": "foo"}, {" Accept": "bar"}, {" Accept": "bar"}),
             ("cased, as before",
-             {"headers": {"accept": "foo"}}, {"headers": {"Accept": "bar"}}, "bar"),
+             {"accept": "foo"}, {"Accept": "bar"}, {"Accept": "bar"}),
         ],
     )
     def test_a_merge_layer_overrides_a_name_however_the_other_spelled_it(
-        self, label, defaults, template, surviving
+        self, label, defaults, template, expected
     ):
         # A survivor is the same header on the wire twice, and the provider
-        # reads whichever it sees first — the merge decides what is sent, so a
-        # name compared its own way here undoes the rules that graded it.
+        # reads whichever it sees first. Asserted by equality on the whole map
+        # for the reason the sweep test above is: a filter written in terms of
+        # the reduction cannot see what the reduction missed.
         headers = build_effective_headers(
-            template, {}, transport=None, transport_defaults=defaults
+            {"headers": template}, {}, transport=None, transport_defaults={"headers": defaults}
         )
-        assert [k for k in headers if header_name_key(k) == "accept"] == list(headers)
-        assert list(headers.values()) == [surviving], label
+        assert headers == expected, label
+
+    def test_an_override_that_cannot_resolve_leaves_the_inherited_value(self):
+        # A later layer whose value does not resolve is dropped before the
+        # bookkeeping runs, so the name it would have overridden keeps the
+        # value it inherited. The alternative — clearing the prior value and
+        # sending nothing — loses a header the connector declared, and the
+        # provider answers as though it were never configured.
+        headers = build_effective_headers(
+            {"headers": {"Accept": {"function": "not_a_registered_function"}}},
+            {},
+            transport=None,
+            transport_defaults={"headers": {"Accept": "inherited"}},
+        )
+        assert headers == {"Accept": "inherited"}
+
+    def test_a_non_string_headers_remove_entry_is_ignored_not_fatal(self):
+        # `headers_remove` is authored, so a malformed entry is a document
+        # defect the rules grade; this function is handed dicts assembled at
+        # dispatch and must not raise partway through building a request.
+        headers = build_effective_headers(
+            {"headers_remove": [None, 7, "Accept"]},
+            {},
+            transport=None,
+            transport_defaults={"headers": {"Accept": "gone", "X-Keep": "kept"}},
+        )
+        assert headers == {"X-Keep": "kept"}
 
     @pytest.mark.parametrize("declared", [" Accept", "Accept ", "accept", "Accept"])
     @pytest.mark.parametrize("removed", [" Accept", "Accept ", "accept", "Accept"])
