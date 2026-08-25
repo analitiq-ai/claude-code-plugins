@@ -551,6 +551,27 @@ def resolve_header_value(name: str, value: Any, context: dict[str, Any]) -> str 
     return str(resolved)
 
 
+def header_name_key(name: str) -> str:
+    """A header name reduced to what a reader of the wire compares.
+
+    Case-folded, because header names are case-insensitive on the wire, and
+    stripped, because the space around a name is not part of it: ` Accept` is
+    that header written carelessly, not a different one. An authored document
+    cannot reach here carrying one — `HeaderName` refuses it as a name at all
+    — so the strip earns its place on the maps assembled at dispatch, which
+    this module builds and merges without any model having graded them.
+
+    Any code asking whether two header names are the same header asks it here.
+    A site that answers it privately answers it differently sooner or later,
+    and the two answers are both plausible and both partial: one refuses a
+    spelling the next accepts, so a name is graded at one layer and merged at
+    another as though it were two. Which sites there are is not something a
+    check can settle — deciding whether a `.lower()` is comparing a header
+    name takes a reader — so it is a reader who keeps this true.
+    """
+    return name.strip().lower()
+
+
 def is_json_content_type(content_type: str | None) -> bool:
     """True when a Content-Type selects JSON body encoding.
 
@@ -570,6 +591,64 @@ def select_transport(connector: dict, template: dict) -> dict | None:
     transports = connector.get("transports") or {}
     ref = template.get("transport_ref") or connector.get("default_transport")
     return transports.get(ref) if ref else None
+
+
+def authored_url_text(node: "str | dict[str, Any] | None") -> str | None:
+    """The URL text an author wrote, for the expression forms that carry any.
+
+    A bare string and a `{literal}` are the whole URL verbatim; a `{template}`
+    is the URL with its placeholders still in it, so its literal parts — the
+    scheme and whatever of the authority no placeholder stands in — are the
+    author's own text. A `{ref}` and a function node carry no URL at all: the
+    string arrives at resolution, and they read back as None.
+
+    One reader for the forms, so a form the grammar gains is taught here
+    rather than to each caller. Its callers want the text for unrelated
+    reasons — `resolve_transport_base_url` joins it with an operation path,
+    and the connector model reads the authority out of it to refuse
+    credentials — and a second copy of "a `{template}`'s text lives under
+    `template`" is a copy that stops agreeing the day a form is added. The
+    node is named rather than the field holding it, for the same reason: a
+    diagnostic naming one caller's field misnames every other caller's.
+    """
+    if node is None:
+        return None
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        # A parsed model is the shape that would otherwise arrive here and read
+        # back as None — silently disabling whatever rule the caller wrote over
+        # the text. Dump it first; the caller knows which of the two it holds.
+        raise TypeError(
+            f"authored_url_text reads a plain-JSON node, not {type(node).__name__}"
+        )
+    if "template" in node:
+        template = node["template"]
+        if not isinstance(template, str):
+            # A `{template}` node whose value isn't a string is malformed —
+            # surface a clean error rather than the raw TypeError a caller's
+            # own string handling would raise on it.
+            raise ValueError(
+                f"value-expression has a non-string template: {node!r}"
+            )
+        return template
+    if "literal" in node:
+        # A literal is context-free — readable without a resolution context,
+        # so a `{"literal": "https://…"}` base_url works in oauth-start too.
+        # It must still be a non-empty URL string.
+        literal = node["literal"]
+        if not isinstance(literal, str) or not literal:
+            raise ValueError(f"literal must be a non-empty string: {node!r}")
+        return literal
+    if "ref" in node or "function" in node:
+        # The forms whose string arrives at resolution. They carry no authored
+        # text, which is the answer, not an absence.
+        return None
+    raise ValueError(
+        f"value-expression names no form this reader knows: {node!r}. A form "
+        "the grammar gains is taught here once; reading it back as carrying "
+        "no text would retire every rule written over the authored text."
+    )
 
 
 def resolve_transport_base_url(
@@ -602,26 +681,9 @@ def resolve_transport_base_url(
     base = (transport or {}).get("base_url")
     if not isinstance(base, dict):
         return base or ""
-    template = base.get("template")
-    if isinstance(template, str):
-        return template
-    if "template" in base:
-        # A `{template}` node whose value isn't a string is malformed — surface
-        # a clean error rather than the raw TypeError `resolve_template_string`
-        # would raise on a non-string.
-        raise ValueError(
-            f"base_url value-expression has a non-string template: {base!r}"
-        )
-    if "literal" in base:
-        # A literal is context-free — resolve it without requiring a context, so
-        # a `{"literal": "https://…"}` base_url works in oauth-start too. It must
-        # still be a non-empty URL string.
-        literal = base["literal"]
-        if not isinstance(literal, str) or not literal:
-            raise ValueError(
-                f"base_url literal must be a non-empty string: {base!r}"
-            )
-        return literal
+    authored = authored_url_text(base)
+    if authored is not None:
+        return authored
     if context is None:
         raise ValueError(
             f"base_url value-expression {base!r} requires a resolution context"
@@ -661,26 +723,36 @@ def resolve_operation_url(
     return resolve_template_string(url, context)
 
 
-def apply_operation_content_type(headers: dict[str, str], operation: dict) -> str:
-    """Apply the operation-level `content_type` shortcut to a built header
-    map (mutating it) and return the effective Content-Type.
+#: What an auth operation's body is encoded as when it declares no
+#: `content_type`. Form encoding because that is what a token request is
+#: specified in, which is what these operations overwhelmingly are.
+DEFAULT_AUTH_CONTENT_TYPE = "application/x-www-form-urlencoded"
 
-    The shortcut overrides any inherited Content-Type; otherwise an
-    inherited header wins; else the historical form default so legacy
-    string bodies still get urlencoded. Matched case-insensitively.
+
+def apply_operation_content_type(headers: dict[str, str], operation: dict) -> str:
+    """Stamp the operation's media type onto a built header map, and return it.
+
+    The operation declares it in `content_type`, and a header map a connector
+    authors cannot (RULE-HTTP-003), so there is no precedence to apply: the
+    declared value wins over nothing and the same value comes back for the
+    body encoder to key on.
+
+    This map is assembled at dispatch rather than read off a document, so the
+    contract's refusal does not reach it and any casing of the name is dropped
+    before the stamp. Header names are case-insensitive on the wire but dict
+    keys are not, so leaving one behind puts the header on the request twice
+    and the provider reads whichever it sees first.
     """
-    operation_ct = operation.get("content_type")
-    if operation_ct:
-        for k in list(headers):
-            if k.lower() == "content-type":
-                del headers[k]
-        headers["Content-Type"] = operation_ct
-    elif not any(k.lower() == "content-type" for k in headers):
-        headers["Content-Type"] = "application/x-www-form-urlencoded"
-    return next(
-        (v for k, v in headers.items() if k.lower() == "content-type"),
-        "application/x-www-form-urlencoded",
-    )
+    declared = operation.get("content_type")
+    # `is None`, not truthiness: the contract refuses an empty `content_type`
+    # (`MediaType`), so one reaching here came from a dict nothing graded, and
+    # reading it as "declared nothing" would send a body under the default the
+    # author was overriding.
+    content_type = DEFAULT_AUTH_CONTENT_TYPE if declared is None else declared
+    for key in [k for k in headers if header_name_key(k) == "content-type"]:
+        del headers[key]
+    headers["Content-Type"] = content_type
+    return content_type
 
 
 def resolve_body_template(
@@ -737,9 +809,11 @@ def build_effective_headers(
       3. operation `headers_remove` (drops inherited names only)
       4. operation `headers`
 
-    Header names are matched case-insensitively for override and removal. The
-    casing of the latest merge layer to set a name is the casing sent on the
-    wire; `headers_remove` does not re-establish casing on its own.
+    Names are matched through `header_name_key` for override and removal, so
+    a layer that writes a name carelessly still overrides — and is still
+    removed by — the same name written plainly. The spelling of the latest
+    layer to set a name is the spelling sent on the wire; `headers_remove`
+    does not re-establish one on its own.
     """
     effective: dict[str, str] = {}
     casing: dict[str, str] = {}
@@ -749,7 +823,7 @@ def build_effective_headers(
             resolved = resolve_header_value(name, value, context)
             if resolved is None:
                 continue
-            lk = name.lower()
+            lk = header_name_key(name)
             prior = casing.pop(lk, None)
             if prior is not None and prior != name:
                 effective.pop(prior, None)
@@ -765,7 +839,7 @@ def build_effective_headers(
                 type(name).__name__,
             )
             continue
-        prior = casing.pop(name.lower(), None)
+        prior = casing.pop(header_name_key(name), None)
         if prior is not None:
             effective.pop(prior, None)
     _merge(template.get("headers"))

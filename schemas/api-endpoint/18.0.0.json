@@ -1,0 +1,2966 @@
+{
+  "$defs": {
+    "Batching": {
+      "additionalProperties": false,
+      "description": "Batching declaration for a write mode.",
+      "properties": {
+        "max_records": {
+          "description": "Provider's maximum records per request. Must be \u2265 2.",
+          "minimum": 2,
+          "title": "Max Records",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_records"
+      ],
+      "title": "Batching",
+      "type": "object"
+    },
+    "Cursor": {
+      "additionalProperties": false,
+      "properties": {
+        "next_cursor": {
+          "description": "Value expression resolving to the next cursor/token. Spec \u00a7Cross-Field Validation: must be a value expression (``{ref}``/``{template}``/``{literal}``/``{function}``); ``response_path`` is invalid.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RefExpression"
+            },
+            {
+              "$ref": "#/$defs/TemplateExpression"
+            },
+            {
+              "$ref": "#/$defs/LiteralExpression"
+            },
+            {
+              "$ref": "#/$defs/FunctionExpression"
+            }
+          ],
+          "title": "Next Cursor"
+        },
+        "param": {
+          "description": "Param that receives the cursor/token.",
+          "minLength": 1,
+          "title": "Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "next_cursor"
+      ],
+      "title": "Cursor",
+      "type": "object"
+    },
+    "CursorPagination": {
+      "additionalProperties": false,
+      "description": "Opaque-cursor pagination strategy.",
+      "properties": {
+        "cursor": {
+          "$ref": "#/$defs/Cursor"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stop_when": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PredicateEq"
+            },
+            {
+              "$ref": "#/$defs/PredicateNeq"
+            },
+            {
+              "$ref": "#/$defs/PredicateLt"
+            },
+            {
+              "$ref": "#/$defs/PredicateLte"
+            },
+            {
+              "$ref": "#/$defs/PredicateGt"
+            },
+            {
+              "$ref": "#/$defs/PredicateGte"
+            },
+            {
+              "$ref": "#/$defs/PredicateExists"
+            },
+            {
+              "$ref": "#/$defs/PredicateMissing"
+            },
+            {
+              "$ref": "#/$defs/PredicateEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateNotEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateAnd"
+            },
+            {
+              "$ref": "#/$defs/PredicateOr"
+            },
+            {
+              "$ref": "#/$defs/PredicateNot"
+            }
+          ],
+          "title": "Stop When"
+        },
+        "type": {
+          "const": "cursor",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "cursor",
+        "stop_when"
+      ],
+      "title": "CursorPagination",
+      "type": "object"
+    },
+    "FunctionExpression": {
+      "additionalProperties": false,
+      "description": "``{\"function\": <name>, ...}`` registered-function value expression.",
+      "properties": {
+        "function": {
+          "minLength": 1,
+          "title": "Function",
+          "type": "string"
+        },
+        "input": {
+          "default": null,
+          "title": "Input"
+        },
+        "map": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Map"
+        },
+        "safe": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Safe"
+        }
+      },
+      "required": [
+        "function"
+      ],
+      "title": "FunctionExpression",
+      "type": "object"
+    },
+    "GetReadRequest": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "path": {
+                "pattern": "\\{[^{}]+\\}"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path_params": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "path_params"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "path": {
+                "not": {
+                  "pattern": "\\{[^{}]+\\}"
+                }
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path_params": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "description": "Provider request for a GET-method API read operation. GET declares no body.",
+      "properties": {
+        "headers": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
+          "title": "Headers"
+        },
+        "headers_remove": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Header names to delete from inherited transport defaults (case-insensitive).",
+          "title": "Headers Remove"
+        },
+        "method": {
+          "const": "GET",
+          "description": "Read HTTP method.",
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path or relative URL on the selected transport.",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\$\\{"
+          },
+          "title": "Path",
+          "type": "string"
+        },
+        "path_params": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bindings for `{name}` placeholders in `path`. Each value is a `{from_param: <name>}` expression naming a declared `in: path` param. `{from_input: ...}` is NOT permitted here on a read operation \u2014 no record is in scope when a read request is built (the write form is documented on the write request's own `path_params`). **Encoding is engine-owned**: the engine percent-encodes each substituted value as ONE path segment, so a binding must not wrap its value in `url_encode` or `base64_encode` \u2014 that double-encodes (`a b` arrives as `a%2520b`) and the provider 404s or matches the wrong resource. Spec: \u00a7Request Parameter Binding.",
+          "title": "Path Params"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint-declared query parameters; values may be literals or expressions.",
+          "title": "Query"
+        },
+        "transport_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Named transport this operation dispatches through; defaults to `default_transport`. **Containment** (spec: \u00a7Transport Selection) has two halves, and they are guaranteed differently. (1) NAME: the value must be one the sibling `connector.json` declares in `transports` \u2014 a request dispatches only through a transport the connector declares. This half is checked at author time by the validator's `endpoint-transport-ref` check (the endpoint and the connector are separate documents, so no single-document model validator can see both sides). It is an ERROR only when the sibling `connector.json` is in hand; validating an endpoint file whose connector is not reachable emits a warning saying the name was not checked, because a check that cannot see the other document cannot refuse the name. (2) ORIGIN: the intended rule is that every URL this request produces, including a next-page link followed from `pagination.link.next_url`, lands on the origin of a declared transport. **This half is enforced by nothing today** \u2014 not by this contract, not by `analitiq-validator`, and not by the engine as it stands: the engine opens ONE session at connect time from `default_transport` and pins the read path to that single origin, the write path has no origin guard at all, and no production call site selects a transport per operation. So declaring a second transport does NOT today make a second origin reachable \u2014 a next-page link that leaves the connection origin is refused. Stated here as the contract's intent, not as a guarantee: closing it takes per-operation transport selection plus a write-path origin guard in the engine.",
+          "title": "Transport Ref"
+        }
+      },
+      "required": [
+        "path",
+        "method"
+      ],
+      "title": "GetReadRequest",
+      "type": "object"
+    },
+    "Idempotency": {
+      "additionalProperties": false,
+      "description": "Idempotency-key placement declaration for a write mode.\n\nThe author declares only *where* the provider's idempotency key goes on\nthe write request. The key *value* is engine-owned (the content-derived\nper-record id) \u2014 no value expression, no template, so engine-computed\nvalues stay out of the request value-expression grammar.",
+      "properties": {
+        "in": {
+          "description": "Where the engine sends the key: `header` \u2014 as HTTP request header `name` (Stripe `Idempotency-Key`, PayPal `PayPal-Request-Id`); `body` \u2014 injected as top-level JSON body field `name` (Square-style `idempotency_key`). `body` is only valid when the request body is a JSON object; the engine rejects non-object bodies at configure time.",
+          "enum": [
+            "header",
+            "body"
+          ],
+          "title": "In",
+          "type": "string"
+        },
+        "name": {
+          "description": "Header name or top-level body field name that carries the key. Not constrained to a header name's token shape, because `in: body` makes it a JSON field name, which admits more; what both share is that the space around a name is not part of it.",
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "in",
+        "name"
+      ],
+      "title": "Idempotency",
+      "type": "object"
+    },
+    "JsonSchemaPropertyNode": {
+      "additionalProperties": true,
+      "dependentRequired": {
+        "arrow_type": [
+          "native_type"
+        ],
+        "native_type": [
+          "arrow_type"
+        ]
+      },
+      "description": "JSON Schema Draft 2020-12 node carrying the Analitiq `native_type` / `arrow_type` annotations on typed field schemas. Recursive: every JSON Schema keyword whose value is itself a schema (or a map/list of schemas) is constrained back to this node. Specifically: `$defs`, `definitions`, `dependentSchemas`, `patternProperties`, `properties` (maps); `allOf`, `anyOf`, `oneOf`, `prefixItems` (lists); `additionalProperties`, `contains`, `contentSchema`, `else`, `if`, `items`, `not`, `propertyNames`, `then`, `unevaluatedItems`, `unevaluatedProperties` (single). A canonical `arrow_type` must carry parameters when the type requires them; `native_type` and `arrow_type` are paired.",
+      "properties": {
+        "$defs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "object"
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/JsonSchemaPropertyNode"
+            }
+          ]
+        },
+        "allOf": {
+          "items": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "array"
+        },
+        "anyOf": {
+          "items": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "array"
+        },
+        "arrow_type": {
+          "pattern": "^(?:Binary|Boolean|Date32|Date64|Decimal128\\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-8])\\)|Decimal256\\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\)|Duration\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)\\)|FixedSizeBinary\\([1-9][0-9]*\\)|Float16|Float32|Float64|Int16|Int32|Int64|Int8|Json|LargeBinary|LargeUtf8|List|Null|Object|Time32\\((?:SECOND|MILLISECOND)\\)|Time64\\((?:MICROSECOND|NANOSECOND)\\)|Timestamp\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\\s*,\\s*(?:null|[A-Za-z_][A-Za-z0-9_\\/\\-]*|Etc\\/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\\)|UInt16|UInt32|UInt64|UInt8|Utf8)$",
+          "type": "string"
+        },
+        "contains": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "contentSchema": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "definitions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "object"
+        },
+        "dependentSchemas": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "object"
+        },
+        "else": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "if": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "items": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "native_type": {
+          "type": "string"
+        },
+        "not": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "oneOf": {
+          "items": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "array"
+        },
+        "patternProperties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "object"
+        },
+        "prefixItems": {
+          "items": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "array"
+        },
+        "properties": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonSchemaPropertyNode"
+          },
+          "type": "object"
+        },
+        "propertyNames": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "then": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "unevaluatedItems": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        },
+        "unevaluatedProperties": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode"
+        }
+      },
+      "type": "object"
+    },
+    "Keyset": {
+      "additionalProperties": false,
+      "properties": {
+        "initial": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Initial keyset value. Omit to send no keyset on the first request.",
+          "title": "Initial"
+        },
+        "order_by_field": {
+          "description": "Dotted record field path used for page ordering. Spec \u00a7Cross-Field Validation requires the dotted-path regex.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "title": "Order By Field",
+          "type": "string"
+        },
+        "param": {
+          "description": "Param that receives the last seen key value.",
+          "minLength": 1,
+          "title": "Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "order_by_field"
+      ],
+      "title": "Keyset",
+      "type": "object"
+    },
+    "KeysetPagination": {
+      "additionalProperties": false,
+      "description": "Keyset (advance-from-last-key) pagination strategy.",
+      "properties": {
+        "keyset": {
+          "$ref": "#/$defs/Keyset"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stop_when": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PredicateEq"
+            },
+            {
+              "$ref": "#/$defs/PredicateNeq"
+            },
+            {
+              "$ref": "#/$defs/PredicateLt"
+            },
+            {
+              "$ref": "#/$defs/PredicateLte"
+            },
+            {
+              "$ref": "#/$defs/PredicateGt"
+            },
+            {
+              "$ref": "#/$defs/PredicateGte"
+            },
+            {
+              "$ref": "#/$defs/PredicateExists"
+            },
+            {
+              "$ref": "#/$defs/PredicateMissing"
+            },
+            {
+              "$ref": "#/$defs/PredicateEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateNotEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateAnd"
+            },
+            {
+              "$ref": "#/$defs/PredicateOr"
+            },
+            {
+              "$ref": "#/$defs/PredicateNot"
+            }
+          ],
+          "title": "Stop When"
+        },
+        "type": {
+          "const": "keyset",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "keyset",
+        "stop_when"
+      ],
+      "title": "KeysetPagination",
+      "type": "object"
+    },
+    "Link": {
+      "additionalProperties": false,
+      "properties": {
+        "next_url": {
+          "description": "Value expression resolving to the next absolute URL. Spec \u00a7Cross-Field Validation: must be a value expression; ``response_path`` is invalid.",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RefExpression"
+            },
+            {
+              "$ref": "#/$defs/TemplateExpression"
+            },
+            {
+              "$ref": "#/$defs/LiteralExpression"
+            },
+            {
+              "$ref": "#/$defs/FunctionExpression"
+            }
+          ],
+          "title": "Next Url"
+        }
+      },
+      "required": [
+        "next_url"
+      ],
+      "title": "Link",
+      "type": "object"
+    },
+    "LinkPagination": {
+      "additionalProperties": false,
+      "description": "Next-URL pagination strategy.",
+      "properties": {
+        "limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "First-request-only page size. Follow-up requests use the response-supplied `next_url` verbatim \u2014 no params traverse \u2014 so `limit` binds into the initial request built from `path` + params and never modifies a followed link. Wired like every other strategy: if set, `limit.param` names a declared `controlled_by: 'pagination'` param bound once in the request. Spec: \u00a7Pagination Strategies."
+        },
+        "link": {
+          "$ref": "#/$defs/Link"
+        },
+        "stop_when": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PredicateEq"
+            },
+            {
+              "$ref": "#/$defs/PredicateNeq"
+            },
+            {
+              "$ref": "#/$defs/PredicateLt"
+            },
+            {
+              "$ref": "#/$defs/PredicateLte"
+            },
+            {
+              "$ref": "#/$defs/PredicateGt"
+            },
+            {
+              "$ref": "#/$defs/PredicateGte"
+            },
+            {
+              "$ref": "#/$defs/PredicateExists"
+            },
+            {
+              "$ref": "#/$defs/PredicateMissing"
+            },
+            {
+              "$ref": "#/$defs/PredicateEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateNotEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateAnd"
+            },
+            {
+              "$ref": "#/$defs/PredicateOr"
+            },
+            {
+              "$ref": "#/$defs/PredicateNot"
+            }
+          ],
+          "title": "Stop When"
+        },
+        "type": {
+          "const": "link",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "link",
+        "stop_when"
+      ],
+      "title": "LinkPagination",
+      "type": "object"
+    },
+    "LiteralExpression": {
+      "additionalProperties": false,
+      "description": "``{\"literal\": <any-json>}`` value expression \u2014 opt out of expression interpretation.",
+      "properties": {
+        "literal": {
+          "title": "Literal"
+        }
+      },
+      "required": [
+        "literal"
+      ],
+      "title": "LiteralExpression",
+      "type": "object"
+    },
+    "OffsetCursor": {
+      "additionalProperties": false,
+      "properties": {
+        "increment_by": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            }
+          ],
+          "description": "Per-page offset step. Required, with no default: the two offset families cannot be told apart from the document, so any default silently breaks one of them. A bare positive integer is a fixed step (`1` for page-index-style offsets). A value expression lets the engine advance by a per-page value: `{ref: response.record_count}` when `offset` counts records returned (resolved against that page's response); when it counts the requested window, step by the *effective* request limit \u2014 the page size actually sent \u2014 which is `{ref: runtime.batch_size}` only where no smaller `limit.max` clamps it; with a cap, use the clamped value so the step matches the window requested (a raw batch size would overshoot and skip rows). Spec: \u00a7Value Expressions.",
+          "title": "Increment By"
+        },
+        "initial": {
+          "description": "Initial offset/start index value.",
+          "title": "Initial"
+        },
+        "param": {
+          "description": "Param that receives the offset/start index.",
+          "minLength": 1,
+          "title": "Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "initial",
+        "increment_by"
+      ],
+      "title": "OffsetCursor",
+      "type": "object"
+    },
+    "OffsetPagination": {
+      "additionalProperties": false,
+      "description": "Offset/start-index pagination strategy.",
+      "properties": {
+        "limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "offset": {
+          "$ref": "#/$defs/OffsetCursor"
+        },
+        "stop_when": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PredicateEq"
+            },
+            {
+              "$ref": "#/$defs/PredicateNeq"
+            },
+            {
+              "$ref": "#/$defs/PredicateLt"
+            },
+            {
+              "$ref": "#/$defs/PredicateLte"
+            },
+            {
+              "$ref": "#/$defs/PredicateGt"
+            },
+            {
+              "$ref": "#/$defs/PredicateGte"
+            },
+            {
+              "$ref": "#/$defs/PredicateExists"
+            },
+            {
+              "$ref": "#/$defs/PredicateMissing"
+            },
+            {
+              "$ref": "#/$defs/PredicateEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateNotEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateAnd"
+            },
+            {
+              "$ref": "#/$defs/PredicateOr"
+            },
+            {
+              "$ref": "#/$defs/PredicateNot"
+            }
+          ],
+          "title": "Stop When"
+        },
+        "type": {
+          "const": "offset",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "offset",
+        "stop_when"
+      ],
+      "title": "OffsetPagination",
+      "type": "object"
+    },
+    "Operations": {
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "read"
+          ]
+        },
+        {
+          "required": [
+            "write"
+          ]
+        }
+      ],
+      "description": "``operations`` block for API endpoints. At least one of ``read``/``write`` is required.",
+      "properties": {
+        "read": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReadOperation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "write": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/WriteOperation"
+              },
+              "properties": {
+                "insert": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/WriteOperation"
+                    },
+                    {
+                      "properties": {
+                        "conflict_keys": {
+                          "type": "null"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "truncate_insert": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/WriteOperation"
+                    },
+                    {
+                      "properties": {
+                        "conflict_keys": {
+                          "type": "null"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "upsert": {
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/WriteOperation"
+                    },
+                    {
+                      "properties": {
+                        "conflict_keys": {
+                          "minItems": 1,
+                          "type": "array"
+                        }
+                      },
+                      "required": [
+                        "conflict_keys"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "propertyNames": {
+                "enum": [
+                  "insert",
+                  "upsert",
+                  "truncate_insert"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "minProperties": 1,
+          "title": "Write"
+        }
+      },
+      "title": "Operations",
+      "type": "object"
+    },
+    "PageCursor": {
+      "additionalProperties": false,
+      "properties": {
+        "increment_by": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Increment per page (defaults to 1). Either a positive integer or a value expression the engine resolves per page. A page step of zero is a loop that never advances, so it is rejected in every spelling.",
+          "title": "Increment By"
+        },
+        "initial": {
+          "description": "Initial page number.",
+          "title": "Initial"
+        },
+        "param": {
+          "description": "Param that receives the page number.",
+          "minLength": 1,
+          "title": "Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "initial"
+      ],
+      "title": "PageCursor",
+      "type": "object"
+    },
+    "PagePagination": {
+      "additionalProperties": false,
+      "description": "Page-number pagination strategy.",
+      "properties": {
+        "limit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageSize"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "page": {
+          "$ref": "#/$defs/PageCursor"
+        },
+        "stop_when": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PredicateEq"
+            },
+            {
+              "$ref": "#/$defs/PredicateNeq"
+            },
+            {
+              "$ref": "#/$defs/PredicateLt"
+            },
+            {
+              "$ref": "#/$defs/PredicateLte"
+            },
+            {
+              "$ref": "#/$defs/PredicateGt"
+            },
+            {
+              "$ref": "#/$defs/PredicateGte"
+            },
+            {
+              "$ref": "#/$defs/PredicateExists"
+            },
+            {
+              "$ref": "#/$defs/PredicateMissing"
+            },
+            {
+              "$ref": "#/$defs/PredicateEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateNotEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateAnd"
+            },
+            {
+              "$ref": "#/$defs/PredicateOr"
+            },
+            {
+              "$ref": "#/$defs/PredicateNot"
+            }
+          ],
+          "title": "Stop When"
+        },
+        "type": {
+          "const": "page",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "page",
+        "stop_when"
+      ],
+      "title": "PagePagination",
+      "type": "object"
+    },
+    "PageSize": {
+      "additionalProperties": false,
+      "description": "Optional ``limit`` block shared by paginated strategies that accept page size.",
+      "properties": {
+        "default": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default page size. Either a positive integer (e.g. `50`) or a value expression the engine resolves per request \u2014 typically `{ref: runtime.batch_size}`, so the run's configured batch size flows through. A non-positive integer is rejected: it is a meaningless request rather than one the provider gets to refuse.",
+          "title": "Default"
+        },
+        "max": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max"
+        },
+        "param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Param"
+        }
+      },
+      "title": "PageSize",
+      "type": "object"
+    },
+    "Param": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "in": {
+                "const": "query"
+              },
+              "type": {
+                "enum": [
+                  "array",
+                  "object"
+                ]
+              }
+            },
+            "required": [
+              "in",
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "explode": {
+                "type": "boolean"
+              },
+              "style": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "style",
+              "explode"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "controlled_by": {
+                "not": {
+                  "type": "null"
+                }
+              }
+            },
+            "required": [
+              "controlled_by"
+            ]
+          },
+          "then": {
+            "properties": {
+              "operators": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "description": "One operation-input contract.",
+      "properties": {
+        "controlled_by": {
+          "anyOf": [
+            {
+              "enum": [
+                "pagination",
+                "replication"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Marks the param as owned by pagination or replication.",
+          "title": "Controlled By"
+        },
+        "default": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default value (literal or value expression).",
+          "title": "Default"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "enum": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enum"
+        },
+        "explode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Explode"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "in": {
+          "description": "Where the param is sent in the request.",
+          "enum": [
+            "path",
+            "query",
+            "header",
+            "body"
+          ],
+          "title": "In",
+          "type": "string"
+        },
+        "maxItems": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maxitems"
+        },
+        "maxLength": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maxlength"
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum"
+        },
+        "minItems": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minitems"
+        },
+        "minLength": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minlength"
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Minimum"
+        },
+        "operators": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "eq",
+                  "neq",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "in",
+                  "not_in",
+                  "contains",
+                  "starts_with",
+                  "ends_with"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Subset of the Analitiq operator vocabulary stream filters may use. Absence means the param is not stream-filterable.",
+          "title": "Operators"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "required": {
+          "description": "Whether the param must resolve to a value.",
+          "title": "Required",
+          "type": "boolean"
+        },
+        "style": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "OpenAPI query serialization style.",
+          "title": "Style"
+        },
+        "type": {
+          "description": "JSON-style validation type for the request input.",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "array",
+            "object"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "in",
+        "type",
+        "required"
+      ],
+      "title": "Param",
+      "type": "object"
+    },
+    "PostReadRequest": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "path": {
+                "pattern": "\\{[^{}]+\\}"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path_params": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "path_params"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "path": {
+                "not": {
+                  "pattern": "\\{[^{}]+\\}"
+                }
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path_params": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "description": "Provider request for a POST-method API read operation (query-in-body reads).",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Request body. May mix literals with `{from_param}`.",
+          "title": "Body"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+ *(;.*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Media type of `body`, sent as the request's `Content-Type` and selecting how the body is encoded \u2014 the field to declare when a provider takes a form-encoded or otherwise non-JSON body. Omitted, the engine sends JSON. The header map is not a second way to say this (RULE-HTTP-003).",
+          "title": "Content Type"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
+          "title": "Headers"
+        },
+        "headers_remove": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Header names to delete from inherited transport defaults (case-insensitive).",
+          "title": "Headers Remove"
+        },
+        "method": {
+          "const": "POST",
+          "description": "Read HTTP method.",
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path or relative URL on the selected transport.",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\$\\{"
+          },
+          "title": "Path",
+          "type": "string"
+        },
+        "path_params": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bindings for `{name}` placeholders in `path`. Each value is a `{from_param: <name>}` expression naming a declared `in: path` param. `{from_input: ...}` is NOT permitted here on a read operation \u2014 no record is in scope when a read request is built (the write form is documented on the write request's own `path_params`). **Encoding is engine-owned**: the engine percent-encodes each substituted value as ONE path segment, so a binding must not wrap its value in `url_encode` or `base64_encode` \u2014 that double-encodes (`a b` arrives as `a%2520b`) and the provider 404s or matches the wrong resource. Spec: \u00a7Request Parameter Binding.",
+          "title": "Path Params"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint-declared query parameters; values may be literals or expressions.",
+          "title": "Query"
+        },
+        "transport_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Named transport this operation dispatches through; defaults to `default_transport`. **Containment** (spec: \u00a7Transport Selection) has two halves, and they are guaranteed differently. (1) NAME: the value must be one the sibling `connector.json` declares in `transports` \u2014 a request dispatches only through a transport the connector declares. This half is checked at author time by the validator's `endpoint-transport-ref` check (the endpoint and the connector are separate documents, so no single-document model validator can see both sides). It is an ERROR only when the sibling `connector.json` is in hand; validating an endpoint file whose connector is not reachable emits a warning saying the name was not checked, because a check that cannot see the other document cannot refuse the name. (2) ORIGIN: the intended rule is that every URL this request produces, including a next-page link followed from `pagination.link.next_url`, lands on the origin of a declared transport. **This half is enforced by nothing today** \u2014 not by this contract, not by `analitiq-validator`, and not by the engine as it stands: the engine opens ONE session at connect time from `default_transport` and pins the read path to that single origin, the write path has no origin guard at all, and no production call site selects a transport per operation. So declaring a second transport does NOT today make a second origin reachable \u2014 a next-page link that leaves the connection origin is refused. Stated here as the contract's intent, not as a guarantee: closing it takes per-operation transport selection plus a write-path origin guard in the engine.",
+          "title": "Transport Ref"
+        }
+      },
+      "required": [
+        "path",
+        "method"
+      ],
+      "title": "PostReadRequest",
+      "type": "object"
+    },
+    "PredicateAnd": {
+      "additionalProperties": false,
+      "properties": {
+        "and": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/PredicateEq"
+              },
+              {
+                "$ref": "#/$defs/PredicateNeq"
+              },
+              {
+                "$ref": "#/$defs/PredicateLt"
+              },
+              {
+                "$ref": "#/$defs/PredicateLte"
+              },
+              {
+                "$ref": "#/$defs/PredicateGt"
+              },
+              {
+                "$ref": "#/$defs/PredicateGte"
+              },
+              {
+                "$ref": "#/$defs/PredicateExists"
+              },
+              {
+                "$ref": "#/$defs/PredicateMissing"
+              },
+              {
+                "$ref": "#/$defs/PredicateEmpty"
+              },
+              {
+                "$ref": "#/$defs/PredicateNotEmpty"
+              },
+              {
+                "$ref": "#/$defs/PredicateAnd"
+              },
+              {
+                "$ref": "#/$defs/PredicateOr"
+              },
+              {
+                "$ref": "#/$defs/PredicateNot"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "And",
+          "type": "array"
+        }
+      },
+      "required": [
+        "and"
+      ],
+      "title": "PredicateAnd",
+      "type": "object"
+    },
+    "PredicateEmpty": {
+      "additionalProperties": false,
+      "properties": {
+        "empty": {
+          "title": "Empty"
+        }
+      },
+      "required": [
+        "empty"
+      ],
+      "title": "PredicateEmpty",
+      "type": "object"
+    },
+    "PredicateEq": {
+      "additionalProperties": false,
+      "properties": {
+        "eq": {
+          "items": {},
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Eq",
+          "type": "array"
+        }
+      },
+      "required": [
+        "eq"
+      ],
+      "title": "PredicateEq",
+      "type": "object"
+    },
+    "PredicateExists": {
+      "additionalProperties": false,
+      "properties": {
+        "exists": {
+          "title": "Exists"
+        }
+      },
+      "required": [
+        "exists"
+      ],
+      "title": "PredicateExists",
+      "type": "object"
+    },
+    "PredicateGt": {
+      "additionalProperties": false,
+      "properties": {
+        "gt": {
+          "items": {},
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Gt",
+          "type": "array"
+        }
+      },
+      "required": [
+        "gt"
+      ],
+      "title": "PredicateGt",
+      "type": "object"
+    },
+    "PredicateGte": {
+      "additionalProperties": false,
+      "properties": {
+        "gte": {
+          "items": {},
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Gte",
+          "type": "array"
+        }
+      },
+      "required": [
+        "gte"
+      ],
+      "title": "PredicateGte",
+      "type": "object"
+    },
+    "PredicateLt": {
+      "additionalProperties": false,
+      "properties": {
+        "lt": {
+          "items": {},
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Lt",
+          "type": "array"
+        }
+      },
+      "required": [
+        "lt"
+      ],
+      "title": "PredicateLt",
+      "type": "object"
+    },
+    "PredicateLte": {
+      "additionalProperties": false,
+      "properties": {
+        "lte": {
+          "items": {},
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Lte",
+          "type": "array"
+        }
+      },
+      "required": [
+        "lte"
+      ],
+      "title": "PredicateLte",
+      "type": "object"
+    },
+    "PredicateMissing": {
+      "additionalProperties": false,
+      "properties": {
+        "missing": {
+          "title": "Missing"
+        }
+      },
+      "required": [
+        "missing"
+      ],
+      "title": "PredicateMissing",
+      "type": "object"
+    },
+    "PredicateNeq": {
+      "additionalProperties": false,
+      "properties": {
+        "neq": {
+          "items": {},
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Neq",
+          "type": "array"
+        }
+      },
+      "required": [
+        "neq"
+      ],
+      "title": "PredicateNeq",
+      "type": "object"
+    },
+    "PredicateNot": {
+      "additionalProperties": false,
+      "properties": {
+        "not": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PredicateEq"
+            },
+            {
+              "$ref": "#/$defs/PredicateNeq"
+            },
+            {
+              "$ref": "#/$defs/PredicateLt"
+            },
+            {
+              "$ref": "#/$defs/PredicateLte"
+            },
+            {
+              "$ref": "#/$defs/PredicateGt"
+            },
+            {
+              "$ref": "#/$defs/PredicateGte"
+            },
+            {
+              "$ref": "#/$defs/PredicateExists"
+            },
+            {
+              "$ref": "#/$defs/PredicateMissing"
+            },
+            {
+              "$ref": "#/$defs/PredicateEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateNotEmpty"
+            },
+            {
+              "$ref": "#/$defs/PredicateAnd"
+            },
+            {
+              "$ref": "#/$defs/PredicateOr"
+            },
+            {
+              "$ref": "#/$defs/PredicateNot"
+            }
+          ],
+          "title": "Not"
+        }
+      },
+      "required": [
+        "not"
+      ],
+      "title": "PredicateNot",
+      "type": "object"
+    },
+    "PredicateNotEmpty": {
+      "additionalProperties": false,
+      "properties": {
+        "not_empty": {
+          "title": "Not Empty"
+        }
+      },
+      "required": [
+        "not_empty"
+      ],
+      "title": "PredicateNotEmpty",
+      "type": "object"
+    },
+    "PredicateOr": {
+      "additionalProperties": false,
+      "properties": {
+        "or": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/PredicateEq"
+              },
+              {
+                "$ref": "#/$defs/PredicateNeq"
+              },
+              {
+                "$ref": "#/$defs/PredicateLt"
+              },
+              {
+                "$ref": "#/$defs/PredicateLte"
+              },
+              {
+                "$ref": "#/$defs/PredicateGt"
+              },
+              {
+                "$ref": "#/$defs/PredicateGte"
+              },
+              {
+                "$ref": "#/$defs/PredicateExists"
+              },
+              {
+                "$ref": "#/$defs/PredicateMissing"
+              },
+              {
+                "$ref": "#/$defs/PredicateEmpty"
+              },
+              {
+                "$ref": "#/$defs/PredicateNotEmpty"
+              },
+              {
+                "$ref": "#/$defs/PredicateAnd"
+              },
+              {
+                "$ref": "#/$defs/PredicateOr"
+              },
+              {
+                "$ref": "#/$defs/PredicateNot"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Or",
+          "type": "array"
+        }
+      },
+      "required": [
+        "or"
+      ],
+      "title": "PredicateOr",
+      "type": "object"
+    },
+    "ReadOperation": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "request": {
+                "properties": {
+                  "method": {
+                    "const": "GET"
+                  }
+                },
+                "required": [
+                  "method"
+                ]
+              }
+            },
+            "required": [
+              "request"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "additionalProperties": {
+                  "properties": {
+                    "in": {
+                      "not": {
+                        "const": "body"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "description": "Read operation block.",
+      "properties": {
+        "pagination": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "cursor": "#/$defs/CursorPagination",
+                  "keyset": "#/$defs/KeysetPagination",
+                  "link": "#/$defs/LinkPagination",
+                  "offset": "#/$defs/OffsetPagination",
+                  "page": "#/$defs/PagePagination"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/OffsetPagination"
+                },
+                {
+                  "$ref": "#/$defs/PagePagination"
+                },
+                {
+                  "$ref": "#/$defs/CursorPagination"
+                },
+                {
+                  "$ref": "#/$defs/LinkPagination"
+                },
+                {
+                  "$ref": "#/$defs/KeysetPagination"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pagination strategy. Every `response.body[.<path>]` this block references \u2014 anywhere in it, including `stop_when` predicates, `cursor.next_cursor`, `link.next_url`, `offset.increment_by`, `page.initial`/`increment_by` and `keyset.initial`, and including refs inside `${...}` templates \u2014 is subject to declared-path resolution against `response.schema` (defined there). A path that does not resolve is a typo that would silently stop paging after one page.",
+          "title": "Pagination"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Param"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "replication": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Replication"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "request": {
+          "discriminator": {
+            "mapping": {
+              "GET": "#/$defs/GetReadRequest",
+              "POST": "#/$defs/PostReadRequest"
+            },
+            "propertyName": "method"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/GetReadRequest"
+            },
+            {
+              "$ref": "#/$defs/PostReadRequest"
+            }
+          ],
+          "title": "Request"
+        },
+        "response": {
+          "$ref": "#/$defs/ResponseExtraction"
+        }
+      },
+      "required": [
+        "request",
+        "response"
+      ],
+      "title": "ReadOperation",
+      "type": "object"
+    },
+    "RefExpression": {
+      "additionalProperties": false,
+      "description": "``{\"ref\": \"<scope>.<dotted-path>\"}`` value expression.",
+      "properties": {
+        "ref": {
+          "description": "Must begin with a known resolution scope: connector, connection, secrets, auth, stream, state, runtime, request, response (spec: \u00a7Value Expressions).",
+          "minLength": 1,
+          "pattern": "^(?:connector|connection|secrets|auth|stream|state|runtime|request|response)(?:\\.|$)",
+          "title": "Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "title": "RefExpression",
+      "type": "object"
+    },
+    "Replication": {
+      "additionalProperties": false,
+      "description": "Replication block for API read operations. Spec: \u00a7Replication.",
+      "properties": {
+        "cursor_mappings": {
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SingleCursorMapping"
+              },
+              {
+                "$ref": "#/$defs/WindowCursorMapping"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Cursor Mappings",
+          "type": "array"
+        },
+        "supported_methods": {
+          "items": {
+            "enum": [
+              "full_refresh",
+              "incremental"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Supported Methods",
+          "type": "array"
+        }
+      },
+      "required": [
+        "supported_methods",
+        "cursor_mappings"
+      ],
+      "title": "Replication",
+      "type": "object"
+    },
+    "ResponseExtraction": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "properties": {
+            "metadata": {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "body",
+                    "headers",
+                    "metadata",
+                    "record_count",
+                    "records",
+                    "status"
+                  ]
+                },
+                "pattern": "^[a-z][a-z0-9_]*$"
+              }
+            },
+            "records": {
+              "properties": {
+                "ref": {
+                  "pattern": "^response\\.body(?:\\..+)?$"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "description": "Read operation ``response`` block.",
+      "properties": {
+        "metadata": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/RefExpression"
+                  },
+                  {
+                    "$ref": "#/$defs/TemplateExpression"
+                  },
+                  {
+                    "$ref": "#/$defs/LiteralExpression"
+                  },
+                  {
+                    "$ref": "#/$defs/FunctionExpression"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional named metadata extractions; each value is a value expression. Every `response.body[.<path>]` any of them references is subject to declared-path resolution against `schema`.",
+          "title": "Metadata"
+        },
+        "records": {
+          "$ref": "#/$defs/RefExpression",
+          "description": "Expression that resolves to the iterable record collection. Must be a `{ref}` whose path starts with `response.body`. The path after `response.body` is subject to declared-path resolution against `schema` (defined there) and must land on a node declaring `type: array`."
+        },
+        "schema": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode",
+          "description": "JSON Schema Draft 2020-12 document describing the full response body.\n\n**Declared-path resolution.** Every `response.body[.<path>]` this endpoint reads \u2014 `records` above, each replication `cursor_field` and `pagination.keyset.order_by_field` (both resolved relative to the record shape but against this document as root), and every `{ref}` and `${...}` placeholder inside `pagination`, `response.metadata`, the `request` `path_params`/`headers`/`query`/`body` slots and every `params.<name>.default` \u2014 must resolve against this document by the following algorithm. It is stated in full because the validator, the engine and the conformance kit must all reproduce it identically.\n\n1. *Declaration.* A segment resolves when the current node declares it under `properties`, counting the declarations contributed by every object branch of `allOf` and by the target of an in-document `$ref`, applied recursively (a cycle contributes nothing the second time it is met). Those are the keywords whose contributions always apply.\n2. *Composition.* Contributors declaring the same name compose into one declaration: identical declarations collapse, differing ones fold into an `allOf` (an `allOf` branch narrowing a base declaration is the idiom `allOf` exists for). Composition fails on a contradiction that can be PROVED, and only then: when the contributors' `type` sets are provably disjoint, so no instance could satisfy all of them, and when an `allOf` branch is the boolean schema `false`, which no instance satisfies and which therefore empties the whole intersection. The disjoint-type test runs for the name being resolved, and again on the node a path finally lands on (and on a records array's record shape), because a terminal node assembled from contradictory `allOf`/`$ref` sources is unsatisfiable whether or not any further segment is read from it. Folding a node together with the sources that unconditionally apply \u2014 its `$ref` target and `allOf` branches, that order, itself last \u2014 is how any consumer reads `type`/`items`/`properties` off it.\n3. *Refusal to guess.* Nothing else declares a segment. If a segment is absent and the node carries `anyOf`, `oneOf`, `if`/`then`/`else`, `patternProperties`, `dependentSchemas`, a schema-valued `additionalProperties`/`unevaluatedProperties`, or a `$ref` that does not resolve, the path is not statically resolvable and the document is rejected \u2014 declare the segment under `properties`. With none of those present the segment is simply undeclared (the typo case). A node declaring BOTH the segment and one of those keywords resolves through `properties`; the ambiguity check runs only on a miss.\n4. *Typedness.* A node any checked `response.body` path resolves to \u2014 in `pagination`, in `response.metadata`, or in a `request` `headers`/`query`/`body` slot \u2014 must declare a `type` (or a `native_type`/`arrow_type` pair). A declaration that says nothing leaves whatever plants a value there to invent its type, which is what decides whether an ordering comparison in `stop_when` raises.\n5. *References.* Every `$ref` in this document must be an in-document JSON Pointer (`#`, or `#/\u2026`) whose EVERY token \u2014 the last one included \u2014 is an unconditionally-applied schema position. Exactly eight keywords qualify: `properties`, `$defs`, `definitions` as maps; `allOf`, `prefixItems` as lists; `items`, `propertyNames`, `contentSchema` singly. Every OTHER keyword this document's `JsonSchemaPropertyNode` constrains \u2014 `anyOf`, `oneOf`, `if`/`then`/`else`, `not`, `dependentSchemas`, `patternProperties`, `contains`, `additionalProperties`, `unevaluatedProperties`, `unevaluatedItems` \u2014 applies conditionally, and a pointer may neither cross one NOR END ON one. `#/anyOf/0` names a real schema position, but one that applies only to instances taking that branch, so following it would commit the resolver to a branch \u2014 the guess clause 3 refuses when it meets the same keyword on a node. `allOf` is not in that set: its branches all apply, so `#/allOf/0` resolves. Pointer tokens are percent-decoded then RFC 6901 unescaped, and array indices follow RFC 6901 exactly (`0` or `[1-9][0-9]*`). Non-local refs, dangling refs, refs into non-schema positions such as `default`/`examples`/`const`/`enum`, refs whose target is a boolean schema (`true`/`false` declare nothing about a value's shape, so no path through them can reach a typed declaration), and the `$id`, `$anchor`, `$dynamicRef`/`$dynamicAnchor`, `$recursiveRef`/`$recursiveAnchor` keywords are all refused: nothing on the offline validate/author/execute path can fetch a second document or retarget a base URI, and a subtree reached that way would escape every annotation check.\n6. *Reserved scopes.* `response.headers.*`, `response.status`, `response.record_count`, `response.records` and `response.metadata.*` are engine-owned. This document describes the BODY only, so those scopes are not resolved against it. A `response.*` reference naming any OTHER sub-scope is rejected rather than skipped: `response.bodyy.next` is not a scope this rule leaves alone, it is a typo that resolves to nothing on every page. The leading token must likewise name a real resolution scope \u2014 `responses.body` fails for the same reason.",
+          "title": "Schema"
+        }
+      },
+      "required": [
+        "records",
+        "schema"
+      ],
+      "title": "ResponseExtraction",
+      "type": "object"
+    },
+    "SingleCursorMapping": {
+      "additionalProperties": false,
+      "description": "Single-param cursor mapping. Spec: \u00a7Replication.",
+      "properties": {
+        "cursor_field": {
+          "description": "Dotted record field path used as the incremental watermark.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "title": "Cursor Field",
+          "type": "string"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "date-time",
+                "date",
+                "epoch_seconds",
+                "epoch_milliseconds"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "operator": {
+          "enum": [
+            "gt",
+            "gte",
+            "lt",
+            "lte"
+          ],
+          "title": "Operator",
+          "type": "string"
+        },
+        "param": {
+          "minLength": 1,
+          "title": "Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cursor_field",
+        "param",
+        "operator"
+      ],
+      "title": "SingleCursorMapping",
+      "type": "object"
+    },
+    "TemplateExpression": {
+      "additionalProperties": false,
+      "description": "``{\"template\": \"...${scope.path}...\"}`` value expression.",
+      "properties": {
+        "template": {
+          "minLength": 1,
+          "title": "Template",
+          "type": "string"
+        }
+      },
+      "required": [
+        "template"
+      ],
+      "title": "TemplateExpression",
+      "type": "object"
+    },
+    "WindowCursorMapping": {
+      "additionalProperties": false,
+      "description": "Bounded-window cursor mapping (start/end provider params). Spec: \u00a7Replication.",
+      "properties": {
+        "cursor_field": {
+          "description": "Dotted record field path used as the incremental watermark.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$",
+          "title": "Cursor Field",
+          "type": "string"
+        },
+        "end_operator": {
+          "enum": [
+            "gt",
+            "gte",
+            "lt",
+            "lte"
+          ],
+          "title": "End Operator",
+          "type": "string"
+        },
+        "end_param": {
+          "minLength": 1,
+          "title": "End Param",
+          "type": "string"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "enum": [
+                "date-time",
+                "date",
+                "epoch_seconds",
+                "epoch_milliseconds"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Format"
+        },
+        "start_operator": {
+          "enum": [
+            "gt",
+            "gte",
+            "lt",
+            "lte"
+          ],
+          "title": "Start Operator",
+          "type": "string"
+        },
+        "start_param": {
+          "minLength": 1,
+          "title": "Start Param",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cursor_field",
+        "start_param",
+        "end_param",
+        "start_operator",
+        "end_operator"
+      ],
+      "title": "WindowCursorMapping",
+      "type": "object"
+    },
+    "WriteError": {
+      "additionalProperties": false,
+      "description": "Optional provider-declared write error extraction expressions.",
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/LiteralExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/LiteralExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/LiteralExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        }
+      },
+      "title": "WriteError",
+      "type": "object"
+    },
+    "WriteInput": {
+      "additionalProperties": false,
+      "description": "Write mode input shape (one provider-facing destination record).",
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/JsonSchemaPropertyNode",
+          "description": "JSON Schema Draft 2020-12 for one provider-facing destination record.",
+          "title": "Schema"
+        }
+      },
+      "required": [
+        "schema"
+      ],
+      "title": "WriteInput",
+      "type": "object"
+    },
+    "WriteOperation": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "anyOf": [
+            {
+              "properties": {
+                "idempotency": {
+                  "anyOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "properties": {
+                        "in": {
+                          "const": "header"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "properties": {
+                "request": {
+                  "properties": {
+                    "body": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "body"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "anyOf": [
+        {
+          "properties": {
+            "idempotency": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "properties": {
+            "batching": {
+              "type": "null"
+            }
+          }
+        }
+      ],
+      "description": "One write-mode block, keyed in `operations.write` by the mode it serves.",
+      "properties": {
+        "batching": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Batching"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "conflict_keys": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Upsert conflict-target fields \u2014 the provider-defined natural key the upsert matches on (e.g. Salesforce `ExternalIdField`, HubSpot `idProperty`, Airtable `fieldsToMergeOn`, Elasticsearch `_id`, Algolia `objectID`). Each entry is a top-level field name in `input.schema`. A single composite key set \u2014 every listed field participates. Required on the `upsert` write mode; forbidden on every other write mode (enforced by `operations`, which knows the mode key).",
+          "title": "Conflict Keys"
+        },
+        "idempotency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Idempotency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Provider idempotency-key placement (e.g. Stripe `Idempotency-Key` header, Square `idempotency_key` body field). Allowed on any write mode, required on none \u2014 some providers require the key even on upsert (Square `UpsertCatalogObject`). Forbidden together with `batching`: the key value is per-record, and a resumed cursor re-batches different row compositions, so a multi-record request cannot carry a key that survives an engine restart."
+        },
+        "input": {
+          "$ref": "#/$defs/WriteInput"
+        },
+        "params": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Param"
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "request": {
+          "$ref": "#/$defs/WriteRequest"
+        },
+        "response": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WriteResponse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "request",
+        "input"
+      ],
+      "title": "WriteOperation",
+      "type": "object"
+    },
+    "WriteRequest": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "path": {
+                "pattern": "\\{[^{}]+\\}"
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path_params": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "path_params"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "path": {
+                "not": {
+                  "pattern": "\\{[^{}]+\\}"
+                }
+              }
+            },
+            "required": [
+              "path"
+            ]
+          },
+          "then": {
+            "properties": {
+              "path_params": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ],
+      "description": "Provider request for an API write mode.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Request body. May mix literals with `{from_param}` (and `{from_input}` for writes).",
+          "title": "Body"
+        },
+        "content_type": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+/[A-Za-z0-9!#$%&'*+.^_`|~-]+ *(;.*)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Media type of `body`, sent as the request's `Content-Type` and selecting how the body is encoded \u2014 the field to declare when a provider takes a form-encoded or otherwise non-JSON body. Omitted, the engine sends JSON. The header map is not a second way to say this (RULE-HTTP-003).",
+          "title": "Content Type"
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
+          "title": "Headers"
+        },
+        "headers_remove": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Header names to delete from inherited transport defaults (case-insensitive).",
+          "title": "Headers Remove"
+        },
+        "method": {
+          "description": "Write HTTP method (closed v1 enum).",
+          "enum": [
+            "POST",
+            "PUT",
+            "PATCH"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "description": "Path or relative URL on the selected transport.",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\$\\{"
+          },
+          "title": "Path",
+          "type": "string"
+        },
+        "path_params": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Bindings for `{name}` placeholders in `path`. A value is either `{from_param: <name>}`, naming a declared `in: path` param that must itself carry a `default` (a write param has no other source, so a sourceless one can never resolve), or `{from_input: \"record.<dotted>\"}`, which reads one field of the record being written (`PATCH /contacts/{id}`) and declares no param at all. `record` and `records[.<dotted>]` are refused \u2014 a path segment carries exactly one value \u2014 and the field a `record.<dotted>` binding addresses must be declared in this mode's `input.schema`. A `from_input` path_param is mutually exclusive with `batching`: a multi-record request has no single record to take the segment from. **Encoding is engine-owned**: the engine percent-encodes each substituted value as ONE path segment, so a binding must not wrap its value in `url_encode` or `base64_encode` \u2014 that double-encodes. Spec: \u00a7Request Parameter Binding.",
+          "title": "Path Params"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Endpoint-declared query parameters; values may be literals or expressions.",
+          "title": "Query"
+        },
+        "transport_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Named transport this operation dispatches through; defaults to `default_transport`. **Containment** (spec: \u00a7Transport Selection) has two halves, and they are guaranteed differently. (1) NAME: the value must be one the sibling `connector.json` declares in `transports` \u2014 a request dispatches only through a transport the connector declares. This half is checked at author time by the validator's `endpoint-transport-ref` check (the endpoint and the connector are separate documents, so no single-document model validator can see both sides). It is an ERROR only when the sibling `connector.json` is in hand; validating an endpoint file whose connector is not reachable emits a warning saying the name was not checked, because a check that cannot see the other document cannot refuse the name. (2) ORIGIN: the intended rule is that every URL this request produces, including a next-page link followed from `pagination.link.next_url`, lands on the origin of a declared transport. **This half is enforced by nothing today** \u2014 not by this contract, not by `analitiq-validator`, and not by the engine as it stands: the engine opens ONE session at connect time from `default_transport` and pins the read path to that single origin, the write path has no origin guard at all, and no production call site selects a transport per operation. So declaring a second transport does NOT today make a second origin reachable \u2014 a next-page link that leaves the connection origin is refused. Stated here as the contract's intent, not as a guarantee: closing it takes per-operation transport selection plus a write-path origin guard in the engine.",
+          "title": "Transport Ref"
+        }
+      },
+      "required": [
+        "path",
+        "method"
+      ],
+      "title": "WriteRequest",
+      "type": "object"
+    },
+    "WriteResponse": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "properties": {
+            "metadata": {
+              "propertyNames": {
+                "not": {
+                  "enum": [
+                    "body",
+                    "headers",
+                    "metadata",
+                    "record_count",
+                    "records",
+                    "status"
+                  ]
+                },
+                "pattern": "^[a-z][a-z0-9_]*$"
+              }
+            }
+          }
+        }
+      ],
+      "description": "Optional write-result extraction block.",
+      "properties": {
+        "affected_records": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/LiteralExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affected Records"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WriteError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional `code`/`message`/`details` value expressions for failure parsing."
+        },
+        "generated_keys": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/LiteralExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Generated Keys"
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/RefExpression"
+                  },
+                  {
+                    "$ref": "#/$defs/TemplateExpression"
+                  },
+                  {
+                    "$ref": "#/$defs/LiteralExpression"
+                  },
+                  {
+                    "$ref": "#/$defs/FunctionExpression"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata"
+        },
+        "success_when": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PredicateEq"
+                },
+                {
+                  "$ref": "#/$defs/PredicateNeq"
+                },
+                {
+                  "$ref": "#/$defs/PredicateLt"
+                },
+                {
+                  "$ref": "#/$defs/PredicateLte"
+                },
+                {
+                  "$ref": "#/$defs/PredicateGt"
+                },
+                {
+                  "$ref": "#/$defs/PredicateGte"
+                },
+                {
+                  "$ref": "#/$defs/PredicateExists"
+                },
+                {
+                  "$ref": "#/$defs/PredicateMissing"
+                },
+                {
+                  "$ref": "#/$defs/PredicateEmpty"
+                },
+                {
+                  "$ref": "#/$defs/PredicateNotEmpty"
+                },
+                {
+                  "$ref": "#/$defs/PredicateAnd"
+                },
+                {
+                  "$ref": "#/$defs/PredicateOr"
+                },
+                {
+                  "$ref": "#/$defs/PredicateNot"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Success When"
+        }
+      },
+      "title": "WriteResponse",
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.analitiq.ai/api-endpoint/18.0.0.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Public JSON Schema contract for API endpoint documents (owned by connectors with `kind: 'api'`) \u2014 authored shape only. Endpoint documents have no top-level `kind` field; the owning connector's `kind` selects this schema. Reserved server-managed fields (endpoint_id, connector_id, connector_version, connection_id, schema_hash) are forbidden in the authored shape. The persisted catalog-row shape is internal and not published. Source of truth: analitiq.contracts.endpoints.ApiEndpointDoc (Pydantic).",
+  "properties": {
+    "$schema": {
+      "const": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+      "description": "Per-kind schema URL declared by every persisted API endpoint document. Per spec \u00a7Schema URLs.",
+      "title": "$Schema",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "User-facing summary (\u22642000 chars).",
+      "title": "Description"
+    },
+    "display_name": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "minLength": 1,
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "User-facing label (1-120 chars trimmed).",
+      "title": "Display Name"
+    },
+    "endpoint_id": {
+      "description": "Stable endpoint identifier within the owner. Matches `^[a-z0-9][a-z0-9_-]*$`.",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "title": "Endpoint Id",
+      "type": "string"
+    },
+    "operations": {
+      "$ref": "#/$defs/Operations"
+    },
+    "tags": {
+      "anyOf": [
+        {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Grouping/search labels (max 50, each 1-64 chars, unique, trimmed).",
+      "title": "Tags",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "endpoint_id",
+    "$schema",
+    "operations"
+  ],
+  "title": "Analitiq API Endpoint",
+  "type": "object",
+  "version": "18.0.0"
+}

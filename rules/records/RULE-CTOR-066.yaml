@@ -1,0 +1,32 @@
+id: RULE-CTOR-066
+statement: >
+  An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the
+  connector author writes — the bare-string form, the `{literal}` form, or the
+  authority of a `{template}`.
+tier: structural
+severity: error
+scopes: [connector]
+validator: "analitiq.contracts.connector::HttpTransport._base_url_declares_no_credentials"
+owners: [connector-plugin, engine]
+targets: [HttpTransport]
+fields: [base_url]
+fixture_model: HttpTransport
+rationale: >
+  The HTTP client the engine sends with derives Basic authentication from the
+  request URL, so a base URL carrying userinfo authenticates the first request
+  and nothing after it: a provider-supplied absolute continuation link is
+  same-origin and omits the credentials, the client sends no authorization
+  header, and the provider answers 401 — which reads as a credential or
+  provider fault rather than a connector-definition one. The origin guard that
+  already grades a next link cannot report it, because origin comparison
+  strips userinfo, so the link that dropped the credentials is same-origin by
+  construction. Credentials in a URL are also logged wherever the URL is,
+  which is why the remedy is the transport's `auth` block or its declared
+  headers rather than a safer-looking URL. The rule reaches as far as the
+  author's own text: a `{ref}` or a function node resolves per connection, and
+  a `{template}` whose host arrives through a placeholder can carry userinfo
+  that no reading of the document reveals. Those are refused again at connect
+  time, where the resolved URL is in hand — passing this rule is not a
+  sanctioned way to reach a provider with credentials in the host.
+status: active
+superseded_by: null

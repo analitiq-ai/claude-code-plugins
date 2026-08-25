@@ -133,7 +133,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="5340bea58a7c",
         structural=(
             "the closed model declares no value slot at all — the Literal on "
-            "`location` and the plain string `name` are placement facts, and "
+            "`location` and the `name` beside it are placement facts, and "
             "extra='forbid' rejects anything more"
         ),
     ),
@@ -220,7 +220,25 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(model="GetReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
-    ProseObligation(model="Idempotency", field="name", prose_hash="0254c1003efd", descriptive=True),
+    ProseObligation(
+        model="Idempotency", field="name",
+        prose_hash="8f23e4b13e1e",
+        structural=(
+            "the NO_EDGE_WHITESPACE_PATTERN constraint on the field carries "
+            "the shared half — that the space around a name is not part of it "
+            "— for either placement"
+        ),
+        waiver=(
+            "which of the two kinds of name this is depends on `location`, "
+            "and the field is one annotation for both, so the header case is "
+            "not held to a header name's token shape here; the maps that key "
+            "on `HeaderName` are. Closing it takes splitting the model on its "
+            "placement discriminator, which also re-mechanises RULE-ENDP-039 "
+            "— that rule binds this field as a closed vocabulary, and each "
+            "branch of the split would carry a single-member Literal that is "
+            "a discriminator tag instead"
+        ),
+    ),
     ProseObligation(
         model="Keyset", field="initial", waiver=ENGINE_CONDUCT,
         prose_hash="9302943f9f24",
@@ -267,9 +285,32 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="Param", field="type", prose_hash="e716f55ea092", descriptive=True),
     ProseObligation(model="PostReadRequest", prose_hash="ec73f959a39b", descriptive=True),
     ProseObligation(
-        model="PostReadRequest", field="body",
-        prose_hash="958783250f0b",
+        model="_BodyBearingRequest", field="body",
+        prose_hash="806a08ec23e9",
         rule_ids=("RULE-ENDP-022",),
+    ),
+    ProseObligation(
+        model="_BodyBearingRequest", field="content_type",
+        prose_hash="a2a16d61a1d1",
+        rule_ids=("RULE-HTTP-003",),
+        waiver=ENGINE_OWNED_DEFAULTING,
+    ),
+    ProseObligation(
+        model="_BodyBearingRequest",
+        prose_hash="71036cdb33f8",
+        structural=(
+            "the branch is the mechanism: `body` and `content_type` are "
+            "declared on the base the body-bearing request branches share, so "
+            "the GET read — which does not inherit it — refuses both keys "
+            "through extra='forbid'"
+        ),
+        waiver=(
+            "the pairing is deliberately not enforced: a media type declared "
+            "beside no body is a legal HTTP request and a statement about what "
+            "would be sent, which the engine settles at dispatch, so the "
+            "docstring says the fields are optional rather than promising a "
+            "check nothing performs"
+        ),
     ),
     ProseObligation(model="PostReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
     ProseObligation(model="ReadOperation", prose_hash="ec0e00d340de", descriptive=True),
@@ -303,7 +344,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="WriteRequest", prose_hash="c2059bccd496", descriptive=True),
     ProseObligation(
         model="WriteRequest", field="body",
-        prose_hash="191d279412ec",
+        prose_hash="6dce4339b994",
         rule_ids=("RULE-ENDP-017", "RULE-ENDP-022"),
     ),
     ProseObligation(

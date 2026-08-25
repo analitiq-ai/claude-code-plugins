@@ -1,0 +1,6 @@
+{
+  "transport_type": "http",
+  "base_url": {
+    "template": "https://${connection.parameters.user}:${connection.parameters.password}@api.example.test"
+  }
+}

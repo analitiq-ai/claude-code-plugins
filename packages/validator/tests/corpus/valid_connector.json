@@ -13,7 +13,6 @@
       "base_url": "https://my.sevdesk.de/api/v1",
       "headers": {
         "Accept": "application/json",
-        "Content-Type": "application/json",
         "Authorization": {
           "template": "${secrets.api_token}"
         }

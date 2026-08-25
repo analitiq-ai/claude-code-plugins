@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`connector`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 41 of the 82 below have no validator, so nothing rejects
+all hold: 41 of the 85 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **29** structural · **29** advisory · **10** referential · **8** procedural · **6** judgment.
+In this file: **32** structural · **29** advisory · **10** referential · **8** procedural · **6** judgment.
 
 ## Contents
 
@@ -61,6 +61,9 @@ than edited.
 | RULE-CTOR-063 | A transport's `tls` values MUST be declarations the runtime resolves to plain strings, never a driver-specific object, a filesystem path, or code; converting a resolved mode into driver connect arguments belongs to the connector package's dialect. | `connector` | error | — | — |
 | RULE-CTOR-064 | An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name. | `connector` | error | validator | — |
 | RULE-CTOR-065 | An expression dict in a connector field a runtime resolves MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares. | `connector` | error | validator | — |
+| RULE-CTOR-066 | An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the connector author writes — the bare-string form, the `{literal}` form, or the authority of a `{template}`. | `connector` | error | validator | — |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | — |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |

@@ -154,7 +154,6 @@ def _endpoint_with_write(response: dict | None = None, request_extra: dict | Non
     request = {
         "method": "POST",
         "path": "/v1/items",
-        "headers": {"Content-Type": "application/json"},
         "body": {"from_input": "records" if batching else "record"},
     }
     if request_extra:

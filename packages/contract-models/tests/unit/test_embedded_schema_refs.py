@@ -398,7 +398,7 @@ class TestGuardEndToEndOnADocument:
                         "request": {
                             "method": "POST",
                             "path": "/v1/x",
-                            "headers": {"Content-Type": "application/json"},
+                            "headers": {"Accept": "application/json"},
                             "body": {"r": {"from_input": "record"}},
                         },
                         "params": {},

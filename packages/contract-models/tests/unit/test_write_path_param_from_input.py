@@ -86,7 +86,7 @@ def _write_op(
     request = {
         "method": method,
         "path": path,
-        "headers": {"Content-Type": "application/json"},
+        "headers": {"Accept": "application/json"},
         "body": {"from_input": "record"} if body is None else body,
     }
     if path_params is not None:
@@ -130,7 +130,7 @@ class TestSevdeskPutContactById:
                         "method": "PUT",
                         "path": "/Contact/{id}",
                         "path_params": {"id": {"from_input": "record.id"}},
-                        "headers": {"Content-Type": "application/json"},
+                        "headers": {"Accept": "application/json"},
                         "body": {"from_input": "record"},
                     },
                     "params": {},
@@ -325,7 +325,7 @@ class TestFromInputInPathParamsRejected:
         ):
             parse_endpoint(_api_payload({"insert": _write_op(
                 request_extras={"headers": {
-                    "Content-Type": "application/json",
+                    "Accept": "application/json",
                     "X-Record-Id": {"from_input": "record.id"},
                 }},
             )}))

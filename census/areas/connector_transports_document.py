@@ -29,7 +29,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="HttpTransport", field="base_url",
-        prose_hash="04961e5771bc",
+        prose_hash="b149b78c8fc3",
+        rule_ids=("RULE-CTOR-066",),
         structural=(
             "the bare-string arm and the typed object arms named here carry "
             "the non-empty constraint: the bare string is Annotated[str, "
@@ -42,9 +43,19 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "resolves to, so a function-form base_url resolving to an empty "
             "string is accepted here and refused at engine transport build, "
             "which this package's `resolve_transport_base_url` mirrors; "
-            "nothing anywhere constrains the value to be URL-SHAPED; and the "
-            "permission to omit the field — that this entry exists only to "
-            "extend `transport_defaults` — is authoring intent no document "
+            "nothing anywhere constrains the value to be URL-SHAPED, so a "
+            "base_url that lost its scheme declares no authority by the URL "
+            "grammar and any credentials in it are out of RULE-CTOR-066's "
+            "reach — refusing that is the separate obligation that an HTTP "
+            "transport's base URL is an HTTP URL, which no rule states yet; "
+            "the "
+            "credentials half of the description reaches only the forms whose "
+            "URL text is authored, so a ref or function arm — and a template "
+            "whose host arrives through a placeholder — resolving to userinfo "
+            "is accepted here and refused at connect, which is why the "
+            "description says so rather than promising the whole claim; and "
+            "the permission to omit the field — that this entry exists only "
+            "to extend `transport_defaults` — is authoring intent no document "
             "states, so an entry omitting it for any other reason is accepted "
             "here and fails at that same build"
         ),

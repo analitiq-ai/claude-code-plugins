@@ -96,7 +96,7 @@ client credentials and gets an access token (no browser redirect):
     "transport_ref": "auth",
     "method": "POST",
     "path": "/oauth/token",
-    "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+    "content_type": "application/x-www-form-urlencoded",
     "body": {
       "template": "grant_type=client_credentials&client_id=${connection.parameters.client_id}&client_secret=${secrets.client_secret}"
     }
