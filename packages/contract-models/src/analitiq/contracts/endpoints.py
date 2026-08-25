@@ -33,6 +33,7 @@ from pydantic import (
     ConfigDict,
     Discriminator,
     Field,
+    StringConstraints,
     Tag as UnionTag,
     field_validator,
     model_validator,
@@ -54,6 +55,8 @@ from analitiq.contracts.shared.arrow_shape import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    HEADER_NAME_PROPERTY_NAMES,
+    HeaderName,
     MediaType,
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
@@ -1032,11 +1035,12 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             "Spec: §Request Parameter Binding."
         ),
     )
-    headers: dict[str, Any] | None = Field(
+    headers: dict[HeaderName, Any] | None = Field(
         default=None,
         description="Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+        json_schema_extra=HEADER_NAME_PROPERTY_NAMES,
     )
-    headers_remove: list[str] | None = Field(
+    headers_remove: list[HeaderName] | None = Field(
         default=None,
         description="Header names to delete from inherited transport defaults (case-insensitive).",
     )
@@ -1784,10 +1788,14 @@ class Idempotency(DeclaredHeaderNames, _EndpointModel):
             "JSON object; the engine rejects non-object bodies at configure time."
         ),
     )
-    name: str = Field(
+    name: Annotated[str, StringConstraints(pattern=NO_EDGE_WHITESPACE_PATTERN)] = Field(
         ...,
-        min_length=1,
-        description="Header name or top-level body field name that carries the key.",
+        description=(
+            "Header name or top-level body field name that carries the key. "
+            "Not constrained to a header name's token shape, because `in: "
+            "body` makes it a JSON field name, which admits more; what both "
+            "share is that the space around a name is not part of it."
+        ),
     )
 
     def declared_header_names(self) -> list[tuple[str, str]]:

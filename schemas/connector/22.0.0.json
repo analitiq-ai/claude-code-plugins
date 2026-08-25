@@ -415,7 +415,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -424,12 +426,16 @@
           ],
           "default": null,
           "description": "Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "headers_remove": {
           "anyOf": [
             {
               "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
                 "type": "string"
               },
               "type": "array"
@@ -2311,7 +2317,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -2320,12 +2328,16 @@
           ],
           "default": null,
           "description": "Default request headers; values may be literals or expressions",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "headers_remove": {
           "anyOf": [
             {
               "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
                 "type": "string"
               },
               "type": "array"
@@ -2901,7 +2913,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -2910,6 +2924,9 @@
           ],
           "default": null,
           "description": "Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "method": {
@@ -4221,7 +4238,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -4230,12 +4249,16 @@
           ],
           "default": null,
           "description": "Default request headers shared across HTTP transport entries.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "headers_remove": {
           "anyOf": [
             {
               "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
                 "type": "string"
               },
               "type": "array"
@@ -4468,7 +4491,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/connector/21.1.0.json",
+  "$id": "https://schemas.analitiq.ai/connector/22.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "description": "Public JSON Schema contract for Analitiq connector documents \u2014 the authored shape used in source control, PR review, and author-time tooling. `connector_id` is the authored canonical identifier (slug pattern `^[a-z0-9][a-z0-9_-]*$`). Only `created_at` and `updated_at` are server-managed and absent in the authored shape. Source of truth: analitiq.contracts.connector.Connector (Pydantic).",
   "discriminator": {
@@ -4507,5 +4530,5 @@
     }
   ],
   "title": "Analitiq Connector",
-  "version": "21.1.0"
+  "version": "22.0.0"
 }

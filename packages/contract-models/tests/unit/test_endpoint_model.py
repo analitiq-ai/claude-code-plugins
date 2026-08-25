@@ -1072,15 +1072,15 @@ class TestWriteIdempotency:
             parse_endpoint(self._payload({"insert": op}))
 
     @pytest.mark.parametrize(
-        "spelling", ["Idempotency-Key", "idempotency-key", " Idempotency-Key",
-                     "Idempotency-Key "],
+        "spelling", ["Idempotency-Key", "idempotency-key", "IDEMPOTENCY-KEY"],
     )
-    def test_header_idempotency_collision_is_found_however_it_is_spelled(
+    def test_header_idempotency_collision_is_found_however_it_is_cased(
         self, spelling
     ):
         # The engine owns the key's value, so the same wire header carrying an
-        # authored one is the contradiction — whichever way either side spells
-        # it.
+        # authored one is the contradiction — whichever way either side cases
+        # it. A padded spelling never gets here: `request.headers` keys on
+        # `HeaderName`, which refuses it as a name at all.
         op = self._write_op(idempotency={"in": "header", "name": "Idempotency-Key"})
         op["request"]["headers"][spelling] = {"from_param": "key"}
         op["params"] = {"key": {"in": "header", "type": "string", "required": True,

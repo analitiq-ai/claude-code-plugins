@@ -37,6 +37,8 @@ from analitiq.contracts.shared.rules import (
 )
 from analitiq.contracts.shared.common import (
     DESCRIPTION_MAX,
+    HEADER_NAME_PROPERTY_NAMES,
+    HeaderName,
     MediaType,
     DISPLAY_NAME_MAX,
     DISPLAY_NAME_MIN,
@@ -222,11 +224,12 @@ class AuthOperationTemplate(
         min_length=1,
         description="Path or relative URL on the selected transport",
     )
-    headers: dict[str, Any] | None = Field(
+    headers: dict[HeaderName, Any] | None = Field(
         default=None,
         description="Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
+        json_schema_extra=HEADER_NAME_PROPERTY_NAMES,
     )
-    headers_remove: list[str] | None = Field(
+    headers_remove: list[HeaderName] | None = Field(
         default=None,
         description="Header names to delete from inherited transport defaults",
     )
@@ -660,9 +663,10 @@ class PostAuthOperationRequest(
         min_length=1,
         description="Path or relative URL on the selected transport",
     )
-    headers: dict[str, Any] | None = Field(
+    headers: dict[HeaderName, Any] | None = Field(
         default=None,
         description="Request headers; values may be literals, `{ref}`, `{template}`, or `{function}`",
+        json_schema_extra=HEADER_NAME_PROPERTY_NAMES,
     )
     content_type: MediaType | None = Field(
         default=None,
@@ -1115,12 +1119,13 @@ class HttpTransport(
             "this contract."
         ),
     )
-    headers: dict[str, Any] | None = Field(
+    headers: dict[HeaderName, Any] | None = Field(
         default=None,
         description="Default request headers; values may be literals or expressions",
+        json_schema_extra=HEADER_NAME_PROPERTY_NAMES,
     )
 
-    headers_remove: list[str] | None = Field(
+    headers_remove: list[HeaderName] | None = Field(
         default=None,
         description="Header names to delete from inherited defaults (case-insensitive)",
     )
@@ -1495,11 +1500,12 @@ class TransportDefaults(
             "does not declare its own."
         ),
     )
-    headers: dict[str, Any] | None = Field(
+    headers: dict[HeaderName, Any] | None = Field(
         default=None,
         description="Default request headers shared across HTTP transport entries.",
+        json_schema_extra=HEADER_NAME_PROPERTY_NAMES,
     )
-    headers_remove: list[str] | None = Field(
+    headers_remove: list[HeaderName] | None = Field(
         default=None,
         description="Header names to delete from any inherited defaults",
     )

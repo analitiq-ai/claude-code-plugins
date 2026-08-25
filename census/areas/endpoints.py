@@ -133,7 +133,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="5340bea58a7c",
         structural=(
             "the closed model declares no value slot at all — the Literal on "
-            "`location` and the plain string `name` are placement facts, and "
+            "`location` and the `name` beside it are placement facts, and "
             "extra='forbid' rejects anything more"
         ),
     ),
@@ -220,7 +220,22 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(model="GetReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
-    ProseObligation(model="Idempotency", field="name", prose_hash="0254c1003efd", descriptive=True),
+    ProseObligation(
+        model="Idempotency", field="name",
+        prose_hash="8f23e4b13e1e",
+        structural=(
+            "the NO_EDGE_WHITESPACE_PATTERN constraint on the field carries "
+            "the shared half — that the space around a name is not part of it "
+            "— for either placement"
+        ),
+        waiver=(
+            "which of the two kinds of name this is depends on `location`, "
+            "and the field is one annotation for both, so the header case is "
+            "not held to a header name's token shape here; the maps that key "
+            "on `HeaderName` are, and closing this one takes splitting the "
+            "model on its placement discriminator"
+        ),
+    ),
     ProseObligation(
         model="Keyset", field="initial", waiver=ENGINE_CONDUCT,
         prose_hash="9302943f9f24",

@@ -207,10 +207,32 @@ class ParseOnly:
         return super().model_copy(deep=deep)
 
 
-#: The character set RFC 9110 calls a `token` — what a header name is made
-#: of, and what each half of a media type is made of. Written once because a
-#: correction to it is a correction to every shape derived from it.
-TOKEN_CHARS = r"[A-Za-z0-9!#$%&'*+.^_`|~-]+"
+#: What RFC 9110 calls a `token`: one or more of the characters it admits.
+#: A header name is a token, and so is each half of a media type. Written once
+#: because a correction to it is a correction to every shape derived from it —
+#: and named for the grammar production rather than for the character set,
+#: because the trailing quantifier makes this a whole token rather than the
+#: set a token is drawn from.
+TOKEN = r"[A-Za-z0-9!#$%&'*+.^_`|~-]+"
+
+#: An HTTP field name, which RFC 9110 says is exactly a token. Constraining
+#: the name is what makes ` Accept` and `Accept` one header rather than two:
+#: the space around a name is not part of it, so a name carrying one is not a
+#: name a provider will ever see, and the map it sits in would send the header
+#: twice. Read by the type below and by the schema fragment beside it, so the
+#: published document refuses what the models refuse.
+HEADER_NAME_PATTERN = rf"^{TOKEN}$"
+
+HeaderName = Annotated[str, StringConstraints(pattern=HEADER_NAME_PATTERN)]
+
+#: The published-schema half of `HeaderName`, for the maps that key on one.
+#: Pydantic renders a constrained dict key as `patternProperties`, which says
+#: what a MATCHING key holds and forbids nothing, so a schema-only consumer
+#: would accept the names the models reject. `propertyNames` is the keyword
+#: that refuses them, and this is the fragment that carries it.
+HEADER_NAME_PROPERTY_NAMES: dict[str, Any] = {
+    "propertyNames": {"pattern": HEADER_NAME_PATTERN}
+}
 
 #: A media type, as RFC 9110 writes one: a type and a subtype of token
 #: characters, optionally followed by parameters. It constrains the SHAPE and
@@ -220,7 +242,7 @@ TOKEN_CHARS = r"[A-Za-z0-9!#$%&'*+.^_`|~-]+"
 #: empty string among them: absent and "declared as nothing" are the same
 #: request to a reader and different values to a resolver.
 MediaType = Annotated[
-    str, StringConstraints(pattern=rf"^{TOKEN_CHARS}/{TOKEN_CHARS} *(;.*)?$")
+    str, StringConstraints(pattern=rf"^{TOKEN}/{TOKEN} *(;.*)?$")
 ]
 
 

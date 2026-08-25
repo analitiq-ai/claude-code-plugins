@@ -13,7 +13,11 @@ The `content_type` field is pinned from both ends here too: it exists on the
 request models that declare a body, and the branch that declares none refuses
 it structurally.
 """
+import json
+from pathlib import Path
+
 import pytest
+from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from analitiq.contracts.connector import (
@@ -50,13 +54,14 @@ REFUSED = [
 
 
 def _spellings(canonical: str, lowercased: str) -> tuple[str, ...]:
-    """Every way of writing one header name that a wire reader cannot tell apart.
+    """Every way of writing one header name that reaches these rules.
 
-    The padded ones matter as much as the cased ones: letting the spelling
-    decide whether a rule applies is the whole of the bypass.
+    Case only. A padded name never gets this far — `HeaderName` refuses it as
+    a name at all, which is a stronger answer than refusing it as this
+    particular header, and `test_a_name_that_is_not_a_header_name_is_refused`
+    is where that is pinned.
     """
-    return (canonical, lowercased, canonical.upper(),
-            f" {canonical}", f"{canonical} ", f"\t{lowercased}")
+    return (canonical, lowercased, canonical.upper())
 
 
 @pytest.mark.parametrize("label, model, kwargs", HEADER_MAP_BLOCKS)
@@ -99,6 +104,26 @@ def test_an_idempotency_key_is_a_header_name_too(rule_id, canonical, lowercased)
         assert "idempotency.name" in str(exc.value)
 
 
+@pytest.mark.parametrize("name", ["", " ", " Idempotency-Key", "Idempotency-Key "])
+@pytest.mark.parametrize("location", ["header", "body"])
+def test_an_idempotency_name_carrying_edge_space_is_refused(name, location):
+    # Held to less than a header name's token shape, because `in: body` makes
+    # it a JSON field name and those admit more. What both share is that the
+    # space around a name is not part of it, so a name carrying one names
+    # nothing the provider will match.
+    with pytest.raises(ValidationError):
+        Idempotency.model_validate({"in": location, "name": name})
+
+
+@pytest.mark.parametrize(
+    "name", ["Idempotency-Key", "idempotency_key", "X-Request-Id", "a b"]
+)
+def test_an_idempotency_name_without_edge_space_parses(name):
+    # `a b` is here deliberately: a body field name may hold what a header
+    # name may not, which is why this field is not `HeaderName`.
+    assert Idempotency.model_validate({"in": "body", "name": name}).name == name
+
+
 @pytest.mark.parametrize("rule_id, canonical, _lowercased", REFUSED)
 def test_a_body_field_of_that_name_is_not_a_header(rule_id, canonical, _lowercased):
     # `in: body` puts the key in the payload, where these names mean nothing
@@ -107,22 +132,45 @@ def test_a_body_field_of_that_name_is_not_a_header(rule_id, canonical, _lowercas
     assert block.name == canonical
 
 
-@pytest.mark.parametrize(
-    "label, headers, removals",
-    [
-        ("padded on the declaring side", {" Accept": "a"}, ["Accept"]),
-        ("padded on the removing side", {"Accept": "a"}, [" Accept"]),
-        ("cased only", {"Accept": "a"}, ["accept"]),
-    ],
-)
-def test_declaring_and_removing_one_header_is_refused_however_it_is_spelled(
-    label, headers, removals
-):
+def test_declaring_and_removing_one_header_is_refused_however_it_is_cased():
     # RULE-HTTP-001 reads a name the same way the refusal rules do — one
     # normaliser, so a spelling refused at one site cannot pass at the next.
     with pytest.raises(ValidationError) as exc:
-        HttpTransport(transport_type="http", headers=headers, headers_remove=removals)
-    assert "RULE-HTTP-001" in str(exc.value), label
+        HttpTransport(
+            transport_type="http", headers={"Accept": "a"}, headers_remove=["accept"]
+        )
+    assert "RULE-HTTP-001" in str(exc.value)
+
+
+#: Names no provider will ever see, whatever the map holding them says. Padded
+#: ones are here rather than in the rule tests above because being a header
+#: name at all is the earlier question: the map is keyed on `HeaderName`, so
+#: these never reach a rule.
+NOT_HEADER_NAMES = ["", " ", "  ", "\t", " Accept", "Accept ", "a b", "a:b", "a\nb"]
+
+
+@pytest.mark.parametrize("name", NOT_HEADER_NAMES)
+@pytest.mark.parametrize("label, model, kwargs", HEADER_MAP_BLOCKS)
+def test_a_name_that_is_not_a_header_name_is_refused(name, label, model, kwargs):
+    # RFC 9110 makes a field name exactly a token. Anything else is a name the
+    # provider never receives — and, since the space around a name is not part
+    # of it, a padded one is a second spelling of a header the map may already
+    # carry, which would put that header on the wire twice.
+    with pytest.raises(ValidationError):
+        model(**kwargs, headers={name: "x"})
+
+
+@pytest.mark.parametrize("name", NOT_HEADER_NAMES)
+def test_a_removal_naming_no_header_name_is_refused(name):
+    with pytest.raises(ValidationError):
+        HttpTransport(transport_type="http", headers_remove=[name])
+
+
+@pytest.mark.parametrize("name", ["Accept", "X-Api-Key", "content-type-ish"])
+def test_an_ordinary_header_name_still_parses(name):
+    assert HttpTransport(
+        transport_type="http", headers={name: "x"}
+    ).headers == {name: "x"}
 
 
 def test_every_block_naming_headers_carries_the_checks():
@@ -222,3 +270,66 @@ def test_any_media_type_is_declarable(media_type):
 def test_a_value_that_is_not_a_media_type_is_refused(label, value):
     with pytest.raises(ValidationError, match="content_type"):
         WriteRequest(method="POST", path="/v1/x", content_type=value)
+
+
+# tests/unit/<this file> -> parents[4] is the repo root.
+LATEST_CONNECTOR_SCHEMA = (
+    Path(__file__).resolve().parents[4] / "schemas" / "connector" / "latest.json"
+)
+
+_CONNECTOR_WITHOUT_TRANSPORTS = {
+    "$schema": "https://schemas.analitiq.ai/connector/latest.json",
+    "connector_id": "acme",
+    "kind": "api",
+    "display_name": "Acme",
+    "description": (
+        "An API connector, minimal but complete, used to grade the published "
+        "schema's own view of what a header may be named."
+    ),
+    "version": "1.0.0",
+    "default_transport": "api",
+    "auth": {"type": "api_key"},
+    "connection_contract": {"inputs": {}},
+}
+
+
+def _connector_declaring(header_name: str) -> dict:
+    return dict(_CONNECTOR_WITHOUT_TRANSPORTS, transports={"api": {
+        "transport_type": "http",
+        "base_url": "https://api.example.test",
+        "headers": {header_name: "x"},
+    }})
+
+
+class TestThePublishedSchemaAgreesAboutHeaderNames:
+    """A consumer holding only `latest.json` refuses what the models refuse.
+
+    Worth its own test because the natural spelling does NOT give this.
+    Pydantic renders a constrained dict key as `patternProperties`, which says
+    what a matching key holds and forbids nothing — so the models would reject
+    a name and the published document would accept it, and nothing else here
+    reads the rendered file closely enough to notice. The `propertyNames`
+    fragment beside the field is what closes that, and this is what says so.
+
+    Judged on whether the whole document validates. A bad header name surfaces
+    as the connector-kind union failing to match its `http` branch, not as an
+    error whose path mentions headers, so asserting on the path reports a pass
+    for every input.
+
+    This reads the COMMITTED document, so it grades what a consumer fetches
+    and is blind to a model that has drifted from it — dropping the fragment
+    leaves this green. `render_schemas.py check` re-renders and compares,
+    which is the gate that sees that half.
+    """
+
+    @staticmethod
+    def _validator() -> Draft202012Validator:
+        return Draft202012Validator(json.loads(LATEST_CONNECTOR_SCHEMA.read_text()))
+
+    @pytest.mark.parametrize("name", ["Accept", "X-Api-Key", "Content-Length-ish"])
+    def test_a_header_name_validates(self, name):
+        assert not list(self._validator().iter_errors(_connector_declaring(name)))
+
+    @pytest.mark.parametrize("name", NOT_HEADER_NAMES)
+    def test_a_name_that_is_not_a_header_name_does_not(self, name):
+        assert list(self._validator().iter_errors(_connector_declaring(name)))

@@ -225,7 +225,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -234,12 +236,16 @@
           ],
           "default": null,
           "description": "Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "headers_remove": {
           "anyOf": [
             {
               "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
                 "type": "string"
               },
               "type": "array"
@@ -330,8 +336,8 @@
           "type": "string"
         },
         "name": {
-          "description": "Header name or top-level body field name that carries the key.",
-          "minLength": 1,
+          "description": "Header name or top-level body field name that carries the key. Not constrained to a header name's token shape, because `in: body` makes it a JSON field name, which admits more; what both share is that the space around a name is not part of it.",
+          "pattern": "^\\S(?:[\\s\\S]*\\S)?$",
           "title": "Name",
           "type": "string"
         }
@@ -1477,7 +1483,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -1486,12 +1494,16 @@
           ],
           "default": null,
           "description": "Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "headers_remove": {
           "anyOf": [
             {
               "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
                 "type": "string"
               },
               "type": "array"
@@ -2597,7 +2609,9 @@
         "headers": {
           "anyOf": [
             {
-              "additionalProperties": true,
+              "patternProperties": {
+                "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$": {}
+              },
               "type": "object"
             },
             {
@@ -2606,12 +2620,16 @@
           ],
           "default": null,
           "description": "Endpoint-declared request headers; values may be literals or `{from_param}`/`{ref}`/`{template}`.",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$"
+          },
           "title": "Headers"
         },
         "headers_remove": {
           "anyOf": [
             {
               "items": {
+                "pattern": "^[A-Za-z0-9!#$%&'*+.^_`|~-]+$",
                 "type": "string"
               },
               "type": "array"
@@ -2864,7 +2882,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/api-endpoint/17.1.0.json",
+  "$id": "https://schemas.analitiq.ai/api-endpoint/18.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for API endpoint documents (owned by connectors with `kind: 'api'`) \u2014 authored shape only. Endpoint documents have no top-level `kind` field; the owning connector's `kind` selects this schema. Reserved server-managed fields (endpoint_id, connector_id, connector_version, connection_id, schema_hash) are forbidden in the authored shape. The persisted catalog-row shape is internal and not published. Source of truth: analitiq.contracts.endpoints.ApiEndpointDoc (Pydantic).",
@@ -2944,5 +2962,5 @@
   ],
   "title": "Analitiq API Endpoint",
   "type": "object",
-  "version": "17.1.0"
+  "version": "18.0.0"
 }
