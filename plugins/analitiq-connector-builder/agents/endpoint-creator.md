@@ -181,7 +181,9 @@ was raised.
      Type its fields the way step 3 types the read record: `native_type`
      beside `arrow_type`, from the `endpoint_facts.fields` entries whose
      `directions` include `write` (`RULE-ENDP-062`), and, where an entry
-     carries `write_modes`, only for the modes it names — a field the provider
+     carries `write_modes`, only for the modes it names — a name outside the
+     write vocabulary `RULE-ENDP-052` prints is a defect in the facts, so
+     report it rather than dropping a field no mode claims — a field the provider
      accepts and never returns has an entry of its own, so does one it types
      differently in each direction, and a mode that takes a different field
      set gets a different input schema. What the pair buys is a destination
