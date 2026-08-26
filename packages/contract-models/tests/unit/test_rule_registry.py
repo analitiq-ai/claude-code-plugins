@@ -320,6 +320,33 @@ def test_every_owner_owns_something():
     assert used == set(OWNERS), f"owners nothing is assigned to: {sorted(set(OWNERS) - used)}"
 
 
+def test_every_pattern_rule_names_the_regex_it_is_about():
+    """A `mechanism: pattern` rule resolves to a live constant, or renders none.
+
+    The reference prints that constant so an author is shown the form the
+    statement points at. A record naming one that moved must fail here rather
+    than at the renderer, and a record naming none renders `—` — which is the
+    honest answer, not a defect, so this only grades the ones that do.
+    """
+    import importlib
+
+    for rule in all_rules():
+        if not rule.pattern_symbol:
+            continue
+        assert rule.mechanism == "pattern", (
+            f"{rule.id}: pattern_symbol on a {rule.mechanism!r} rule"
+        )
+        module_name, _, name = rule.pattern_symbol.partition("::")
+        module = importlib.import_module(module_name)
+        assert hasattr(module, name), (
+            f"{rule.id}: pattern_symbol {rule.pattern_symbol!r} resolves to no "
+            f"name in {module_name}"
+        )
+        assert isinstance(getattr(module, name), str), (
+            f"{rule.id}: {rule.pattern_symbol!r} is not a regex string"
+        )
+
+
 def test_every_mechanism_names_a_rule():
     """The same, for the shape-device axis.
 

@@ -105,6 +105,11 @@ PATH_PLACEHOLDER_NAME_PATTERN = rf"^{PATH_PLACEHOLDER_NAME_INNER}$"
 PATH_BRACES_WELL_FORMED_PATTERN = (
     rf"^(?:[^{{}}]|\{{{PATH_PLACEHOLDER_NAME_INNER}\}})*$"
 )
+#: The sigil that opens a value-expression template. Stated once: the runtime
+#: refusal and the pattern the schema carries are the same characters, so a
+#: change to the grammar's opener cannot reach one and miss the other.
+TEMPLATE_SIGIL = "${"
+PATH_TEMPLATE_SIGIL_PATTERN = re.escape(TEMPLATE_SIGIL)
 #: A placeholder name appearing twice, as a backreference — the uniqueness half
 #: of the same field, so a consumer reading only the published document refuses
 #: the repeat the model refuses. Negated in the schema, since what it matches
@@ -1052,7 +1057,7 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             # `not`, and this field is graded by several patterns — each the
             # published half of a rule the model applies.
             "allOf": [
-                {"not": {"pattern": r"\$\{"}},
+                {"not": {"pattern": PATH_TEMPLATE_SIGIL_PATTERN}},
                 {"pattern": PATH_BRACES_WELL_FORMED_PATTERN},
                 {"not": {"pattern": PATH_PLACEHOLDER_REPEATED_PATTERN}},
             ],
@@ -1094,7 +1099,7 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         # shape too, so refusing the template second reports it as a malformed
         # placeholder name and sends the author to respell something that must
         # not be in the path at all.
-        if "${" in self.path:
+        if TEMPLATE_SIGIL in self.path:
             raise violation("RULE-ENDP-061", f"path={self.path!r}")
         placeholders = PATH_PLACEHOLDER_RE.findall(self.path)
         # A brace the placeholder pattern did not consume is a brace that

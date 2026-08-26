@@ -10,6 +10,7 @@ owners: [connector-plugin]
 targets: [_EndpointBase]
 fields: [endpoint_id]
 mechanism: pattern
+pattern_symbol: "analitiq.contracts.shared.common::SLUG_PATTERN"
 rationale: >
   The id is the endpoint's handle everywhere outside the document: the filename
   it ships under, the key it is looked up by, and the value a stream pins. It

@@ -10,6 +10,7 @@ owners: [connector-plugin, engine]
 targets: [ConnectorBase]
 fields: [connector_id]
 mechanism: pattern
+pattern_symbol: "analitiq.contracts.shared.common::SLUG_PATTERN"
 rationale: >
   `connector_id` is the connector's identity in every direction at once — the
   registry repo and on-disk directory name, the entry-point name the package
