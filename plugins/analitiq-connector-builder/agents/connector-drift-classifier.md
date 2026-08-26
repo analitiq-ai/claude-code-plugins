@@ -48,9 +48,14 @@ rules for every document" says which file carries which artifact.
    - `operations.write` — the mode keys it declares.
    - the record shape: the node `response.records` resolves to inside
      `operations.read.response.schema` (`RULE-ENDP-012`) — which fields it
-     declares, and each field's declared type.
-   - `params.<name>.operators` — the operator members each param offers
-     (`RULE-ENDP-055`).
+     declares, and each field's declared type. Resolve it the way the contract
+     reads it before comparing: an in-document `$ref` is followed and an
+     `allOf` composed (`RULE-ENDP-026`), so a field that moved under `$defs`
+     or into a branch is not read as removed, and one that changed there is
+     not missed.
+   - `operations.read.params.<name>.operators` — the operator members each
+     read param offers (`RULE-ENDP-055`). Read params only: a write mode
+     declares params through the same model, and a filter never names one.
 4. For each change, classify it under the categories in the `DriftVerdict`
    schema (see connector-builder/references/io-contracts.md). An addition is
    minor when a document outside the connector can name it — a stream
@@ -108,7 +113,11 @@ rules for every document" says which file carries which artifact.
   `operations.write` that endpoint did not declare before; a whole new
   endpoint document is `optional-endpoint-added`), record-field-added (a
   field the record shape did not declare before; the discovery outputs
-  `optional-output-added` names are a connector-level block, not this),
+  `optional-output-added` names are a connector-level block, not this. Minor
+  because nothing an existing stream binds stops resolving — but a stream
+  that omits `mapping` copies every source field 1:1, so the new field
+  reaches its destination too, and a destination that has no column for it
+  learns so at run time. Say that in the `note` when a release adds one),
   filter-operators-widened (a param offers an operator it did not offer
   before, including a param newly declared with `operators`. These are
   endpoint params, not the connection inputs `optional-input-added` names),

@@ -181,7 +181,11 @@ CATEGORIES: tuple[Category, ...] = (
         note=(
             "a field the record shape did not declare before; the discovery "
             "outputs `optional-output-added` names are a connector-level "
-            "block, not this"
+            "block, not this. Minor because nothing an existing stream binds "
+            "stops resolving — but a stream that omits `mapping` copies every "
+            "source field 1:1, so the new field reaches its destination too, "
+            "and a destination that has no column for it learns so at run "
+            "time. Say that in the `note` when a release adds one"
         ),
     ),
     Category(
