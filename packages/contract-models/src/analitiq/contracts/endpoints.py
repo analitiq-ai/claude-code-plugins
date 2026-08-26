@@ -1035,7 +1035,10 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             "spelled in the contract's placeholder-name form (RULE-ENDP-060), "
             "never repeated within one path (RULE-ENDP-059), and bound in "
             "`path_params` (RULE-ENDP-001). A `${...}` template expression is "
-            "refused here (RULE-ENDP-061)."
+            "refused here (RULE-ENDP-061). That the path resolves against the "
+            "selected transport's origin rather than carrying a host of its "
+            "own (RULE-ENDP-045) is **enforced by nothing today**: an absolute "
+            "URL here satisfies every constraint this field declares."
         ),
         json_schema_extra={
             "not": {"pattern": r"\$\{"},

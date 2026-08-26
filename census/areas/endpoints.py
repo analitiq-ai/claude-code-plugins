@@ -403,7 +403,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="_RequestBase", field="headers_remove", prose_hash="b518759030fa", descriptive=True),
     ProseObligation(
         model="_RequestBase", field="path",
-        prose_hash="87c881e0fabc",
+        prose_hash="d9f2c4cddf5b",
         rule_ids=(
             "RULE-ENDP-001", "RULE-ENDP-045", "RULE-ENDP-059", "RULE-ENDP-060",
             "RULE-ENDP-061",
