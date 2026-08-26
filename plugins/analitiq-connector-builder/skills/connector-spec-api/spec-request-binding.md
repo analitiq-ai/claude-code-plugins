@@ -69,7 +69,8 @@ prohibitions below).
   `"path": "/v3/objects/{object_id}"` with
   `"path_params": { "object_id": { "from_param": "objectId" } }`. Pasting a
   provider's `{objectId}` straight into the path is how this is usually failed.
-  Also on `path`: RULE-ENDP-059 and RULE-ENDP-061.
+  A path never repeats a placeholder (RULE-ENDP-059) and refuses a `${...}`
+  template (RULE-ENDP-061).
 - **A binding's location must match the site it appears in** (RULE-ENDP-008);
   the placement vocabulary is printed under RULE-ENDP-050 in
   `connector-builder/references/rules/api-endpoint.md`.

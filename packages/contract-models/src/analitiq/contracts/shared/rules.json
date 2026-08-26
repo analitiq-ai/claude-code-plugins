@@ -3603,13 +3603,13 @@
    ],
    "mechanism": null,
    "fixture_model": "WriteRequest",
-   "rationale": "A repeated placeholder is filled from the one `path_params` entry it collapses to, so the URL is well-formed and wrong in a way nothing downstream can see: the later segment silently carries the earlier one's value and the provider answers about a resource nobody addressed. Nobody types it on purpose — it arrives from editing a copied path and changing one occurrence but not the rest — and the key-set agreement RULE-ENDP-001 checks cannot catch it, because a set has already collapsed the repeat by the time that comparison runs. This is where the repeat is still visible.\n",
+   "rationale": "A repeated placeholder is filled from the one `path_params` entry it collapses to, so the URL is well-formed and wrong in a way nothing downstream can see: the later segment silently carries the earlier one's value and the provider answers about a resource nobody addressed. It usually arrives from editing a copied path and changing one occurrence but not the rest — and the key-set agreement RULE-ENDP-001 checks cannot catch it, because a set has already collapsed the repeat by the time that comparison runs. This is where the repeat is still visible.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-ENDP-060",
-   "statement": "Every `{name}` placeholder a request's `path` declares MUST match the contract's placeholder-name pattern, regardless of how the provider spells the value that placeholder carries.\n",
+   "statement": "A brace in a request's `path` MUST delimit a `{name}` placeholder, and every such name MUST match the contract's placeholder-name pattern, regardless of how the provider spells the value that placeholder carries.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -3627,7 +3627,7 @@
    ],
    "mechanism": "pattern",
    "fixture_model": "WriteRequest",
-   "rationale": "The placeholder is a slot this document names, not a provider identifier: it is the key `path_params` binds under, and `from_param` is where the provider's own spelling belongs. So fixing one form for it costs an author nothing and is what keeps the binding legible. The name is compared to a `path_params` key by exact string, and a vocabulary admitting `{objectId}` beside `{object_id}` makes slots that read as one and are not. And the wrong form arrives one way — a provider's path copied in whole — so refusing it here puts the diagnostic on the line where the copy happened, instead of letting it surface as a binding whose keys do not line up with a path the author believes is right.\n",
+   "rationale": "The placeholder is a slot this document names, not a provider identifier: it is the key `path_params` binds under, and `from_param` is where the provider's own spelling belongs. So fixing one form for it costs an author nothing and is what keeps the binding legible — the name is compared to a `path_params` key by exact string, and a vocabulary admitting `{objectId}` beside `{object_id}` makes slots that read as one and are not. Nothing downstream rejects a consistently camelCased placeholder, which is precisely why the contract makes legibility structural here rather than leaving it to review. The brace half is a different failure with the same diagnosis: `{}`, `{{name}}` and an unclosed `{` all leave a brace that no binding fills, so every later check reads the path as fine and the brace reaches the URL as itself.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3652,7 +3652,7 @@
    ],
    "mechanism": "pattern",
    "fixture_model": "WriteRequest",
-   "rationale": "RULE-SHRD-006 states the general form — a `${...}` resolves only where the value-expression grammar says it does — and a slot taking free text cannot be told from a shape whether the author meant the characters. A path can be: nothing in it is free text the engine passes through, so this is that rule applied where the answer is decidable. What it prevents: a template written here is never expanded, the braces and the scope name go out on the wire inside the URL, and the provider answers 404 naming nothing the author wrote. The idiom is borrowed from the request slots where a template does resolve, which is exactly why the path is checked rather than trusted.\n",
+   "rationale": "RULE-SHRD-006 states the general form — a `${...}` resolves only where the value-expression grammar says it does — and in most slots a shape cannot say whether the author meant the characters or a template. A path can: no part of it is an opaque slot where a template could have been intended, so this is that rule applied where the answer is decidable. What it prevents: nothing resolves a path, so the template is never expanded, and what is left collides with the `{name}` syntax around it — the inner span reads as a placeholder name, leaving a URL that either carries a stray sigil beside a correctly bound value or names a placeholder nothing binds. Neither is the path the author wrote. The idiom is borrowed from the request slots where a template does resolve, which is exactly why the path is checked rather than trusted.\n",
    "status": "active",
    "superseded_by": null
   },

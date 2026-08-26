@@ -91,7 +91,20 @@ from analitiq.contracts.value_expression import (
 # Constants & regex
 # ---------------------------------------------------------------------------
 
-PATH_PLACEHOLDER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
+#: The name half of a `{name}` path placeholder. Stated once: the anchored
+#: pattern the model applies and the whole-string pattern the published schema
+#: carries are both derived from it, so a JSON Schema consumer and this model
+#: refuse the same spellings.
+PATH_PLACEHOLDER_NAME_INNER = r"[a-z][a-z0-9_]*"
+PATH_PLACEHOLDER_NAME_PATTERN = rf"^{PATH_PLACEHOLDER_NAME_INNER}$"
+#: Every `{` in the path opens a well-formed placeholder — a name in the form
+#: above, closed. Written as a negative lookahead, which pydantic-core's regex
+#: engine cannot compile but ECMA-262 (what JSON Schema reads) can, so it goes
+#: to the schema through `json_schema_extra` while `_RequestBase._validate`
+#: carries the runtime half.
+PATH_BRACES_WELL_FORMED_PATTERN = (
+    rf"^(?![\s\S]*\{{(?!{PATH_PLACEHOLDER_NAME_INNER}\}}))[\s\S]*$"
+)
 # Record field paths preserve segment spelling and casing. The pattern only
 # enforces the dotted non-empty-segment shape; identifier chars are
 # provider-owned.
@@ -1019,12 +1032,15 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         description=(
             "Path or relative URL on the selected transport. A `{name}` "
             "placeholder in it is a substitution slot this document names: "
-            "spelled in the contract's placeholder-name form, never repeated "
-            "within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in "
-            "`path_params` (RULE-ENDP-001). The `${...}` template grammar does "
-            "not resolve here (RULE-ENDP-061)."
+            "spelled in the contract's placeholder-name form (RULE-ENDP-060), "
+            "never repeated within one path (RULE-ENDP-059), and bound in "
+            "`path_params` (RULE-ENDP-001). A `${...}` template expression is "
+            "refused here (RULE-ENDP-061)."
         ),
-        json_schema_extra={"not": {"pattern": r"\$\{"}},
+        json_schema_extra={
+            "not": {"pattern": r"\$\{"},
+            "pattern": PATH_BRACES_WELL_FORMED_PATTERN,
+        },
     )
     path_params: dict[str, Any] | None = Field(
         default=None,
@@ -1065,18 +1081,29 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
         if "${" in self.path:
             raise violation("RULE-ENDP-061", f"path={self.path!r}")
         placeholders = PATH_PLACEHOLDER_RE.findall(self.path)
-        repeated = find_duplicates(placeholders)
-        if repeated:
+        # A brace the placeholder pattern did not consume is a brace that
+        # reaches the URL as itself: `{}`, `{{name}}`, an unclosed `{`, a
+        # stray `}`. Each leaves `placeholders` empty or short, so every later
+        # check agrees the path is fine and the braces ship.
+        if set("{}") & set(PATH_PLACEHOLDER_RE.sub("", self.path)):
             raise violation(
-                "RULE-ENDP-059", f"path={self.path!r}; repeated={repeated!r}"
+                "RULE-ENDP-060", f"path={self.path!r}; a brace delimits no placeholder"
             )
         for ph in placeholders:
-            if not PATH_PLACEHOLDER_NAME_RE.match(ph):
+            # `fullmatch`, not `match`: `$` also matches before a trailing
+            # newline, so `{name\n}` would pass a pattern an ECMA reader of
+            # the same string rejects.
+            if not PATH_PLACEHOLDER_NAME_RE.fullmatch(ph):
                 raise violation(
                     "RULE-ENDP-060",
                     f"placeholder {ph!r} does not match "
                     f"{PATH_PLACEHOLDER_NAME_PATTERN!r}",
                 )
+        repeated = find_duplicates(placeholders)
+        if repeated:
+            raise violation(
+                "RULE-ENDP-059", f"path={self.path!r}; repeated={repeated!r}"
+            )
         placeholder_set = set(placeholders)
         # Use explicit `is None`: `path_params={}` is meaningfully different
         # from omitted, and the falsy-check version treats them the same.

@@ -919,9 +919,9 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"native_type 'MYSTERY_TYPE'"),
     # The asymmetry spec-request-binding.md teaches: the placeholder takes the
     # contract's form while the param it binds keeps the provider's spelling.
-    # `forbid_re` is what makes this pin the params half — without it, a key
-    # constraint landing on `params` would leave the probe green while the
-    # sentence beside the fence went false.
+    # `forbid_re` covers the severity `expect="clean"` does not — a
+    # warning-tier check landing on the `params` key would falsify the sentence
+    # while leaving the document error-free.
     Probe("param-key-keeps-provider-spelling", "clean", _p_param_key_provider_spelling,
           forbid_re=r"(?i)objectId"),
     # type maps

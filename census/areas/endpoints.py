@@ -403,18 +403,15 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="_RequestBase", field="headers_remove", prose_hash="b518759030fa", descriptive=True),
     ProseObligation(
         model="_RequestBase", field="path",
-        prose_hash="ece8cbb9b326",
+        prose_hash="87c881e0fabc",
         rule_ids=(
             "RULE-ENDP-001", "RULE-ENDP-045", "RULE-ENDP-059", "RULE-ENDP-060",
             "RULE-ENDP-061",
         ),
         waiver=(
-            "the opening clause is the origin half — a path resolved against "
-            "the selected transport rather than authored as an absolute URL "
-            "(RULE-ENDP-045) — and nothing here rejects one: a document "
-            "carrying a host in `path` satisfies every constraint this field "
-            "declares, so catching it means reading the path beside the "
-            "transport's base URL"
+            "the opening clause is the origin half, which nothing here "
+            "rejects; RULE-ENDP-045 carries that gap and what closing it "
+            "would take"
         ),
     ),
     ProseObligation(

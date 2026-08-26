@@ -265,11 +265,12 @@
           "type": "string"
         },
         "path": {
-          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form, never repeated within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in `path_params` (RULE-ENDP-001). The `${...}` template grammar does not resolve here (RULE-ENDP-061).",
+          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form (RULE-ENDP-060), never repeated within one path (RULE-ENDP-059), and bound in `path_params` (RULE-ENDP-001). A `${...}` template expression is refused here (RULE-ENDP-061).",
           "minLength": 1,
           "not": {
             "pattern": "\\$\\{"
           },
+          "pattern": "^(?![\\s\\S]*\\{(?![a-z][a-z0-9_]*\\}))[\\s\\S]*$",
           "title": "Path",
           "type": "string"
         },
@@ -1523,11 +1524,12 @@
           "type": "string"
         },
         "path": {
-          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form, never repeated within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in `path_params` (RULE-ENDP-001). The `${...}` template grammar does not resolve here (RULE-ENDP-061).",
+          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form (RULE-ENDP-060), never repeated within one path (RULE-ENDP-059), and bound in `path_params` (RULE-ENDP-001). A `${...}` template expression is refused here (RULE-ENDP-061).",
           "minLength": 1,
           "not": {
             "pattern": "\\$\\{"
           },
+          "pattern": "^(?![\\s\\S]*\\{(?![a-z][a-z0-9_]*\\}))[\\s\\S]*$",
           "title": "Path",
           "type": "string"
         },
@@ -2653,11 +2655,12 @@
           "type": "string"
         },
         "path": {
-          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form, never repeated within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in `path_params` (RULE-ENDP-001). The `${...}` template grammar does not resolve here (RULE-ENDP-061).",
+          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form (RULE-ENDP-060), never repeated within one path (RULE-ENDP-059), and bound in `path_params` (RULE-ENDP-001). A `${...}` template expression is refused here (RULE-ENDP-061).",
           "minLength": 1,
           "not": {
             "pattern": "\\$\\{"
           },
+          "pattern": "^(?![\\s\\S]*\\{(?![a-z][a-z0-9_]*\\}))[\\s\\S]*$",
           "title": "Path",
           "type": "string"
         },
@@ -2962,5 +2965,5 @@
   ],
   "title": "Analitiq API Endpoint",
   "type": "object",
-  "version": "18.0.1"
+  "version": "19.0.0"
 }

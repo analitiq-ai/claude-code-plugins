@@ -265,11 +265,12 @@
           "type": "string"
         },
         "path": {
-          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form, never repeated within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in `path_params` (RULE-ENDP-001). The `${...}` template grammar does not resolve here (RULE-ENDP-061).",
+          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form (RULE-ENDP-060), never repeated within one path (RULE-ENDP-059), and bound in `path_params` (RULE-ENDP-001). A `${...}` template expression is refused here (RULE-ENDP-061).",
           "minLength": 1,
           "not": {
             "pattern": "\\$\\{"
           },
+          "pattern": "^(?![\\s\\S]*\\{(?![a-z][a-z0-9_]*\\}))[\\s\\S]*$",
           "title": "Path",
           "type": "string"
         },
@@ -1523,11 +1524,12 @@
           "type": "string"
         },
         "path": {
-          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form, never repeated within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in `path_params` (RULE-ENDP-001). The `${...}` template grammar does not resolve here (RULE-ENDP-061).",
+          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form (RULE-ENDP-060), never repeated within one path (RULE-ENDP-059), and bound in `path_params` (RULE-ENDP-001). A `${...}` template expression is refused here (RULE-ENDP-061).",
           "minLength": 1,
           "not": {
             "pattern": "\\$\\{"
           },
+          "pattern": "^(?![\\s\\S]*\\{(?![a-z][a-z0-9_]*\\}))[\\s\\S]*$",
           "title": "Path",
           "type": "string"
         },
@@ -2653,11 +2655,12 @@
           "type": "string"
         },
         "path": {
-          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form, never repeated within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in `path_params` (RULE-ENDP-001). The `${...}` template grammar does not resolve here (RULE-ENDP-061).",
+          "description": "Path or relative URL on the selected transport. A `{name}` placeholder in it is a substitution slot this document names: spelled in the contract's placeholder-name form (RULE-ENDP-060), never repeated within one path (RULE-ENDP-059), and bound in `path_params` (RULE-ENDP-001). A `${...}` template expression is refused here (RULE-ENDP-061).",
           "minLength": 1,
           "not": {
             "pattern": "\\$\\{"
           },
+          "pattern": "^(?![\\s\\S]*\\{(?![a-z][a-z0-9_]*\\}))[\\s\\S]*$",
           "title": "Path",
           "type": "string"
         },
@@ -2882,7 +2885,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/api-endpoint/18.0.1.json",
+  "$id": "https://schemas.analitiq.ai/api-endpoint/19.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for API endpoint documents (owned by connectors with `kind: 'api'`) \u2014 authored shape only. Endpoint documents have no top-level `kind` field; the owning connector's `kind` selects this schema. Reserved server-managed fields (endpoint_id, connector_id, connector_version, connection_id, schema_hash) are forbidden in the authored shape. The persisted catalog-row shape is internal and not published. Source of truth: analitiq.contracts.endpoints.ApiEndpointDoc (Pydantic).",
@@ -2962,5 +2965,5 @@
   ],
   "title": "Analitiq API Endpoint",
   "type": "object",
-  "version": "18.0.1"
+  "version": "19.0.0"
 }

@@ -1244,6 +1244,51 @@ class TestRequestPathPlaceholders:
             }},
         ))
 
+    @pytest.mark.parametrize("path", [
+        "/v1/items/{}",            # a brace pair naming nothing
+        "/v1/items/{{item_id}}",   # the inner pair binds; the outer ships
+        "/v1/items/{item_id",      # never closed
+        "/v1/items/item_id}",      # never opened
+        "/v1/items/{item_id\n}",   # `$` also matches before a trailing newline
+    ])
+    def test_brace_that_delimits_no_placeholder_rejected(self, path):
+        """Each of these leaves `path_params` agreeing with the placeholders
+        the path declares, so RULE-ENDP-001 reads the document as complete
+        while a brace reaches the URL as itself."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-060"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": path},
+                    "params": {},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_duplicate_report_names_every_repeated_placeholder(self):
+        """The diagnostic carries the whole repeat set, not the first one it
+        found: an author fixing one occurrence of two re-runs into the same
+        message with no way to tell it moved."""
+        with pytest.raises(ValidationError, match=r"tenant_id.*user_id"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{tenant_id}/{user_id}/{tenant_id}/{user_id}",
+                        "path_params": {
+                            "tenant_id": {"from_param": "tenant_id"},
+                            "user_id": {"from_param": "user_id"},
+                        },
+                    },
+                    "params": {
+                        "tenant_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.t"}},
+                        "user_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.u"}},
+                    },
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
     def test_scoped_template_in_path_reports_the_template_rule(self):
         """A `${scope.name}` also matches the `{name}` placeholder shape, so
         the order of the checks decides which diagnostic an author gets. The
