@@ -533,36 +533,22 @@ def _p_endpoint_pair_unresolved() -> list[dict]:
     return _staged_api_endpoint(endpoint)
 
 
-def _example_write_mode(input_schema: dict) -> dict:
-    """The example endpoint with an `insert` mode carrying `input_schema`.
-
-    The probes below differ only in whether that schema's node is annotated,
-    which is the whole of what the claim in `endpoint-creator.md` turns on.
-    """
-    endpoint = _read_endpoint()
-    endpoint["operations"]["write"] = {"insert": {
-        "request": {"method": "POST", "path": "/v1/items",
-                    "body": {"from_input": "record"}},
-        "params": {},
-        "input": {"schema": input_schema},
-    }}
-    return endpoint
-
-
 def _p_write_input_pair_unresolved() -> list[dict]:
-    return _staged_api_endpoint(_example_write_mode({
-        "type": "object",
-        "properties": {"id": {"type": "string",
-                              "native_type": "MYSTERY_WRITE_TYPE",
-                              "arrow_type": "Utf8"}},
-    }))
+    """The write mode `_endpoint_with_write` already builds, with its one
+    input field annotated against a native no read map carries.
+
+    The pair of probes differs only in that annotation, which is the whole of
+    what the claim in `endpoint-creator.md` turns on.
+    """
+    endpoint = _endpoint_with_write()
+    field = endpoint["operations"]["write"]["insert"]["input"]["schema"]["properties"]["id"]
+    field["native_type"] = "MYSTERY_WRITE_TYPE"
+    field["arrow_type"] = "Utf8"
+    return _staged_api_endpoint(endpoint)
 
 
 def _p_write_input_unannotated() -> list[dict]:
-    return _staged_api_endpoint(_example_write_mode({
-        "type": "object",
-        "properties": {"id": {"type": "string"}},
-    }))
+    return _staged_api_endpoint(_endpoint_with_write())
 
 
 def _p_param_key_provider_spelling() -> list[dict]:

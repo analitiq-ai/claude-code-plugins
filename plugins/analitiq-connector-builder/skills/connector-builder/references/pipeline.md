@@ -185,8 +185,9 @@ Database connectors skip this phase entirely.
    (default **10**); as one finishes, pull the next `pending`. Each branch
    is a full `researcher → endpoint-creator → validator` chain for one
    resource:
-   - `connector-provider-researcher` at `scope: endpoint` researches that
-     resource's response and returns `EndpointFacts` — the field-level
+   - `connector-provider-researcher` at `scope: endpoint` researches the
+     fields that resource exposes in each direction — those a read returns and
+     those a write accepts — and returns `EndpointFacts`, the field-level
      schema (datetime zone-awareness from a real sample value, enum
      domains, nullability, formats). This is the per-resource research
      that grounds field types instead of guessing them.

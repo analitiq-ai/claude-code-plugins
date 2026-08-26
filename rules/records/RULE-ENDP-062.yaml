@@ -17,16 +17,16 @@ rationale: >
   (RULE-PKG-033), while an unannotated one is compared with nothing at all, so
   the destination record's field types are whatever the author believed on the
   day and no later reader can tell a reconciled write shape from an unexamined
-  one. A destination that declares no types also leaves the value's wire form
-  to whatever the source happened to produce, which is how a decimal arrives as
-  a float and a timestamp as an unparsed string. Annotating is what makes read
-  and write disagree out loud: the same provider field is read and written
+  one. Annotating is what makes read and write disagree out loud: the same provider field is read and written
   through one native vocabulary, so a token the map cannot resolve is either a
   gap in the map or a field nobody grounded, and both are worth learning while
   the endpoint is being authored. Nothing rejects an omission, and nothing here
-  could — a field the provider documents no wire type for is a legitimate
-  reason to leave a node untyped, and that is indistinguishable from having
-  skipped it, so catching a skipped one means reading the input schema beside
-  the provider's own field reference.
+  could name the nodes it would have to grade: the pair walk descends every
+  subschema position an embedded JSON Schema can hold, and a leaf under `not`
+  or a container head is not a provider field, so "the nodes describing a
+  field" is not a set a walker can pick out. A field the provider documents no
+  wire type for is a legitimate reason to leave one untyped besides, and that
+  is indistinguishable from having skipped it — so catching a skipped one means
+  reading the input schema beside the provider's own field reference.
 status: active
 superseded_by: null

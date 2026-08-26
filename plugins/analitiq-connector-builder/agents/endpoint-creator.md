@@ -121,8 +121,10 @@ was raised.
      `response.body.data` requires a `data` property typed as an array whose
      `items` carry the record's fields. Authoring only the record's fields at
      the top level is the most common way to fail validation.
-     `endpoint_facts.fields` describes the **record**, so they land under
-     `properties.<envelope>.items.properties`. A read operation yields
+     `endpoint_facts.fields` describes the **record**, so the entries whose
+     `directions` include `read` land under
+     `properties.<envelope>.items.properties`; a write-only field has no place
+     in a response schema. A read operation yields
      zero-to-many records; a single-object resource is not a read endpoint.
      For each field, the declared `arrow_type` is the field's
      `endpoint_facts.fields[].arrow_type` and the `native_type` annotation is
@@ -173,19 +175,23 @@ was raised.
      describing one provider-facing destination record. Every field a
      `from_input` path addresses must be declared here.
      Type its fields the way step 3 types the read record: `native_type`
-     beside `arrow_type`, taken from the same `endpoint_facts.fields` entry,
-     since a provider field keeps one wire type whichever direction it
-     travels (`RULE-ENDP-062`). A destination that declares no types leaves the wire
-     form of every value to whatever the source produced.
+     beside `arrow_type`, from the `endpoint_facts.fields` entries whose
+     `directions` include `write` (`RULE-ENDP-062`) — a field the provider
+     accepts and never returns has an entry of its own, and so does one it
+     types differently in each direction. What the pair buys is a destination
+     whose field types are declared and checkable rather than left to
+     whatever a source produced; it is the contract's statement about the
+     field, not a conversion this document performs.
      <!-- PROBE: write-input-pair-unresolved-through-read-map, write-input-unannotated-uncovered -->
      Those declarations are what put the destination record under the read map
      — `type-map-read` must resolve the `native_type` to the `arrow_type`
      declared beside it (`RULE-PKG-033`); a node carrying no type declaration
      is resolved against nothing. A token the map cannot render is a
      domain-level type-map fix, exactly as on the read side.
-     Where the provider documents no wire type for a field, leave that node
-     untyped rather than half-typed — declaring one without the other is an
-     error (`RULE-ENDP-006`) — and report the gap. Never invent a token to satisfy
+     Where the provider documents no wire type for a field, its facts entry
+     carries neither declaration; leave that node untyped rather than
+     half-typed — declaring one without the other is an error
+     (`RULE-ENDP-006`) — and report the gap. Never invent a token to satisfy
      the map: the read map is first-match-wins and shared with the read
      direction, so a rule added for a native the provider never emits can
      shadow a real one.

@@ -268,13 +268,14 @@ access and may not guess field types).
     "fields": {
       "type": "array",
       "minItems": 1,
-      "description": "One entry per field the connector exposes for this resource — the fields a read returns and the fields a write accepts. `native_type` must be a token covered by ProviderFacts.native_type_vocabulary; `arrow_type` is the canonical Arrow type the field resolves to.",
+      "description": "One entry per field the connector exposes for this resource — the fields a read returns and the fields a write accepts, each entry naming which of the two it belongs to. `native_type` must be a token covered by ProviderFacts.native_type_vocabulary; `arrow_type` is the canonical Arrow type the field resolves to. A field the provider types differently by direction is recorded as an entry per direction, so an entry always carries one pair.",
       "items": {
         "type": "object",
-        "required": ["name", "native_type", "arrow_type"],
+        "required": ["name", "directions"],
         "properties": {
           "name": { "type": "string" },
-          "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`)." },
+          "directions": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["read", "write"] }, "description": "Which sides of the resource carry this field. A generated id the provider returns and refuses on a write is `[\"read\"]`; a credential it accepts and never echoes is `[\"write\"]`. The creator takes the read subset into `response.schema` and the write subset into the write mode's `input.schema`, so a field is never advertised on a side the provider does not have it on." },
+          "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`). Omitted, with `arrow_type`, for a field whose wire type the provider documents nowhere — the creator then leaves that node untyped rather than guessing (`RULE-ENDP-006`, `RULE-ENDP-062`), and `notes` says which fields those were." },
           "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness (`RULE-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`." },
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },
