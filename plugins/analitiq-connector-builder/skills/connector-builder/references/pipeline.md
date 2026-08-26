@@ -205,14 +205,23 @@ Database connectors skip this phase entirely.
    marked `failed` in the worklist and surfaced — it does **not** block its
    siblings. The orchestrator reports partial results rather than silently
    dropping the endpoint.
-4. **Join.** When the worklist is drained (no `pending` / `running`),
-   proceed to phase 6.
+4. **Join, then validate the package.** When the worklist is drained (no
+   `pending` / `running`), stage `connector.json`, the type map(s) and every
+   authored endpoint at their release paths and validate the **connector**,
+   not the endpoint documents on their own. Coverage is connector-anchored:
+   the per-branch pass in step 2 grades one endpoint against the endpoint
+   contract and can say nothing about the sibling read map, so a native a
+   branch discovered and the map does not carry passes there and fails at
+   `RULE-PKG-033` — after phase 7 has written the tree, if nothing looks
+   before then. A finding here routes to phases 3–4, not to the branch.
 
 **Type vocabulary stays connector-level.** If a resource exposes a native
 not covered by `type-map-read`, that is a **domain-level** type-map
 addition — re-author and re-validate the domain (phases 3–4), never patch
 the map per endpoint. This keeps canonical types consistent across
-endpoints.
+endpoints. A write mode's `input.schema` is graded the same way and against
+the same map, so a native only a write field carries is the same
+domain-level fix.
 
 ### 6. Drift
 

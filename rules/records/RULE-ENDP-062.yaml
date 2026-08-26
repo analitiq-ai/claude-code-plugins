@@ -22,9 +22,11 @@ rationale: >
   gap in the map or a field nobody grounded, and both are worth learning while
   the endpoint is being authored. Nothing rejects an omission, and nothing here
   could name the nodes it would have to grade: the pair walk descends every
-  subschema position an embedded JSON Schema can hold, and a leaf under `not`
-  or a container head is not a provider field, so "the nodes describing a
-  field" is not a set a walker can pick out. A field the provider documents no
+  subschema position an embedded JSON Schema can hold, and a node reached
+  through `not`, `allOf` or the schema root is a composition site rather than a
+  field the provider named — while an object-valued property is both a
+  container and a field, and takes the pair like any other. So "the nodes
+  describing a provider field" is not a set a walker can pick out. A field the provider documents no
   wire type for is a legitimate reason to leave one untyped besides, and that
   is indistinguishable from having skipped it — so catching a skipped one means
   reading the input schema beside the provider's own field reference.
