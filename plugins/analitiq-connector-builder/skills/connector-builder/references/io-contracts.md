@@ -364,9 +364,10 @@ access and may not guess field types).
               "type-map-canonical-changed", "optional-input-added",
               "optional-output-added", "optional-endpoint-added",
               "write-mode-added", "record-field-added",
-              "filter-operators-widened", "endpoint-capability-added",
-              "type-map-rule-added", "bug-fix", "doc-fix", "tuning",
-              "capability-block-added", "type-map-rule-reordered"
+              "filter-operators-widened", "endpoint-obligation-added",
+              "endpoint-capability-added", "type-map-rule-added", "bug-fix",
+              "doc-fix", "tuning", "capability-block-added",
+              "type-map-rule-reordered"
             ]
           },
           "note": { "type": "string" }

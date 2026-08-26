@@ -166,11 +166,14 @@ CATEGORIES: tuple[Category, ...] = (
         "major",
         "Kept endpoint withdrew something a stream binds",
         note=(
-            "an endpoint both releases ship no longer offers something a "
-            "stream document names, and no category above says which. The "
+            "an endpoint both releases ship no longer offers something an "
+            "existing stream depends on — whether the stream names it or "
+            "reads it through the endpoint's own behaviour — and no category "
+            "above says which. The "
             "endpoint's interior is wider than the categories that enumerate "
             "it — a read operation dropped from a write-bearing endpoint, a "
-            "replication method or a cursor mapping withdrawn, a filterable "
+            "replication method or a cursor mapping withdrawn, a `pagination` "
+            "block removed so a stream silently reads one page, a filterable "
             "param whose value contract narrowed, an idempotency block "
             "removed, a write input field removed or retyped, a nested record "
             "field changed under an unchanged parent. Reach for this when the "
@@ -226,6 +229,20 @@ CATEGORIES: tuple[Category, ...] = (
             "a param offers an operator it did not offer before, including a "
             "param newly declared with `operators`. These are endpoint params, "
             "not the connection inputs `optional-input-added` names"
+        ),
+    ),
+    Category(
+        "endpoint-obligation-added",
+        "major",
+        "Kept endpoint now demands something of an existing document",
+        note=(
+            "an addition an existing stream must satisfy rather than one it "
+            "may opt into: a read param declared `required` with no default, "
+            "so a stream supplying no value for it stops resolving, or a "
+            "member added to a write mode's required input, so a stream whose "
+            "mapping does not produce it sends a record the provider refuses. "
+            "The additive categories are for what a stream MAY now use; an "
+            "addition it MUST now satisfy is drift wearing the other sign"
         ),
     ),
     Category(
