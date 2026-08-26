@@ -105,6 +105,13 @@ PATH_PLACEHOLDER_NAME_PATTERN = rf"^{PATH_PLACEHOLDER_NAME_INNER}$"
 PATH_BRACES_WELL_FORMED_PATTERN = (
     rf"^(?:[^{{}}]|\{{{PATH_PLACEHOLDER_NAME_INNER}\}})*$"
 )
+#: A placeholder name appearing twice, as a backreference — the uniqueness half
+#: of the same field, so a consumer reading only the published document refuses
+#: the repeat the model refuses. Negated in the schema, since what it matches
+#: is the defect.
+PATH_PLACEHOLDER_REPEATED_PATTERN = (
+    rf"\{{({PATH_PLACEHOLDER_NAME_INNER})\}}[\s\S]*\{{\1\}}"
+)
 # Record field paths preserve segment spelling and casing. The pattern only
 # enforces the dotted non-empty-segment shape; identifier chars are
 # provider-owned.
@@ -1041,8 +1048,14 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             "URL here satisfies every constraint this field declares."
         ),
         json_schema_extra={
-            "not": {"pattern": r"\$\{"},
-            "pattern": PATH_BRACES_WELL_FORMED_PATTERN,
+            # `allOf` because a schema object carries one `pattern` and one
+            # `not`, and this field is graded by several patterns — each the
+            # published half of a rule the model applies.
+            "allOf": [
+                {"not": {"pattern": r"\$\{"}},
+                {"pattern": PATH_BRACES_WELL_FORMED_PATTERN},
+                {"not": {"pattern": PATH_PLACEHOLDER_REPEATED_PATTERN}},
+            ],
         },
     )
     path_params: dict[str, Any] | None = Field(

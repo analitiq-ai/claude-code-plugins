@@ -18,6 +18,7 @@ from pydantic import TypeAdapter, ValidationError
 from analitiq.contracts.endpoints import (
     _RESERVED_ENDPOINT_FIELDS,
     PATH_BRACES_WELL_FORMED_PATTERN,
+    PATH_PLACEHOLDER_REPEATED_PATTERN,
     RESOLUTION_SCOPES,
     WRITE_MODES,
     ApiEndpointDoc,
@@ -1282,10 +1283,10 @@ class TestRequestPathPlaceholders:
         ("/v1/items/{2nd}", False),
     ])
     def test_schema_pattern_refuses_what_the_model_refuses(self, path, well_formed):
-        """The published pattern and the model agree on every brace form.
+        """The published patterns and the model agree on every brace form.
 
         A JSON Schema consumer validates against the rendered document alone,
-        so a path the model rejects and the pattern accepts is a document that
+        so a path the model rejects and the patterns accept is a document that
         is valid for that consumer and invalid here.
         """
         assert bool(re.match(PATH_BRACES_WELL_FORMED_PATTERN, path)) is well_formed
@@ -1297,6 +1298,31 @@ class TestRequestPathPlaceholders:
             # which is a different rule and says nothing about brace form.
             model_ok = "RULE-ENDP-060" not in str(exc)
         assert model_ok is well_formed
+
+    @pytest.mark.parametrize("path, repeats", [
+        ("/v1/{tenant_id}/{tenant_id}", True),
+        ("/v1/{tenant_id}/items/{tenant_id}/rows", True),
+        ("/v1/{tenant_id}/{user_id}", False),
+        ("/v1/{tenant}/{tenant_id}", False),   # a prefix is a different name
+        ("/v1/{tenant_id}", False),
+    ])
+    def test_schema_pattern_refuses_the_repeat_the_model_refuses(self, path, repeats):
+        """The uniqueness half, published: the same corpus through the
+        backreference pattern and through the model."""
+        assert bool(re.search(PATH_PLACEHOLDER_REPEATED_PATTERN, path)) is repeats
+        model_repeats = False
+        try:
+            WriteRequest.model_validate({
+                "method": "POST",
+                "path": path,
+                "path_params": {
+                    name: {"from_param": name}
+                    for name in re.findall(r"\{([a-z][a-z0-9_]*)\}", path)
+                },
+            })
+        except ValidationError as exc:
+            model_repeats = "RULE-ENDP-059" in str(exc)
+        assert model_repeats is repeats
 
     def test_duplicate_report_names_every_repeated_placeholder(self):
         """The diagnostic carries the whole repeat set, not the first one it
