@@ -117,11 +117,10 @@ CATEGORIES: tuple[Category, ...] = (
         "Record field removed",
         note=(
             "a field the previous release declared in a read operation's "
-            "record shape — the node `response.records` resolves to inside "
-            "`response.schema` (`RULE-ENDP-012`) — is no longer declared "
-            "there. A stream names those fields: its incremental "
-            "`cursor_field`, and every mapping assignment that reads one by "
-            "path"
+            "record shape — the `items` of the array node `response.records` "
+            "resolves to (`RULE-ENDP-012`) — is no longer declared there. A "
+            "stream names those fields: its incremental `cursor_field`, and "
+            "every mapping assignment that reads one by path"
         ),
     ),
     Category(
@@ -129,10 +128,12 @@ CATEGORIES: tuple[Category, ...] = (
         "major",
         "Record field type changed",
         note=(
-            "a field both releases declare in the record shape resolves to a "
-            "different declared type. Direction does not soften it: widening "
-            "and narrowing alike re-type the column a destination already "
-            "created for that field"
+            "a field both releases declare in the record shape froze a "
+            "different `native_type` / `arrow_type` pair. Direction does not "
+            "soften it: widening and narrowing alike re-type the column a "
+            "destination already created from that `arrow_type`, and a JSON "
+            "`type` that held still while the pair moved is the case a shape "
+            "diff misses"
         ),
     ),
     Category(
@@ -146,6 +147,18 @@ CATEGORIES: tuple[Category, ...] = (
             "was dropped, or the param carrying it is gone. A stream filters "
             "on the members the endpoint offered, so its filter stops being "
             "expressible"
+        ),
+    ),
+    Category(
+        "conflict-keys-changed",
+        "major",
+        "Conflict keys changed on a kept write mode",
+        note=(
+            "the `conflict_keys` an upsert mode both releases ship matches on "
+            "are not the same set. The key is endpoint-owned — a stream "
+            "declares none — so a change re-keys every existing stream's "
+            "upsert silently: rows that matched an existing row now insert, "
+            "and rows that did not now overwrite one"
         ),
     ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
@@ -182,10 +195,9 @@ CATEGORIES: tuple[Category, ...] = (
             "a field the record shape did not declare before; the discovery "
             "outputs `optional-output-added` names are a connector-level "
             "block, not this. Minor because nothing an existing stream binds "
-            "stops resolving — but a stream that omits `mapping` copies every "
-            "source field 1:1, so the new field reaches its destination too, "
-            "and a destination that has no column for it learns so at run "
-            "time. Say that in the `note` when a release adds one"
+            "stops resolving; a stream that maps its source without naming "
+            "fields carries the new one too, so name the added fields in the "
+            "`note`"
         ),
     ),
     Category(
