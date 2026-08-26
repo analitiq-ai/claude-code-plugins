@@ -97,13 +97,13 @@ from analitiq.contracts.value_expression import (
 #: refuse the same spellings.
 PATH_PLACEHOLDER_NAME_INNER = r"[a-z][a-z0-9_]*"
 PATH_PLACEHOLDER_NAME_PATTERN = rf"^{PATH_PLACEHOLDER_NAME_INNER}$"
-#: Every `{` in the path opens a well-formed placeholder — a name in the form
-#: above, closed. Written as a negative lookahead, which pydantic-core's regex
-#: engine cannot compile but ECMA-262 (what JSON Schema reads) can, so it goes
-#: to the schema through `json_schema_extra` while `_RequestBase._validate`
-#: carries the runtime half.
+#: A path is a sequence of characters that are not braces and placeholders that
+#: are well formed — which says the same thing about `{` and `}`, so the schema
+#: refuses `{}`, `{{name}}`, an unclosed `{` and an unopened `}` alike, as
+#: `_RequestBase._validate` does. Stated as an alternation rather than a
+#: lookaround so it compiles wherever a JSON Schema consumer reads it.
 PATH_BRACES_WELL_FORMED_PATTERN = (
-    rf"^(?![\s\S]*\{{(?!{PATH_PLACEHOLDER_NAME_INNER}\}}))[\s\S]*$"
+    rf"^(?:[^{{}}]|\{{{PATH_PLACEHOLDER_NAME_INNER}\}})*$"
 )
 # Record field paths preserve segment spelling and casing. The pattern only
 # enforces the dotted non-empty-segment shape; identifier chars are

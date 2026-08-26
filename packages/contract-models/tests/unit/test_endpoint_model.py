@@ -8,6 +8,7 @@ cursor_field schema-presence, pagination expression shape), and the
 discriminated-union refactors of `Predicate` and `CursorMapping`.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.endpoints import (
     _RESERVED_ENDPOINT_FIELDS,
+    PATH_BRACES_WELL_FORMED_PATTERN,
     RESOLUTION_SCOPES,
     WRITE_MODES,
     ApiEndpointDoc,
@@ -34,6 +36,7 @@ from analitiq.contracts.endpoints import (
     SingleCursorMapping,
     TemplateExpression,
     WindowCursorMapping,
+    WriteRequest,
     WriteResponse,
     parse_endpoint,
 )
@@ -1264,6 +1267,36 @@ class TestRequestPathPlaceholders:
                     "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
                 }},
             ))
+
+    @pytest.mark.parametrize("path, well_formed", [
+        ("/v1/items", True),
+        ("/v1/items/{item_id}", True),
+        ("/v1/{tenant_id}/items/{item_id}", True),
+        ("/v1/prices/$top", True),          # a bare `$` is a path character
+        ("/v1/items/{}", False),
+        ("/v1/items/{{item_id}}", False),
+        ("/v1/items/{item_id", False),
+        ("/v1/items/item_id}", False),
+        ("/v1/items/{item_id}}", False),
+        ("/v1/items/{itemId}", False),
+        ("/v1/items/{2nd}", False),
+    ])
+    def test_schema_pattern_refuses_what_the_model_refuses(self, path, well_formed):
+        """The published pattern and the model agree on every brace form.
+
+        A JSON Schema consumer validates against the rendered document alone,
+        so a path the model rejects and the pattern accepts is a document that
+        is valid for that consumer and invalid here.
+        """
+        assert bool(re.match(PATH_BRACES_WELL_FORMED_PATTERN, path)) is well_formed
+        model_ok = True
+        try:
+            WriteRequest.model_validate({"method": "POST", "path": path})
+        except ValidationError as exc:
+            # RULE-ENDP-001 rejects a placeholder with no `path_params` entry,
+            # which is a different rule and says nothing about brace form.
+            model_ok = "RULE-ENDP-060" not in str(exc)
+        assert model_ok is well_formed
 
     def test_duplicate_report_names_every_repeated_placeholder(self):
         """The diagnostic carries the whole repeat set, not the first one it
