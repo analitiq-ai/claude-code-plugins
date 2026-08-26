@@ -1041,6 +1041,12 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
     path: str = Field(
         ...,
         min_length=1,
+        # Bounded because the published uniqueness pattern is a backreference
+        # over `[\s\S]*`: a consumer applying it to an unbounded string
+        # backtracks from every placeholder, so an oversized document costs a
+        # validator quadratic time. No real provider path approaches this, and
+        # the runtime scan does not backtrack at all.
+        max_length=2048,
         description=(
             "Path or relative URL on the selected transport. A `{name}` "
             "placeholder in it is a substitution slot this document names: "
