@@ -97,6 +97,57 @@ CATEGORIES: tuple[Category, ...] = (
             "sets the bump"
         ),
     ),
+    Category(
+        "write-mode-removed",
+        "major",
+        "Write mode removed from a kept endpoint",
+        note=(
+            "a mode key under `operations.write` the previous release shipped "
+            "is absent from an endpoint this one still ships — dropping the "
+            "whole `operations.write` block withdraws every mode it declared "
+            "at once. A stream's API destination selects the mode by that key, "
+            "so the selection resolves to nothing and the destination stops "
+            "writing; the endpoint surviving is what separates this from "
+            "`endpoint-removed`"
+        ),
+    ),
+    Category(
+        "record-field-removed",
+        "major",
+        "Record field removed",
+        note=(
+            "a field the previous release declared in a read operation's "
+            "record shape — the node `response.records` resolves to inside "
+            "`response.schema` (`RULE-ENDP-012`) — is no longer declared "
+            "there. A stream names those fields: its incremental "
+            "`cursor_field`, and every mapping assignment that reads one by "
+            "path"
+        ),
+    ),
+    Category(
+        "record-field-type-changed",
+        "major",
+        "Record field type changed",
+        note=(
+            "a field both releases declare in the record shape resolves to a "
+            "different declared type. Direction does not soften it: widening "
+            "and narrowing alike re-type the column a destination already "
+            "created for that field"
+        ),
+    ),
+    Category(
+        "filter-operators-narrowed",
+        "major",
+        "Filter operators narrowed",
+        note=(
+            "an operator a param offered under `operators` — the "
+            "stream-filterability contract (`RULE-ENDP-055`) — is no longer "
+            "offered, whether the member left the list, the `operators` key "
+            "was dropped, or the param carrying it is gone. A stream filters "
+            "on the members the endpoint offered, so its filter stops being "
+            "expressible"
+        ),
+    ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
     Category(
         "type-map-canonical-changed",
@@ -114,6 +165,35 @@ CATEGORIES: tuple[Category, ...] = (
     Category("optional-input-added", "minor", "Optional input added"),
     Category("optional-output-added", "minor", "Optional discovery output added"),
     Category("optional-endpoint-added", "minor", "Optional endpoint added"),
+    Category(
+        "write-mode-added",
+        "minor",
+        "Write mode added to a kept endpoint",
+        note=(
+            "a mode key under `operations.write` that endpoint did not declare "
+            "before; a whole new endpoint document is `optional-endpoint-added`"
+        ),
+    ),
+    Category(
+        "record-field-added",
+        "minor",
+        "Record field added",
+        note=(
+            "a field the record shape did not declare before; the discovery "
+            "outputs `optional-output-added` names are a connector-level "
+            "block, not this"
+        ),
+    ),
+    Category(
+        "filter-operators-widened",
+        "minor",
+        "Filter operators widened",
+        note=(
+            "a param offers an operator it did not offer before, including a "
+            "param newly declared with `operators`. These are endpoint params, "
+            "not the connection inputs `optional-input-added` names"
+        ),
+    ),
     Category("type-map-rule-added", "minor", "Type-map rule added"),
     Category("bug-fix", "patch", "Bug fixes"),
     Category("doc-fix", "patch", "Doc fixes"),
