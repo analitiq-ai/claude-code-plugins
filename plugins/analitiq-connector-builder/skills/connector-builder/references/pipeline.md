@@ -213,7 +213,12 @@ Database connectors skip this phase entirely.
    contract and can say nothing about the sibling read map, so a native a
    branch discovered and the map does not carry passes there and fails at
    `RULE-PKG-033` — after phase 7 has written the tree, if nothing looks
-   before then. A finding here routes to phases 3–4, not to the branch.
+   before then. A finding here routes to phases 3–4, not to the branch, and
+   carries what the domain creator needs to close it: the native the map
+   could not render together with the `arrow_type` the branch's own
+   `EndpointFacts` entry grounds it to. A diagnostic naming the native alone
+   leaves the creator guessing the canonical side of a rule it has to add, and
+   the same finding returns on the next pass.
 
 **Type vocabulary stays connector-level.** If a resource exposes a native
 not covered by `type-map-read`, that is a **domain-level** type-map
