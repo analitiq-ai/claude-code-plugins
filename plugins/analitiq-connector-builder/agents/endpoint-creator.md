@@ -133,7 +133,11 @@ was raised.
      `arrow_type` declared beside it (`RULE-PKG-033`). If they would diverge,
      the read map is wrong (a domain-level type-map fix, re-author +
      re-validate the domain), not the endpoint. Do not invent or guess field
-     types — every type comes from the researched facts.
+     types — every type comes from the researched facts. Where a facts entry
+     carries neither annotation, the provider documents no wire type for that
+     field: declare neither on the node here too, rather than half a pair
+     (`RULE-ENDP-006`) or a guess, and report the gap. This holds on both
+     schemas an endpoint declares — the read record and a write mode's input.
      - **Temporal fields follow the sample value, never a default**
        (`RULE-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
@@ -190,11 +194,9 @@ was raised.
      declared beside it (`RULE-PKG-033`); a node carrying no type declaration
      is resolved against nothing. A token the map cannot render is a
      domain-level type-map fix, exactly as on the read side.
-     Where the provider documents no wire type for a field, its facts entry
-     carries neither declaration; leave that node untyped rather than
-     half-typed — declaring one without the other is an error
-     (`RULE-ENDP-006`) — and report the gap. Never invent a token to satisfy
-     the map: the read map is first-match-wins and shared with the read
+     A field whose facts entry carries neither annotation is left untyped
+     here, exactly as on the read side. Never invent a token to satisfy the
+     map: the read map is first-match-wins and shared with the read
      direction, so a rule added for a native the provider never emits can
      shadow a real one.
    - `conflict_keys` (`RULE-ENDP-019`, `RULE-ENDP-014`) — the

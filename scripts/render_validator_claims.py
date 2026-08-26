@@ -562,14 +562,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
         "in": "path", "type": "string", "required": True,
         "default": {"ref": "connection.selections.object_id"},
     }
-    doc = _example_body(API_EXAMPLE)
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        (definition / "endpoints").mkdir(parents=True)
-        (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(API_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
-        (definition / "endpoints" / "v1__items.json").write_text(json.dumps(endpoint))
-        return _validate(doc, doc_path=definition / "connector.json")
+    return _staged_api_endpoint(endpoint)
 
 
 # --- type-map probes --------------------------------------------------------
