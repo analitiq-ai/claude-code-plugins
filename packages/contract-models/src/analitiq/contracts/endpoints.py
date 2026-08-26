@@ -1016,7 +1016,15 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
     path: str = Field(
         ...,
         min_length=1,
-        description="Path or relative URL on the selected transport.",
+        description=(
+            "Path or relative URL on the selected transport. A `{name}` "
+            "placeholder in it is a substitution slot this document names: "
+            "spelled in the contract's placeholder-name form, never repeated "
+            "within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in "
+            "`path_params` (RULE-ENDP-001), which is where a provider's own "
+            "spelling of the value belongs. The `${...}` template grammar does "
+            "not resolve here (RULE-ENDP-061)."
+        ),
         json_schema_extra={"not": {"pattern": r"\$\{"}},
     )
     path_params: dict[str, Any] | None = Field(
@@ -1051,23 +1059,25 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "_RequestBase":
+        # Before the placeholder sweep: `${scope.name}` matches the `{name}`
+        # shape too, so refusing the template second reports it as a malformed
+        # placeholder name and sends the author to respell something that must
+        # not be in the path at all.
+        if "${" in self.path:
+            raise violation("RULE-ENDP-061", f"path={self.path!r}")
         placeholders = PATH_PLACEHOLDER_RE.findall(self.path)
-        if len(placeholders) != len(set(placeholders)):
-            raise ValueError(
-                f"request.path contains duplicate placeholders in {self.path!r} "
-                "(spec: §Request Parameter Binding)"
+        repeated = find_duplicates(placeholders)
+        if repeated:
+            raise violation(
+                "RULE-ENDP-059", f"path={self.path!r}; repeated={repeated!r}"
             )
         for ph in placeholders:
             if not PATH_PLACEHOLDER_NAME_RE.match(ph):
-                raise ValueError(
-                    f"path placeholder {ph!r} must match "
-                    f"{PATH_PLACEHOLDER_NAME_PATTERN!r} (spec: §Request Parameter Binding)"
+                raise violation(
+                    "RULE-ENDP-060",
+                    f"placeholder {ph!r} does not match "
+                    f"{PATH_PLACEHOLDER_NAME_PATTERN!r}",
                 )
-        if "${" in self.path:
-            raise ValueError(
-                "request.path must not contain ${...} template expressions "
-                "(spec: §Request Parameter Binding)"
-            )
         placeholder_set = set(placeholders)
         # Use explicit `is None`: `path_params={}` is meaningfully different
         # from omitted, and the falsy-check version treats them the same.

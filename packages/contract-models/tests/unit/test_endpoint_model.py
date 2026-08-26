@@ -1196,7 +1196,7 @@ class TestRequestPathPlaceholders:
         ))
 
     def test_duplicate_placeholder_rejected(self):
-        with pytest.raises(ValidationError, match="duplicate placeholders"):
+        with pytest.raises(ValidationError, match="RULE-ENDP-059"):
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"read": {
@@ -1207,11 +1207,54 @@ class TestRequestPathPlaceholders:
             ))
 
     def test_dollar_brace_template_in_path_rejected(self):
-        with pytest.raises(ValidationError, match=r"\$\{...\} template"):
+        with pytest.raises(ValidationError, match="RULE-ENDP-061"):
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"read": {
                     "request": {"method": "GET", "path": "/v1/${account_id}"},
+                    "params": {},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_camel_case_placeholder_rejected(self):
+        """The placeholder is the document's slot, so the provider's spelling
+        of the value does not travel into `path` with the path it was copied
+        from."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-060"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": "/v3/objects/{objectId}", "path_params": {"objectId": {"from_param": "objectId"}}},
+                    "params": {"objectId": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.x"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_provider_spelling_survives_on_the_param(self):
+        """The asymmetry the placeholder rule rests on: a param keeps whatever
+        the provider calls it, and `from_param` is what crosses between the two
+        spellings."""
+        parse_endpoint(_minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v3/objects/{object_id}", "path_params": {"object_id": {"from_param": "objectId"}}},
+                "params": {"objectId": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.x"}}},
+                "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+            }},
+        ))
+
+    def test_scoped_template_in_path_reports_the_template_rule(self):
+        """A `${scope.name}` also matches the `{name}` placeholder shape, so
+        the order of the checks decides which diagnostic an author gets. The
+        template refusal is the one that names what is wrong; the placeholder
+        pattern would send them to respell a template that must not be in the
+        path at all."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-061"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": "/v1/accounts/${connection.account_id}/invoices"},
                     "params": {},
                     "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
                 }},

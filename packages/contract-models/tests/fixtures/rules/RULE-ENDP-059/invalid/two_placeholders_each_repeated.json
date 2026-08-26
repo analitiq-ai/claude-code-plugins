@@ -1,0 +1,8 @@
+{
+  "method": "POST",
+  "path": "/v1/{tenant_id}/{user_id}/{tenant_id}/{user_id}",
+  "path_params": {
+    "tenant_id": { "from_param": "tenant_id" },
+    "user_id": { "from_param": "user_id" }
+  }
+}

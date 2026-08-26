@@ -1,0 +1,7 @@
+{
+  "method": "POST",
+  "path": "/v3/objects/{object_id}",
+  "path_params": {
+    "object_id": { "from_param": "objectId" }
+  }
+}

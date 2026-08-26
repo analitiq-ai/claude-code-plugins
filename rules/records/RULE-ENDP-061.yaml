@@ -1,0 +1,26 @@
+id: RULE-ENDP-061
+statement: >
+  A request's `path` MUST NOT carry a `${...}` template expression; the only
+  substitution into a path is the `{name}` placeholders `path_params` binds.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_RequestBase._validate"
+owners: [connector-plugin, engine]
+targets: [_RequestBase]
+fields: [path]
+mechanism: pattern
+fixture_model: WriteRequest
+rationale: >
+  RULE-SHRD-006 states the general form — a `${...}` resolves only where the
+  value-expression grammar says it does — and names no enforcer, because which
+  slots resolve is the grammar's to say and a slot taking free text cannot be
+  told from a shape whether the author meant the characters. A path can be:
+  nothing in it is free text the engine passes through, so this is that rule
+  applied where the answer is decidable. What it prevents: a template written
+  here is never expanded, the braces and the scope name go out on the wire
+  inside the URL, and the provider answers 404 naming nothing the author wrote.
+  The idiom is borrowed from the request slots one field over, where a template
+  does resolve, which is exactly why the path is checked rather than trusted.
+status: active
+superseded_by: null

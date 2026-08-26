@@ -1,0 +1,27 @@
+id: RULE-ENDP-060
+statement: >
+  Every `{name}` placeholder a request's `path` declares MUST match the
+  contract's placeholder-name pattern, regardless of how the provider spells the
+  value that placeholder carries.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_RequestBase._validate"
+owners: [connector-plugin]
+targets: [_RequestBase]
+fields: [path]
+mechanism: pattern
+fixture_model: WriteRequest
+rationale: >
+  The placeholder is a slot this document names, not a provider identifier: it
+  is the key `path_params` binds under, and `from_param` is where the provider's
+  own spelling belongs. So fixing one form for it costs an author nothing and is
+  what keeps the binding legible. The name is compared to a `path_params` key by
+  exact string, and a vocabulary admitting `{objectId}` beside `{object_id}`
+  makes slots that read as one and are not. And the wrong form
+  arrives one way — a provider's path copied in whole — so refusing it here puts
+  the diagnostic on the line where the copy happened, instead of letting it
+  surface as a binding whose keys do not line up with a path the author believes
+  is right.
+status: active
+superseded_by: null

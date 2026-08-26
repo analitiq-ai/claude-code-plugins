@@ -3584,6 +3584,79 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-059",
+   "statement": "A request's `path` MUST NOT declare the same `{name}` placeholder more than once.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "owners": [
+    "connector-plugin"
+   ],
+   "targets": [
+    "_RequestBase"
+   ],
+   "fields": [
+    "path"
+   ],
+   "mechanism": null,
+   "fixture_model": "WriteRequest",
+   "rationale": "A repeated placeholder is filled from the one `path_params` entry it collapses to, so the URL is well-formed and wrong in a way nothing downstream can see: the later segment silently carries the earlier one's value and the provider answers about a resource nobody addressed. Nobody types it on purpose — it arrives from editing a copied path and changing one occurrence but not the rest — and the key-set agreement RULE-ENDP-001 checks cannot catch it, because a set has already collapsed the repeat by the time that comparison runs. This is where the repeat is still visible.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-060",
+   "statement": "Every `{name}` placeholder a request's `path` declares MUST match the contract's placeholder-name pattern, regardless of how the provider spells the value that placeholder carries.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "owners": [
+    "connector-plugin"
+   ],
+   "targets": [
+    "_RequestBase"
+   ],
+   "fields": [
+    "path"
+   ],
+   "mechanism": "pattern",
+   "fixture_model": "WriteRequest",
+   "rationale": "The placeholder is a slot this document names, not a provider identifier: it is the key `path_params` binds under, and `from_param` is where the provider's own spelling belongs. So fixing one form for it costs an author nothing and is what keeps the binding legible. The name is compared to a `path_params` key by exact string, and a vocabulary admitting `{objectId}` beside `{object_id}` makes slots that read as one and are not. And the wrong form arrives one way — a provider's path copied in whole — so refusing it here puts the diagnostic on the line where the copy happened, instead of letting it surface as a binding whose keys do not line up with a path the author believes is right.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-061",
+   "statement": "A request's `path` MUST NOT carry a `${...}` template expression; the only substitution into a path is the `{name}` placeholders `path_params` binds.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_RequestBase._validate",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "_RequestBase"
+   ],
+   "fields": [
+    "path"
+   ],
+   "mechanism": "pattern",
+   "fixture_model": "WriteRequest",
+   "rationale": "RULE-SHRD-006 states the general form — a `${...}` resolves only where the value-expression grammar says it does — and names no enforcer, because which slots resolve is the grammar's to say and a slot taking free text cannot be told from a shape whether the author meant the characters. A path can be: nothing in it is free text the engine passes through, so this is that rule applied where the answer is decidable. What it prevents: a template written here is never expanded, the braces and the scope name go out on the wire inside the URL, and the provider answers 404 naming nothing the author wrote. The idiom is borrowed from the request slots one field over, where a template does resolve, which is exactly why the path is checked rather than trusted.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",

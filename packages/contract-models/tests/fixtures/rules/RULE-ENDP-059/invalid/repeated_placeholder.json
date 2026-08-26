@@ -1,0 +1,7 @@
+{
+  "method": "POST",
+  "path": "/v1/users/{user_id}/manager/{user_id}",
+  "path_params": {
+    "user_id": { "from_param": "user_id" }
+  }
+}

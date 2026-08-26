@@ -1,0 +1,23 @@
+id: RULE-ENDP-059
+statement: >
+  A request's `path` MUST NOT declare the same `{name}` placeholder more than
+  once.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_RequestBase._validate"
+owners: [connector-plugin]
+targets: [_RequestBase]
+fields: [path]
+fixture_model: WriteRequest
+rationale: >
+  A repeated placeholder is filled from the one `path_params` entry it collapses
+  to, so the URL is well-formed and wrong in a way nothing downstream can see:
+  the later segment silently carries the earlier one's value and the provider
+  answers about a resource nobody addressed. Nobody types it on purpose — it
+  arrives from editing a copied path and changing one occurrence but not the
+  rest — and the key-set agreement RULE-ENDP-001 checks cannot catch it, because
+  a set has already collapsed the repeat by the time that comparison runs. This
+  is where the repeat is still visible.
+status: active
+superseded_by: null
