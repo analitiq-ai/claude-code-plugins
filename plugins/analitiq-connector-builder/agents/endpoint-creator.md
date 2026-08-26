@@ -176,9 +176,11 @@ was raised.
      `from_input` path addresses must be declared here.
      Type its fields the way step 3 types the read record: `native_type`
      beside `arrow_type`, from the `endpoint_facts.fields` entries whose
-     `directions` include `write` (`RULE-ENDP-062`) — a field the provider
-     accepts and never returns has an entry of its own, and so does one it
-     types differently in each direction. What the pair buys is a destination
+     `directions` include `write` (`RULE-ENDP-062`), and, where an entry
+     carries `write_modes`, only for the modes it names — a field the provider
+     accepts and never returns has an entry of its own, so does one it types
+     differently in each direction, and a mode that takes a different field
+     set gets a different input schema. What the pair buys is a destination
      whose field types are declared and checkable rather than left to
      whatever a source produced; it is the contract's statement about the
      field, not a conversion this document performs.
