@@ -61,17 +61,15 @@ prohibitions below).
   On a read, exactly `{"from_param": <name>}`, and the bound param must declare
   `in: "path"`. On a write, `{"from_input": "record.<dotted>"}` is also legal —
   the record itself supplies the segment; see "Write path segments" below.
-- **The placeholder name is the document's, not the provider's**
-  (RULE-ENDP-060). `params` keys are unconstrained, so a param may keep a
-  provider's spelling — but the `{name}` in `path`, and the `path_params` key
-  binding it, are written in the contract's placeholder-name form, and
-  `from_param` is what crosses between them:
+- <!-- PROBE: param-key-keeps-provider-spelling -->
+  **The placeholder name is the document's, not the provider's**
+  (RULE-ENDP-060). A param may keep the provider's spelling; the `{name}` in
+  `path`, and the `path_params` key binding it, are written in the contract's
+  placeholder-name form, and `from_param` is what crosses between them:
   `"path": "/v3/objects/{object_id}"` with
   `"path_params": { "object_id": { "from_param": "objectId" } }`. Pasting a
   provider's `{objectId}` straight into the path is how this is usually failed.
-  One path never repeats a placeholder (RULE-ENDP-059), and `${...}` does not
-  resolve in `path` (RULE-ENDP-061) — `path_params` is the only substitution
-  into it.
+  Also on `path`: RULE-ENDP-059 and RULE-ENDP-061.
 - **A binding's location must match the site it appears in** (RULE-ENDP-008);
   the placement vocabulary is printed under RULE-ENDP-050 in
   `connector-builder/references/rules/api-endpoint.md`.

@@ -523,6 +523,27 @@ def _p_endpoint_pair_unresolved() -> list[dict]:
         return _validate(doc, doc_path=definition / "connector.json")
 
 
+def _p_param_key_provider_spelling() -> list[dict]:
+    """A path param keyed the way the provider spells it, bound to a
+    contract-form placeholder through `from_param`."""
+    endpoint = _read_endpoint()
+    read = endpoint["operations"]["read"]
+    read["request"]["path"] = "/v1/items/{object_id}"
+    read["request"]["path_params"] = {"object_id": {"from_param": "objectId"}}
+    read["params"]["objectId"] = {
+        "in": "path", "type": "string", "required": True,
+        "default": {"ref": "connection.selections.object_id"},
+    }
+    doc = _example_body(API_EXAMPLE)
+    with tempfile.TemporaryDirectory() as tmp:
+        definition = Path(tmp) / "definition"
+        (definition / "endpoints").mkdir(parents=True)
+        (definition / "connector.json").write_text(json.dumps(doc))
+        shutil.copy(API_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
+        (definition / "endpoints" / "v1__items.json").write_text(json.dumps(endpoint))
+        return _validate(doc, doc_path=definition / "connector.json")
+
+
 # --- type-map probes --------------------------------------------------------
 
 def _p_write_map_regex_case() -> list[dict]:
@@ -896,6 +917,13 @@ PROBES: tuple[Probe, ...] = (
     Probe("read-map-native-semantics-unchecked", "clean", _p_read_map_native_semantics),
     Probe("endpoint-pair-unresolved-through-read-map", "error", _p_endpoint_pair_unresolved,
           message_re=r"native_type 'MYSTERY_TYPE'"),
+    # The asymmetry spec-request-binding.md teaches: the placeholder takes the
+    # contract's form while the param it binds keeps the provider's spelling.
+    # `forbid_re` is what makes this pin the params half — without it, a key
+    # constraint landing on `params` would leave the probe green while the
+    # sentence beside the fence went false.
+    Probe("param-key-keeps-provider-spelling", "clean", _p_param_key_provider_spelling,
+          forbid_re=r"(?i)objectId"),
     # type maps
     Probe("write-map-regex-canonical-case-unchecked", "silent", _p_write_map_regex_case),
     # require_re holds the coverage warning itself in existence: without it,

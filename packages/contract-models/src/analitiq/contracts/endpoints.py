@@ -1021,8 +1021,7 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
             "placeholder in it is a substitution slot this document names: "
             "spelled in the contract's placeholder-name form, never repeated "
             "within one path (RULE-ENDP-059, RULE-ENDP-060), and bound in "
-            "`path_params` (RULE-ENDP-001), which is where a provider's own "
-            "spelling of the value belongs. The `${...}` template grammar does "
+            "`path_params` (RULE-ENDP-001). The `${...}` template grammar does "
             "not resolve here (RULE-ENDP-061)."
         ),
         json_schema_extra={"not": {"pattern": r"\$\{"}},

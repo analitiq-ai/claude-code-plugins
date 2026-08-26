@@ -1232,9 +1232,9 @@ class TestRequestPathPlaceholders:
             ))
 
     def test_provider_spelling_survives_on_the_param(self):
-        """The asymmetry the placeholder rule rests on: a param keeps whatever
-        the provider calls it, and `from_param` is what crosses between the two
-        spellings."""
+        """The asymmetry RULE-ENDP-060 rests on: a param keeps whatever the
+        provider calls it, while the placeholder and its `path_params` key take
+        the contract's form, and `from_param` is what crosses between them."""
         parse_endpoint(_minimal_api_payload(
             endpoint_id="x",
             operations={"read": {
