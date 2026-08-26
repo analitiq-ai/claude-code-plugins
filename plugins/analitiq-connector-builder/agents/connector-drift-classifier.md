@@ -60,6 +60,18 @@ rules for every document" says which file carries which artifact.
    - `operations.read.params.<name>.operators` — the operator members each
      read param offers (`RULE-ENDP-055`). Read params only: a write mode
      declares params through the same model, and a filter never names one.
+
+   Those are the interior sites with a category of their own. The interior is
+   larger than they are, so compare the rest of it too — the read operation's
+   presence, `replication.supported_methods` and `cursor_mappings`, a
+   filterable param's own value contract (`type`, `enum`, requiredness), a
+   write mode's `input.schema` fields, an `idempotency` block — and recurse:
+   a nested record field can change under a parent that did not, and a stream
+   addresses one by path. Anything withdrawn that a stream binds and no
+   category names is `endpoint-capability-narrowed`; anything added the same
+   way is `endpoint-capability-added`. Neither is a licence to stop looking
+   for the specific category — they exist so a release is never patch because
+   the vocabulary had no word for it.
 4. For each change, classify it under the categories in the `DriftVerdict`
    schema (see connector-builder/references/io-contracts.md). Among the
    interior additions step 3 finds, the tier follows what a stream can name:
@@ -114,11 +126,21 @@ rules for every document" says which file carries which artifact.
   ship matches on are not the same set. The key is endpoint-owned — a stream
   declares none — so a change re-keys every existing stream's upsert
   silently: rows that matched an existing row now insert, and rows that did
-  not now overwrite one), type-map-rule-removed, type-map-canonical-changed
-  (an existing matcher now resolves to a different render — read map: an
-  existing `native` resolves to a different canonical; write map: an
-  existing `canonical` renders a different native DDL — either invalidates
-  downstream consumers).
+  not now overwrite one), endpoint-capability-narrowed (an endpoint both
+  releases ship no longer offers something a stream document names, and no
+  category above says which. The endpoint's interior is wider than the
+  categories that enumerate it — a read operation dropped from a
+  write-bearing endpoint, a replication method or a cursor mapping
+  withdrawn, a filterable param whose value contract narrowed, an
+  idempotency block removed, a write input field removed or retyped, a
+  nested record field changed under an unchanged parent. Reach for this when
+  the diff withdraws something and nothing more specific fits, and say in
+  the `note` what was withdrawn. A release is never patch because the
+  vocabulary had no word for what it took away), type-map-rule-removed,
+  type-map-canonical-changed (an existing matcher now resolves to a
+  different render — read map: an existing `native` resolves to a different
+  canonical; write map: an existing `canonical` renders a different native
+  DDL — either invalidates downstream consumers).
 - **minor**: optional-input-added, optional-output-added,
   optional-endpoint-added, write-mode-added (a mode key under
   `operations.write` that endpoint did not declare before; a whole new
@@ -130,7 +152,10 @@ rules for every document" says which file carries which artifact.
   added fields in the `note`), filter-operators-widened (a param offers an
   operator it did not offer before, including a param newly declared with
   `operators`. These are endpoint params, not the connection inputs
-  `optional-input-added` names), type-map-rule-added.
+  `optional-input-added` names), endpoint-capability-added (the additive
+  counterpart, and the same fallback: an endpoint both releases ship now
+  offers something a stream document can name that no category above
+  covers), type-map-rule-added.
 - **patch**: bug-fix, doc-fix, tuning, capability-block-added (a top-level
   capability block the connector did not carry before (`sql_capabilities`,
   `error_map`) appears for the first time — neither an input, an output nor

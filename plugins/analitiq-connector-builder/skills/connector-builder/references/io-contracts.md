@@ -360,10 +360,11 @@ access and may not guess field types).
               "endpoint-removed", "write-mode-removed",
               "record-field-removed", "record-field-type-changed",
               "filter-operators-narrowed", "conflict-keys-changed",
-              "type-map-rule-removed", "type-map-canonical-changed",
-              "optional-input-added", "optional-output-added",
-              "optional-endpoint-added", "write-mode-added",
-              "record-field-added", "filter-operators-widened",
+              "endpoint-capability-narrowed", "type-map-rule-removed",
+              "type-map-canonical-changed", "optional-input-added",
+              "optional-output-added", "optional-endpoint-added",
+              "write-mode-added", "record-field-added",
+              "filter-operators-widened", "endpoint-capability-added",
               "type-map-rule-added", "bug-fix", "doc-fix", "tuning",
               "capability-block-added", "type-map-rule-reordered"
             ]

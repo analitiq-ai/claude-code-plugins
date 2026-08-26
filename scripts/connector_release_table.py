@@ -161,6 +161,24 @@ CATEGORIES: tuple[Category, ...] = (
             "and rows that did not now overwrite one"
         ),
     ),
+    Category(
+        "endpoint-capability-narrowed",
+        "major",
+        "Kept endpoint withdrew something a stream binds",
+        note=(
+            "an endpoint both releases ship no longer offers something a "
+            "stream document names, and no category above says which. The "
+            "endpoint's interior is wider than the categories that enumerate "
+            "it — a read operation dropped from a write-bearing endpoint, a "
+            "replication method or a cursor mapping withdrawn, a filterable "
+            "param whose value contract narrowed, an idempotency block "
+            "removed, a write input field removed or retyped, a nested record "
+            "field changed under an unchanged parent. Reach for this when the "
+            "diff withdraws something and nothing more specific fits, and say "
+            "in the `note` what was withdrawn. A release is never patch "
+            "because the vocabulary had no word for what it took away"
+        ),
+    ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
     Category(
         "type-map-canonical-changed",
@@ -208,6 +226,16 @@ CATEGORIES: tuple[Category, ...] = (
             "a param offers an operator it did not offer before, including a "
             "param newly declared with `operators`. These are endpoint params, "
             "not the connection inputs `optional-input-added` names"
+        ),
+    ),
+    Category(
+        "endpoint-capability-added",
+        "minor",
+        "Kept endpoint offers something more a stream can bind",
+        note=(
+            "the additive counterpart, and the same fallback: an endpoint both "
+            "releases ship now offers something a stream document can name "
+            "that no category above covers"
         ),
     ),
     Category("type-map-rule-added", "minor", "Type-map rule added"),
