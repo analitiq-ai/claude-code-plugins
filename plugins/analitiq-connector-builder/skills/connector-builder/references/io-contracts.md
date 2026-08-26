@@ -224,7 +224,8 @@ One `EndpointFacts` object per data resource: the researcher's
 **per-endpoint** pass in the fan-out grounds the researched fields, the
 orchestrator injects the connector-level `pagination` (echoed from
 `ProviderFacts.pagination`), and `endpoint-creator` consumes it. It carries
-the field-level truths about one resource's response — including whether each
+the field-level truths about one resource's fields — those a read returns and
+those a write accepts — including whether each
 datetime field is zone-aware, which decides `Timestamp(MICROSECOND, UTC)`
 versus the naive `Timestamp(MICROSECOND)`. Every field fact is grounded on
 the resource's own documentation / a real sample; an
@@ -267,7 +268,7 @@ access and may not guess field types).
     "fields": {
       "type": "array",
       "minItems": 1,
-      "description": "One entry per response field the connector exposes. `native_type` must be a token covered by ProviderFacts.native_type_vocabulary; `arrow_type` is the canonical Arrow type the field resolves to.",
+      "description": "One entry per field the connector exposes for this resource — the fields a read returns and the fields a write accepts. `native_type` must be a token covered by ProviderFacts.native_type_vocabulary; `arrow_type` is the canonical Arrow type the field resolves to.",
       "items": {
         "type": "object",
         "required": ["name", "native_type", "arrow_type"],
