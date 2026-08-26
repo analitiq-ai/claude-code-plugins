@@ -257,6 +257,8 @@ def _live_values(rule, models: dict) -> str:
     """
     from analitiq.contracts.shared.introspect import closed_members
 
+    if rule.mechanism == "pattern":
+        return _live_patterns(rule, models)
     if rule.mechanism != "literal_enum":
         return "—"
     by_field: dict[str, list[str]] = {}
@@ -291,6 +293,68 @@ def _live_values(rule, models: dict) -> str:
         if members
     ]
     return " · ".join(rendered) if rendered else "—"
+
+
+def _live_patterns(rule, models: dict) -> str:
+    """The patterns a `mechanism: pattern` rule points at, read from the field.
+
+    Same argument as the enum members beside it: a rule saying a value matches
+    "the contract's pattern" names a form the reader is then never shown, and
+    the reference is the whole of what an author must satisfy. Both places a
+    field can carry one are read — the annotation's own `pattern=` constraint
+    and the patterns its published schema declares — because a rule the model
+    applies in a validator has no annotation constraint to read.
+    """
+    by_field: dict[str, list[str]] = {}
+    labels: dict[str, str] = {}
+    for target in rule.targets:
+        model = models.get(target)
+        if model is None:
+            continue
+        for expr in rule.fields:
+            head = expr.split("[]")[0].split(".")[0]
+            info = model.model_fields.get(head)
+            if info is None:
+                continue
+            labels.setdefault(expr, expr.replace(head, info.alias, 1) if info.alias else expr)
+            found = by_field.setdefault(expr, [])
+            for entry in _field_patterns(info):
+                if entry not in found:
+                    found.append(entry)
+    rendered = [
+        f"`{labels[field]}` " + " · ".join(
+            f"{verb}: " + ", ".join(f"`{p}`" for v, p in patterns if v == verb)
+            for verb in ("matches", "refuses")
+            if any(v == verb for v, _ in patterns)
+        )
+        for field, patterns in by_field.items()
+        if patterns
+    ]
+    return " · ".join(rendered) if rendered else "—"
+
+
+def _field_patterns(info) -> list[tuple[str, str]]:
+    """Every regex a field declares, each with the verb that reads it right.
+
+    A field carries a pattern it must match and, under a `not`, one it must
+    refuse. Printing both under one verb states the opposite of the refusals,
+    so the verb travels with the pattern.
+    """
+    out = [
+        ("matches", meta.pattern) for meta in info.metadata
+        if getattr(meta, "pattern", None) is not None
+    ]
+    extra = info.json_schema_extra
+    if isinstance(extra, dict):
+        for node in [extra, *(extra.get("allOf") or [])]:
+            if not isinstance(node, dict):
+                continue
+            if isinstance(node.get("pattern"), str):
+                out.append(("matches", node["pattern"]))
+            refused = (node.get("not") or {}).get("pattern")
+            if isinstance(refused, str):
+                out.append(("refuses", refused))
+    return [e for i, e in enumerate(out) if e not in out[:i]]
 
 
 def _cell(text: str) -> str:

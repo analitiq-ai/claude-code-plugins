@@ -7,6 +7,7 @@ uniqueness, response.records ↔ response.schema traversal, replication
 cursor_field schema-presence, pagination expression shape), and the
 discriminated-union refactors of `Predicate` and `CursorMapping`.
 """
+import itertools
 import json
 import re
 from pathlib import Path
@@ -1323,6 +1324,59 @@ class TestRequestPathPlaceholders:
         except ValidationError as exc:
             model_repeats = "RULE-ENDP-059" in str(exc)
         assert model_repeats is repeats
+
+    def test_published_patterns_and_the_model_agree_on_every_short_path(self):
+        """Exhaustive over a small alphabet, because a case list only fails for
+        a form someone thought to write down.
+
+        The published patterns are the whole of what a schema-only consumer
+        applies, so any string the two sides disagree about is a document that
+        is valid for that consumer and invalid here — or the reverse.
+        """
+        alphabet = "{}aB_2/"
+        divergent = []
+        for length in range(1, 6):
+            for tup in itertools.product(alphabet, repeat=length):
+                path = "".join(tup)
+                schema_ok = bool(
+                    re.match(PATH_BRACES_WELL_FORMED_PATTERN, path)
+                ) and not re.search(PATH_PLACEHOLDER_REPEATED_PATTERN, path)
+                names = re.findall(r"\{([a-z][a-z0-9_]*)\}", path)
+                try:
+                    WriteRequest.model_validate({
+                        "method": "POST",
+                        "path": path,
+                        "path_params": (
+                            {n: {"from_param": n} for n in names} if names else None
+                        ),
+                    })
+                    model_ok = True
+                except ValidationError as exc:
+                    text = str(exc)
+                    # Only the brace and uniqueness rules are in scope; another
+                    # rule refusing the string says nothing about these two.
+                    model_ok = not (
+                        "RULE-ENDP-059" in text or "RULE-ENDP-060" in text
+                    )
+                if model_ok is not schema_ok:
+                    divergent.append(path)
+        assert not divergent, (
+            f"published patterns and model disagree on {divergent[:10]!r}"
+        )
+
+    def test_an_absolute_url_in_path_is_still_accepted(self):
+        """The tripwire under the description's "enforced by nothing today".
+
+        `_RequestBase.path`'s description declares RULE-ENDP-045's origin half
+        unenforced, and that sentence is frozen in a published schema. The
+        prose hash fires when the wording moves, never when the behaviour does,
+        so this is what goes red the day enforcement lands and the disclaimer
+        has to go.
+        """
+        WriteRequest.model_validate({
+            "method": "POST",
+            "path": "https://other.example.com/v1/items",
+        })
 
     def test_duplicate_report_names_every_repeated_placeholder(self):
         """The diagnostic carries the whole repeat set, not the first one it
