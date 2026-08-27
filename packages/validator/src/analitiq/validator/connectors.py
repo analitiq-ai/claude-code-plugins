@@ -69,11 +69,11 @@ try:
             SAMPLE_CONTRADICTION_REMEDY,
         )
         # RULE-ENDP-026's own walk, imported rather than approximated: it is
-        # what decides whether every `$ref` in an embedded schema resolves and
-        # terminates, and a sample cannot be graded through one that does not.
-        # The pointer escape travels with it — the contract owns both halves of
-        # RFC 6901 (`_unescape_pointer_token` is what reads a `$ref`), and a
-        # second implementation here would be a copy of a value with an owner.
+        # what decides whether every `$ref` in an embedded schema resolves, and
+        # a sample cannot be graded through one that does not. Resolution only
+        # — a reference that resolves can still be one nothing following it
+        # comes back from, which is why the grading runs guarded rather than
+        # trusting this to make it safe.
         from analitiq.contracts.endpoints import (
             _validate_schema_refs,
             iter_schema_nodes,

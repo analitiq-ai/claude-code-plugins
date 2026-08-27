@@ -1655,8 +1655,8 @@ def test_diagnostics_enum_matches_the_package() -> None:
 
 
 #: Backticked names in the connector README's `## Validation` section that are
-#: id-shaped but are not finding ids — the two packages, the CLI entry point,
-#: and the agent that runs it.
+#: id-shaped but are not finding ids — the packages, the CLI entry point, and
+#: the agent that runs it.
 _README_NON_IDS = frozenset({
     "analitiq-contract-models",
     "analitiq-validator",
@@ -1670,10 +1670,10 @@ def test_readme_validation_section_names_every_finding_id() -> None:
 
     A curated summary is a permitted copy and an unpinned one is a defect, so
     the id set the README's `## Validation` section names is graded against the
-    package the same way the `Diagnostics` fragment is. `test_validator_ids_
-    match_package` names the README only in its fix text, which pins nothing:
-    the section could lose an id, or keep one the validator stopped emitting,
-    with that gate green.
+    package the same way the `Diagnostics` fragment is.
+    `test_validator_ids_match_package` names the README only in its fix text,
+    which pins nothing: the section could lose an id, or keep one the validator
+    stopped emitting, with that gate green.
 
     Located, not decided: the section is found by its heading and the ids by
     their backticks, so no sentence in it is read. What that leaves open is a
