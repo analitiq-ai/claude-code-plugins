@@ -1298,9 +1298,11 @@ def _validate_examples_zone(
     """RULE-ENDP-063: a node's recorded samples must bear out the zone its
     declared type claims.
 
-    Each reading is taken and an unreadable one ends the check: a family with
-    no timezone position has nothing a sample could contradict, and a sample
-    that is not a date-time literal carries no answer about zones.
+    Both readings can come back unreadable, and each is answered where it
+    arises: a family with no timezone position has nothing any sample could
+    contradict, so the node is not graded at all, while a sample that is not a
+    date-time literal carries no answer about zones and is passed over on its
+    own.
     Silence here is the absence of evidence, never evidence of absence — see
     `analitiq.contracts.arrow_grammar.sample_carries_zone`.
 
@@ -1483,21 +1485,21 @@ def _validate_arrow_type_in_json_schema(
     # Each traversal always re-enters the walker so its entry-point bool/dict
     # check (above) runs on every visited slot — that's the only place
     # malformed schema positions (e.g. `items: "Int64"`) get surfaced.
-    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
         child = schema.get(key)
         if isinstance(child, dict):
             for sub_key, sub_schema in child.items():
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}.{sub_key}", errors
                 )
-    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
         child = schema.get(key)
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}[{idx}]", errors
                 )
-    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
         if key not in schema:
             continue
         child = schema[key]
@@ -1572,9 +1574,10 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
         return
     yield pointer, schema
     # The three inventories are frozensets, so iterating them raw ordered the
-    # yield — and every consumer's findings — by the interpreter's hash seed.
-    # An author rerunning the validator on an unchanged document got the same
-    # findings back in a different order.
+    # yield by the interpreter's hash seed. Every walk over them does it — the
+    # two error-collecting ones in this module sort for the same reason — so
+    # that an author rerunning the validator on an unchanged document gets the
+    # same findings back in the same order.
     for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
         child = schema.get(key)
         if isinstance(child, dict):
@@ -1731,19 +1734,19 @@ def _validate_schema_refs(
                     "(spec: §API Response Extraction — embedded schema references)"
                 )
 
-    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
         child = schema.get(key)
         if not isinstance(child, dict):
             continue
         for sub_key, sub_schema in child.items():
             _validate_schema_refs(sub_schema, f"{path}.{key}.{sub_key}", errors, root)
-    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
         child = schema.get(key)
         if not isinstance(child, list):
             continue
         for idx, sub_schema in enumerate(child):
             _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
-    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
         if key not in schema:
             continue
         child = schema[key]
