@@ -1075,10 +1075,11 @@ class TestRecursiveSchemasTerminate:
                      "PYTHONPATH": source},
             )
             runs.append(json.loads(proc.stdout))
-        assert runs[0], f"{fixture}: no rings reported — nothing is being measured"
-        assert all(run == runs[0] for run in runs), (
-            f"{fixture}: the reported rings differ between hash seeds:\n"
-            f"  {runs[0][:1]}\n  {next(r for r in runs if r != runs[0])[:1]}"
+        assert runs[0], f"{fixture}: nothing reported — nothing is being measured"
+        differing = [run for run in runs if run != runs[0]]
+        assert not differing, (
+            f"{fixture}: the reported findings differ between hash seeds:\n"
+            f"  {runs[0][:1]}\n  {differing[0][:1]}"
         )
 
     @pytest.mark.parametrize("condition", [5, None, 1.5, "x", ["not"], {"not": 5}])
