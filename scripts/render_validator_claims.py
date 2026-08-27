@@ -142,6 +142,18 @@ def _read_endpoint() -> dict:
     return json.loads((API_EXAMPLE / "endpoints" / "v1__items.json").read_text())
 
 
+def _record_node(doc: dict) -> dict:
+    """The record shape of an endpoint's read response — the array node's
+    `items`, which is where a field declaration and its recorded sample sit."""
+    schema = doc["operations"]["read"]["response"]["schema"]
+    records = doc["operations"]["read"]["response"]["records"]["ref"]
+    node = schema
+    for token in records.removeprefix("response.body").lstrip(".").split("."):
+        if token:
+            node = node["properties"][token]
+    return node["items"]
+
+
 def _endpoint_with_stop_when(ref: str) -> dict:
     doc = _read_endpoint()
     doc["operations"]["read"]["pagination"]["stop_when"] = {"empty": {"ref": ref}}
@@ -228,6 +240,52 @@ def _p_read_body_path_untyped() -> list[dict]:
     }
     doc["operations"]["read"]["pagination"]["stop_when"] = {
         "empty": {"ref": "response.body.meta.next"},
+    }
+    return _validate(doc)
+
+
+def _p_recorded_sample_contradicting_its_node() -> list[dict]:
+    """The sevdesk shape: a field the provider documents as a boolean and
+    illustrates with the string "0"."""
+    doc = _read_endpoint()
+    record = _record_node(doc)
+    record["properties"]["small_settlement"] = {
+        "type": ["boolean", "null"], "native_type": "boolean",
+        "arrow_type": "Boolean", "examples": ["0"],
+    }
+    return _validate(doc)
+
+
+def _p_recorded_sample_zone_contradiction() -> list[dict]:
+    doc = _read_endpoint()
+    record = _record_node(doc)
+    record["properties"]["updated_at"] = {
+        "type": "string", "native_type": "date-time",
+        "arrow_type": "Timestamp(MICROSECOND, UTC)",
+        "examples": ["2024-01-02T03:04:05"],
+    }
+    return _validate(doc)
+
+
+def _p_recorded_sample_agreeing_with_its_node() -> list[dict]:
+    doc = _read_endpoint()
+    record = _record_node(doc)
+    record["properties"]["updated_at"] = {
+        "type": "string", "native_type": "date-time",
+        "arrow_type": "Timestamp(MICROSECOND, UTC)",
+        "examples": ["2024-01-02T03:04:05Z"],
+    }
+    return _validate(doc)
+
+
+def _p_no_recorded_sample_is_no_obligation() -> list[dict]:
+    """A field with no sample is graded on nothing — recording one is never
+    required."""
+    doc = _read_endpoint()
+    record = _record_node(doc)
+    record["properties"]["updated_at"] = {
+        "type": "string", "native_type": "date-time",
+        "arrow_type": "Timestamp(MICROSECOND, UTC)",
     }
     return _validate(doc)
 
@@ -866,6 +924,17 @@ PROBES: tuple[Probe, ...] = (
           message_re=r"does not resolve in\s+response\.schema"),
     Probe("read-body-path-untyped", "error", _p_read_body_path_untyped,
           message_re=r"declares no `type`"),
+    # recorded wire samples
+    Probe("recorded-sample-type-contradiction", "error",
+          _p_recorded_sample_contradicting_its_node,
+          message_re=r"does not satisfy the declaration it sits on"),
+    Probe("recorded-sample-zone-contradiction", "error",
+          _p_recorded_sample_zone_contradiction,
+          message_re=r"RULE-ENDP-063"),
+    Probe("recorded-sample-agreeing", "clean",
+          _p_recorded_sample_agreeing_with_its_node),
+    Probe("no-recorded-sample-no-obligation", "clean",
+          _p_no_recorded_sample_is_no_obligation),
     Probe("read-subscope-typo", "error", _p_read_subscope_typo,
           message_re=r"response sub-scope"),
     Probe("read-records-tail-unchecked", "clean", _p_read_records_tail),

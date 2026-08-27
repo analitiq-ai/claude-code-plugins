@@ -3,6 +3,7 @@
   { "match": "exact", "native": "INTEGER", "canonical": "Int64" },
   { "match": "exact", "native": "NUMBER", "canonical": "Float64" },
   { "match": "exact", "native": "BOOLEAN", "canonical": "Boolean" },
+  { "match": "exact", "native": "DATE-TIME", "canonical": "Timestamp(MICROSECOND, UTC)" },
   { "match": "exact", "native": "OBJECT", "canonical": "Json" },
   { "match": "exact", "native": "ARRAY", "canonical": "Json" }
 ]

@@ -1654,6 +1654,17 @@ def test_diagnostics_enum_matches_the_package() -> None:
     )
 
 
+#: Backticked names in the connector README's `## Validation` section that are
+#: id-shaped but are not finding ids — the two packages, the CLI entry point,
+#: and the agent that runs it.
+_README_NON_IDS = frozenset({
+    "analitiq-contract-models",
+    "analitiq-validator",
+    "analitiq-validate",
+    "connector-schema-validator",
+})
+
+
 def test_readme_validation_section_names_every_finding_id() -> None:
     """The human-facing summary of what the validator checks, read off the file.
 
@@ -1676,10 +1687,16 @@ def test_readme_validation_section_names_every_finding_id() -> None:
         "no single `## Validation` section in the connector README — the "
         "extraction below would grade an empty set and pass"
     )
-    named = {
-        token for token in re.findall(r"`([a-z0-9-]+)`", validation[0])
-        if token in VALIDATOR_IDS
-    }
+    # Every backticked token shaped like a finding id, minus the names below.
+    # Deliberately NOT filtered to `VALIDATOR_IDS`: that filter would drop
+    # exactly the ids the package stopped emitting, which is half of what this
+    # exists to see. A new backticked name in the section reddens this and is
+    # added to the exemption — loudly, which is the point.
+    named = set(re.findall(r"`([a-z0-9-]+)`", validation[0])) - _README_NON_IDS
+    assert named, (
+        "no finding ids in the connector README's `## Validation` section — "
+        "the extraction has stopped measuring"
+    )
     package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
     assert named == package_set, _diff_msg(
         "README § Validation finding ids",

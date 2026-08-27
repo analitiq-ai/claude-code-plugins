@@ -142,9 +142,11 @@ was raised.
        carries a `sample_value`, put it on that field's node as
        `"examples": [<value>]`, copied verbatim and with its JSON type intact
        (`EndpointFacts.sample_value` says why the typing is load-bearing). The
+       <!-- PROBE: recorded-sample-type-contradiction, recorded-sample-zone-contradiction, recorded-sample-agreeing, no-recorded-sample-no-obligation -->
        declaration is then graded against it rather than taken on trust
-       (`RULE-ENDP-063`, `RULE-ENDP-064`). An entry with no `sample_value` gets
-       no `examples`; nothing here is invented to fill the slot.
+       (`RULE-ENDP-063`, `RULE-ENDP-064`), and an entry with no `sample_value`
+       gets no `examples` and is graded on nothing; nothing here is invented to
+       fill the slot.
      - **When the sample contradicts the documented type, the sample wins.**
        A provider that documents `boolean` and shows `"0"` sends strings, and
        the field is typed from what it sends. Add the native token the

@@ -4,26 +4,58 @@
   "operations": {
     "read": {
       "params": {
-        "limit": { "in": "query", "type": "integer", "required": false, "controlled_by": "pagination" },
-        "page": { "in": "query", "type": "integer", "required": false, "controlled_by": "pagination" }
+        "limit": {
+          "in": "query",
+          "type": "integer",
+          "required": false,
+          "controlled_by": "pagination"
+        },
+        "page": {
+          "in": "query",
+          "type": "integer",
+          "required": false,
+          "controlled_by": "pagination"
+        }
       },
       "request": {
         "method": "GET",
         "path": "/v1/items",
         "query": {
-          "limit": { "from_param": "limit" },
-          "page": { "from_param": "page" }
+          "limit": {
+            "from_param": "limit"
+          },
+          "page": {
+            "from_param": "page"
+          }
         },
-        "headers": { "Accept": "application/json" }
+        "headers": {
+          "Accept": "application/json"
+        }
       },
       "pagination": {
         "type": "page",
-        "page": { "param": "page", "initial": 1, "increment_by": 1 },
-        "limit": { "param": "limit", "default": { "ref": "runtime.batch_size" }, "max": 100 },
-        "stop_when": { "empty": { "ref": "response.body.data" } }
+        "page": {
+          "param": "page",
+          "initial": 1,
+          "increment_by": 1
+        },
+        "limit": {
+          "param": "limit",
+          "default": {
+            "ref": "runtime.batch_size"
+          },
+          "max": 100
+        },
+        "stop_when": {
+          "empty": {
+            "ref": "response.body.data"
+          }
+        }
       },
       "response": {
-        "records": { "ref": "response.body.data" },
+        "records": {
+          "ref": "response.body.data"
+        },
         "schema": {
           "type": "object",
           "properties": {
@@ -36,9 +68,38 @@
                 "native_type": "object",
                 "arrow_type": "Object",
                 "properties": {
-                  "id": { "type": "string", "native_type": "string", "arrow_type": "Utf8" },
-                  "name": { "type": "string", "native_type": "string", "arrow_type": "Utf8" },
-                  "active": { "type": "boolean", "native_type": "boolean", "arrow_type": "Boolean" }
+                  "id": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8",
+                    "examples": [
+                      "itm_8f21c"
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8",
+                    "examples": [
+                      "Blue widget"
+                    ]
+                  },
+                  "active": {
+                    "type": "boolean",
+                    "native_type": "boolean",
+                    "arrow_type": "Boolean",
+                    "examples": [
+                      true
+                    ]
+                  },
+                  "updated_at": {
+                    "type": "string",
+                    "native_type": "date-time",
+                    "arrow_type": "Timestamp(MICROSECOND, UTC)",
+                    "examples": [
+                      "2024-01-02T03:04:05Z"
+                    ]
+                  }
                 }
               }
             }

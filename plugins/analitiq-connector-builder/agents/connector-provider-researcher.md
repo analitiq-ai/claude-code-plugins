@@ -95,6 +95,7 @@ a zone you assume (`RULE-SHRD-002`) — a date-only wire value (`2024-01-02`) is
 appears in the provider's own documentation — in an example response, an
 OpenAPI `example`, or the field's own row — reproduced exactly, with its JSON
 type intact. A plausible value you wrote yourself is worse than no sample:
+<!-- PROBE: recorded-sample-type-contradiction, recorded-sample-zone-contradiction -->
 the declaration is graded against it downstream (`RULE-ENDP-063`,
 `RULE-ENDP-064`), so an invented one certifies the declaration it was invented
 to match. Where the docs illustrate nothing for a field, omit the key.

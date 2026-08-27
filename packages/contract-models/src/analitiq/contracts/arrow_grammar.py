@@ -601,8 +601,8 @@ def validate_cross_params(value: str) -> None:
 #: spelling) carries no answer, and the reader below says so rather than
 #: inventing one.
 WIRE_DATETIME_PATTERN = (
-    r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?"
-    r"(?P<zone>[Zz]|[+-]\d{2}:?\d{2})?"
+    r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?"
+    r"(?P<zone>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
 )
 _WIRE_DATETIME_RE = re.compile(f"^{WIRE_DATETIME_PATTERN}$")
 
@@ -647,10 +647,14 @@ def sample_carries_zone(sample: Any) -> bool | None:
     """
     if not isinstance(sample, str):
         return None
-    match = _WIRE_DATETIME_RE.match(sample)
+    # `fullmatch`, not `match`: the pattern is anchored, and `$` matches
+    # before a trailing newline, so `match` would read `"…05Z\n"` as a clean
+    # sample. Same trap `_validate_arrow_type_in_json_schema` names.
+    match = _WIRE_DATETIME_RE.fullmatch(sample)
     if match is None:
         return None
     return match.group("zone") is not None
+
 
 def _describe_bounds(lo: int, hi: int | None) -> str:
     return f"{lo}-{hi}" if hi is not None else f"{lo} or above"
