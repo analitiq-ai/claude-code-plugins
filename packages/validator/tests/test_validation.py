@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
+from analitiq.validator import GUARD_DEFAULT_BLAME, is_guard_finding
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -306,9 +307,51 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     ep = _sample_endpoint({"$ref": ref, "examples": [1]})
     findings = validator.validate_document(ep)
     assert any(ref in f["message"] for f in findings), findings
-    from analitiq.validator import GUARD_DEFAULT_BLAME
-
     assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
+
+
+def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
+    """The other direction of the same wording. Two tests assert the default
+    blame is ABSENT from a document-caused crash, and an absence assertion
+    against a string nothing emits is quiet rather than red — so one test has
+    to require it where it belongs."""
+    from analitiq.validator._core import _run_guarded
+
+    def _boom():
+        raise KeyError("x")
+
+    emitted = _run_guarded(_boom, vid="contract-model")[0]
+    assert is_guard_finding(emitted), emitted
+    assert GUARD_DEFAULT_BLAME in emitted["message"], emitted
+
+
+def test_a_crash_finding_does_not_carry_a_whole_schema(validator):
+    """`jsonschema`'s referencing errors put the entire schema root in their
+    repr. Unbounded, one finding an agent has to read is kilobytes of JSON —
+    and the exception text is the half this tool does not write."""
+    from analitiq.validator._core import _GUARD_DETAIL_MAX, _run_guarded
+
+    def _boom():
+        raise ValueError("x" * 5000)
+
+    emitted = _run_guarded(_boom, vid="contract-model")[0]
+    assert len(emitted["message"]) < _GUARD_DETAIL_MAX + 400, len(emitted["message"])
+    assert emitted["message"].endswith(GUARD_DEFAULT_BLAME), emitted
+
+
+def test_a_non_string_dialect_below_the_root_is_malformed_not_another_draft(
+    validator,
+):
+    """Nothing switches dialect on a number, so naming it a draft mismatch
+    sends the author to fix something that is not there — and the `continue`
+    behind that finding hides the metaschema error that names the real one."""
+    ep = _sample_endpoint({"$schema": 7, "type": "string", "examples": ["ok"]})
+    errors = _errors(validator.validate_document(ep))
+    messages = [e["message"] for e in errors
+                if e["validator"] == "embedded-json-schema"]
+    assert messages, errors
+    assert any("is not of type 'string'" in m for m in messages), messages
+    assert not any("another draft" in m for m in messages), messages
 
 
 def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
@@ -322,14 +365,12 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
         "type": "number", "multipleOf": 0.5, "examples": [int("9" * 400)]})
     ep["endpoint_id"] = "WRONG NAME"
     findings = validator.validate_document(ep)
-    crashed = [f for f in findings if "could not finish" in f["message"]]
+    crashed = [f for f in findings if is_guard_finding(f)]
     assert len(crashed) == 1, findings
     assert crashed[0]["validator"] == "embedded-schema-example", crashed
     # What brought it down came out of the author's document, so the finding
     # must not send them to report a validator bug, and it must say which of
     # the endpoint's embedded schemas it was.
-    from analitiq.validator import GUARD_DEFAULT_BLAME
-
     assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
     # The sample, not the schema: the guard is per-sample, so the author is
     # pointed at the one value that brought the grading down.
@@ -702,7 +743,7 @@ def test_coverage_non_dict_endpoint_file_no_crash(tmp_path, connector_base, vali
     (tmp_path / "endpoints" / "widgets.json").write_text("[]")  # array, not object
     errs = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert errs
-    assert not any("validator bug" in e["message"] for e in errs)
+    assert not any(GUARD_DEFAULT_BLAME in e["message"] for e in errs)
 
 
 def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, validator):

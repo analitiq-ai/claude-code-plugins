@@ -14,6 +14,8 @@ from urllib.parse import urlsplit
 
 import pytest
 
+from analitiq.validator import GUARD_DEFAULT_BLAME
+
 CORPUS = Path(__file__).resolve().parent / "corpus"
 
 API = "https://schemas.analitiq.ai/api-endpoint/latest.json"
@@ -221,7 +223,7 @@ def test_malformed_endpoint_does_not_crash_the_check(tmp_path, connector_base, e
     "validator bug". Each malformed shape must still produce findings and no
     fabricated transport-ref error."""
     findings = _run(tmp_path, connector_base, {"widgets.json": ep}, validator)
-    assert not any("validator bug" in f["message"] for f in findings), findings
+    assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
     assert not _ref_errors(findings), findings
     assert _errors(findings), "a malformed endpoint must still be reported"
 

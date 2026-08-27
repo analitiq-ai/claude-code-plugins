@@ -281,8 +281,12 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
         if not isinstance(schema, dict):
             continue
         where = f"{label}{pointer}" if label else pointer
+        # A non-STRING `$schema` is malformed, not another draft — the same
+        # reading the nested check below applies. Without the type test this
+        # reported `$schema 7` as a draft mismatch and `continue`d past
+        # `check_schema`, hiding the metaschema error that names the defect.
         declared = schema.get("$schema")
-        if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        if isinstance(declared, str) and declared != _DRAFT_2020_12_SCHEMA:
             findings.append(finding(
                 "embedded-json-schema", "error", pointer,
                 f"embedded schema at {where} declares $schema {declared!r}; the "
@@ -297,11 +301,9 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
         # already in is redundant, not wrong, and refusing it would be an
         # obligation no rule states — the rendered reference an author
         # satisfies says only that a different draft is forbidden.
-        # A non-STRING `$schema` is malformed, not another draft: nothing
-        # switches dialect on it, and saying so would send the author to fix a
-        # mismatch that is not there while `continue` hides the metaschema
-        # error that names the real defect. The root branch above guards the
-        # same way; this mirrors it.
+        # Same reading as the root branch above: a non-string value is
+        # malformed rather than another draft, so it falls through to
+        # `check_schema`, which names it.
         nested = sorted(
             node_pointer
             for node_pointer, node in iter_schema_nodes(schema)
