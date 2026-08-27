@@ -1571,18 +1571,22 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     if not isinstance(schema, dict):
         return
     yield pointer, schema
-    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+    # The three inventories are frozensets, so iterating them raw ordered the
+    # yield — and every consumer's findings — by the interpreter's hash seed.
+    # An author rerunning the validator on an unchanged document got the same
+    # findings back in a different order.
+    for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
         child = schema.get(key)
         if isinstance(child, dict):
             for name, sub in child.items():
                 yield from iter_schema_nodes(
                     sub, f"{pointer}/{key}/{_escape_pointer_token(name)}")
-    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
         child = schema.get(key)
         if isinstance(child, list):
             for index, sub in enumerate(child):
                 yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
-    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+    for key in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
         if key not in schema:
             continue
         child = schema[key]
@@ -1604,6 +1608,7 @@ def _escape_pointer_token(name: str) -> str:
     a name carrying `%` does not round-trip between them and neither is wrong.
     """
     return name.replace("~", "~0").replace("/", "~1")
+
 
 def _validate_schema_refs(
     schema: Any, path: str, errors: list[str], root: Any = None
