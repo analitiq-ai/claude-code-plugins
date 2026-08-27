@@ -24,6 +24,7 @@ root conftest), hard-failed in CI via `DRIFT_REQUIRE_CONTRACT_MODELS=1`.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -340,8 +341,15 @@ def test_run_probe_branches() -> None:
 
     error = {"severity": "error", "message": "the tail does not resolve"}
     warning = {"severity": "warning", "message": "coverage gap in the write map"}
-    crash = {"severity": "error",
-             "message": "check 'contract-model' crashed unexpectedly (KeyError: 'x')"}
+    # Produced by the guard, not written out here: a hand-typed copy of its
+    # wording is what let a rename leave the real tripwire matching nothing
+    # while this stayed green against its own fabrication.
+    from analitiq.validator._core import _run_guarded
+
+    def _boom():
+        raise KeyError("x")
+
+    crash = _run_guarded(_boom, vid="contract-model")[0]
 
     assert _REGISTRY.run_probe(probe("clean", [warning])) is None
     assert _REGISTRY.run_probe(probe("silent", [])) is None
@@ -357,7 +365,7 @@ def test_run_probe_branches() -> None:
     # The crash guard beats every expectation — a crash embedding the very
     # vocabulary a message_re looks for must still fail.
     assert "crashed" in _REGISTRY.run_probe(
-        probe("error", [crash], message_re="crashed unexpectedly")).reason
+        probe("error", [crash], message_re=re.escape(crash["message"][:20]))).reason
     assert "crashed" in _REGISTRY.run_probe(probe("clean", [crash])).reason
     assert "forbidden" in _REGISTRY.run_probe(
         probe("clean", [warning], forbid_re="coverage")).reason
