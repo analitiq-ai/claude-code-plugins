@@ -815,11 +815,6 @@ class TestRecursiveSchemasTerminate:
         assert isinstance(_run_with_timeout(lambda: parse_endpoint(_read_doc(schema))), ApiEndpointDoc)
 
 
-# ---------------------------------------------------------------------------
-# The two together: cross-block paths (RULE-ENDP-023) resolving through `$defs`
-# ---------------------------------------------------------------------------
-
-
     def test_every_schema_keyword_is_classified(self):
         """The partition that makes the next omission fail rather than ship.
 
@@ -1019,8 +1014,8 @@ class TestRecursiveSchemasTerminate:
             ))
 
     #: Two documents. The first carries a ring under each same-instance
-    #: keyword shape, so the ring it names first turns on which node the walk
-    #: reaches first. The second gives one node two same-instance edges onto a
+    #: keyword shape and two dangling references besides, so it grades the
+    #: order of everything this walk emits rather than of its ring half alone. The second gives one node two same-instance edges onto a
     #: node that closes back, so the ring it names turns on which edge is
     #: taken first.
     HASH_SEED_FIXTURES = {
@@ -1031,6 +1026,10 @@ class TestRecursiveSchemasTerminate:
             "properties": {"p": {"anyOf": [{"$ref": "#/properties/p"}]},
                            "q": {"oneOf": [{"$ref": "#/properties/q"}]}},
             "allOf": [{"if": True, "then": {"$ref": "#/allOf/0"}}],
+            # Not rings: this walk emits more than ring findings, and all of
+            # it comes out of the same frozenset iteration.
+            "contains": {"$ref": "#/$defs/Nowhere"},
+            "propertyNames": {"$ref": "#/$defs/AlsoNowhere"},
         },
         "one node, two edges onto the node that closes back": {
             "type": "object",
@@ -1082,6 +1081,24 @@ class TestRecursiveSchemasTerminate:
             f"  {runs[0][:1]}\n  {next(r for r in runs if r != runs[0])[:1]}"
         )
 
+    @pytest.mark.parametrize("condition", [5, None, 1.5, "x", ["not"], {"not": 5}])
+    def test_a_malformed_condition_is_read_as_no_answer(self, condition):
+        """`if` holds whatever the document put there. Reading it as a schema
+        — asking its length, indexing it — raises out of the model layer, and
+        that crash reaches the dispatch guard, which has no per-caller wording:
+        one bad character would replace every finding on the document with
+        "this is a validator bug — please report". The walker that reports a
+        malformed schema position is what should say so, and it runs after."""
+        from analitiq.contracts import endpoints as ep
+
+        errors: list[str] = []
+        ep._validate_schema_refs(
+            {"type": "object",
+             "properties": {"d": {"if": condition, "then": {"type": "object"}}}},
+            "response.schema", errors,
+        )
+        assert errors == [], errors
+
     def test_a_ring_written_as_a_percent_encoded_reference_is_still_a_ring(self):
         """A `$ref` is a URI-reference and may percent-encode a token; a
         pointer built from the document's own keys never does. Comparing the
@@ -1113,6 +1130,12 @@ class TestRecursiveSchemasTerminate:
         # `B` points into the cycle without being on it, so the ring the
         # diagnostic names is `A` and `C`.
         assert "'#/$defs/A', '#/$defs/C'" in str(exc.value), str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# The two together: cross-block paths (RULE-ENDP-023) resolving through `$defs`
+# ---------------------------------------------------------------------------
+
 
 class TestCrossBlockPathsThroughRefs:
     SCHEMA = {
