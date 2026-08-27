@@ -226,6 +226,22 @@ def test_a_finding_path_is_a_resolvable_json_pointer(validator):
     assert errors[0]["path"].endswith("/properties/a~1b~0c/examples/0"), errors
 
 
+@pytest.mark.parametrize("ref", ["#/$defs/Missing", "https://example.com/x.json"])
+def test_samples_are_not_graded_through_a_reference_that_does_not_resolve(
+    validator, ref,
+):
+    """Resolution happens here for the first time in this module, so a
+    reference the contract already refuses raises out of the grading rather
+    than returning a finding — and the guard around the check would answer the
+    whole document with "validator bug" instead of naming the reference.
+    RULE-ENDP-026 owns that diagnostic; this check stands aside."""
+    ep = _sample_endpoint({"$ref": ref, "examples": [1]})
+    findings = validator.validate_document(ep)
+    assert not any(f["validator"] == "embedded-schema-example" for f in findings)
+    assert not any("validator bug" in f["message"] for f in findings), findings
+    assert any(ref in f["message"] for f in findings), findings
+
+
 def test_samples_are_not_graded_against_a_malformed_schema(validator):
     """A schema `check_schema` rejects is reported once, as the malformation it
     is — not a second time in the vocabulary of whichever sample met it."""

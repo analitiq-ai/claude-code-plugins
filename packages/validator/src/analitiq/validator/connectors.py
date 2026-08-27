@@ -69,7 +69,12 @@ try:
             ApiEndpointDoc,
             DatabaseEndpointDoc,
             SLUG_RE,
+            SAMPLE_CONTRADICTION_REMEDY,
         )
+        # RULE-ENDP-026's own walk, imported rather than approximated: it is
+        # what decides whether every `$ref` in an embedded schema resolves, and
+        # a sample cannot be graded through one that does not.
+        from analitiq.contracts.endpoints import _validate_schema_refs
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
@@ -372,7 +377,13 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
 
     Reached only for a schema `check_schema` already accepted — grading an
     instance against a malformed schema reports the malformation a second time,
-    in the vocabulary of whichever example happened to meet it first.
+    in the vocabulary of whichever example happened to meet it first. A schema
+    carrying a reference that does not resolve is skipped for the same reason
+    and one more: resolution happens here for the first time in this module, so
+    a dangling `#/$defs/Typo` raises out of `iter_errors` rather than returning
+    a finding, and the guard around this check would replace every finding on
+    the document with "validator bug — please report". RULE-ENDP-026 already
+    names that reference precisely; this check has nothing to add to it.
 
     `jsonschema` is imported HERE for the reason the caller states: only
     endpoint meta-validation needs it.
@@ -385,6 +396,10 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
         if isinstance(node.get("examples"), list)
     ]
     if not nodes:
+        return []
+    unresolvable: list[str] = []
+    _validate_schema_refs(schema, pointer, unresolvable)
+    if unresolvable:
         return []
     root = Draft202012Validator(schema)
     findings: list[dict] = []
@@ -399,14 +414,8 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                 "embedded-schema-example", "error",
                 f"{pointer}{node_pointer}/examples/{index}",
                 f"recorded sample {example!r} at {at} does not satisfy the "
-                f"declaration it sits on: {error.message}. The sample is the "
-                "evidence the declaration was decided from, so the "
-                "disagreement is real in one direction or the other — correct "
-                "the declared type (and the connector's read type map, which "
-                "resolves the native token to it) to match what the provider "
-                "sends, or correct the sample if it was mistranscribed. "
-                "Dropping the sample removes the evidence, not the "
-                "disagreement"))
+                f"declaration it sits on: {error.message}. "
+                f"{SAMPLE_CONTRADICTION_REMEDY}"))
     return findings
 
 
