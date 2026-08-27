@@ -64,6 +64,9 @@ What stays contract-owned (authoring-profile policy, not engine facts):
   `fixed_offset_pattern` verbatim.
 - **The `${name}` template grammar** of type-map render rules — a contract
   feature the engine never sees.
+- **The wire date-time profile.** The engine parses whatever its reader
+  accepts; this is the subset a recorded sample's zone-awareness is read from,
+  and a value outside it is read as no evidence rather than as no zone.
 """
 from __future__ import annotations
 
@@ -202,6 +205,19 @@ GRAMMAR, FAMILIES = _load_families()
 # Contract-owned profile fragments (see module docstring for why these are
 # policy, not restated engine facts).
 # ---------------------------------------------------------------------------
+
+#: A wire value in ISO-8601 date-time form — the one sample shape whose
+#: zone-awareness can be decided by reading it. Contract-owned authoring
+#: profile, not an engine fact: the engine parses what its reader accepts, and
+#: this is the subset a document's recorded sample is graded on. Anything else
+#: a provider sends (a date with no time, an epoch number, a provider-specific
+#: spelling) carries no answer, and the reader below says so rather than
+#: inventing one.
+_WIRE_DATETIME_PATTERN = (
+    r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?"
+    r"(?P<zone>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
+)
+_WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
 
 #: `${name}` placeholder of type-map render templates. Must be a valid
 #: identifier, matching the native capture-group naming it resolves from.
@@ -592,19 +608,6 @@ def validate_cross_params(value: str) -> None:
 # ---------------------------------------------------------------------------
 # Recorded wire samples
 # ---------------------------------------------------------------------------
-
-#: A wire value in ISO-8601 date-time form — the one sample shape whose
-#: zone-awareness can be decided by reading it. Contract-owned authoring
-#: profile, not an engine fact: the engine parses what its reader accepts, and
-#: this is the subset a document's recorded sample is graded on. Anything else
-#: a provider sends (a date with no time, an epoch number, a provider-specific
-#: spelling) carries no answer, and the reader below says so rather than
-#: inventing one.
-_WIRE_DATETIME_PATTERN = (
-    r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?"
-    r"(?P<zone>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
-)
-_WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
 
 
 def declares_zone(value: str) -> bool | None:
