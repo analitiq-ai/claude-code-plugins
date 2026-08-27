@@ -340,7 +340,6 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
     reran the validator on an unchanged document and got the same findings in a
     different order. Subprocesses, because a seed is fixed for the life of one.
     """
-    import subprocess
     import textwrap
 
     ep = _endpoint("STRING", "Utf8")
@@ -374,9 +373,10 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         )
         runs.append(json.loads(proc.stdout))
     assert runs[0], "no findings — nothing is being measured"
-    assert all(run == runs[0] for run in runs), (
+    differing = [run for run in runs if run != runs[0]]
+    assert not differing, (
         "finding order differs between hash seeds:\n"
-        f"  {runs[0]}\n  {next(r for r in runs if r != runs[0])}"
+        f"  {runs[0]}\n  {differing[0]}"
     )
 
 
