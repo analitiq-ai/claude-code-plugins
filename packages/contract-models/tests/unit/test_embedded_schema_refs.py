@@ -820,6 +820,292 @@ class TestRecursiveSchemasTerminate:
 # ---------------------------------------------------------------------------
 
 
+    def test_every_schema_keyword_is_classified(self):
+        """The partition that makes the next omission fail rather than ship.
+
+        The ring check follows the same-instance half and not the descending
+        half, so a keyword in neither is one the check silently does not
+        follow — which is how `dependentSchemas` came to be missed: a
+        same-instance applicator with no bucket of its own shape.
+        """
+        from analitiq.contracts import endpoints as ep
+
+        vocabulary = (
+            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
+            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        )
+        same_instance = (
+            ep.SAME_INSTANCE_MAP_APPLICATORS
+            | ep.SAME_INSTANCE_LIST_APPLICATORS
+            | ep.SAME_INSTANCE_SINGLE_APPLICATORS
+        )
+        # A bucket is read by the shape of the value it holds, so a keyword in
+        # the wrong one is a keyword no edge is ever built for — the partition
+        # below still passes, and `oneOf` moved to the single bucket silently
+        # stops being followed. Bind each to the contract's own set for that
+        # shape, which is what decides how the walkers reach it.
+        for bucket, owner, shape in (
+            (ep.SAME_INSTANCE_MAP_APPLICATORS,
+             ep.JSON_SCHEMA_SUBSCHEMA_KEYS, "a map of subschemas"),
+            (ep.SAME_INSTANCE_LIST_APPLICATORS,
+             ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS, "a list of subschemas"),
+            (ep.SAME_INSTANCE_SINGLE_APPLICATORS,
+             ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS, "one subschema"),
+        ):
+            assert bucket <= owner, (
+                f"{sorted(bucket - owner)} are in the same-instance bucket for "
+                f"{shape}, which is not how the contract says they hold their "
+                "subschemas — the edge builder reads that bucket by that shape "
+                "and would build no edge for them"
+            )
+        assert ep.IF_CONDITIONED_APPLICATORS <= ep.SAME_INSTANCE_SINGLE_APPLICATORS, (
+            "a conditional applicator outside the set it is drawn from: the "
+            "edge builder reads it as a member and the partition below cannot "
+            "see it"
+        )
+        assert same_instance & ep.RING_SAFE_SCHEMA_KEYWORDS == set(), (
+            "a keyword is classified as both handing the value on and "
+            "descending into part of it"
+        )
+        assert same_instance | ep.RING_SAFE_SCHEMA_KEYWORDS == vocabulary, (
+            "unclassified: "
+            f"{sorted(vocabulary ^ (same_instance | ep.RING_SAFE_SCHEMA_KEYWORDS))}. "
+            "Every keyword the contract's walkers recurse through either "
+            "hands the value on — and belongs in the same-instance set "
+            "matching how it holds its subschemas, so the ring check follows "
+            "it — or cannot close a ring, because it descends into a part of "
+            "the value or is no applicator at all. Decide which, and say so "
+            "there."
+        )
+
+    def test_a_ring_through_a_map_applicator_is_refused(self):
+        """`dependentSchemas` conditions on a property being present and then
+        validates the WHOLE instance (2020-12 §10.2.2.4), so it hands the value
+        on rather than descending into that property."""
+        payload = _endpoint_with_record_shape(
+            items={"$ref": "#/$defs/Ring"},
+            defs={"Ring": {"dependentSchemas": {"id": {"$ref": "#/$defs/Ring"}}}},
+        )
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(payload)
+
+    @pytest.mark.parametrize("keyword, branch", [
+        ("allOf", [{"$ref": "#/$defs/Ring"}]),
+        ("anyOf", [{"$ref": "#/$defs/Ring"}]),
+        ("oneOf", [{"$ref": "#/$defs/Ring"}]),
+        ("not", {"$ref": "#/$defs/Ring"}),
+        ("if", {"$ref": "#/$defs/Ring"}),
+    ])
+    def test_a_ring_through_a_composition_keyword_is_refused(self, keyword, branch):
+        """Each of these hands the SAME value on, so a ring through one never
+        consumes any part of it — a `$ref`-only walk sees a node whose content
+        is a composition and stops one hop short of the defect.
+
+        A case per keyword rather than a loop, so one that stops being followed
+        names itself instead of hiding behind whichever ran first."""
+        ring: dict = {keyword: branch}
+        if keyword == "if":
+            ring["then"] = {"type": "object"}
+        payload = _endpoint_with_record_shape(
+            items={"$ref": "#/$defs/Ring"}, defs={"Ring": ring})
+        with pytest.raises(ValidationError,
+                           match="hands the same value round") as exc:
+            parse_endpoint(payload)
+        assert f"'#/$defs/Ring/{keyword}" in str(exc.value), str(exc.value)
+
+    @pytest.mark.parametrize("shape", [
+        {"type": "array", "items": {"$ref": "#/$defs/Deep"}},
+        {"type": "array", "prefixItems": [{"$ref": "#/$defs/Deep"}]},
+        {"type": "object", "additionalProperties": {"$ref": "#/$defs/Deep"}},
+        {"type": "object", "patternProperties": {"^x": {"$ref": "#/$defs/Deep"}}},
+    ])
+    def test_a_shape_referring_to_itself_through_a_descending_keyword_is_fine(
+        self, shape,
+    ):
+        """The boundary of the same-instance set, from the other side: these
+        rings close through the reference alone, and each is legal because the
+        keyword carrying it applies to a PART of the value. Move any of these
+        keywords into the same-instance set and this document is refused."""
+        parse_endpoint(_endpoint_with_record_shape(
+            items={"type": "object", "properties": {
+                "id": {"type": "string"},
+                "nested": {"$ref": "#/$defs/Deep"},
+            }},
+            defs={"Deep": shape},
+        ))
+
+    @pytest.mark.parametrize("carrier", [
+        {"type": "array", "items": {"$ref": "#/$defs/Node"}},
+        {"type": "array", "prefixItems": [{"$ref": "#/$defs/Node"}]},
+        {"type": "object", "properties": {"n": {"$ref": "#/$defs/Node"}}},
+        {"type": "object", "patternProperties": {"^n": {"$ref": "#/$defs/Node"}}},
+        {"type": "object", "additionalProperties": {"$ref": "#/$defs/Node"}},
+    ])
+    def test_recursion_that_descends_is_not_a_ring(self, carrier):
+        """The shapes the rule must not break. Each hop goes through a keyword
+        that applies to a PART of the value, so following it reaches a smaller
+        value every time and bottoms out — which is what separates these from
+        the compositions above, and is why the edge set is the same-instance
+        applicators rather than every schema position."""
+        parse_endpoint(_endpoint_with_record_shape(
+            items={"$ref": "#/$defs/Node"},
+            defs={"Node": {"type": "object", "properties": {
+                "id": {"type": "string"},
+                "children": carrier,
+            }}},
+        ))
+
+    #: A condition and the branch it can never select. `None` is "no `if` at
+    #: all", which kills either. `{}` is the object spelling of `true` and
+    #: `{"not": {}}` of `false`: the same two schemas written two ways, and a
+    #: check reading one spelling and not the other gives one document two
+    #: verdicts.
+    @pytest.mark.parametrize("condition, dead", [
+        (None, "then"),
+        (None, "else"),
+        (True, "else"),
+        ({}, "else"),
+        (False, "then"),
+        ({"not": {}}, "then"),
+        ({"not": True}, "then"),
+        ({"not": False}, "else"),
+    ])
+    def test_a_branch_no_instance_enters_is_not_a_ring(self, condition, dead):
+        """`then`/`else` apply only where `if` is present, and only on the
+        outcome each is the branch for (2020-12 §10.2.2.2-3). A cycle through a
+        branch nothing enters is a cycle nothing follows."""
+        inert: dict = {"type": "object", dead: {"$ref": "#/$defs/Inert"}}
+        if condition is not None:
+            inert["if"] = condition
+        parse_endpoint(_endpoint_with_record_shape(
+            items={"type": "object", "properties": {
+                "id": {"type": "string"},
+                "nested": {"$ref": "#/$defs/Inert"},
+            }},
+            defs={"Inert": inert},
+        ))
+
+    @pytest.mark.parametrize("condition, live", [
+        (True, "then"),
+        ({}, "then"),
+        ({"not": False}, "then"),
+        (False, "else"),
+        ({"not": {}}, "else"),
+        ({"not": True}, "else"),
+        # A condition that decides nothing statically leaves both live: some
+        # instance takes each branch.
+        ({"type": "object"}, "then"),
+        ({"type": "object"}, "else"),
+    ])
+    def test_a_branch_an_instance_can_enter_is_a_ring(self, condition, live):
+        """The other side of the same reading. A schema-shaped `if` that
+        accepts everything is easy to miss: it is not spelled `true`, and it
+        selects a branch just as fixedly."""
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(_endpoint_with_record_shape(
+                items={"$ref": "#/$defs/Live"},
+                defs={"Live": {"if": condition,
+                               live: {"$ref": "#/$defs/Live"}}},
+            ))
+
+    #: Two documents, because the walk has two orders to fix and one document
+    #: does not exercise both. The first carries rings under four different
+    #: keywords, so WHICH NODE is reached first turns on the iteration order of
+    #: the three keyword sets. The second gives one node two same-instance
+    #: edges onto a node that closes back, so the ring is named for WHICH EDGE
+    #: is taken first.
+    HASH_SEED_FIXTURES = {
+        "rings under different keywords": {
+            "type": "object",
+            "$defs": {"Za": {"allOf": [{"$ref": "#/$defs/Za"}]},
+                      "Ab": {"not": {"$ref": "#/$defs/Ab"}}},
+            "properties": {"p": {"anyOf": [{"$ref": "#/properties/p"}]},
+                           "q": {"oneOf": [{"$ref": "#/properties/q"}]}},
+            "allOf": [{"if": True, "then": {"$ref": "#/allOf/0"}}],
+        },
+        "one node, two edges onto the node that closes back": {
+            "type": "object",
+            "$defs": {"A": {"allOf": [{"$ref": "#/$defs/D"}],
+                            "anyOf": [{"$ref": "#/$defs/D"}]},
+                      "D": {"$ref": "#/$defs/A"}},
+            "properties": {"p": {"$ref": "#/$defs/A"}},
+        },
+    }
+
+    @pytest.mark.parametrize("fixture", sorted(HASH_SEED_FIXTURES))
+    def test_the_reported_set_does_not_depend_on_the_hash_seed(self, fixture):
+        """The walk reaches nodes and their edges through frozensets, whose
+        iteration order is the interpreter's hash seed. Unsorted, the same
+        document named a different ring from run to run.
+
+        Run in subprocesses, because a seed is fixed for the life of a process:
+        comparing two walks inside one of them cannot see this at all.
+        """
+        import subprocess
+        import sys
+
+        program = textwrap.dedent(
+            """
+            import json, sys
+            from analitiq.contracts.endpoints import _validate_schema_refs
+            schema = json.loads(sys.argv[1])
+            errors = []
+            _validate_schema_refs(schema, "response.schema", errors)
+            json.dump(errors, sys.stdout)
+            """
+        )
+        # The source tree reaches this process through the repo conftest; a
+        # bare subprocess needs it named.
+        source = str(Path(__file__).resolve().parents[2] / "src")
+        payload = json.dumps(self.HASH_SEED_FIXTURES[fixture])
+        runs = []
+        for seed in ("0", "1", "2", "3", "4", "5", "6", "7"):
+            proc = subprocess.run(
+                [sys.executable, "-c", program, payload],
+                capture_output=True, text=True, check=True,
+                env={**os.environ, "PYTHONHASHSEED": seed,
+                     "DOMAIN": "analitiq.ai", "PYTHONPATH": source},
+            )
+            runs.append(json.loads(proc.stdout))
+        assert runs[0], f"{fixture}: no rings reported — nothing is being measured"
+        assert all(run == runs[0] for run in runs), (
+            f"{fixture}: the reported rings differ between hash seeds:\n"
+            f"  {runs[0][:1]}\n  {next(r for r in runs if r != runs[0])[:1]}"
+        )
+
+    def test_a_ring_written_as_a_percent_encoded_reference_is_still_a_ring(self):
+        """A `$ref` is a URI-reference and may percent-encode a token; a
+        pointer built from the document's own keys never does. Comparing the
+        two spellings unnormalized loses the ring."""
+        payload = _endpoint_with_record_shape(
+            items={"type": "object"},
+            defs={"my def": {"$ref": "#/$defs/my%20def"}},
+        )
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(payload)
+
+    def test_a_contradiction_reached_through_a_ring_is_refused_as_the_ring(self):
+        """The same contributors wired into a cycle. `A` and `C` reference each
+        other, so the fold this class is about never runs — and the diagnostic
+        an author can act on is the ring, which needs no folding to see."""
+        payload = _endpoint_with_record_shape(
+            items={"$ref": "#/$defs/B"},
+            defs={
+                "A": {"$ref": "#/$defs/C",
+                      "properties": {"x": {"type": ["string", "boolean"]}}},
+                "B": {"$ref": "#/$defs/A",
+                      "properties": {"x": {"type": ["integer", "boolean"]}}},
+                "C": {"$ref": "#/$defs/A",
+                      "properties": {"x": {"type": ["string", "integer"]}}},
+            },
+        )
+        with pytest.raises(ValidationError, match="hands the same value round") as exc:
+            parse_endpoint(payload)
+        # `B` points into the cycle without being on it, so the ring the
+        # diagnostic names is `A` and `C`.
+        assert "'#/$defs/A', '#/$defs/C'" in str(exc.value), str(exc.value)
+
 class TestCrossBlockPathsThroughRefs:
     SCHEMA = {
         "type": "object",
@@ -1706,253 +1992,6 @@ class TestMaterializeMatchesTheNaiveFold:
             "statement of this module's public surface; keep it exact or stop "
             "claiming it."
         )
-
-    def test_every_schema_keyword_is_classified(self):
-        """The partition that makes the next omission fail rather than ship.
-
-        The ring check follows the same-instance half and not the descending
-        half, so a keyword in neither is one the check silently does not
-        follow — which is how `dependentSchemas` came to be missed: a
-        same-instance applicator with no bucket of its own shape.
-        """
-        from analitiq.contracts import endpoints as ep
-
-        vocabulary = (
-            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
-            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
-        )
-        same_instance = (
-            ep.SAME_INSTANCE_MAP_APPLICATORS
-            | ep.SAME_INSTANCE_LIST_APPLICATORS
-            | ep.SAME_INSTANCE_SINGLE_APPLICATORS
-        )
-        assert ep.IF_CONDITIONED_APPLICATORS <= ep.SAME_INSTANCE_SINGLE_APPLICATORS, (
-            "a conditional applicator outside the set it is drawn from: the "
-            "edge builder reads it as a member and the partition below cannot "
-            "see it"
-        )
-        assert same_instance & ep.RING_SAFE_SCHEMA_KEYWORDS == set(), (
-            "a keyword is classified as both handing the value on and "
-            "descending into part of it"
-        )
-        assert same_instance | ep.RING_SAFE_SCHEMA_KEYWORDS == vocabulary, (
-            "unclassified: "
-            f"{sorted(vocabulary ^ (same_instance | ep.RING_SAFE_SCHEMA_KEYWORDS))}. "
-            "Every keyword the contract's walkers recurse through either "
-            "hands the value on — and belongs in the same-instance set "
-            "matching how it holds its subschemas, so the ring check follows "
-            "it — or cannot close a ring, because it descends into a part of "
-            "the value or is no applicator at all. Decide which, and say so "
-            "there."
-        )
-
-    def test_a_ring_through_a_map_applicator_is_refused(self):
-        """`dependentSchemas` conditions on a property being present and then
-        validates the WHOLE instance (2020-12 §10.2.2.4), so it hands the value
-        on rather than descending into that property."""
-        payload = _endpoint_with_record_shape(
-            items={"$ref": "#/$defs/Ring"},
-            defs={"Ring": {"dependentSchemas": {"id": {"$ref": "#/$defs/Ring"}}}},
-        )
-        with pytest.raises(ValidationError, match="hands the same value round"):
-            parse_endpoint(payload)
-
-    #: `if` value -> the branch it can never select. `None` is "no `if` at
-    #: all", which kills either. Each row is a shape `jsonschema` returns from
-    #: for every instance, because the branch carrying the reference is one no
-    #: instance reaches.
-    def test_a_ring_through_a_composition_keyword_is_refused(self):
-        """`allOf`/`anyOf`/`not` hand the SAME value on, so a ring through one
-        never consumes any part of it — a `$ref`-only walk sees a node whose
-        content is a composition and stops one hop short of the defect."""
-        for keyword, branch in (
-            ("allOf", [{"$ref": "#/$defs/Ring"}]),
-            ("anyOf", [{"$ref": "#/$defs/Ring"}]),
-            ("not", {"$ref": "#/$defs/Ring"}),
-        ):
-            payload = _endpoint_with_record_shape(
-                items={"$ref": "#/$defs/Ring"},
-                defs={"Ring": {keyword: branch}},
-            )
-            with pytest.raises(ValidationError,
-                               match="hands the same value round") as exc:
-                parse_endpoint(payload)
-            assert f"'#/$defs/Ring/{keyword}" in str(exc.value), (
-                keyword, str(exc.value))
-
-    @pytest.mark.parametrize("shape", [
-        {"type": "array", "items": {"$ref": "#/$defs/Deep"}},
-        {"type": "array", "prefixItems": [{"$ref": "#/$defs/Deep"}]},
-        {"type": "object", "additionalProperties": {"$ref": "#/$defs/Deep"}},
-        {"type": "object", "patternProperties": {"^x": {"$ref": "#/$defs/Deep"}}},
-    ])
-    def test_a_shape_referring_to_itself_through_a_descending_keyword_is_fine(
-        self, shape,
-    ):
-        """The boundary of the same-instance set, from the other side: these
-        rings close through the reference alone, and each is legal because the
-        keyword carrying it applies to a PART of the value. Move any of these
-        keywords into the same-instance set and this document is refused."""
-        parse_endpoint(_endpoint_with_record_shape(
-            items={"type": "object", "properties": {
-                "id": {"type": "string"},
-                "nested": {"$ref": "#/$defs/Deep"},
-            }},
-            defs={"Deep": shape},
-        ))
-
-    @pytest.mark.parametrize("carrier", [
-        {"type": "array", "items": {"$ref": "#/$defs/Node"}},
-        {"type": "array", "prefixItems": [{"$ref": "#/$defs/Node"}]},
-        {"type": "object", "properties": {"n": {"$ref": "#/$defs/Node"}}},
-        {"type": "object", "patternProperties": {"^n": {"$ref": "#/$defs/Node"}}},
-        {"type": "object", "additionalProperties": {"$ref": "#/$defs/Node"}},
-    ])
-    def test_recursion_that_descends_is_not_a_ring(self, carrier):
-        """The shapes the rule must not break. Each hop goes through a keyword
-        that applies to a PART of the value, so following it reaches a smaller
-        value every time and bottoms out — which is what separates these from
-        the compositions above, and is why the edge set is the same-instance
-        applicators rather than every schema position."""
-        parse_endpoint(_endpoint_with_record_shape(
-            items={"$ref": "#/$defs/Node"},
-            defs={"Node": {"type": "object", "properties": {
-                "id": {"type": "string"},
-                "children": carrier,
-            }}},
-        ))
-
-    #: A condition and the branch it can never select. `None` is "no `if` at
-    #: all", which kills either. `{}` is the object spelling of `true` and
-    #: `{"not": {}}` of `false`: the same two schemas written two ways, and a
-    #: check reading one spelling and not the other gives one document two
-    #: verdicts.
-    @pytest.mark.parametrize("condition, dead", [
-        (None, "then"),
-        (None, "else"),
-        (True, "else"),
-        ({}, "else"),
-        (False, "then"),
-        ({"not": {}}, "then"),
-    ])
-    def test_a_branch_no_instance_enters_is_not_a_ring(self, condition, dead):
-        """`then`/`else` apply only where `if` is present, and only on the
-        outcome each is the branch for (2020-12 §10.2.2.2-3). A cycle through a
-        branch nothing enters is a cycle nothing follows."""
-        inert: dict = {"type": "object", dead: {"$ref": "#/$defs/Inert"}}
-        if condition is not None:
-            inert["if"] = condition
-        parse_endpoint(_endpoint_with_record_shape(
-            items={"type": "object", "properties": {
-                "id": {"type": "string"},
-                "nested": {"$ref": "#/$defs/Inert"},
-            }},
-            defs={"Inert": inert},
-        ))
-
-    @pytest.mark.parametrize("condition, live", [
-        (True, "then"),
-        ({}, "then"),
-        (False, "else"),
-        ({"not": {}}, "else"),
-        # A condition that decides nothing statically leaves both live: some
-        # instance takes each branch.
-        ({"type": "object"}, "then"),
-        ({"type": "object"}, "else"),
-    ])
-    def test_a_branch_an_instance_can_enter_is_a_ring(self, condition, live):
-        """The other side of the same reading. A schema-shaped `if` that
-        accepts everything is easy to miss: it is not spelled `true`, and it
-        selects a branch just as fixedly."""
-        with pytest.raises(ValidationError, match="hands the same value round"):
-            parse_endpoint(_endpoint_with_record_shape(
-                items={"$ref": "#/$defs/Live"},
-                defs={"Live": {"if": condition,
-                               live: {"$ref": "#/$defs/Live"}}},
-            ))
-
-    def test_the_reported_set_does_not_depend_on_the_hash_seed(self):
-        """The walk reaches nodes through frozensets, whose iteration order is
-        the interpreter's hash seed. Unsorted, the same document reported its
-        rings in a different order — and anything that trims the list then
-        keeps different ones from run to run.
-
-        Run in subprocesses, because a seed is fixed for the life of a process:
-        comparing two walks inside one of them cannot see this at all.
-        """
-        import subprocess
-        import sys
-
-        program = textwrap.dedent(
-            """
-            import json, sys
-            from analitiq.contracts.endpoints import _validate_schema_refs
-            # Rings under four different keywords, so which is discovered
-            # first turns on the iteration order of the three keyword sets —
-            # the frozensets whose order the seed decides.
-            schema = {
-                "type": "object",
-                "$defs": {"Za": {"allOf": [{"$ref": "#/$defs/Za"}]},
-                          "Ab": {"not": {"$ref": "#/$defs/Ab"}}},
-                "properties": {"p": {"anyOf": [{"$ref": "#/properties/p"}]},
-                               "q": {"oneOf": [{"$ref": "#/properties/q"}]}},
-                "allOf": [{"if": True, "then": {"$ref": "#/allOf/0"}}],
-            }
-            errors = []
-            _validate_schema_refs(schema, "response.schema", errors)
-            json.dump(errors, sys.stdout)
-            """
-        )
-        # The source tree reaches this process through the repo conftest; a
-        # bare subprocess needs it named.
-        source = str(Path(__file__).resolve().parents[2] / "src")
-        runs = []
-        for seed in ("0", "1", "2"):
-            proc = subprocess.run(
-                [sys.executable, "-c", program],
-                capture_output=True, text=True, check=True,
-                env={**os.environ, "PYTHONHASHSEED": seed,
-                     "DOMAIN": "analitiq.ai", "PYTHONPATH": source},
-            )
-            runs.append(json.loads(proc.stdout))
-        assert runs[0], "no rings reported — the extraction has stopped measuring"
-        assert runs[0] == runs[1] == runs[2], (
-            "the reported rings differ between hash seeds:\n"
-            f"  seed 0: {runs[0][:2]}\n  seed 1: {runs[1][:2]}"
-        )
-
-    def test_a_ring_written_as_a_percent_encoded_reference_is_still_a_ring(self):
-        """A `$ref` is a URI-reference and may percent-encode a token; a
-        pointer built from the document's own keys never does. Comparing the
-        two spellings unnormalized loses the ring."""
-        payload = _endpoint_with_record_shape(
-            items={"type": "object"},
-            defs={"my def": {"$ref": "#/$defs/my%20def"}},
-        )
-        with pytest.raises(ValidationError, match="hands the same value round"):
-            parse_endpoint(payload)
-
-    def test_a_contradiction_reached_through_a_ring_is_refused_as_the_ring(self):
-        """The same contributors wired into a cycle. `A` and `C` reference each
-        other, so the fold this class is about never runs — and the diagnostic
-        an author can act on is the ring, which needs no folding to see."""
-        payload = _endpoint_with_record_shape(
-            items={"$ref": "#/$defs/B"},
-            defs={
-                "A": {"$ref": "#/$defs/C",
-                      "properties": {"x": {"type": ["string", "boolean"]}}},
-                "B": {"$ref": "#/$defs/A",
-                      "properties": {"x": {"type": ["integer", "boolean"]}}},
-                "C": {"$ref": "#/$defs/A",
-                      "properties": {"x": {"type": ["string", "integer"]}}},
-            },
-        )
-        with pytest.raises(ValidationError, match="hands the same value round") as exc:
-            parse_endpoint(payload)
-        # `B` points into the cycle without being on it, so the ring the
-        # diagnostic names is `A` and `C`.
-        assert "'#/$defs/A', '#/$defs/C'" in str(exc.value), str(exc.value)
 
     def test_that_shape_is_refused_end_to_end_not_just_by_the_helpers(self):
         """Because the helper disagreement is only the mechanism — the harm is

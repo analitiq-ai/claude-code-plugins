@@ -1662,19 +1662,25 @@ def _always_or_never(schema: Any) -> bool | None:
     """Whether `schema` accepts every instance or none, when its own spelling
     says so — None when reading it would take evaluating it.
 
-    `true` and `{}` both accept everything; `false` and `{"not": {}}` accept
-    nothing. They are the same two schemas written two ways, and a check that
-    reads one spelling and not the other gives one document two verdicts.
-    Nothing further is attempted: whether some larger schema happens to accept
-    everything is a question about evaluating it, not about reading a keyword,
-    and the answer where this cannot say is to treat the branch as reachable.
+    Read here: the two boolean short-forms, the empty object, and a lone `not`
+    around any of those. That is a chosen set, not a characterisation — a
+    schema accepting everything can be written in unboundedly many ways
+    (`{"allOf": []}`, `{"description": "x"}`, a double negation), and deciding
+    those is evaluating a schema rather than reading a keyword. What the set
+    must be is symmetric: reading one spelling of always-true while missing its
+    mirror is what gives one document two verdicts, which is the whole reason
+    to read any of them.
+
+    Where this cannot say, the branch is treated as reachable — an edge that
+    might not be taken, which over-refuses rather than letting a ring through.
     """
     if isinstance(schema, bool):
         return schema
     if schema == {}:
         return True
-    if schema in ({"not": {}}, {"not": True}):
-        return False
+    if len(schema) == 1 and "not" in schema:
+        negated = _always_or_never(schema["not"])
+        return None if negated is None else not negated
     return None
 
 
@@ -1743,6 +1749,11 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     it is one edit away, and a shape that cannot be checked is not made safe by
     nothing checking it yet.
 
+    What is reported is what one traversal reaches: a document can hold rings
+    this pass does not name, because a node it finishes with hides any further
+    ring through it. The verdict is unaffected — a document with a ring is
+    refused — but the list is a place to start, not a census.
+
     Not a shape a reader spots: each hop resolves, lands on a schema, and
     reads as an ordinary alias or an ordinary composition. Ordinary *recursion*
     is untouched, because every edge it needs — `properties`, `items` — is one
@@ -1751,20 +1762,25 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     """
     nodes = dict(iter_schema_nodes(root))
     edges = _same_instance_edges(nodes)
-    # Sorted, because the cap below decides WHICH rings are reported and the
-    # walk reaches them through frozensets: unsorted, the same document
-    # reported different rings from run to run as the interpreter's hash seed
-    # changed. Document order is not available here — a pointer sorts by its
-    # own text — but a stable order is what the cap needs to be answerable.
+    # Sorted at both levels, because the walk reaches nodes and their edges
+    # through frozensets and what it finds first decides what it reports. A
+    # node with two same-instance edges onto a shared successor closes one ring
+    # or the other depending on which is taken, and a node this walk finishes
+    # with hides any further ring through it — so unsorted, the same document
+    # named a different ring from run to run as the interpreter's hash seed
+    # changed. Document order is not available here (a pointer sorts by its own
+    # text); what matters is that it is the same order every time.
     order = sorted(nodes)
     edges = {pointer: sorted(targets) for pointer, targets in edges.items()}
-    # Every ring the walk reaches is reported. A densely composed `$defs`
-    # carries rings in numbers that grow with the square of its entries, so an
-    # adversarial document is verbose — but it is an offline authoring check
-    # over a hand-written file, and a cap would have to choose WHICH rings to
-    # keep, which is a judgment nothing here can make: the ring an author
-    # needs is the one in the shape they are authoring, and this walk does not
-    # know which that is.
+    # Every ring this walk reaches is reported, and that is not every ring in
+    # the document: a node it finishes with hides any further ring through it,
+    # so breaking the ones named here can surface more. Nothing is capped on
+    # top of that. A densely composed `$defs` carries rings in numbers that
+    # grow with the square of its entries, so an adversarial document is
+    # verbose — but this is an offline check over a hand-written file, and a
+    # cap would narrow an already-partial list by a rule with nothing behind
+    # it: the ring an author needs is the one in the shape they are authoring,
+    # which is not a thing pointer order knows.
     reported: set[frozenset[str]] = set()
     # Iterative DFS with an explicit path, so a deep schema cannot exhaust the
     # interpreter's stack while looking for the thing that would exhaust it.
@@ -1806,7 +1822,6 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
                 continue
             on_path[nxt] = len(stack)
             stack.append((nxt, iter(edges[nxt])))
-
 
 
 def _normalized_pointer(pointer: str) -> str:
