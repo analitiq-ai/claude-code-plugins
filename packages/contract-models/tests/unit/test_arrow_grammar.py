@@ -518,8 +518,8 @@ def test_timestamp_offset_uses_the_manifest_pattern_verbatim():
 
 
 class TestRecordedWireSamples:
-    """`declares_zone` / `sample_carries_zone` — the two readings RULE-ENDP-063
-    compares. Both answer `None` for "cannot say", and the rule turns on that
+    """`declares_zone` / `sample_carries_zone` — the readings RULE-ENDP-063
+    compares. Each answers `None` for "cannot say", and the rule turns on that
     third value: absence of evidence must never be read as evidence a
     declaration is right."""
 
@@ -531,10 +531,20 @@ class TestRecordedWireSamples:
             if any(p["kind"] == arrow_grammar.TIMEZONE_PARAM_KIND
                    for p in spec.get("params") or ())
         }
+        assert zoned, (
+            "no family in the vendored grammar carries a timezone position. "
+            "The manifest may have renamed the param kind, or dropped the "
+            "position; whatever the cause, every assertion below now matches "
+            "nothing and passes, so the extraction is failed here rather "
+            "than reported as agreement"
+        )
         for name in zoned:
             assert arrow_grammar.declares_zone(f"{name}(SECOND)") is False
         for name in set(arrow_grammar.FAMILIES) - zoned:
-            assert arrow_grammar.declares_zone(name) is None, name
+            # Asked through a parameterized application, not a bare name: a
+            # bare one is refused at the head, so it would answer `None` for
+            # every family whether or not it carries the position.
+            assert arrow_grammar.declares_zone(f"{name}(SECOND)") is None, name
 
     @pytest.mark.parametrize("value, expected", [
         ("Timestamp(MICROSECOND, UTC)", True),
