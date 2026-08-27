@@ -289,23 +289,29 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 f"contract requires JSON Schema Draft 2020-12 "
                 f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
             continue
+        # A DIFFERENT draft below the top level, which is the same obligation
+        # RULE-ENDP-048 states of the root and the same harm: `evolve` calls
+        # `validator_for(node)`, so a subschema naming another draft is graded
+        # under that draft while this contract and the engine read the whole
+        # document as 2020-12. A subschema repeating the draft the document is
+        # already in is redundant, not wrong, and refusing it would be an
+        # obligation no rule states — the rendered reference an author
+        # satisfies says only that a different draft is forbidden.
         nested = sorted(
             node_pointer
             for node_pointer, node in iter_schema_nodes(schema)
-            if node_pointer and "$schema" in node
+            if node_pointer
+            and node.get("$schema", _DRAFT_2020_12_SCHEMA) != _DRAFT_2020_12_SCHEMA
         )
         if nested:
             findings.append(finding(
                 "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} declares `$schema` at "
-                f"{', '.join(nested)}. The keyword sets the dialect for a "
-                "resource, and only a resource ROOT is one — `$id` is not "
-                "authorable here, so no subschema is a root and a `$schema` "
-                "below the top level names a dialect nothing agrees on: a JSON "
-                "Schema implementation switches to it for that subtree, while "
-                "this contract and the engine read the whole document in "
-                f"{_DRAFT_2020_12_SCHEMA!r}. Declare it once at the top, or "
-                "not at all"))
+                f"embedded schema at {where} declares another draft at "
+                f"{', '.join(nested)}. A JSON Schema implementation switches "
+                "to it for that subtree, while this contract and the engine "
+                f"read the whole document in {_DRAFT_2020_12_SCHEMA!r} — so "
+                "the subtree is graded against keywords that mean something "
+                "else there. Declare the draft once at the top, or not at all"))
             continue
         try:
             Draft202012Validator.check_schema(schema)
