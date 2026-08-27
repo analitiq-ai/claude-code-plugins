@@ -1557,10 +1557,11 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     The one generic traversal of an embedded schema's structural positions:
     it recurses through the shared `JSON_SCHEMA_SUBSCHEMA_KEYS` /
     `JSON_SCHEMA_LIST_OF_SCHEMA_KEYS` / `JSON_SCHEMA_SINGLE_SCHEMA_KEYS`
-    inventory and yields, leaving every caller to filter for what it wants —
-    the ring check below, and `analitiq.validator`, which grades the recorded
-    samples it finds. Pointers are RFC 6901 escaped, so one resolves back to
-    the node it came from even under a property named `a/b`.
+    inventory and yields, leaving each caller to filter for what it wants.
+    Public because the callers are in `analitiq.validator`, which collects the
+    typed nodes for type-map coverage and the sample-bearing ones to grade;
+    nothing in this module walks with it. Pointers are RFC 6901 escaped, so one
+    resolves back to the node it came from even under a property named `a/b`.
 
     The two error-collecting walkers in this module predate it and stay as they
     are: both report paths in a dotted spelling rather than as pointers, and
