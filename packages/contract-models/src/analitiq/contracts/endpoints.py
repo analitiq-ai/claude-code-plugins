@@ -1673,7 +1673,7 @@ def _always_or_never(schema: Any) -> bool | None:
         return schema
     if schema == {}:
         return True
-    if schema == {"not": {}} or schema == {"not": True}:
+    if schema in ({"not": {}}, {"not": True}):
         return False
     return None
 

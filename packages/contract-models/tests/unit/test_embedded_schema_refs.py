@@ -1240,9 +1240,6 @@ class TestKeywordVocabularyHasOneOwner:
     """
 
     def _rendered_node(self):
-        import json
-        from pathlib import Path
-
         repo = Path(__file__).resolve().parents[4]
         doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
         return doc["$defs"]["JsonSchemaPropertyNode"]
