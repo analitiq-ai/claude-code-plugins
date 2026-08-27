@@ -91,7 +91,32 @@ from analitiq.contracts.value_expression import (
 # Constants & regex
 # ---------------------------------------------------------------------------
 
-PATH_PLACEHOLDER_NAME_PATTERN = r"^[a-z][a-z0-9_]*$"
+#: The name half of a `{name}` path placeholder. Stated once: the anchored
+#: pattern the model applies and the whole-string pattern the published schema
+#: carries are both derived from it, so a JSON Schema consumer and this model
+#: refuse the same spellings.
+PATH_PLACEHOLDER_NAME_INNER = r"[a-z][a-z0-9_]*"
+PATH_PLACEHOLDER_NAME_PATTERN = rf"^{PATH_PLACEHOLDER_NAME_INNER}$"
+#: A path is a sequence of characters that are not braces and placeholders that
+#: are well formed — which says the same thing about `{` and `}`, so the schema
+#: refuses `{}`, `{{name}}`, an unclosed `{` and an unopened `}` alike, as
+#: `_RequestBase._validate` does. Stated as an alternation rather than a
+#: lookaround so it compiles wherever a JSON Schema consumer reads it.
+PATH_BRACES_WELL_FORMED_PATTERN = (
+    rf"^(?:[^{{}}]|\{{{PATH_PLACEHOLDER_NAME_INNER}\}})*$"
+)
+#: The sigil that opens a value-expression template. Stated once: the runtime
+#: refusal and the pattern the schema carries are the same characters, so a
+#: change to the grammar's opener cannot reach one and miss the other.
+TEMPLATE_SIGIL = "${"
+PATH_TEMPLATE_SIGIL_PATTERN = re.escape(TEMPLATE_SIGIL)
+#: A placeholder name appearing twice, as a backreference — the uniqueness half
+#: of the same field, so a consumer reading only the published document refuses
+#: the repeat the model refuses. Negated in the schema, since what it matches
+#: is the defect.
+PATH_PLACEHOLDER_REPEATED_PATTERN = (
+    rf"\{{({PATH_PLACEHOLDER_NAME_INNER})\}}[\s\S]*\{{\1\}}"
+)
 # Record field paths preserve segment spelling and casing. The pattern only
 # enforces the dotted non-empty-segment shape; identifier chars are
 # provider-owned.
@@ -1016,8 +1041,33 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
     path: str = Field(
         ...,
         min_length=1,
-        description="Path or relative URL on the selected transport.",
-        json_schema_extra={"not": {"pattern": r"\$\{"}},
+        # Bounded because the published uniqueness pattern is a backreference
+        # over `[\s\S]*`: a consumer applying it to an unbounded string
+        # backtracks from every placeholder, so an oversized document costs a
+        # validator quadratic time. No real provider path approaches this, and
+        # the runtime scan does not backtrack at all.
+        max_length=2048,
+        description=(
+            "Path or relative URL on the selected transport. A `{name}` "
+            "placeholder in it is a substitution slot this document names: "
+            "spelled in the contract's placeholder-name form (RULE-ENDP-060), "
+            "never repeated within one path (RULE-ENDP-059), and bound in "
+            "`path_params` (RULE-ENDP-001). A `${...}` template expression is "
+            "refused here (RULE-ENDP-061). That the path resolves against the "
+            "selected transport's origin rather than carrying a host of its "
+            "own (RULE-ENDP-045) is **enforced by nothing today**: an absolute "
+            "URL here satisfies every constraint this field declares."
+        ),
+        json_schema_extra={
+            # `allOf` because a schema object carries one `pattern` and one
+            # `not`, and this field is graded by several patterns — each the
+            # published half of a rule the model applies.
+            "allOf": [
+                {"not": {"pattern": PATH_TEMPLATE_SIGIL_PATTERN}},
+                {"pattern": PATH_BRACES_WELL_FORMED_PATTERN},
+                {"not": {"pattern": PATH_PLACEHOLDER_REPEATED_PATTERN}},
+            ],
+        },
     )
     path_params: dict[str, Any] | None = Field(
         default=None,
@@ -1051,22 +1101,35 @@ class _RequestBase(HeaderMergeRules, DeclaredHeaderNames, _EndpointModel):
 
     @model_validator(mode="after")
     def _validate(self) -> "_RequestBase":
+        # Before the placeholder sweep: `${scope.name}` matches the `{name}`
+        # shape too, so refusing the template second reports it as a malformed
+        # placeholder name and sends the author to respell something that must
+        # not be in the path at all.
+        if TEMPLATE_SIGIL in self.path:
+            raise violation("RULE-ENDP-061", f"path={self.path!r}")
         placeholders = PATH_PLACEHOLDER_RE.findall(self.path)
-        if len(placeholders) != len(set(placeholders)):
-            raise ValueError(
-                f"request.path contains duplicate placeholders in {self.path!r} "
-                "(spec: §Request Parameter Binding)"
+        # A brace the placeholder pattern did not consume is a brace that
+        # reaches the URL as itself: `{}`, `{{name}}`, an unclosed `{`, a
+        # stray `}`. Each leaves `placeholders` empty or short, so every later
+        # check agrees the path is fine and the braces ship.
+        if set("{}") & set(PATH_PLACEHOLDER_RE.sub("", self.path)):
+            raise violation(
+                "RULE-ENDP-060", f"path={self.path!r}; a brace delimits no placeholder"
             )
         for ph in placeholders:
-            if not PATH_PLACEHOLDER_NAME_RE.match(ph):
-                raise ValueError(
-                    f"path placeholder {ph!r} must match "
-                    f"{PATH_PLACEHOLDER_NAME_PATTERN!r} (spec: §Request Parameter Binding)"
+            # `fullmatch`, not `match`: `$` also matches before a trailing
+            # newline, so `{name\n}` would pass a pattern an ECMA reader of
+            # the same string rejects.
+            if not PATH_PLACEHOLDER_NAME_RE.fullmatch(ph):
+                raise violation(
+                    "RULE-ENDP-060",
+                    f"placeholder {ph!r} does not match "
+                    f"{PATH_PLACEHOLDER_NAME_PATTERN!r}",
                 )
-        if "${" in self.path:
-            raise ValueError(
-                "request.path must not contain ${...} template expressions "
-                "(spec: §Request Parameter Binding)"
+        repeated = find_duplicates(placeholders)
+        if repeated:
+            raise violation(
+                "RULE-ENDP-059", f"path={self.path!r}; repeated={repeated!r}"
             )
         placeholder_set = set(placeholders)
         # Use explicit `is None`: `path_params={}` is meaningfully different

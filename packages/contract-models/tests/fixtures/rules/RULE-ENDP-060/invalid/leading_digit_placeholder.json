@@ -1,0 +1,7 @@
+{
+  "method": "POST",
+  "path": "/v1/rows/{2nd_id}",
+  "path_params": {
+    "2nd_id": { "from_param": "second_id" }
+  }
+}

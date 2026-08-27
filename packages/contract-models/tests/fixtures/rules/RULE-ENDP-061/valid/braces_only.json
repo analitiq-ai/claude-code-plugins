@@ -1,0 +1,7 @@
+{
+  "method": "POST",
+  "path": "/v1/invoices/{invoice_id}",
+  "path_params": {
+    "invoice_id": { "from_param": "invoice_id" }
+  }
+}

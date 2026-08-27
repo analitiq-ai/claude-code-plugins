@@ -195,6 +195,14 @@ class RuleRecord:
     fields: tuple[str, ...] = ()
     #: Which shape device a structural rule is about, from :data:`MECHANISMS`.
     mechanism: str | None = None
+    #: The dotted symbol holding the regex a `mechanism: pattern` rule is
+    #: about, `dotted.module::NAME`. A field can carry several patterns — one
+    #: per rule that grades it — and nothing in the shape says which rule owns
+    #: which, so a reference rendering all of them under each rule tells an
+    #: author what the FIELD must satisfy and never what the RULE requires.
+    #: Resolved by import like `validator`, so a renamed constant fails the
+    #: build rather than leaving a rule pointing at a regex that moved.
+    pattern_symbol: str | None = None
     #: The concrete model the shared fixture corpus validates against. Naming
     #: one is how a rule joins the corpus, so membership is a thing the record
     #: says rather than a thing derived from how the rule happens to be
@@ -306,6 +314,20 @@ class RuleRecord:
                     "dotted.module::Symbol — bind the module that is imported "
                     "(analitiq.contracts.x::Symbol), never a path to a file"
                 )
+        if self.pattern_symbol:
+            dotted, separator, _ = self.pattern_symbol.partition("::")
+            if not separator or not all(
+                part.isidentifier() for part in dotted.split(".")
+            ):
+                self._fail(
+                    f"pattern_symbol {self.pattern_symbol!r} is not "
+                    "dotted.module::NAME — name the constant that is imported"
+                )
+        if self.pattern_symbol and self.mechanism != "pattern":
+            self._fail(
+                "pattern_symbol names the regex a `mechanism: pattern` rule is "
+                f"about; this record's mechanism is {self.mechanism!r}"
+            )
         if self.status == "retired" and not self.superseded_by:
             self._fail(
                 "a retired rule names the id that replaced it — a retirement "

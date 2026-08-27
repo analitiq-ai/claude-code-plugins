@@ -1,0 +1,29 @@
+id: RULE-ENDP-060
+statement: >
+  A brace in a request's `path` MUST delimit a `{name}` placeholder, and every
+  such name MUST match the contract's placeholder-name pattern, regardless of
+  how the provider spells the value that placeholder carries.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_RequestBase._validate"
+owners: [connector-plugin]
+targets: [_RequestBase]
+fields: [path]
+mechanism: pattern
+pattern_symbol: "analitiq.contracts.endpoints::PATH_PLACEHOLDER_NAME_PATTERN"
+fixture_model: WriteRequest
+rationale: >
+  The placeholder is a slot this document names, not a provider identifier: it
+  is the key `path_params` binds under, and `from_param` is where the provider's
+  own spelling belongs. So fixing one form for it costs an author nothing and is
+  what keeps the binding legible — the name is compared to a `path_params` key
+  by exact string, and a vocabulary admitting `{objectId}` beside `{object_id}`
+  makes slots that read as one and are not. Nothing downstream rejects a
+  consistently camelCased placeholder, which is precisely why the contract makes
+  legibility structural here rather than leaving it to review. The brace half is
+  a different failure with the same diagnosis: `{}`, `{{name}}` and an unclosed
+  `{` all leave a brace that no binding fills, so every later check reads the
+  path as fine and the brace reaches the URL as itself.
+status: active
+superseded_by: null

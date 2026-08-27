@@ -1,0 +1,7 @@
+{
+  "method": "POST",
+  "path": "/v1/items/{item_id\n}",
+  "path_params": {
+    "item_id\n": { "from_param": "item_id" }
+  }
+}

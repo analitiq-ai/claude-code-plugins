@@ -401,7 +401,19 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         rule_ids=("RULE-ENDP-022",),
     ),
     ProseObligation(model="_RequestBase", field="headers_remove", prose_hash="b518759030fa", descriptive=True),
-    ProseObligation(model="_RequestBase", field="path", prose_hash="21f5956ac9f8", descriptive=True),
+    ProseObligation(
+        model="_RequestBase", field="path",
+        prose_hash="d9f2c4cddf5b",
+        rule_ids=(
+            "RULE-ENDP-001", "RULE-ENDP-045", "RULE-ENDP-059", "RULE-ENDP-060",
+            "RULE-ENDP-061",
+        ),
+        waiver=(
+            "the opening clause is the origin half, which nothing here "
+            "rejects; RULE-ENDP-045 carries that gap and what closing it "
+            "would take"
+        ),
+    ),
     ProseObligation(
         model="_RequestBase", field="query",
         prose_hash="16b50146e9fe",

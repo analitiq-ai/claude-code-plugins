@@ -1,0 +1,4 @@
+{
+  "method": "POST",
+  "path": "/v1/accounts/${connection.account_id}/invoices"
+}

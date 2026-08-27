@@ -7,7 +7,9 @@ uniqueness, response.records ↔ response.schema traversal, replication
 cursor_field schema-presence, pagination expression shape), and the
 discriminated-union refactors of `Predicate` and `CursorMapping`.
 """
+import itertools
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,8 @@ from pydantic import TypeAdapter, ValidationError
 
 from analitiq.contracts.endpoints import (
     _RESERVED_ENDPOINT_FIELDS,
+    PATH_BRACES_WELL_FORMED_PATTERN,
+    PATH_PLACEHOLDER_REPEATED_PATTERN,
     RESOLUTION_SCOPES,
     WRITE_MODES,
     ApiEndpointDoc,
@@ -34,6 +38,7 @@ from analitiq.contracts.endpoints import (
     SingleCursorMapping,
     TemplateExpression,
     WindowCursorMapping,
+    WriteRequest,
     WriteResponse,
     parse_endpoint,
 )
@@ -1196,7 +1201,7 @@ class TestRequestPathPlaceholders:
         ))
 
     def test_duplicate_placeholder_rejected(self):
-        with pytest.raises(ValidationError, match="duplicate placeholders"):
+        with pytest.raises(ValidationError, match="RULE-ENDP-059"):
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"read": {
@@ -1207,11 +1212,207 @@ class TestRequestPathPlaceholders:
             ))
 
     def test_dollar_brace_template_in_path_rejected(self):
-        with pytest.raises(ValidationError, match=r"\$\{...\} template"):
+        with pytest.raises(ValidationError, match="RULE-ENDP-061"):
             parse_endpoint(_minimal_api_payload(
                 endpoint_id="x",
                 operations={"read": {
                     "request": {"method": "GET", "path": "/v1/${account_id}"},
+                    "params": {},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_camel_case_placeholder_rejected(self):
+        """The placeholder is the document's slot, so the provider's spelling
+        of the value does not travel into `path` with the path it was copied
+        from."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-060"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": "/v3/objects/{objectId}", "path_params": {"objectId": {"from_param": "objectId"}}},
+                    "params": {"objectId": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.x"}}},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_provider_spelling_survives_on_the_param(self):
+        """The asymmetry RULE-ENDP-060 rests on: a param keeps whatever the
+        provider calls it, while the placeholder and its `path_params` key take
+        the contract's form, and `from_param` is what crosses between them."""
+        parse_endpoint(_minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v3/objects/{object_id}", "path_params": {"object_id": {"from_param": "objectId"}}},
+                "params": {"objectId": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.x"}}},
+                "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+            }},
+        ))
+
+    @pytest.mark.parametrize("path", [
+        "/v1/items/{}",            # a brace pair naming nothing
+        "/v1/items/{{item_id}}",   # the inner pair binds; the outer ships
+        "/v1/items/{item_id",      # never closed
+        "/v1/items/item_id}",      # never opened
+        "/v1/items/{item_id\n}",   # `$` also matches before a trailing newline
+    ])
+    def test_brace_that_delimits_no_placeholder_rejected(self, path):
+        """Each of these leaves `path_params` agreeing with the placeholders
+        the path declares, so RULE-ENDP-001 reads the document as complete
+        while a brace reaches the URL as itself."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-060"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": path},
+                    "params": {},
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    @pytest.mark.parametrize("path, well_formed", [
+        ("/v1/items", True),
+        ("/v1/items/{item_id}", True),
+        ("/v1/{tenant_id}/items/{item_id}", True),
+        ("/v1/prices/$top", True),          # a bare `$` is a path character
+        ("/v1/items/{}", False),
+        ("/v1/items/{{item_id}}", False),
+        ("/v1/items/{item_id", False),
+        ("/v1/items/item_id}", False),
+        ("/v1/items/{item_id}}", False),
+        ("/v1/items/{itemId}", False),
+        ("/v1/items/{2nd}", False),
+    ])
+    def test_schema_pattern_refuses_what_the_model_refuses(self, path, well_formed):
+        """The published patterns and the model agree on every brace form.
+
+        A JSON Schema consumer validates against the rendered document alone,
+        so a path the model rejects and the patterns accept is a document that
+        is valid for that consumer and invalid here.
+        """
+        assert bool(re.match(PATH_BRACES_WELL_FORMED_PATTERN, path)) is well_formed
+        model_ok = True
+        try:
+            WriteRequest.model_validate({"method": "POST", "path": path})
+        except ValidationError as exc:
+            # RULE-ENDP-001 rejects a placeholder with no `path_params` entry,
+            # which is a different rule and says nothing about brace form.
+            model_ok = "RULE-ENDP-060" not in str(exc)
+        assert model_ok is well_formed
+
+    @pytest.mark.parametrize("path, repeats", [
+        ("/v1/{tenant_id}/{tenant_id}", True),
+        ("/v1/{tenant_id}/items/{tenant_id}/rows", True),
+        ("/v1/{tenant_id}/{user_id}", False),
+        ("/v1/{tenant}/{tenant_id}", False),   # a prefix is a different name
+        ("/v1/{tenant_id}", False),
+    ])
+    def test_schema_pattern_refuses_the_repeat_the_model_refuses(self, path, repeats):
+        """The uniqueness half, published: the same corpus through the
+        backreference pattern and through the model."""
+        assert bool(re.search(PATH_PLACEHOLDER_REPEATED_PATTERN, path)) is repeats
+        model_repeats = False
+        try:
+            WriteRequest.model_validate({
+                "method": "POST",
+                "path": path,
+                "path_params": {
+                    name: {"from_param": name}
+                    for name in re.findall(r"\{([a-z][a-z0-9_]*)\}", path)
+                },
+            })
+        except ValidationError as exc:
+            model_repeats = "RULE-ENDP-059" in str(exc)
+        assert model_repeats is repeats
+
+    def test_published_patterns_and_the_model_agree_on_every_short_path(self):
+        """Exhaustive over a small alphabet, because a case list only fails for
+        a form someone thought to write down.
+
+        The published patterns are the whole of what a schema-only consumer
+        applies, so any string the two sides disagree about is a document that
+        is valid for that consumer and invalid here — or the reverse.
+        """
+        alphabet = "{}aB_2/"
+        divergent = []
+        for length in range(1, 6):
+            for tup in itertools.product(alphabet, repeat=length):
+                path = "".join(tup)
+                schema_ok = bool(
+                    re.match(PATH_BRACES_WELL_FORMED_PATTERN, path)
+                ) and not re.search(PATH_PLACEHOLDER_REPEATED_PATTERN, path)
+                names = re.findall(r"\{([a-z][a-z0-9_]*)\}", path)
+                try:
+                    WriteRequest.model_validate({
+                        "method": "POST",
+                        "path": path,
+                        "path_params": (
+                            {n: {"from_param": n} for n in names} if names else None
+                        ),
+                    })
+                    model_ok = True
+                except ValidationError as exc:
+                    text = str(exc)
+                    # Only the brace and uniqueness rules are in scope; another
+                    # rule refusing the string says nothing about these two.
+                    model_ok = not (
+                        "RULE-ENDP-059" in text or "RULE-ENDP-060" in text
+                    )
+                if model_ok is not schema_ok:
+                    divergent.append(path)
+        assert not divergent, (
+            f"published patterns and model disagree on {divergent[:10]!r}"
+        )
+
+    def test_an_absolute_url_in_path_is_still_accepted(self):
+        """The tripwire under the description's "enforced by nothing today".
+
+        `_RequestBase.path`'s description declares RULE-ENDP-045's origin half
+        unenforced, and that sentence is frozen in a published schema. The
+        prose hash fires when the wording moves, never when the behaviour does,
+        so this is what goes red the day enforcement lands and the disclaimer
+        has to go.
+        """
+        WriteRequest.model_validate({
+            "method": "POST",
+            "path": "https://other.example.com/v1/items",
+        })
+
+    def test_duplicate_report_names_every_repeated_placeholder(self):
+        """The diagnostic carries the whole repeat set, not the first one it
+        found: an author fixing one occurrence of two re-runs into the same
+        message with no way to tell it moved."""
+        with pytest.raises(ValidationError, match=r"tenant_id.*user_id"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {
+                        "method": "GET",
+                        "path": "/v1/{tenant_id}/{user_id}/{tenant_id}/{user_id}",
+                        "path_params": {
+                            "tenant_id": {"from_param": "tenant_id"},
+                            "user_id": {"from_param": "user_id"},
+                        },
+                    },
+                    "params": {
+                        "tenant_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.t"}},
+                        "user_id": {"in": "path", "type": "string", "required": True, "default": {"ref": "connection.selections.u"}},
+                    },
+                    "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
+                }},
+            ))
+
+    def test_scoped_template_in_path_reports_the_template_rule(self):
+        """A `${scope.name}` also matches the `{name}` placeholder shape, so
+        the order of the checks decides which diagnostic an author gets. The
+        template refusal is the one that names what is wrong; the placeholder
+        pattern would send them to respell a template that must not be in the
+        path at all."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-061"):
+            parse_endpoint(_minimal_api_payload(
+                endpoint_id="x",
+                operations={"read": {
+                    "request": {"method": "GET", "path": "/v1/accounts/${connection.account_id}/invoices"},
                     "params": {},
                     "response": {"records": {"ref": "response.body"}, "schema": {"type": "array", "items": {"type": "object"}}},
                 }},
