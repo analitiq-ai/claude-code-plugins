@@ -3867,7 +3867,7 @@
    "scopes": [
     "api-endpoint"
    ],
-   "validator": "analitiq.validator.connectors::_schema_example_findings",
+   "validator": "analitiq.validator.connectors::_sample_findings",
    "owners": [
     "engine",
     "connector-plugin"
