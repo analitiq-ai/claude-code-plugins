@@ -30,7 +30,6 @@ failure there, never a green all-skipped gate. Run `-rs` to print skip reasons.
 from __future__ import annotations
 
 import json
-import pathlib
 import re
 from collections import Counter
 from pathlib import Path
