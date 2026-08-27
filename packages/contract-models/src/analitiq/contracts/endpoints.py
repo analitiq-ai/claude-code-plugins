@@ -18,6 +18,15 @@ Endpoint documents have no top-level ``kind`` field. The owning connector's
     :class:`DatabaseEndpointDoc`
 
 Stream-side endpoint references (``EndpointRef``) live in ``analitiq.contracts.stream``.
+
+Public helpers this module exports beside the models: :func:`parse_endpoint`
+dispatches a payload to its kind; :func:`iter_schema_nodes` walks an embedded
+schema's structural positions; :func:`resolve_local_pointer`,
+:func:`resolve_schema_ref`, :func:`resolve_declared_path`,
+:func:`resolve_read_record_schema`, :func:`find_record_field_properties`,
+:func:`effective_properties` and :func:`materialize_node` are the read
+contract's resolution surface, which every consumer of it shares rather than
+re-deriving.
 """
 from __future__ import annotations
 
@@ -1598,7 +1607,16 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
 
 def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
     """Which nodes each node hands the SAME value on to — a `$ref` target, and
-    every subschema under an applicator in the two sets above."""
+    every subschema under an applicator in the two sets above.
+
+    An edge whose target is not a node of this document is dropped rather than
+    reported: a reference that lands outside the document, on nothing, on a
+    non-schema position or on a boolean is each already a finding from
+    :func:`_validate_schema_refs`, which is the walk this runs inside. The drop
+    is that deferral, not a filter — narrowing any of those branches without
+    handling the target here would turn a reported reference into an
+    unreported ring.
+    """
     edges: dict[str, list[str]] = {}
     for pointer, node in nodes.items():
         out: list[str] = []
