@@ -757,6 +757,25 @@ class TestResolveDeclaredPathThroughRefs:
         assert resolve_declared_path(root, ["data"]) == {"type": "array"}
 
 
+def _order_mismatch(expected: list, got: list) -> str:
+    """Where two orderings first part, and what sits there.
+
+    Not the whole lists and not their first elements: a run that diverges at
+    element 5 shares elements 0-4, so printing element 0 prints the same line
+    twice and slices the signal away. And not a bare `next()` over the pairs
+    either — two runs can differ only in length, one a prefix of the other,
+    which this walk can produce because what it reports is what one traversal
+    reaches. `zip` yields no mismatching pair there, and the guard would die of
+    `StopIteration` instead of saying what it found.
+    """
+    for index, (a, b) in enumerate(zip(expected, got)):
+        if a != b:
+            return (f"orderings part at index {index}:\n"
+                    f"  expected {a!r}\n  got      {b!r}\n"
+                    f"  full: {expected}\n        {got}")
+    return f"orderings differ in length:\n  {expected}\n  {got}"
+
+
 class TestRecursiveSchemasTerminate:
     def test_self_recursive_defs_node_terminates(self):
         root = {
@@ -914,15 +933,21 @@ class TestRecursiveSchemasTerminate:
         {"type": "array", "prefixItems": [{"$ref": "#/$defs/Deep"}]},
         {"type": "object", "additionalProperties": {"$ref": "#/$defs/Deep"}},
         {"type": "object", "patternProperties": {"^x": {"$ref": "#/$defs/Deep"}}},
-        # The rest of the ring-safe set. Moving any of these INTO a
-        # same-instance bucket leaves the partition intact — the union is
-        # unchanged and the shapes still match — so only a document that is
-        # still accepted catches it.
+        # The rest of the ring-safe set, `properties` excepted — the sibling
+        # test below carries that one. Moving any of these INTO a same-instance
+        # bucket leaves the partition intact — the union is unchanged and the
+        # shapes still match — so only a document that is still accepted
+        # catches it.
         {"type": "array", "contains": {"$ref": "#/$defs/Deep"}},
         {"type": "array", "unevaluatedItems": {"$ref": "#/$defs/Deep"}},
         {"type": "object", "unevaluatedProperties": {"$ref": "#/$defs/Deep"}},
         {"type": "object", "propertyNames": {"$ref": "#/$defs/Deep"}},
         {"type": "string", "contentSchema": {"$ref": "#/$defs/Deep"}},
+        # `$defs` and `definitions` hold subschemas the same way `properties`
+        # does, so mis-bucketing either gives the root an edge into every entry
+        # and refuses any document whose `$defs` references an ancestor.
+        {"type": "object", "$defs": {"Inner": {"$ref": "#/$defs/Deep"}}},
+        {"type": "object", "definitions": {"Inner": {"$ref": "#/$defs/Deep"}}},
     ])
     def test_a_shape_referring_to_itself_through_a_descending_keyword_is_fine(
         self, shape,
@@ -1077,16 +1102,8 @@ class TestRecursiveSchemasTerminate:
             runs.append(json.loads(proc.stdout))
         assert runs[0], f"{fixture}: nothing reported — nothing is being measured"
         differing = [run for run in runs if run != runs[0]]
-        if differing:
-            # Where they part, not their first element: two runs that diverge
-            # at element 5 share elements 0-4, so printing element 0 prints one
-            # line twice and slices the signal away.
-            index, expected, got = next(
-                (i, a, b) for i, (a, b) in enumerate(zip(runs[0], differing[0]))
-                if a != b)
-            raise AssertionError(
-                f"{fixture}: orderings part at index {index}:\n"
-                f"  expected {expected[:90]!r}\n  got      {got[:90]!r}")
+        assert not differing, (
+            f"{fixture}: {_order_mismatch(runs[0], differing[0])}")
 
     @pytest.mark.parametrize("condition", [5, None, 1.5, "x", ["not"], {"not": 5}])
     def test_a_malformed_condition_is_read_as_no_answer(self, condition):
@@ -1119,8 +1136,9 @@ class TestRecursiveSchemasTerminate:
 
     def test_a_contradiction_reached_through_a_ring_is_refused_as_the_ring(self):
         """The same contributors wired into a cycle. `A` and `C` reference each
-        other, so the fold this class is about never runs — and the diagnostic
-        an author can act on is the ring, which needs no folding to see."""
+        other, so the contributor fold `materialize_node` performs never runs —
+        and the diagnostic an author can act on is the ring, which needs no
+        folding to see."""
         payload = _endpoint_with_record_shape(
             items={"$ref": "#/$defs/B"},
             defs={
