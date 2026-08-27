@@ -334,6 +334,23 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
     assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
 
 
+def _order_mismatch(expected: list, got: list) -> str:
+    """Where two orderings first part, and what sits there.
+
+    Not the whole lists and not their first elements: a run that diverges at
+    element 5 shares elements 0-4, so printing element 0 prints the same line
+    twice and slices the signal away. This guard catches a nondeterminism
+    nobody reproduces locally without setting `PYTHONHASHSEED`, so what it
+    prints is the whole of what a maintainer gets.
+    """
+    for index, (a, b) in enumerate(zip(expected, got)):
+        if a != b:
+            return (f"orderings part at index {index}:\n"
+                    f"  expected {a!r}\n  got      {b!r}\n"
+                    f"  full: {expected}\n        {got}")
+    return f"orderings differ in length:\n  {expected}\n  {got}"
+
+
 def test_findings_come_back_in_the_same_order_every_run(validator):
     """`iter_schema_nodes` reaches nodes through frozensets, so unsorted it
     ordered every consumer's findings by the interpreter's hash seed: an author
@@ -374,10 +391,7 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         runs.append(json.loads(proc.stdout))
     assert runs[0], "no findings — nothing is being measured"
     differing = [run for run in runs if run != runs[0]]
-    assert not differing, (
-        "finding order differs between hash seeds:\n"
-        f"  {runs[0]}\n  {differing[0]}"
-    )
+    assert not differing, _order_mismatch(runs[0], differing[0])
 
 
 def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
