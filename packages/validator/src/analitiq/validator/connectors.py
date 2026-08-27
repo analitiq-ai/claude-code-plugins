@@ -297,6 +297,24 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 f"contract requires JSON Schema Draft 2020-12 "
                 f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
             continue
+        nested = sorted(
+            node_pointer
+            for node_pointer, node in iter_schema_nodes(schema)
+            if node_pointer and "$schema" in node
+        )
+        if nested:
+            findings.append(finding(
+                "embedded-json-schema", "error", pointer,
+                f"embedded schema at {where} declares `$schema` at "
+                f"{', '.join(nested)}. The keyword sets the dialect for a "
+                "resource, and only a resource ROOT is one — `$id` is not "
+                "authorable here, so no subschema is a root and a `$schema` "
+                "below the top level names a dialect nothing agrees on: a JSON "
+                "Schema implementation switches to it for that subtree, while "
+                "this contract and the engine read the whole document in "
+                f"{_DRAFT_2020_12_SCHEMA!r}. Declare it once at the top, or "
+                "not at all"))
+            continue
         try:
             Draft202012Validator.check_schema(schema)
         except SchemaError as exc:
