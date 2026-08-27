@@ -10,12 +10,16 @@ validator: "analitiq.contracts.endpoints::WriteInput._validate"
 owners: [connector-plugin, engine]
 targets: [WriteInput]
 rationale: >
-  The input schema is the only description of the record being written: the
-  write type map is matched against its native tokens, and every record-addressed
-  binding and conflict key is resolved against its declared fields. A half-typed
-  node makes the engine infer the canonical type of a value it is about to send,
-  and an untraversable container makes a per-field binding into that record
-  unresolvable — both surface as a provider-side rejection or a silently wrong
-  value, not as an authoring error.
+  The input schema is the only description of the record being written: every
+  record-addressed binding and conflict key is resolved against its declared
+  fields, and a node that declares a type is declaring the one the destination
+  field is frozen to. Pairing is what makes that declaration checkable — the
+  coverage RULE-PKG-033 states reads a node as typed only where it carries the
+  native token and the canonical type together, so a half-typed node is not
+  merely incomplete, it is invisible: it reads as annotated on the page, no
+  read-map rule is ever resolved for it. The container half is what keeps a structured field
+  traversable — a container head whose members are undeclared describes nothing
+  a per-field binding can address, so the binding into that record resolves
+  against a shape that is not there.
 status: active
 superseded_by: null

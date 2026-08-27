@@ -1,0 +1,34 @@
+id: RULE-ENDP-062
+statement: >
+  Every node of a write mode's input schema that describes a provider field
+  SHOULD declare that field's native type and canonical Arrow type, spelling
+  the native token the way the connector's read map already spells it for that
+  field.
+tier: judgment
+severity: warning
+scopes: [api-endpoint]
+validator: null
+owners: [connector-plugin]
+targets: [WriteInput]
+rationale: >
+  An unannotated write input is a legal document, and that is the whole
+  difficulty: an annotated node is resolved against the connector's read map
+  and reported when the map cannot render it or renders a different canonical
+  (RULE-PKG-033), while an unannotated one is compared with nothing at all, so
+  the destination record's field types are whatever the author believed on the
+  day and no later reader can tell a reconciled write shape from an unexamined
+  one. Annotating is what makes read and write disagree out loud: the same provider field is read and written
+  through one native vocabulary, so a token the map cannot resolve is either a
+  gap in the map or a field nobody grounded, and both are worth learning while
+  the endpoint is being authored. Nothing rejects an omission, and nothing here
+  could name the nodes it would have to grade: the pair walk descends every
+  subschema position an embedded JSON Schema can hold, and a node reached
+  through `not`, `allOf` or the schema root is a composition site rather than a
+  field the provider named — while an object-valued property is both a
+  container and a field, and takes the pair like any other. So "the nodes
+  describing a provider field" is not a set a walker can pick out. A field the provider documents no
+  wire type for is a legitimate reason to leave one untyped besides, and that
+  is indistinguishable from having skipped it — so catching a skipped one means
+  reading the input schema beside the provider's own field reference.
+status: active
+superseded_by: null

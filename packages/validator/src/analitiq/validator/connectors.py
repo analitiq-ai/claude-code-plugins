@@ -907,8 +907,8 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
         # connector.json's `transports`, which only `check_coverage` has. Say so
         # rather than returning a silent clean pass — an author validating a
         # single endpoint file would otherwise read `passed: true` as "the
-        # transport_ref is fine", which is the unearned reassurance this whole
-        # PR is about. Warning, not error, matching `endpoint-filename`'s
+        # transport_ref is fine", which is reassurance the check never earned.
+        # Warning, not error, matching `endpoint-filename`'s
         # convention for a check it cannot perform from the given path.
         declared_refs = sorted({
             ref for _, ref in _api_operation_transport_refs(doc) if isinstance(ref, str)

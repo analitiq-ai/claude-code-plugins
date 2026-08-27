@@ -32,14 +32,15 @@ You run at one of two scopes per invocation:
   io-contracts.md, never a free-picked slug — `RULE-ENDP-046`), and
   the connector-wide **native-type
   vocabulary**). For databases also cover driver-selection facts, DSN shape,
-  TLS, and default port. Per-resource response field schemas are **not** part
+  TLS, and default port. Per-resource field schemas are **not** part
   of this pass.
 - **`endpoint`** — one resource's pass (API fan-out). Read the `api-endpoint`
-  schema; research that resource's response and return an `EndpointFacts`
-  object: every exposed field's name, native wire type, the canonical Arrow
-  type it resolves to, nullability, enum domain, format, and — for temporal
-  fields — a **real sample value** and its zone-awareness. This is the
-  field-level category `ProviderFacts` deliberately omits.
+  schema; research the fields that resource exposes — those a read returns and
+  those a write accepts — and return an `EndpointFacts`
+  object whose shape `io-contracts.md` §EndpointFacts states: per field, which
+  directions carry it, its type pair where the provider documents one, and —
+  for temporal fields — a **real sample value** and its zone-awareness. This is
+  the field-level category `ProviderFacts` deliberately omits.
 
 **Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
 — before researching. Its `ProviderFacts` and `EndpointFacts` fragments state

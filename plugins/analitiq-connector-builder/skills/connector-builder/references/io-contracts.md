@@ -224,7 +224,8 @@ One `EndpointFacts` object per data resource: the researcher's
 **per-endpoint** pass in the fan-out grounds the researched fields, the
 orchestrator injects the connector-level `pagination` (echoed from
 `ProviderFacts.pagination`), and `endpoint-creator` consumes it. It carries
-the field-level truths about one resource's response — including whether each
+the field-level truths about one resource's fields — those a read returns and
+those a write accepts — including whether each
 datetime field is zone-aware, which decides `Timestamp(MICROSECOND, UTC)`
 versus the naive `Timestamp(MICROSECOND)`. Every field fact is grounded on
 the resource's own documentation / a real sample; an
@@ -267,13 +268,17 @@ access and may not guess field types).
     "fields": {
       "type": "array",
       "minItems": 1,
-      "description": "One entry per response field the connector exposes. `native_type` must be a token covered by ProviderFacts.native_type_vocabulary; `arrow_type` is the canonical Arrow type the field resolves to.",
+      "description": "One entry per field the connector exposes for this resource — the fields a read returns and the fields a write accepts, each entry naming which of the two it belongs to. `native_type` must be a token covered by ProviderFacts.native_type_vocabulary; `arrow_type` is the canonical Arrow type the field resolves to. A field the provider types differently by direction is recorded as an entry per direction, so an entry always carries one pair.",
       "items": {
         "type": "object",
-        "required": ["name", "native_type", "arrow_type"],
+        "required": ["name", "directions"],
+        "dependentRequired": { "native_type": ["arrow_type"], "arrow_type": ["native_type"] },
         "properties": {
           "name": { "type": "string" },
-          "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`)." },
+          "directions": { "type": "array", "minItems": 1, "items": { "type": "string", "enum": ["read", "write"] }, "description": "Which sides of the resource carry this field. A generated id the provider returns and refuses on a write is `[\"read\"]`; a credential it accepts and never echoes is `[\"write\"]`. The creator takes the read subset into `response.schema` and the write subset into the write mode's `input.schema`, so a field is never advertised on a side the provider does not have it on." },
+          "required_in_modes": { "type": "array", "items": { "type": "string" }, "description": "The write modes that REQUIRE this field, from the same vocabulary as `write_modes`. The creator puts a field in a mode's `input.schema.required` exactly when that mode is named here, so a provider-mandatory field is never advertised as optional and a record missing it is refused at authoring rather than by the provider. An empty array — or the key omitted — means no mode requires it." },
+          "write_modes": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Which write modes accept this field, when the provider does not accept the same set for all of them (an `insert` that takes fields an `upsert` refuses). Each name is a mode key from the vocabulary `RULE-ENDP-053` prints, never a provider's own word for the operation. Omitted means every mode the resource declares. Only meaningful on an entry whose `directions` include `write`." },
+          "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`). Omitted, with `arrow_type`, for a field whose wire type the provider documents nowhere — the creator then leaves that node untyped rather than guessing (`RULE-ENDP-006`, `RULE-ENDP-062`), and `notes` says which fields those were." },
           "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness (`RULE-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`." },
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },

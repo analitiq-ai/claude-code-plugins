@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 18 of the 74 below have no validator, so nothing rejects
+all hold: 19 of the 75 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **34** structural · **25** advisory · **8** referential · **4** procedural · **3** judgment.
+In this file: **34** structural · **25** advisory · **8** referential · **4** procedural · **4** judgment.
 
 ## Contents
 
@@ -149,5 +149,6 @@ not just the statement.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-ENDP-058 | An offset strategy's per-page step MUST advance by the same quantity the provider's offset counts — the records a page returned when the offset counts records, and the page size the request actually asked for when it counts the requested window. | `api-endpoint` | error | — |
+| RULE-ENDP-062 | Every node of a write mode's input schema that describes a provider field SHOULD declare that field's native type and canonical Arrow type, spelling the native token the way the connector's read map already spells it for that field. | `api-endpoint` | warning | — |
 | RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |

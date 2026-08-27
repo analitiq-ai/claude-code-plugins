@@ -1,6 +1,6 @@
 ---
 name: endpoint-creator
-description: Author an endpoint JSON document for an API connector package, conforming to the published api-endpoint contract. Invoked by the connector-builder orchestrator only when the connector kind is api, once per resource inside the endpoint fan-out. Multiple endpoint creators run in parallel — each authors one endpoint file. Inputs are the resource's researched EndpointFacts (its response field schema, including datetime zone-awareness) and the assembled connector document (for transport refs). Output is an EndpointCreatorOutput JSON object containing one endpoint document.
+description: Author an endpoint JSON document for an API connector package, conforming to the published api-endpoint contract. Invoked by the connector-builder orchestrator only when the connector kind is api, once per resource inside the endpoint fan-out. Multiple endpoint creators run in parallel — each authors one endpoint file. Inputs are the resource's researched EndpointFacts (its field schema for both read and write, including datetime zone-awareness) and the assembled connector document (for transport refs). Output is an EndpointCreatorOutput JSON object containing one endpoint document.
 tools: Read, Glob, Grep
 color: purple
 ---
@@ -121,8 +121,10 @@ was raised.
      `response.body.data` requires a `data` property typed as an array whose
      `items` carry the record's fields. Authoring only the record's fields at
      the top level is the most common way to fail validation.
-     `endpoint_facts.fields` describes the **record**, so they land under
-     `properties.<envelope>.items.properties`. A read operation yields
+     `endpoint_facts.fields` describes the **record**, so the entries whose
+     `directions` include `read` land under
+     `properties.<envelope>.items.properties`; a write-only field has no place
+     in a response schema. A read operation yields
      zero-to-many records; a single-object resource is not a read endpoint.
      For each field, the declared `arrow_type` is the field's
      `endpoint_facts.fields[].arrow_type` and the `native_type` annotation is
@@ -131,7 +133,11 @@ was raised.
      `arrow_type` declared beside it (`RULE-PKG-033`). If they would diverge,
      the read map is wrong (a domain-level type-map fix, re-author +
      re-validate the domain), not the endpoint. Do not invent or guess field
-     types — every type comes from the researched facts.
+     types — every type comes from the researched facts. Where a facts entry
+     carries neither annotation, the provider documents no wire type for that
+     field: declare neither on the node here too, rather than half a pair
+     (`RULE-ENDP-006`) or a guess, and report the gap. This holds on both
+     schemas an endpoint declares — the read record and a write mode's input.
      - **Temporal fields follow the sample value, never a default**
        (`RULE-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
@@ -172,6 +178,32 @@ was raised.
    - `input` (required) — `{"schema": <JsonSchemaPropertyNode>}`
      describing one provider-facing destination record. Every field a
      `from_input` path addresses must be declared here.
+     Type its fields the way step 3 types the read record: `native_type`
+     beside `arrow_type`, from the `endpoint_facts.fields` entries whose
+     `directions` include `write` (`RULE-ENDP-062`), and, where an entry
+     carries `write_modes`, only for the modes it names — a name outside the
+     mode vocabulary `RULE-ENDP-053` prints is a defect in the facts, so
+     report it rather than dropping a field no mode claims. A mode's
+     `input.schema.required` holds exactly the fields whose entry names that
+     mode in `required_in_modes` — requiredness is researched, never inferred
+     from how the provider's example happens to be filled in — a field the provider
+     accepts and never returns has an entry of its own, so does one it types
+     differently in each direction, and a mode that takes a different field
+     set gets a different input schema. What the pair buys is a destination
+     whose field types are declared and checkable rather than left to
+     whatever a source produced; it is the contract's statement about the
+     field, not a conversion this document performs.
+     <!-- PROBE: write-input-pair-unresolved-through-read-map, write-input-unannotated-uncovered -->
+     Those declarations are what put the destination record under the read map
+     — `type-map-read` must resolve the `native_type` to the `arrow_type`
+     declared beside it (`RULE-PKG-033`); a node carrying no type declaration
+     is resolved against nothing. A token the map cannot render is a
+     domain-level type-map fix, exactly as on the read side.
+     A field whose facts entry carries neither annotation is left untyped
+     here, exactly as on the read side. Never invent a token to satisfy the
+     map: the read map is first-match-wins and shared with the read
+     direction, so a rule added for a native the provider never emits can
+     shadow a real one.
    - `conflict_keys` (`RULE-ENDP-019`, `RULE-ENDP-014`) — the
      provider-defined natural key the upsert matches on. Use
      `endpoint_facts.conflict_keys`; never invent one.

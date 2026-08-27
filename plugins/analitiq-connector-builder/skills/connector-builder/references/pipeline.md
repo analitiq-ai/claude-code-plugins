@@ -185,8 +185,9 @@ Database connectors skip this phase entirely.
    (default **10**); as one finishes, pull the next `pending`. Each branch
    is a full `researcher → endpoint-creator → validator` chain for one
    resource:
-   - `connector-provider-researcher` at `scope: endpoint` researches that
-     resource's response and returns `EndpointFacts` — the field-level
+   - `connector-provider-researcher` at `scope: endpoint` researches the
+     fields that resource exposes in each direction — those a read returns and
+     those a write accepts — and returns `EndpointFacts`, the field-level
      schema (datetime zone-awareness from a real sample value, enum
      domains, nullability, formats). This is the per-resource research
      that grounds field types instead of guessing them.
@@ -204,14 +205,28 @@ Database connectors skip this phase entirely.
    marked `failed` in the worklist and surfaced — it does **not** block its
    siblings. The orchestrator reports partial results rather than silently
    dropping the endpoint.
-4. **Join.** When the worklist is drained (no `pending` / `running`),
-   proceed to phase 6.
+4. **Join, then validate the package.** When the worklist is drained (no
+   `pending` / `running`), stage `connector.json`, the type map(s) and every
+   authored endpoint at their release paths and validate the **connector**,
+   not the endpoint documents on their own. Coverage is connector-anchored:
+   the per-branch pass in step 2 grades one endpoint against the endpoint
+   contract and can say nothing about the sibling read map, so a native a
+   branch discovered and the map does not carry passes there and fails at
+   `RULE-PKG-033` — after phase 7 has written the tree, if nothing looks
+   before then. A finding here routes to phases 3–4, not to the branch, and
+   carries what the domain creator needs to close it: the native the map
+   could not render together with the `arrow_type` the branch's own
+   `EndpointFacts` entry grounds it to. A diagnostic naming the native alone
+   leaves the creator guessing the canonical side of a rule it has to add, and
+   the same finding returns on the next pass.
 
 **Type vocabulary stays connector-level.** If a resource exposes a native
 not covered by `type-map-read`, that is a **domain-level** type-map
 addition — re-author and re-validate the domain (phases 3–4), never patch
 the map per endpoint. This keeps canonical types consistent across
-endpoints.
+endpoints. A write mode's `input.schema` is graded the same way and against
+the same map, so a native only a write field carries is the same
+domain-level fix.
 
 ### 6. Drift
 

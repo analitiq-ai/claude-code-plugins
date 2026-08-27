@@ -507,12 +507,13 @@ def _p_read_map_native_semantics() -> list[dict]:
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map)
 
 
-def _p_endpoint_pair_unresolved() -> list[dict]:
-    endpoint = _read_endpoint()
-    record = endpoint["operations"]["read"]["response"]["schema"]["properties"]["data"]["items"]
-    record["properties"]["mystery"] = {
-        "type": "string", "native_type": "MYSTERY_TYPE", "arrow_type": "Utf8",
-    }
+def _staged_api_endpoint(endpoint: dict) -> list[dict]:
+    """Validate the example API connector with `endpoint` as its only endpoint.
+
+    Coverage is connector-anchored — `check_coverage` reads the endpoint files
+    from disk beside `connector.json` — so a probe about type-map coverage has
+    to enter through the connector, never through the endpoint document alone.
+    """
     doc = _example_body(API_EXAMPLE)
     with tempfile.TemporaryDirectory() as tmp:
         definition = Path(tmp) / "definition"
@@ -521,6 +522,33 @@ def _p_endpoint_pair_unresolved() -> list[dict]:
         shutil.copy(API_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
         (definition / "endpoints" / "v1__items.json").write_text(json.dumps(endpoint))
         return _validate(doc, doc_path=definition / "connector.json")
+
+
+def _p_endpoint_pair_unresolved() -> list[dict]:
+    endpoint = _read_endpoint()
+    record = endpoint["operations"]["read"]["response"]["schema"]["properties"]["data"]["items"]
+    record["properties"]["mystery"] = {
+        "type": "string", "native_type": "MYSTERY_TYPE", "arrow_type": "Utf8",
+    }
+    return _staged_api_endpoint(endpoint)
+
+
+def _p_write_input_pair_unresolved() -> list[dict]:
+    """The write mode `_endpoint_with_write` already builds, with its one
+    input field annotated against a native no read map carries.
+
+    The pair of probes differs only in that annotation, which is the whole of
+    what the claim in `endpoint-creator.md` turns on.
+    """
+    endpoint = _endpoint_with_write()
+    node = endpoint["operations"]["write"]["insert"]["input"]["schema"]["properties"]["id"]
+    node["native_type"] = "MYSTERY_WRITE_TYPE"
+    node["arrow_type"] = "Utf8"
+    return _staged_api_endpoint(endpoint)
+
+
+def _p_write_input_unannotated() -> list[dict]:
+    return _staged_api_endpoint(_endpoint_with_write())
 
 
 def _p_param_key_provider_spelling() -> list[dict]:
@@ -534,14 +562,7 @@ def _p_param_key_provider_spelling() -> list[dict]:
         "in": "path", "type": "string", "required": True,
         "default": {"ref": "connection.selections.object_id"},
     }
-    doc = _example_body(API_EXAMPLE)
-    with tempfile.TemporaryDirectory() as tmp:
-        definition = Path(tmp) / "definition"
-        (definition / "endpoints").mkdir(parents=True)
-        (definition / "connector.json").write_text(json.dumps(doc))
-        shutil.copy(API_EXAMPLE / "type-map-read.json", definition / "type-map-read.json")
-        (definition / "endpoints" / "v1__items.json").write_text(json.dumps(endpoint))
-        return _validate(doc, doc_path=definition / "connector.json")
+    return _staged_api_endpoint(endpoint)
 
 
 # --- type-map probes --------------------------------------------------------
@@ -917,6 +938,14 @@ PROBES: tuple[Probe, ...] = (
     Probe("read-map-native-semantics-unchecked", "clean", _p_read_map_native_semantics),
     Probe("endpoint-pair-unresolved-through-read-map", "error", _p_endpoint_pair_unresolved,
           message_re=r"native_type 'MYSTERY_TYPE'"),
+    Probe("write-input-pair-unresolved-through-read-map", "error",
+          _p_write_input_pair_unresolved,
+          message_re=r"native_type 'MYSTERY_WRITE_TYPE'"),
+    # `forbid_re` rather than expect="clean" alone: the sentence claims the
+    # unannotated node is resolved against nothing, and a warning-tier report
+    # naming the read map would falsify it without producing an error.
+    Probe("write-input-unannotated-uncovered", "clean", _p_write_input_unannotated,
+          forbid_re=r"type-map-read\.json"),
     # The asymmetry spec-request-binding.md teaches: the placeholder takes the
     # contract's form while the param it binds keeps the provider's spelling.
     # `forbid_re` covers the severity `expect="clean"` does not — a
