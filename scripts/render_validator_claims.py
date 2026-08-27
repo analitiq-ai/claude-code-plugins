@@ -541,9 +541,9 @@ def _p_write_input_pair_unresolved() -> list[dict]:
     what the claim in `endpoint-creator.md` turns on.
     """
     endpoint = _endpoint_with_write()
-    field = endpoint["operations"]["write"]["insert"]["input"]["schema"]["properties"]["id"]
-    field["native_type"] = "MYSTERY_WRITE_TYPE"
-    field["arrow_type"] = "Utf8"
+    node = endpoint["operations"]["write"]["insert"]["input"]["schema"]["properties"]["id"]
+    node["native_type"] = "MYSTERY_WRITE_TYPE"
+    node["arrow_type"] = "Utf8"
     return _staged_api_endpoint(endpoint)
 
 
