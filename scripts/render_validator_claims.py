@@ -159,12 +159,16 @@ def _record_node(doc: dict) -> dict:
     response = doc["operations"]["read"]["response"]
     node = response["schema"]["properties"]["data"]["items"]
     resolved = resolve_read_record_schema(response, response["schema"])
-    assert resolved == node, (
-        "the example endpoint's record shape is no longer the `data` array's "
-        "`items`; probes would declare their fields on a node the read "
-        "contract does not resolve to. Reach it the way "
-        "`resolve_read_record_schema` does, on the live document."
-    )
+    if resolved != node:
+        # Raised, not asserted: `-O` strips an assert, and a check that
+        # disappears under an optimisation flag is not a check. This module
+        # already reports its own defects this way.
+        raise RuntimeError(
+            "the example endpoint's record shape is no longer the `data` "
+            "array's `items`; probes would declare their fields on a node the "
+            "read contract does not resolve to. Reach it the way "
+            "`resolve_read_record_schema` does, on the live document."
+        )
     return node
 
 
