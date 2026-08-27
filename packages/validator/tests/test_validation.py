@@ -381,9 +381,10 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
 
 
 def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
-    """The gate that used to sit here skipped a whole embedded schema when any
-    reference in it was refused, so one bad node cost the author every sample
-    finding in the document and handed them a second wave on the next run."""
+    """A reference the contract refuses must not suppress the sample findings
+    around it. Skipping the schema it sits in costs the author every other
+    sample there, and they meet the rest in a second wave once the reference is
+    fixed — which is `test_every_recorded_sample_is_graded` one scope up."""
     ep = _endpoint("STRING", "Utf8")
     props = ep["operations"]["read"]["response"]["schema"]["items"]["properties"]
     good = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
@@ -403,20 +404,30 @@ def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
     assert any("does not resolve" in f["message"] for f in findings), findings
 
 
-def test_a_dialect_declared_below_the_root_is_refused(validator):
-    """`$schema` sets the dialect for a resource, and `$id` is not authorable
-    here, so no subschema is a resource root. A jsonschema implementation still
-    switches dialect for that subtree — so the sample would be graded under a
-    draft neither this contract nor the engine reads."""
+def test_another_dialect_declared_below_the_root_is_refused(validator):
+    """A jsonschema implementation switches dialect for that subtree, so the
+    sample would be graded under a draft neither this contract nor the engine
+    reads. RULE-ENDP-048's obligation, at a node instead of the root."""
     ep = _sample_endpoint({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "dependencies": {"a": ["b"]},
         "examples": [{"a": 1}]})
     errors = _errors(validator.validate_document(ep))
     assert any(
-        e["validator"] == "embedded-json-schema" and "$schema" in e["message"]
+        e["validator"] == "embedded-json-schema" and "another draft" in e["message"]
         for e in errors), errors
     assert not any(e["validator"] == "embedded-schema-example" for e in errors), errors
+
+
+def test_the_documents_own_dialect_repeated_below_the_root_is_not(validator):
+    """Redundant, not wrong. Refusing it would be an obligation no rule
+    states — RULE-ENDP-048 forbids declaring a DIFFERENT draft, and the
+    rendered reference an author satisfies says exactly that."""
+    ep = _sample_endpoint({
+        "$schema": JS, "type": "string", "native_type": "STRING",
+        "arrow_type": "Utf8", "examples": ["fine"]})
+    errors = _errors(validator.validate_document(ep))
+    assert not any(e["validator"] == "embedded-json-schema" for e in errors), errors
 
 
 def test_samples_are_not_graded_against_a_malformed_schema(validator):
