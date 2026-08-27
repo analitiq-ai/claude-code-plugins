@@ -585,6 +585,74 @@ def validate_cross_params(value: str) -> None:
                 )
 
 
+# ---------------------------------------------------------------------------
+# Recorded wire samples
+# ---------------------------------------------------------------------------
+
+#: The parameter kind naming a family's timezone position. The manifest states
+#: which families carry one, so nothing here decides it: a family the engine
+#: later gives a zone to is read correctly without an edit.
+TIMEZONE_PARAM_KIND = "timezone"
+
+#: A wire value in ISO-8601 date-time form — the one sample shape whose
+#: zone-awareness can be decided by reading it. Contract-owned authoring
+#: profile, not an engine fact: the engine parses what its reader accepts, and
+#: this is the subset a document's recorded sample is graded on. Anything else
+#: a provider sends (a date with no time, an epoch number, a provider-specific
+#: spelling) carries no answer, and the reader below says so rather than
+#: inventing one.
+WIRE_DATETIME_PATTERN = (
+    r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?"
+    r"(?P<zone>[Zz]|[+-]\d{2}:?\d{2})?"
+)
+_WIRE_DATETIME_RE = re.compile(f"^{WIRE_DATETIME_PATTERN}$")
+
+
+def declares_zone(value: str) -> bool | None:
+    """Whether canonical `value` declares a zone — None when it cannot say.
+
+    None is "there is nothing here a sample could contradict": the family
+    carries no timezone position at all (`Date32`, `Utf8`, `Time64(SECOND)`),
+    the value is not a parameterized application, or the position is templated
+    and so has no value yet. A True/False answer is returned only for a family
+    that HAS the position, which is what keeps a caller from reading "declares
+    no zone" out of a type that could never carry one.
+    """
+    parsed = _parse_args(value)
+    if parsed is None:
+        return None
+    spec, args = parsed
+    params = spec["params"]
+    index = next(
+        (i for i, p in enumerate(params) if p["kind"] == TIMEZONE_PARAM_KIND),
+        None,
+    )
+    if index is None:
+        return None
+    if index >= len(args):
+        # The position is optional and was omitted — a zone-naive declaration.
+        return False
+    arg = args[index]
+    if _PLACEHOLDER_ANYWHERE_RE.search(arg):
+        return None
+    return arg != params[index]["null_sentinel"]
+
+
+def sample_carries_zone(sample: Any) -> bool | None:
+    """Whether a recorded wire sample carries a zone — None when it cannot say.
+
+    Only a string in :data:`WIRE_DATETIME_PATTERN` form is decidable. Every
+    other sample returns None, which reads downstream as "no evidence" and
+    never as "no zone": a provider that sends `1712345678` has not said its
+    instants are naive, it has said nothing this reader can hear.
+    """
+    if not isinstance(sample, str):
+        return None
+    match = _WIRE_DATETIME_RE.match(sample)
+    if match is None:
+        return None
+    return match.group("zone") is not None
+
 def _describe_bounds(lo: int, hi: int | None) -> str:
     return f"{lo}-{hi}" if hi is not None else f"{lo} or above"
 

@@ -41,6 +41,8 @@ from pydantic import (
 
 from analitiq.contracts.arrow_grammar import (
     ARROW_TYPE_PATTERN,
+    declares_zone,
+    sample_carries_zone,
     validate_cross_params,
 )
 from analitiq.contracts.shared.rules import (
@@ -1263,6 +1265,46 @@ JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
 })
 
 
+def _validate_examples_zone(
+    schema: dict[str, Any], arrow_value: str, path: str, errors: list[str]
+) -> None:
+    """RULE-ENDP-063: a node's recorded samples must bear out the zone its
+    declared type claims.
+
+    Both halves are read, and either one being unreadable ends the check: a
+    family with no timezone position has nothing a sample could contradict,
+    and a sample that is not a date-time literal carries no answer about zones.
+    Silence here is the absence of evidence, never evidence of absence — see
+    `analitiq.contracts.arrow_grammar.sample_carries_zone`.
+
+    Grading every entry rather than the first: `examples` is a list because a
+    provider can send more than one shape, and a field whose samples disagree
+    with EACH OTHER about zones is the case most worth naming — reporting only
+    the first would let the author fix one spelling and rerun into the next.
+    """
+    examples = schema.get("examples")
+    if not isinstance(examples, list):
+        return
+    declared = declares_zone(arrow_value)
+    if declared is None:
+        return
+    for index, example in enumerate(examples):
+        carried = sample_carries_zone(example)
+        if carried is None or carried == declared:
+            continue
+        errors.append(str(violation("RULE-ENDP-063", (
+            f"{path}.examples[{index}]={example!r} "
+            f"{'carries a zone' if carried else 'carries no zone'}, but "
+            f"arrow_type={arrow_value!r} declares "
+            f"{'a zoned' if declared else 'a zone-naive'} timestamp. The "
+            "sample is the evidence the zone was decided from: correct the "
+            "declared type — and the connector's read type map, which is what "
+            "resolves the native token to it — to match what the provider "
+            "sends, or correct the sample if it was mistranscribed. Dropping "
+            "the sample removes the evidence, not the disagreement"
+        ))))
+
+
 def _validate_arrow_type_in_json_schema(
     schema: Any, path: str, errors: list[str]
 ) -> None:
@@ -1275,6 +1317,11 @@ def _validate_arrow_type_in_json_schema(
       (2) any subschema declaring `native_type` or `arrow_type` must declare
           both. Pairing is enforced per node; the walker does not distinguish
           leaf and inner subschemas.
+      (3) any subschema recording wire samples under `examples` must declare an
+          `arrow_type` whose zone-awareness those samples bear out —
+          RULE-ENDP-063, the mechanized half of RULE-SHRD-002. A sample whose
+          zone-awareness cannot be read, and a type whose family carries no
+          zone position, are both simply not graded here.
     """
     # JSON Schema 2020-12 permits `true` / `false` as a whole-schema short-form
     # ("anything" / "nothing"). Those are valid but carry no arrow_type, so
@@ -1316,6 +1363,7 @@ def _validate_arrow_type_in_json_schema(
                 errors.append(
                     f"{path}.arrow_type: {exc} (spec: §Native and Arrow Types)"
                 )
+            _validate_examples_zone(schema, arrow_value, path, errors)
     if has_native ^ has_arrow:
         missing = "arrow_type" if has_native else "native_type"
         errors.append(

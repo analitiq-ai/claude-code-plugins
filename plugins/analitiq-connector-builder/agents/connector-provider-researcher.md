@@ -38,8 +38,8 @@ You run at one of two scopes per invocation:
   schema; research the fields that resource exposes — those a read returns and
   those a write accepts — and return an `EndpointFacts`
   object whose shape `io-contracts.md` §EndpointFacts states: per field, which
-  directions carry it, its type pair where the provider documents one, and —
-  for temporal fields — a **real sample value** and its zone-awareness. This is
+  directions carry it, its type pair where the provider documents one, and a
+  **sample value** wherever the docs show one. This is
   the field-level category `ProviderFacts` deliberately omits.
 
 **Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
@@ -90,6 +90,21 @@ goes into `notes` as a domain type-map addition, never an endpoint-local one;
 and a temporal field whose docs show no sample value is a gap you report, never
 a zone you assume (`RULE-SHRD-002`) — a date-only wire value (`2024-01-02`) is
 `Date32`, never a `Timestamp`.
+
+**Samples are copied, never composed.** A `sample_value` is a value that
+appears in the provider's own documentation — in an example response, an
+OpenAPI `example`, or the field's own row — reproduced exactly, with its JSON
+type intact. A plausible value you wrote yourself is worse than no sample: it
+is graded against the declaration downstream, so an invented one certifies the
+declaration it was invented to match. Where the docs illustrate nothing for a
+field, omit the key.
+
+**A documented type and a documented example that disagree are the finding.**
+Providers whose field table says `boolean` and whose example response shows
+`"0"` are common, and the example is what the wire carries. Record both — the
+`native_type` the provider really emits, and the `sample_value` it showed —
+and name the contradiction in `notes` so the domain read map gains a rule for
+the token the provider actually sends.
 
 ## Hard rules
 

@@ -1,0 +1,27 @@
+id: RULE-ENDP-063
+statement: >
+  A node of an endpoint's response or write-input schema that records wire
+  samples under `examples` MUST declare a canonical Arrow type whose
+  zone-awareness those samples bear out.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
+owners: [connector-plugin, engine]
+targets: [ResponseExtraction, WriteInput]
+fixture_model: WriteInput
+rationale: >
+  RULE-SHRD-002 decides a temporal's zone from a real wire value, and until a
+  document recorded one the decision was unfalsifiable: both spellings are
+  canonical, both validate, and a wrong call reinterprets every instant the
+  provider sends and shifts it by the destination's offset — uniformly enough
+  that nobody reads it as corruption. A sample recorded beside the declaration
+  turns that judgment into an arithmetic one, and it is graded here because a
+  zone is not a JSON Schema property: a string carrying an offset and a string
+  carrying none are the same `type: string`, so nothing in the draft the
+  embedded schema is written in can object. Only what can be read is graded —
+  a family with no timezone position has nothing to contradict, and a sample
+  that is not a date-time literal answers nothing — so silence here is absence
+  of evidence, never evidence the declaration is right.
+status: active
+superseded_by: null

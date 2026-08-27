@@ -279,12 +279,11 @@ access and may not guess field types).
           "required_in_modes": { "type": "array", "items": { "type": "string" }, "description": "The write modes that REQUIRE this field, from the same vocabulary as `write_modes`. The creator puts a field in a mode's `input.schema.required` exactly when that mode is named here, so a provider-mandatory field is never advertised as optional and a record missing it is refused at authoring rather than by the provider. An empty array — or the key omitted — means no mode requires it." },
           "write_modes": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Which write modes accept this field, when the provider does not accept the same set for all of them (an `insert` that takes fields an `upsert` refuses). Each name is a mode key from the vocabulary `RULE-ENDP-053` prints, never a provider's own word for the operation. Omitted means every mode the resource declares. Only meaningful on an entry whose `directions` include `write`." },
           "native_type": { "type": "string", "description": "Provider's documented/observed wire-type token (e.g. `string`, `integer`, `date-time`). Omitted, with `arrow_type`, for a field whose wire type the provider documents nowhere — the creator then leaves that node untyped rather than guessing (`RULE-ENDP-006`, `RULE-ENDP-062`), and `notes` says which fields those were." },
-          "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, chosen from the SAMPLE value's zone-awareness (`RULE-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`." },
+          "arrow_type": { "type": "string", "description": "Canonical Arrow type (PascalCase). For temporals, read the zone off `sample_value` (`RULE-SHRD-002`): a zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an offset/Z → `Timestamp(<unit>, UTC)`. Where the sample contradicts the type the provider documents, the sample governs — it is what the wire actually carries — and `notes` records the contradiction." },
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },
           "format": { "type": "string", "description": "Documented string format (e.g. `email`, `uri`, `uuid`, `date`)." },
-          "sample_value": { "type": "string", "description": "A real wire sample. REQUIRED for any temporal field so zone-awareness is decided on evidence, not guessed." },
-          "tz_aware": { "type": "boolean", "description": "For date-time fields: true iff the wire value carries a zone/offset." }
+          "sample_value": { "description": "A value the provider's own documentation shows for this field, copied verbatim and with its JSON type intact — deliberately untyped here, because the string `\"0\"` and the boolean `false` are different evidence and typing this as a string would erase the difference the sample exists to preserve. Record one for any field whose docs illustrate a value; omit it where they do not and never construct one, and omit it where the only value shown is `null` (which says nothing about the type). The creator carries it into that field's node as `examples`, where the declaration is graded against it (`RULE-ENDP-063`, `RULE-ENDP-064`) instead of being taken on trust." }
         }
       }
     },
@@ -322,7 +321,8 @@ access and may not guess field types).
               "endpoint-id-unique",
               "endpoint-id-locator",
               "endpoint-transport-ref",
-              "embedded-json-schema"
+              "embedded-json-schema",
+              "embedded-schema-example"
             ]
           },
           "severity": { "type": "string", "enum": ["error", "warning"] },

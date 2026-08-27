@@ -1,0 +1,13 @@
+{
+  "schema": {
+    "type": "object",
+    "properties": {
+      "updated_at": {
+        "type": "string",
+        "native_type": "date",
+        "arrow_type": "Timestamp(MICROSECOND, UTC)",
+        "examples": ["2024-01-02"]
+      }
+    }
+  }
+}

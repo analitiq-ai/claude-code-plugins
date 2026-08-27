@@ -515,3 +515,63 @@ def test_timestamp_offset_uses_the_manifest_pattern_verbatim():
         if p["kind"] == "timezone"
     )
     assert tz_param["fixed_offset_pattern"] in arrow_grammar.ARROW_TYPE_PATTERN
+
+
+class TestRecordedWireSamples:
+    """`declares_zone` / `sample_carries_zone` — the two readings RULE-ENDP-063
+    compares. Both answer `None` for "cannot say", and the rule turns on that
+    third value: absence of evidence must never be read as evidence a
+    declaration is right."""
+
+    def test_which_families_carry_a_zone_comes_from_the_manifest(self):
+        """Not from a family name written down here: a family the engine later
+        gives a timezone position is read correctly without an edit."""
+        zoned = {
+            name for name, spec in arrow_grammar.FAMILIES.items()
+            if any(p["kind"] == arrow_grammar.TIMEZONE_PARAM_KIND
+                   for p in spec.get("params") or ())
+        }
+        for name in zoned:
+            assert arrow_grammar.declares_zone(f"{name}(SECOND)") is False
+        for name in set(arrow_grammar.FAMILIES) - zoned:
+            assert arrow_grammar.declares_zone(name) is None, name
+
+    @pytest.mark.parametrize("value, expected", [
+        ("Timestamp(MICROSECOND, UTC)", True),
+        ("Timestamp(MICROSECOND, Europe/Berlin)", True),
+        ("Timestamp(MICROSECOND, +02:00)", True),
+        # The position is optional; omitting it declares a zone-naive instant.
+        ("Timestamp(MICROSECOND)", False),
+        # The manifest's own sentinel for "explicitly no zone".
+        ("Timestamp(MICROSECOND, null)", False),
+        # A templated position carries no value yet, so it contradicts nothing.
+        ("Timestamp(MICROSECOND, ${zone})", None),
+        # Families with no timezone position at all.
+        ("Date32", None),
+        ("Time64(NANOSECOND)", None),
+        ("Decimal128(38, 9)", None),
+    ])
+    def test_declares_zone(self, value, expected):
+        assert arrow_grammar.declares_zone(value) is expected
+
+    @pytest.mark.parametrize("sample, expected", [
+        ("2024-01-02T03:04:05Z", True),
+        ("2024-01-02t03:04:05z", True),
+        ("2024-01-02 03:04:05-05:00", True),
+        ("2024-01-02T03:04:05.123456+0200", True),
+        ("2024-01-02T03:04:05", False),
+        ("2024-01-02T03:04", False),
+        # Not a date-time literal: a date, an epoch, a provider spelling, and a
+        # value that merely contains one. None of them answers the question.
+        ("2024-01-02", None),
+        ("1712345678", None),
+        ("02/01/2024 03:04:05", None),
+        ("seen at 2024-01-02T03:04:05Z", None),
+        # Non-strings carry no zone-awareness a reader can see.
+        (1712345678, None),
+        (True, None),
+        (None, None),
+        ({"at": "2024-01-02T03:04:05Z"}, None),
+    ])
+    def test_sample_carries_zone(self, sample, expected):
+        assert arrow_grammar.sample_carries_zone(sample) is expected

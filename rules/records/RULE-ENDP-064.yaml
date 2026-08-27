@@ -1,0 +1,27 @@
+id: RULE-ENDP-064
+statement: >
+  Every entry a node of an endpoint's response or write-input schema records
+  under `examples` MUST satisfy that node's own declarations.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.validator.connectors::_schema_example_findings"
+owners: [connector-plugin, engine]
+targets: [ResponseExtraction, WriteInput]
+rationale: >
+  A recorded sample is the wire evidence the field's declaration was decided
+  from, so a node that rejects its own sample is a declaration its own evidence
+  contradicts — and the contradiction is invisible to every other check in this
+  contract, which grades declarations against each other and never against a
+  value. That is the shape a connector ships in when a provider's documented
+  type and its documented example disagree: the endpoint validates clean, the
+  type map resolves, and the engine refuses the first batch because the reader
+  is handed a string where the declared type admits none. The draft this
+  contract is written in states that an `examples` entry need not validate;
+  this contract requires it, because an example nobody grades is the same
+  unfalsifiable claim the sample was recorded to remove. Graded in the
+  validator rather than the models because deciding an instance against a
+  schema is a JSON Schema implementation's job, and the contract package is
+  deliberately too dependency-light to host one.
+status: active
+superseded_by: null

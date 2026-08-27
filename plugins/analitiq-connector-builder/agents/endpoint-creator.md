@@ -35,9 +35,9 @@ not the plugin's.
 
 - `endpoint_facts` — the `EndpointFacts` object for this resource, from this
   run's per-endpoint research pass. Shape and field meanings:
-  `connector-builder/references/io-contracts.md` § EndpointFacts. Temporal
-  fields carry a real `sample_value` and its `tz_aware` flag — step 3 depends
-  on them.
+  `connector-builder/references/io-contracts.md` § EndpointFacts. A field the
+  provider's docs illustrate carries a `sample_value` — the wire evidence step
+  3 types it from, and records beside it.
 - `connector` — the assembled connector document (for `transports`, `auth`,
   and `connection_contract` reference paths).
 
@@ -138,9 +138,26 @@ was raised.
      field: declare neither on the node here too, rather than half a pair
      (`RULE-ENDP-006`) or a guess, and report the gap. This holds on both
      schemas an endpoint declares — the read record and a write mode's input.
+     - **Record the sample beside the declaration.** Where a facts entry
+       carries a `sample_value`, put it on that field's node as
+       `"examples": [<value>]`, copied verbatim and with its JSON type
+       intact — the string `"0"` and the boolean `false` are different
+       evidence. The declaration is then graded against it rather than taken
+       on trust (`RULE-ENDP-063`, `RULE-ENDP-064`), which is the one check in
+       this contract that can see a provider whose documented type and
+       documented example disagree. An entry with no `sample_value` gets no
+       `examples`; nothing here is invented to fill the slot.
+     - **When the sample contradicts the documented type, the sample wins.**
+       A provider that documents `boolean` and shows `"0"` sends strings, and
+       the connector that believes the documentation fails deterministically
+       on the first batch — the declared type is what the engine builds the
+       record batch from, and no string reaches a boolean column. Type the
+       field from the sample, add the native token the provider really emits
+       to the domain read map (a domain-level type-map fix, re-author +
+       re-validate), and report the contradiction. Never resolve it by
+       dropping the sample: that removes the evidence, not the disagreement.
      - **Temporal fields follow the sample value, never a default**
-       (`RULE-SHRD-002`). Use the field's
-       `tz_aware` flag (set by research from a real `sample_value`): a
+       (`RULE-SHRD-002`). Read the zone off the sample: a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
        offset/`Z` → `Timestamp(<unit>, UTC)`. When two fields share a native
        token but differ in zone-awareness, give them **distinct** native

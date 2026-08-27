@@ -41,6 +41,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any, Callable
 
 from ._core import (
@@ -105,6 +106,7 @@ register_validator_ids({
     "endpoint-id-locator",
     "endpoint-transport-ref",
     "embedded-json-schema",
+    "embedded-schema-example",
 })
 
 
@@ -218,24 +220,32 @@ _SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
 _SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
 
-def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
-    """Collect `(native_type, arrow_type)` pairs from a JSON Schema, recursing
-    only through structural sub-schema positions."""
+def _pointer_token(name: str) -> str:
+    """One JSON Pointer reference token, RFC 6901 escaped. A property named
+    `a/b` is one token, not two, and a finding's `path` is a JSON pointer a
+    reader resolves against the document — unescaped it points somewhere else,
+    or nowhere."""
+    return name.replace("~", "~0").replace("/", "~1")
+
+
+def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
+    """Yield `(json_pointer, node)` for the schema and every structural
+    sub-schema position under it, recursing exactly where the contract's own
+    walkers do."""
     if not isinstance(schema, dict):
         return
-    nt, at = schema.get("native_type"), schema.get("arrow_type")
-    if isinstance(nt, str) and isinstance(at, str):
-        out.append((nt, at, pointer))
+    yield pointer, schema
     for key in _SUBSCHEMA_MAP_KEYS:
         sub = schema.get(key)
         if isinstance(sub, dict):
             for name, child in sub.items():
-                _walk_schema_pairs(child, f"{pointer}/{key}/{name}", out)
+                yield from _walk_schema_nodes(
+                    child, f"{pointer}/{key}/{_pointer_token(name)}")
     for key in _SUBSCHEMA_LIST_KEYS:
         sub = schema.get(key)
         if isinstance(sub, list):
             for i, child in enumerate(sub):
-                _walk_schema_pairs(child, f"{pointer}/{key}/{i}", out)
+                yield from _walk_schema_nodes(child, f"{pointer}/{key}/{i}")
     for key in _SUBSCHEMA_SINGLE_KEYS:
         if key not in schema:
             continue
@@ -245,9 +255,17 @@ def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]
         # above) but the catalog still carries the tuple form.
         if isinstance(child, list):
             for i, sub in enumerate(child):
-                _walk_schema_pairs(sub, f"{pointer}/{key}/{i}", out)
+                yield from _walk_schema_nodes(sub, f"{pointer}/{key}/{i}")
         else:
-            _walk_schema_pairs(child, f"{pointer}/{key}", out)
+            yield from _walk_schema_nodes(child, f"{pointer}/{key}")
+
+
+def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
+    """Collect `(native_type, arrow_type)` pairs from a JSON Schema."""
+    for node_pointer, node in _walk_schema_nodes(schema, pointer):
+        nt, at = node.get("native_type"), node.get("arrow_type")
+        if isinstance(nt, str) and isinstance(at, str):
+            out.append((nt, at, node_pointer))
 
 
 def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
@@ -334,6 +352,61 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 "embedded-json-schema", "error", pointer,
                 f"embedded schema at {where} is not a valid JSON Schema Draft "
                 f"2020-12 document: {exc.message}"))
+            continue
+        findings.extend(_schema_example_findings(schema, pointer, where))
+    return findings
+
+
+def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dict]:
+    """RULE-ENDP-064: every `examples` entry must satisfy the node declaring it.
+
+    An `examples` entry on a typed node is the wire sample the field's
+    declaration was decided from, so a sample the node itself rejects is a
+    declaration contradicted by its own evidence — the shape that ships a
+    connector which validates clean and dies on the first batch.
+
+    Each node is graded by a validator `evolve`d from one built on the WHOLE
+    embedded document, never by one built on the node alone: a `#/$defs/...`
+    reference inside a node resolves against the document root, so a validator
+    that had only the node would call every legitimate reference unresolvable.
+
+    Reached only for a schema `check_schema` already accepted — grading an
+    instance against a malformed schema reports the malformation a second time,
+    in the vocabulary of whichever example happened to meet it first.
+
+    `jsonschema` is imported HERE for the reason the caller states: only
+    endpoint meta-validation needs it.
+    """
+    from jsonschema import Draft202012Validator
+
+    nodes = [
+        (node_pointer, node)
+        for node_pointer, node in _walk_schema_nodes(schema, "")
+        if isinstance(node.get("examples"), list)
+    ]
+    if not nodes:
+        return []
+    root = Draft202012Validator(schema)
+    findings: list[dict] = []
+    for node_pointer, node in nodes:
+        validator = root.evolve(schema=node)
+        for index, example in enumerate(node["examples"]):
+            error = next(validator.iter_errors(example), None)
+            if error is None:
+                continue
+            at = f"{where}{node_pointer}" if node_pointer else where
+            findings.append(finding(
+                "embedded-schema-example", "error",
+                f"{pointer}{node_pointer}/examples/{index}",
+                f"recorded sample {example!r} at {at} does not satisfy the "
+                f"declaration it sits on: {error.message}. The sample is the "
+                "evidence the declaration was decided from, so the "
+                "disagreement is real in one direction or the other — correct "
+                "the declared type (and the connector's read type map, which "
+                "resolves the native token to it) to match what the provider "
+                "sends, or correct the sample if it was mistranscribed. "
+                "Dropping the sample removes the evidence, not the "
+                "disagreement"))
     return findings
 
 
