@@ -297,19 +297,16 @@ def test_a_finding_path_is_a_resolvable_json_pointer(validator):
 
 
 @pytest.mark.parametrize("ref", ["#/$defs/Missing", "https://example.com/x.json"])
-def test_samples_are_not_graded_through_a_reference_that_does_not_resolve(
-    validator, ref,
-):
+def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     """Resolution happens here for the first time in this module, so a
-    reference the contract already refuses raises out of the grading rather
-    than returning a finding — and the guard around the check would answer the
-    whole document with "validator bug" instead of naming the reference.
-    RULE-ENDP-026 owns that diagnostic; this check stands aside."""
+    reference the contract already refuses raises out of the grading. Two
+    things must hold: RULE-ENDP-026 still names the reference precisely, and
+    the grading failure reads as the document's rather than as a bug in this
+    tool — the reference IS the author's to fix."""
     ep = _sample_endpoint({"$ref": ref, "examples": [1]})
     findings = validator.validate_document(ep)
-    assert not any(f["validator"] == "embedded-schema-example" for f in findings)
-    assert not any("validator bug" in f["message"] for f in findings), findings
     assert any(ref in f["message"] for f in findings), findings
+    assert not any("please report" in f["message"] for f in findings), findings
 
 
 def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
@@ -323,11 +320,81 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
         "type": "number", "multipleOf": 0.5, "examples": [int("9" * 400)]})
     ep["endpoint_id"] = "WRONG NAME"
     findings = validator.validate_document(ep)
-    crashed = [f for f in findings if "crashed unexpectedly" in f["message"]]
+    crashed = [f for f in findings if "could not finish" in f["message"]]
     assert len(crashed) == 1, findings
     assert crashed[0]["validator"] == "embedded-schema-example", crashed
+    # What brought it down came out of the author's document, so the finding
+    # must not send them to report a validator bug, and it must say which of
+    # the endpoint's embedded schemas it was.
+    assert "please report" not in crashed[0]["message"], crashed[0]
+    assert crashed[0]["path"] == "/operations/read/response/schema", crashed[0]
     # The unrelated defect is still reported beside it.
     assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
+
+
+def test_findings_come_back_in_the_same_order_every_run(validator):
+    """`iter_schema_nodes` reaches nodes through frozensets, so unsorted it
+    ordered every consumer's findings by the interpreter's hash seed: an author
+    reran the validator on an unchanged document and got the same findings in a
+    different order. Subprocesses, because a seed is fixed for the life of one.
+    """
+    import json
+    import os
+    import subprocess
+    import sys
+    import textwrap
+    from pathlib import Path
+
+    ep = _endpoint("STRING", "Utf8")
+    node = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+            "examples": [1]}
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"] = {"p": dict(node)}
+    schema["items"]["patternProperties"] = {"^x": dict(node)}
+    schema["items"]["$defs"] = {"D": dict(node)}
+    schema["items"]["allOf"] = [dict(node)]
+    schema["items"]["not"] = dict(node)
+
+    program = textwrap.dedent(
+        """
+        import json, sys
+        import analitiq.validator as v
+        doc = json.loads(sys.argv[1])
+        json.dump([f["path"] for f in v.validate_document(doc)], sys.stdout)
+        """
+    )
+    packages = Path(__file__).resolve().parents[2]
+    source = os.pathsep.join([
+        str(packages / "validator" / "src"),
+        str(packages / "contract-models" / "src"),
+    ])
+    runs = []
+    for seed in ("0", "1", "2", "3", "4"):
+        proc = subprocess.run(
+            [sys.executable, "-c", program, json.dumps(ep)],
+            capture_output=True, text=True, check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": source},
+        )
+        runs.append(json.loads(proc.stdout))
+    assert runs[0], "no findings — nothing is being measured"
+    assert all(run == runs[0] for run in runs), (
+        "finding order differs between hash seeds:\n"
+        f"  {runs[0]}\n  {next(r for r in runs if r != runs[0])}"
+    )
+
+
+def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
+    """The gate that used to sit here skipped a whole embedded schema when any
+    reference in it was refused, so one bad node cost the author every sample
+    finding in the document and handed them a second wave on the next run."""
+    ep = _endpoint("STRING", "Utf8")
+    props = ep["operations"]["read"]["response"]["schema"]["items"]["properties"]
+    props["a"] = {"type": "string", "native_type": "STRING",
+                  "arrow_type": "Utf8", "examples": [1]}
+    props["b"] = {"$ref": "#/$defs/Missing"}
+    findings = validator.validate_document(ep)
+    assert any(f["validator"] == "embedded-schema-example" for f in findings), findings
+    assert any("does not resolve" in f["message"] for f in findings), findings
 
 
 def test_a_dialect_declared_below_the_root_is_refused(validator):
