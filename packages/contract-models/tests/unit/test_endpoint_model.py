@@ -3141,6 +3141,100 @@ def _api_payload_with_field_schema(field_name, field_schema):
     })
 
 
+class TestRecordedWireSampleZone:
+    """RULE-ENDP-063 — the mechanized half of RULE-SHRD-002. The matrix of
+    which declaration/sample pairs agree lives in the shared fixture corpus
+    (`tests/fixtures/rules/RULE-ENDP-063`); what is pinned here is where the
+    walk reaches and what the author is told.
+    """
+
+    @staticmethod
+    def _temporal(arrow_type, examples):
+        return {
+            "type": "string", "native_type": "date-time",
+            "arrow_type": arrow_type, "examples": examples,
+        }
+
+    def test_a_response_record_field_is_graded(self):
+        with pytest.raises(ValidationError, match="RULE-ENDP-063"):
+            parse_endpoint(_api_payload_with_field_schema(
+                "updated_at",
+                self._temporal("Timestamp(MICROSECOND, UTC)",
+                               ["2024-01-02T03:04:05"])))
+
+    def test_a_write_input_field_is_graded(self):
+        """The same rule on the other schema an endpoint declares — a
+        destination field's zone is decided from evidence too."""
+        with pytest.raises(ValidationError, match="RULE-ENDP-063"):
+            parse_endpoint(_api_payload_with_write_input_schema({
+                "$schema": JSON_SCHEMA,
+                "type": "object",
+                "properties": {"due_at": self._temporal(
+                    "Timestamp(MICROSECOND)", ["2024-01-02T03:04:05Z"])},
+            }))
+
+    def test_a_nested_record_field_is_graded(self):
+        """The walk reaches wherever a declaration can sit, not only the record
+        root — a sample under a `$defs` shape is evidence like any other."""
+        payload = _api_payload_with_response_schema({
+            "$schema": JSON_SCHEMA,
+            "$defs": {"Stamp": self._temporal(
+                "Timestamp(MICROSECOND, UTC)", ["2024-01-02T03:04:05"])},
+            "type": "object",
+            "properties": {"data": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"created_at": {"$ref": "#/$defs/Stamp"}}}}},
+        })
+        with pytest.raises(ValidationError, match="RULE-ENDP-063"):
+            parse_endpoint(payload)
+
+    def test_every_disagreeing_sample_is_named(self):
+        """Reporting only the first would let an author fix one spelling and
+        rerun into the next; the samples disagreeing with each other is the
+        case most worth seeing whole."""
+        with pytest.raises(ValidationError) as exc:
+            parse_endpoint(_api_payload_with_field_schema(
+                "updated_at",
+                self._temporal("Timestamp(MICROSECOND, UTC)", [
+                    "2024-01-02T03:04:05Z",
+                    "2024-01-02T09:00:00",
+                    "2024-01-03T09:00:00",
+                ])))
+        message = str(exc.value)
+        assert "examples[1]" in message and "examples[2]" in message, message
+        assert "examples[0]" not in message, message
+
+    def test_the_finding_names_the_field_and_both_readings(self):
+        """An author has to be able to act on it without opening the document:
+        which node, which sample, and what each of the two sides says."""
+        with pytest.raises(ValidationError) as exc:
+            parse_endpoint(_api_payload_with_field_schema(
+                "updated_at",
+                self._temporal("Timestamp(MICROSECOND)",
+                               ["2024-01-02T03:04:05Z"])))
+        message = str(exc.value)
+        assert "properties.updated_at.examples[0]" in message, message
+        assert "'2024-01-02T03:04:05Z'" in message, message
+        assert "Timestamp(MICROSECOND)" in message, message
+
+    def test_an_untyped_node_carrying_samples_is_not_graded(self):
+        """A node with no `arrow_type` declares no zone to contradict — and a
+        field the provider documents no wire type for is authored exactly that
+        way (RULE-ENDP-006)."""
+        parse_endpoint(_api_payload_with_field_schema(
+            "updated_at",
+            {"type": "string", "examples": ["2024-01-02T03:04:05Z"]}))
+
+    def test_a_non_list_examples_value_is_left_to_the_meta_check(self):
+        """`examples` must be an array; saying so is the JSON Schema draft's
+        job, and reporting it here too would report it twice."""
+        parse_endpoint(_api_payload_with_field_schema(
+            "updated_at",
+            {"type": "string", "native_type": "date-time",
+             "arrow_type": "Timestamp(MICROSECOND, UTC)",
+             "examples": "2024-01-02T03:04:05"}))
+
+
 class TestColumnAuthoredShapeMarkers:
     """Database `Column` carries the same Object / List / Json rules."""
 

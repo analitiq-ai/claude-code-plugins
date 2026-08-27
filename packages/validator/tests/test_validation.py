@@ -155,6 +155,91 @@ def test_embedded_schema_rejects_other_dialect(validator):
     assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
 
 
+def _sample_endpoint(node: dict, **defs):
+    """An endpoint whose record carries one field node — the slot a recorded
+    sample sits in."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["a"] = node
+    if defs:
+        schema["$defs"] = defs
+    return ep
+
+
+def _example_errors(validator, ep):
+    return [
+        e for e in _errors(validator.validate_document(ep))
+        if e["validator"] == "embedded-schema-example"
+    ]
+
+
+def test_recorded_sample_satisfying_its_node_passes(validator):
+    ep = _sample_endpoint({
+        "type": ["boolean", "null"], "native_type": "boolean",
+        "arrow_type": "Boolean", "examples": [True, None]})
+    assert _example_errors(validator, ep) == []
+
+
+def test_recorded_sample_contradicting_its_node_is_rejected(validator):
+    """The shape that ships a connector which validates clean and dies on the
+    first batch: the provider documents a boolean and sends the string "0"."""
+    ep = _sample_endpoint({
+        "type": ["boolean", "null"], "native_type": "boolean",
+        "arrow_type": "Boolean", "examples": ["0"]})
+    errors = _example_errors(validator, ep)
+    assert len(errors) == 1, errors
+    assert errors[0]["path"].endswith("/properties/a/examples/0"), errors
+    assert "'0'" in errors[0]["message"], errors
+
+
+def test_every_recorded_sample_is_graded(validator):
+    """Not just the first: an author who fixes one spelling and reruns should
+    not walk into the next one report at a time."""
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": ["fine", 7, 9]})
+    assert len(_example_errors(validator, ep)) == 2
+
+
+def test_a_sample_is_graded_through_the_reference_its_node_carries(validator):
+    """A node whose declaration is a `#/$defs/...` reference is graded against
+    what the reference resolves to — the whole document is in scope, so a
+    validator built on the node alone would call the reference unresolvable."""
+    ep = _sample_endpoint(
+        {"$ref": "#/$defs/Money", "examples": [9.99]},
+        Money={"type": "string", "native_type": "STRING", "arrow_type": "Utf8"})
+    errors = _example_errors(validator, ep)
+    assert len(errors) == 1, errors
+    assert "9.99" in errors[0]["message"], errors
+
+
+def test_a_finding_path_is_a_resolvable_json_pointer(validator):
+    """A property name carrying `/` is ONE pointer token; unescaped it points
+    at a node that is not there, and the reader is sent to the wrong field."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["a/b~c"] = {
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [7]}
+    errors = _example_errors(validator, ep)
+    assert len(errors) == 1, errors
+    assert errors[0]["path"].endswith("/properties/a~1b~0c/examples/0"), errors
+
+
+def test_samples_are_not_graded_against_a_malformed_schema(validator):
+    """A schema `check_schema` rejects is reported once, as the malformation it
+    is — not a second time in the vocabulary of whichever sample met it."""
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        # `minLength` must be a non-negative integer. Grading an instance
+        # against this node does not report a bad sample — it compares a length
+        # to a string and raises out of the validator entirely.
+        "minLength": "notanumber", "examples": ["fine"]})
+    errors = _errors(validator.validate_document(ep))
+    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert not any(e["validator"] == "embedded-schema-example" for e in errors), errors
+
+
 @pytest.fixture
 def connector_base():
     # A real, model-valid api connector (hand-crafting the exact Connector

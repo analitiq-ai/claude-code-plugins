@@ -1,0 +1,13 @@
+{
+  "schema": {
+    "type": "object",
+    "properties": {
+      "updated_at": {
+        "type": "string",
+        "native_type": "epoch",
+        "arrow_type": "Timestamp(SECOND, UTC)",
+        "examples": [1712345678]
+      }
+    }
+  }
+}
