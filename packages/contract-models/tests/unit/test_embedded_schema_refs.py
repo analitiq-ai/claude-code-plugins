@@ -1077,10 +1077,16 @@ class TestRecursiveSchemasTerminate:
             runs.append(json.loads(proc.stdout))
         assert runs[0], f"{fixture}: nothing reported — nothing is being measured"
         differing = [run for run in runs if run != runs[0]]
-        assert not differing, (
-            f"{fixture}: the reported findings differ between hash seeds:\n"
-            f"  {runs[0][:1]}\n  {differing[0][:1]}"
-        )
+        if differing:
+            # Where they part, not their first element: two runs that diverge
+            # at element 5 share elements 0-4, so printing element 0 prints one
+            # line twice and slices the signal away.
+            index, expected, got = next(
+                (i, a, b) for i, (a, b) in enumerate(zip(runs[0], differing[0]))
+                if a != b)
+            raise AssertionError(
+                f"{fixture}: orderings part at index {index}:\n"
+                f"  expected {expected[:90]!r}\n  got      {got[:90]!r}")
 
     @pytest.mark.parametrize("condition", [5, None, 1.5, "x", ["not"], {"not": 5}])
     def test_a_malformed_condition_is_read_as_no_answer(self, condition):
