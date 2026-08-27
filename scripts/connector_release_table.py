@@ -97,6 +97,92 @@ CATEGORIES: tuple[Category, ...] = (
             "sets the bump"
         ),
     ),
+    Category(
+        "write-mode-removed",
+        "major",
+        "Write mode removed from a kept endpoint",
+        note=(
+            "a mode key under `operations.write` the previous release shipped "
+            "is absent from an endpoint this one still ships — dropping the "
+            "whole `operations.write` block withdraws every mode it declared "
+            "at once. A stream's API destination selects the mode by that key, "
+            "so the selection resolves to nothing and the destination stops "
+            "writing; the endpoint surviving is what separates this from "
+            "`endpoint-removed`"
+        ),
+    ),
+    Category(
+        "record-field-removed",
+        "major",
+        "Record field removed",
+        note=(
+            "a field the previous release declared in a read operation's "
+            "record shape — the `items` of the array node `response.records` "
+            "resolves to (`RULE-ENDP-012`) — is no longer declared there. A "
+            "stream names those fields: its incremental `cursor_field`, and "
+            "every mapping assignment that reads one by path"
+        ),
+    ),
+    Category(
+        "record-field-type-changed",
+        "major",
+        "Record field type changed",
+        note=(
+            "a field both releases declare in the record shape froze a "
+            "different `native_type` / `arrow_type` pair. Direction does not "
+            "soften it: widening and narrowing alike re-type the column a "
+            "destination already created from that `arrow_type`, and a JSON "
+            "`type` that held still while the pair moved is the case a shape "
+            "diff misses"
+        ),
+    ),
+    Category(
+        "filter-operators-narrowed",
+        "major",
+        "Filter operators narrowed",
+        note=(
+            "an operator a param offered under `operators` — the "
+            "stream-filterability contract (`RULE-ENDP-055`) — is no longer "
+            "offered, whether the member left the list, the `operators` key "
+            "was dropped, or the param carrying it is gone. A stream filters "
+            "on the members the endpoint offered, so its filter stops being "
+            "expressible"
+        ),
+    ),
+    Category(
+        "conflict-keys-changed",
+        "major",
+        "Conflict keys changed on a kept write mode",
+        note=(
+            "the `conflict_keys` an upsert mode both releases ship matches on "
+            "are not the same set. The key is endpoint-owned — a stream "
+            "declares none — so a change re-keys every existing stream's "
+            "upsert silently: rows that matched an existing row now insert, "
+            "and rows that did not now overwrite one"
+        ),
+    ),
+    Category(
+        "endpoint-capability-narrowed",
+        "major",
+        "Kept endpoint withdrew something a stream binds",
+        note=(
+            "an endpoint both releases ship no longer offers something an "
+            "existing stream depends on — whether the stream names it or "
+            "reads it through the endpoint's own behaviour — and no category "
+            "above says which. The "
+            "endpoint's interior is wider than the categories that enumerate "
+            "it — a read operation dropped from a write-bearing endpoint, a "
+            "replication method or a cursor mapping withdrawn, a `pagination` "
+            "block removed so a stream silently reads one page, a filterable "
+            "param whose request-value contract tightened anywhere — a bound, "
+            "a pattern, a length, not only its type — an idempotency block "
+            "removed, a write input field removed or retyped, a nested record "
+            "field changed under an unchanged parent. Reach for this when the "
+            "diff withdraws something and nothing more specific fits, and say "
+            "in the `note` what was withdrawn. A release is never patch "
+            "because the vocabulary had no word for what it took away"
+        ),
+    ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
     Category(
         "type-map-canonical-changed",
@@ -114,6 +200,62 @@ CATEGORIES: tuple[Category, ...] = (
     Category("optional-input-added", "minor", "Optional input added"),
     Category("optional-output-added", "minor", "Optional discovery output added"),
     Category("optional-endpoint-added", "minor", "Optional endpoint added"),
+    Category(
+        "write-mode-added",
+        "minor",
+        "Write mode added to a kept endpoint",
+        note=(
+            "a mode key under `operations.write` that endpoint did not declare "
+            "before; a whole new endpoint document is `optional-endpoint-added`"
+        ),
+    ),
+    Category(
+        "record-field-added",
+        "minor",
+        "Record field added",
+        note=(
+            "a field the record shape did not declare before; the discovery "
+            "outputs `optional-output-added` names are a connector-level "
+            "block, not this. Minor because nothing an existing stream binds "
+            "stops resolving; a stream that maps its source without naming "
+            "fields carries the new one too, so name the added fields in the "
+            "`note`"
+        ),
+    ),
+    Category(
+        "filter-operators-widened",
+        "minor",
+        "Filter operators widened",
+        note=(
+            "a param offers an operator it did not offer before, including a "
+            "param newly declared with `operators`. These are endpoint params, "
+            "not the connection inputs `optional-input-added` names"
+        ),
+    ),
+    Category(
+        "endpoint-obligation-added",
+        "major",
+        "Kept endpoint now demands something of an existing document",
+        note=(
+            "an addition an existing stream must satisfy rather than one it "
+            "may opt into: a read param declared `required` with no default, "
+            "so a stream supplying no value for it stops resolving, or a "
+            "member added to a write mode's required input, so a stream whose "
+            "mapping does not produce it sends a record the provider refuses. "
+            "The additive categories are for what a stream MAY now use; an "
+            "addition it MUST now satisfy is drift wearing the other sign"
+        ),
+    ),
+    Category(
+        "endpoint-capability-added",
+        "minor",
+        "Kept endpoint offers something more a stream can bind",
+        note=(
+            "the additive counterpart, and the same fallback: an endpoint both "
+            "releases ship now offers something a stream document can name "
+            "that no category above covers"
+        ),
+    ),
     Category("type-map-rule-added", "minor", "Type-map rule added"),
     Category("bug-fix", "patch", "Bug fixes"),
     Category("doc-fix", "patch", "Doc fixes"),

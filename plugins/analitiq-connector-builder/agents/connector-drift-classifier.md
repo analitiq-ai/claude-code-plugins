@@ -28,25 +28,65 @@ rules for every document" says which file carries which artifact.
 ## Inputs
 
 - `previous_release_path` — absolute path to the prior released
-  connector directory or `connector.json`. The classifier also reads
-  the sibling `type-map-read.json` and `type-map-write.json` when
-  present.
+  connector directory or `connector.json`.
 - `current_path` — absolute path to the assembled draft (connector JSON
-  or its directory). The classifier also reads the sibling draft
-  `type-map-read.json` / `type-map-write.json` when present.
+  or its directory).
 
 ## Process
 
-1. Read both documents AND every sibling type-map file the connector's kind
-   ships (`RULE-PKG-030`). Each map is diffed independently; a change in any
+1. Read both documents, every sibling type-map file the connector's kind
+   ships (`RULE-PKG-030`), and every endpoint document under the `endpoints/`
+   directory beside each `connector.json` (`RULE-PKG-031`) — a database connector release ships
+   none (`RULE-DBEP-006`). Each file is diffed independently; a change in any
    of them drives the bump.
 2. Compute the structural diff. Use `diff` or `jq` via Bash, or compare in
    your reasoning against the rules below.
-3. For each change, classify it under the categories in the `DriftVerdict`
-   schema (see connector-builder/references/io-contracts.md).
-4. Apply the rollup stated under the bump table below.
-5. Compute `next_version` from the previous version's semver.
-6. Return `DriftVerdict` as a JSON block.
+3. Match endpoints across the two releases by `endpoint_id`; the filename
+   carries it (`RULE-PKG-031`). An id only one side ships is an endpoint
+   added or removed. For an id both sides ship, diff its interior — an
+   endpoint that survives can still withdraw what a stream binds:
+   - `operations.write` — the mode keys it declares, and the `conflict_keys`
+     each surviving upsert mode matches on.
+   - the record shape: `response.records` resolves to an array node
+     (`RULE-ENDP-012`), and the record is that node's `items` — the wrapper
+     key declares no fields, so diffing it reports no drift whatever changed.
+     Compare which fields the record declares and the `native_type` /
+     `arrow_type` each one froze; a destination column is typed from
+     `arrow_type`, and a JSON `type` that held still while `arrow_type` moved
+     is the case worth catching. Resolve the node the way the contract reads
+     it before comparing: an in-document `$ref` is followed and an `allOf`
+     composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
+     branch is not read as removed, and one that changed there is not missed.
+   - `operations.read.params.<name>.operators` — the operator members each
+     read param offers (`RULE-ENDP-055`). Read params only: a write mode
+     declares params through the same model, and a filter never names one.
+
+   Those are the interior sites with a category of their own. The interior is
+   larger than they are, so compare the rest of it too — the read operation's
+   presence, `pagination`, `replication.supported_methods` and
+   `cursor_mappings`, a filterable param's own request-value contract — every
+   constraint it declares, not only its type and requiredness, since a bound or
+   a pattern tightened around a value a stream already stores rejects that
+   stream as surely as removing the param — a write mode's `input.schema`
+   fields and which of them are required, an `idempotency` block — and
+   recurse:
+   a nested record field can change under a parent that did not, and a stream
+   addresses one by path. Anything withdrawn that an existing stream depends
+   on and no category names is `endpoint-capability-narrowed`; anything added
+   the same way is `endpoint-capability-added` — unless the addition is one a
+   stream must now satisfy rather than may use, which is
+   `endpoint-obligation-added` and major. None is a licence to stop looking
+   for the specific category — they exist so a release is never patch because
+   the vocabulary had no word for it.
+4. For each change, classify it under the categories in the `DriftVerdict`
+   schema (see connector-builder/references/io-contracts.md). Among the
+   interior additions step 3 finds, the tier follows what a stream can name:
+   a mode it selects, a record field it maps, an operator it filters on. Every
+   other category carries its own note; read it rather than reasoning from
+   this one.
+5. Apply the rollup stated under the bump table below.
+6. Compute `next_version` from the previous version's semver.
+7. Return `DriftVerdict` as a JSON block.
 
 ## Bump table
 
@@ -67,13 +107,70 @@ rules for every document" says which file carries which artifact.
   Streams pin endpoints by id, so the pin resolves to nothing and the stream
   stops reading — which is why a resource whose locator moves ships as a new
   document plus this removal rather than a rename (`RULE-ENDP-043`), and why
-  the removal half is what sets the bump), type-map-rule-removed,
-  type-map-canonical-changed (an existing matcher now resolves to a
-  different render — read map: an existing `native` resolves to a different
-  canonical; write map: an existing `canonical` renders a different native
-  DDL — either invalidates downstream consumers).
+  the removal half is what sets the bump), write-mode-removed (a mode key
+  under `operations.write` the previous release shipped is absent from an
+  endpoint this one still ships — dropping the whole `operations.write`
+  block withdraws every mode it declared at once. A stream's API destination
+  selects the mode by that key, so the selection resolves to nothing and the
+  destination stops writing; the endpoint surviving is what separates this
+  from `endpoint-removed`), record-field-removed (a field the previous
+  release declared in a read operation's record shape — the `items` of the
+  array node `response.records` resolves to (`RULE-ENDP-012`) — is no longer
+  declared there. A stream names those fields: its incremental
+  `cursor_field`, and every mapping assignment that reads one by path),
+  record-field-type-changed (a field both releases declare in the record
+  shape froze a different `native_type` / `arrow_type` pair. Direction does
+  not soften it: widening and narrowing alike re-type the column a
+  destination already created from that `arrow_type`, and a JSON `type` that
+  held still while the pair moved is the case a shape diff misses),
+  filter-operators-narrowed (an operator a param offered under `operators` —
+  the stream-filterability contract (`RULE-ENDP-055`) — is no longer
+  offered, whether the member left the list, the `operators` key was
+  dropped, or the param carrying it is gone. A stream filters on the members
+  the endpoint offered, so its filter stops being expressible),
+  conflict-keys-changed (the `conflict_keys` an upsert mode both releases
+  ship matches on are not the same set. The key is endpoint-owned — a stream
+  declares none — so a change re-keys every existing stream's upsert
+  silently: rows that matched an existing row now insert, and rows that did
+  not now overwrite one), endpoint-capability-narrowed (an endpoint both
+  releases ship no longer offers something an existing stream depends on —
+  whether the stream names it or reads it through the endpoint's own
+  behaviour — and no category above says which. The endpoint's interior is
+  wider than the categories that enumerate it — a read operation dropped
+  from a write-bearing endpoint, a replication method or a cursor mapping
+  withdrawn, a `pagination` block removed so a stream silently reads one
+  page, a filterable param whose request-value contract tightened anywhere —
+  a bound, a pattern, a length, not only its type — an idempotency block
+  removed, a write input field removed or retyped, a nested record field
+  changed under an unchanged parent. Reach for this when the diff withdraws
+  something and nothing more specific fits, and say in the `note` what was
+  withdrawn. A release is never patch because the vocabulary had no word for
+  what it took away), type-map-rule-removed, type-map-canonical-changed (an
+  existing matcher now resolves to a different render — read map: an
+  existing `native` resolves to a different canonical; write map: an
+  existing `canonical` renders a different native DDL — either invalidates
+  downstream consumers), endpoint-obligation-added (an addition an existing
+  stream must satisfy rather than one it may opt into: a read param declared
+  `required` with no default, so a stream supplying no value for it stops
+  resolving, or a member added to a write mode's required input, so a stream
+  whose mapping does not produce it sends a record the provider refuses. The
+  additive categories are for what a stream MAY now use; an addition it MUST
+  now satisfy is drift wearing the other sign).
 - **minor**: optional-input-added, optional-output-added,
-  optional-endpoint-added, type-map-rule-added.
+  optional-endpoint-added, write-mode-added (a mode key under
+  `operations.write` that endpoint did not declare before; a whole new
+  endpoint document is `optional-endpoint-added`), record-field-added (a
+  field the record shape did not declare before; the discovery outputs
+  `optional-output-added` names are a connector-level block, not this. Minor
+  because nothing an existing stream binds stops resolving; a stream that
+  maps its source without naming fields carries the new one too, so name the
+  added fields in the `note`), filter-operators-widened (a param offers an
+  operator it did not offer before, including a param newly declared with
+  `operators`. These are endpoint params, not the connection inputs
+  `optional-input-added` names), endpoint-capability-added (the additive
+  counterpart, and the same fallback: an endpoint both releases ship now
+  offers something a stream document can name that no category above
+  covers), type-map-rule-added.
 - **patch**: bug-fix, doc-fix, tuning, capability-block-added (a top-level
   capability block the connector did not carry before (`sql_capabilities`,
   `error_map`) appears for the first time — neither an input, an output nor

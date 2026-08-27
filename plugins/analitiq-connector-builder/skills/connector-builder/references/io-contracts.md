@@ -357,11 +357,17 @@ access and may not guess field types).
               "input-enum-narrowed", "storage-changed",
               "non-optional-input-added", "auth-shape-changed",
               "discovery-shape-changed", "sql-capabilities-changed",
-              "endpoint-removed", "type-map-rule-removed",
+              "endpoint-removed", "write-mode-removed",
+              "record-field-removed", "record-field-type-changed",
+              "filter-operators-narrowed", "conflict-keys-changed",
+              "endpoint-capability-narrowed", "type-map-rule-removed",
               "type-map-canonical-changed", "optional-input-added",
               "optional-output-added", "optional-endpoint-added",
-              "type-map-rule-added", "bug-fix", "doc-fix", "tuning",
-              "capability-block-added", "type-map-rule-reordered"
+              "write-mode-added", "record-field-added",
+              "filter-operators-widened", "endpoint-obligation-added",
+              "endpoint-capability-added", "type-map-rule-added", "bug-fix",
+              "doc-fix", "tuning", "capability-block-added",
+              "type-map-rule-reordered"
             ]
           },
           "note": { "type": "string" }
