@@ -213,6 +213,76 @@ def test_a_sample_is_graded_through_the_reference_its_node_carries(validator):
     assert "9.99" in errors[0]["message"], errors
 
 
+def test_a_write_input_records_samples_too(validator):
+    """The other schema an endpoint declares. An implementation grading only
+    the read response, or only the first embedded schema it meets, passes every
+    other test here."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["write"] = {
+        mode: {
+            "request": {"method": "POST", "path": "/widgets",
+                        "body": {"from_input": "record"}},
+            "params": {},
+            "input": {"schema": {"$schema": JS, "type": "object", "properties": {
+                "a": {"type": "string", "native_type": "STRING",
+                      "arrow_type": "Utf8", "examples": [bad]}}}},
+        }
+        for mode, bad in (("insert", 1), ("upsert", 2))
+    }
+    ep["operations"]["write"]["upsert"]["conflict_keys"] = ["a"]
+    paths = [e["path"] for e in _example_errors(validator, ep)]
+    assert sorted(paths) == [
+        "/operations/write/insert/input/schema/properties/a/examples/0",
+        "/operations/write/upsert/input/schema/properties/a/examples/0",
+    ], paths
+
+
+def test_a_sample_is_graded_against_its_own_node_not_the_composition(validator):
+    """`examples` sits on the node that records it, and that node is what
+    grades it — an `allOf` sibling constrains the instances the schema as a
+    whole accepts, not the sample recorded one branch down."""
+    ep = _sample_endpoint({"allOf": [{"type": "integer"}, {"examples": ["x"]}]})
+    assert _example_errors(validator, ep) == []
+
+
+def test_samples_are_graded_wherever_a_declaration_can_sit(validator):
+    """`properties` is where a record's fields live, and it is not the only
+    schema position the walk reaches."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["prefixItems"] = [{"type": "string", "examples": [1]}]
+    schema["examples"] = ["not an array"]
+    paths = sorted(e["path"] for e in _example_errors(validator, ep))
+    assert paths == [
+        "/operations/read/response/schema/examples/0",
+        "/operations/read/response/schema/items/prefixItems/0/examples/0",
+    ], paths
+
+
+def test_an_empty_examples_array_records_nothing_and_is_graded_as_nothing(
+    validator,
+):
+    """The boundary between "no samples" and "samples": the key is present, so
+    the node is collected, and there is still nothing to disagree with."""
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": []})
+    assert _example_errors(validator, ep) == []
+
+
+def test_the_finding_carries_the_shared_remedy(validator):
+    """One wording, whichever rule fires — an author meeting both on one
+    document should not read one instruction twice."""
+    from analitiq.contracts.endpoints import SAMPLE_CONTRADICTION_REMEDY
+
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [1]})
+    errors = _example_errors(validator, ep)
+    assert len(errors) == 1, errors
+    assert SAMPLE_CONTRADICTION_REMEDY in errors[0]["message"], errors[0]
+
+
 def test_a_finding_path_is_a_resolvable_json_pointer(validator):
     """A property name carrying `/` is ONE pointer token; unescaped it points
     at a node that is not there, and the reader is sent to the wrong field."""

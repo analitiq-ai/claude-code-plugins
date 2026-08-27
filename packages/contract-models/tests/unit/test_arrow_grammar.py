@@ -569,6 +569,13 @@ class TestRecordedWireSamples:
         ("2024-01-02t03:04:05z", True),
         ("2024-01-02 03:04:05-05:00", True),
         ("2024-01-02T03:04:05.123456+0200", True),
+        # Spellings ISO-8601 allows and providers emit: an hour-only offset,
+        # and the comma fraction separator.
+        ("2024-01-02T03:04:05+02", True),
+        ("2024-01-02T03:04:05,123Z", True),
+        # Anchored and read with `fullmatch`, so a trailing newline is not a
+        # date-time literal rather than a clean one.
+        ("2024-01-02T03:04:05Z\n", None),
         ("2024-01-02T03:04:05", False),
         ("2024-01-02T03:04", False),
         # Not a date-time literal: a date, an epoch, a provider spelling, and a

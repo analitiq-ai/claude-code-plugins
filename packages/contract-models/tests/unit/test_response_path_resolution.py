@@ -19,6 +19,7 @@ through `properties`. Every path the old properties-only walk resolved must
 still resolve — that is what guarantees no document that validates today starts
 failing. One test per conditional construct pins it.
 """
+import copy
 import threading
 import time
 
@@ -587,7 +588,11 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
     }
     response = {
         "records": {"ref": records or "response.body.data"},
-        "schema": RESPONSE_SCHEMA,
+        # Deep-copied, not shared: callers below mutate the schema they get
+        # back, and a shared one carried those edits into every later test in
+        # the module — a `$defs` entry left behind by one parametrized case
+        # reappearing in documents that never declared it.
+        "schema": copy.deepcopy(RESPONSE_SCHEMA),
     }
     if metadata is not None:
         response["metadata"] = metadata
@@ -1285,16 +1290,18 @@ class TestARecordShapeMustDeclareSomething:
         }
         return payload
 
-    @pytest.mark.parametrize(
-        ("items", "defs"),
-        [
-            ({}, None),  # the empty schema accepts anything and says nothing
-            ({"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}),
-        ],
-    )
-    def test_a_shape_that_composes_to_nothing_is_rejected(self, items, defs):
+    def test_a_shape_that_composes_to_nothing_is_rejected(self):
+        # The empty schema accepts anything and says nothing.
         with pytest.raises(ValidationError, match="declares nothing at all"):
-            parse_endpoint(self._payload(items, defs))
+            parse_endpoint(self._payload({}))
+
+    def test_a_record_shape_referring_only_to_itself_is_rejected(self):
+        """The self-`$ref` spelling composes to nothing the same way, and is
+        refused before that is reached: a reference ring does not terminate, so
+        RULE-ENDP-026 names it rather than leaving the fold to meet it."""
+        with pytest.raises(ValidationError, match="returns to itself"):
+            parse_endpoint(self._payload(
+                {"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}))
 
     @pytest.mark.parametrize(
         "items",
