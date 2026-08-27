@@ -327,7 +327,9 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
     # must not send them to report a validator bug, and it must say which of
     # the endpoint's embedded schemas it was.
     assert "please report" not in crashed[0]["message"], crashed[0]
-    assert crashed[0]["path"] == "/operations/read/response/schema", crashed[0]
+    # The sample, not the schema: the guard is per-sample, so the author is
+    # pointed at the one value that brought the grading down.
+    assert crashed[0]["path"].endswith("/properties/a/examples/0"), crashed[0]
     # The unrelated defect is still reported beside it.
     assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
 
@@ -338,22 +340,22 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
     reran the validator on an unchanged document and got the same findings in a
     different order. Subprocesses, because a seed is fixed for the life of one.
     """
-    import json
-    import os
     import subprocess
-    import sys
     import textwrap
-    from pathlib import Path
 
     ep = _endpoint("STRING", "Utf8")
     node = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
             "examples": [1]}
     schema = ep["operations"]["read"]["response"]["schema"]
+    # At least two members of EACH keyword bucket: with one, that bucket's
+    # loop has no order to vary and its `sorted()` is unpinned.
     schema["items"]["properties"] = {"p": dict(node)}
     schema["items"]["patternProperties"] = {"^x": dict(node)}
     schema["items"]["$defs"] = {"D": dict(node)}
     schema["items"]["allOf"] = [dict(node)]
+    schema["items"]["oneOf"] = [dict(node)]
     schema["items"]["not"] = dict(node)
+    schema["items"]["contains"] = dict(node)
 
     program = textwrap.dedent(
         """
@@ -363,17 +365,12 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         json.dump([f["path"] for f in v.validate_document(doc)], sys.stdout)
         """
     )
-    packages = Path(__file__).resolve().parents[2]
-    source = os.pathsep.join([
-        str(packages / "validator" / "src"),
-        str(packages / "contract-models" / "src"),
-    ])
     runs = []
     for seed in ("0", "1", "2", "3", "4"):
         proc = subprocess.run(
             [sys.executable, "-c", program, json.dumps(ep)],
             capture_output=True, text=True, check=True,
-            env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": source},
+            env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": _CLI_PYTHONPATH},
         )
         runs.append(json.loads(proc.stdout))
     assert runs[0], "no findings — nothing is being measured"
@@ -389,11 +386,20 @@ def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
     finding in the document and handed them a second wave on the next run."""
     ep = _endpoint("STRING", "Utf8")
     props = ep["operations"]["read"]["response"]["schema"]["items"]["properties"]
-    props["a"] = {"type": "string", "native_type": "STRING",
-                  "arrow_type": "Utf8", "examples": [1]}
-    props["b"] = {"$ref": "#/$defs/Missing"}
+    good = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+            "examples": [1]}
+    props["a"] = dict(good)
+    # WITH `examples`, so the bad node is actually graded and actually raises.
+    # Without them it is never reached, and this test passed while proving
+    # nothing — which is how the per-schema guard survived a round.
+    props["b"] = {"$ref": "#/$defs/Missing", "examples": [1]}
+    props["c"] = dict(good)
     findings = validator.validate_document(ep)
-    assert any(f["validator"] == "embedded-schema-example" for f in findings), findings
+    graded = {f["path"] for f in findings
+              if f["validator"] == "embedded-schema-example"}
+    for field in ("a", "b", "c"):
+        assert any(f"/properties/{field}/examples/0" in p for p in graded), (
+            field, sorted(graded))
     assert any("does not resolve" in f["message"] for f in findings), findings
 
 

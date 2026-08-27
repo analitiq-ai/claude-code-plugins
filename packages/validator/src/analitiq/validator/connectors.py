@@ -68,16 +68,7 @@ try:
             SLUG_RE,
             SAMPLE_CONTRADICTION_REMEDY,
         )
-        # RULE-ENDP-026's own walk, imported rather than approximated: it is
-        # what decides whether every `$ref` in an embedded schema resolves, and
-        # a sample cannot be graded through one that does not. Resolution only
-        # — a reference that resolves can still be one nothing following it
-        # comes back from, which is why the grading runs guarded rather than
-        # trusting this to make it safe.
-        from analitiq.contracts.endpoints import (
-            _validate_schema_refs,
-            iter_schema_nodes,
-        )
+        from analitiq.contracts.endpoints import iter_schema_nodes
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
@@ -324,30 +315,14 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 f"embedded schema at {where} is not a valid JSON Schema Draft "
                 f"2020-12 document: {exc.message}"))
             continue
-        # Guarded, because grading an instance is the one thing here that runs
-        # arbitrary keyword logic over content the author supplies: a
-        # `multipleOf` against a 400-digit sample raises `OverflowError` out of
-        # `iter_errors`, a reference ring recurses until the stack ends, and
-        # the metaschema has an opinion about neither. Unguarded, the
-        # dispatch-level guard turns that into one line REPLACING every finding
-        # on the document — including the ones the author was fixing.
-        #
-        # The blame is the author's, not this tool's: what brought the check
-        # down came out of their document, and the default wording would send
-        # them to file a bug with nothing in it. The pointer says which of an
-        # endpoint's embedded schemas it was, since a crash in one must not
-        # read like a crash in another.
-        findings.extend(_run_guarded(
-            _schema_example_findings, schema, pointer, where,
-            vid="embedded-schema-example", path=pointer,
-            blame=(
-                f"the recorded samples under {where} could not be graded. "
-                "Something in this schema takes the JSON Schema implementation "
-                "somewhere it cannot come back from — a reference that leads "
-                "back to itself, or a value a keyword cannot compute against. "
-                "Every other check on this document still ran"
-            )))
+        findings.extend(_schema_example_findings(schema, pointer, where))
     return findings
+
+
+def _first_error(validator, instance):
+    """The first way `instance` fails `validator`, or None — the whole of what
+    grading one sample is, wrapped so the guard has a callable to run."""
+    return next(validator.iter_errors(instance), None)
 
 
 def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dict]:
@@ -391,7 +366,35 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     for node_pointer, node in nodes:
         validator = root.evolve(schema=node)
         for index, example in enumerate(node["examples"]):
-            error = next(validator.iter_errors(example), None)
+            # Guarded per SAMPLE, because grading one runs arbitrary keyword
+            # logic over content the author supplies: a `multipleOf` against a
+            # 400-digit sample raises `OverflowError`, a reference ring recurses
+            # until the stack ends, and the metaschema has an opinion about
+            # neither. Guarded any wider and one such sample costs every other
+            # sample it shares a scope with — the author fixes what they were
+            # shown, reruns, and meets the next wave, which is the failure
+            # `test_every_recorded_sample_is_graded` exists to prevent.
+            #
+            # The blame is theirs, not this tool's: what brought the grading
+            # down came out of their document, and the default wording would
+            # send them to file a bug with nothing in it.
+            at = f"{where}{node_pointer}" if node_pointer else where
+            graded = _run_guarded(
+                _first_error, validator, example,
+                vid="embedded-schema-example",
+                path=f"{pointer}{node_pointer}/examples/{index}",
+                blame=(
+                    f"the recorded sample at {at} could not be graded. "
+                    "Something the node reaches takes the JSON Schema "
+                    "implementation somewhere it cannot come back from — a "
+                    "reference that leads back to itself, or a value a keyword "
+                    "cannot compute against. Every other sample on this "
+                    "document was still graded"
+                ))
+            if isinstance(graded, list):
+                findings.extend(graded)
+                continue
+            error = graded
             if error is None:
                 continue
             at = f"{where}{node_pointer}" if node_pointer else where

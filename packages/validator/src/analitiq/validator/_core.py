@@ -170,9 +170,37 @@ def _run_guarded(
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - last-resort guard
+        # The exception text is truncated: `jsonschema`'s referencing errors
+        # embed the whole schema root in their repr, which on a real endpoint
+        # is kilobytes of JSON inside one finding an agent has to read.
+        detail = f"{type(exc).__name__}: {exc}"
+        if len(detail) > _GUARD_DETAIL_MAX:
+            detail = detail[:_GUARD_DETAIL_MAX] + "…"
         return [finding(vid, "error", path,
-                        f"check {vid!r} could not finish ({type(exc).__name__}: {exc}); "
+                        f"{GUARD_PREFIX} {vid!r} {GUARD_VERB} ({detail}); "
                         + (blame or "this is a validator bug — please report."))]
+
+
+#: The two halves of the guard's message that anything recognising one of its
+#: findings has to match. Stated here because they ARE the recognition: the
+#: probe registry refuses to let a crash satisfy a probe that expects a
+#: rejection, and it identifies a crash by this wording. Reworded in place and
+#: that check silently stops firing, which is how it was found — a rename from
+#: "crashed unexpectedly" left the tripwire matching nothing.
+GUARD_PREFIX = "check"
+GUARD_VERB = "could not finish"
+#: How much of an exception's own text a finding carries.
+_GUARD_DETAIL_MAX = 300
+
+
+def is_guard_finding(item: dict) -> bool:
+    """Whether `item` is a check that could not finish, rather than a verdict.
+
+    A crash proves nothing in either direction — not that the document is
+    good, and not that the rejection a caller was expecting happened.
+    """
+    message = item.get("message", "")
+    return message.startswith(GUARD_PREFIX) and GUARD_VERB in message
 
 
 # ---------------------------------------------------------------------------
