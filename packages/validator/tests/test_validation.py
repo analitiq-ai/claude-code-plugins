@@ -306,7 +306,9 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     ep = _sample_endpoint({"$ref": ref, "examples": [1]})
     findings = validator.validate_document(ep)
     assert any(ref in f["message"] for f in findings), findings
-    assert not any("please report" in f["message"] for f in findings), findings
+    from analitiq.validator import GUARD_DEFAULT_BLAME
+
+    assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
 
 
 def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
@@ -326,7 +328,9 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
     # What brought it down came out of the author's document, so the finding
     # must not send them to report a validator bug, and it must say which of
     # the endpoint's embedded schemas it was.
-    assert "please report" not in crashed[0]["message"], crashed[0]
+    from analitiq.validator import GUARD_DEFAULT_BLAME
+
+    assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
     # The sample, not the schema: the guard is per-sample, so the author is
     # pointed at the one value that brought the grading down.
     assert crashed[0]["path"].endswith("/properties/a/examples/0"), crashed[0]

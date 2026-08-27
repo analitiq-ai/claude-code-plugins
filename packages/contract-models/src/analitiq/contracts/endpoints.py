@@ -1485,21 +1485,21 @@ def _validate_arrow_type_in_json_schema(
     # Each traversal always re-enters the walker so its entry-point bool/dict
     # check (above) runs on every visited slot — that's the only place
     # malformed schema positions (e.g. `items: "Int64"`) get surfaced.
-    for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
+    for key in JSON_SCHEMA_SUBSCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, dict):
             for sub_key, sub_schema in child.items():
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}.{sub_key}", errors
                 )
-    for key in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
                     sub_schema, f"{path}.{key}[{idx}]", errors
                 )
-    for key in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
             continue
         child = schema[key]
@@ -1514,6 +1514,17 @@ def _validate_arrow_type_in_json_schema(
                 )
         else:
             _validate_arrow_type_in_json_schema(child, f"{path}.{key}", errors)
+
+
+#: The same three inventories in a fixed order, and what every walk over them
+#: iterates. A frozenset's order is the interpreter's hash seed, so a walk that
+#: reached one raw ordered its findings — and an author rerunning the validator
+#: on an unchanged document got them back rearranged. Sorting at each of the
+#: nine call sites worked and left the tenth walk free to forget; iterating
+#: these does not.
+JSON_SCHEMA_SUBSCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SUBSCHEMA_KEYS))
+JSON_SCHEMA_LIST_OF_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS))
+JSON_SCHEMA_SINGLE_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS))
 
 
 #: Reference keywords the contract does not author, and why each is refused
@@ -1573,23 +1584,18 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     if not isinstance(schema, dict):
         return
     yield pointer, schema
-    # The three inventories are frozensets, so iterating them raw ordered the
-    # yield by the interpreter's hash seed. Every walk over them does it — the
-    # two error-collecting ones in this module sort for the same reason — so
-    # that an author rerunning the validator on an unchanged document gets the
-    # same findings back in the same order.
-    for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
+    for key in JSON_SCHEMA_SUBSCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, dict):
             for name, sub in child.items():
                 yield from iter_schema_nodes(
                     sub, f"{pointer}/{key}/{_escape_pointer_token(name)}")
-    for key in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, list):
             for index, sub in enumerate(child):
                 yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
-    for key in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
             continue
         child = schema[key]
@@ -1734,19 +1740,19 @@ def _validate_schema_refs(
                     "(spec: §API Response Extraction — embedded schema references)"
                 )
 
-    for key in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
+    for key in JSON_SCHEMA_SUBSCHEMA_ORDER:
         child = schema.get(key)
         if not isinstance(child, dict):
             continue
         for sub_key, sub_schema in child.items():
             _validate_schema_refs(sub_schema, f"{path}.{key}.{sub_key}", errors, root)
-    for key in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if not isinstance(child, list):
             continue
         for idx, sub_schema in enumerate(child):
             _validate_schema_refs(sub_schema, f"{path}.{key}[{idx}]", errors, root)
-    for key in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
             continue
         child = schema[key]
