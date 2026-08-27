@@ -56,4 +56,5 @@ __all__ = [
     "is_stream_doc",
     "is_pipeline_doc",
     "is_pipeline_bundle",
-    "validate_pipeline_bundle",]
+    "validate_pipeline_bundle",
+]

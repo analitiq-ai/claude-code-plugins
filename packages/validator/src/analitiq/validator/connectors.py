@@ -351,9 +351,10 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     Nothing else is gated. Resolution happens here for the first time in this
     module, so a reference the contract refuses can raise out of `iter_errors`
     — but so can a keyword that resolves nothing, and skipping a whole schema
-    for either costs the author every sample in it over one bad node. The
-    caller runs this guarded instead: a raise costs the samples in that one
-    embedded schema, and RULE-ENDP-026 still names the reference precisely.
+    for either costs the author every sample in it over one bad node. Each
+    sample is graded under its own guard instead, so a raise costs that one
+    sample and nothing else, and RULE-ENDP-026 still names the reference
+    precisely.
 
     `jsonschema` is imported HERE for the reason the caller states: only
     endpoint meta-validation needs it.
@@ -403,7 +404,6 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
             error = graded
             if error is None:
                 continue
-            at = f"{where}{node_pointer}" if node_pointer else where
             findings.append(finding(
                 "embedded-schema-example", "error",
                 f"{pointer}{node_pointer}/examples/{index}",
