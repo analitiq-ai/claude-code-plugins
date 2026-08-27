@@ -602,12 +602,13 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
         "operations": {
             "read": {
                 "request": request,
-                    # Deep, like the response schema above and for the same reason:
-            # `dict(...)` copies the map and shares every param under it, and a
-            # caller below writes through one (`params.c.default`), which a
-            # shallow copy carries into `STRATEGY_CASES` and out again into
-            # every later payload for that strategy.
-            "params": copy.deepcopy(case["params"]),
+                # Deep, like the response schema above and for the same
+                # reason: `dict(...)` copies the map and shares every param
+                # under it, and a caller below writes through one
+                # (`params.c.default`), which a shallow copy carries into
+                # `STRATEGY_CASES` and out again into every later payload for
+                # that strategy.
+                "params": copy.deepcopy(case["params"]),
                 "pagination": pagination,
                 "response": response,
             }

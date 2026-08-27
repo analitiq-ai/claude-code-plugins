@@ -1,10 +1,11 @@
 id: RULE-ENDP-026
 statement: >
   Every `$ref` in an embedded response or input schema MUST be an
-  in-document pointer that resolves to a schema node in the same document
-  and MUST NOT lead back to its own node through references alone, and the
-  schema MUST NOT use a keyword that retargets the base URI or defers a
-  reference to evaluation time.
+  in-document pointer that resolves to a schema node in the same document,
+  no set of nodes MUST hand the same value round to each other without any
+  of them declaring something about it, and the schema MUST NOT use a
+  keyword that retargets the base URI or defers a reference to evaluation
+  time.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -19,10 +20,13 @@ rationale: >
   subtree behind it is not annotation-checked, not covered by a type map,
   and not reported; the author is told nothing. A dangling local pointer
   fails the same way while looking safer, because a reference to nothing
-  asserts nothing and every instance satisfies it. A ring of references
-  looks safer still — each one resolves and lands on a schema — and is
-  worse: it describes no value at all, and whatever resolves it first
-  resolves until its stack runs out. Closing all of those is
+  asserts nothing and every instance satisfies it. A ring looks safer still,
+  since every hop in it resolves and lands on a schema, and is worse on both
+  counts: nothing in it declares anything about a value, and a consumer that
+  does follow it never finishes — a reference is only one of the ways round,
+  since a composition branch hands the same value on exactly as a reference
+  does, while a keyword descending into a member of the value cannot close a
+  ring at all. Closing all of those is
   also what makes it safe for declared-path resolution to follow a `$ref`
   at all: by the time a path is resolved, every reference it can meet is
   local, real, and lands on a node both structural walkers visited.
