@@ -1265,6 +1265,22 @@ JSON_SCHEMA_SINGLE_SCHEMA_KEYS: frozenset[str] = frozenset({
 })
 
 
+#: What an author does about a declaration its own recorded sample contradicts.
+#: Stated once and formatted into every such finding — the contract models
+#: raise one (RULE-ENDP-063) and `analitiq.validator` reports another
+#: (RULE-ENDP-064), and an author who meets both on one document should not be
+#: reading two wordings of one instruction. The last sentence is the
+#: load-bearing half: the sample is the only thing in the document that came
+#: from the wire, so deleting it is what makes the contradiction unfalsifiable
+#: again.
+SAMPLE_CONTRADICTION_REMEDY = (
+    "The sample is the evidence the declaration was decided from: correct the "
+    "declared type — and the connector's read type map, which is what resolves "
+    "the native token to it — to match what the provider sends, or correct the "
+    "sample if it was mistranscribed. Dropping the sample removes the "
+    "evidence, not the disagreement"
+)
+
 def _validate_examples_zone(
     schema: dict[str, Any], arrow_value: str, path: str, errors: list[str]
 ) -> None:
@@ -1296,12 +1312,8 @@ def _validate_examples_zone(
             f"{path}.examples[{index}]={example!r} "
             f"{'carries a zone' if carried else 'carries no zone'}, but "
             f"arrow_type={arrow_value!r} declares "
-            f"{'a zoned' if declared else 'a zone-naive'} timestamp. The "
-            "sample is the evidence the zone was decided from: correct the "
-            "declared type — and the connector's read type map, which is what "
-            "resolves the native token to it — to match what the provider "
-            "sends, or correct the sample if it was mistranscribed. Dropping "
-            "the sample removes the evidence, not the disagreement"
+            f"{'a zoned' if declared else 'a zone-naive'} timestamp. "
+            f"{SAMPLE_CONTRADICTION_REMEDY}"
         ))))
 
 
