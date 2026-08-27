@@ -1340,11 +1340,13 @@ def _validate_arrow_type_in_json_schema(
       (2) any subschema declaring `native_type` or `arrow_type` must declare
           both. Pairing is enforced per node; the walker does not distinguish
           leaf and inner subschemas.
-      (3) any subschema recording wire samples under `examples` must declare an
-          `arrow_type` whose zone-awareness those samples bear out —
-          RULE-ENDP-063, the mechanized half of RULE-SHRD-002. A sample whose
-          zone-awareness cannot be read, and a type whose family carries no
-          zone position, are simply not graded here.
+      (3) any subschema that records wire samples under `examples` AND declares
+          an `arrow_type` must declare one whose zone-awareness those samples
+          bear out — RULE-ENDP-063, the mechanized half of RULE-SHRD-002.
+          Recording a sample never obliges a node to declare a type: a node
+          carrying no `arrow_type`, a sample whose zone-awareness cannot be
+          read, and a type whose family carries no zone position are all
+          simply not graded here.
     """
     # JSON Schema 2020-12 permits `true` / `false` as a whole-schema short-form
     # ("anything" / "nothing"). Those are valid but carry no arrow_type, so
@@ -1568,21 +1570,24 @@ SAME_INSTANCE_SINGLE_APPLICATORS: frozenset[str] = frozenset({
     "not", "if", "then", "else",
 })
 
-#: The two whose effect depends on a sibling `if` (2020-12 §10.2.2.2-3): each
-#: applies only where `if` is present, and only on the outcome it is the branch
-#: for. A cycle through a branch no instance can enter is a cycle nothing
-#: follows, so it is not an edge. Named rather than written inline so
-#: `test_every_schema_keyword_is_classified` can hold it to the set it is drawn
-#: from — a conditional applicator landing outside both is the hole this pair
-#: would otherwise sit in.
+#: Applicators whose effect depends on a sibling `if` (2020-12 §10.2.2.2-3):
+#: each applies only where `if` is present, and only on the outcome it is the
+#: branch for. Where `if` is one of the boolean whole-schema short-forms the
+#: outcome is fixed for every instance, so the branch it does not select is one
+#: nothing enters and no edge is built for it. Only that spelling is read:
+#: whether some other schema accepts everything is not a question a walk over
+#: keywords answers, and a ring behind one is refused. Named rather than
+#: written inline so `test_every_schema_keyword_is_classified` can hold these
+#: to the set they are drawn from.
 IF_CONDITIONED_APPLICATORS: frozenset[str] = frozenset({"then", "else"})
 
-#: The rest of the vocabulary, each with why a cycle through it terminates.
-#: Named rather than derived so a keyword joining the contract cannot land in
-#: neither half unnoticed: `test_every_schema_keyword_is_classified` asserts
-#: these and the same-instance sets partition the vocabulary exactly, so a new
-#: keyword fails the build until someone decides which it is.
-DESCENDING_SCHEMA_KEYWORDS: frozenset[str] = frozenset({
+#: The rest of the vocabulary — every keyword that cannot close a ring, each
+#: with the reason it cannot. Named rather than derived so a keyword joining
+#: the contract cannot land in neither half unnoticed:
+#: `test_every_schema_keyword_is_classified` asserts these and the
+#: same-instance sets partition the vocabulary exactly, so a new keyword fails
+#: the build until someone decides which it is.
+RING_SAFE_SCHEMA_KEYWORDS: frozenset[str] = frozenset({
     # Apply to a member of the value.
     "properties", "patternProperties", "additionalProperties",
     "unevaluatedProperties", "items", "prefixItems", "unevaluatedItems",
@@ -1695,14 +1700,15 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
 
     A ring is a set of nodes that hand the same value round to each other —
     through `$ref`, or through a same-instance applicator branch — and never to
-    a part of it. Two things are wrong with one, and the first holds even where
-    nothing reaches it: nothing in the ring ever states what a value must be,
-    so it is a declaration that declares nothing, the same hole a dangling
-    reference leaves. The second is what makes it worse than that hole —
-    whatever does follow it does not stop. Declared-path resolution here halts
-    at the second visit and gets nothing; a JSON Schema implementation checking
-    a value does not halt at all; the engine reads these documents with
-    neither guard.
+    a part of it. What is wrong with one is that following it does not end, and
+    that holds whatever its members declare along the way: each hands the whole
+    value to the next, so nothing consumes any of it and there is no smaller
+    problem to bottom out on. Declared-path resolution here halts at the second
+    visit and gets nothing; a JSON Schema implementation checking a value does
+    not halt at all; the engine reads these documents with neither guard. A
+    ring nothing references today is refused too — the reference that reaches
+    it is one edit away, and a shape that cannot be checked is not made safe by
+    nothing checking it yet.
 
     Not a shape a reader spots: each hop resolves, lands on a schema, and
     reads as an ordinary alias or an ordinary composition. Ordinary *recursion*
@@ -1714,9 +1720,9 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     edges = _same_instance_edges(nodes)
     reported: set[frozenset[str]] = set()
     # A document where every `$defs` entry composes every other carries a ring
-    # per pair, so the count grows with the square of the entries and the text
-    # with their cube. Report enough to work from and say what was left, rather
-    # than building hundreds of megabytes of message for one broken document.
+    # per pair, so the count grows with the square of the entries. Report
+    # enough to work from and say what was left, rather than emitting one
+    # message per pair for a document with one thing wrong with it.
     ring_report_cap = 10
     # Iterative DFS with an explicit path, so a deep schema cannot exhaust the
     # interpreter's stack while looking for the thing that would exhaust it.
@@ -1746,10 +1752,12 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
                         f"{', '.join(repr('#' + p) for p in sorted(ring))} "
                         "hands the same value round to itself. Every hop "
                         "resolves, so it reads as an ordinary alias or "
-                        "composition, but nothing in the ring ever states what "
-                        "a value must be, and following it does not stop. "
-                        "Inline the shape one of them means, or point the ring "
-                        "at a subschema that declares something "
+                        "composition, but checking a value against it never "
+                        "finishes — whatever the members declare on the way "
+                        "round, each hands the whole value to the next and "
+                        "none of them consumes any of it. Break the ring: "
+                        "inline the shape one of them means, or point the hop "
+                        "that closes it at a subschema outside "
                         "(spec: §API Response Extraction — embedded schema "
                         "references)"
                     )

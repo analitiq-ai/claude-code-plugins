@@ -1675,6 +1675,37 @@ class TestMaterializeMatchesTheNaiveFold:
         with pytest.raises(DeclarationConflictError):
             materialize_node(record, root)
 
+    def test_the_module_docstring_names_every_public_helper(self):
+        """The module states its public surface, and a published package's
+        public surface is a commitment — so the statement is graded against the
+        module rather than kept by hand. It shipped one member short once
+        already.
+
+        Located by the `:func:` role, decided against the live module. What it
+        cannot see is whether each helper's one-line gloss still describes it;
+        that half is a reader's.
+        """
+        import re
+
+        from analitiq.contracts import endpoints as ep
+
+        documented = set(re.findall(r":func:`([a-z_][a-z0-9_]*)`", ep.__doc__))
+        public = {
+            name for name, value in vars(ep).items()
+            if not name.startswith("_")
+            and callable(value)
+            and getattr(value, "__module__", None) == ep.__name__
+            and not isinstance(value, type)
+        }
+        assert public, "no public helpers found — the extraction has stopped measuring"
+        assert documented == public, (
+            f"module docstring names {sorted(documented - public)} that are not "
+            f"public helpers here, and omits {sorted(public - documented)}. "
+            "The paragraph under `Stream-side endpoint references` is the "
+            "statement of this module's public surface; keep it exact or stop "
+            "claiming it."
+        )
+
     def test_every_schema_keyword_is_classified(self):
         """The partition that makes the next omission fail rather than ship.
 
@@ -1700,17 +1731,19 @@ class TestMaterializeMatchesTheNaiveFold:
             "edge builder reads it as a member and the partition below cannot "
             "see it"
         )
-        assert same_instance & ep.DESCENDING_SCHEMA_KEYWORDS == set(), (
+        assert same_instance & ep.RING_SAFE_SCHEMA_KEYWORDS == set(), (
             "a keyword is classified as both handing the value on and "
             "descending into part of it"
         )
-        assert same_instance | ep.DESCENDING_SCHEMA_KEYWORDS == vocabulary, (
+        assert same_instance | ep.RING_SAFE_SCHEMA_KEYWORDS == vocabulary, (
             "unclassified: "
-            f"{sorted(vocabulary ^ (same_instance | ep.DESCENDING_SCHEMA_KEYWORDS))}. "
-            "Every keyword the contract's walkers recurse through either hands "
-            "the value on — and belongs in the same-instance set matching how "
-            "it holds its subschemas, so the ring check follows it — or "
-            "descends into a part of it. Decide which, and say so there."
+            f"{sorted(vocabulary ^ (same_instance | ep.RING_SAFE_SCHEMA_KEYWORDS))}. "
+            "Every keyword the contract's walkers recurse through either "
+            "hands the value on — and belongs in the same-instance set "
+            "matching how it holds its subschemas, so the ring check follows "
+            "it — or cannot close a ring, because it descends into a part of "
+            "the value or is no applicator at all. Decide which, and say so "
+            "there."
         )
 
     def test_a_document_full_of_rings_reports_a_bounded_number_of_them(self):
@@ -1751,8 +1784,9 @@ class TestMaterializeMatchesTheNaiveFold:
             parse_endpoint(payload)
 
     #: `if` value -> the branch it can never select. `None` is "no `if` at
-    #: all", which kills both. Each row was checked against what `jsonschema`
-    #: actually does with the shape: the live half loops, the dead half returns.
+    #: all", which kills either. Each row is a shape `jsonschema` returns from
+    #: for every instance, because the branch carrying the reference is one no
+    #: instance reaches.
     @pytest.mark.parametrize("condition, dead", [
         (None, "then"),
         (None, "else"),
@@ -1779,6 +1813,8 @@ class TestMaterializeMatchesTheNaiveFold:
     @pytest.mark.parametrize("condition, live", [
         (True, "then"),
         (False, "else"),
+        # A schema `if` fixes nothing: whichever branch a given instance takes,
+        # some instance takes the other, so both are reachable.
         ({"type": "object"}, "then"),
         ({"type": "object"}, "else"),
     ])
