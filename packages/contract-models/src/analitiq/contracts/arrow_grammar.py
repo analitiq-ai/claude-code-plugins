@@ -600,11 +600,11 @@ def validate_cross_params(value: str) -> None:
 #: a provider sends (a date with no time, an epoch number, a provider-specific
 #: spelling) carries no answer, and the reader below says so rather than
 #: inventing one.
-WIRE_DATETIME_PATTERN = (
+_WIRE_DATETIME_PATTERN = (
     r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?"
     r"(?P<zone>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
 )
-_WIRE_DATETIME_RE = re.compile(f"^{WIRE_DATETIME_PATTERN}$")
+_WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
 
 
 def declares_zone(value: str) -> bool | None:
@@ -640,7 +640,7 @@ def declares_zone(value: str) -> bool | None:
 def sample_carries_zone(sample: Any) -> bool | None:
     """Whether a recorded wire sample carries a zone — None when it cannot say.
 
-    Only a string in :data:`WIRE_DATETIME_PATTERN` form is decidable. Every
+    Only a string in :data:`_WIRE_DATETIME_PATTERN` form is decidable. Every
     other sample returns None, which reads downstream as "no evidence" and
     never as "no zone": a provider that sends `1712345678` has not said its
     instants are naive, it has said nothing this reader can hear.

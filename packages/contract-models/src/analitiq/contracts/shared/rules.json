@@ -2908,7 +2908,7 @@
   },
   {
    "id": "RULE-ENDP-026",
-   "statement": "Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, a set of nodes MUST NOT hand the same value round to each other, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time.\n",
+   "statement": "Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -2927,7 +2927,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Everything on the path that reads an embedded schema runs offline — the validator by design, the engine when it resolves an endpoint, the conformance kit when it executes a read — so a reference out of the document is never followed by anything that could object to it. The subtree behind it is not annotation-checked, not covered by a type map, and not reported; the author is told nothing. A dangling local pointer fails the same way while looking safer, because a reference to nothing asserts nothing and every instance satisfies it. A ring looks safer still, since every hop in it resolves and lands on a schema: what is wrong with it is that a consumer following it never finishes, whatever its members declare along the way. A reference is only one of the ways round — a composition branch hands the same value on exactly as a reference does, while a keyword descending into a member of the value cannot close a ring at all — and a ring nothing reaches today is one a later reference reaches, so it is refused where it is written. Closing all of those is also what makes it safe for declared-path resolution to follow a `$ref` at all: by the time a path is resolved, every reference it can meet is local, real, and lands on a node both structural walkers visited.\n",
+   "rationale": "Everything on the path that reads an embedded schema runs offline — the validator by design, the engine when it resolves an endpoint, the conformance kit when it executes a read — so a reference out of the document is never followed by anything that could object to it. The subtree behind it is not annotation-checked, not covered by a type map, and not reported; the author is told nothing. A dangling local pointer fails the same way while looking safer, because a reference to nothing asserts nothing and every instance satisfies it. Closing all of those is also what makes it safe for declared-path resolution to follow a `$ref` at all: by the time a path is resolved, every reference it can meet is local, real, and lands on a node both structural walkers visited.\n",
    "status": "active",
    "superseded_by": null
   },

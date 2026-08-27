@@ -312,6 +312,24 @@ def test_samples_are_not_graded_through_a_reference_that_does_not_resolve(
     assert any(ref in f["message"] for f in findings), findings
 
 
+def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
+    """Grading an instance runs arbitrary keyword logic, and no gate ahead of
+    it makes that total: `multipleOf` against a 400-digit sample raises out of
+    `iter_errors`, and the metaschema has no opinion about it. Unguarded, the
+    dispatch-level guard answers that by replacing every finding on the
+    document — so the author loses the defects they were fixing and is told to
+    report a bug."""
+    ep = _sample_endpoint({
+        "type": "number", "multipleOf": 0.5, "examples": [int("9" * 400)]})
+    ep["endpoint_id"] = "WRONG NAME"
+    findings = validator.validate_document(ep)
+    crashed = [f for f in findings if "crashed unexpectedly" in f["message"]]
+    assert len(crashed) == 1, findings
+    assert crashed[0]["validator"] == "embedded-schema-example", crashed
+    # The unrelated defect is still reported beside it.
+    assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
+
+
 def test_a_dialect_declared_below_the_root_is_refused(validator):
     """`$schema` sets the dialect for a resource, and `$id` is not authorable
     here, so no subschema is a resource root. A jsonschema implementation still

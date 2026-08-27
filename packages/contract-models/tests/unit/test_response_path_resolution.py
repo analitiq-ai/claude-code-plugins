@@ -590,8 +590,8 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
         "records": {"ref": records or "response.body.data"},
         # Deep-copied, not shared: callers below mutate the schema they get
         # back, and a shared one carried those edits into every later test in
-        # the module — a `$defs` entry left behind by one parametrized case
-        # reappearing in documents that never declared it.
+        # the module — a `$defs` entry left behind by one case reappearing in
+        # documents that never declared it.
         "schema": copy.deepcopy(RESPONSE_SCHEMA),
     }
     if metadata is not None:
@@ -602,7 +602,7 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
         "operations": {
             "read": {
                 "request": request,
-                # Deep, like the response schema above and for the same
+                # Deep, like the response schema below and for the same
                 # reason: `dict(...)` copies the map and shares every param
                 # under it, and a caller below writes through one
                 # (`params.c.default`), which a shallow copy carries into
@@ -1296,18 +1296,16 @@ class TestARecordShapeMustDeclareSomething:
         }
         return payload
 
-    def test_a_shape_that_composes_to_nothing_is_rejected(self):
-        # The empty schema accepts anything and says nothing.
+    @pytest.mark.parametrize(
+        ("items", "defs"),
+        [
+            ({}, None),  # the empty schema accepts anything and says nothing
+            ({"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}),
+        ],
+    )
+    def test_a_shape_that_composes_to_nothing_is_rejected(self, items, defs):
         with pytest.raises(ValidationError, match="declares nothing at all"):
-            parse_endpoint(self._payload({}))
-
-    def test_a_record_shape_referring_only_to_itself_is_rejected(self):
-        """The self-`$ref` spelling composes to nothing the same way, and is
-        refused before that is reached: a reference ring does not terminate, so
-        RULE-ENDP-026 names it rather than leaving the fold to meet it."""
-        with pytest.raises(ValidationError, match="hands the same value round"):
-            parse_endpoint(self._payload(
-                {"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}))
+            parse_endpoint(self._payload(items, defs))
 
     @pytest.mark.parametrize(
         "items",
