@@ -312,6 +312,22 @@ def test_samples_are_not_graded_through_a_reference_that_does_not_resolve(
     assert any(ref in f["message"] for f in findings), findings
 
 
+def test_a_dialect_declared_below_the_root_is_refused(validator):
+    """`$schema` sets the dialect for a resource, and `$id` is not authorable
+    here, so no subschema is a resource root. A jsonschema implementation still
+    switches dialect for that subtree — so the sample would be graded under a
+    draft neither this contract nor the engine reads."""
+    ep = _sample_endpoint({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "dependencies": {"a": ["b"]},
+        "examples": [{"a": 1}]})
+    errors = _errors(validator.validate_document(ep))
+    assert any(
+        e["validator"] == "embedded-json-schema" and "$schema" in e["message"]
+        for e in errors), errors
+    assert not any(e["validator"] == "embedded-schema-example" for e in errors), errors
+
+
 def test_samples_are_not_graded_against_a_malformed_schema(validator):
     """A schema `check_schema` rejects is reported once, as the malformation it
     is — not a second time in the vocabulary of whichever sample met it."""

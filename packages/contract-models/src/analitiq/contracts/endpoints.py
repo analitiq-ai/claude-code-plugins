@@ -1568,6 +1568,15 @@ SAME_INSTANCE_SINGLE_APPLICATORS: frozenset[str] = frozenset({
     "not", "if", "then", "else",
 })
 
+#: The two whose effect depends on a sibling `if` (2020-12 §10.2.2.2-3): each
+#: applies only where `if` is present, and only on the outcome it is the branch
+#: for. A cycle through a branch no instance can enter is a cycle nothing
+#: follows, so it is not an edge. Named rather than written inline so
+#: `test_every_schema_keyword_is_classified` can hold it to the set it is drawn
+#: from — a conditional applicator landing outside both is the hole this pair
+#: would otherwise sit in.
+IF_CONDITIONED_APPLICATORS: frozenset[str] = frozenset({"then", "else"})
+
 #: The rest of the vocabulary, each with why a cycle through it terminates.
 #: Named rather than derived so a keyword joining the contract cannot land in
 #: neither half unnoticed: `test_every_schema_keyword_is_classified` asserts
@@ -1662,11 +1671,17 @@ def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
         for key in SAME_INSTANCE_SINGLE_APPLICATORS:
             if not isinstance(node.get(key), dict):
                 continue
-            # 2020-12 §10.2.2.2-3: `then`/`else` have no effect where `if` is
-            # absent, so nothing ever enters one and a cycle through it is not
-            # a cycle anything follows.
-            if key in ("then", "else") and not isinstance(node.get("if"), dict):
-                continue
+            if key in IF_CONDITIONED_APPLICATORS:
+                condition = node.get("if", _MISSING)
+                # No `if`: neither branch has any effect at all. A boolean `if`
+                # is the legal whole-schema short-form and selects one branch
+                # for every instance, so the OTHER one is the dead half — read
+                # by identity, since `1 == True` in Python and a schema is not
+                # a truth value.
+                if condition is _MISSING:
+                    continue
+                if condition is (True if key == "else" else False):
+                    continue
             out.append(f"{pointer}/{key}")
         edges[pointer] = [p for p in out if p in nodes]
     return edges
@@ -1695,6 +1710,11 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     nodes = dict(iter_schema_nodes(root))
     edges = _same_instance_edges(nodes)
     reported: set[frozenset[str]] = set()
+    # A document where every `$defs` entry composes every other carries a ring
+    # per pair, so the count grows with the square of the entries and the text
+    # with their cube. Report enough to work from and say what was left, rather
+    # than building hundreds of megabytes of message for one broken document.
+    ring_report_cap = 10
     # Iterative DFS with an explicit path, so a deep schema cannot exhaust the
     # interpreter's stack while looking for the thing that would exhaust it.
     finished: set[str] = set()
@@ -1716,6 +1736,8 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
                                  if depth >= on_path[nxt])
                 if ring not in reported:
                     reported.add(ring)
+                    if len(reported) > ring_report_cap:
+                        continue
                     errors.append(
                         f"{path}: the schema at "
                         f"{', '.join(repr('#' + p) for p in sorted(ring))} "
@@ -1733,6 +1755,11 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
                 continue
             on_path[nxt] = len(stack)
             stack.append((nxt, iter(edges[nxt])))
+    if len(reported) > ring_report_cap:
+        errors.append(
+            f"{path}: {len(reported) - ring_report_cap} further reference "
+            f"ring(s) are not listed; the first {ring_report_cap} are above"
+        )
 
 
 def _normalized_pointer(pointer: str) -> str:
