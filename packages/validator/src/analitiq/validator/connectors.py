@@ -297,11 +297,17 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
         # already in is redundant, not wrong, and refusing it would be an
         # obligation no rule states — the rendered reference an author
         # satisfies says only that a different draft is forbidden.
+        # A non-STRING `$schema` is malformed, not another draft: nothing
+        # switches dialect on it, and saying so would send the author to fix a
+        # mismatch that is not there while `continue` hides the metaschema
+        # error that names the real defect. The root branch above guards the
+        # same way; this mirrors it.
         nested = sorted(
             node_pointer
             for node_pointer, node in iter_schema_nodes(schema)
             if node_pointer
-            and node.get("$schema", _DRAFT_2020_12_SCHEMA) != _DRAFT_2020_12_SCHEMA
+            and isinstance(node.get("$schema"), str)
+            and node["$schema"] != _DRAFT_2020_12_SCHEMA
         )
         if nested:
             findings.append(finding(
@@ -325,10 +331,26 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     return findings
 
 
-def _first_error(validator, instance):
-    """The first way `instance` fails `validator`, or None — the whole of what
-    grading one sample is, wrapped so the guard has a callable to run."""
-    return next(validator.iter_errors(instance), None)
+def _sample_findings(validator, example, index, node_pointer, pointer, where) -> list[dict]:
+    """Grade one recorded sample: the findings it earns, empty when it passes.
+
+    Returns findings rather than the error, so the guard wrapping it has one
+    return type to hand back. Discriminating a crash from a verdict by asking
+    whether the result is a list works only while this returns something that
+    is not one — and the obvious next change here, reporting every way a sample
+    fails instead of the first, would quietly start pushing raw
+    `ValidationError` objects into the finding stream.
+    """
+    error = next(validator.iter_errors(example), None)
+    if error is None:
+        return []
+    at = f"{where}{node_pointer}" if node_pointer else where
+    return [finding(
+        "embedded-schema-example", "error",
+        f"{pointer}{node_pointer}/examples/{index}",
+        f"recorded sample {example!r} at {at} does not satisfy the "
+        f"declaration it sits on: {error.message}. "
+        f"{SAMPLE_CONTRADICTION_REMEDY}")]
 
 
 def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dict]:
@@ -386,8 +408,9 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
             # down came out of their document, and the default wording would
             # send them to file a bug with nothing in it.
             at = f"{where}{node_pointer}" if node_pointer else where
-            graded = _run_guarded(
-                _first_error, validator, example,
+            findings.extend(_run_guarded(
+                _sample_findings, validator, example, index, node_pointer,
+                pointer, where,
                 vid="embedded-schema-example",
                 path=f"{pointer}{node_pointer}/examples/{index}",
                 blame=(
@@ -397,19 +420,7 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                     "reference that leads back to itself, or a value a keyword "
                     "cannot compute against. Every other sample on this "
                     "document was still graded"
-                ))
-            if isinstance(graded, list):
-                findings.extend(graded)
-                continue
-            error = graded
-            if error is None:
-                continue
-            findings.append(finding(
-                "embedded-schema-example", "error",
-                f"{pointer}{node_pointer}/examples/{index}",
-                f"recorded sample {example!r} at {at} does not satisfy the "
-                f"declaration it sits on: {error.message}. "
-                f"{SAMPLE_CONTRADICTION_REMEDY}"))
+                )))
     return findings
 
 

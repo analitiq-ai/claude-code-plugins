@@ -14,7 +14,14 @@ pairs (and its validator ids) with the core dispatch registry — a new kind is 
 new module registering the same way, without touching `_core`. The public surface
 is re-exported here.
 """
-from ._core import finding, is_guard_finding, main, validate_document, VALIDATOR_IDS
+from ._core import (
+    finding,
+    is_guard_finding,
+    main,
+    validate_document,
+    GUARD_DEFAULT_BLAME,
+    VALIDATOR_IDS,
+)
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
 from . import pipelines  # noqa: F401  — imported for its self-registration side effect
 from . import connections  # noqa: F401  — imported for its self-registration side effect
@@ -43,6 +50,7 @@ from .streams import is_stream_doc
 __all__ = [
     "finding",
     "is_guard_finding",
+    "GUARD_DEFAULT_BLAME",
     "main",
     "validate_document",
     "VALIDATOR_IDS",

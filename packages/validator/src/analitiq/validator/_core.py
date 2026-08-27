@@ -178,7 +178,7 @@ def _run_guarded(
             detail = detail[:_GUARD_DETAIL_MAX] + "…"
         return [finding(vid, "error", path,
                         f"{GUARD_PREFIX} {vid!r} {GUARD_VERB} ({detail}); "
-                        + (blame or "this is a validator bug — please report."))]
+                        + (blame or GUARD_DEFAULT_BLAME))]
 
 
 #: The two halves of the guard's message that anything recognising one of its
@@ -189,6 +189,11 @@ def _run_guarded(
 #: "crashed unexpectedly" left the tripwire matching nothing.
 GUARD_PREFIX = "check"
 GUARD_VERB = "could not finish"
+#: What a crash tells the reader to do when the caller names nothing better.
+#: Stated here because two tests assert its ABSENCE — that a document-caused
+#: crash does not send the author to file a bug — and an absence assertion
+#: against a hand-typed string goes quiet, not red, when the string moves.
+GUARD_DEFAULT_BLAME = "this is a validator bug — please report."
 #: How much of an exception's own text a finding carries.
 _GUARD_DETAIL_MAX = 300
 
