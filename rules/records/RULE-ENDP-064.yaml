@@ -11,12 +11,11 @@ targets: [ResponseExtraction, WriteInput]
 rationale: >
   A recorded sample is the wire evidence the field's declaration was decided
   from, so a node that rejects its own sample is a declaration its own evidence
-  contradicts — and the contradiction is invisible to every other check in this
-  contract, which grades declarations against each other and never against a
-  value. That is the shape a connector ships in when a provider's documented
-  type and its documented example disagree: the endpoint validates clean, the
-  type map resolves, and the engine refuses the first batch because the reader
-  is handed a string where the declared type admits none. The draft this
+  contradicts — and a check comparing declarations to each other cannot see it.
+  That is the shape a connector takes when a provider's documented type and its
+  documented example disagree: with no sample recorded the endpoint is
+  internally consistent, the type map resolves the token it was told about, and
+  what the provider actually sends is described nowhere. The draft this
   contract is written in states that an `examples` entry need not validate;
   this contract requires it, because an example nobody grades is the same
   unfalsifiable claim the sample was recorded to remove. Graded in the

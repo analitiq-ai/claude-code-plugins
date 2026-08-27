@@ -168,7 +168,8 @@ EXPECTED_BARE_MARKER_ARROW_TYPES = {"Object", "List", "Json"}
 EXPECTED_KINDS = {"api", "database", "nosql", "document", "file", "s3", "stdout"}
 EXPECTED_TRANSPORT_TYPES = {"http", "sqlalchemy", "adbc", "s3", "file", "stdout"}
 # Validator ids a connector/endpoint/type-map finding may carry — restated in
-# io-contracts.md's `Diagnostics` enum and README.md § Validation. Owned by
+# io-contracts.md's `Diagnostics` enum and README.md § Validation, each graded
+# against the package at its own site by a test below. Owned by
 # `analitiq.validator.VALIDATOR_IDS`, minus the `bundle-*` ids, which only apply
 # to pipeline bundles this plugin never validates.
 EXPECTED_VALIDATOR_IDS = {
@@ -1650,6 +1651,42 @@ def test_diagnostics_enum_matches_the_package() -> None:
         documented,
         "update the `validator` enum in "
         "plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md.",
+    )
+
+
+def test_readme_validation_section_names_every_finding_id() -> None:
+    """The human-facing summary of what the validator checks, read off the file.
+
+    A curated summary is a permitted copy and an unpinned one is a defect, so
+    the id set the README's `## Validation` section names is graded against the
+    package the same way the `Diagnostics` fragment is. `test_validator_ids_
+    match_package` names the README only in its fix text, which pins nothing:
+    the section could lose an id, or keep one the validator stopped emitting,
+    with that gate green.
+
+    Located, not decided: the section is found by its heading and the ids by
+    their backticks, so no sentence in it is read.
+    """
+    from analitiq.validator import VALIDATOR_IDS
+
+    readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+    section = re.split(r"^## ", readme, flags=re.MULTILINE)
+    validation = [s for s in section if s.startswith("Validation\n")]
+    assert len(validation) == 1, (
+        "no single `## Validation` section in the connector README — the "
+        "extraction below would grade an empty set and pass"
+    )
+    named = {
+        token for token in re.findall(r"`([a-z0-9-]+)`", validation[0])
+        if token in VALIDATOR_IDS
+    }
+    package_set = {vid for vid in VALIDATOR_IDS if not vid.startswith("bundle-")}
+    assert named == package_set, _diff_msg(
+        "README § Validation finding ids",
+        package_set,
+        named,
+        "update the finding ids named in "
+        "plugins/analitiq-connector-builder/README.md § Validation.",
     )
 
 
