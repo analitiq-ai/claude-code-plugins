@@ -1695,6 +1695,11 @@ class TestMaterializeMatchesTheNaiveFold:
             | ep.SAME_INSTANCE_LIST_APPLICATORS
             | ep.SAME_INSTANCE_SINGLE_APPLICATORS
         )
+        assert ep.IF_CONDITIONED_APPLICATORS <= ep.SAME_INSTANCE_SINGLE_APPLICATORS, (
+            "a conditional applicator outside the set it is drawn from: the "
+            "edge builder reads it as a member and the partition below cannot "
+            "see it"
+        )
         assert same_instance & ep.DESCENDING_SCHEMA_KEYWORDS == set(), (
             "a keyword is classified as both handing the value on and "
             "descending into part of it"
@@ -1708,6 +1713,32 @@ class TestMaterializeMatchesTheNaiveFold:
             "descends into a part of it. Decide which, and say so there."
         )
 
+    def test_a_document_full_of_rings_reports_a_bounded_number_of_them(self):
+        """One message per distinct ring, and a `$defs` where every entry
+        composes every other carries a ring per pair — so the count grows with
+        the square of the entries and the text with their cube. What is left
+        out is stated rather than dropped."""
+        from analitiq.contracts import endpoints as ep
+
+        size = 30
+        defs = {
+            f"D{i}": {"allOf": [{"$ref": f"#/$defs/D{j}"}
+                                for j in range(size) if j != i]}
+            for i in range(size)
+        }
+        errors: list[str] = []
+        ep._validate_schema_refs(
+            {"type": "object", "$defs": defs,
+             "properties": {"f": {"$ref": "#/$defs/D0"}}},
+            "response.schema", errors,
+        )
+        listed = [e for e in errors if "hands the same value round" in e]
+        remainder = [e for e in errors if "further reference ring" in e]
+        assert len(listed) == 10, len(listed)
+        assert len(remainder) == 1, errors[-3:]
+        # Every ring is still counted; only the listing is bounded.
+        assert f"{size * (size - 1) // 2 - len(listed)} further" in remainder[0]
+
     def test_a_ring_through_a_map_applicator_is_refused(self):
         """`dependentSchemas` conditions on a property being present and then
         validates the WHOLE instance (2020-12 §10.2.2.4), so it hands the value
@@ -1719,18 +1750,47 @@ class TestMaterializeMatchesTheNaiveFold:
         with pytest.raises(ValidationError, match="hands the same value round"):
             parse_endpoint(payload)
 
-    @pytest.mark.parametrize("keyword", ["then", "else"])
-    def test_a_branch_no_instance_enters_is_not_a_ring(self, keyword):
-        """`then`/`else` have no effect where `if` is absent (2020-12
-        §10.2.2.2-3), so a cycle through one is a cycle nothing follows."""
+    #: `if` value -> the branch it can never select. `None` is "no `if` at
+    #: all", which kills both. Each row was checked against what `jsonschema`
+    #: actually does with the shape: the live half loops, the dead half returns.
+    @pytest.mark.parametrize("condition, dead", [
+        (None, "then"),
+        (None, "else"),
+        # The whole-schema short-forms select one branch for every instance,
+        # so the other is unreachable.
+        (True, "else"),
+        (False, "then"),
+    ])
+    def test_a_branch_no_instance_enters_is_not_a_ring(self, condition, dead):
+        """`then`/`else` apply only where `if` is present, and only on the
+        outcome each is the branch for (2020-12 §10.2.2.2-3). A cycle through a
+        branch nothing enters is a cycle nothing follows."""
+        inert: dict = {"type": "object", dead: {"$ref": "#/$defs/Inert"}}
+        if condition is not None:
+            inert["if"] = condition
         parse_endpoint(_endpoint_with_record_shape(
             items={"type": "object", "properties": {
                 "id": {"type": "string"},
                 "nested": {"$ref": "#/$defs/Inert"},
             }},
-            defs={"Inert": {"type": "object",
-                            keyword: {"$ref": "#/$defs/Inert"}}},
+            defs={"Inert": inert},
         ))
+
+    @pytest.mark.parametrize("condition, live", [
+        (True, "then"),
+        (False, "else"),
+        ({"type": "object"}, "then"),
+        ({"type": "object"}, "else"),
+    ])
+    def test_a_branch_an_instance_can_enter_is_a_ring(self, condition, live):
+        """The other side of the same reading. A boolean `if` is easy to miss:
+        it is a legal schema, not a truth value the edge builder may skip."""
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(_endpoint_with_record_shape(
+                items={"$ref": "#/$defs/Live"},
+                defs={"Live": {"if": condition,
+                               live: {"$ref": "#/$defs/Live"}}},
+            ))
 
     def test_a_ring_through_a_composition_keyword_is_refused(self):
         """`allOf`/`anyOf`/`not` hand the SAME value on, so a ring through one

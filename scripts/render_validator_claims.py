@@ -157,17 +157,23 @@ def _record_node(doc: dict) -> dict:
     from analitiq.contracts.endpoints import resolve_read_record_schema
 
     response = doc["operations"]["read"]["response"]
+    indexed_ref = "response.body.data"
     node = response["schema"]["properties"]["data"]["items"]
     resolved = resolve_read_record_schema(response, response["schema"])
-    if resolved != node:
+    # Both halves, because each misses what the other catches: the ref pins
+    # WHERE the record is, and a retargeted ref whose new path happens to carry
+    # an identical shape compares equal; the value pins what is AT the indexed
+    # path, and a record moved behind a `$ref` leaves the ref untouched.
+    if response["records"]["ref"] != indexed_ref or resolved != node:
         # Raised, not asserted: `-O` strips an assert, and a check that
         # disappears under an optimisation flag is not a check. This module
         # already reports its own defects this way.
         raise RuntimeError(
-            "the example endpoint's record shape is no longer the `data` "
-            "array's `items`; probes would declare their fields on a node the "
-            "read contract does not resolve to. Reach it the way "
-            "`resolve_read_record_schema` does, on the live document."
+            f"the example endpoint's record shape is no longer the `items` of "
+            f"{indexed_ref!r} (its `records.ref` is "
+            f"{response['records']['ref']!r}); probes would declare their "
+            "fields on a node the read contract does not resolve to. Reach it "
+            "the way `resolve_read_record_schema` does, on the live document."
         )
     return node
 
