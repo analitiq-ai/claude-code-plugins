@@ -49,6 +49,7 @@ from ._core import (
     register_kind,
     register_validator_ids,
     _model_findings,
+    _run_guarded,
 )
 
 # The contract models resolve from the `analitiq-contract-models` dependency —
@@ -323,7 +324,16 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 f"embedded schema at {where} is not a valid JSON Schema Draft "
                 f"2020-12 document: {exc.message}"))
             continue
-        findings.extend(_schema_example_findings(schema, pointer, where))
+        # Guarded, because grading an instance is the one thing here that
+        # runs arbitrary keyword logic: `multipleOf` against a 400-digit
+        # sample raises `OverflowError` out of `iter_errors`, and the
+        # metaschema has no opinion about it. Unguarded, the dispatch-level
+        # guard turns that into one "validator bug" line REPLACING every
+        # finding on the document — including the ones the author was fixing.
+        # Guarded here, a crash costs this check and nothing else.
+        findings.extend(_run_guarded(
+            _schema_example_findings, schema, pointer, where,
+            vid="embedded-schema-example"))
     return findings
 
 
@@ -344,14 +354,14 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     instance against a malformed schema reports the malformation a second time,
     in the vocabulary of whichever example happened to meet it first. A schema
     whose references the contract refuses is skipped for the same reason and
-    one more. The gate is every finding RULE-ENDP-026's walk emits, not only
-    the unresolvable ones — a ring, a `$id` retargeting the base URI, a
-    reference into a non-schema position — because resolution happens here for
-    the first time in this module: each of those either raises out of
-    `iter_errors` or makes it resolve something other than what the contract
-    read, and the guard around this check answers a raise by replacing every
-    finding on the document with "validator bug — please report".
-    RULE-ENDP-026 names each of them precisely; this check has nothing to add.
+    one more: resolution happens here for the first time in this module, so a
+    reference RULE-ENDP-026 objects to either raises out of `iter_errors` or
+    resolves to something other than what the contract read. That rule names
+    each of them precisely; this check has nothing to add to it.
+
+    Neither gate makes `iter_errors` total, and this does not try to be — the
+    caller runs it guarded, so a keyword that raises costs this check's
+    findings rather than the document's.
 
     `jsonschema` is imported HERE for the reason the caller states: only
     endpoint meta-validation needs it.

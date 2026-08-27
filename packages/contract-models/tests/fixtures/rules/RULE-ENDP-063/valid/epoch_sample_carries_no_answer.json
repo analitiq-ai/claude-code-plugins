@@ -3,10 +3,12 @@
     "type": "object",
     "properties": {
       "updated_at": {
-        "type": "string",
+        "type": "integer",
         "native_type": "epoch",
         "arrow_type": "Timestamp(SECOND, UTC)",
-        "examples": [1712345678]
+        "examples": [
+          1712345678
+        ]
       }
     }
   }
