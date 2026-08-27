@@ -20,8 +20,9 @@ Endpoint documents have no top-level ``kind`` field. The owning connector's
 Stream-side endpoint references (``EndpointRef``) live in ``analitiq.contracts.stream``.
 
 Public helpers this module exports beside the models: :func:`parse_endpoint`
-dispatches a payload to its kind; :func:`iter_schema_nodes` walks an embedded
-schema's structural positions; :func:`resolve_local_pointer`,
+dispatches a payload to its kind; :func:`is_valid_conflict_keys` is the
+conflict-key predicate the paths that never run the model share;
+:func:`iter_schema_nodes` walks an embedded schema's structural positions; :func:`resolve_local_pointer`,
 :func:`resolve_schema_ref`, :func:`resolve_declared_path`,
 :func:`resolve_read_record_schema`, :func:`find_record_field_properties`,
 :func:`effective_properties` and :func:`materialize_node` are the read
@@ -1549,17 +1550,41 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 
 
 #: Applicator keywords whose subschemas apply to the SAME instance the node
-#: does, rather than to a child of it. A cycle over these edges never consumes
-#: any part of the value, so a consumer following them does not come back —
-#: which is what separates a ring from ordinary recursion, where every hop
-#: descends through `properties` or `items` into a smaller value and bottoms
-#: out. `prefixItems` is a list keyword like `allOf` and is deliberately absent:
-#: it applies to array positions, so it descends.
+#: does, rather than to a part of it. A cycle over these edges never consumes
+#: any of the value, so a consumer following them does not come back — which is
+#: what separates a ring from ordinary recursion, where every hop descends into
+#: something smaller and bottoms out. Split by how the keyword holds its
+#: subschemas, because that is how each is reached: a map, a list, or one.
+SAME_INSTANCE_MAP_APPLICATORS: frozenset[str] = frozenset({
+    # 2020-12 §10.2.2.4: each named subschema validates the WHOLE instance,
+    # conditioned on a property being present — it does not descend into that
+    # property.
+    "dependentSchemas",
+})
 SAME_INSTANCE_LIST_APPLICATORS: frozenset[str] = frozenset({
     "allOf", "anyOf", "oneOf",
 })
 SAME_INSTANCE_SINGLE_APPLICATORS: frozenset[str] = frozenset({
     "not", "if", "then", "else",
+})
+
+#: The rest of the vocabulary, each with why a cycle through it terminates.
+#: Named rather than derived so a keyword joining the contract cannot land in
+#: neither half unnoticed: `test_every_schema_keyword_is_classified` asserts
+#: these and the same-instance sets partition the vocabulary exactly, so a new
+#: keyword fails the build until someone decides which it is.
+DESCENDING_SCHEMA_KEYWORDS: frozenset[str] = frozenset({
+    # Apply to a member of the value.
+    "properties", "patternProperties", "additionalProperties",
+    "unevaluatedProperties", "items", "prefixItems", "unevaluatedItems",
+    "contains",
+    # Applies to each property NAME, which is a string, not the object.
+    "propertyNames",
+    # Applies to the DECODED content of a string, not the string.
+    "contentSchema",
+    # Not applicators: a subschema here validates nothing until something
+    # references it, and the reference is an edge in its own right.
+    "$defs", "definitions",
 })
 
 
@@ -1575,9 +1600,9 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     the node it came from even under a property named `a/b`.
 
     The two error-collecting walkers in this module predate it and stay as they
-    are: each re-enters on a non-dict child to report a malformed schema
-    position, which a yielding traversal cannot do, and each reports paths in a
-    dotted spelling rather than as pointers.
+    are: both report paths in a dotted spelling rather than as pointers, and
+    `_validate_arrow_type_in_json_schema` re-enters on a non-dict child to
+    report a malformed schema position, which a yielding traversal cannot do.
     """
     if not isinstance(schema, dict):
         return
@@ -1607,7 +1632,7 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
 
 def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
     """Which nodes each node hands the SAME value on to — a `$ref` target, and
-    every subschema under an applicator in the two sets above.
+    every subschema under an applicator in the same-instance sets above.
 
     An edge whose target is not a node of this document is dropped rather than
     reported: a reference that lands outside the document, on nothing, on a
@@ -1625,13 +1650,24 @@ def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
             target = _ref_pointer(ref)
             if target is not None:
                 out.append(_normalized_pointer(target))
+        for key in SAME_INSTANCE_MAP_APPLICATORS:
+            child = node.get(key)
+            if isinstance(child, dict):
+                out += [f"{pointer}/{key}/{_escape_pointer_token(name)}"
+                        for name in child]
         for key in SAME_INSTANCE_LIST_APPLICATORS:
             child = node.get(key)
             if isinstance(child, list):
                 out += [f"{pointer}/{key}/{i}" for i, _ in enumerate(child)]
         for key in SAME_INSTANCE_SINGLE_APPLICATORS:
-            if isinstance(node.get(key), dict):
-                out.append(f"{pointer}/{key}")
+            if not isinstance(node.get(key), dict):
+                continue
+            # 2020-12 §10.2.2.2-3: `then`/`else` have no effect where `if` is
+            # absent, so nothing ever enters one and a cycle through it is not
+            # a cycle anything follows.
+            if key in ("then", "else") and not isinstance(node.get("if"), dict):
+                continue
+            out.append(f"{pointer}/{key}")
         edges[pointer] = [p for p in out if p in nodes]
     return edges
 
@@ -1640,12 +1676,15 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     """RULE-ENDP-026's terminating half: no ring of same-instance edges.
 
     A ring is a set of nodes that hand the same value round to each other —
-    through `$ref`, or through an `allOf`/`anyOf`/`oneOf`/`not`/`if`/`then`/
-    `else` branch — and never to a part of it. Nothing in such a ring ever
-    states what a value must be, and whatever follows it does not stop:
-    declared-path resolution here halts at the second visit and gets nothing,
-    a JSON Schema implementation checking a value does not halt at all, and
-    the engine reads these documents with neither guard.
+    through `$ref`, or through a same-instance applicator branch — and never to
+    a part of it. Two things are wrong with one, and the first holds even where
+    nothing reaches it: nothing in the ring ever states what a value must be,
+    so it is a declaration that declares nothing, the same hole a dangling
+    reference leaves. The second is what makes it worse than that hole —
+    whatever does follow it does not stop. Declared-path resolution here halts
+    at the second visit and gets nothing; a JSON Schema implementation checking
+    a value does not halt at all; the engine reads these documents with
+    neither guard.
 
     Not a shape a reader spots: each hop resolves, lands on a schema, and
     reads as an ordinary alias or an ordinary composition. Ordinary *recursion*

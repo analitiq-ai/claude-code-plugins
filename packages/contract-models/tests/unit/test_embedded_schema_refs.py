@@ -1245,21 +1245,36 @@ class TestKeywordVocabularyHasOneOwner:
 
     def test_the_validator_keeps_no_copy_of_the_vocabulary(self):
         """It walks with the contract's own iterator, so there is no second set
-        to compare — and re-introducing one is what this now catches."""
+        to compare.
+
+        A module global holding any keyword of the vocabulary is reported, and
+        one that IS the contract's own object is not — importing the owner is
+        the prescribed form, restating it is the defect, and equality alone
+        cannot tell them apart. What this cannot see is a copy that has already
+        diverged past sharing any keyword at all; that a walker still recurses
+        where the contract's does is the reader's, and the neighbouring
+        `test_rendered_node_*` cases pin the surface the copy would show up on.
+        """
         from analitiq.contracts import endpoints as ep
         from analitiq.validator import connectors as vc
 
         assert vc.iter_schema_nodes is ep.iter_schema_nodes
+        owned = (ep.JSON_SCHEMA_SUBSCHEMA_KEYS
+                 | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+                 | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS)
         restated = sorted(
             name for name, value in vars(vc).items()
             if isinstance(value, (frozenset, set))
-            and value in (ep.JSON_SCHEMA_SUBSCHEMA_KEYS,
-                          ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-                          ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS)
+            and value & owned
+            and not any(value is bucket for bucket in (
+                ep.JSON_SCHEMA_SUBSCHEMA_KEYS,
+                ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+                ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            ))
         )
         assert not restated, (
-            f"{restated} restate a keyword bucket the contract owns; walk with "
-            "`iter_schema_nodes` instead of keying off a local copy"
+            f"{restated} restate keywords the contract owns; walk with "
+            "`iter_schema_nodes`, or import the bucket rather than copying it"
         )
 
     def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
@@ -1660,6 +1675,63 @@ class TestMaterializeMatchesTheNaiveFold:
         with pytest.raises(DeclarationConflictError):
             materialize_node(record, root)
 
+    def test_every_schema_keyword_is_classified(self):
+        """The partition that makes the next omission fail rather than ship.
+
+        The ring check follows the same-instance half and not the descending
+        half, so a keyword in neither is one the check silently does not
+        follow — which is how `dependentSchemas` came to be missed: a
+        same-instance applicator with no bucket of its own shape.
+        """
+        from analitiq.contracts import endpoints as ep
+
+        vocabulary = (
+            ep.JSON_SCHEMA_SUBSCHEMA_KEYS
+            | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
+            | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        )
+        same_instance = (
+            ep.SAME_INSTANCE_MAP_APPLICATORS
+            | ep.SAME_INSTANCE_LIST_APPLICATORS
+            | ep.SAME_INSTANCE_SINGLE_APPLICATORS
+        )
+        assert same_instance & ep.DESCENDING_SCHEMA_KEYWORDS == set(), (
+            "a keyword is classified as both handing the value on and "
+            "descending into part of it"
+        )
+        assert same_instance | ep.DESCENDING_SCHEMA_KEYWORDS == vocabulary, (
+            "unclassified: "
+            f"{sorted(vocabulary ^ (same_instance | ep.DESCENDING_SCHEMA_KEYWORDS))}. "
+            "Every keyword the contract's walkers recurse through either hands "
+            "the value on — and belongs in the same-instance set matching how "
+            "it holds its subschemas, so the ring check follows it — or "
+            "descends into a part of it. Decide which, and say so there."
+        )
+
+    def test_a_ring_through_a_map_applicator_is_refused(self):
+        """`dependentSchemas` conditions on a property being present and then
+        validates the WHOLE instance (2020-12 §10.2.2.4), so it hands the value
+        on rather than descending into that property."""
+        payload = _endpoint_with_record_shape(
+            items={"$ref": "#/$defs/Ring"},
+            defs={"Ring": {"dependentSchemas": {"id": {"$ref": "#/$defs/Ring"}}}},
+        )
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(payload)
+
+    @pytest.mark.parametrize("keyword", ["then", "else"])
+    def test_a_branch_no_instance_enters_is_not_a_ring(self, keyword):
+        """`then`/`else` have no effect where `if` is absent (2020-12
+        §10.2.2.2-3), so a cycle through one is a cycle nothing follows."""
+        parse_endpoint(_endpoint_with_record_shape(
+            items={"type": "object", "properties": {
+                "id": {"type": "string"},
+                "nested": {"$ref": "#/$defs/Inert"},
+            }},
+            defs={"Inert": {"type": "object",
+                            keyword: {"$ref": "#/$defs/Inert"}}},
+        ))
+
     def test_a_ring_through_a_composition_keyword_is_refused(self):
         """`allOf`/`anyOf`/`not` hand the SAME value on, so a ring through one
         never consumes any part of it — a `$ref`-only walk sees a node whose
@@ -1676,7 +1748,8 @@ class TestMaterializeMatchesTheNaiveFold:
             with pytest.raises(ValidationError,
                                match="hands the same value round") as exc:
                 parse_endpoint(payload)
-            assert keyword in str(exc.value), (keyword, str(exc.value))
+            assert f"'#/$defs/Ring/{keyword}" in str(exc.value), (
+                keyword, str(exc.value))
 
     @pytest.mark.parametrize("shape", [
         {"type": "array", "items": {"$ref": "#/$defs/Deep"}},
@@ -1739,6 +1812,22 @@ class TestMaterializeMatchesTheNaiveFold:
         payload = _endpoint_with_record_shape(
             items={"$ref": "#/$defs/B"},
             defs={
+                "A": {"properties": {"x": {"type": ["string", "boolean"]}}},
+                "B": {"allOf": [{"$ref": "#/$defs/A"}, {"$ref": "#/$defs/C"}],
+                      "properties": {"x": {"type": ["integer", "boolean"]}}},
+                "C": {"properties": {"x": {"type": ["string", "integer"]}}},
+            },
+        )
+        with pytest.raises(ValidationError, match="self-contradictory"):
+            parse_endpoint(payload)
+
+    def test_a_contradiction_reached_through_a_ring_is_refused_as_the_ring(self):
+        """The same contributors wired into a cycle. `A` and `C` reference each
+        other, so the fold this class is about never runs — and the diagnostic
+        an author can act on is the ring, which needs no folding to see."""
+        payload = _endpoint_with_record_shape(
+            items={"$ref": "#/$defs/B"},
+            defs={
                 "A": {"$ref": "#/$defs/C",
                       "properties": {"x": {"type": ["string", "boolean"]}}},
                 "B": {"$ref": "#/$defs/A",
@@ -1747,13 +1836,11 @@ class TestMaterializeMatchesTheNaiveFold:
                       "properties": {"x": {"type": ["string", "integer"]}}},
             },
         )
-        # The ring these three form is refused first, and by name: a reference
-        # that leads back to itself is a defect on its own, and the fold whose
-        # verdict "self-contradictory" reports is what a consumer runs *after*
-        # resolving them. Both readings reject the document; this is the one
-        # the author can act on without folding anything.
-        with pytest.raises(ValidationError, match="hands the same value round"):
+        with pytest.raises(ValidationError, match="hands the same value round") as exc:
             parse_endpoint(payload)
+        # `B` points into the cycle without being on it, so the ring the
+        # diagnostic names is `A` and `C`.
+        assert "'#/$defs/A', '#/$defs/C'" in str(exc.value), str(exc.value)
 
     @pytest.mark.parametrize("seed", range(240))
     def test_the_two_views_never_disagree_about_satisfiability(self, seed):
