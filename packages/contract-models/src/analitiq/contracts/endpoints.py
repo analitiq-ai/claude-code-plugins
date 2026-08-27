@@ -1564,6 +1564,57 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 }
 
 
+#: Applicator keywords whose subschemas apply to the SAME instance the node
+#: does, rather than to a part of it. A cycle over these edges never consumes
+#: any of the value, so a consumer following them does not come back — which is
+#: what separates a ring from ordinary recursion, where every hop descends into
+#: something smaller and bottoms out. Split by how the keyword holds its
+#: subschemas, because that is how each is reached: a map, a list, or one.
+SAME_INSTANCE_MAP_APPLICATORS: frozenset[str] = frozenset({
+    # 2020-12 §10.2.2.4: each named subschema validates the WHOLE instance,
+    # conditioned on a property being present — it does not descend into that
+    # property.
+    "dependentSchemas",
+})
+SAME_INSTANCE_LIST_APPLICATORS: frozenset[str] = frozenset({
+    "allOf", "anyOf", "oneOf",
+})
+SAME_INSTANCE_SINGLE_APPLICATORS: frozenset[str] = frozenset({
+    "not", "if", "then", "else",
+})
+
+#: Applicators whose effect depends on a sibling `if` (2020-12 §10.2.2.2-3):
+#: each applies only where `if` is present, and only on the outcome it is the
+#: branch for. Where `if` is one of the boolean whole-schema short-forms the
+#: outcome is fixed for every instance, so the branch it does not select is one
+#: nothing enters and no edge is built for it. Only that spelling is read:
+#: whether some other schema accepts everything is not a question a walk over
+#: keywords answers, and a ring behind one is refused. Named rather than
+#: written inline so `test_every_schema_keyword_is_classified` can hold these
+#: to the set they are drawn from.
+IF_CONDITIONED_APPLICATORS: frozenset[str] = frozenset({"then", "else"})
+
+#: The rest of the vocabulary — every keyword that cannot close a ring, each
+#: with the reason it cannot. Named rather than derived so a keyword joining
+#: the contract cannot land in neither half unnoticed:
+#: `test_every_schema_keyword_is_classified` asserts these and the
+#: same-instance sets partition the vocabulary exactly, so a new keyword fails
+#: the build until someone decides which it is.
+RING_SAFE_SCHEMA_KEYWORDS: frozenset[str] = frozenset({
+    # Apply to a member of the value.
+    "properties", "patternProperties", "additionalProperties",
+    "unevaluatedProperties", "items", "prefixItems", "unevaluatedItems",
+    "contains",
+    # Applies to each property NAME, which is a string, not the object.
+    "propertyNames",
+    # Applies to the DECODED content of a string, not the string.
+    "contentSchema",
+    # Not applicators: a subschema here validates nothing until something
+    # references it, and the reference is an edge in its own right.
+    "$defs", "definitions",
+})
+
+
 def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dict]]:
     """Every schema node under `schema`, as `(json_pointer, node)`.
 
@@ -1605,6 +1656,185 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
                 yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
         else:
             yield from iter_schema_nodes(child, f"{pointer}/{key}")
+
+
+def _always_or_never(schema: Any) -> bool | None:
+    """Whether `schema` accepts every instance or none, when its own spelling
+    says so — None when reading it would take evaluating it.
+
+    `true` and `{}` both accept everything; `false` and `{"not": {}}` accept
+    nothing. They are the same two schemas written two ways, and a check that
+    reads one spelling and not the other gives one document two verdicts.
+    Nothing further is attempted: whether some larger schema happens to accept
+    everything is a question about evaluating it, not about reading a keyword,
+    and the answer where this cannot say is to treat the branch as reachable.
+    """
+    if isinstance(schema, bool):
+        return schema
+    if schema == {}:
+        return True
+    if schema == {"not": {}} or schema == {"not": True}:
+        return False
+    return None
+
+
+def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
+    """Which nodes each node hands the SAME value on to — a `$ref` target, and
+    every subschema under an applicator in the same-instance sets above.
+
+    An edge whose target is not a node of this document is dropped rather than
+    reported: a reference that lands outside the document, on nothing, on a
+    non-schema position or on a boolean is each already a finding from
+    :func:`_validate_schema_refs`, which is the walk this runs inside. The drop
+    is that deferral, not a filter — narrowing any of those branches without
+    handling the target here would turn a reported reference into an
+    unreported ring.
+    """
+    edges: dict[str, list[str]] = {}
+    for pointer, node in nodes.items():
+        out: list[str] = []
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            target = _ref_pointer(ref)
+            if target is not None:
+                out.append(_normalized_pointer(target))
+        for key in SAME_INSTANCE_MAP_APPLICATORS:
+            child = node.get(key)
+            if isinstance(child, dict):
+                out += [f"{pointer}/{key}/{_escape_pointer_token(name)}"
+                        for name in child]
+        for key in SAME_INSTANCE_LIST_APPLICATORS:
+            child = node.get(key)
+            if isinstance(child, list):
+                out += [f"{pointer}/{key}/{i}" for i, _ in enumerate(child)]
+        for key in SAME_INSTANCE_SINGLE_APPLICATORS:
+            if not isinstance(node.get(key), dict):
+                continue
+            if key in IF_CONDITIONED_APPLICATORS:
+                condition = node.get("if", _MISSING)
+                # No `if` at all: neither branch has any effect.
+                if condition is _MISSING:
+                    continue
+                # A condition every instance passes selects `then` for all of
+                # them, leaving `else` unreachable, and vice versa. Only the
+                # spellings that say so in the keyword itself are read.
+                fixed = _always_or_never(condition)
+                if fixed is True and key == "else":
+                    continue
+                if fixed is False and key == "then":
+                    continue
+            out.append(f"{pointer}/{key}")
+        edges[pointer] = [p for p in out if p in nodes]
+    return edges
+
+
+def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> None:
+    """RULE-ENDP-026's terminating half: no ring of same-instance edges.
+
+    A ring is a set of nodes that hand the same value round to each other —
+    through `$ref`, or through a same-instance applicator branch — and never to
+    a part of it. What is wrong with one is that following it does not end, and
+    that holds whatever its members declare along the way: each hands the whole
+    value to the next, so nothing consumes any of it and there is no smaller
+    problem to bottom out on. Declared-path resolution here halts at the second
+    visit and gets nothing; a JSON Schema implementation checking a value does
+    not halt at all; the engine reads these documents with neither guard. A
+    ring nothing references today is refused too — the reference that reaches
+    it is one edit away, and a shape that cannot be checked is not made safe by
+    nothing checking it yet.
+
+    Not a shape a reader spots: each hop resolves, lands on a schema, and
+    reads as an ordinary alias or an ordinary composition. Ordinary *recursion*
+    is untouched, because every edge it needs — `properties`, `items` — is one
+    this walk does not follow: a `Node` whose `children.items` references
+    `Node` descends into a smaller value on every hop and bottoms out.
+    """
+    nodes = dict(iter_schema_nodes(root))
+    edges = _same_instance_edges(nodes)
+    # Sorted, because the cap below decides WHICH rings are reported and the
+    # walk reaches them through frozensets: unsorted, the same document
+    # reported different rings from run to run as the interpreter's hash seed
+    # changed. Document order is not available here — a pointer sorts by its
+    # own text — but a stable order is what the cap needs to be answerable.
+    order = sorted(nodes)
+    edges = {pointer: sorted(targets) for pointer, targets in edges.items()}
+    # Every ring the walk reaches is reported. A densely composed `$defs`
+    # carries rings in numbers that grow with the square of its entries, so an
+    # adversarial document is verbose — but it is an offline authoring check
+    # over a hand-written file, and a cap would have to choose WHICH rings to
+    # keep, which is a judgment nothing here can make: the ring an author
+    # needs is the one in the shape they are authoring, and this walk does not
+    # know which that is.
+    reported: set[frozenset[str]] = set()
+    # Iterative DFS with an explicit path, so a deep schema cannot exhaust the
+    # interpreter's stack while looking for the thing that would exhaust it.
+    finished: set[str] = set()
+    for origin in order:
+        if origin in finished:
+            continue
+        stack: list[tuple[str, Iterator[str]]] = [(origin, iter(edges[origin]))]
+        on_path: dict[str, int] = {origin: 0}
+        while stack:
+            current, remaining = stack[-1]
+            nxt = next(remaining, None)
+            if nxt is None:
+                stack.pop()
+                finished.add(current)
+                on_path.pop(current, None)
+                continue
+            if nxt in on_path:
+                ring = frozenset(p for p, depth in on_path.items()
+                                 if depth >= on_path[nxt])
+                if ring not in reported:
+                    reported.add(ring)
+                    errors.append(
+                        f"{path}: the schema at "
+                        f"{', '.join(repr('#' + p) for p in sorted(ring))} "
+                        "hands the same value round to itself. Every hop "
+                        "resolves, so it reads as an ordinary alias or "
+                        "composition, but checking a value against it never "
+                        "finishes — whatever the members declare on the way "
+                        "round, each hands the whole value to the next and "
+                        "none of them consumes any of it. Break the ring: "
+                        "inline the shape one of them means, or point the hop "
+                        "that closes it at a subschema outside "
+                        "(spec: §API Response Extraction — embedded schema "
+                        "references)"
+                    )
+                continue
+            if nxt in finished:
+                continue
+            on_path[nxt] = len(stack)
+            stack.append((nxt, iter(edges[nxt])))
+
+
+
+def _normalized_pointer(pointer: str) -> str:
+    """A JSON pointer in the spelling :func:`iter_schema_nodes` builds.
+
+    A `$ref` is a URI-reference, so its fragment may percent-encode a token
+    (`#/$defs/my%20def`, and a literal `%` written `%25`); a pointer built from
+    the document's own keys never does. Decoding each token the way the
+    resolver does and re-escaping it puts both spellings in one form, so a
+    reference and the node it names compare equal instead of a ring going
+    unseen because it was written the other way.
+    """
+    if not pointer:
+        return pointer
+    return "".join(
+        f"/{_escape_pointer_token(_unescape_pointer_token(token))}"
+        for token in pointer.split("/")[1:]
+    )
+
+
+def _ref_pointer(ref: str) -> str | None:
+    """The JSON pointer an in-document `$ref` names (`#/a/b` -> `/a/b`, `#` ->
+    `''`), or None when the reference is not one this contract follows."""
+    if ref == "#":
+        return ""
+    if ref.startswith("#/"):
+        return ref[1:]
+    return None
 
 
 def _escape_pointer_token(name: str) -> str:
@@ -1665,7 +1895,11 @@ def _validate_schema_refs(
     # `root` is threaded down so a ref deep in the tree still resolves against
     # the WHOLE embedded schema — `$defs` lives at the top, and resolving
     # against the current subtree would call every legitimate ref dangling.
-    root = schema if root is None else root
+    if root is None:
+        # Whole-document, so it runs once from the entry call rather than at
+        # every node: a ring is a property of the graph, not of a node.
+        root = schema
+        _validate_ref_chains_terminate(root, path, errors)
     # `true` / `false` are legal whole-schema short-forms carrying no `$ref`.
     if isinstance(schema, bool) or not isinstance(schema, dict):
         return

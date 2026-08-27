@@ -1296,16 +1296,18 @@ class TestARecordShapeMustDeclareSomething:
         }
         return payload
 
-    @pytest.mark.parametrize(
-        ("items", "defs"),
-        [
-            ({}, None),  # the empty schema accepts anything and says nothing
-            ({"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}),
-        ],
-    )
-    def test_a_shape_that_composes_to_nothing_is_rejected(self, items, defs):
+    def test_a_shape_that_composes_to_nothing_is_rejected(self):
+        # The empty schema accepts anything and says nothing.
         with pytest.raises(ValidationError, match="declares nothing at all"):
-            parse_endpoint(self._payload(items, defs))
+            parse_endpoint(self._payload({}))
+
+    def test_a_record_shape_referring_only_to_itself_is_rejected(self):
+        """The self-`$ref` spelling composes to nothing the same way, and is
+        refused before that is reached: a ring does not terminate, so
+        RULE-ENDP-026 names it rather than leaving the fold to meet it."""
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(self._payload(
+                {"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}))
 
     @pytest.mark.parametrize(
         "items",
