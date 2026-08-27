@@ -41,7 +41,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from collections.abc import Iterator
 from typing import Any, Callable
 
 from ._core import (
@@ -63,18 +62,21 @@ try:
         from pydantic import TypeAdapter
         from analitiq.contracts.connector import Connector
         from analitiq.contracts.endpoints import (
-            JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-            JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-            JSON_SCHEMA_SUBSCHEMA_KEYS,
             ApiEndpointDoc,
             DatabaseEndpointDoc,
             SLUG_RE,
             SAMPLE_CONTRADICTION_REMEDY,
         )
         # RULE-ENDP-026's own walk, imported rather than approximated: it is
-        # what decides whether every `$ref` in an embedded schema resolves, and
-        # a sample cannot be graded through one that does not.
-        from analitiq.contracts.endpoints import _validate_schema_refs
+        # what decides whether every `$ref` in an embedded schema resolves and
+        # terminates, and a sample cannot be graded through one that does not.
+        # The pointer escape travels with it — the contract owns both halves of
+        # RFC 6901 (`_unescape_pointer_token` is what reads a `$ref`), and a
+        # second implementation here would be a copy of a value with an owner.
+        from analitiq.contracts.endpoints import (
+            _validate_schema_refs,
+            iter_schema_nodes,
+        )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
@@ -210,64 +212,9 @@ def _canonical_eq(a: str, b: str) -> bool:
     return norm(a) == norm(b)
 
 
-# JSON-Schema keyword sets that hold sub-schemas (mirrors analitiq.contracts.endpoints):
-# a schema-aware walk recurses only through these — never through data keywords
-# like `const`/`default`/`enum`, and it treats `properties` children as field
-# names (a field literally named `default` is still walked as a sub-schema).
-# The JSON-Schema keyword vocabulary is OWNED by the contract package and
-# imported, not restated. It used to be a third hand-maintained copy: adding
-# `contentSchema` meant editing three, and the one that was missed left the
-# rendered schema's prose contradicting its own constraints. `_walk_schema_pairs`
-# must descend exactly where the contract's walkers do, or a `native_type`
-# declared in a position only one of them visits escapes type-map coverage.
-_SUBSCHEMA_MAP_KEYS = JSON_SCHEMA_SUBSCHEMA_KEYS
-_SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-_SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
-
-
-def _pointer_token(name: str) -> str:
-    """One JSON Pointer reference token, RFC 6901 escaped. A property named
-    `a/b` is one token, not two, and a finding's `path` is a JSON pointer a
-    reader resolves against the document — unescaped it points somewhere else,
-    or nowhere."""
-    return name.replace("~", "~0").replace("/", "~1")
-
-
-def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
-    """Yield `(json_pointer, node)` for the schema and every structural
-    sub-schema position under it, recursing exactly where the contract's own
-    walkers do."""
-    if not isinstance(schema, dict):
-        return
-    yield pointer, schema
-    for key in _SUBSCHEMA_MAP_KEYS:
-        sub = schema.get(key)
-        if isinstance(sub, dict):
-            for name, child in sub.items():
-                yield from _walk_schema_nodes(
-                    child, f"{pointer}/{key}/{_pointer_token(name)}")
-    for key in _SUBSCHEMA_LIST_KEYS:
-        sub = schema.get(key)
-        if isinstance(sub, list):
-            for i, child in enumerate(sub):
-                yield from _walk_schema_nodes(child, f"{pointer}/{key}/{i}")
-    for key in _SUBSCHEMA_SINGLE_KEYS:
-        if key not in schema:
-            continue
-        child = schema[key]
-        # `items` may be tuple-form (a list of schemas, Draft 2019-09) — iterate
-        # it, matching the model's walk. Draft 2020-12 uses `prefixItems` (handled
-        # above) but the catalog still carries the tuple form.
-        if isinstance(child, list):
-            for i, sub in enumerate(child):
-                yield from _walk_schema_nodes(sub, f"{pointer}/{key}/{i}")
-        else:
-            yield from _walk_schema_nodes(child, f"{pointer}/{key}")
-
-
 def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
     """Collect `(native_type, arrow_type)` pairs from a JSON Schema."""
-    for node_pointer, node in _walk_schema_nodes(schema, pointer):
+    for node_pointer, node in iter_schema_nodes(schema, pointer):
         nt, at = node.get("native_type"), node.get("arrow_type")
         if isinstance(nt, str) and isinstance(at, str):
             out.append((nt, at, node_pointer))
@@ -392,7 +339,7 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
 
     nodes = [
         (node_pointer, node)
-        for node_pointer, node in _walk_schema_nodes(schema, "")
+        for node_pointer, node in iter_schema_nodes(schema)
         if isinstance(node.get("examples"), list)
     ]
     if not nodes:

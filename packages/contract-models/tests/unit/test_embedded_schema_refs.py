@@ -1220,18 +1220,19 @@ class TestEachOperationKindGetsItsOwnHarmText:
 
 
 class TestKeywordVocabularyHasOneOwner:
-    """The JSON-Schema keyword vocabulary every walker keys off exists in three
-    hand-maintained copies — the contract's `_JSON_SCHEMA_*_KEYS`, the
-    validator's `_SUBSCHEMA_*_KEYS`, and the renderer's
-    `JsonSchemaPropertyNode`. Adding `contentSchema` required editing all three,
-    and the fourth expression of it — that node's own published *description* —
-    was missed, so the shipped contract constrained a keyword while its prose
-    said it did not recurse there.
+    """The JSON-Schema keyword vocabulary every walker keys off was restated
+    per walker — the contract's `JSON_SCHEMA_*_KEYS`, a copy in the validator,
+    and the renderer's `JsonSchemaPropertyNode`. Adding `contentSchema`
+    required editing each, and the expression of it nobody thought of — that
+    node's own published *description* — was missed, so the shipped contract
+    constrained a keyword while its prose said it did not recurse there.
 
-    `.claude/rules/no-drift-surfaces.md` requires an unavoidable restatement to
-    be pinned by a test. These are the comparisons that catch it: per bucket
-    (the bucket decides HOW the walker recurses), the rendered constraint map,
-    and the rendered sentence.
+    `.claude/rules/no-drift-surfaces.md` asks first that a copy be removed and
+    only then that an unavoidable one be pinned. The validator's is gone: it
+    filters `iter_schema_nodes`, so the vocabulary reaches it by import. What
+    remains to pin is the renderer's, which cannot be — a published schema
+    states the keywords as properties — so the rendered constraint map and the
+    rendered sentence are both compared against the live sets.
     """
 
     def _rendered_node(self):
@@ -1242,13 +1243,24 @@ class TestKeywordVocabularyHasOneOwner:
         doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
         return doc["$defs"]["JsonSchemaPropertyNode"]
 
-    def test_validator_buckets_match_the_contract_bucket_for_bucket(self):
+    def test_the_validator_keeps_no_copy_of_the_vocabulary(self):
+        """It walks with the contract's own iterator, so there is no second set
+        to compare — and re-introducing one is what this now catches."""
         from analitiq.contracts import endpoints as ep
         from analitiq.validator import connectors as vc
 
-        assert vc._SUBSCHEMA_MAP_KEYS == ep.JSON_SCHEMA_SUBSCHEMA_KEYS
-        assert vc._SUBSCHEMA_LIST_KEYS == ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
-        assert vc._SUBSCHEMA_SINGLE_KEYS == ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        assert vc.iter_schema_nodes is ep.iter_schema_nodes
+        restated = sorted(
+            name for name, value in vars(vc).items()
+            if isinstance(value, (frozenset, set))
+            and value in (ep.JSON_SCHEMA_SUBSCHEMA_KEYS,
+                          ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+                          ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS)
+        )
+        assert not restated, (
+            f"{restated} restate a keyword bucket the contract owns; walk with "
+            "`iter_schema_nodes` instead of keying off a local copy"
+        )
 
     def test_rendered_node_constrains_exactly_the_contract_vocabulary(self):
         from analitiq.contracts import endpoints as ep
@@ -1648,6 +1660,77 @@ class TestMaterializeMatchesTheNaiveFold:
         with pytest.raises(DeclarationConflictError):
             materialize_node(record, root)
 
+    def test_a_ring_through_a_composition_keyword_is_refused(self):
+        """`allOf`/`anyOf`/`not` hand the SAME value on, so a ring through one
+        never consumes any part of it — a `$ref`-only walk sees a node whose
+        content is a composition and stops one hop short of the defect."""
+        for keyword, branch in (
+            ("allOf", [{"$ref": "#/$defs/Ring"}]),
+            ("anyOf", [{"$ref": "#/$defs/Ring"}]),
+            ("not", {"$ref": "#/$defs/Ring"}),
+        ):
+            payload = _endpoint_with_record_shape(
+                items={"$ref": "#/$defs/Ring"},
+                defs={"Ring": {keyword: branch}},
+            )
+            with pytest.raises(ValidationError,
+                               match="hands the same value round") as exc:
+                parse_endpoint(payload)
+            assert keyword in str(exc.value), (keyword, str(exc.value))
+
+    @pytest.mark.parametrize("shape", [
+        {"type": "array", "items": {"$ref": "#/$defs/Deep"}},
+        {"type": "array", "prefixItems": [{"$ref": "#/$defs/Deep"}]},
+        {"type": "object", "additionalProperties": {"$ref": "#/$defs/Deep"}},
+        {"type": "object", "patternProperties": {"^x": {"$ref": "#/$defs/Deep"}}},
+    ])
+    def test_a_shape_referring_to_itself_through_a_descending_keyword_is_fine(
+        self, shape,
+    ):
+        """The boundary of the same-instance set, from the other side: these
+        rings close through the reference alone, and each is legal because the
+        keyword carrying it applies to a PART of the value. Move any of these
+        keywords into the same-instance set and this document is refused."""
+        parse_endpoint(_endpoint_with_record_shape(
+            items={"type": "object", "properties": {
+                "id": {"type": "string"},
+                "nested": {"$ref": "#/$defs/Deep"},
+            }},
+            defs={"Deep": shape},
+        ))
+
+    @pytest.mark.parametrize("carrier", [
+        {"type": "array", "items": {"$ref": "#/$defs/Node"}},
+        {"type": "array", "prefixItems": [{"$ref": "#/$defs/Node"}]},
+        {"type": "object", "properties": {"n": {"$ref": "#/$defs/Node"}}},
+        {"type": "object", "patternProperties": {"^n": {"$ref": "#/$defs/Node"}}},
+        {"type": "object", "additionalProperties": {"$ref": "#/$defs/Node"}},
+    ])
+    def test_recursion_that_descends_is_not_a_ring(self, carrier):
+        """The shapes the rule must not break. Each hop goes through a keyword
+        that applies to a PART of the value, so following it reaches a smaller
+        value every time and bottoms out — which is what separates these from
+        the compositions above, and is why the edge set is the same-instance
+        applicators rather than every schema position."""
+        parse_endpoint(_endpoint_with_record_shape(
+            items={"$ref": "#/$defs/Node"},
+            defs={"Node": {"type": "object", "properties": {
+                "id": {"type": "string"},
+                "children": carrier,
+            }}},
+        ))
+
+    def test_a_ring_written_as_a_percent_encoded_reference_is_still_a_ring(self):
+        """A `$ref` is a URI-reference and may percent-encode a token; a
+        pointer built from the document's own keys never does. Comparing the
+        two spellings unnormalized loses the ring."""
+        payload = _endpoint_with_record_shape(
+            items={"type": "object"},
+            defs={"my def": {"$ref": "#/$defs/my%20def"}},
+        )
+        with pytest.raises(ValidationError, match="hands the same value round"):
+            parse_endpoint(payload)
+
     def test_that_shape_is_refused_end_to_end_not_just_by_the_helpers(self):
         """Because the helper disagreement is only the mechanism — the harm is
         `parse_endpoint` accepting the document and `find_record_field_properties`
@@ -1669,7 +1752,7 @@ class TestMaterializeMatchesTheNaiveFold:
         # verdict "self-contradictory" reports is what a consumer runs *after*
         # resolving them. Both readings reject the document; this is the one
         # the author can act on without folding anything.
-        with pytest.raises(ValidationError, match="returns to itself"):
+        with pytest.raises(ValidationError, match="hands the same value round"):
             parse_endpoint(payload)
 
     @pytest.mark.parametrize("seed", range(240))

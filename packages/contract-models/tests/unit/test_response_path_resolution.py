@@ -580,7 +580,7 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
     case = STRATEGY_CASES[strategy]
     request = {"method": "GET", "path": "/v1/x"}
     if case["query"]:
-        request["query"] = dict(case["query"])
+        request["query"] = copy.deepcopy(case["query"])
     pagination = {
         "type": strategy,
         **case["block"](case["good"] if ref is None else ref),
@@ -602,7 +602,12 @@ def _read_payload(strategy, *, ref=None, stop_when=None, metadata=None, records=
         "operations": {
             "read": {
                 "request": request,
-                "params": dict(case["params"]),
+                    # Deep, like the response schema above and for the same reason:
+            # `dict(...)` copies the map and shares every param under it, and a
+            # caller below writes through one (`params.c.default`), which a
+            # shallow copy carries into `STRATEGY_CASES` and out again into
+            # every later payload for that strategy.
+            "params": copy.deepcopy(case["params"]),
                 "pagination": pagination,
                 "response": response,
             }
@@ -1299,7 +1304,7 @@ class TestARecordShapeMustDeclareSomething:
         """The self-`$ref` spelling composes to nothing the same way, and is
         refused before that is reached: a reference ring does not terminate, so
         RULE-ENDP-026 names it rather than leaving the fold to meet it."""
-        with pytest.raises(ValidationError, match="returns to itself"):
+        with pytest.raises(ValidationError, match="hands the same value round"):
             parse_endpoint(self._payload(
                 {"$ref": "#/$defs/Rec"}, {"Rec": {"$ref": "#/$defs/Rec"}}))
 
