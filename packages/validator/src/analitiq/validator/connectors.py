@@ -325,12 +325,15 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     Reached only for a schema `check_schema` already accepted — grading an
     instance against a malformed schema reports the malformation a second time,
     in the vocabulary of whichever example happened to meet it first. A schema
-    carrying a reference that does not resolve is skipped for the same reason
-    and one more: resolution happens here for the first time in this module, so
-    a dangling `#/$defs/Typo` raises out of `iter_errors` rather than returning
-    a finding, and the guard around this check would replace every finding on
-    the document with "validator bug — please report". RULE-ENDP-026 already
-    names that reference precisely; this check has nothing to add to it.
+    whose references the contract refuses is skipped for the same reason and
+    one more. The gate is every finding RULE-ENDP-026's walk emits, not only
+    the unresolvable ones — a ring, a `$id` retargeting the base URI, a
+    reference into a non-schema position — because resolution happens here for
+    the first time in this module: each of those either raises out of
+    `iter_errors` or makes it resolve something other than what the contract
+    read, and the guard around this check answers a raise by replacing every
+    finding on the document with "validator bug — please report".
+    RULE-ENDP-026 names each of them precisely; this check has nothing to add.
 
     `jsonschema` is imported HERE for the reason the caller states: only
     endpoint meta-validation needs it.
@@ -344,9 +347,9 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     ]
     if not nodes:
         return []
-    unresolvable: list[str] = []
-    _validate_schema_refs(schema, pointer, unresolvable)
-    if unresolvable:
+    refused_references: list[str] = []
+    _validate_schema_refs(schema, pointer, refused_references)
+    if refused_references:
         return []
     root = Draft202012Validator(schema)
     findings: list[dict] = []

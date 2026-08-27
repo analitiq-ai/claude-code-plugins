@@ -143,15 +143,29 @@ def _read_endpoint() -> dict:
 
 
 def _record_node(doc: dict) -> dict:
-    """The record shape of an endpoint's read response — the array node's
-    `items`, which is where a field declaration and its recorded sample sit."""
-    schema = doc["operations"]["read"]["response"]["schema"]
-    records = doc["operations"]["read"]["response"]["records"]["ref"]
-    node = schema
-    for token in records.removeprefix("response.body").lstrip(".").split("."):
-        if token:
-            node = node["properties"][token]
-    return node["items"]
+    """The LIVE record-shape node of the shipped example's read response, for a
+    probe to declare a field on.
+
+    Indexed, not resolved. `analitiq.contracts.endpoints.resolve_read_record_schema`
+    is the record locator every consumer of the read contract must call — it
+    follows `$ref` and composes `allOf`, which this does not — but it
+    materializes a copy, and a probe needs the node the document actually
+    carries so its mutation reaches the validator. So the index is checked
+    against it: re-author the example's record behind `$defs` and this fails
+    here rather than stamping a field onto a node nothing grades.
+    """
+    from analitiq.contracts.endpoints import resolve_read_record_schema
+
+    response = doc["operations"]["read"]["response"]
+    node = response["schema"]["properties"]["data"]["items"]
+    resolved = resolve_read_record_schema(response, response["schema"])
+    assert resolved == node, (
+        "the example endpoint's record shape is no longer the `data` array's "
+        "`items`; probes would declare their fields on a node the read "
+        "contract does not resolve to. Reach it the way "
+        "`resolve_read_record_schema` does, on the live document."
+    )
+    return node
 
 
 def _endpoint_with_stop_when(ref: str) -> dict:
@@ -584,7 +598,7 @@ def _staged_api_endpoint(endpoint: dict) -> list[dict]:
 
 def _p_endpoint_pair_unresolved() -> list[dict]:
     endpoint = _read_endpoint()
-    record = endpoint["operations"]["read"]["response"]["schema"]["properties"]["data"]["items"]
+    record = _record_node(endpoint)
     record["properties"]["mystery"] = {
         "type": "string", "native_type": "MYSTERY_TYPE", "arrow_type": "Utf8",
     }
