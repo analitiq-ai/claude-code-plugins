@@ -1166,10 +1166,15 @@ def run_probe(probe: Probe) -> ProbeFailure | None:
     # finding whose message embeds the exception text. That text can contain
     # the same vocabulary as the real rejection message, so a crashed check
     # could otherwise satisfy an expect="error" probe while every user gets
-    # "validator bug — please report" instead of the rejection the prose
-    # promises. A crash never proves a claim, in either direction.
-    crashed = [f for f in findings
-               if re.search(r"crashed unexpectedly", f.get("message", ""))]
+    # the guard's line instead of the rejection the prose promises. A crash
+    # never proves a claim, in either direction.
+    #
+    # Asked of the validator, not matched here: this tripwire went dead once
+    # already when the guard's wording changed under a copy of it kept in this
+    # file, and a dead tripwire reports the same green as a live one.
+    from analitiq.validator import is_guard_finding
+
+    crashed = [f for f in findings if is_guard_finding(f)]
     if crashed:
         return ProbeFailure(probe.id, "the validator crashed on the probe document", crashed)
     return _expectation_failure(probe, findings) or _pattern_failure(probe, findings)
