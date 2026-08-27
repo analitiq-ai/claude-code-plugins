@@ -1663,10 +1663,11 @@ def _always_or_never(schema: Any) -> bool | None:
     says so — None when reading it would take evaluating it.
 
     Read here: the two boolean short-forms, the empty object, and a lone `not`
-    around any of those. That is a chosen set, not a characterisation — a
-    schema accepting everything can be written in unboundedly many ways
-    (`{"allOf": []}`, `{"description": "x"}`, a double negation), and deciding
-    those is evaluating a schema rather than reading a keyword. What the set
+    around anything else this reads — which takes double negation, since the
+    recursion meets it one level down. That is a chosen set, not a
+    characterisation: a schema accepting everything can be written in
+    unboundedly many ways (`{"allOf": []}`, `{"description": "x"}`), and
+    deciding those is evaluating a schema rather than reading a keyword. What the set
     must be is symmetric: reading one spelling of always-true while missing its
     mirror is what gives one document two verdicts, which is the whole reason
     to read any of them.
@@ -1676,6 +1677,13 @@ def _always_or_never(schema: Any) -> bool | None:
     """
     if isinstance(schema, bool):
         return schema
+    # Anything else reaching here came out of the document, and a schema
+    # position holding a number or a list is malformed rather than
+    # always-anything. Say nothing about it: the walker that reports malformed
+    # positions runs after this, and raising here would take the whole
+    # document's findings with it.
+    if not isinstance(schema, dict):
+        return None
     if schema == {}:
         return True
     if len(schema) == 1 and "not" in schema:
@@ -1762,15 +1770,13 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     """
     nodes = dict(iter_schema_nodes(root))
     edges = _same_instance_edges(nodes)
-    # Sorted at both levels, because the walk reaches nodes and their edges
-    # through frozensets and what it finds first decides what it reports. A
-    # node with two same-instance edges onto a shared successor closes one ring
-    # or the other depending on which is taken, and a node this walk finishes
-    # with hides any further ring through it — so unsorted, the same document
-    # named a different ring from run to run as the interpreter's hash seed
-    # changed. Document order is not available here (a pointer sorts by its own
-    # text); what matters is that it is the same order every time.
-    order = sorted(nodes)
+    # Edges sorted, because `_same_instance_edges` reaches them through the
+    # frozensets above and what this walk takes first decides what it reports:
+    # a node with two same-instance edges onto a shared successor closes one
+    # ring or the other depending on which is taken, and a node this walk
+    # finishes with hides any further ring through it. Node order needs nothing
+    # here — `iter_schema_nodes` already yields deterministically, and a second
+    # sort would be a second answer to a settled question.
     edges = {pointer: sorted(targets) for pointer, targets in edges.items()}
     # Every ring this walk reaches is reported, and that is not every ring in
     # the document: a node it finishes with hides any further ring through it,
@@ -1785,7 +1791,7 @@ def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> N
     # Iterative DFS with an explicit path, so a deep schema cannot exhaust the
     # interpreter's stack while looking for the thing that would exhaust it.
     finished: set[str] = set()
-    for origin in order:
+    for origin in nodes:
         if origin in finished:
             continue
         stack: list[tuple[str, Iterator[str]]] = [(origin, iter(edges[origin]))]

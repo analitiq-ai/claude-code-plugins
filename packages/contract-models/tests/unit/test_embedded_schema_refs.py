@@ -919,6 +919,15 @@ class TestRecursiveSchemasTerminate:
         {"type": "array", "prefixItems": [{"$ref": "#/$defs/Deep"}]},
         {"type": "object", "additionalProperties": {"$ref": "#/$defs/Deep"}},
         {"type": "object", "patternProperties": {"^x": {"$ref": "#/$defs/Deep"}}},
+        # The rest of the ring-safe set. Moving any of these INTO a
+        # same-instance bucket leaves the partition intact — the union is
+        # unchanged and the shapes still match — so only a document that is
+        # still accepted catches it.
+        {"type": "array", "contains": {"$ref": "#/$defs/Deep"}},
+        {"type": "array", "unevaluatedItems": {"$ref": "#/$defs/Deep"}},
+        {"type": "object", "unevaluatedProperties": {"$ref": "#/$defs/Deep"}},
+        {"type": "object", "propertyNames": {"$ref": "#/$defs/Deep"}},
+        {"type": "string", "contentSchema": {"$ref": "#/$defs/Deep"}},
     ])
     def test_a_shape_referring_to_itself_through_a_descending_keyword_is_fine(
         self, shape,
@@ -1009,12 +1018,11 @@ class TestRecursiveSchemasTerminate:
                                live: {"$ref": "#/$defs/Live"}}},
             ))
 
-    #: Two documents, because the walk has two orders to fix and one document
-    #: does not exercise both. The first carries rings under four different
-    #: keywords, so WHICH NODE is reached first turns on the iteration order of
-    #: the three keyword sets. The second gives one node two same-instance
-    #: edges onto a node that closes back, so the ring is named for WHICH EDGE
-    #: is taken first.
+    #: Two documents. The first carries a ring under each same-instance
+    #: keyword shape, so the ring it names first turns on which node the walk
+    #: reaches first. The second gives one node two same-instance edges onto a
+    #: node that closes back, so the ring it names turns on which edge is
+    #: taken first.
     HASH_SEED_FIXTURES = {
         "rings under different keywords": {
             "type": "object",
@@ -1065,7 +1073,7 @@ class TestRecursiveSchemasTerminate:
                 [sys.executable, "-c", program, payload],
                 capture_output=True, text=True, check=True,
                 env={**os.environ, "PYTHONHASHSEED": seed,
-                     "DOMAIN": "analitiq.ai", "PYTHONPATH": source},
+                     "PYTHONPATH": source},
             )
             runs.append(json.loads(proc.stdout))
         assert runs[0], f"{fixture}: no rings reported — nothing is being measured"
