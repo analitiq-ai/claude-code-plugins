@@ -5072,7 +5072,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The zoned and the zoneless spelling are alike canonical Arrow types the engine grammar admits, so the declaration validates whichever it claims and only the provider's actual wire value decides which claim is true. The common error is assuming zone-awareness because a field is named like an instant, which reinterprets every value the provider sends and shifts it by the destination's offset, silently and uniformly enough that nobody reads it as corruption. An api-endpoint may record that wire value beside the declaration, and where one does RULE-ENDP-063 grades the pair; no other document the connector ships holds a wire value at all, so on those catching a wrong call means going back to a captured sample response.\n",
+   "rationale": "The zoned and the zoneless spelling are alike canonical Arrow types the engine grammar admits, so the declaration validates whichever it claims and only the provider's actual wire value decides which claim is true. The common error is assuming zone-awareness because a field is named like an instant, which reinterprets every value the provider sends and shifts it by the destination's offset, silently and uniformly enough that nobody reads it as corruption. An api-endpoint may record that wire value beside the declaration, and where one does RULE-ENDP-063 grades the pair; elsewhere catching a wrong call means going back to a captured sample response.\n",
    "status": "active",
    "superseded_by": null
   },

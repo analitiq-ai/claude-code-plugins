@@ -1676,7 +1676,10 @@ def test_readme_validation_section_names_every_finding_id() -> None:
     with that gate green.
 
     Located, not decided: the section is found by its heading and the ids by
-    their backticks, so no sentence in it is read.
+    their backticks, so no sentence in it is read. What that leaves open is a
+    reader's: the section describes what each id means, and whether those
+    descriptions still hold is `.claude/rules/plugin-prose.md` § "A sentence
+    about what the validator checks", not something this can see.
     """
     from analitiq.validator import VALIDATOR_IDS
 
@@ -1687,11 +1690,11 @@ def test_readme_validation_section_names_every_finding_id() -> None:
         "no single `## Validation` section in the connector README — the "
         "extraction below would grade an empty set and pass"
     )
-    # Every backticked token shaped like a finding id, minus the names below.
-    # Deliberately NOT filtered to `VALIDATOR_IDS`: that filter would drop
-    # exactly the ids the package stopped emitting, which is half of what this
-    # exists to see. A new backticked name in the section reddens this and is
-    # added to the exemption — loudly, which is the point.
+    # Every backticked token shaped like a finding id, minus `_README_NON_IDS`
+    # above. Deliberately NOT filtered to `VALIDATOR_IDS`: that filter would
+    # drop exactly the ids the package stopped emitting, which is half of what
+    # this exists to see. A new backticked name in the section reddens this and
+    # is added to the exemption — loudly, which is the point.
     named = set(re.findall(r"`([a-z0-9-]+)`", validation[0])) - _README_NON_IDS
     assert named, (
         "no finding ids in the connector README's `## Validation` section — "
@@ -1703,7 +1706,9 @@ def test_readme_validation_section_names_every_finding_id() -> None:
         package_set,
         named,
         "update the finding ids named in "
-        "plugins/analitiq-connector-builder/README.md § Validation.",
+        "plugins/analitiq-connector-builder/README.md § Validation — or, for a "
+        "backticked name that is id-shaped but is not a finding id, add it to "
+        "`_README_NON_IDS` in this file.",
     )
 
 

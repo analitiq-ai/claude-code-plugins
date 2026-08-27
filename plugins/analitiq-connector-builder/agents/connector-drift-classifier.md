@@ -58,10 +58,11 @@ rules for every document" says which file carries which artifact.
      composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
      branch is not read as removed, and one that changed there is not missed.
      A field's `examples` is the wire evidence its declaration was graded
-     against (`RULE-ENDP-064`), not a constraint on anything downstream:
-     recording one, or replacing it with a better one, changes no shape a
-     stream binds and is not drift. What the sample can change is the
-     declaration beside it, and that is already diffed above.
+     against (`RULE-ENDP-064`), and is none of the things a stream names —
+     step 4 lists them — so recording one, or replacing it with a better one,
+     is not drift. What the
+     sample can change is the declaration beside it, and that is already
+     diffed above.
    - `operations.read.params.<name>.operators` — the operator members each
      read param offers (`RULE-ENDP-055`). Read params only: a write mode
      declares params through the same model, and a filter never names one.
