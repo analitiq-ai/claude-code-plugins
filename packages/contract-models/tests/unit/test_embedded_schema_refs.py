@@ -1664,7 +1664,12 @@ class TestMaterializeMatchesTheNaiveFold:
                       "properties": {"x": {"type": ["string", "integer"]}}},
             },
         )
-        with pytest.raises(ValidationError, match="self-contradictory"):
+        # The ring these three form is refused first, and by name: a reference
+        # that leads back to itself is a defect on its own, and the fold whose
+        # verdict "self-contradictory" reports is what a consumer runs *after*
+        # resolving them. Both readings reject the document; this is the one
+        # the author can act on without folding anything.
+        with pytest.raises(ValidationError, match="returns to itself"):
             parse_endpoint(payload)
 
     @pytest.mark.parametrize("seed", range(240))

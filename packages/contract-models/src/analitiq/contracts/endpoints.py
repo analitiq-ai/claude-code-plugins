@@ -1281,6 +1281,7 @@ SAMPLE_CONTRADICTION_REMEDY = (
     "evidence, not the disagreement"
 )
 
+
 def _validate_examples_zone(
     schema: dict[str, Any], arrow_value: str, path: str, errors: list[str]
 ) -> None:
@@ -1538,6 +1539,100 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 }
 
 
+def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> None:
+    """RULE-ENDP-026's terminating half: a `$ref` chain must not return to
+    itself.
+
+    Followed through `$ref` edges alone, which is what makes this the
+    *unguarded* case and leaves ordinary recursive shapes alone: a `Node` whose
+    `children.items` references `Node` is followed one edge and stops, because
+    `Node` itself carries no `$ref`. A node whose whole content is a reference
+    back to itself, directly or around a ring, describes no value — every
+    consumer that resolves it resolves forever.
+
+    Not a shape a reader spots: each reference in the ring resolves, lands on a
+    schema, and reads as a perfectly ordinary alias. It is caught here rather
+    than left to whatever meets it first, because what meets it first is a
+    stack overflow — in the engine, or in the JSON Schema implementation
+    `analitiq.validator` grades recorded samples with.
+    """
+    reported: set[frozenset[str]] = set()
+    for start, _node in _iter_ref_bearing_nodes(root, ""):
+        seen: list[str] = []
+        current = start
+        while current is not None and current not in seen:
+            seen.append(current)
+            node = resolve_schema_ref(root, f"#{current}" if current else "#")
+            ref = node.get("$ref") if isinstance(node, dict) else None
+            current = _ref_pointer(ref) if isinstance(ref, str) else None
+        if current is None:
+            continue
+        ring = frozenset(seen[seen.index(current):])
+        if ring in reported:
+            continue
+        reported.add(ring)
+        errors.append(
+            f"{path}: the `$ref` chain through "
+            f"{', '.join(repr('#' + p) for p in sorted(ring))} returns to "
+            "itself. Every reference in it resolves, so it reads as an "
+            "ordinary alias, but nothing in the ring ever states what a value "
+            "must be: declared-path resolution here stops at the second visit "
+            "and gets nothing, and a JSON Schema implementation checking a "
+            "value against it does not stop at all. Inline the shape one of "
+            "them means, or point the ring at a subschema that declares "
+            "something "
+            "(spec: §API Response Extraction — embedded schema references)"
+        )
+
+
+def _ref_pointer(ref: str) -> str | None:
+    """The JSON pointer an in-document `$ref` names (`#/a/b` -> `/a/b`, `#` ->
+    `''`), or None when the reference is not one this contract follows."""
+    if ref == "#":
+        return ""
+    if ref.startswith("#/"):
+        return ref[1:]
+    return None
+
+
+def _iter_ref_bearing_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
+    """Every structural position holding a `$ref` this contract follows, as
+    `(pointer, node)`. Walks the shared `_JSON_SCHEMA_*_KEYS` inventory, so it
+    reaches exactly what the other walkers here do."""
+    if not isinstance(schema, dict):
+        return
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and _ref_pointer(ref) is not None:
+        yield pointer, schema
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+        child = schema.get(key)
+        if isinstance(child, dict):
+            for name, sub in child.items():
+                yield from _iter_ref_bearing_nodes(
+                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}")
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+        child = schema.get(key)
+        if isinstance(child, list):
+            for index, sub in enumerate(child):
+                yield from _iter_ref_bearing_nodes(sub, f"{pointer}/{key}/{index}")
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        if key not in schema:
+            continue
+        child = schema[key]
+        if isinstance(child, list):
+            for index, sub in enumerate(child):
+                yield from _iter_ref_bearing_nodes(sub, f"{pointer}/{key}/{index}")
+        else:
+            yield from _iter_ref_bearing_nodes(child, f"{pointer}/{key}")
+
+
+def _escape_pointer_token(name: str) -> str:
+    """One JSON Pointer reference token, RFC 6901 escaped — the inverse of
+    :func:`_unescape_pointer_token`, so a name carrying `/` or `~` builds a
+    pointer that resolves back to the node it came from."""
+    return name.replace("~", "~0").replace("/", "~1")
+
+
 def _validate_schema_refs(
     schema: Any, path: str, errors: list[str], root: Any = None
 ) -> None:
@@ -1584,7 +1679,11 @@ def _validate_schema_refs(
     # `root` is threaded down so a ref deep in the tree still resolves against
     # the WHOLE embedded schema — `$defs` lives at the top, and resolving
     # against the current subtree would call every legitimate ref dangling.
-    root = schema if root is None else root
+    if root is None:
+        # Whole-document, so it runs once from the entry call rather than at
+        # every node: a ring is a property of the graph, not of a node.
+        root = schema
+        _validate_ref_chains_terminate(root, path, errors)
     # `true` / `false` are legal whole-schema short-forms carrying no `$ref`.
     if isinstance(schema, bool) or not isinstance(schema, dict):
         return

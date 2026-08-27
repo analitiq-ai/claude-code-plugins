@@ -3225,6 +3225,22 @@ class TestRecordedWireSampleZone:
             "updated_at",
             {"type": "string", "examples": ["2024-01-02T03:04:05Z"]}))
 
+    def test_a_container_node_declares_no_zone_and_grades_none(self):
+        """A sample on an `Object` / `List` / `Json` node is not read against
+        the members below it. The container's own declaration makes no claim
+        about a zone, so there is nothing for the sample to bear out — and
+        reading a member's declaration against a fragment of the container's
+        sample would be a different rule. RULE-ENDP-064 still grades the sample
+        structurally; this is the boundary between the two."""
+        parse_endpoint(_api_payload_with_field_schema("period", {
+            "type": "object",
+            "native_type": "object",
+            "arrow_type": "Object",
+            "examples": [{"from": "2024-01-02T03:04:05"}],
+            "properties": {"from": self._temporal(
+                "Timestamp(MICROSECOND, UTC)", [])},
+        }))
+
     def test_a_non_list_examples_value_is_left_to_the_meta_check(self):
         """`examples` must be an array; saying so is the JSON Schema draft's
         job, and reporting it here too would report it twice."""

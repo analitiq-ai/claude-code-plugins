@@ -2908,7 +2908,7 @@
   },
   {
    "id": "RULE-ENDP-026",
-   "statement": "Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time.\n",
+   "statement": "Every `$ref` in an embedded response or input schema MUST be an in-document pointer that resolves to a schema node in the same document and MUST NOT lead back to its own node through references alone, and the schema MUST NOT use a keyword that retargets the base URI or defers a reference to evaluation time.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -2927,7 +2927,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Everything on the path that reads an embedded schema runs offline — the validator by design, the engine when it resolves an endpoint, the conformance kit when it executes a read — so a reference out of the document is never followed by anything that could object to it. The subtree behind it is not annotation-checked, not covered by a type map, and not reported; the author is told nothing. A dangling local pointer fails the same way while looking safer, because a reference to nothing asserts nothing and every instance satisfies it. Closing all of those is also what makes it safe for declared-path resolution to follow a `$ref` at all: by the time a path is resolved, every reference it can meet is local, real, and lands on a node both structural walkers visited.\n",
+   "rationale": "Everything on the path that reads an embedded schema runs offline — the validator by design, the engine when it resolves an endpoint, the conformance kit when it executes a read — so a reference out of the document is never followed by anything that could object to it. The subtree behind it is not annotation-checked, not covered by a type map, and not reported; the author is told nothing. A dangling local pointer fails the same way while looking safer, because a reference to nothing asserts nothing and every instance satisfies it. A ring of references looks safer still — each one resolves and lands on a schema — and is worse: it describes no value at all, and whatever resolves it first resolves until its stack runs out. Closing all of those is also what makes it safe for declared-path resolution to follow a `$ref` at all: by the time a path is resolved, every reference it can meet is local, real, and lands on a node both structural walkers visited.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3836,7 +3836,7 @@
   },
   {
    "id": "RULE-ENDP-063",
-   "statement": "A node of an endpoint's response or write-input schema that records wire samples under `examples` MUST declare a canonical Arrow type whose zone-awareness those samples bear out.\n",
+   "statement": "A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type MUST declare one whose zone-awareness those samples bear out. Recording a sample never obliges a node to declare a type it has no evidence for.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -5072,7 +5072,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Both the bare and the zoned spelling are canonical Arrow types the engine grammar admits, so both validate and only the provider's actual wire value decides which is true — and no authored document records that value. The common error is assuming zone-awareness because a field is named like an instant, which reinterprets every value the provider sends and shifts it by the destination's offset, silently and uniformly enough that nobody reads it as corruption. Catching a wrong call means going back to a captured sample response, which lives outside every document the connector ships.\n",
+   "rationale": "The zoned and the zoneless spelling are alike canonical Arrow types the engine grammar admits, so the declaration validates whichever it claims and only the provider's actual wire value decides which claim is true. The common error is assuming zone-awareness because a field is named like an instant, which reinterprets every value the provider sends and shifts it by the destination's offset, silently and uniformly enough that nobody reads it as corruption. An api-endpoint may record that wire value beside the declaration, and where one does RULE-ENDP-063 grades the pair; no other document the connector ships holds a wire value at all, so on those catching a wrong call means going back to a captured sample response.\n",
    "status": "active",
    "superseded_by": null
   },
