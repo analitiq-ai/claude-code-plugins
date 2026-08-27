@@ -1673,14 +1673,17 @@ def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
                 continue
             if key in IF_CONDITIONED_APPLICATORS:
                 condition = node.get("if", _MISSING)
-                # No `if`: neither branch has any effect at all. A boolean `if`
-                # is the legal whole-schema short-form and selects one branch
-                # for every instance, so the OTHER one is the dead half — read
-                # by identity, since `1 == True` in Python and a schema is not
-                # a truth value.
+                # No `if` at all: neither branch has any effect.
                 if condition is _MISSING:
                     continue
-                if condition is (True if key == "else" else False):
+                # A boolean `if` is the legal whole-schema short-form and
+                # selects one branch for every instance — `true` picks `then`,
+                # `false` picks `else` — so the other is unreachable. Compared
+                # by identity, since `1 == True` in Python and a schema is not
+                # a truth value.
+                if condition is True and key == "else":
+                    continue
+                if condition is False and key == "then":
                     continue
             out.append(f"{pointer}/{key}")
         edges[pointer] = [p for p in out if p in nodes]
