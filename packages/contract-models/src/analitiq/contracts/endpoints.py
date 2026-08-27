@@ -1539,50 +1539,161 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 }
 
 
-def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> None:
-    """RULE-ENDP-026's terminating half: a `$ref` chain must not return to
-    itself.
+#: Applicator keywords whose subschemas apply to the SAME instance the node
+#: does, rather than to a child of it. A cycle over these edges never consumes
+#: any part of the value, so a consumer following them does not come back —
+#: which is what separates a ring from ordinary recursion, where every hop
+#: descends through `properties` or `items` into a smaller value and bottoms
+#: out. `prefixItems` is a list keyword like `allOf` and is deliberately absent:
+#: it applies to array positions, so it descends.
+SAME_INSTANCE_LIST_APPLICATORS: frozenset[str] = frozenset({
+    "allOf", "anyOf", "oneOf",
+})
+SAME_INSTANCE_SINGLE_APPLICATORS: frozenset[str] = frozenset({
+    "not", "if", "then", "else",
+})
 
-    Followed through `$ref` edges alone, which is what makes this the
-    *unguarded* case and leaves ordinary recursive shapes alone: a `Node` whose
-    `children.items` references `Node` is followed one edge and stops, because
-    `Node` itself carries no `$ref`. A node whose whole content is a reference
-    back to itself, directly or around a ring, describes no value — every
-    consumer that resolves it resolves forever.
 
-    Not a shape a reader spots: each reference in the ring resolves, lands on a
-    schema, and reads as a perfectly ordinary alias. It is caught here rather
-    than left to whatever meets it first, because what meets it first is a
-    stack overflow — in the engine, or in the JSON Schema implementation
-    `analitiq.validator` grades recorded samples with.
+def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dict]]:
+    """Every schema node under `schema`, as `(json_pointer, node)`.
+
+    The one generic traversal of an embedded schema's structural positions:
+    it recurses through the shared `JSON_SCHEMA_SUBSCHEMA_KEYS` /
+    `JSON_SCHEMA_LIST_OF_SCHEMA_KEYS` / `JSON_SCHEMA_SINGLE_SCHEMA_KEYS`
+    inventory and yields, leaving every caller to filter for what it wants —
+    the ring check below, and `analitiq.validator`, which grades the recorded
+    samples it finds. Pointers are RFC 6901 escaped, so one resolves back to
+    the node it came from even under a property named `a/b`.
+
+    The two error-collecting walkers in this module predate it and stay as they
+    are: each re-enters on a non-dict child to report a malformed schema
+    position, which a yielding traversal cannot do, and each reports paths in a
+    dotted spelling rather than as pointers.
     """
+    if not isinstance(schema, dict):
+        return
+    yield pointer, schema
+    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+        child = schema.get(key)
+        if isinstance(child, dict):
+            for name, sub in child.items():
+                yield from iter_schema_nodes(
+                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}")
+    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+        child = schema.get(key)
+        if isinstance(child, list):
+            for index, sub in enumerate(child):
+                yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
+    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
+        if key not in schema:
+            continue
+        child = schema[key]
+        # Draft 2019-09 tuple-form `items: [...]`, as elsewhere here.
+        if isinstance(child, list):
+            for index, sub in enumerate(child):
+                yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
+        else:
+            yield from iter_schema_nodes(child, f"{pointer}/{key}")
+
+
+def _same_instance_edges(nodes: dict[str, dict]) -> dict[str, list[str]]:
+    """Which nodes each node hands the SAME value on to — a `$ref` target, and
+    every subschema under an applicator in the two sets above."""
+    edges: dict[str, list[str]] = {}
+    for pointer, node in nodes.items():
+        out: list[str] = []
+        ref = node.get("$ref")
+        if isinstance(ref, str):
+            target = _ref_pointer(ref)
+            if target is not None:
+                out.append(_normalized_pointer(target))
+        for key in SAME_INSTANCE_LIST_APPLICATORS:
+            child = node.get(key)
+            if isinstance(child, list):
+                out += [f"{pointer}/{key}/{i}" for i, _ in enumerate(child)]
+        for key in SAME_INSTANCE_SINGLE_APPLICATORS:
+            if isinstance(node.get(key), dict):
+                out.append(f"{pointer}/{key}")
+        edges[pointer] = [p for p in out if p in nodes]
+    return edges
+
+
+def _validate_ref_chains_terminate(root: Any, path: str, errors: list[str]) -> None:
+    """RULE-ENDP-026's terminating half: no ring of same-instance edges.
+
+    A ring is a set of nodes that hand the same value round to each other —
+    through `$ref`, or through an `allOf`/`anyOf`/`oneOf`/`not`/`if`/`then`/
+    `else` branch — and never to a part of it. Nothing in such a ring ever
+    states what a value must be, and whatever follows it does not stop:
+    declared-path resolution here halts at the second visit and gets nothing,
+    a JSON Schema implementation checking a value does not halt at all, and
+    the engine reads these documents with neither guard.
+
+    Not a shape a reader spots: each hop resolves, lands on a schema, and
+    reads as an ordinary alias or an ordinary composition. Ordinary *recursion*
+    is untouched, because every edge it needs — `properties`, `items` — is one
+    this walk does not follow: a `Node` whose `children.items` references
+    `Node` descends into a smaller value on every hop and bottoms out.
+    """
+    nodes = dict(iter_schema_nodes(root))
+    edges = _same_instance_edges(nodes)
     reported: set[frozenset[str]] = set()
-    for start, _node in _iter_ref_bearing_nodes(root, ""):
-        seen: list[str] = []
-        current = start
-        while current is not None and current not in seen:
-            seen.append(current)
-            node = resolve_schema_ref(root, f"#{current}" if current else "#")
-            ref = node.get("$ref") if isinstance(node, dict) else None
-            current = _ref_pointer(ref) if isinstance(ref, str) else None
-        if current is None:
+    # Iterative DFS with an explicit path, so a deep schema cannot exhaust the
+    # interpreter's stack while looking for the thing that would exhaust it.
+    finished: set[str] = set()
+    for origin in nodes:
+        if origin in finished:
             continue
-        ring = frozenset(seen[seen.index(current):])
-        if ring in reported:
-            continue
-        reported.add(ring)
-        errors.append(
-            f"{path}: the `$ref` chain through "
-            f"{', '.join(repr('#' + p) for p in sorted(ring))} returns to "
-            "itself. Every reference in it resolves, so it reads as an "
-            "ordinary alias, but nothing in the ring ever states what a value "
-            "must be: declared-path resolution here stops at the second visit "
-            "and gets nothing, and a JSON Schema implementation checking a "
-            "value against it does not stop at all. Inline the shape one of "
-            "them means, or point the ring at a subschema that declares "
-            "something "
-            "(spec: §API Response Extraction — embedded schema references)"
-        )
+        stack: list[tuple[str, Iterator[str]]] = [(origin, iter(edges[origin]))]
+        on_path: dict[str, int] = {origin: 0}
+        while stack:
+            current, remaining = stack[-1]
+            nxt = next(remaining, None)
+            if nxt is None:
+                stack.pop()
+                finished.add(current)
+                on_path.pop(current, None)
+                continue
+            if nxt in on_path:
+                ring = frozenset(p for p, depth in on_path.items()
+                                 if depth >= on_path[nxt])
+                if ring not in reported:
+                    reported.add(ring)
+                    errors.append(
+                        f"{path}: the schema at "
+                        f"{', '.join(repr('#' + p) for p in sorted(ring))} "
+                        "hands the same value round to itself. Every hop "
+                        "resolves, so it reads as an ordinary alias or "
+                        "composition, but nothing in the ring ever states what "
+                        "a value must be, and following it does not stop. "
+                        "Inline the shape one of them means, or point the ring "
+                        "at a subschema that declares something "
+                        "(spec: §API Response Extraction — embedded schema "
+                        "references)"
+                    )
+                continue
+            if nxt in finished:
+                continue
+            on_path[nxt] = len(stack)
+            stack.append((nxt, iter(edges[nxt])))
+
+
+def _normalized_pointer(pointer: str) -> str:
+    """A JSON pointer in the spelling :func:`iter_schema_nodes` builds.
+
+    A `$ref` is a URI-reference, so its fragment may percent-encode a token
+    (`#/$defs/my%20def`, and a literal `%` written `%25`); a pointer built from
+    the document's own keys never does. Decoding each token the way the
+    resolver does and re-escaping it puts both spellings in one form, so a
+    reference and the node it names compare equal instead of a ring going
+    unseen because it was written the other way.
+    """
+    if not pointer:
+        return pointer
+    return "".join(
+        f"/{_escape_pointer_token(_unescape_pointer_token(token))}"
+        for token in pointer.split("/")[1:]
+    )
 
 
 def _ref_pointer(ref: str) -> str | None:
@@ -1595,41 +1706,15 @@ def _ref_pointer(ref: str) -> str | None:
     return None
 
 
-def _iter_ref_bearing_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
-    """Every structural position holding a `$ref` this contract follows, as
-    `(pointer, node)`. Walks the shared `_JSON_SCHEMA_*_KEYS` inventory, so it
-    reaches exactly what the other walkers here do."""
-    if not isinstance(schema, dict):
-        return
-    ref = schema.get("$ref")
-    if isinstance(ref, str) and _ref_pointer(ref) is not None:
-        yield pointer, schema
-    for key in JSON_SCHEMA_SUBSCHEMA_KEYS:
-        child = schema.get(key)
-        if isinstance(child, dict):
-            for name, sub in child.items():
-                yield from _iter_ref_bearing_nodes(
-                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}")
-    for key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
-        child = schema.get(key)
-        if isinstance(child, list):
-            for index, sub in enumerate(child):
-                yield from _iter_ref_bearing_nodes(sub, f"{pointer}/{key}/{index}")
-    for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS:
-        if key not in schema:
-            continue
-        child = schema[key]
-        if isinstance(child, list):
-            for index, sub in enumerate(child):
-                yield from _iter_ref_bearing_nodes(sub, f"{pointer}/{key}/{index}")
-        else:
-            yield from _iter_ref_bearing_nodes(child, f"{pointer}/{key}")
-
-
 def _escape_pointer_token(name: str) -> str:
-    """One JSON Pointer reference token, RFC 6901 escaped — the inverse of
-    :func:`_unescape_pointer_token`, so a name carrying `/` or `~` builds a
-    pointer that resolves back to the node it came from."""
+    """One JSON Pointer reference token, RFC 6901 §3 escaped.
+
+    Escapes the two characters a pointer gives meaning to, and nothing else: a
+    property named `a/b` is one token, not two. Deliberately NOT the inverse of
+    :func:`_unescape_pointer_token`, which percent-decodes first because it
+    reads a `$ref` written as a URI fragment — this builds a bare pointer, so
+    a name carrying `%` does not round-trip between them and neither is wrong.
+    """
     return name.replace("~", "~0").replace("/", "~1")
 
 
