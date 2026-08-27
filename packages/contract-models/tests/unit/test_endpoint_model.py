@@ -3144,8 +3144,8 @@ def _api_payload_with_field_schema(field_name, field_schema):
 class TestRecordedWireSampleZone:
     """RULE-ENDP-063 — the mechanized half of RULE-SHRD-002. The matrix of
     which declaration/sample pairs agree lives in the shared fixture corpus
-    (`tests/fixtures/rules/RULE-ENDP-063`); what is pinned here is where the
-    walk reaches and what the author is told.
+    (`packages/contract-models/tests/fixtures/rules/RULE-ENDP-063`); what is
+    pinned here is where the walk reaches and what the author is told.
     """
 
     @staticmethod
@@ -3206,7 +3206,7 @@ class TestRecordedWireSampleZone:
 
     def test_the_finding_names_the_field_and_both_readings(self):
         """An author has to be able to act on it without opening the document:
-        which node, which sample, and what each of the two sides says."""
+        which node, which sample, and what each side says."""
         with pytest.raises(ValidationError) as exc:
             parse_endpoint(_api_payload_with_field_schema(
                 "updated_at",
@@ -3220,7 +3220,7 @@ class TestRecordedWireSampleZone:
     def test_an_untyped_node_carrying_samples_is_not_graded(self):
         """A node with no `arrow_type` declares no zone to contradict — and a
         field the provider documents no wire type for is authored exactly that
-        way (RULE-ENDP-006)."""
+        way (RULE-ENDP-005, and RULE-ENDP-006 on a write input)."""
         parse_endpoint(_api_payload_with_field_schema(
             "updated_at",
             {"type": "string", "examples": ["2024-01-02T03:04:05Z"]}))

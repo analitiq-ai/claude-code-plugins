@@ -11,11 +11,11 @@ owners: [connector-plugin, engine]
 targets: [ResponseExtraction, WriteInput]
 fixture_model: WriteInput
 rationale: >
-  RULE-SHRD-002 decides a temporal's zone from a real wire value, and until a
-  document recorded one the decision was unfalsifiable: both spellings are
-  canonical, both validate, and a wrong call reinterprets every instant the
-  provider sends and shifts it by the destination's offset — uniformly enough
-  that nobody reads it as corruption. A sample recorded beside the declaration
+  RULE-SHRD-002 decides a temporal's zone from a real wire value and states
+  what a wrong call costs; until a document recorded such a value the decision
+  was unfalsifiable, since only the value the provider actually sends
+  distinguishes the zone a declaration claims from the one it should have
+  claimed. A sample recorded beside the declaration
   turns that judgment into an arithmetic one, and it is graded here because a
   zone is not a JSON Schema property: a string carrying an offset and a string
   carrying none are the same `type: string`, so nothing in the draft the

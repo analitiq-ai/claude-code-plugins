@@ -107,6 +107,10 @@ MATRIX_CELL_MODE_KEY = "mode"
 #: every diagonal cell (family to itself) declares the identity mode. Guards
 #: assert exactly that and nothing about any off-diagonal mode value.
 MATRIX_IDENTITY_MODE = "identity"
+#: The parameter kind naming a family's timezone position. The manifest states
+#: which families carry one, so nothing here decides it: a family the engine
+#: later gives a zone to is read correctly without an edit.
+TIMEZONE_PARAM_KIND = "timezone"
 #: Key each artifact stamps its own version under. Both artifacts
 #: self-declare from grammar v1.1.0 / matrix v2.0.0 on, which is what lets a
 #: consumer assert the version it got rather than trusting the URL it asked for.
@@ -324,7 +328,7 @@ def _param_literal_pattern(
         return _int_range_pattern(lo, hi)
     if kind == "unit":
         return "(?:" + "|".join(param["allowed"]) + ")"
-    if kind == "timezone":
+    if kind == TIMEZONE_PARAM_KIND:
         null = param["null_sentinel"]
         offset = param["fixed_offset_pattern"]  # manifest-owned, verbatim
         return f"(?:{null}|{_IANA_ZONE}|{_ETC_GMT_ZONE}|{offset})"
@@ -589,11 +593,6 @@ def validate_cross_params(value: str) -> None:
 # Recorded wire samples
 # ---------------------------------------------------------------------------
 
-#: The parameter kind naming a family's timezone position. The manifest states
-#: which families carry one, so nothing here decides it: a family the engine
-#: later gives a zone to is read correctly without an edit.
-TIMEZONE_PARAM_KIND = "timezone"
-
 #: A wire value in ISO-8601 date-time form — the one sample shape whose
 #: zone-awareness can be decided by reading it. Contract-owned authoring
 #: profile, not an engine fact: the engine parses what its reader accepts, and
@@ -612,7 +611,7 @@ def declares_zone(value: str) -> bool | None:
     """Whether canonical `value` declares a zone — None when it cannot say.
 
     None is "there is nothing here a sample could contradict": the family
-    carries no timezone position at all (`Date32`, `Utf8`, `Time64(SECOND)`),
+    carries no timezone position at all (`Date32`, `Utf8`, `Time32(SECOND)`),
     the value is not a parameterized application, or the position is templated
     and so has no value yet. A True/False answer is returned only for a family
     that HAS the position, which is what keeps a caller from reading "declares

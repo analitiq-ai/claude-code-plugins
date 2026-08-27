@@ -94,16 +94,16 @@ a zone you assume (`RULE-SHRD-002`) — a date-only wire value (`2024-01-02`) is
 **Samples are copied, never composed.** A `sample_value` is a value that
 appears in the provider's own documentation — in an example response, an
 OpenAPI `example`, or the field's own row — reproduced exactly, with its JSON
-type intact. A plausible value you wrote yourself is worse than no sample: it
-is graded against the declaration downstream, so an invented one certifies the
-declaration it was invented to match. Where the docs illustrate nothing for a
-field, omit the key.
+type intact. A plausible value you wrote yourself is worse than no sample:
+the declaration is graded against it downstream (`RULE-ENDP-063`,
+`RULE-ENDP-064`), so an invented one certifies the declaration it was invented
+to match. Where the docs illustrate nothing for a field, omit the key.
 
 **A documented type and a documented example that disagree are the finding.**
 Providers whose field table says `boolean` and whose example response shows
-`"0"` are common, and the example is what the wire carries. Record both — the
-`native_type` the provider really emits, and the `sample_value` it showed —
-and name the contradiction in `notes` so the domain read map gains a rule for
+`"0"` are common, and the example is what the wire carries. Record the
+`native_type` the provider really emits and the `sample_value` it showed, and
+name the contradiction in `notes` so the domain read map gains a rule for
 the token the provider actually sends.
 
 ## Hard rules

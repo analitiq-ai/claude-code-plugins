@@ -140,22 +140,18 @@ was raised.
      schemas an endpoint declares — the read record and a write mode's input.
      - **Record the sample beside the declaration.** Where a facts entry
        carries a `sample_value`, put it on that field's node as
-       `"examples": [<value>]`, copied verbatim and with its JSON type
-       intact — the string `"0"` and the boolean `false` are different
-       evidence. The declaration is then graded against it rather than taken
-       on trust (`RULE-ENDP-063`, `RULE-ENDP-064`), which is the one check in
-       this contract that can see a provider whose documented type and
-       documented example disagree. An entry with no `sample_value` gets no
-       `examples`; nothing here is invented to fill the slot.
+       `"examples": [<value>]`, copied verbatim and with its JSON type intact
+       (`EndpointFacts.sample_value` says why the typing is load-bearing). The
+       declaration is then graded against it rather than taken on trust
+       (`RULE-ENDP-063`, `RULE-ENDP-064`). An entry with no `sample_value` gets
+       no `examples`; nothing here is invented to fill the slot.
      - **When the sample contradicts the documented type, the sample wins.**
        A provider that documents `boolean` and shows `"0"` sends strings, and
-       the connector that believes the documentation fails deterministically
-       on the first batch — the declared type is what the engine builds the
-       record batch from, and no string reaches a boolean column. Type the
-       field from the sample, add the native token the provider really emits
-       to the domain read map (a domain-level type-map fix, re-author +
-       re-validate), and report the contradiction. Never resolve it by
-       dropping the sample: that removes the evidence, not the disagreement.
+       the field is typed from what it sends. Add the native token the
+       provider really emits to the domain read map (a domain-level type-map
+       fix, re-author + re-validate), and report the contradiction. Never
+       resolve it by dropping the sample: that removes the evidence, not the
+       disagreement.
      - **Temporal fields follow the sample value, never a default**
        (`RULE-SHRD-002`). Read the zone off the sample: a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an

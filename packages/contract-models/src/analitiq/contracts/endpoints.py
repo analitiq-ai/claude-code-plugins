@@ -1271,9 +1271,9 @@ def _validate_examples_zone(
     """RULE-ENDP-063: a node's recorded samples must bear out the zone its
     declared type claims.
 
-    Both halves are read, and either one being unreadable ends the check: a
-    family with no timezone position has nothing a sample could contradict,
-    and a sample that is not a date-time literal carries no answer about zones.
+    Each reading is taken and an unreadable one ends the check: a family with
+    no timezone position has nothing a sample could contradict, and a sample
+    that is not a date-time literal carries no answer about zones.
     Silence here is the absence of evidence, never evidence of absence — see
     `analitiq.contracts.arrow_grammar.sample_carries_zone`.
 
@@ -1321,7 +1321,7 @@ def _validate_arrow_type_in_json_schema(
           `arrow_type` whose zone-awareness those samples bear out —
           RULE-ENDP-063, the mechanized half of RULE-SHRD-002. A sample whose
           zone-awareness cannot be read, and a type whose family carries no
-          zone position, are both simply not graded here.
+          zone position, are simply not graded here.
     """
     # JSON Schema 2020-12 permits `true` / `false` as a whole-schema short-form
     # ("anything" / "nothing"). Those are valid but carry no arrow_type, so
