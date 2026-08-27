@@ -151,14 +151,28 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
                     "a pipeline 'connections'.")]
 
 
-def _run_guarded(fn: Callable, *args, vid: str) -> list[dict]:
-    """Run a check; a crash becomes one error finding so other checks survive."""
+def _run_guarded(
+    fn: Callable, *args, vid: str, path: str = "", blame: str | None = None,
+) -> list[dict]:
+    """Run a check; a crash becomes one error finding so other checks survive.
+
+    `blame` is what the reader is told to do about it. The default says the
+    validator is at fault, which is right where a check crashed on a document
+    the contract accepts. It is NOT right everywhere: a check that runs
+    arbitrary keyword logic over author-supplied content can be brought down by
+    the content, and telling that author to report a validator bug names the
+    wrong culprit and gives them nothing to fix. Such a caller passes its own
+    wording.
+
+    `path` locates the crash. A check that runs per-slot has more than one
+    place to crash, and without it every one of them reports the same finding.
+    """
     try:
         return fn(*args)
     except Exception as exc:  # noqa: BLE001 - last-resort guard
-        return [finding(vid, "error", "",
-                        f"check {vid!r} crashed unexpectedly ({type(exc).__name__}: {exc}); "
-                        "this is a validator bug — please report.")]
+        return [finding(vid, "error", path,
+                        f"check {vid!r} could not finish ({type(exc).__name__}: {exc}); "
+                        + (blame or "this is a validator bug — please report."))]
 
 
 # ---------------------------------------------------------------------------

@@ -324,16 +324,29 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
                 f"embedded schema at {where} is not a valid JSON Schema Draft "
                 f"2020-12 document: {exc.message}"))
             continue
-        # Guarded, because grading an instance is the one thing here that
-        # runs arbitrary keyword logic: `multipleOf` against a 400-digit
-        # sample raises `OverflowError` out of `iter_errors`, and the
-        # metaschema has no opinion about it. Unguarded, the dispatch-level
-        # guard turns that into one "validator bug" line REPLACING every
-        # finding on the document — including the ones the author was fixing.
-        # Guarded here, a crash costs this check and nothing else.
+        # Guarded, because grading an instance is the one thing here that runs
+        # arbitrary keyword logic over content the author supplies: a
+        # `multipleOf` against a 400-digit sample raises `OverflowError` out of
+        # `iter_errors`, a reference ring recurses until the stack ends, and
+        # the metaschema has an opinion about neither. Unguarded, the
+        # dispatch-level guard turns that into one line REPLACING every finding
+        # on the document — including the ones the author was fixing.
+        #
+        # The blame is the author's, not this tool's: what brought the check
+        # down came out of their document, and the default wording would send
+        # them to file a bug with nothing in it. The pointer says which of an
+        # endpoint's embedded schemas it was, since a crash in one must not
+        # read like a crash in another.
         findings.extend(_run_guarded(
             _schema_example_findings, schema, pointer, where,
-            vid="embedded-schema-example"))
+            vid="embedded-schema-example", path=pointer,
+            blame=(
+                f"the recorded samples under {where} could not be graded. "
+                "Something in this schema takes the JSON Schema implementation "
+                "somewhere it cannot come back from — a reference that leads "
+                "back to itself, or a value a keyword cannot compute against. "
+                "Every other check on this document still ran"
+            )))
     return findings
 
 
@@ -352,16 +365,14 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
 
     Reached only for a schema `check_schema` already accepted — grading an
     instance against a malformed schema reports the malformation a second time,
-    in the vocabulary of whichever example happened to meet it first. A schema
-    whose references the contract refuses is skipped for the same reason and
-    one more: resolution happens here for the first time in this module, so a
-    reference RULE-ENDP-026 objects to either raises out of `iter_errors` or
-    resolves to something other than what the contract read. That rule names
-    each of them precisely; this check has nothing to add to it.
+    in the vocabulary of whichever example happened to meet it first.
 
-    Neither gate makes `iter_errors` total, and this does not try to be — the
-    caller runs it guarded, so a keyword that raises costs this check's
-    findings rather than the document's.
+    Nothing else is gated. Resolution happens here for the first time in this
+    module, so a reference the contract refuses can raise out of `iter_errors`
+    — but so can a keyword that resolves nothing, and skipping a whole schema
+    for either costs the author every sample in it over one bad node. The
+    caller runs this guarded instead: a raise costs the samples in that one
+    embedded schema, and RULE-ENDP-026 still names the reference precisely.
 
     `jsonschema` is imported HERE for the reason the caller states: only
     endpoint meta-validation needs it.
@@ -374,10 +385,6 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
         if isinstance(node.get("examples"), list)
     ]
     if not nodes:
-        return []
-    refused_references: list[str] = []
-    _validate_schema_refs(schema, pointer, refused_references)
-    if refused_references:
         return []
     root = Draft202012Validator(schema)
     findings: list[dict] = []
