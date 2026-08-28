@@ -1,16 +1,16 @@
-"""Two rule statements enumerate the negating positions; the contract owns them.
+"""A rule statement that carves out the negating positions names all of them.
 
-RULE-ENDP-063 and RULE-ENDP-064 both carve out a node reached through a
-position whose subschema does not describe the instance, and both name the
-positions — `not`, `if`, `propertyNames` — because naming only the class left
-an author with a sample under `if` concluding, correctly, that the exemption
-did not reach them.
+Every rule in `CARVE_OUT_RULES` exempts a node reached through a position whose
+subschema does not describe the instance, and each names those positions rather
+than only the class — because naming only the class left an author with a
+sample under one of them concluding, correctly, that the exemption did not
+reach it.
 
 That enumeration is a hand copy of `JSON_SCHEMA_NEGATED_SCHEMA_KEYS`, and it
-ships twice: into the wheel as `shared/rules.json`, and into the plugin as
+ships into the wheel as `shared/rules.json` and into the plugin as
 `references/rules/api-endpoint.md`. A member landing on that frozenset leaves
-both statements teaching an exemption narrower than the one enforced, and no
-renderer reads statement text.
+every such statement teaching an exemption narrower than the one enforced, and
+no renderer reads statement text.
 
 This locates rather than decides (`.claude/rules/guards.md`): it asks whether
 each member the contract owns appears backticked in the statement, and whether
@@ -31,6 +31,12 @@ CARVE_OUT_RULES = ("RULE-ENDP-063", "RULE-ENDP-064")
 def test_the_statement_names_every_negating_position(rule_id):
     from analitiq.contracts.endpoints import JSON_SCHEMA_NEGATED_SCHEMA_KEYS
     from analitiq.contracts.shared.rules import all_rules
+
+    assert JSON_SCHEMA_NEGATED_SCHEMA_KEYS, (
+        "the contract owns no negating positions — both comprehensions below "
+        "would be empty and this would report agreement while the statements "
+        "go on teaching an exemption nothing applies"
+    )
 
     by_id = {r.id: r for r in all_rules()}
     assert rule_id in by_id, (

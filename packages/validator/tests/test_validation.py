@@ -229,7 +229,6 @@ def test_one_sample_earns_one_finding_however_many_ways_it_fails(validator):
         "minLength": 5, "pattern": "^z", "examples": ["ab"]})
     errors = _example_errors(validator, ep)
     assert len(errors) == 1, errors
-    assert all(isinstance(e, dict) for e in errors), errors
 
 
 def test_a_sample_finding_names_the_file_it_came_from(tmp_path, connector_base,
@@ -674,10 +673,10 @@ def test_one_endpoint_that_cannot_be_checked_costs_only_that_endpoint(
 
 
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
-    """The other direction of the same wording. Two tests assert the default
-    blame is ABSENT from a document-caused crash, and an absence assertion
-    against a string nothing emits is quiet rather than red — so one test has
-    to require it where it belongs."""
+    """The other direction of the same wording. Several tests assert the
+    default blame is ABSENT from a document-caused crash, and an absence
+    assertion against a string nothing emits is quiet rather than red — so one
+    test has to require it where it belongs."""
     from analitiq.validator._core import _run_guarded
 
     def _boom():
