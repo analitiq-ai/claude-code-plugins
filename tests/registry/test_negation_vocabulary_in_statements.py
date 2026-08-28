@@ -32,7 +32,12 @@ def test_the_statement_names_every_negating_position(rule_id):
     from analitiq.contracts.endpoints import JSON_SCHEMA_NEGATED_SCHEMA_KEYS
     from analitiq.contracts.shared.rules import all_rules
 
-    statement = next(r.statement for r in all_rules() if r.id == rule_id)
+    by_id = {r.id: r for r in all_rules()}
+    assert rule_id in by_id, (
+        f"{rule_id} is not in the compiled registry — this guard would "
+        "otherwise report agreement over a rule that no longer exists"
+    )
+    statement = by_id[rule_id].statement
     missing = sorted(
         key for key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
         if f"`{key}`" not in statement
