@@ -219,11 +219,11 @@ This repo vendors one pinned version at
 states the pin (version + sha256) once. `census/consumption/reachability.py`
 walks the live models from the roots through their field annotations,
 never descending into an opaque model, and every reachable field the
-manifest does not claim is *unread*: it carries a `FieldDisposition` in
-`census/consumption/dispositions.py` naming what consumes it off the
-run-time path, the parse that settles it, or which side owes the fix —
-engine, manifest, or contract — with `DispositionKind` in
-`census/consumption/disposition.py` owning the names. A model no root
+manifest does not claim, on a model it does not consume whole, is
+*unread*: it carries a `FieldDisposition` in
+`census/consumption/dispositions.py` whose kind — `DispositionKind` in
+`census/consumption/disposition.py` owns the names — says what consumes it
+or which side owes the fix. A model no root
 reaches is not covered — unknown, not unread. Guards: `tests/census/test_contract_consumption.py` re-hashes
 the vendored file offline, checks its self-declared version against the
 pin, and fails on every finding the `ConsumptionReport` dataclass in

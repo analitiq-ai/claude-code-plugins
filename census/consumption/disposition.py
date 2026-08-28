@@ -59,15 +59,13 @@ DispositionKind = Literal[
 #: re-words a category everywhere. A bespoke ``reason`` is still right when a
 #: field's situation is not one of these.
 
-#: Human-facing metadata: labels and descriptions a person reads in a catalog
-#: or a diff; nothing at run time branches on them.
+#: Catalog labels and descriptions.
 HUMAN_METADATA = (
     "human-facing metadata: read by a person in the catalog, the registry "
     "diff and the plugin's own summaries, never by the run-time path"
 )
 
-#: A discriminator: the value selects which union member pydantic builds, so
-#: the engine holds the member and never reads the tag.
+#: A union tag.
 UNION_DISCRIMINATOR = (
     "union discriminator: the value selects the member pydantic builds, so "
     "the engine holds the member type and never reads the tag"

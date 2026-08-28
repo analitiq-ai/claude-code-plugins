@@ -24,8 +24,7 @@ from census.consumption.disposition import (
 
 # --- Named reasons shared across entries -------------------------------------
 
-#: A required ``Literal`` carrying the per-kind schema URL. Pydantic refuses
-#: any other value, so the engine holds a document whose URL is already known.
+#: The per-kind ``schema_url`` literal.
 SCHEMA_URL_LITERAL = (
     "required Literal pinned to the per-kind schema URL: pydantic refuses any "
     "other value, so the engine holds a document already known to be this kind"
@@ -126,7 +125,10 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "goes, and the slot and the field state the same placement; "
         "RULE-ENDP-008's location clause names the obligation, the pinned "
         "manifest claims no read of the field, and the field is the copy "
-        "that goes",
+        "that goes. The model validators that read it — the slot agreement, "
+        "the style/explode requirement on an array or object query param, "
+        "and the refusal of a body param on a GET read — each re-key onto "
+        "the binding slot, which is the same fact stated once",
     ),
     FieldDisposition(
         "endpoints.Param", "required", "engine_gap",
@@ -176,9 +178,11 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "form is read except for operator and format, so a required field the "
         "read path ignores misleads in a form that otherwise works — unlike "
         "the windowed form, unread as a whole and dispositioned as one gap. "
-        "Removed rather than adopted because a comparison operator declared "
-        "beside the param binding restates what the param the cursor binds "
-        "to already fixes, so it can only agree with it or contradict it",
+        "Removed rather than adopted because the field is required: while "
+        "it stands, every document must state a comparison the run does not "
+        "apply, and the contract cannot keep demanding a value it cannot "
+        "promise to honour — adoption, if the owners choose it, lands as an "
+        "optional field alongside the windowed form's decision",
     ),
     FieldDisposition("endpoints.SingleCursorMapping", "format", "engine_gap", CURSOR_MAPPING_WIRE),
     # --- endpoints.WindowCursorMapping: the whole windowed form is unread ---

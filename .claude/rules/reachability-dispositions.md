@@ -41,7 +41,10 @@ module docstring in `census/consumption/disposition.py` says what each
 means. What a reader settles is which one applies:
 
 - Something off the run-time path consumes the field → `authoring_only`, and
-  the reason **names that consumer**. "Documentation" names nothing.
+  the reason **names that consumer**. "Documentation" names nothing. A
+  consumer does not settle it alone: a field the document already states
+  elsewhere is `contract_surplus` however many checks read the copy, and
+  the reason then names each check and what it re-keys onto.
 - Pydantic settles the value before the engine holds the object →
   `structural`.
 - Nothing consumes it, and the question is **who owes the fix**:
