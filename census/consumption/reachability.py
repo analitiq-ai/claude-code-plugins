@@ -25,7 +25,7 @@ grading a connector, not the engine running one, and ``transport`` sites
 re-serialise a document unchanged; neither is a read, so neither is a claim.
 
 :func:`census_report` diffs the classification against the dispositions.
-Both consumers — ``tests/census/test_contract_consumption.py`` and
+Each consumer — ``tests/census/test_contract_consumption.py`` and
 ``scripts/render_contract_consumption.py`` — assert on that one report, so
 the lint and the tool can never disagree.
 """

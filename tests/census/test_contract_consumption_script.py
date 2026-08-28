@@ -4,8 +4,9 @@ The script prints the same report the census test asserts on; what is its
 own is the verdict it maps that report to. Pinned here: a clean census is
 exit 0 with the completion line, a finding is exit 1, a usage error is
 exit 2, and a check that cannot run — the vendored manifest refused, a
-model the tree does not hold — is exit 2 with a "could not run" line, never
-the exit-1 remediation.
+root the tree does not hold (a ``claims`` or ``opaque`` key naming an
+unknown model is an exit-1 finding) — is exit 2 with a "could not run"
+line, never the exit-1 remediation.
 """
 from __future__ import annotations
 
@@ -76,7 +77,7 @@ def test_a_manifest_the_envelope_check_refuses_is_exit_2(monkeypatch, capsys):
     assert "could not run" in err and "roots" in err
 
 
-def test_a_manifest_naming_a_model_the_tree_does_not_hold_is_exit_2(
+def test_a_root_the_tree_does_not_hold_is_exit_2(
     monkeypatch, capsys
 ):
     module = _load_script()

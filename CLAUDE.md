@@ -226,13 +226,14 @@ engine, manifest, or contract — with `DispositionKind` in
 `census/consumption/disposition.py` owning the names. A model no root
 reaches is not covered — unknown, not unread. Guards: `tests/census/test_contract_consumption.py` re-hashes
 the vendored file offline, checks its self-declared version against the
-pin, and fails on an unread field with no entry, an entry for a field the
-manifest now claims, or one outside coverage;
+pin, and fails on every finding the `ConsumptionReport` dataclass in
+`census/consumption/reachability.py` carries;
 `scripts/render_contract_consumption.py check` prints the same report; the
 `contract-consumption-pin-guard` CI job byte-compares the vendored file
 against the published immutable object and surfaces a newer engine
-publication as a notice. A pin bump re-vendors, re-runs the census, and
-retires or adds dispositions in the same change — never by editing the
+publication as a notice. Adopting a newer publication is a pin bump, whose
+procedure is the pin-bump section of
+`.claude/rules/reachability-dispositions.md` — never an edit to the
 manifest.
 
 **Where a new fact goes.** Something a document must satisfy is a model field,
@@ -369,14 +370,17 @@ matches what you are editing:
 - `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
   count, "the rule above". The PR template asks you to attest you applied it.
 - `guards.md` — before writing any check that reads prose this repo tracks.
+- `engine-behaviour-claims.md` — before writing any sentence about what the
+  engine does at run time, and before resting a check on one.
 - `reachability-dispositions.md` — before writing or re-affirming a
   `FieldDisposition` under `census/consumption/`. The guard compares sets;
   which kind an unread field is, and whether its reason is honest, is the
   reader's.
 
 `plugin-prose.md`, `contract-prose.md` and `reachability-dispositions.md` are
-keyed to the surface you are editing. `no-drift-surfaces.md`, `no-cardinality-restatements.md` and
-`resolvable-referents.md` are keyed to a class of sentence that rots on any
+keyed to the surface you are editing. `no-drift-surfaces.md`,
+`no-cardinality-restatements.md`, `resolvable-referents.md` and
+`engine-behaviour-claims.md` are keyed to a class of sentence that rots on any
 surface. `guards.md` is keyed to the mechanism that reads them.
 
 ## Conventions

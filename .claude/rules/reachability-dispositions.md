@@ -12,34 +12,31 @@ same split on fields.
 
 ## What the guard decides, and what a reader decides
 
-`census/consumption/reachability.py` compares sets: every unread field has an
-entry, no entry names a field the manifest now claims or the tree no longer
-declares, no field carries more than one, and a `structural` entry sits on a
-`Literal`.
+`census/consumption/reachability.py` compares sets, and `ConsumptionReport`
+there carries every finding that comparison can reach.
 `tests/census/test_contract_consumption.py` and
-`scripts/render_contract_consumption.py check` run that comparison. **It never
-decides whether the kind is right or the reason honest.** That is a reader's,
+`scripts/render_contract_consumption.py check` fail on every finding that
+dataclass carries. **Neither decides whether the kind is right or the reason
+honest.** That is a reader's,
 and this file is what the reader applies.
 
 ## The kind
 
 `DispositionKind` in `census/consumption/disposition.py` owns the names; the
-docstring there says what each means. What a reader settles is which one
-applies:
+module docstring in `census/consumption/disposition.py` says what each
+means. What a reader settles is which one applies:
 
-- Something off the run-time path consumes the field — a person, plugin prose,
-  the validator, the schema renderer → `authoring_only`, and the reason
-  **names that consumer**. "Documentation" names nothing.
-- Pydantic settles the value before the engine holds the object — a
-  discriminator, a schema-pinned constant → `structural`. This is the one kind
-  with a mechanical half: the guard refuses it on a field that is not
-  `Literal`-typed.
+- Something off the run-time path consumes the field → `authoring_only`, and
+  the reason **names that consumer**. "Documentation" names nothing.
+- Pydantic settles the value before the engine holds the object →
+  `structural`, the kind with a mechanical half: the guard refuses it on a
+  field that is not `Literal`-typed.
 - Nothing consumes it, and the question is **who owes the fix**:
-  - the engine should honour what the author declared → `engine_gap`;
-  - the contract should stop declaring it → `contract_surplus`, and the reason
-    says why removal rather than adoption;
-  - the engine does read it, by a means its manifest extractor cannot
-    attribute → `manifest_gap`, filed against the manifest generator.
+  - the engine → `engine_gap`;
+  - the contract → `contract_surplus`, and the reason says why removal
+    rather than adoption;
+  - the manifest generator, because the engine does read it by a read its
+    extractor cannot attribute to a field → `manifest_gap`.
 
 ## The reason, and its halves
 
@@ -50,7 +47,8 @@ comparison against the published artifact, pinned by the sha256 in
 of `engine-behaviour-claims.md`. The consequence half — what the run does with
 the field today — is a reading of the engine as it stands, the second rung.
 Write it as what the run does, never as what the engine must always do, and
-never rest a check on it: the gate is `claims` membership and nothing else.
+never rest a check on it: the gate is a non-empty `claims` entry and nothing
+else.
 
 A consequence half stays inside the engine. What a provider does with the
 request that goes out is not a fact the manifest can carry, and an absence of
@@ -62,9 +60,21 @@ that restates it is a second copy of a fact the registry owns.
 
 ## A pin bump re-reads every entry it touches
 
-A new manifest version retires entries by claiming their fields, and the guard
-finds those. It does not find an entry whose manifest half is still true and
-whose consequence half has gone stale because the engine moved without
-claiming the field. So a pin bump re-reads every entry on a model whose
-`claims` changed, and re-affirms or rewrites the consequence half — the same
-obligation `contract-prose.md` places on a prose site whose hash has moved.
+This section owns the pin-bump procedure; `census/consumption/pin.py`, the
+pin guard and the root `CLAUDE.md` point here rather than restating it.
+
+1. Replace the vendored manifest with the newly published object, byte for
+   byte, and move the version and sha256 constants in
+   `census/consumption/pin.py` together (the sha is `sha256` of the published
+   bytes; `latest.json` also states it). The manifest itself is never edited.
+2. Run `scripts/render_contract_consumption.py check`. It reports the entries
+   whose fields the new manifest now claims — delete those — and the fields
+   it leaves unread with no entry — write a disposition for each, by hand,
+   under this file.
+3. Re-read every entry on a model whose `claims` changed. A new manifest
+   version retires entries by claiming their fields, and the guard finds
+   those. It does not find an entry whose manifest half is still true and
+   whose consequence half has gone stale because the engine moved without
+   claiming the field. So re-affirm or rewrite the consequence half — the
+   same obligation `contract-prose.md` places on a prose site whose hash has
+   moved.

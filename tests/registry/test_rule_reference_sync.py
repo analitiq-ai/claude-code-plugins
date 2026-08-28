@@ -145,6 +145,7 @@ def test_prose_rule_citations_resolve() -> None:
     dangling: dict[str, set[str]] = {}
     plugins_root = REPO_ROOT / "plugins"
     plugin_cited = 0
+    census_cited = 0
     census_root = REPO_ROOT / "census"
     for path in [
         *REPO_ROOT.glob("*.md"),
@@ -156,6 +157,8 @@ def test_prose_rule_citations_resolve() -> None:
         ids = _cited_ids(path.read_text(encoding="utf-8"))
         if plugins_root in path.parents:
             plugin_cited += len(ids)
+        if census_root in path.parents:
+            census_cited += len(ids)
         if ids - known:
             dangling[str(path.relative_to(REPO_ROOT))] = ids - known
 
@@ -166,6 +169,12 @@ def test_prose_rule_citations_resolve() -> None:
         "no RULE-* citations found under plugins/ — plugin prose cites dozens, "
         "so the search glob no longer points at it — a scan over zero citations "
         "would otherwise pass vacuously."
+    )
+    assert census_cited, (
+        "no RULE-* citations found under census/ — the consumption "
+        "dispositions cite rule ids in their reasons, so the search glob no "
+        "longer points at them — a scan over zero citations would otherwise "
+        "pass vacuously."
     )
     assert not dangling, (
         f"prose cites rule ids that no longer exist: {dangling}. Update the "

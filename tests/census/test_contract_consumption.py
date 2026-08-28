@@ -18,6 +18,10 @@ half) and covers:
    diff only ever asserted empty is a diff nobody has proven can fail.
 6. **The live gate**: every unread field in the real contract tree carries a
    disposition, and every disposition names a field the census still holds.
+
+What this suite never decides is whether a disposition's kind is right or
+its reason honest — that is the reader's half, and
+``.claude/rules/reachability-dispositions.md`` is what the reader applies.
 """
 from __future__ import annotations
 
@@ -85,6 +89,7 @@ def test_pin_module_is_stdlib_only():
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        check=False,
     )
     assert result.returncode == 0, result.stderr
 
@@ -95,6 +100,7 @@ def test_pin_module_is_stdlib_only():
 
 _WELL_FORMED = {
     "version": "0.0.0",
+    "contract_models_version": "0.0.0",
     "roots": ["a.B"],
     "claims": {},
     "opaque": {},
@@ -127,6 +133,8 @@ def test_load_manifest_accepts_a_well_formed_envelope(tmp_path):
         ({"transport": {}}, "`transport` is not a list"),
         ({"version": 1}, "`version` is not a string"),
         ({"version": None}, "`version` is missing"),
+        ({"contract_models_version": 1}, "`contract_models_version` is not a string"),
+        ({"contract_models_version": None}, "`contract_models_version` is missing"),
     ],
 )
 def test_load_manifest_refuses_a_malformed_envelope(tmp_path, mutation, reason):
@@ -432,7 +440,6 @@ def shadowed(monkeypatch):
     ``analitiq.contracts``-relative path by contract — can name them.
     ``monkeypatch`` undoes both the module registration and the
     ``__module__`` rewrite, so the prose census's own walk never sees them."""
-    import sys
     import types
 
     shadow = types.ModuleType(_SHADOW)
@@ -596,8 +603,7 @@ def test_manifest_was_generated_against_this_tree_or_an_older_one():
     claim fields this tree does not declare — a census over models the
     engine has moved past. At or behind is the safe direction."""
     manifest = pin.load_manifest()
-    generated_against = manifest["contract_models_version"]
-    assert isinstance(generated_against, str)
+    generated_against = manifest[pin.CONTRACT_MODELS_VERSION_KEY]
     tree = _tree_contract_models_version()
     assert _version_key(generated_against) <= _version_key(tree), (
         f"the vendored manifest was generated against analitiq-contract-models "
@@ -606,11 +612,10 @@ def test_manifest_was_generated_against_this_tree_or_an_older_one():
 
 
 def test_every_unread_contract_field_carries_a_disposition():
-    """The gate. An unread field with no entry, an entry for a field the
-    engine now reads, an entry outside coverage, a duplicate, or a
-    ``structural`` claim on a field pydantic does not settle — each fails
-    here, with the same report ``scripts/render_contract_consumption.py
-    check`` prints."""
+    """The gate. Every finding ``ConsumptionReport`` carries fails here,
+    with the same report ``scripts/render_contract_consumption.py check``
+    prints. Whether an entry's kind and reason are the right ones is the
+    reader's half — ``.claude/rules/reachability-dispositions.md``."""
     from census.consumption.dispositions import DISPOSITIONS
 
     report = census_report(pin.load_manifest(), DISPOSITIONS)

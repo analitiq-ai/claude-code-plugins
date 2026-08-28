@@ -33,10 +33,9 @@ One disposition per kind of consumer an unread field may have:
   than adoption is the answer. An entry of this kind is a decision recorded,
   not a gap waiting on the engine.
 - ``manifest_gap`` — the engine reports reading the field by a means its
-  manifest extractor cannot attribute (a dict-path read the manifest records
-  under ``transport``), so the pinned artifact claims no read while the
-  run-time path does read it. The entry is filed against the manifest
-  generator, and is retired by the ``disposition_now_claimed`` finding the
+  manifest extractor does not attribute to a field (a dict-path read), so
+  the pinned artifact claims no read while the run-time path does read it.
+  The entry is filed against the manifest generator, and is retired by the ``disposition_now_claimed`` finding the
   moment a manifest version claims the field.
 
 Whether an entry's ``kind`` and ``reason`` are the right ones is the
@@ -78,9 +77,11 @@ UNION_DISCRIMINATOR = (
 class FieldDisposition:
     """One unread field, bound to what consumes it — or declared a gap.
 
-    ``model`` is the ``analitiq.contracts``-relative dotted path of the class
-    that DECLARES the field (``endpoints.Param``, ``pipelines.config.Logging``,
-    ``stream.StreamSource``); ``field`` is the field name on that model.
+    ``model`` is the ``analitiq.contracts``-relative dotted path of the
+    reachable class that CARRIES the field (``endpoints.Param``,
+    ``pipelines.config.Logging``, ``stream.StreamSource``) — inherited fields
+    included, since the walk reads ``model_fields`` — not necessarily the
+    class declaring it; ``field`` is the field name on that model.
     ``kind`` is the disposition and ``reason`` the sentence a reviewer reads
     to judge it. A ``reason`` is required for every kind: an ``engine_gap``
     with no stated consequence is an alarm with no text, and an

@@ -19,15 +19,15 @@ published truth:
      self-declared version by asserting the vendored copy's.
   3. The published `latest.json` pointer is consulted: a newer engine version
      than the pin is a NOTICE, not a failure — the census still grades
-     against a manifest the engine did publish; adopting the new version is
-     a deliberate pin bump (re-vendor, re-run the census, re-disposition),
-     never an automatic one. A pointer BELOW the pin fails, as a POINTER
-     problem, not an unpublished pin: this step runs only after step 2
+     against a manifest the engine did publish; adopting it is a deliberate
+     pin bump, never an automatic one (the procedure is the pin-bump section
+     of `.claude/rules/reachability-dispositions.md`). A pointer BELOW the
+     pin fails, as a POINTER problem, not an unpublished pin: this step runs only after step 2
      fetched the pinned immutable object (a genuinely unpublished pin dies
      there as a GuardError, exit 2), so the mutable pointer is lagging a
-     published object — a stale latest.json (the pointers rely on the
-     short TTL the publish workflow's cache-control states, not
-     invalidation) or a half-completed publish.
+     published object — a stale latest.json (the pointers rely on a short
+     TTL, not invalidation; `.github/workflows/schemas-publish.yml` owns the
+     cache-control) or a half-completed publish.
      Remediation: re-check after the TTL and repair the pointer if it
      persists — re-vendoring does not fix the pointer.
 
@@ -210,7 +210,8 @@ def check_published(failures: list[str]) -> list[str]:
             f"{pin.CONSUMPTION_RESOURCE}: engine has published v{latest}, pin "
             f"is v{pin.CONSUMPTION_VERSION} — the census still grades against "
             "a manifest the engine published; adopt deliberately via a pin "
-            "bump (re-vendor, re-run the census, re-disposition)"
+            "bump — the procedure is the pin-bump section of "
+            ".claude/rules/reachability-dispositions.md"
         )
     elif latest_v < pinned_v:
         # Reachable only AFTER step 2 fetched the pinned immutable object
@@ -224,9 +225,9 @@ def check_published(failures: list[str]) -> list[str]:
             f"{pin.CONSUMPTION_RESOURCE}: latest.json says v{latest}, but the "
             f"pinned v{pin.CONSUMPTION_VERSION} object is published — this "
             "same run just fetched it. The mutable pointer lags a published "
-            "pinned object: a stale latest.json (the pointers rely on the "
-            "short TTL the publish workflow's cache-control states, not "
-            "invalidation) or a half-completed publish. "
+            "pinned object: a stale latest.json (the pointers rely on a short "
+            "TTL, not invalidation; .github/workflows/schemas-publish.yml "
+            "owns the cache-control) or a half-completed publish. "
             "Re-check after the TTL and repair the pointer if it persists — "
             "re-vendoring does not fix the pointer"
         )

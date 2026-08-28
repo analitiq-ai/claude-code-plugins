@@ -16,15 +16,18 @@ Usage:
 
 Exit codes: 0 when the census is complete and current, 1 on any finding, 2
 when the check could not run — a usage error, a vendored manifest the
-envelope check refuses, a manifest naming a model the live tree does not
-hold, or a contract tree that does not import. A check that cannot run
+envelope check refuses, a manifest ROOT the live tree does not hold (a
+``claims`` or ``opaque`` key naming an unknown model is an exit-1 finding),
+or a contract tree that does not import. A check that cannot run
 prints a "could not run" line and never reads as a finding: the exit-1
 remediation is "write or retire a disposition", which fixes none of those.
 
 There is no ``write`` mode. A disposition is a judgment — which consumer
 reads the field off the run-time path, or what an author loses when the
 engine ignores it — and nothing here can make it; the report names each
-field that needs one and the author writes the entry by hand.
+field that needs one and the author writes the entry by hand. Whether an
+entry's kind and reason are the right ones is the reader's half —
+``.claude/rules/reachability-dispositions.md``.
 """
 
 from __future__ import annotations

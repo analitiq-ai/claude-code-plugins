@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -247,7 +246,13 @@ def test_offline_vendored_file_the_census_cannot_walk_is_a_guard_error(
     """The sha256 pin MATCHES the bytes but the loader refuses the shape (no
     `roots`): the pin was minted against a malformed object, a state neither
     re-vendoring (the exit-1 remediation) nor a retry fixes — exit 2."""
-    malformed = json.dumps({"version": guard.pin.CONSUMPTION_VERSION, "claims": {}}).encode()
+    malformed = json.dumps(
+        {
+            "version": guard.pin.CONSUMPTION_VERSION,
+            "contract_models_version": "0.0.0",
+            "claims": {},
+        }
+    ).encode()
     path = tmp_path / guard.pin.CONSUMPTION_FILENAME
     path.write_bytes(malformed)
     monkeypatch.setattr(guard.pin, "MANIFEST_PATH", path)

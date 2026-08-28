@@ -28,7 +28,8 @@ The envelope, and why each key is read the way it is:
   engine generated the manifest against. Compared to the version in
   ``packages/contract-models/pyproject.toml``: it must be at or behind the
   tree, because a manifest generated against a newer models release can
-  claim fields this tree does not declare. (``tests/census`` holds it.)
+  claim fields this tree does not declare. (``tests/census`` holds it;
+  the envelope check only requires the key to be a string.)
 - ``scope`` — the engine's own extraction scope, the packages it walked for
   ``runtime`` and ``kit`` reads. Not read here.
 - ``roots`` — the models the engine hands to its run-time path directly.
@@ -54,11 +55,9 @@ The envelope, and why each key is read the way it is:
 This module is stdlib-only: the pin and the envelope check are read by the
 CI guard and by the census tests before any contract model is imported.
 
-Updating the pin: replace the vendored file with the newly published object
-and move ``CONSUMPTION_VERSION`` / ``CONSUMPTION_SHA256`` together (the sha is
-``sha256`` of the published bytes; ``latest.json`` also states it), then run
-``scripts/render_contract_consumption.py check`` and disposition whatever
-the new manifest leaves unread.
+Updating the pin is the pin-bump section of
+``.claude/rules/reachability-dispositions.md``; the constants that move
+together are ``CONSUMPTION_VERSION`` and ``CONSUMPTION_SHA256``.
 """
 from __future__ import annotations
 
@@ -76,6 +75,9 @@ CONSUMPTION_FILENAME = "contract_consumption.json"
 #: Key the artifact stamps its own version under, so a consumer asserts the
 #: version it got rather than trusting the URL it asked for.
 ARTIFACT_VERSION_KEY = "version"
+#: Key the artifact names the ``analitiq-contract-models`` release it was
+#: generated against under.
+CONTRACT_MODELS_VERSION_KEY = "contract_models_version"
 #: Envelope keys, each read by name — never the document itself.
 ROOTS_KEY = "roots"
 CLAIMS_KEY = "claims"
@@ -101,6 +103,12 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     if not isinstance(version, str):
         raise ValueError(
             f"{path.name}: `{ARTIFACT_VERSION_KEY}` must be a string, got {version!r}"
+        )
+    generated_against = document.get(CONTRACT_MODELS_VERSION_KEY)
+    if not isinstance(generated_against, str):
+        raise ValueError(
+            f"{path.name}: `{CONTRACT_MODELS_VERSION_KEY}` must be a string, "
+            f"got {generated_against!r}"
         )
     roots = document.get(ROOTS_KEY)
     if not isinstance(roots, list) or not roots:
