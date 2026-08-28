@@ -21,6 +21,7 @@ from ._core import (
     validate_document,
     GUARD_DEFAULT_BLAME,
     GUARD_RESOURCE_BLAME,
+    GUARD_RESOURCE_CAUSE,
     VALIDATOR_IDS,
 )
 from . import connectors  # noqa: F401  — imported for its self-registration side effect
@@ -53,6 +54,7 @@ __all__ = [
     "is_guard_finding",
     "GUARD_DEFAULT_BLAME",
     "GUARD_RESOURCE_BLAME",
+    "GUARD_RESOURCE_CAUSE",
     "main",
     "validate_document",
     "VALIDATOR_IDS",

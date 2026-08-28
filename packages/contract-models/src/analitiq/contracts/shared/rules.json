@@ -3836,7 +3836,7 @@
   },
   {
    "id": "RULE-ENDP-063",
-   "statement": "A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type whose family carries a timezone position MUST declare one whose zone-awareness those samples bear out, and each such sample written as a date-time MUST name a moment that exists. A node reached through a position that describes what an instance must NOT be is exempt: the sample recorded there is a counter-example. Recording a sample never obliges a node to declare a type it has no evidence for.\n",
+   "statement": "A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type whose family carries a timezone position MUST declare one whose zone-awareness those samples bear out, and each such sample written as a date-time MUST name a moment that exists. A node reached through a position whose subschema does not describe the instance — `not`, which says what it must not be; `if`, which selects a branch; `propertyNames`, which constrains keys — is exempt: the sample recorded there is a counter-example. Recording a sample never obliges a node to declare a type it has no evidence for.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3855,13 +3855,13 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": "WriteInput",
-   "rationale": "RULE-SHRD-002 decides a temporal's zone from a real wire value and states what a wrong call costs; until a document recorded such a value the decision was unfalsifiable, since only the value the provider actually sends distinguishes the zone a declaration claims from the one it should have claimed. A sample recorded beside the declaration turns that judgment into an arithmetic one, and it is graded here because a zone is not a JSON Schema property: a string carrying an offset and a string carrying none are the same `type: string`, so nothing in the draft the embedded schema is written in can object. Only what can be read is graded — a family with no timezone position has nothing to contradict, and a sample that is not a date-time literal answers nothing — so silence here is absence of evidence, never evidence the declaration is right. The exception is a sample wearing the date-time shape over a moment that does not exist, which is refused rather than passed over: `format` is an annotation the draft does not assert, and a `Z` on a thirteenth month would otherwise read as evidence of a zone and stand in for the wire value nobody recorded.\n",
+   "rationale": "RULE-SHRD-002 decides a temporal's zone from a real wire value and states what a wrong call costs; until a document recorded such a value the decision was unfalsifiable, since only the value the provider actually sends distinguishes the zone a declaration claims from the one it should have claimed. A sample recorded beside the declaration turns that judgment into an arithmetic one, and it is graded here because a zone is not a JSON Schema property: a string carrying an offset and a string carrying none are the same `type: string`, so nothing in the draft the embedded schema is written in can object. Only what can be read is graded — a family with no timezone position has nothing to contradict, a sample that is not a date-time literal answers nothing, and a sample recorded where the declaration describes the instance's opposite is a counter-example rather than evidence against itself — so silence here is absence of evidence, never evidence the declaration is right. The exception is a sample wearing the date-time shape over a moment that does not exist, which is refused rather than passed over: `format` is an annotation the draft does not assert, and a `Z` on a thirteenth month would otherwise read as evidence of a zone and stand in for the wire value nobody recorded.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-ENDP-064",
-   "statement": "Every entry a node of an endpoint's response or write-input schema records under `examples` MUST satisfy that node's own declarations, unless the node is reached through a position that describes what an instance must NOT be — where the sample is a counter-example, and satisfying the declaration beside it would be the defect.\n",
+   "statement": "Every entry a node of an endpoint's response or write-input schema records under `examples` MUST satisfy that node's own declarations, unless the node is reached through a position whose subschema does not describe the instance — `not`, which says what it must not be; `if`, which selects a branch; `propertyNames`, which constrains keys — where the sample is a counter-example and satisfying the declaration beside it would be the defect.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [

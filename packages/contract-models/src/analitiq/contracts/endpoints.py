@@ -1373,7 +1373,15 @@ def _validate_arrow_type_in_json_schema(
           Recording a sample never obliges a node to declare a type: a node
           carrying no `arrow_type`, a sample whose zone-awareness cannot be
           read, and a type whose family carries no zone position are all
-          simply not graded here.
+          simply not graded here — and neither is a node reached through a
+          position whose subschema does not describe the instance, where the
+          sample is a counter-example (`negated`, below).
+
+    `negated` says the walk reached this node through one of
+    :data:`JSON_SCHEMA_NEGATED_SCHEMA_KEYS` and stays true beneath it. It gates
+    (3) alone: a canonicity error, a cross-parameter bound, the native/arrow
+    pairing and the container-shape rules are all defects of the declaration
+    itself and are wrong wherever it sits.
     """
     # JSON Schema 2020-12 permits `true` / `false` as a whole-schema short-form
     # ("anything" / "nothing"). Those are valid but carry no arrow_type, so
@@ -1554,12 +1562,6 @@ def _validate_arrow_type_in_json_schema(
                 child, f"{path}.{key}", errors, under)
 
 
-#: The inventories above in a fixed order, and what every walk over them
-#: iterates. A frozenset's order is the interpreter's hash seed, so a walk that
-#: reached one raw ordered its findings — and an author rerunning the validator
-#: on an unchanged document got them back rearranged. Sorting at each call site
-#: worked and left the next walk written free to forget; iterating these does
-#: not.
 #: The subset of the single-schema positions whose subschema does NOT describe
 #: the instance: `not` and `if` describe what it must not be or what selects a
 #: branch, and `propertyNames` constrains the KEYS rather than any value. A
@@ -1575,6 +1577,12 @@ JSON_SCHEMA_NEGATED_SCHEMA_KEYS: frozenset[str] = frozenset({
     "not", "if", "propertyNames",
 })
 
+#: The inventories above in a fixed order, and what every walk over them
+#: iterates. A frozenset's order is the interpreter's hash seed, so a walk that
+#: reached one raw ordered its findings — and an author rerunning the validator
+#: on an unchanged document got them back rearranged. Sorting at each call site
+#: worked and left the next walk written free to forget; iterating these does
+#: not.
 JSON_SCHEMA_SUBSCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SUBSCHEMA_KEYS))
 JSON_SCHEMA_LIST_OF_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS))
 JSON_SCHEMA_SINGLE_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS))

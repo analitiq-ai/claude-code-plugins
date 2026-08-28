@@ -1476,7 +1476,7 @@ def render_unfinished_check() -> str:
     """
     from analitiq.validator._core import (
         GUARD_DEFAULT_BLAME,
-        GUARD_RESOURCE_BLAME,
+        GUARD_RESOURCE_CAUSE,
         _guard_opening,
     )
 
@@ -1488,7 +1488,7 @@ def render_unfinished_check() -> str:
         "   follows that opening says whose the cause is:",
         "",
         f"   - `{GUARD_DEFAULT_BLAME}` — this tool's, and worth reporting.",
-        f"   - `{GUARD_RESOURCE_BLAME.split('.')[0]}.` — the document's size.",
+        f"   - `{GUARD_RESOURCE_CAUSE}.` — the document\'s size.",
         "   - anything else — the document's own content, described by the check",
         "     that was reading it.",
         "",
