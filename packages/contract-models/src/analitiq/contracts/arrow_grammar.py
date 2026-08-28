@@ -227,6 +227,9 @@ _WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
 #: leap second (RFC 3339 §5.6), which a wire value can carry and no
 #: `datetime` can hold.
 _MAX_WIRE_SECOND = 60
+#: The largest offset hour a real zone can carry. `+24:00` exists; nothing
+#: beyond it does.
+_MAX_OFFSET_HOUR = 24
 
 #: `${name}` placeholder of type-map render templates. Must be a valid
 #: identifier, matching the native capture-group naming it resolves from.
@@ -665,6 +668,22 @@ def _read_wire_datetime(sample: Any) -> re.Match[str] | None:
     return _WIRE_DATETIME_RE.fullmatch(sample)
 
 
+def _offset_is_real(zone: str | None) -> bool:
+    """Whether a captured zone names an offset that exists.
+
+    True for an absent zone and for `Z`, neither of which is an offset. The
+    profile admits `+HH`, `+HHMM` and `+HH:MM`, all with unbounded digits, so
+    the positions are read the way the clock positions are — the hours run to
+    24, since `+24:00` is a real offset and `24:01` is not.
+    """
+    if zone is None or zone in "Zz":
+        return True
+    digits = zone[1:].replace(":", "")
+    hour = int(digits[:2])
+    minute = int(digits[2:]) if len(digits) > 2 else 0
+    return hour <= _MAX_OFFSET_HOUR and minute <= 59 and (hour, minute) <= (24, 0)
+
+
 def sample_names_an_instant(sample: Any) -> bool:
     """Whether a date-time-shaped sample names a moment that exists.
 
@@ -683,7 +702,10 @@ def sample_names_an_instant(sample: Any) -> bool:
 
     A second of 60 is a leap second, which RFC 3339 admits and providers emit;
     `datetime` has no representation for one, so the seconds position is
-    range-checked here rather than constructed.
+    range-checked here rather than constructed. The offset is range-checked for
+    the same reason and to the same end: `+25:99` is a `Z` on a moment that
+    does not exist, and reading one as evidence of a zone is the whole failure
+    this function was written to stop.
 
     False only for a sample that HAS the shape. A sample that has no date-time
     shape is not malformed; it is a different kind of value, and
@@ -697,6 +719,8 @@ def sample_names_an_instant(sample: Any) -> bool:
     # The seconds position is optional in the profile.
     second = match.group("second")
     if second is not None and int(second) > _MAX_WIRE_SECOND:
+        return False
+    if not _offset_is_real(match.group("zone")):
         return False
     try:
         date(int(match.group("year")), int(match.group("month")),

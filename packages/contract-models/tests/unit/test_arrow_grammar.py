@@ -615,6 +615,17 @@ class TestRecordedWireSamples:
         ("2024-01-02T23:59:60Z", True),
         # The positions above the seconds have no leap case.
         ("2024-01-02T24:00:00Z", False),
+        # The offset is a position too. `+25:99` is a `Z` on a moment that does
+        # not exist; reading it as evidence of a zone is what this rejects.
+        ("2024-01-02T03:04:05+25:99", False),
+        ("2024-01-02T03:04:05+99", False),
+        ("2024-01-02T03:04:05+9999", False),
+        ("2024-01-02T03:04:05+24:01", False),
+        # `+24:00` exists, and every spelling of a real offset the profile
+        # admits reads as one.
+        ("2024-01-02T03:04:05+24:00", True),
+        ("2024-01-02T03:04:05-08", True),
+        ("2024-01-02T03:04:05+0530", True),
         ("2024-01-02T03:60:00Z", False),
         # The calendar, not a digit range: a 29th of February exists in a leap
         # year and does not in the year before it.

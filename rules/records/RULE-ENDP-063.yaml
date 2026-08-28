@@ -2,8 +2,8 @@ id: RULE-ENDP-063
 statement: >
   A node of an endpoint's response or write-input schema that records wire
   samples under `examples` and declares a canonical Arrow type whose family
-  carries a timezone MUST declare one whose zone-awareness those samples bear
-  out, and each such sample written as a date-time MUST name a moment that
+  carries a timezone position MUST declare one whose zone-awareness those
+  samples bear out, and each such sample written as a date-time MUST name a moment that
   exists. Recording a sample never obliges a node to declare a type it has no
   evidence for.
 tier: advisory

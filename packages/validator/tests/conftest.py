@@ -33,6 +33,14 @@ for _root in (CONTRACTS_SRC_ROOT, VALIDATOR_SRC_ROOT):
 #: them straight from the package and so out from under the wrap.
 SCREENED_ENTRY_POINTS = ("validate_document", "check_coverage")
 
+#: The name shapes of every OTHER function that returns findings — a per-kind
+#: validator, and anything ending `_findings`. Reaching one of those directly
+#: gets an unscreened list just as surely as reaching an entry point does, and
+#: there are more of them than a hand-kept list would stay level with. Matched
+#: on the name, which is a question about what a module imported; whether the
+#: findings it returns are then asserted over is nobody's mechanism to decide.
+SCREENED_NAME_SHAPES = ("_validate_", "_findings")
+
 
 class _ScreenedValidator:
     """The validator package, with `validate_document` screened.
@@ -101,47 +109,47 @@ class _ScreenedValidator:
 
 
 #: What the CLI is driven with, and where it imports from. Only the two public
-#: source trees, matching an installed consumer exactly.
-_CLI_CODE = "from analitiq.validator import main; import sys; sys.exit(main())"
+#: source trees, matching an installed consumer exactly. Stated once: every CLI
+#: test in this suite runs through the helpers below, so a second copy would be
+#: a spelling of the invocation nothing keeps in step with this one.
+CLI_CODE = "from analitiq.validator import main; import sys; sys.exit(main())"
+CLI_PYTHONPATH = os.pathsep.join(
+    [str(VALIDATOR_SRC_ROOT), str(CONTRACTS_SRC_ROOT)])
 
 
-def run_cli(tmp_path, doc, filename="doc.json"):
-    """Drive `analitiq-validate --document` on one authored document, screened.
+def cli_env(**overrides):
+    """The environment the CLI subprocess runs in."""
+    return {**os.environ, "PYTHONPATH": CLI_PYTHONPATH,
+            "DOMAIN": "analitiq.ai", **overrides}
 
-    The CLI is the path no fixture can wrap — it runs out of process — and it
-    is the one where a crash is hardest to see: `main()` exits 1 on any
+
+def run_cli_argv(*args, env=None):
+    """Run the CLI with these arguments, screening any verdict it emits.
+
+    The CLI is the path no fixture can wrap — it runs out of process — and the
+    one where a crash is hardest to see: `main()` exits 1 on any
     error-severity finding, so a guard finding produces exactly the
     `returncode == 1` / `passed is False` a caller asserts, and the test passes
-    on a document nothing judged. So the screen is applied here, once, and
-    every CLI test in this suite goes through it.
+    on a document nothing judged.
 
-    Returns the `CompletedProcess`; callers assert the exit code and parse
-    stdout themselves.
+    A run that emits no verdict at all is not screened, because there is
+    nothing to screen: an argument error exits before any document is read and
+    reports through argparse on stderr. Whether stdout carries a verdict is
+    read off the output rather than declared by the caller, so a run that stops
+    emitting one is not quietly excused by a flag someone passed.
     """
     import json
     import subprocess
 
-    path = tmp_path / filename
-    path.write_text(json.dumps(doc))
-    env = {
-        **os.environ,
-        "PYTHONPATH": os.pathsep.join(
-            [str(VALIDATOR_SRC_ROOT), str(CONTRACTS_SRC_ROOT)]),
-        "DOMAIN": "analitiq.ai",
-    }
     result = subprocess.run(
-        [sys.executable, "-c", _CLI_CODE, "--document", str(path)],
-        capture_output=True, text=True, env=env, check=False)
-    # Asserted, not tolerated: the CLI's contract is that it always emits
-    # `{"passed": …, "findings": […]}`. Falling back to "no findings" on
-    # unparseable output would screen nothing and say nothing, which is the
-    # shape this helper exists to remove.
-    assert result.stdout.strip(), (
-        "the CLI produced no stdout, so there is no verdict to screen or to "
-        f"assert against. stderr:\n{result.stderr}")
-    payload = json.loads(result.stdout)
-    assert isinstance(payload, dict) and "findings" in payload, (
-        f"the CLI emitted no `findings` key: {result.stdout[:400]}")
+        [sys.executable, "-c", CLI_CODE, *args],
+        capture_output=True, text=True, env=env or cli_env(), check=False)
+    try:
+        payload = json.loads(result.stdout)
+    except ValueError:
+        return result
+    if not (isinstance(payload, dict) and isinstance(payload.get("findings"), list)):
+        return result
 
     import analitiq.validator
 
@@ -151,6 +159,27 @@ def run_cli(tmp_path, doc, filename="doc.json"):
         "a check crashed inside the CLI, so this test's exit code says "
         "nothing about what the validator decided:\n"
         + "\n".join(f["message"] for f in crashed))
+    return result
+
+
+def run_cli(tmp_path, doc, filename="doc.json"):
+    """Drive `analitiq-validate --document` on one authored document, screened.
+
+    Asserts a verdict came back, which :func:`run_cli_argv` cannot: this
+    helper is handed a document, so "the CLI emitted nothing" is a failure
+    rather than one of the outcomes under test.
+    """
+    import json
+
+    path = tmp_path / filename
+    path.write_text(json.dumps(doc))
+    result = run_cli_argv("--document", str(path))
+    assert result.stdout.strip(), (
+        "the CLI produced no stdout for a document it was handed, so there is "
+        f"no verdict to assert against. stderr:\n{result.stderr}")
+    payload = json.loads(result.stdout)
+    assert isinstance(payload, dict) and "findings" in payload, (
+        f"the CLI emitted no `findings` key: {result.stdout[:400]}")
     return result
 
 

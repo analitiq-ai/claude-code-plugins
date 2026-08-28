@@ -21,7 +21,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from conftest import SCREENED_ENTRY_POINTS
+from conftest import SCREENED_ENTRY_POINTS, SCREENED_NAME_SHAPES
 
 TESTS_DIR = Path(__file__).resolve().parent
 
@@ -36,6 +36,19 @@ _VALIDATOR_MODULES = frozenset({
 })
 
 
+def _returns_findings(name: str) -> bool:
+    """Whether importing this name hands a caller an unscreened finding list.
+
+    The two entry points by name, and every other finding-returning function
+    by the shape of its name — a per-kind `_validate_*`, or anything ending
+    `_findings`. Both shapes are conventions this package keeps, and a
+    function that returns findings under some third name is the reader's to
+    catch; that is said here rather than left for someone to discover.
+    """
+    return name in SCREENED_ENTRY_POINTS or any(
+        shape in name for shape in SCREENED_NAME_SHAPES)
+
+
 def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
     """Screened names this module can call without going through the fixture.
 
@@ -46,12 +59,11 @@ def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
     through an attribute; and both live in a defining module of their own,
     which `analitiq.validator` only re-exports.
     """
-    screened = set(SCREENED_ENTRY_POINTS)
     bound: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module in _VALIDATOR_MODULES:
-                bound |= {a.name for a in node.names} & screened
+                bound |= {a.name for a in node.names if _returns_findings(a.name)}
             # `from analitiq import validator` — the module itself, from which
             # an attribute access reaches either entry point.
             if node.module == "analitiq" and any(

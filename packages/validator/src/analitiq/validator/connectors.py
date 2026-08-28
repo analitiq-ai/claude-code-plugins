@@ -290,11 +290,11 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
             path=pointer,
             blame=(
                 f"the embedded schema at {where} could not be read far enough "
-                "to check. Its structure takes the walk somewhere it cannot "
-                "come back from — a nesting deeper than this tool unwinds, or "
-                "a size it cannot hold. Every other schema on this document "
-                "was still checked"
-            )))
+                "to check — it nests deeper, or runs larger, than this tool "
+                "can walk. Every other schema on this document was still "
+                "checked"
+            ),
+            resource_only=True))
     return findings
 
 
@@ -322,7 +322,11 @@ def _one_embedded_schema_findings(
             f"embedded schema at {where} declares $schema {declared!r}; the "
             f"contract requires JSON Schema Draft 2020-12 "
             f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
-        return findings
+        # Reported and carried on with. `check_schema` and the sample grading
+        # below both read this document as 2020-12 whatever its `$schema` says,
+        # and 2020-12 is the draft the author has to reach — so their findings
+        # are the ones that will still stand after the declaration is fixed.
+        # Stopping here would hand the author one defect per rerun.
     # A DIFFERENT draft below the top level, which is the same obligation
     # RULE-ENDP-048 states of the root and the same harm: `evolve` calls
     # `validator_for(node)`, so a subschema naming another draft is graded
@@ -957,46 +961,67 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         if ep_doc is None:
             findings.extend(load)
             continue
-        # Each sibling endpoint is a full api-endpoint document — validate it
-        # with the model (annotations, markers, wiring) and check its filename.
-        findings.extend(_model_findings(ep_doc, _API_ENDPOINT_ADAPTER))
-        findings.extend(endpoint_filename_findings(ep_doc, ep_path.name))
-        findings.extend(_endpoint_locator_findings(ep_doc))
-        ep_id = ep_doc.get("endpoint_id") if isinstance(ep_doc, dict) else None
-        if isinstance(ep_id, str) and ep_id:
-            if ep_id in seen_ids:
-                findings.append(finding(
-                    "endpoint-id-unique", "error", "/endpoint_id",
-                    f"duplicate endpoint_id {ep_id!r}: declared by both "
-                    f"'endpoints/{seen_ids[ep_id]}' and 'endpoints/{ep_path.name}'; "
-                    "endpoint_id must be unique within the connector release."))
-            else:
-                seen_ids[ep_id] = ep_path.name
-        if not isinstance(ep_doc, dict):
-            # A JSON array/string endpoint file is already a recorded model error;
-            # skip the coverage walk (it calls `.get()` and would crash, replacing
-            # the actionable findings with a generic "validator bug" via _run_guarded).
-            continue
-        findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
-        # Cross-file: the endpoint's transport_ref sites resolve against THIS
-        # connector's `transports` — checkable only here, where both documents
-        # are in hand.
-        findings.extend(_endpoint_transport_ref_findings(
-            ep_doc, doc.get("transports"), label=ep_path.name))
-        # Guarded: this walks the same schemas the check above just walked,
-        # recursively, over the same author-supplied nesting. Unguarded it
-        # re-raises whatever that one caught and escapes to the dispatch, which
-        # discards the guard finding just produced along with every finding on
-        # every other endpoint in the connector.
+        # Guarded as ONE unit, per endpoint. Every check below walks the same
+        # author-supplied nesting recursively, the model layer first and
+        # deepest, so whichever reaches the document's depth first is where the
+        # stack ends — and unguarded that escapes to the dispatch, which
+        # discards every finding on every OTHER endpoint in the connector too.
+        # Guarding one of them and not the rest reads as covered and is not:
+        # the one that raises is whichever walk got there, not the one wrapped.
         findings.extend(_run_guarded(
-            _type_map_coverage_findings, ep_doc, read_doc, ep_path.name,
+            _one_endpoint_findings, ep_doc, ep_path, doc, read_doc, seen_ids,
             vid="type-map-coverage",
             path="/",
             blame=(
-                f"the declared types in {ep_path.name} could not be collected "
-                "to check against the read type map. Every other endpoint in "
-                "this connector was still checked"
+                f"{ep_path.name} could not be checked to the end. Something "
+                "it declares takes a walk over it somewhere it cannot come "
+                "back from — a nesting deeper than this tool unwinds, a "
+                "reference that leads back to itself, or a value a keyword "
+                "cannot compute against. Every other endpoint in this "
+                "connector was still checked"
             )))
+    return findings
+
+
+def _one_endpoint_findings(
+    ep_doc: Any, ep_path: Path, connector_doc: dict, read_doc: Any,
+    seen_ids: dict[str, str],
+) -> list[dict]:
+    """Everything checkable about one sibling endpoint of a connector.
+
+    `seen_ids` is carried across endpoints and mutated here, because
+    `endpoint-id-unique` is a property of the set rather than of any one
+    document. An endpoint whose checks crash contributes nothing to it, which
+    is right: its id was never established.
+    """
+    findings: list[dict] = []
+    # Each sibling endpoint is a full api-endpoint document — validate it
+    # with the model (annotations, markers, wiring) and check its filename.
+    findings.extend(_model_findings(ep_doc, _API_ENDPOINT_ADAPTER))
+    findings.extend(endpoint_filename_findings(ep_doc, ep_path.name))
+    findings.extend(_endpoint_locator_findings(ep_doc))
+    ep_id = ep_doc.get("endpoint_id") if isinstance(ep_doc, dict) else None
+    if isinstance(ep_id, str) and ep_id:
+        if ep_id in seen_ids:
+            findings.append(finding(
+                "endpoint-id-unique", "error", "/endpoint_id",
+                f"duplicate endpoint_id {ep_id!r}: declared by both "
+                f"'endpoints/{seen_ids[ep_id]}' and 'endpoints/{ep_path.name}'; "
+                "endpoint_id must be unique within the connector release."))
+        else:
+            seen_ids[ep_id] = ep_path.name
+    if not isinstance(ep_doc, dict):
+        # A JSON array/string endpoint file is already a recorded model error;
+        # the walks below call `.get()` and would crash, replacing the
+        # actionable findings with the guard's line.
+        return findings
+    findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+    # Cross-file: the endpoint's transport_ref sites resolve against THIS
+    # connector's `transports` — checkable only here, where both documents
+    # are in hand.
+    findings.extend(_endpoint_transport_ref_findings(
+        ep_doc, connector_doc.get("transports"), label=ep_path.name))
+    findings.extend(_type_map_coverage_findings(ep_doc, read_doc, ep_path.name))
     return findings
 
 

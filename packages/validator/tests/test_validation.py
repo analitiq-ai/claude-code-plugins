@@ -7,7 +7,6 @@ instead of the record. The model rejects it, so the validator now catches it —
 the gap the old validator missed.
 """
 import json
-import os
 import re
 import subprocess
 import sys
@@ -15,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import run_cli
+from conftest import cli_env, run_cli, run_cli_argv
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.validator import (
     GUARD_DEFAULT_BLAME,
@@ -24,16 +23,11 @@ from analitiq.validator import (
 )
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-CONTRACTS_SRC_ROOT = _REPO_ROOT / "contract-models" / "src"
-SRC_ROOT = _REPO_ROOT / "validator" / "src"
 # Drive the CLI the way a consumer does: import the package and call main(). With
 # `python -c "<code>" --document X`, argv is ["-c", "--document", "X"], so argparse
 # parses the flags exactly as the `analitiq-validate` console script would. Only
 # the two public source trees ride PYTHONPATH — the validator and the contract
 # models — so this exercises precisely what an installed consumer gets.
-_CLI_CODE = "from analitiq.validator import main; import sys; sys.exit(main())"
-_CLI_PYTHONPATH = os.pathsep.join([str(SRC_ROOT), str(CONTRACTS_SRC_ROOT)])
 
 # (corpus file, expected pass?) — single-document verdicts.
 DOC_CASES = [
@@ -424,7 +418,14 @@ def test_a_sample_that_cannot_be_graded_costs_only_that_check(validator):
     assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
 
 
-def _deeply_nested_schema(depth: int) -> dict:
+#: Deep enough to exhaust the walk, shallow enough for `json.dumps` to write
+#: the fixture: the encoder recurses too, and its own limit is the lower of the
+#: two on some interpreters. Should a future one walk this without running out,
+#: the screen's `expect_crash=True` fails rather than passing quietly.
+_EXHAUSTING_DEPTH = 400
+
+
+def _deeply_nested_schema(depth: int = _EXHAUSTING_DEPTH) -> dict:
     root = node = {"type": "object"}
     for _ in range(depth):
         node["properties"] = {"x": {"type": "object"}}
@@ -444,16 +445,78 @@ def test_a_document_too_deep_to_walk_is_not_the_authors_bug_to_file(validator):
     caller expected to go wrong."""
     ep = _endpoint("STRING", "Utf8")
     ep["operations"]["read"]["response"]["schema"]["items"] = (
-        _deeply_nested_schema(4000))
+        _deeply_nested_schema())
     findings = validator.validate_document(ep, expect_crash=True)
     crashed = [f for f in findings if is_guard_finding(f)]
     assert len(crashed) == 1, findings
-    assert GUARD_RESOURCE_BLAME in crashed[0]["message"], crashed[0]
+    # WHICH guard catches it is not asserted, and cannot be: the walk that
+    # runs out of stack is whichever reached the depth, which is the whole
+    # reason the type decides the blame rather than the call site. What every
+    # one of them must not say is that this is a bug to report.
     assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
-    # No detail from the exception: a RecursionError raised while unwinding
-    # names whichever frame happened to be innermost, which is not the walk
-    # that filled the stack and reads to an author as though it were.
+    assert "nests deeper" in crashed[0]["message"], crashed[0]
+    # The type, and no more of the exception than that: a RecursionError
+    # raised while unwinding names whichever frame happened to be innermost,
+    # which is not the walk that filled the stack and reads to an author as
+    # though it were.
     assert "RecursionError" in crashed[0]["message"], crashed[0]
+
+
+def test_the_blame_a_crash_carries_is_chosen_by_what_went_wrong(validator):
+    """`_run_guarded`'s three ways to answer, at the level they are decided.
+
+    End to end only ever exercises whichever walk reached the depth first, so
+    the branches are driven here: a caller that named nothing gets the wording
+    for running out of room rather than the one for a bug, and a caller whose
+    wording is true of running out of room and of nothing else gets handed back
+    to the default when something else goes wrong."""
+    from analitiq.validator._core import _run_guarded
+
+    def _deep():
+        raise RecursionError
+    def _bug():
+        raise TypeError("not a size problem")
+
+    unnamed = _run_guarded(_deep, vid="document", path="/")
+    assert GUARD_RESOURCE_BLAME in unnamed[0]["message"], unnamed
+
+    named = _run_guarded(_deep, vid="document", path="/", blame="mine")
+    assert "mine" in named[0]["message"], named
+
+    resource_only = _run_guarded(
+        _bug, vid="document", path="/", blame="only true of size",
+        resource_only=True)
+    assert "only true of size" not in resource_only[0]["message"], resource_only
+    assert GUARD_DEFAULT_BLAME in resource_only[0]["message"], resource_only
+
+
+def test_one_endpoint_that_cannot_be_walked_costs_only_that_endpoint(
+    tmp_path, connector_base, validator,
+):
+    """A connector's endpoints are checked in one loop, and every check in it
+    walks the document's own nesting — the contract models first and deepest.
+    Whichever walk reaches the depth is where the stack ends, so guarding one
+    of them leaves the rest to escape to the dispatch, which discards every
+    finding on every OTHER endpoint too. The unit guarded is the endpoint."""
+    deep = _endpoint("STRING", "Utf8")
+    deep["endpoint_id"] = "deepone"
+    deep["operations"]["read"]["response"]["schema"]["items"] = (
+        _deeply_nested_schema())
+    other = _endpoint("STRING", "Utf8")
+    other["endpoint_id"] = "WRONG NAME"
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                {"deepone.json": deep, "widgets.json": other})
+    findings = validator.check_coverage(
+        connector_base, tmp_path / "connector.json", expect_crash=True)
+    crashed = [f for f in findings if is_guard_finding(f)]
+    assert len(crashed) == 1, findings
+    # The offending file is named: `path` is `/`, so without it the author is
+    # told a connector somewhere has an endpoint they cannot find.
+    assert "deepone.json" in crashed[0]["message"], crashed[0]
+    # The other endpoint's defects survive it.
+    assert {f["validator"] for f in findings if not is_guard_finding(f)} >= {
+        "endpoint-filename", "endpoint-id-locator"}, findings
 
 
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
@@ -498,6 +561,20 @@ def test_a_non_string_dialect_below_the_root_is_malformed_not_another_draft(
     assert messages, errors
     assert any("is not of type 'string'" in m for m in messages), messages
     assert not any("another draft" in m for m in messages), messages
+
+
+def test_a_wrong_root_draft_does_not_stop_the_rest_of_the_checks(validator):
+    """The root's declared draft changes nothing about how this document is
+    read: `check_schema` and the sample grading are 2020-12 either way, and
+    2020-12 is what the author has to reach. Their findings still stand after
+    the `$schema` is fixed, so withholding them costs a rerun each."""
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [7]})
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["$schema"] = "http://json-schema.org/draft-07/schema#"
+    ids = {f["validator"] for f in validator.validate_document(ep)}
+    assert {"embedded-json-schema", "embedded-schema-example"} <= ids, ids
 
 
 def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
@@ -590,7 +667,7 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         proc = subprocess.run(
             [sys.executable, "-c", program, json.dumps(ep)],
             capture_output=True, text=True, check=True,
-            env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": _CLI_PYTHONPATH},
+            env=cli_env(PYTHONHASHSEED=seed),
         )
         runs.append(json.loads(proc.stdout))
     assert len(runs[0]) == len(baseline), (runs[0], baseline)
@@ -1292,15 +1369,12 @@ def test_cli_invalid_doc_exit1(tmp_path):
 
 
 def test_cli_unreadable_document_exit1(tmp_path):
-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
     # A directory path: read raises IsADirectoryError → must still emit JSON + exit 1.
-    r = subprocess.run([sys.executable, "-c", _CLI_CODE, "--document", str(tmp_path)],
-                       capture_output=True, text=True, env=env, check=False)
+    r = run_cli_argv("--document", str(tmp_path))
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
 
 
-def test_cli_missing_arg_exit2(tmp_path):
-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
-    r = subprocess.run([sys.executable, "-c", _CLI_CODE], capture_output=True, text=True, env=env, check=False)
+def test_cli_missing_arg_exit2():
+    r = run_cli_argv()
     assert r.returncode == 2
