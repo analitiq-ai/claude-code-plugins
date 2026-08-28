@@ -25,6 +25,7 @@ conflict-key predicate the paths that never run the model share;
 :func:`iter_schema_nodes` walks an embedded schema's structural positions; :func:`resolve_local_pointer`,
 :func:`resolve_schema_ref`, :func:`resolve_declared_path`,
 :func:`resolve_read_record_schema`, :func:`find_record_field_properties`,
+:func:`try_materialize_node`,
 :func:`effective_properties` and :func:`materialize_node` are the read
 contract's resolution surface, which every consumer of it shares rather than
 re-deriving.
@@ -1366,21 +1367,17 @@ def _folded_arrow_type(schema: dict, root: Any) -> str | None:
     discards every error already found and refuses the document under a message
     that carries no path.
 
-    Refusing here would also make a SAMPLE decide it. The identical
-    unsatisfiable node without `examples` is accepted by this walker, and
-    whether a field records wire evidence is not what should settle a
-    satisfiability question. So the answer is the one this rule gives
-    everywhere it cannot read something: no declaration reached, nothing
-    graded, and no claim that the node is fine. A reference that leads NOWHERE
-    is not in this list — RULE-ENDP-026 refuses that one with the pointer that
-    does not resolve, because it has an owner.
+    An unfoldable node reads as no declaration rather than as a refusal, which
+    is what :func:`try_materialize_node` answers. Refusing would make a SAMPLE
+    decide it: the identical unsatisfiable node without `examples` is accepted
+    by this walker, and whether a field records wire evidence is not what
+    settles a satisfiability question. A reference that leads NOWHERE is a
+    different case — RULE-ENDP-026 refuses that one with the pointer that does
+    not resolve, because it has an owner.
     """
     if not any(key in schema for key in ("$ref", "allOf")):
         return None
-    try:
-        folded = materialize_node(schema, root)
-    except (ValueError, RecursionError):
-        return None
+    folded = try_materialize_node(schema, root)
     arrow = folded.get("arrow_type") if isinstance(folded, dict) else None
     return arrow if isinstance(arrow, str) and ARROW_TYPE_RE.fullmatch(arrow) else None
 
@@ -4237,6 +4234,31 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     if not isinstance(node, dict):
         return node
     return _materialize(node, node if root is None else root, {}, set())
+
+
+def try_materialize_node(node: Any, root: Any = None) -> Any | None:
+    """:func:`materialize_node`, answering ``None`` where it would raise.
+
+    The inspection form, for a caller that cannot raise. Folding fails on a
+    node whose contributors contradict each other and on a chain longer than
+    one fold unwinds, and both are real answers about the document — but a
+    caller that ACCUMULATES findings cannot receive them as exceptions: a
+    raise mid-walk discards everything collected so far and reports under a
+    message carrying no coordinates.
+
+    Owned here rather than caught at each call site. Which failures folding
+    has is this function's knowledge, and a caller repeating the except clause
+    is a second copy of it that goes stale the day a third is added — the
+    shape `.claude/rules/no-drift-surfaces.md` forbids. `None` means "no
+    reading available", which is a state every consumer of the read contract
+    already has to handle.
+    """
+    try:
+        return materialize_node(node, root)
+    except (ValueError, RecursionError):
+        # ValueError covers DeclarationConflictError, the fold's own refusal.
+        # RecursionError is the interpreter's, on a chain it cannot unwind.
+        return None
 
 
 def _materialize(
