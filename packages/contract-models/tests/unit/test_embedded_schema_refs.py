@@ -812,21 +812,22 @@ class TestRecursiveSchemasTerminate:
 
 
     #: `(name, node, findings owed, arrow type the fold reaches)` — shapes
-    #: whose declaration a walk cannot simply read off the node. Only the
-    #: first REFUSES to fold; the rest fold cleanly and reach no
-    #: `arrow_type`, which is a different answer arriving at the same place,
-    #: and the last folds and reaches one that its sample contradicts.
+    #: whose declaration a walk cannot simply read off the node. They are not
+    #: all unfoldable: one REFUSES to fold, some fold cleanly and reach no
+    #: `arrow_type` — a different answer arriving at the same place — and one
+    #: folds and reaches a type its sample contradicts.
     #:
-    #: All four values are asserted. The counts separate a walk that ran from
-    #: one that returned on its first line; the fold's own answer separates a
-    #: fold that worked from one gutted to `None`, which the counts alone
-    #: cannot see for four of the five rows.
+    #: The findings and the fold's answer are both asserted; the name is a
+    #: parametrize id. The counts separate a walk that ran from one that
+    #: returned on its first line, and the fold's answer separates a fold that
+    #: worked from one gutted to `None`, which a count cannot see on a row
+    #: that owes nothing.
     #:
     #: Depth is deliberately absent. A document nested deeper than the
     #: interpreter unwinds raises out of any walk written this way, so a row
     #: for it would assert an invariant the code does not have — see
     #: `test_the_walk_does_not_absorb_running_out_of_stack`.
-    UNFOLDABLE_NODES = (
+    HARD_TO_READ_NODES = (
         ("contradictory-allOf",
          {"allOf": [{"type": "string", "native_type": "S",
                      "arrow_type": "Timestamp(MICROSECOND, UTC)"},
@@ -847,15 +848,15 @@ class TestRecursiveSchemasTerminate:
     )
 
     #: Reachable through `$defs` from every row above.
-    UNFOLDABLE_DEFS = {
+    HARD_TO_READ_DEFS = {
         "Ring": {"$ref": "#/$defs/Ring"},
         "Stamp": {"type": "string", "native_type": "date-time",
                   "arrow_type": "Timestamp(MICROSECOND, UTC)"},
     }
 
     @pytest.mark.parametrize(
-        "node, owed", [(n, owed) for _, n, owed, _a in UNFOLDABLE_NODES],
-        ids=[name for name, _, _, _a in UNFOLDABLE_NODES])
+        "node, owed", [(n, owed) for _, n, owed, _a in HARD_TO_READ_NODES],
+        ids=[name for name, _, _, _a in HARD_TO_READ_NODES])
     def test_the_arrow_walk_accumulates_what_a_document_declares(self, node, owed):
         """The walk's contract, asserted rather than remembered.
 
@@ -875,7 +876,7 @@ class TestRecursiveSchemasTerminate:
         errors: list[str] = []
         ep._validate_arrow_type_in_json_schema(
             {"type": "object", "properties": {"f": node},
-             "$defs": dict(self.UNFOLDABLE_DEFS)},
+             "$defs": dict(self.HARD_TO_READ_DEFS)},
             "s", errors)
         assert len(errors) == owed, errors
 
@@ -903,8 +904,8 @@ class TestRecursiveSchemasTerminate:
                 "s", [])
 
     @pytest.mark.parametrize(
-        "node, arrow", [(n, a) for _, n, _o, a in UNFOLDABLE_NODES],
-        ids=[name for name, _, _o, _a in UNFOLDABLE_NODES])
+        "node, arrow", [(n, a) for _, n, _o, a in HARD_TO_READ_NODES],
+        ids=[name for name, _, _o, _a in HARD_TO_READ_NODES])
     def test_try_materialize_node_answers_what_each_shape_reaches(
         self, node, arrow,
     ):
@@ -914,12 +915,13 @@ class TestRecursiveSchemasTerminate:
 
         Asserting only that the result is a dict or `None` would be true of
         every value the signature admits, so it would pass with the fold
-        replaced by `lambda *_: None`. The walk's own table catches that on one
-        row of five; this catches it on all of them.
+        replaced by `lambda *_: None`. The walk's own table catches that only
+        where a row owes a finding; this catches it on every row whose fold
+        must succeed.
         """
         from analitiq.contracts import endpoints as ep
 
-        root = {"$defs": dict(self.UNFOLDABLE_DEFS),
+        root = {"$defs": dict(self.HARD_TO_READ_DEFS),
                 "properties": {"f": node}}
         folded = ep.try_materialize_node(node, root)
         if arrow is None:

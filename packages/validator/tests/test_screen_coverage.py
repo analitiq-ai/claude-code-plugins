@@ -121,16 +121,37 @@ def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name in _VALIDATOR_MODULES:
-                    modules.add(alias.asname or alias.name.split(".")[0])
+                    # `import a.b.c` with no alias binds `a`, and the call is
+                    # written out in full — so the name to watch is the whole
+                    # dotted path, not its first component.
+                    modules.add(alias.asname or alias.name)
     # A bound module reaches a screened name only through a call on it.
     for node in ast.walk(tree):
-        if (isinstance(node, ast.Call)
+        if not (isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
-                and isinstance(node.func.value, ast.Name)
-                and node.func.value.id in modules
                 and _returns_findings(node.func.attr)):
-            bound.add(f"{node.func.value.id}.{node.func.attr}()")
+            continue
+        prefix = _dotted(node.func.value)
+        if prefix is not None and prefix in modules:
+            bound.add(f"{prefix}.{node.func.attr}()")
     return bound
+
+
+def _dotted(node: ast.AST) -> str | None:
+    """The dotted name an expression spells, or None if it spells none.
+
+    `analitiq.validator.validate_document(...)` reaches the entry point
+    through an `Attribute` chain, not a bare `Name` — reading only the base
+    made the check blind to the plainest module spelling there is.
+    """
+    parts: list[str] = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return None
+    parts.append(node.id)
+    return ".".join(reversed(parts))
 
 
 def test_every_screened_entry_point_has_a_wrapper_that_screens_it():
@@ -179,6 +200,38 @@ def test_every_screened_entry_point_has_a_wrapper_that_screens_it():
         assert any(shape in name for shape in SCREENED_NAME_SHAPES), name
         with pytest.raises(AssertionError, match="a check crashed"):
             getattr(screened, name)()
+
+
+@pytest.mark.parametrize("source, caught", [
+    ("from analitiq.validator import validate_document", True),
+    ("from analitiq.validator._core import validate_document", True),
+    ("from analitiq.validator.connectors import _validate_api_endpoint", True),
+    # A bound module, judged by whether a screened name is CALLED on it.
+    ("import analitiq.validator\nanalitiq.validator.validate_document({})", True),
+    ("import analitiq.validator.connectors\n"
+     "analitiq.validator.connectors._embedded_schema_findings({})", True),
+    ("import analitiq.validator as v\nv.validate_document({})", True),
+    ("from analitiq import validator\nvalidator.check_coverage({})", True),
+    ("from analitiq.validator import connectors\n"
+     "connectors._embedded_schema_findings({})", True),
+    # Bound to patch, not to call through — the reason the call shape decides.
+    ("from analitiq.validator import connectors\n"
+     "monkeypatch.setattr(connectors, 'x', y)", False),
+    ("import analitiq.validator\nprint(analitiq.validator.__file__)", False),
+    # Not this package.
+    ("from json import loads\nloads('{}')", False),
+])
+def test_the_import_scan_sees_every_spelling_that_reaches_one(source, caught):
+    """The detector's own positive control.
+
+    On this tree it finds nothing, because no test reaches an entry point that
+    way — which is indistinguishable from a detector that has stopped looking.
+    It was: widening it to bound modules silently dropped
+    `import analitiq.validator` followed by a dotted call, the plainest
+    spelling of all, and the suite stayed green because nothing writes it.
+    """
+    found = _reaches_an_entry_point(ast.parse(source))
+    assert bool(found) is caught, found
 
 
 def test_no_test_module_calls_an_entry_point_out_from_under_the_screen():

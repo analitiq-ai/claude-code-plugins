@@ -300,8 +300,8 @@ def _one_embedded_schema_findings(
 ) -> list[dict]:
     """One embedded schema: its draft, its metaschema validity, its samples.
 
-    Imports nothing from `jsonschema` itself — the two helpers it delegates to
-    do, each lazily, for the reason the caller states.
+    Imports nothing from `jsonschema` itself — the helpers it delegates to do,
+    each lazily, for the reason the caller states.
     """
     findings: list[dict] = []
     # A non-STRING `$schema` is malformed, not another draft — the same

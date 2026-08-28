@@ -126,23 +126,38 @@ def _model_findings(entity: str, doc) -> list[dict]:
         Model.model_validate(doc)
         return []
     except ValidationError as exc:
+        errors = exc.errors()
+        # pydantic-core has its own recursion guard, and it reports one as an
+        # ordinary error: a `recursion_loop` whose message asserts a cycle and
+        # whose `loc` is hundreds of segments long. Read as a verdict that is
+        # a wrong one — the document has no cycle, it is deep — so it is
+        # reported as what it is, a check that could not finish.
+        if any(err["type"] == "recursion_loop" for err in errors):
+            return [_undecided(entity, "RecursionError")]
         return [
             _finding("contract-model", "error",
                      "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
-            for err in exc.errors()
+            for err in errors
         ]
     except (RecursionError, MemoryError) as exc:
-        # The only path in this script that reaches a contract model without
-        # going through `analitiq.validator`, which turns a crash into a
-        # finding. A document nested deeper than the interpreter unwinds would
-        # otherwise leave this script as a raw traceback, which is neither a
-        # verdict nor something an author can act on.
-        return [_finding(
-            "document", "error", "/",
-            f"{entity} could not be checked ({type(exc).__name__}): the "
-            "document nests deeper, or runs larger, than this tool can walk. "
-            "Nothing was decided about it either way; flattening the nesting "
-            "is what gets it checked.")]
+        # What pydantic-core does not absorb — its guard covers its own walk,
+        # not a contract validator recursing under it.
+        return [_undecided(entity, type(exc).__name__)]
+
+
+def _undecided(entity: str, detail: str) -> dict:
+    """A finding saying this entity was not judged, in the shape the validator
+    package's own `is_guard_finding` recognises.
+
+    This is the one path in this script that reaches a contract model without
+    going through `analitiq.validator`, so it is also the one place a crash
+    would otherwise leave a raw traceback — or, worse, a finding that reads
+    like a rejection to anything counting error-severity results.
+    """
+    from analitiq.validator import GUARD_RESOURCE_BLAME, guard_finding
+
+    return guard_finding("document", "/", detail, GUARD_RESOURCE_BLAME,
+                         scope=f"The {entity} document was not judged.")
 
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
