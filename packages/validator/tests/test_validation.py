@@ -436,22 +436,34 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
     ordered every consumer's findings by the interpreter's hash seed: an author
     reran the validator on an unchanged document and got the same findings in a
     different order. Subprocesses, because a seed is fixed for the life of one.
+
+    Two things the document has to be, both learned the hard way. Several
+    members of one bucket on ONE node — with one member per bucket the loop has
+    no order to vary and every sort here is unpinned. And no crash: a document
+    the model layer aborts on yields a single guard finding, which compares
+    equal across every seed while measuring nothing, and a liveness assert on a
+    non-empty list is satisfied by it.
     """
     import textwrap
 
+    sample = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+              "examples": [1]}
     ep = _endpoint("STRING", "Utf8")
-    node = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
-            "examples": [1]}
-    schema = ep["operations"]["read"]["response"]["schema"]
-    # At least two members of EACH keyword bucket: with one, that bucket's
-    # loop has no order to vary and its `sorted()` is unpinned.
-    schema["items"]["properties"] = {"p": dict(node)}
-    schema["items"]["patternProperties"] = {"^x": dict(node)}
-    schema["items"]["$defs"] = {"D": dict(node)}
-    schema["items"]["allOf"] = [dict(node)]
-    schema["items"]["oneOf"] = [dict(node)]
-    schema["items"]["not"] = dict(node)
-    schema["items"]["contains"] = dict(node)
+    ep["operations"]["read"]["response"]["records"] = {"ref": "response.body"}
+    ep["operations"]["read"]["response"]["schema"]["items"] = {
+        "type": "object",
+        "properties": {"p": dict(sample)},
+        "patternProperties": {"^x": dict(sample)},
+        "$defs": {"D": dict(sample)},
+        "oneOf": [dict(sample)],
+        "anyOf": [dict(sample)],
+        "not": dict(sample),
+        "contains": dict(sample),
+    }
+
+    baseline = validator.validate_document(ep)
+    assert not any(is_guard_finding(f) for f in baseline), baseline
+    assert len(baseline) > 1, baseline
 
     program = textwrap.dedent(
         """
@@ -462,16 +474,45 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         """
     )
     runs = []
-    for seed in ("0", "1", "2", "3", "4"):
+    for seed in ("0", "1", "2", "3", "4", "5", "6", "7"):
         proc = subprocess.run(
             [sys.executable, "-c", program, json.dumps(ep)],
             capture_output=True, text=True, check=True,
             env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": _CLI_PYTHONPATH},
         )
         runs.append(json.loads(proc.stdout))
-    assert runs[0], "no findings — nothing is being measured"
+    assert len(runs[0]) == len(baseline), (runs[0], baseline)
     differing = [run for run in runs if run != runs[0]]
     assert not differing, _order_mismatch(runs[0], differing[0])
+
+
+def test_a_non_string_root_dialect_is_malformed_not_another_draft(validator):
+    """`{"$schema": 7}` at the root: nothing switches dialect on a number, and
+    the `continue` behind a draft-mismatch finding hides the metaschema error
+    that names the real defect. The nested branch reads it the same way."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["$schema"] = 7
+    messages = [e["message"] for e in _errors(validator.validate_document(ep))
+                if e["validator"] == "embedded-json-schema"]
+    assert messages, "no embedded-json-schema finding at all"
+    assert any("is not of type 'string'" in m for m in messages), messages
+    assert not any("requires JSON Schema Draft" in m for m in messages), messages
+
+
+def test_a_sample_is_graded_with_the_whole_document_in_scope(validator):
+    """`root.evolve(schema=node)` keeps the document's resolution scope, so a
+    `#/$defs/...` inside the node still resolves. Built on the node alone, the
+    reference is unresolvable and every sample under it becomes a crash finding
+    — the author is told the tool broke instead of what their sample says."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["$defs"] = {"S": {"type": "string"}}
+    schema["items"]["properties"]["a"] = {
+        "type": "object", "properties": {"x": {"$ref": "#/$defs/S"}},
+        "examples": [{"x": 1}]}
+    findings = validator.validate_document(ep)
+    assert not any(is_guard_finding(f) for f in findings), findings
+    assert any("is not of type 'string'" in f["message"] for f in findings), findings
 
 
 def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
