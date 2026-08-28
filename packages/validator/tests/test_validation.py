@@ -730,6 +730,22 @@ def test_a_wrong_root_draft_still_reports_the_metaschema_errors(validator):
                for m in messages), messages
 
 
+def test_a_wrong_root_draft_still_reports_a_nested_one(validator):
+    """The nested scan is a text walk over node pointers and never touches
+    `evolve`, so the reason the root branch withholds sample grading does not
+    reach it. Stopping at the root would report one draft, take a fix, and
+    report the other on the next run."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["$schema"] = "http://json-schema.org/draft-07/schema#"
+    schema["items"]["properties"]["a"] = {
+        "$schema": "http://json-schema.org/draft-07/schema#", "type": "string"}
+    messages = [f["message"] for f in validator.validate_document(ep)
+                if f["validator"] == "embedded-json-schema"]
+    assert any("declares $schema" in m for m in messages), messages
+    assert any("declares another draft at" in m for m in messages), messages
+
+
 def test_a_wrong_root_draft_withholds_the_sample_grading(validator):
     """`evolve` reads `$schema` off the node it is handed, and for the ROOT
     that node is the schema itself — so a foreign draft there is picked up and

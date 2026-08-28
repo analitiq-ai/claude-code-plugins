@@ -175,9 +175,12 @@ def _run_guarded(
     guard wraps, which land on the dispatch guard where the default would send
     the author to file a bug about their own document. What is left is a
     check brought down by the content it was reading, and there the caller
-    knows more than the type does: a `$ref` that leads back to itself and a
-    value a keyword cannot compute against are the same thing to the author,
-    and only the code that ran them can say so. That is what `blame` is for.
+    knows more than the type does — a value a keyword cannot compute against
+    is the document's doing, and only the code that ran it can say what the
+    author should look at. That is what `blame` is for. It has to be true of
+    every exception that reaches this clause: running out of room is
+    intercepted above, so a `blame` naming a `$ref` that leads back to itself
+    describes an outcome it can never carry.
 
     The SCOPE — which slot was being checked and what survived — is the
     caller's alone, and is appended whatever the cause turns out to be. It was

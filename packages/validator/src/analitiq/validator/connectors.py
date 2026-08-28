@@ -328,41 +328,17 @@ def _one_embedded_schema_findings(
         # picked up and every sample in the document is graded under it. A
         # `prefixItems` violation goes unreported under draft-07, which does
         # not have the keyword.
-        try:
-            Draft202012Validator.check_schema(schema)
-        except SchemaError as exc:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} is not a valid JSON Schema Draft "
-                f"2020-12 document: {exc.message}"))
+        #
+        # The nested scan below still runs: it is a text walk over the node
+        # pointers and never touches `evolve`, so the argument for withholding
+        # does not reach it — and stopping here would report the root's draft,
+        # take a fix, and report a subschema's on the next run.
+        findings.extend(_metaschema_findings(schema, pointer, where))
+        findings.extend(_nested_draft_findings(schema, pointer, where))
         return findings
-    # A DIFFERENT draft below the top level, which is the same obligation
-    # RULE-ENDP-048 states of the root and the same harm: `evolve` calls
-    # `validator_for(node)`, so a subschema naming another draft is graded
-    # under that draft while this contract and the engine read the whole
-    # document as 2020-12. A subschema repeating the draft the document is
-    # already in is redundant, not wrong, and refusing it would be an
-    # obligation no rule states — the rendered reference an author
-    # satisfies says only that a different draft is forbidden.
-    # Same reading as the root branch above: a non-string value is
-    # malformed rather than another draft, so it falls through to
-    # `check_schema`, which names it.
-    nested = sorted(
-        node_pointer
-        for node_pointer, node, _negated in iter_schema_nodes(schema)
-        if node_pointer
-        and isinstance(node.get("$schema"), str)
-        and node["$schema"] != _DRAFT_2020_12_SCHEMA
-    )
+    nested = _nested_draft_findings(schema, pointer, where)
     if nested:
-        findings.append(finding(
-            "embedded-json-schema", "error", pointer,
-            f"embedded schema at {where} declares another draft at "
-            f"{', '.join(nested)}. A JSON Schema implementation switches "
-            "to it for that subtree, while this contract and the engine "
-            f"read the whole document in {_DRAFT_2020_12_SCHEMA!r} — so "
-            "the subtree is graded against keywords that mean something "
-            "else there. Declare the draft once at the top, or not at all"))
+        findings.extend(nested)
         # `check_schema` still runs: it grades against this class's own
         # metaschema, which a nested `$schema` does not reach, so its findings
         # are the author's either way and withholding them costs a rerun.
@@ -374,24 +350,62 @@ def _one_embedded_schema_findings(
         # grading the rest would mean deciding, per sample, which draft it was
         # read under. The draft error is reported at error severity, so the
         # document fails either way and the author fixes one declaration.
-        try:
-            Draft202012Validator.check_schema(schema)
-        except SchemaError as exc:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} is not a valid JSON Schema Draft "
-                f"2020-12 document: {exc.message}"))
+        findings.extend(_metaschema_findings(schema, pointer, where))
         return findings
+    metaschema = _metaschema_findings(schema, pointer, where)
+    if metaschema:
+        return findings + metaschema
+    findings.extend(_schema_example_findings(schema, pointer, where))
+    return findings
+
+
+def _metaschema_findings(schema: dict, pointer: str, where: str) -> list[dict]:
+    """`check_schema`, stated once. Every branch above runs it — it grades
+    against this class's own metaschema whatever the document declares — and a
+    reworded message that reached two of the three copies would go unnoticed."""
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import SchemaError
+
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
-        findings.append(finding(
+        return [finding(
             "embedded-json-schema", "error", pointer,
             f"embedded schema at {where} is not a valid JSON Schema Draft "
-            f"2020-12 document: {exc.message}"))
-        return findings
-    findings.extend(_schema_example_findings(schema, pointer, where))
-    return findings
+            f"2020-12 document: {exc.message}")]
+    return []
+
+
+def _nested_draft_findings(schema: dict, pointer: str, where: str) -> list[dict]:
+    """A DIFFERENT draft below the top level, which is the same obligation
+    RULE-ENDP-048 states of the root and the same harm: `evolve` calls
+    `validator_for(node)`, so a subschema naming another draft is graded under
+    that draft while this contract and the engine read the whole document as
+    2020-12.
+
+    A subschema repeating the draft the document is already in is redundant,
+    not wrong, and refusing it would be an obligation no rule states — the
+    rendered reference an author satisfies says only that a different draft is
+    forbidden. Same reading as the root: a non-string value is malformed rather
+    than another draft, so it falls through to the metaschema, which names it.
+    """
+    nested = sorted(
+        node_pointer
+        for node_pointer, node, _negated in iter_schema_nodes(schema)
+        if node_pointer
+        and isinstance(node.get("$schema"), str)
+        and node["$schema"] != _DRAFT_2020_12_SCHEMA
+    )
+    if not nested:
+        return []
+    return [finding(
+        "embedded-json-schema", "error", pointer,
+        f"embedded schema at {where} declares another draft at "
+        f"{', '.join(nested)}. A JSON Schema implementation switches "
+        "to it for that subtree, while this contract and the engine "
+        f"read the whole document in {_DRAFT_2020_12_SCHEMA!r} — so "
+        "the subtree is graded against keywords that mean something "
+        "else there. Declare the draft once at the top, or not at all")]
 
 
 def _sample_findings(validator, example, index, node_pointer, pointer, where) -> list[dict]:
