@@ -23,13 +23,16 @@ and this file is what the reader applies.
 ## The unit
 
 An entry is keyed by the class that carries the field, inherited or not,
-because that is how the manifest claims: by the class the engine holds. A
+because that is how the manifest claims: by the class name it keys
+`claims` under. A
 base-class field is therefore one entry per variant that reaches it, each a
 separate fact — a read on one variant and none on another is exactly the
 state `stream.FullRefreshReplication.safety_window_seconds` records — and
 variants with the same verdict share a named reason rather than a merged
 entry. The prose census keys by declaring owner because its unit is one
-description; do not carry that keying here.
+description; do not carry that keying here. This section owns the unit;
+`census/consumption/disposition.py` and the entries point here rather than
+restating it.
 
 ## The kind
 
@@ -50,6 +53,7 @@ means. What a reader settles is which one applies:
 
 ## The reason, and its halves
 
+This section owns the two-halves rule; the census modules point here.
 A reason for a gap kind carries a **manifest half** and a **consequence
 half**. The manifest half — "the pinned manifest claims no read of …" — is a
 comparison against the published artifact, pinned by the sha256 in

@@ -36,7 +36,8 @@ The envelope, and why each key is read the way it is:
   the only way the engine could ever hold the object. A model no root
   reaches is not covered — unknown, not unread.
 - ``claims`` — ``model -> field -> sites``: the attribute reads the engine's
-  run-time path performs. A reachable field absent here is unread.
+  run-time path performs. A reachable field absent here, or present with
+  no sites, is unread.
 - ``opaque`` — ``model -> consumer record``: models the engine consumes
   whole, as a JSON grammar (``model_dump`` into an expression tree or a
   predicate resolver), each mapped to the record of what consumes it. Their

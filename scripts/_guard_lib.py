@@ -131,7 +131,10 @@ def surface_warning(text: str, *, title: str) -> None:
                 fh.write(f"⚠️ {text}\n")
 
 
-#: The version triple every engine-published artifact and pointer declares.
+#: The version shape the pinned artifacts and their pointers declare — the
+#: grammar, the matrix and the consumption manifest, at the versions this
+#: repo pins. Anything else stops the guard (exit 2) rather than minting a
+#: verdict: that is the direction a published format change fails.
 VERSION_TRIPLE_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 

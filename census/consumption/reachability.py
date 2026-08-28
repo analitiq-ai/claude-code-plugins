@@ -7,7 +7,7 @@ published fact, never a reading of the engine). This module walks the live
 contract models from the manifest's ``roots`` and classifies every field it
 reaches:
 
-- **read** — the manifest claims the field.
+- **read** — the manifest claims the field with at least one site.
 - **opaque** — the field belongs to a model the engine consumes whole as a
   JSON grammar. The walk records the model and stops: an opaque model's
   fields never appear in ``claims`` because no attribute read exists, so

@@ -73,7 +73,6 @@ from _guard_lib import BASE_URL, GuardError, ObjectMissing, surface_warning  # n
 from _guard_lib import fetch as _fetch  # noqa: E402
 from _guard_lib import (  # noqa: E402
     fetch_json,
-    parse_object,
     parse_version,
     report_failures,
     sha256,

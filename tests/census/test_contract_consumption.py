@@ -183,6 +183,20 @@ def test_accepted_kinds_are_exactly_the_literal():
         FieldDisposition("a.B", "x", "documented", "reason")
 
 
+def test_every_kind_is_named_where_its_meaning_and_decision_live():
+    """``DispositionKind`` owns the names; the module docstring says what each
+    means and the rule file says when each applies. Both enumerate, so a
+    kind added to the Literal and to neither prose list is one edit short —
+    this locates each backticked name and never reads the sentence around
+    it."""
+    import census.consumption.disposition as module
+
+    rule = (REPO_ROOT / ".claude" / "rules" / "reachability-dispositions.md").read_text()
+    for kind in get_args(DispositionKind):
+        assert f"``{kind}``" in module.__doc__, f"{kind} not defined in disposition.py"
+        assert f"`{kind}`" in rule, f"{kind} not placed in reachability-dispositions.md"
+
+
 @pytest.mark.parametrize("reason", ["", "   "])
 def test_disposition_requires_a_reason(reason):
     with pytest.raises(ValueError, match="a reason is required"):
@@ -231,7 +245,7 @@ class Root(BaseModel):
     direct: Leaf
     maybe: Optional[Grammar] = None
     either: Union[Tagged, int]
-    annotated: Annotated[list[ViaDict], Field(min_length=0)]
+    annotated: Optional[Annotated[list[ViaDict], Field(min_length=0)]] = None
     shape: Literal["root"] = "root"
     plain: str = ""
 
@@ -324,7 +338,9 @@ def test_walk_terminates_on_a_cycle():
 class Shapes(BaseModel):
     plain: Literal["x"]
     optional: Optional[Literal["x"]] = None
-    annotated: Annotated[Literal["x"], Field(description="pinned")]
+    # Nested, because pydantic strips a top-level Annotated into FieldInfo
+    # and the branch under test would never see one.
+    annotated: Optional[Annotated[Literal["x"], Field(description="pinned")]] = None
     mixed: Union[Literal["x"], str]
     free: str
 
@@ -608,6 +624,24 @@ def test_manifest_was_generated_against_this_tree_or_an_older_one():
         f"the vendored manifest was generated against analitiq-contract-models "
         f"{generated_against}, ahead of this tree's {tree}"
     )
+
+
+@pytest.mark.parametrize(
+    ("older", "newer"),
+    [("1.0.0rc23", "1.0.0"), ("1.0.0a1", "1.0.0b1"), ("0.9", "0.10"), ("1.0.0rc2", "1.0.0rc10")],
+)
+def test_version_key_orders_pre_releases_before_finals(older, newer):
+    assert _version_key(older) < _version_key(newer)
+
+
+def test_a_manifest_generated_against_a_newer_tree_fails(monkeypatch):
+    """The live pair is equal today, so the direction of the comparison is
+    otherwise unexercised: a manifest ahead of the tree must be refused."""
+    ahead = dict(pin.load_manifest())
+    ahead[pin.CONTRACT_MODELS_VERSION_KEY] = "999.0.0"
+    monkeypatch.setattr(pin, "load_manifest", lambda: ahead)
+    with pytest.raises(AssertionError, match="ahead of this tree"):
+        test_manifest_was_generated_against_this_tree_or_an_older_one()
 
 
 def test_every_unread_contract_field_carries_a_disposition():

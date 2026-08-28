@@ -1,22 +1,18 @@
 """The disposition of every field the pinned manifest leaves unread.
 
 One :class:`FieldDisposition` per (model, field) the reachability walk finds
-and ``claims`` does not — grouped by the model that declares the field, in
-the order the walk reports them. The guard in ``tests/census`` holds this
+and ``claims`` does not — keyed and grouped by the model that carries the
+field, in the order the walk reports them. The guard in ``tests/census`` holds this
 tuple to the manifest in each direction: an unread field with no entry fails,
 and so does an entry for a field the manifest now claims or no longer
 reaches, so a pin bump that starts reading a field retires its entry here
 in the same change.
 
 Every ``engine_gap``, ``contract_surplus`` and ``manifest_gap`` reason has
-a manifest half and a consequence half. The manifest half — "the pinned
-manifest claims no read of …" — is a comparison against the published
-artifact (the pinned rung of ``.claude/rules/engine-behaviour-claims.md``),
-and the pin guard is what keeps it current. The consequence half — what the
-run does with the field today — is a reading of the engine as it stands,
-and no check rests on it: the gate is ``claims`` membership only.
-``.claude/rules/reachability-dispositions.md`` is how a reader judges an
-entry.
+a manifest half and a consequence half; what each may say, and that no check
+rests on the second, is "The reason, and its halves" in
+``.claude/rules/reachability-dispositions.md`` — the file a reader judges an
+entry by.
 """
 from __future__ import annotations
 
@@ -95,8 +91,8 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "adopt moves these entries to engine_gap"
 )
 
-#: The page size of a database pagination variant. One fact per variant —
-#: the manifest claims per carrier — under one reason.
+#: The page size of a database pagination variant: one entry per variant
+#: (the census unit), one reason.
 DATABASE_PAGE_SIZE = (
     "an author declaring a page size expects the read fetched in pages of "
     "that size; the pinned manifest claims no read of it, so a database "
