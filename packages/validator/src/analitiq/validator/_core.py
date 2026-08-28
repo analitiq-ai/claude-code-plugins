@@ -177,10 +177,11 @@ def _run_guarded(
     check brought down by the content it was reading, and there the caller
     knows more than the type does — a value a keyword cannot compute against
     is the document's doing, and only the code that ran it can say what the
-    author should look at. That is what `blame` is for. It has to be true of
-    every exception that reaches this clause: running out of room is
-    intercepted above, so a `blame` naming a `$ref` that leads back to itself
-    describes an outcome it can never carry.
+    author should look at. That is what `blame` is for, and it has to be true
+    of every exception reaching a clause that consults it. Running out of room
+    consults it too: depth is the usual cause and the default says so, but a
+    caller that follows references knows the other one, since a `$ref` leading
+    back to itself exhausts the stack on a document three keys deep.
 
     The SCOPE — which slot was being checked and what survived — is the
     caller's alone, and is appended whatever the cause turns out to be. It was
@@ -200,8 +201,14 @@ def _run_guarded(
         # No detail beyond the type: a `RecursionError` raised while unwinding
         # names whichever frame was innermost, which is not the walk that
         # filled the stack and reads to an author as though it were.
+        # The caller's wording wins here too when it has one. Depth is the
+        # usual cause and the default says so, but it is not the only one: a
+        # `$ref` that leads back to itself exhausts the stack on a document
+        # three keys deep, and telling that author to flatten their nesting
+        # names a remedy that fixes nothing. A caller that follows references
+        # knows that; this clause does not.
         return [guard_finding(vid, path, type(exc).__name__,
-                               GUARD_RESOURCE_BLAME, scope)]
+                               blame or GUARD_RESOURCE_BLAME, scope)]
     except Exception as exc:  # noqa: BLE001 - last-resort guard
         return [guard_finding(vid, path, _detail(exc),
                                blame or GUARD_DEFAULT_BLAME, scope)]
@@ -223,9 +230,15 @@ def _detail(exc: BaseException) -> str:
     one finding an agent has to read.
     """
     detail = f"{type(exc).__name__}: {exc}"
-    if len(detail) > _GUARD_DETAIL_MAX:
-        detail = detail[:_GUARD_DETAIL_MAX] + "…"
-    return detail
+    if len(detail) <= _GUARD_DETAIL_MAX:
+        return detail
+    # Both ends, not the first N characters. `jsonschema`'s referencing errors
+    # read "PointerToNowhere: '/$defs/X' does not exist within {…the whole
+    # schema root…}" — cutting from the right keeps the pointer; but a
+    # different implementation puts its own subject last, and a cut that
+    # always drops one end drops the only actionable word half the time.
+    keep = _GUARD_DETAIL_MAX // 2
+    return f"{detail[:keep]}…{detail[-keep:]}"
 
 
 def guard_finding(
@@ -294,7 +307,7 @@ GUARD_RESOURCE_BLAME = (
     f"{GUARD_RESOURCE_CAUSE}. Nothing was decided about it either way; "
     "flattening the nesting is what gets it checked."
 )
-#: How much of an exception's own text a finding carries.
+#: How much of an exception's own text a finding carries, head and tail.
 _GUARD_DETAIL_MAX = 300
 
 
