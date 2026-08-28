@@ -123,8 +123,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "the request slot a binding sits in already states where the value "
         "goes, and the slot and the field state the same placement; "
         "RULE-ENDP-008's location clause names the obligation, the pinned "
-        "manifest claims no read of the field, and the field is the copy "
-        "that goes. The model validators that read it — the slot agreement, "
+        "manifest claims no read of the field, so the run routes the value "
+        "by the slot the binding sits in and never consults it, and the "
+        "field is the copy that goes. The model validators that read it — the slot agreement, "
         "the style/explode requirement on an array or object query param, "
         "and the refusal of a body param on a GET read — each re-key onto "
         "the binding slot. The style/explode rule also has a declarative "
@@ -154,7 +155,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "read by the registry service's on-save comparison of a stream's "
         "filter operators against the subset this param declares — the "
         "consumer RULE-STRM-026's rationale describes, beside the "
-        "obligation its statement names on the filter; the pinned manifest claims no "
+        "obligation its statement names on the filter — and by the model "
+        "validator and its published-schema mirror that refuse the set "
+        "beside controlled_by; the pinned manifest claims no "
         "read of the set, so the run sends the filter with whatever operator "
         "the stream declares",
     ),
