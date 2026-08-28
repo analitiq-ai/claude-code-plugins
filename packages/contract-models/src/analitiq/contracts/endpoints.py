@@ -1330,6 +1330,10 @@ def _validate_examples_zone(
     declared = declares_zone(arrow_value)
     if declared is None:
         return
+    # Both questions are asked only of a declaration that could be wrong about
+    # a zone. Under `Utf8`, a date-time-shaped string is a string, and its
+    # digits are the provider's business — the calendar has nothing to say
+    # about a value nothing here reads as a time.
     for index, example in enumerate(examples):
         if not sample_names_an_instant(example):
             errors.append(str(violation("RULE-ENDP-063", (
@@ -1589,9 +1593,11 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     """Every schema node under `schema`, as `(json_pointer, node)`.
 
     The one generic traversal of an embedded schema's structural positions:
-    it recurses through the shared `JSON_SCHEMA_SUBSCHEMA_KEYS` /
-    `JSON_SCHEMA_LIST_OF_SCHEMA_KEYS` / `JSON_SCHEMA_SINGLE_SCHEMA_KEYS`
-    inventory and yields, leaving each caller to filter for what it wants.
+    it recurses through the shared `JSON_SCHEMA_SUBSCHEMA_ORDER` /
+    `JSON_SCHEMA_LIST_OF_SCHEMA_ORDER` / `JSON_SCHEMA_SINGLE_SCHEMA_ORDER`
+    inventory — the same members as the `_KEYS` sets they come from, in the
+    fixed order a walk has to have — and yields, leaving each caller to filter
+    for what it wants.
     Public because the callers are in `analitiq.validator`, which collects the
     typed nodes for type-map coverage and the sample-bearing ones to grade;
     nothing in this module walks with it. Pointers are RFC 6901 escaped, so one

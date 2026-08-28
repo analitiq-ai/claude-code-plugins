@@ -9,7 +9,7 @@ name = "analitiq-contract-models"
 version = "1.0.0rc23"
 description = "Analitiq's public contract surface (Pydantic): the authored connector/connection/stream/pipeline/endpoint documents the published JSON Schemas and the validator both derive from, plus the public REST API request/response shapes. Import as `analitiq.contracts`."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Analitiq" }]
 keywords = ["analitiq", "connector", "contract", "pydantic", "validation"]

@@ -15,8 +15,13 @@ from pathlib import Path
 
 import pytest
 
+from conftest import run_cli
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
-from analitiq.validator import GUARD_DEFAULT_BLAME, is_guard_finding
+from analitiq.validator import (
+    GUARD_DEFAULT_BLAME,
+    GUARD_RESOURCE_BLAME,
+    is_guard_finding,
+)
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -417,6 +422,38 @@ def test_a_sample_that_cannot_be_graded_costs_only_that_check(validator):
     assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
     # The unrelated defect survives it.
     assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
+
+
+def _deeply_nested_schema(depth: int) -> dict:
+    root = node = {"type": "object"}
+    for _ in range(depth):
+        node["properties"] = {"x": {"type": "object"}}
+        node = node["properties"]["x"]
+    return root
+
+
+def test_a_document_too_deep_to_walk_is_not_the_authors_bug_to_file(validator):
+    """Every walk here recurses on the document's own nesting, and the walk
+    that runs out of stack first is whichever one reaches the depth — often
+    one no guard wraps, since the contract models walk before any check does.
+    Landing there, the default blame would send the author to file a bug about
+    a crash their own document caused.
+
+    So the exception TYPE decides: running out of stack says what the cause
+    was regardless of which walk was holding it, and regardless of what the
+    caller expected to go wrong."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["items"] = (
+        _deeply_nested_schema(4000))
+    findings = validator.validate_document(ep, expect_crash=True)
+    crashed = [f for f in findings if is_guard_finding(f)]
+    assert len(crashed) == 1, findings
+    assert GUARD_RESOURCE_BLAME in crashed[0]["message"], crashed[0]
+    assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
+    # No detail from the exception: a RecursionError raised while unwinding
+    # names whichever frame happened to be innermost, which is not the walk
+    # that filled the stack and reads to an author as though it were.
+    assert "RecursionError" in crashed[0]["message"], crashed[0]
 
 
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
@@ -1239,43 +1276,17 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
 
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
 
-def _run_cli(tmp_path, doc, filename="doc.json"):
-    """Run the CLI on `doc`, screened the way the fixture screens the API.
-
-    The CLI is the third way findings reach a test and the one the fixture
-    cannot wrap — it runs out of process. A crash yields exactly the
-    `returncode == 1` / `passed is False` the CLI tests assert, so without
-    this an exit-code test passes on a document nothing actually judged.
-    """
-    p = tmp_path / filename
-    p.write_text(json.dumps(doc))
-    env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
-    result = subprocess.run(
-        [sys.executable, "-c", _CLI_CODE, "--document", str(p)],
-        capture_output=True, text=True, env=env, check=False)
-    try:
-        findings = json.loads(result.stdout).get("findings", [])
-    except (ValueError, AttributeError):
-        return result
-    crashed = [f for f in findings if is_guard_finding(f)]
-    assert not crashed, (
-        "a check crashed inside the CLI, so this test's exit code says "
-        "nothing about what the validator decided:\n"
-        + "\n".join(f["message"] for f in crashed))
-    return result
-
-
 def test_cli_valid_doc_exit0(tmp_path):
     # Name the file after its endpoint_id so the filename↔id check is satisfied.
     doc = json.loads((CORPUS / "valid_read.json").read_text())
-    r = _run_cli(tmp_path, doc, filename=f"{doc['endpoint_id']}.json")
+    r = run_cli(tmp_path, doc, filename=f"{doc['endpoint_id']}.json")
     assert r.returncode == 0, r.stdout
     out = json.loads(r.stdout)
     assert out["passed"] is True and isinstance(out["findings"], list)
 
 
 def test_cli_invalid_doc_exit1(tmp_path):
-    r = _run_cli(tmp_path, json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
+    r = run_cli(tmp_path, json.loads((CORPUS / "invalid_write_from_input.json").read_text()))
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
 

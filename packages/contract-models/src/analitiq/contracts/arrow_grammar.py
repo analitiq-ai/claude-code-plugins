@@ -72,7 +72,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
@@ -214,11 +214,19 @@ GRAMMAR, FAMILIES = _load_families()
 #: a provider sends (a date with no time, an epoch number, a provider-specific
 #: spelling) carries no answer, and the reader below says so rather than
 #: inventing one.
+#: The positions are captured, because whether a sample is a real moment is
+#: read off them: a shape match alone accepts a thirteenth month, and a `Z` on
+#: a date that does not exist would otherwise read as evidence of a zone.
 _WIRE_DATETIME_PATTERN = (
-    r"\d{4}-\d{2}-\d{2}[Tt ]\d{2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?"
+    r"(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})[Tt ]"
+    r"(?P<hour>\d{2}):(?P<minute>\d{2})(?::(?P<second>\d{2})(?:[.,]\d+)?)?"
     r"(?P<zone>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
 )
 _WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
+#: The largest seconds value the profile reads as a real one. 60 is a
+#: leap second (RFC 3339 §5.6), which a wire value can carry and no
+#: `datetime` can hold.
+_MAX_WIRE_SECOND = 60
 
 #: `${name}` placeholder of type-map render templates. Must be a valid
 #: identifier, matching the native capture-group naming it resolves from.
@@ -662,22 +670,37 @@ def sample_names_an_instant(sample: Any) -> bool:
 
     The shape regex answers which spellings the authoring profile admits; it
     cannot answer whether `2024-13-45T99:99:99Z` is a date, and reading a
-    month of 13 as evidence about anything is worse than reading nothing. The
-    calendar arithmetic is `datetime.fromisoformat`'s, not this module's — the
-    profile admits three spellings it does not (a lowercase separator, a
-    lowercase zone, a comma before the fraction), so those are normalized to
-    their canonical form on the way in rather than reimplemented here.
+    month of 13 as evidence about anything is worse than reading nothing.
+
+    The calendar arithmetic — which months have 31 days, which years have a
+    29th of February — is `datetime.date`'s, from the captured positions.
+    Handing the whole string to a parser instead would tie the profile to
+    whatever that parser accepts: `datetime.fromisoformat` gained the spellings
+    this profile admits only in 3.11, so on the floor these packages declare it
+    refuses a `Z`-suffixed sample and this reader would call every zoned wire
+    value on the interpreter impossible. Constructing from the positions asks
+    the calendar and nothing else, and answers the same on every version.
+
+    A second of 60 is a leap second, which RFC 3339 admits and providers emit;
+    `datetime` has no representation for one, so the seconds position is
+    range-checked here rather than constructed.
 
     False only for a sample that HAS the shape. A sample that has no date-time
     shape is not malformed; it is a different kind of value, and
     :func:`sample_carries_zone` passes it over.
     """
-    if _read_wire_datetime(sample) is None:
+    match = _read_wire_datetime(sample)
+    if match is None:
         return True
-    normalized = (sample.replace("t", "T", 1).replace(",", ".", 1)
-                  .replace("z", "Z"))
+    if int(match.group("hour")) > 23 or int(match.group("minute")) > 59:
+        return False
+    # The seconds position is optional in the profile.
+    second = match.group("second")
+    if second is not None and int(second) > _MAX_WIRE_SECOND:
+        return False
     try:
-        datetime.fromisoformat(normalized)
+        date(int(match.group("year")), int(match.group("month")),
+             int(match.group("day")))
     except ValueError:
         return False
     return True

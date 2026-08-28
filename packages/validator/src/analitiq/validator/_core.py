@@ -172,9 +172,21 @@ def _run_guarded(
 
     `path` locates the crash. A check that runs per-slot has more than one
     place to crash, and without it every one of them reports the same finding.
+
+    One class of crash overrides both: running out of stack or memory says
+    what the cause was, whatever the caller expected. Every walk here recurses
+    on the document's own nesting, so a deep enough one exhausts the stack in
+    whichever walk reaches it first — including walks no guard wraps, which
+    land on the dispatch guard where the default blame would send the author
+    to file a bug about their own document. The exception TYPE decides that,
+    not a reading of any message.
     """
     try:
         return fn(*args)
+    except (RecursionError, MemoryError) as exc:
+        return [finding(vid, "error", path,
+                        f"{_guard_opening(vid)} ({type(exc).__name__}); "
+                        + GUARD_RESOURCE_BLAME)]
     except Exception as exc:  # noqa: BLE001 - last-resort guard
         # The exception text is truncated: `jsonschema`'s referencing errors
         # embed the whole schema root in their repr, which on a real endpoint
@@ -206,6 +218,8 @@ def _guard_opening(vid: str) -> str:
     whose text happens to begin "checked" and contain the verb.
     """
     return f"{GUARD_PREFIX} {vid!r} {GUARD_VERB}"
+
+
 #: What a crash tells the reader to do when the caller names nothing better.
 #: Stated here because the tests over it assert its ABSENCE — that a
 #: document-caused crash does not send the author to file a bug — and an
@@ -213,6 +227,18 @@ def _guard_opening(vid: str) -> str:
 #: string moves. One test requires it where it does belong, so emptying it is
 #: not silent either.
 GUARD_DEFAULT_BLAME = "this is a validator bug — please report."
+#: What a crash tells the reader when the interpreter ran out of stack or
+#: memory. Overrides every caller's wording, because the cause is settled by
+#: the exception type: no check here allocates or recurses on anything but the
+#: document, so the document is the size that was too big. Carries no detail
+#: from the exception — a `RecursionError` raised while unwinding is as likely
+#: to name an inner frame as the walk that filled the stack.
+GUARD_RESOURCE_BLAME = (
+    "the document nests deeper, or runs larger, than this tool can walk. That "
+    "is a limit here rather than a defect in the document, but a schema that "
+    "deep is worth flattening either way — the engine walks it too. Every "
+    "other document in this run was still checked."
+)
 #: How much of an exception's own text a finding carries.
 _GUARD_DETAIL_MAX = 300
 

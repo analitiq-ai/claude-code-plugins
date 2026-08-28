@@ -8,10 +8,9 @@ document passes and an invalid one fails. Detection is also checked to be mutual
 exclusive: no authored kind claims another's shape.
 """
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
+
+from conftest import run_cli
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS_SRC_ROOT = _REPO_ROOT / "contract-models" / "src"
@@ -179,29 +178,8 @@ def test_active_pipeline_with_stream_passes(validator):
 
 # --- CLI end to end (the one-stop-validator ask) -----------------------------
 
-def _run_cli(tmp_path, doc, filename="doc.json"):
-    """Drive `analitiq-validate --document` on a single authored document.
-
-    Only the two public source trees are on the path — the validator and the
-    contract models it depends on. Nothing private, matching an installed
-    consumer exactly.
-    """
-    p = tmp_path / filename
-    p.write_text(json.dumps(doc))
-    code = "from analitiq.validator import main; import sys; sys.exit(main())"
-    env = {
-        **os.environ,
-        "PYTHONPATH": os.pathsep.join([str(SRC_ROOT), str(CONTRACTS_SRC_ROOT)]),
-        "DOMAIN": "analitiq.ai",
-    }
-    return subprocess.run(
-        [sys.executable, "-c", code, "--document", str(p)],
-        capture_output=True, text=True, env=env, check=False,
-    )
-
-
 def test_cli_validates_connection_exit0(tmp_path):
-    r = _run_cli(tmp_path, _valid_connection())
+    r = run_cli(tmp_path, _valid_connection())
     assert r.returncode == 0, r.stdout + r.stderr
     out = json.loads(r.stdout)
     assert out["passed"] is True
@@ -210,6 +188,6 @@ def test_cli_validates_connection_exit0(tmp_path):
 def test_cli_invalid_stream_exit1(tmp_path):
     bad = _valid_stream()
     bad["status"] = "bogus"
-    r = _run_cli(tmp_path, bad)
+    r = run_cli(tmp_path, bad)
     assert r.returncode == 1
     assert json.loads(r.stdout)["passed"] is False
