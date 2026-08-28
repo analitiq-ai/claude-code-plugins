@@ -4,8 +4,9 @@ The engine publishes ``contract-consumption``, the fields its run-time path
 reads (``census.consumption.pin`` vendors one pinned version). A field a root
 reaches that the manifest does not claim is *unread*: the contract declares
 it, the published schema renders it, plugin prose teaches it, authors write
-it, and no engine path looks at it. That is a fact the engine states and
-this repo decides the meaning of, field by field, in a
+it, and the pinned manifest claims no read of it. That is the fact the
+artifact states — the engine's extractor attributes no read to the field —
+and this repo decides the meaning of, field by field, in a
 :class:`FieldDisposition` entry. An unread field with no entry fails the
 build; an entry for a field the manifest now claims — or that no longer
 exists — fails the build too, so the census can only ever say what is

@@ -187,7 +187,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 | `schemas/` | a **resource version** | never — rendered, never authored |
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
-| `census/consumption/dispositions.py` | an **unread contract field** — one a root reaches that the engine never reads | the pinned consumption manifest claims no read of it; every such field carries an entry or the build fails |
+| `census/consumption/dispositions.py` | an **unread contract field** — one a root reaches that the manifest does not claim | the pinned consumption manifest claims no read of it; every such field carries an entry or the build fails |
 | `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
 | `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
 | `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |

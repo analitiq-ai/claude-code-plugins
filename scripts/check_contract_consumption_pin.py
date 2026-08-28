@@ -98,7 +98,6 @@ else:
     _IMPORT_ERROR = None
 
 
-
 def _pinned_url() -> str:
     return (
         f"{BASE_URL}/{pin.CONSUMPTION_RESOURCE}/v{pin.CONSUMPTION_VERSION}/"

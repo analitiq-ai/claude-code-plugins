@@ -88,9 +88,12 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
 
 #: The page size of a database pagination variant.
 DATABASE_PAGE_SIZE = (
-    "an author declaring a page size expects the read fetched in pages of "
-    "that size; the pinned manifest claims no read of it, so a database "
-    "read pages at the pipeline runtime's batch size"
+    "the pinned manifest claims no read of it, and the field's own published "
+    "description already says so: the size is the pipeline runtime's "
+    "batching value for every stream. Removed rather than adopted because "
+    "the contract has already told authors the knob is inert — adoption "
+    "would honour a value the description promises nothing for, and RULE-"
+    "STRM-039 names the obligation"
 )
 
 
@@ -284,9 +287,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     # --- stream.KeysetDatabasePagination / OffsetDatabasePagination: the
     # tag selects the shape; the size reaches nobody, as the field's own
     # description already states.
-    FieldDisposition("stream.KeysetDatabasePagination", "page_size", "engine_gap", DATABASE_PAGE_SIZE),
+    FieldDisposition("stream.KeysetDatabasePagination", "page_size", "contract_surplus", DATABASE_PAGE_SIZE),
     FieldDisposition("stream.KeysetDatabasePagination", "type", "structural", UNION_DISCRIMINATOR),
-    FieldDisposition("stream.OffsetDatabasePagination", "page_size", "engine_gap", DATABASE_PAGE_SIZE),
+    FieldDisposition("stream.OffsetDatabasePagination", "page_size", "contract_surplus", DATABASE_PAGE_SIZE),
     FieldDisposition("stream.OffsetDatabasePagination", "type", "structural", UNION_DISCRIMINATOR),
     # --- stream.StreamSource: the stream-owned identity hint ----------------
     FieldDisposition(

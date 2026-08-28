@@ -30,9 +30,9 @@ import hashlib
 import json
 import os
 import subprocess
+import re
 import sys
 from pathlib import Path
-import re
 from typing import Annotated, Literal, Optional, Union, get_args
 
 import pytest
@@ -182,6 +182,24 @@ def test_accepted_kinds_are_exactly_the_literal():
         assert FieldDisposition("a.B", "x", kind, "reason").kind == kind
     with pytest.raises(ValueError, match="unknown kind"):
         FieldDisposition("a.B", "x", "documented", "reason")
+
+
+def test_dispositions_are_grouped_by_model_and_ordered_as_declared():
+    """The module docstring states the file's order — models sorted by
+    qualified name, fields in declaration order — so that a reader placing
+    an entry finds the field list it describes beside it. The report is
+    order-blind, so this is the only thing that keeps that sentence true."""
+    import itertools
+
+    from census.consumption.dispositions import DISPOSITIONS
+
+    groups = [m for m, _ in itertools.groupby(DISPOSITIONS, key=lambda d: d.model)]
+    assert len(set(groups)) == len(groups), "a model's entries are split"
+    assert groups == sorted(groups, key=lambda m: f"analitiq.contracts.{m}")
+    for model, entries in itertools.groupby(DISPOSITIONS, key=lambda d: d.model):
+        declared = list(resolve_model(f"analitiq.contracts.{model}").model_fields)
+        positions = [declared.index(d.field) for d in entries]
+        assert positions == sorted(positions), model
 
 
 def test_every_kind_is_named_where_its_meaning_and_decision_live():

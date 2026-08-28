@@ -14,7 +14,7 @@ reaches:
   still counts as a read. The walk records the model and stops: descending
   into it would report every field of an expression tree as unread.
 - **unread** — reachable, not opaque, not claimed. The contract declares it
-  and the engine never looks. Each such field needs a
+  and the manifest claims no read of it. Each such field needs a
   :class:`~census.consumption.disposition.FieldDisposition`.
 
 Coverage is ``roots`` because reachability through field annotations is the
@@ -223,9 +223,9 @@ class ConsumptionReport:
             lines.append("")
 
         group(
-            "unread fields with no disposition — the engine's run-time path "
-            "never reads these; add a FieldDisposition naming what does, or "
-            "declare the gap",
+            "unread fields with no disposition — the pinned manifest claims no "
+            "read of these; add a FieldDisposition naming what consumes each, "
+            "or declare the gap",
             self.unread_without_disposition,
             lambda ref: f"{ref[0]}.{ref[1]}",
         )

@@ -109,7 +109,6 @@ else:
     _IMPORT_ERROR = None
 
 
-
 def _declared_version(obj: dict, *, context: str) -> str:
     """The version an artifact stamps on ITSELF, under the key
     `arrow_grammar.ARTIFACT_VERSION_KEY` names.
