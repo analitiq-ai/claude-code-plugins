@@ -591,12 +591,15 @@ def test_the_cause_a_crash_names_is_chosen_by_what_went_wrong(validator):
     def _content():
         raise OverflowError("int too large")
 
-    # Out of room: the type answers, and a caller's wording does not enter
-    # into it — nothing a caller knows makes a full stack something else.
-    for kwargs in ({}, {"blame": "mine"}):
-        out_of_room = _run_guarded(_deep, vid="document", path="/", **kwargs)
-        assert GUARD_RESOURCE_BLAME in out_of_room[0]["message"], out_of_room
-        assert "mine" not in out_of_room[0]["message"], out_of_room
+    # Out of room: depth is the usual cause, so the default says so — but a
+    # caller that follows references knows the other one, since a `$ref`
+    # leading back to itself exhausts the stack on a shallow document and
+    # "flatten the nesting" fixes nothing there.
+    unnamed_room = _run_guarded(_deep, vid="document", path="/")
+    assert GUARD_RESOURCE_BLAME in unnamed_room[0]["message"], unnamed_room
+    named_room = _run_guarded(_deep, vid="document", path="/", blame="mine")
+    assert "mine" in named_room[0]["message"], named_room
+    assert GUARD_RESOURCE_BLAME not in named_room[0]["message"], named_room
 
     # A defect in this tool: likewise not the caller's to reinterpret.
     ours = _run_guarded(_bug, vid="document", path="/", blame="mine")
@@ -695,6 +698,22 @@ def test_one_endpoint_that_cannot_be_checked_costs_only_that_endpoint(
     # way, one document earlier.
     scoped = " ".join(f["message"] for f in crashed)
     assert "badone.json" in scoped and "widgets.json" in scoped, crashed
+
+
+def test_a_long_exception_keeps_both_ends(validator):
+    """The bounded detail is cut in the middle, not at the tail.
+
+    `jsonschema`'s referencing errors read "PointerToNowhere: '/$defs/X' does
+    not exist within {…the whole schema root…}", so the pointer — the only
+    actionable word — is at the front and the filler is behind it. A cut that
+    always drops one end drops that word for whichever implementation puts its
+    subject there."""
+    from analitiq.validator._core import _GUARD_DETAIL_MAX, _detail
+
+    exc = ValueError("HEAD" + ("x" * _GUARD_DETAIL_MAX * 2) + "TAIL")
+    detail = _detail(exc)
+    assert len(detail) <= _GUARD_DETAIL_MAX + 1, len(detail)
+    assert "HEAD" in detail and "TAIL" in detail, detail
 
 
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):

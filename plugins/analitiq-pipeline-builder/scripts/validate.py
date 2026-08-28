@@ -126,38 +126,25 @@ def _model_findings(entity: str, doc) -> list[dict]:
         Model.model_validate(doc)
         return []
     except ValidationError as exc:
-        errors = exc.errors()
-        # pydantic-core has its own recursion guard, and it reports one as an
-        # ordinary error: a `recursion_loop` whose message asserts a cycle and
-        # whose `loc` is hundreds of segments long. Read as a verdict that is
-        # a wrong one — the document has no cycle, it is deep — so it is
-        # reported as what it is, a check that could not finish.
-        if any(err["type"] == "recursion_loop" for err in errors):
-            return [_undecided(entity, "RecursionError")]
         return [
             _finding("contract-model", "error",
                      "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
             for err in errors
-        ]
-    except (RecursionError, MemoryError) as exc:
-        # What pydantic-core does not absorb — its guard covers its own walk,
-        # not a contract validator recursing under it.
-        return [_undecided(entity, type(exc).__name__)]
-
-
-def _undecided(entity: str, detail: str) -> dict:
-    """A finding saying this entity was not judged, in the shape the validator
-    package's own `is_guard_finding` recognises.
-
-    This is the one path in this script that reaches a contract model without
-    going through `analitiq.validator`, so it is also the one place a crash
-    would otherwise leave a raw traceback — or, worse, a finding that reads
-    like a rejection to anything counting error-severity results.
-    """
-    from analitiq.validator import GUARD_RESOURCE_BLAME, guard_finding
-
-    return guard_finding("document", "/", detail, GUARD_RESOURCE_BLAME,
-                         scope=f"The {entity} document was not judged.")
+        ] if (errors := exc.errors()) else []
+    # Deliberately no crash handler. This is the one path here that reaches a
+    # contract model without `analitiq.validator`, which would make it the one
+    # place a crash escapes as a traceback — but none of these three models
+    # walks anything recursively (`analitiq.contracts` keeps its recursive
+    # walkers in `endpoints` and `value_expression`, and neither is reached
+    # from a connection, a stream or a pipeline), and every endpoint and type
+    # map goes through `validate_document`, which is guarded.
+    #
+    # It also cannot be written against the validator this plugin installs:
+    # the shape `is_guard_finding` recognises is produced by `guard_finding`,
+    # which is newer than `VALIDATOR_PIN`, and writing the wording by hand
+    # produces a finding that reads as a REJECTION to that predicate. If a
+    # recursive walker ever becomes reachable from these models, the pin moves
+    # first and the handler is one call.
 
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
