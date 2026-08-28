@@ -92,8 +92,9 @@ DATABASE_PAGE_SIZE = (
     "description already says so: the size is the pipeline runtime's "
     "batching value for every stream. Removed rather than adopted because "
     "the contract has already told authors the knob is inert — adoption "
-    "would honour a value the description promises nothing for, and RULE-"
-    "STRM-039 names the obligation"
+    "would honour a value the description promises nothing for; that "
+    "sentence is the obligation's only statement, and the prose census "
+    "pins it"
 )
 
 
@@ -282,7 +283,8 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "it sits. The field is declared on the shared replication base and "
         "inherited by each variant, so removal here is moving it off the base "
         "onto the incremental variant, which stops the full-refresh resource "
-        "declaring it",
+        "declaring it; RULE-STRM-039 names the obligation the window carries "
+        "where it stays",
     ),
     # --- stream.KeysetDatabasePagination / OffsetDatabasePagination: the
     # tag selects the shape; the size reaches nobody, as the field's own
