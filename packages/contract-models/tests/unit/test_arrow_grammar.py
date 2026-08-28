@@ -589,6 +589,35 @@ class TestRecordedWireSamples:
         (True, None),
         (None, None),
         ({"at": "2024-01-02T03:04:05Z"}, None),
+        # Date-time SHAPED, but no such moment. A `Z` on a thirteenth month
+        # reports nothing about zones, so the reader says so rather than
+        # letting the trailing character stand in for evidence.
+        ("2024-13-45T99:99:99Z", None),
+        ("2024-02-30T00:00:00Z", None),
     ])
     def test_sample_carries_zone(self, sample, expected):
         assert arrow_grammar.sample_carries_zone(sample) is expected
+
+    @pytest.mark.parametrize("sample, expected", [
+        # Impossible moments, each in a different position.
+        ("2024-13-02T03:04:05Z", False),
+        ("2024-02-30T03:04:05Z", False),
+        ("2024-01-02T25:04:05Z", False),
+        ("2024-01-02T03:61:05Z", False),
+        # Real moments, in each spelling the profile admits.
+        ("2024-01-02T03:04:05Z", True),
+        ("2024-01-02t03:04:05,123z", True),
+        ("2024-01-02 03:04", True),
+        ("2024-02-29T00:00:00+05:30", True),
+        # Not date-time shaped at all, so not malformed either — a different
+        # kind of value, which `sample_carries_zone` passes over.
+        ("1712345678", True),
+        ("2024-01-02", True),
+        (None, True),
+        (17, True),
+    ])
+    def test_sample_names_an_instant(self, sample, expected):
+        """The calendar question, asked apart from the zone one. A month of 13
+        is not a zone-naive instant and not a zoned one; it is not an instant,
+        and the two readers answer for their own subject."""
+        assert arrow_grammar.sample_names_an_instant(sample) is expected

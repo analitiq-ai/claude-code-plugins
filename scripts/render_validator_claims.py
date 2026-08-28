@@ -158,7 +158,12 @@ def _record_node(doc: dict) -> dict:
 
     response = doc["operations"]["read"]["response"]
     indexed_ref = "response.body.data"
-    node = response["schema"]["properties"]["data"]["items"]
+    # Reached with `.get`, not indexed: a record that MOVED is exactly the case
+    # this guard exists to report, and indexing it would raise a `KeyError`
+    # naming a dict key instead of the message that tells the author where the
+    # record has to be and how to reach it.
+    node = (response.get("schema", {}).get("properties", {})
+            .get("data", {}).get("items"))
     resolved = resolve_read_record_schema(response, response["schema"])
     # Both halves, because each misses what the other catches: the ref pins
     # WHERE the record is, and a retargeted ref whose new path happens to carry

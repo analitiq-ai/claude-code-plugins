@@ -3188,6 +3188,26 @@ class TestRecordedWireSampleZone:
         with pytest.raises(ValidationError, match="RULE-ENDP-063"):
             parse_endpoint(payload)
 
+    def test_a_sample_naming_no_real_moment_is_refused_not_passed_over(self):
+        """A `Z` on a thirteenth month is not evidence of a zone. Passing it
+        over leaves a temporal declaration whose recorded evidence supports
+        nothing and a clean validation saying so nowhere — and `format` is an
+        annotation the draft does not assert, so nothing else objects."""
+        with pytest.raises(ValidationError) as exc:
+            parse_endpoint(_api_payload_with_field_schema(
+                "updated_at",
+                self._temporal("Timestamp(MICROSECOND, UTC)",
+                               ["2024-13-45T99:99:99Z"])))
+        assert "names no moment that exists" in str(exc.value), exc.value
+
+    def test_a_sample_that_is_not_a_date_time_is_still_passed_over(self):
+        """The calendar check applies to values wearing the date-time shape.
+        An epoch is a different kind of value, not a malformed instant, and
+        the rule's whole point is that silence is absence of evidence."""
+        parse_endpoint(_api_payload_with_field_schema(
+            "updated_at",
+            self._temporal("Timestamp(MICROSECOND, UTC)", ["1712345678"])))
+
     def test_every_disagreeing_sample_is_named(self):
         """Reporting only the first would let an author fix one spelling and
         rerun into the next; the samples disagreeing with each other is the
@@ -3243,7 +3263,12 @@ class TestRecordedWireSampleZone:
 
     def test_a_non_list_examples_value_is_left_to_the_meta_check(self):
         """`examples` must be an array; saying so is the JSON Schema draft's
-        job, and reporting it here too would report it twice."""
+        job, and reporting it here too would report it twice.
+
+        The draft is run by `analitiq-validator`, not by these models — so a
+        consumer holding only the contract package gets no finding for this,
+        the same boundary every other metaschema defect sits on.
+        """
         parse_endpoint(_api_payload_with_field_schema(
             "updated_at",
             {"type": "string", "native_type": "date-time",

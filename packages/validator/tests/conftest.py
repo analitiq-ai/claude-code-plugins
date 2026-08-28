@@ -27,6 +27,13 @@ for _root in (CONTRACTS_SRC_ROOT, VALIDATOR_SRC_ROOT):
         sys.path.insert(0, str(_root))
 
 
+#: The entry points that return findings and are therefore screened. Stated
+#: as data because two things read it: the class below, which wraps exactly
+#: these, and the coverage test, which fails a test module importing one of
+#: them straight from the package and so out from under the wrap.
+SCREENED_ENTRY_POINTS = ("validate_document", "check_coverage")
+
+
 class _ScreenedValidator:
     """The validator package, with `validate_document` screened.
 
@@ -40,8 +47,15 @@ class _ScreenedValidator:
     That is how the ordering guard here came to pass for a while.
 
     So the screen is here rather than in each test: every `validate_document`
-    call refuses a guard finding, and a test that means to provoke one says so
-    with `expect_crash=True`. Forgetting is not an available move.
+    call through this fixture refuses a guard finding, and a test that means to
+    provoke one says so with `expect_crash=True`.
+
+    What the screen cannot reach is a test that imports the entry point from
+    the package instead of taking the fixture. That is not left to memory:
+    :data:`SCREENED_ENTRY_POINTS` names what is wrapped, and a test in
+    `test_screen_coverage.py` fails on a module importing one of those names
+    directly. The out-of-process path — the CLI — is screened at its own helper
+    for the same reason, since no fixture can wrap a subprocess.
     """
 
     def __init__(self, module):
@@ -78,9 +92,10 @@ class _ScreenedValidator:
             self._module.validate_document(*args, **kwargs), expect_crash)
 
     def check_coverage(self, *args, expect_crash: bool = False, **kwargs):
-        """Screened too. It is the other entry point that returns findings, so
-        leaving it to `__getattr__` covered one of the two ways a crash reaches
-        a test."""
+        """Screened too. Every entry point returning findings is wrapped —
+        leaving any of them to `__getattr__` covers some of the ways a crash
+        reaches a test and not the rest, which is the shape that reads as
+        covered."""
         return self._screen(
             self._module.check_coverage(*args, **kwargs), expect_crash)
 

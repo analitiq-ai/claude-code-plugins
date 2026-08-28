@@ -106,7 +106,7 @@ single field looks wrong.
 | RULE-ENDP-033 | Every ref and every `${...}` template placeholder in a request slot MUST lead with one of the resolution scopes the contract declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
-| RULE-ENDP-063 | A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type MUST declare one whose zone-awareness those samples bear out. Recording a sample never obliges a node to declare a type it has no evidence for. | `api-endpoint` | error | validator |
+| RULE-ENDP-063 | A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type MUST declare one whose zone-awareness those samples bear out, and each such sample written as a date-time MUST name a moment that exists. Recording a sample never obliges a node to declare a type it has no evidence for. | `api-endpoint` | error | validator |
 | RULE-ENDP-064 | Every entry a node of an endpoint's response or write-input schema records under `examples` MUST satisfy that node's own declarations. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 

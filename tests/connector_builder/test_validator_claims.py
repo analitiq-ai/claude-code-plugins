@@ -100,6 +100,47 @@ def test_no_fence_names_a_probe_that_does_not_exist() -> None:
     assert not dangling, f"fences name unknown probes: {dangling}"
 
 
+def _move_record_behind_a_ref(response: dict) -> None:
+    """Re-author the record shape as a `$defs` target. `records.ref` still
+    names the same path, so only the value half of the guard can see this."""
+    envelope = response["schema"]
+    envelope["$defs"] = {"Item": envelope["properties"]["data"]["items"]}
+    envelope["properties"]["data"]["items"] = {"$ref": "#/$defs/Item"}
+
+
+def _move_record_to_another_envelope_key(response: dict) -> None:
+    """Move the record elsewhere and point `records.ref` at its new home. The
+    shape at the end is identical, so only the ref half can see this."""
+    envelope = response["schema"]
+    envelope["properties"]["rows"] = envelope["properties"]["data"]
+    response["records"]["ref"] = "response.body.rows"
+
+
+@pytest.mark.parametrize("mutate, expected", [
+    (_move_record_behind_a_ref, "does not resolve to"),
+    (_move_record_to_another_envelope_key, "is no longer the `items` of"),
+])
+def test_the_record_locator_refuses_an_example_whose_record_moved(
+    mutate, expected,
+) -> None:
+    """The positive control for `_record_node`'s guard, which cannot supply one.
+
+    On a green tree the example's record sits exactly where the guard expects,
+    so the whole condition passes on an unbroken document and would pass just
+    as well as `if False:`. Every probe that stamps a field onto the returned
+    node would then be declaring it where the read contract does not look, the
+    `expect="error"` probes would go quiet, and `test_probe_holds` would stay
+    green through all of it.
+
+    Each half is driven separately, because a document breaking both is
+    satisfied by either check alone and pins neither.
+    """
+    doc = _REGISTRY._read_endpoint()
+    mutate(doc["operations"]["read"]["response"])
+    with pytest.raises(RuntimeError, match=expected):
+        _REGISTRY._record_node(doc)
+
+
 def test_a_fence_naming_no_probe_is_reported(monkeypatch, tmp_path: Path) -> None:
     """The positive control for the assertion above, which cannot supply one.
 

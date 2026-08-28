@@ -214,6 +214,43 @@ def test_a_sample_is_graded_through_the_reference_its_node_carries(validator):
     assert "9.99" in errors[0]["message"], errors
 
 
+def test_one_sample_earns_one_finding_however_many_ways_it_fails(validator):
+    """A sample violating several keywords is one defect, reported once — and
+    the reporting stays a list of findings.
+
+    Pinned because `_sample_findings`' return type is what tells a crash from
+    a verdict: the guard around it hands back whatever it returns, and a
+    change to "report every way it fails" that reached for `iter_errors`
+    directly would push raw `ValidationError` objects into the finding stream,
+    where the screen reading `message` off each item meets an attribute that
+    is not there.
+    """
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "minLength": 5, "pattern": "^z", "examples": ["ab"]})
+    errors = _example_errors(validator, ep)
+    assert len(errors) == 1, errors
+    assert all(isinstance(e, dict) for e in errors), errors
+
+
+def test_a_sample_finding_names_the_file_it_came_from(tmp_path, connector_base,
+                                                      validator):
+    """`path` is a pointer into one document and says nothing about which. An
+    author validating a connector holds several endpoint files, so the message
+    carries the label — the half `path` cannot."""
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [7]})
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                {"widgets.json": ep})
+    hits = [f for f in validator.check_coverage(connector_base,
+                                                tmp_path / "connector.json")
+            if f["validator"] == "embedded-schema-example"]
+    assert len(hits) == 1, hits
+    assert "widgets.json" in hits[0]["message"], hits[0]
+
+
 def test_a_write_input_records_samples_too(validator):
     """The other schema an endpoint declares. An implementation grading only
     the read response, or only the first embedded schema it meets, passes every
@@ -241,9 +278,24 @@ def test_a_write_input_records_samples_too(validator):
 def test_a_sample_is_graded_against_its_own_node_not_the_composition(validator):
     """`examples` sits on the node that records it, and that node is what
     grades it — an `allOf` sibling constrains the instances the schema as a
-    whole accepts, not the sample recorded one branch down."""
-    ep = _sample_endpoint({"allOf": [{"type": "integer"}, {"examples": ["x"]}]})
-    assert _example_errors(validator, ep) == []
+    whole accepts, not the sample recorded one branch down.
+
+    Both halves in one document, because either alone passes vacuously: a
+    branch the walk never reaches yields no finding, which is indistinguishable
+    from a branch it reached and let through.
+    """
+    ep = _sample_endpoint({"allOf": [
+        {"type": "integer"},
+        {"examples": ["x"]},
+        {"type": "string", "examples": [1]},
+    ]})
+    errors = _example_errors(validator, ep)
+    # The third branch's sample fails its OWN branch, so the walk demonstrably
+    # descends into `allOf`; the second branch's does not fail anything,
+    # because the sibling `type: integer` is not its node's declaration.
+    assert [e["path"] for e in errors] == [
+        "/operations/read/response/schema/items/properties/a/allOf/2/examples/0"
+    ], errors
 
 
 def test_samples_are_graded_wherever_a_declaration_can_sit(validator):
@@ -307,7 +359,13 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     ep = _sample_endpoint({"$ref": ref, "examples": [1]})
     # The reference is what makes grading raise, so the crash IS the subject.
     findings = validator.validate_document(ep, expect_crash=True)
-    assert any(ref in f["message"] for f in findings), findings
+    crashed = [f for f in findings if is_guard_finding(f)]
+    # Constrained to ONE crash from the sample grading: satisfied by a crash
+    # from any check, this would still pass if the reference brought down
+    # something else and the grading never ran.
+    assert len(crashed) == 1, findings
+    assert crashed[0]["validator"] == "embedded-schema-example", crashed
+    assert ref in crashed[0]["message"], crashed[0]
     assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
 
 
@@ -420,9 +478,10 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
     assert len(crashed) == 1, findings
     assert crashed[0]["validator"] == "embedded-schema-example", crashed
     # What brought it down came out of the author's document, so the finding
-    # must not send them to report a validator bug, and it must say which of
-    # the endpoint's embedded schemas it was.
+    # must not send them to report a validator bug, and it must name the node
+    # it was grading rather than the document as a whole.
     assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
+    assert "/properties/a" in crashed[0]["message"], crashed[0]
     # The sample, not the schema: the guard is per-sample, so the author is
     # pointed at the one value that brought the grading down.
     assert crashed[0]["path"].endswith("/properties/a/examples/0"), crashed[0]
@@ -1181,11 +1240,29 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
 
 def _run_cli(tmp_path, doc, filename="doc.json"):
+    """Run the CLI on `doc`, screened the way the fixture screens the API.
+
+    The CLI is the third way findings reach a test and the one the fixture
+    cannot wrap — it runs out of process. A crash yields exactly the
+    `returncode == 1` / `passed is False` the CLI tests assert, so without
+    this an exit-code test passes on a document nothing actually judged.
+    """
     p = tmp_path / filename
     p.write_text(json.dumps(doc))
     env = {**os.environ, "PYTHONPATH": _CLI_PYTHONPATH, "DOMAIN": "analitiq.ai"}
-    return subprocess.run([sys.executable, "-c", _CLI_CODE, "--document", str(p)],
-                          capture_output=True, text=True, env=env, check=False)
+    result = subprocess.run(
+        [sys.executable, "-c", _CLI_CODE, "--document", str(p)],
+        capture_output=True, text=True, env=env, check=False)
+    try:
+        findings = json.loads(result.stdout).get("findings", [])
+    except (ValueError, AttributeError):
+        return result
+    crashed = [f for f in findings if is_guard_finding(f)]
+    assert not crashed, (
+        "a check crashed inside the CLI, so this test's exit code says "
+        "nothing about what the validator decided:\n"
+        + "\n".join(f["message"] for f in crashed))
+    return result
 
 
 def test_cli_valid_doc_exit0(tmp_path):

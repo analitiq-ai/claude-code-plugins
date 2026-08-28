@@ -53,6 +53,7 @@ from analitiq.contracts.arrow_grammar import (
     ARROW_TYPE_PATTERN,
     declares_zone,
     sample_carries_zone,
+    sample_names_an_instant,
     validate_cross_params,
 )
 from analitiq.contracts.shared.rules import (
@@ -1306,6 +1307,13 @@ def _validate_examples_zone(
     Silence here is the absence of evidence, never evidence of absence — see
     `analitiq.contracts.arrow_grammar.sample_carries_zone`.
 
+    The one sample that is neither is one wearing the date-time shape over a
+    moment that does not exist. Passing it over would leave the author with a
+    temporal declaration whose recorded evidence supports nothing and a clean
+    validation saying so nowhere, so it is refused here instead: what a JSON
+    Schema implementation asserts about `format` is an annotation by default,
+    and the profile this contract grades a temporal on is its own.
+
     Grading every entry rather than the first: `examples` is a list because a
     provider can send more than one shape, and a field whose samples disagree
     with EACH OTHER about zones is the case most worth naming — reporting only
@@ -1313,11 +1321,24 @@ def _validate_examples_zone(
     """
     examples = schema.get("examples")
     if not isinstance(examples, list):
+        # An `examples` that is not an array is a malformed JSON Schema, not a
+        # sample this rule can read. The draft's own metaschema says so, and
+        # `analitiq-validator` runs it — a consumer holding only these models
+        # gets no finding for it, which is the same boundary every other
+        # metaschema defect sits on rather than one this rule opens.
         return
     declared = declares_zone(arrow_value)
     if declared is None:
         return
     for index, example in enumerate(examples):
+        if not sample_names_an_instant(example):
+            errors.append(str(violation("RULE-ENDP-063", (
+                f"{path}.examples[{index}]={example!r} is written as a "
+                "date-time and names no moment that exists, so it bears out "
+                f"nothing about arrow_type={arrow_value!r}. Copy the value the "
+                "provider's own documentation shows, or drop the sample"
+            ))))
+            continue
         carried = sample_carries_zone(example)
         if carried is None or carried == declared:
             continue
@@ -1516,12 +1537,12 @@ def _validate_arrow_type_in_json_schema(
             _validate_arrow_type_in_json_schema(child, f"{path}.{key}", errors)
 
 
-#: The same three inventories in a fixed order, and what every walk over them
+#: The inventories above in a fixed order, and what every walk over them
 #: iterates. A frozenset's order is the interpreter's hash seed, so a walk that
 #: reached one raw ordered its findings — and an author rerunning the validator
-#: on an unchanged document got them back rearranged. Sorting at each of the
-#: nine call sites worked and left the tenth walk free to forget; iterating
-#: these does not.
+#: on an unchanged document got them back rearranged. Sorting at each call site
+#: worked and left the next walk written free to forget; iterating these does
+#: not.
 JSON_SCHEMA_SUBSCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SUBSCHEMA_KEYS))
 JSON_SCHEMA_LIST_OF_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS))
 JSON_SCHEMA_SINGLE_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS))
@@ -1576,8 +1597,8 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     nothing in this module walks with it. Pointers are RFC 6901 escaped, so one
     resolves back to the node it came from even under a property named `a/b`.
 
-    The two error-collecting walkers in this module predate it and stay as they
-    are: both report paths in a dotted spelling rather than as pointers, and
+    The error-collecting walkers in this module predate it and stay as they
+    are: they report paths in a dotted spelling rather than as pointers, and
     `_validate_arrow_type_in_json_schema` re-enters on a non-dict child to
     report a malformed schema position, which a yielding traversal cannot do.
     """

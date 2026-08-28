@@ -268,68 +268,98 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     non-2020-12 `$schema` explicitly. An absent `$schema` is allowed (the engine
     reads these as 2020-12; a valid authored write `input.schema` may omit it).
 
-    `jsonschema` is imported lazily HERE, not at module load: some callers import
-    `analitiq.validator` only to run `validate_pipeline_bundle` and never reach
-    this api-endpoint path, so a module-level import would force `jsonschema` onto
-    every consumer even where it is not installed. Only endpoint meta-validation
-    needs it."""
-    from jsonschema import Draft202012Validator
-    from jsonschema.exceptions import SchemaError
-
+    `jsonschema` is imported lazily inside the per-schema helpers below, not at
+    module load: some callers import `analitiq.validator` only to run
+    `validate_pipeline_bundle` and never reach this api-endpoint path, so a
+    module-level import would force `jsonschema` onto every consumer even where
+    it is not installed. Only endpoint meta-validation needs it."""
     findings: list[dict] = []
     for pointer, schema in _embedded_json_schemas(ep_doc):
         if not isinstance(schema, dict):
             continue
         where = f"{label}{pointer}" if label else pointer
-        # A non-STRING `$schema` is malformed, not another draft — the same
-        # reading the nested check below applies. Without the type test this
-        # reported `$schema 7` as a draft mismatch and `continue`d past
-        # `check_schema`, hiding the metaschema error that names the defect.
-        declared = schema.get("$schema")
-        if isinstance(declared, str) and declared != _DRAFT_2020_12_SCHEMA:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} declares $schema {declared!r}; the "
-                f"contract requires JSON Schema Draft 2020-12 "
-                f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
-            continue
-        # A DIFFERENT draft below the top level, which is the same obligation
-        # RULE-ENDP-048 states of the root and the same harm: `evolve` calls
-        # `validator_for(node)`, so a subschema naming another draft is graded
-        # under that draft while this contract and the engine read the whole
-        # document as 2020-12. A subschema repeating the draft the document is
-        # already in is redundant, not wrong, and refusing it would be an
-        # obligation no rule states — the rendered reference an author
-        # satisfies says only that a different draft is forbidden.
-        # Same reading as the root branch above: a non-string value is
-        # malformed rather than another draft, so it falls through to
-        # `check_schema`, which names it.
-        nested = sorted(
-            node_pointer
-            for node_pointer, node in iter_schema_nodes(schema)
-            if node_pointer
-            and isinstance(node.get("$schema"), str)
-            and node["$schema"] != _DRAFT_2020_12_SCHEMA
-        )
-        if nested:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} declares another draft at "
-                f"{', '.join(nested)}. A JSON Schema implementation switches "
-                "to it for that subtree, while this contract and the engine "
-                f"read the whole document in {_DRAFT_2020_12_SCHEMA!r} — so "
-                "the subtree is graded against keywords that mean something "
-                "else there. Declare the draft once at the top, or not at all"))
-            continue
-        try:
-            Draft202012Validator.check_schema(schema)
-        except SchemaError as exc:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} is not a valid JSON Schema Draft "
-                f"2020-12 document: {exc.message}"))
-            continue
-        findings.extend(_schema_example_findings(schema, pointer, where))
+        # Guarded per SCHEMA, outside the per-sample guards nested within.
+        # Everything below walks and compiles author-supplied structure before
+        # any sample is reached — the recursive node walk, the metaschema
+        # compile — and a raise there escapes to the dispatch guard, which
+        # replaces every finding on the document with one line. That is the
+        # failure the inner guard was added to prevent, one scope out.
+        findings.extend(_run_guarded(
+            _one_embedded_schema_findings, schema, pointer, where,
+            vid="embedded-json-schema",
+            path=pointer,
+            blame=(
+                f"the embedded schema at {where} could not be read far enough "
+                "to check. Its structure takes the walk somewhere it cannot "
+                "come back from — a nesting deeper than this tool unwinds, or "
+                "a size it cannot hold. Every other schema on this document "
+                "was still checked"
+            )))
+    return findings
+
+
+def _one_embedded_schema_findings(
+    schema: dict, pointer: str, where: str,
+) -> list[dict]:
+    """One embedded schema: its draft, its metaschema validity, its samples.
+
+    Imported lazily for the reason its caller states; the module is already
+    in `sys.modules` by the time this runs, so the name lookup is what
+    repeats, not the import.
+    """
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import SchemaError
+
+    findings: list[dict] = []
+    # A non-STRING `$schema` is malformed, not another draft — the same
+    # reading the nested check below applies. Without the type test this
+    # reported `$schema 7` as a draft mismatch and `continue`d past
+    # `check_schema`, hiding the metaschema error that names the defect.
+    declared = schema.get("$schema")
+    if isinstance(declared, str) and declared != _DRAFT_2020_12_SCHEMA:
+        findings.append(finding(
+            "embedded-json-schema", "error", pointer,
+            f"embedded schema at {where} declares $schema {declared!r}; the "
+            f"contract requires JSON Schema Draft 2020-12 "
+            f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
+        return findings
+    # A DIFFERENT draft below the top level, which is the same obligation
+    # RULE-ENDP-048 states of the root and the same harm: `evolve` calls
+    # `validator_for(node)`, so a subschema naming another draft is graded
+    # under that draft while this contract and the engine read the whole
+    # document as 2020-12. A subschema repeating the draft the document is
+    # already in is redundant, not wrong, and refusing it would be an
+    # obligation no rule states — the rendered reference an author
+    # satisfies says only that a different draft is forbidden.
+    # Same reading as the root branch above: a non-string value is
+    # malformed rather than another draft, so it falls through to
+    # `check_schema`, which names it.
+    nested = sorted(
+        node_pointer
+        for node_pointer, node in iter_schema_nodes(schema)
+        if node_pointer
+        and isinstance(node.get("$schema"), str)
+        and node["$schema"] != _DRAFT_2020_12_SCHEMA
+    )
+    if nested:
+        findings.append(finding(
+            "embedded-json-schema", "error", pointer,
+            f"embedded schema at {where} declares another draft at "
+            f"{', '.join(nested)}. A JSON Schema implementation switches "
+            "to it for that subtree, while this contract and the engine "
+            f"read the whole document in {_DRAFT_2020_12_SCHEMA!r} — so "
+            "the subtree is graded against keywords that mean something "
+            "else there. Declare the draft once at the top, or not at all"))
+        return findings
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError as exc:
+        findings.append(finding(
+            "embedded-json-schema", "error", pointer,
+            f"embedded schema at {where} is not a valid JSON Schema Draft "
+            f"2020-12 document: {exc.message}"))
+        return findings
+    findings.extend(_schema_example_findings(schema, pointer, where))
     return findings
 
 
@@ -421,7 +451,8 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                     "implementation somewhere it cannot come back from — a "
                     "reference that leads back to itself, or a value a keyword "
                     "cannot compute against. Every other sample on this "
-                    "document was still graded"
+                    "document was still attempted — one that reaches the same "
+                    "construct reports the same way"
                 )))
     return findings
 

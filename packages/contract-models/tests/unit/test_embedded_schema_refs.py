@@ -1250,7 +1250,13 @@ class TestKeywordVocabularyHasOneOwner:
         A module global holding any keyword of the vocabulary is reported, and
         one that IS the contract's own object is not — importing the owner is
         the prescribed form, restating it is the defect, and equality alone
-        cannot tell them apart. What this cannot see is a copy that has already
+        cannot tell them apart.
+
+        Every collection spelling is inspected, not just the set ones: the
+        contract publishes each bucket in two forms, an unordered one and a
+        sorted tuple every walk iterates, so a copy written in the shape the
+        contract's own callers use would otherwise be the one shape this
+        cannot see. What it still cannot see is a copy that has already
         diverged past sharing any keyword at all; that a walker still recurses
         where the contract's does is the reader's, and the neighbouring
         `test_rendered_node_*` cases pin the surface the copy would show up on.
@@ -1262,15 +1268,20 @@ class TestKeywordVocabularyHasOneOwner:
         owned = (ep.JSON_SCHEMA_SUBSCHEMA_KEYS
                  | ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
                  | ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS)
+        owners = (
+            ep.JSON_SCHEMA_SUBSCHEMA_KEYS,
+            ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+            ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+            ep.JSON_SCHEMA_SUBSCHEMA_ORDER,
+            ep.JSON_SCHEMA_LIST_OF_SCHEMA_ORDER,
+            ep.JSON_SCHEMA_SINGLE_SCHEMA_ORDER,
+        )
         restated = sorted(
             name for name, value in vars(vc).items()
-            if isinstance(value, (frozenset, set))
-            and value & owned
-            and not any(value is bucket for bucket in (
-                ep.JSON_SCHEMA_SUBSCHEMA_KEYS,
-                ep.JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
-                ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
-            ))
+            if isinstance(value, (frozenset, set, tuple, list))
+            and all(isinstance(member, str) for member in value)
+            and set(value) & owned
+            and not any(value is bucket for bucket in owners)
         )
         assert not restated, (
             f"{restated} restate keywords the contract owns; walk with "
