@@ -50,8 +50,14 @@ def _validator_modules() -> frozenset[str]:
     calling into one.
     """
     package = VALIDATOR_SRC_ROOT / "analitiq" / "validator"
-    modules = {f"analitiq.validator.{path.stem}"
-               for path in package.glob("*.py") if path.stem != "__init__"}
+    # `rglob`: a subpackage is as importable as a top-level module, and the
+    # non-empty guard below cannot see one missing — it is satisfied by the
+    # flat modules that will always be there.
+    modules = {
+        "analitiq.validator." + ".".join(
+            path.relative_to(package).with_suffix("").parts)
+        for path in package.rglob("*.py") if path.stem != "__init__"
+    }
     assert modules, (
         f"no modules found under {package} — this walk is reading nothing and "
         "would report agreement over an empty set"

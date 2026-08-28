@@ -1465,7 +1465,38 @@ def _release_table():
     return module
 
 
+def render_unfinished_check() -> str:
+    """How to read a finding that is a crash rather than a verdict.
+
+    Generated because every word of it is a fact about `_run_guarded`: the
+    opening it writes, and the two causes it chooses between. A probe cannot
+    carry this one — `run_probe` treats any guard finding as a probe failure,
+    by design, since a crash proves no claim in either direction — so the
+    rung above it is where the claim goes.
+    """
+    from analitiq.validator._core import (
+        GUARD_DEFAULT_BLAME,
+        GUARD_RESOURCE_BLAME,
+        _guard_opening,
+    )
+
+    opening = _guard_opening("<id>")
+    return "\n".join([
+        f"   A finding whose message opens `{opening}` is a check that",
+        "   could not finish, not a verdict — nothing was decided about what it",
+        "   points at, in either direction, and the run carried on past it. What",
+        "   follows that opening says whose the cause is:",
+        "",
+        f"   - `{GUARD_DEFAULT_BLAME}` — this tool's, and worth reporting.",
+        f"   - `{GUARD_RESOURCE_BLAME.split('.')[0]}.` — the document's size.",
+        "   - anything else — the document's own content, described by the check",
+        "     that was reading it.",
+        "",
+    ])
+
+
 _DEDICATED_RENDERERS: dict[str, Callable[[], str]] = {
+    "unfinished-check": render_unfinished_check,
     "scope-guarantees": render_scope_guarantees,
     "validator-blind-spots": render_validator_blind_spots,
     "native-normalization": render_native_normalization,
@@ -1487,6 +1518,14 @@ def block_probe_ids(block_id: str) -> set[str]:
     """The probe ids one block stands on."""
     if block_id in _release_table().RENDERERS:
         return set()  # data-backed, not probe-backed — see `_release_table`
+    if block_id == "unfinished-check":
+        # Code-backed, not probe-backed: every word is rendered from the
+        # guard's own opening and its two causes, so it moves with them by
+        # construction. A probe could not carry it either way — `run_probe`
+        # treats any guard finding as a probe failure, since a crash proves no
+        # claim in either direction, so a probe expecting one cannot be
+        # written without inverting that.
+        return set()
     if block_id == "native-normalization":
         # Contract-backed: the rows are what `normalize_native_type` returns,
         # so the function is the pin. No validator behavior is asserted.

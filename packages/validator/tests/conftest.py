@@ -31,7 +31,9 @@ for _root in (CONTRACTS_SRC_ROOT, VALIDATOR_SRC_ROOT):
 #: as data because two things read it: the class below, which wraps exactly
 #: these, and the coverage test, which fails a test module importing one of
 #: them straight from the package and so out from under the wrap.
-SCREENED_ENTRY_POINTS = ("validate_document", "check_coverage")
+SCREENED_ENTRY_POINTS = (
+    "validate_document", "check_coverage", "validate_pipeline_bundle",
+)
 
 #: The name shapes of every OTHER function that returns findings — a per-kind
 #: validator, and anything ending `_findings`. Reaching one of those directly
@@ -109,6 +111,13 @@ class _ScreenedValidator:
     def validate_document(self, *args, expect_crash: bool = False, **kwargs):
         return self._screen(
             self._module.validate_document(*args, **kwargs), expect_crash)
+
+    def validate_pipeline_bundle(self, *args, expect_crash: bool = False, **kwargs):
+        """Screened too. Its name matches neither shape below, so
+        `__getattr__` would hand it back raw — and it is public, which is the
+        spelling every bundle test actually uses."""
+        return self._screen(
+            self._module.validate_pipeline_bundle(*args, **kwargs), expect_crash)
 
     def check_coverage(self, *args, expect_crash: bool = False, **kwargs):
         """Screened too. Every entry point returning findings is wrapped —

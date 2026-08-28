@@ -1356,7 +1356,7 @@ def _validate_examples_zone(
 
 
 def _validate_arrow_type_in_json_schema(
-    schema: Any, path: str, errors: list[str]
+    schema: Any, path: str, errors: list[str], negated: bool = False,
 ) -> None:
     """Walk a JSON Schema document and enforce arrow_type contract rules.
 
@@ -1415,7 +1415,15 @@ def _validate_arrow_type_in_json_schema(
                 errors.append(
                     f"{path}.arrow_type: {exc} (spec: §Native and Arrow Types)"
                 )
-            _validate_examples_zone(schema, arrow_value, path, errors)
+            if not negated:
+                # Under `not` / `if` / `propertyNames` the declaration
+                # describes what the value must NOT be, so a sample recorded
+                # there is the author's counter-example and grading it reports
+                # their right answer as a contradiction. The same reading
+                # RULE-ENDP-064 applies, applied by the rule that shares its
+                # subject — a sample is evidence about a declaration, or it is
+                # not, and which layer reads it cannot change the answer.
+                _validate_examples_zone(schema, arrow_value, path, errors)
     if has_native ^ has_arrow:
         missing = "arrow_type" if has_native else "native_type"
         errors.append(
@@ -1515,19 +1523,23 @@ def _validate_arrow_type_in_json_schema(
         if isinstance(child, dict):
             for sub_key, sub_schema in child.items():
                 _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}.{sub_key}", errors
+                    sub_schema, f"{path}.{key}.{sub_key}", errors, negated
                 )
     for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}[{idx}]", errors
+                    sub_schema, f"{path}.{key}[{idx}]", errors, negated
                 )
     for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
             continue
         child = schema[key]
+        # The negating positions all live in this inventory, pinned by
+        # `test_every_negating_key_is_a_single_schema_position`, so this is
+        # the only loop that can set the flag.
+        under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
         # Draft 2019-09 tuple-form `items: [...]` is still authored in
         # parts of the catalog; iterate per position. Draft 2020-12 uses
         # `prefixItems` for the same purpose (handled by the list-keyword
@@ -1535,10 +1547,11 @@ def _validate_arrow_type_in_json_schema(
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}[{idx}]", errors
+                    sub_schema, f"{path}.{key}[{idx}]", errors, under
                 )
         else:
-            _validate_arrow_type_in_json_schema(child, f"{path}.{key}", errors)
+            _validate_arrow_type_in_json_schema(
+                child, f"{path}.{key}", errors, under)
 
 
 #: The inventories above in a fixed order, and what every walk over them
@@ -1551,12 +1564,13 @@ def _validate_arrow_type_in_json_schema(
 #: the instance: `not` and `if` describe what it must not be or what selects a
 #: branch, and `propertyNames` constrains the KEYS rather than any value. A
 #: consumer asking "does this node's declaration apply to this value" has to
-#: know the difference — RULE-ENDP-064 grades a recorded sample against "that
-#: node's own declarations", and under one of these those declarations
-#: describe the value's opposite, so the correct counter-example reads as a
-#: contradiction. Owned here because it is a fact about the draft's
-#: applicators, the same as the sets above, and the validator that needs it
-#: would otherwise keep a second copy of three of their members.
+#: know the difference — RULE-ENDP-063 and RULE-ENDP-064 both grade a recorded
+#: sample against the declaration it sits on, and under one of these positions
+#: that declaration describes the value's opposite, so the correct
+#: counter-example reads as a contradiction. Owned here because it is a fact
+#: about the draft's applicators, the same as the sets above, and because the
+#: walks that need it are here: both read it, and neither restates which
+#: keywords it holds.
 JSON_SCHEMA_NEGATED_SCHEMA_KEYS: frozenset[str] = frozenset({
     "not", "if", "propertyNames",
 })
@@ -1638,21 +1652,24 @@ def iter_schema_nodes(
     for key in JSON_SCHEMA_SUBSCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, dict):
-            under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
             for name, sub in child.items():
                 yield from iter_schema_nodes(
-                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}", under)
+                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}",
+                    negated)
     for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, list):
-            under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
             for index, sub in enumerate(child):
                 yield from iter_schema_nodes(
-                    sub, f"{pointer}/{key}/{index}", under)
+                    sub, f"{pointer}/{key}/{index}", negated)
     for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
             continue
         child = schema[key]
+        # The only loop that can set it: every negating position is a
+        # single-schema keyword, pinned by
+        # `test_every_negating_key_is_a_single_schema_position`. Testing for
+        # them in the other two would read as live logic that never fires.
         under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
         # Draft 2019-09 tuple-form `items: [...]`, as elsewhere here.
         if isinstance(child, list):

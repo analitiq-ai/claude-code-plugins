@@ -3836,7 +3836,7 @@
   },
   {
    "id": "RULE-ENDP-063",
-   "statement": "A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type whose family carries a timezone position MUST declare one whose zone-awareness those samples bear out, and each such sample written as a date-time MUST name a moment that exists. Recording a sample never obliges a node to declare a type it has no evidence for.\n",
+   "statement": "A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type whose family carries a timezone position MUST declare one whose zone-awareness those samples bear out, and each such sample written as a date-time MUST name a moment that exists. A node reached through a position that describes what an instance must NOT be is exempt: the sample recorded there is a counter-example. Recording a sample never obliges a node to declare a type it has no evidence for.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3861,7 +3861,7 @@
   },
   {
    "id": "RULE-ENDP-064",
-   "statement": "Every entry a node of an endpoint's response or write-input schema records under `examples` MUST satisfy that node's own declarations.\n",
+   "statement": "Every entry a node of an endpoint's response or write-input schema records under `examples` MUST satisfy that node's own declarations, unless the node is reached through a position that describes what an instance must NOT be — where the sample is a counter-example, and satisfying the declaration beside it would be the defect.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
