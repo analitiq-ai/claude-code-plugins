@@ -14,8 +14,9 @@ currently true.
 One disposition per kind of consumer an unread field may have:
 
 - ``authoring_only`` — the field is consumed off the run-time path by design:
-  by a person reading the document, by plugin prose, by the validator, or by
-  the schema renderer. The ``reason`` names that consumer.
+  by a person reading the document, by plugin prose, by the validator, by
+  the registry service's save-time checks, or by the schema renderer. The
+  ``reason`` names that consumer.
 - ``structural`` — the model's own parsing consumes it: a discriminator the
   union dispatches on, a literal the schema pins. No attribute read exists
   because pydantic settled the value before the engine held the object.

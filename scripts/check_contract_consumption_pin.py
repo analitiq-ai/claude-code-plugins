@@ -133,7 +133,7 @@ def _read_vendored() -> bytes:
         raise GuardError(
             f"cannot read the vendored manifest {pin.MANIFEST_PATH}: {exc} — "
             "re-vendor the published object — the procedure is the pin-bump "
-            "section of .claude/rules/reachability-dispositions.md"
+            "section of `.claude/rules/reachability-dispositions.md`"
         ) from exc
 
 
@@ -179,9 +179,11 @@ def check_offline() -> list[str]:
     ]
 
 
-def check_published(failures: list[str]) -> list[str]:
+def check_published(failures: list[str]) -> tuple[list[str], bool]:
     """Steps 2-3 — the published object and pointer vs the pin. Returns
-    notices.
+    notices and whether the pointer's sha was held to the pin — it is only
+    when the pointer names the pinned version, and the success banner must
+    not claim a comparison that did not run.
 
     Divergences are APPENDED to the caller's `failures` rather than returned,
     so a `GuardError` raised by a later check cannot discard the definite
@@ -191,6 +193,7 @@ def check_published(failures: list[str]) -> list[str]:
     invites a CI reader to retry it as a flake forever.
     """
     notices: list[str] = []
+    pointer_sha_compared = False
 
     url = _pinned_url()
     published = _fetch(url)
@@ -217,12 +220,13 @@ def check_published(failures: list[str]) -> list[str]:
             f"is v{pin.CONSUMPTION_VERSION} — the census still grades against "
             "a manifest the engine published; adopt deliberately via a pin "
             "bump — the procedure is the pin-bump section of "
-            ".claude/rules/reachability-dispositions.md"
+            "`.claude/rules/reachability-dispositions.md`"
         )
     elif latest_v == pinned_v:
         # The pointer names the pinned version, so it must name the pinned
         # bytes too. A newer pointer is not held to anything: the pin says
         # nothing about bytes it does not vendor.
+        pointer_sha_compared = True
         pointer_sha = pointer.get(pin.POINTER_SHA256_KEY)
         if not isinstance(pointer_sha, str):
             raise GuardError(
@@ -254,7 +258,7 @@ def check_published(failures: list[str]) -> list[str]:
             "Re-check after the TTL and repair the pointer if it persists — "
             "re-vendoring does not fix the pointer"
         )
-    return notices
+    return notices, pointer_sha_compared
 
 
 def _report(failures: list[str]) -> None:
@@ -295,10 +299,12 @@ def main(argv: list[str] | None = None) -> int:
     # what was already found (see `_report`).
     failures: list[str] = []
     notices: list[str] = []
+    pointer_sha_compared = False
     try:
         failures.extend(check_offline())
         if not args.offline and not failures:
-            notices.extend(check_published(failures))
+            published_notices, pointer_sha_compared = check_published(failures)
+            notices.extend(published_notices)
     except GuardError as exc:
         _report(failures)
         print(
@@ -328,11 +334,12 @@ def main(argv: list[str] | None = None) -> int:
     if failures:
         _report(failures)
         return 1
-    scope = (
-        "offline hash + shape + declared version"
-        if args.offline
-        else "published object + hash + shape + declared version + latest pointer + pointer sha"
-    )
+    if args.offline:
+        scope = "offline hash + shape + declared version"
+    else:
+        scope = "published object + hash + shape + declared version + latest pointer"
+        if pointer_sha_compared:
+            scope += " + pointer sha"
     print(
         f"contract-consumption pin OK ({scope}): "
         f"{pin.CONSUMPTION_RESOURCE} v{pin.CONSUMPTION_VERSION}"

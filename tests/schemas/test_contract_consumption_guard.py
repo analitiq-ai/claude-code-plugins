@@ -56,12 +56,14 @@ def _pointer(guard, latest, sha256=None) -> bytes:
     ).encode()
 
 
-def _stub_fetch(guard, monkeypatch, *, latest, object_bytes=None, latest_bytes=None):
+def _stub_fetch(guard, monkeypatch, *, latest=None, object_bytes=None, latest_bytes=None):
     """Healthy by default: the published object IS the vendored bytes and the
     pointer names the pin, version and sha256. `object_bytes` expresses a
     divergent republish — step 2 is the check the whole guard exists for, so
     it must be expressible here; `latest_bytes` expresses a pointer document
-    a test shapes itself."""
+    a test shapes itself, and replaces `latest` rather than joining it."""
+    if (latest is None) == (latest_bytes is None):
+        raise TypeError("pass exactly one of latest= and latest_bytes=")
     urls = _urls(guard)
     responses = {
         urls["object"]: _vendored_bytes(guard) if object_bytes is None else object_bytes,
@@ -92,13 +94,13 @@ def test_newer_engine_publication_is_a_notice_not_a_failure(guard, monkeypatch, 
 def test_newer_pointer_with_a_different_sha_is_still_a_notice(guard, monkeypatch, capsys):
     """The pin says nothing about bytes it does not vendor: a newer pointer
     naming its own sha is the notice, never the sha divergence."""
-    _stub_fetch(
-        guard, monkeypatch, latest="9.0.0", latest_bytes=_pointer(guard, "9.0.0", "f" * 64)
-    )
+    _stub_fetch(guard, monkeypatch, latest_bytes=_pointer(guard, "9.0.0", "f" * 64))
     assert guard.main([]) == 0
     out, err = capsys.readouterr()
     assert "engine has published v9.0.0" in out
     assert "different bytes" not in err
+    # The sha comparison did not run, so the banner must not claim it.
+    assert "pointer sha" not in out
 
 
 def test_pointer_at_the_pin_naming_different_bytes_is_a_divergence(
@@ -109,7 +111,6 @@ def test_pointer_at_the_pin_naming_different_bytes_is_a_divergence(
     _stub_fetch(
         guard,
         monkeypatch,
-        latest=guard.pin.CONSUMPTION_VERSION,
         latest_bytes=_pointer(guard, guard.pin.CONSUMPTION_VERSION, "f" * 64),
     )
     assert guard.main([]) == 1
@@ -130,7 +131,6 @@ def test_pointer_at_the_pin_without_string_sha_is_a_guard_error(
     _stub_fetch(
         guard,
         monkeypatch,
-        latest=guard.pin.CONSUMPTION_VERSION,
         latest_bytes=json.dumps(document).encode(),
     )
     assert guard.main([]) == 2
@@ -208,14 +208,14 @@ def test_fetch_failure_is_a_guard_error(guard, monkeypatch, capsys):
 
 
 def test_malformed_pointer_json_is_a_guard_error(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, latest="unused", latest_bytes=b"{not json")
+    _stub_fetch(guard, monkeypatch, latest_bytes=b"{not json")
     assert guard.main([]) == 2
     err = capsys.readouterr().err
     assert "could not run" in err and "not valid JSON" in err
 
 
 def test_pointer_that_is_not_an_object_is_a_guard_error(guard, monkeypatch, capsys):
-    _stub_fetch(guard, monkeypatch, latest="unused", latest_bytes=b'["0.3.0"]')
+    _stub_fetch(guard, monkeypatch, latest_bytes=b'["0.3.0"]')
     assert guard.main([]) == 2
     assert "expected object" in capsys.readouterr().err
 
@@ -227,7 +227,6 @@ def test_pointer_without_string_version_is_a_guard_error(
     _stub_fetch(
         guard,
         monkeypatch,
-        latest="unused",
         latest_bytes=json.dumps({"version": version}).encode(),
     )
     assert guard.main([]) == 2

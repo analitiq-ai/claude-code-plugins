@@ -60,7 +60,7 @@ def test_vendored_manifest_hashes_to_the_pin():
     assert digest == pin.CONSUMPTION_SHA256, (
         f"vendored {pin.MANIFEST_PATH.name} hashes to {digest}, but the pin "
         f"says {pin.CONSUMPTION_SHA256}. The procedure is the pin-bump "
-        "section of .claude/rules/reachability-dispositions.md."
+        "section of `.claude/rules/reachability-dispositions.md`."
     )
 
 

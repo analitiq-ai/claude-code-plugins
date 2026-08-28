@@ -17,7 +17,7 @@ vendored bytes against the pin and checks the document's self-declared
 version, offline, so an edited or swapped copy fails in any plain pytest run;
 the CI guard fetches the published object and byte-compares it against the
 vendored copy, so a withdrawn pin leaves the guard unable to run (its exit-2
-verdict), a superseded one surfaces as a notice.
+verdict), and a superseded one surfaces as a notice.
 
 The envelope, and why each key is read the way it is:
 

@@ -87,10 +87,12 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "validation failure on that assignment to follow it; the pinned manifest "
     "claims no read of the override, so a validation failure follows the "
     "pipeline runtime's error handling — the outcome RULE-STRM-040 tells "
-    "authors to expect. Removal follows that record: its statement says the "
-    "block MUST NOT be authored as the policy, and its rationale that the "
-    "run never consults it, so adoption would honour a knob the registry "
-    "already tells authors not to set"
+    "authors to expect. The record leaves adopt-or-drop to the owners of "
+    "both sides; until they decide, the entry sits here because the record's "
+    "statement already tells authors not to author the block as the policy "
+    "and its rationale that the run never consults it — a knob nothing "
+    "honours and, as the contract stands, nothing should. A decision to "
+    "adopt moves these entries to engine_gap"
 )
 
 #: The page size of a database pagination variant.
@@ -147,11 +149,11 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition(
         "endpoints.Param", "operators", "authoring_only",
-        "read by the registry's on-save comparison of a stream's filter "
-        "operators against the subset this param declares (RULE-STRM-026 "
-        "names the obligation); the pinned manifest claims no read of the "
-        "set, so the run sends the filter with whatever operator the stream "
-        "declares, the save having already refused one outside the set",
+        "read by the registry service's on-save comparison of a stream's "
+        "filter operators against the subset this param declares "
+        "(RULE-STRM-026 names the obligation); the pinned manifest claims no "
+        "read of the set, so the run sends the filter with whatever operator "
+        "the stream declares",
     ),
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
