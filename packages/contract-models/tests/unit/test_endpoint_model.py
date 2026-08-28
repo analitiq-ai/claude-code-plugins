@@ -3217,7 +3217,8 @@ class TestRecordedWireSampleZone:
                                  ["2024-01-02T03:04:05"])}))
 
     @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
-    @pytest.mark.parametrize("descent", ["properties", "anyOf", "items"])
+    @pytest.mark.parametrize(
+        "descent", ["properties", "anyOf", "items", "items[]"])
     def test_the_exemption_reaches_below_the_negating_position(self, key, descent):
         """The flag is set where the walk descends into one of these and is
         carried down from there. Pinned separately from where it is SET,
@@ -3237,8 +3238,33 @@ class TestRecordedWireSampleZone:
             "properties": {"type": "object", "properties": {"inner": inner}},
             "anyOf": {"anyOf": [inner]},
             "items": {"type": "array", "items": inner},
+            # Draft 2019-09 tuple form, which the walker's own comment says is
+            # still authored here — a second arm of the single-schema loop,
+            # and the one carry site the shape parametrisation missed.
+            "items[]": {"type": "array", "items": [inner]},
         }[descent]
         parse_endpoint(_api_payload_with_field_schema("updated_at", {key: below}))
+
+    @pytest.mark.parametrize("node", [
+        {"allOf": [{"type": "string"}, {"type": "integer"}],
+         "examples": ["x"]},
+        {"$ref": "#/$defs/Ring", "examples": ["x"]},
+    ], ids=["unsatisfiable", "ring"])
+    def test_a_node_that_cannot_be_folded_is_not_refused_by_this_rule(self, node):
+        """Folding raises on these, and the walk around it accumulates errors
+        and raises once at the end — so a raise here discarded every error
+        already found and refused the document under a message carrying no
+        path. It also made a SAMPLE decide it: the identical node without
+        `examples` is accepted, so whether a field records wire evidence
+        settled a satisfiability question it has nothing to do with.
+
+        Neither is this rule's subject. Not graded, and not refused — unlike a
+        reference that leads NOWHERE, which RULE-ENDP-026 refuses with the
+        pointer that does not resolve, because that one has an owner."""
+        payload = _api_payload_with_field_schema("updated_at", node)
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Ring": {"$ref": "#/$defs/Ring"}}
+        parse_endpoint(payload)
 
     @pytest.mark.parametrize("shape", ["$ref", "allOf"])
     def test_a_sample_is_graded_against_a_type_one_fold_away(self, shape):
@@ -3260,6 +3286,22 @@ class TestRecordedWireSampleZone:
         })
         with pytest.raises(ValidationError, match="RULE-ENDP-063"):
             parse_endpoint(payload)
+
+    def test_an_unreadable_sample_does_not_stop_the_ones_after_it(self):
+        """Grading every entry rather than the first is what lets an author fix
+        a list in one pass. An impossible instant is reported and the walk
+        carries on — turning that `continue` into a `return` left the rest of
+        the list ungraded with the suite green."""
+        with pytest.raises(ValidationError) as exc:
+            parse_endpoint(_api_payload_with_field_schema(
+                "updated_at",
+                self._temporal("Timestamp(MICROSECOND, UTC)", [
+                    "2024-13-45T99:99:99Z",
+                    "2024-01-02T03:04:05",
+                ])))
+        message = str(exc.value)
+        assert "names no moment that exists" in message, message
+        assert "carries no zone" in message, message
 
     def test_a_sample_that_is_not_a_date_time_is_still_passed_over(self):
         """The calendar check applies to values wearing the date-time shape.

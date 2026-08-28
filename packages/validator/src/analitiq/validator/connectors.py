@@ -319,11 +319,23 @@ def _one_embedded_schema_findings(
             f"embedded schema at {where} declares $schema {declared!r}; the "
             f"contract requires JSON Schema Draft 2020-12 "
             f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
-        # Reported and carried on with. `check_schema` and the sample grading
-        # below both read this document as 2020-12 whatever its `$schema` says,
-        # and 2020-12 is the draft the author has to reach — so their findings
-        # are the ones that will still stand after the declaration is fixed.
-        # Stopping here would hand the author one defect per rerun.
+        # Reported, then `check_schema` — which grades against this class's
+        # own metaschema whatever the document declares, so its findings stand
+        # after the declaration is fixed and withholding them would cost a
+        # rerun. Sample grading is withheld, for the reason the nested branch
+        # below states: `evolve` reads `$schema` off the node it is handed, and
+        # at the ROOT that node is this schema — so a foreign draft there is
+        # picked up and every sample in the document is graded under it. A
+        # `prefixItems` violation goes unreported under draft-07, which does
+        # not have the keyword.
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError as exc:
+            findings.append(finding(
+                "embedded-json-schema", "error", pointer,
+                f"embedded schema at {where} is not a valid JSON Schema Draft "
+                f"2020-12 document: {exc.message}"))
+        return findings
     # A DIFFERENT draft below the top level, which is the same obligation
     # RULE-ENDP-048 states of the root and the same harm: `evolve` calls
     # `validator_for(node)`, so a subschema naming another draft is graded
@@ -467,8 +479,9 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                 blame=(
                     "something the node reaches takes the JSON Schema "
                     "implementation somewhere it cannot come back from — a "
-                    "reference that leads back to itself, or a value a keyword "
-                    "cannot compute against."
+                    "value a keyword cannot compute against, say. (A "
+                    "reference that leads back to itself exhausts the stack "
+                    "instead, and reports as a size.)"
                 ),
                 scope=(
                     f"The recorded sample at {at} was not graded; every other "

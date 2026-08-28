@@ -1355,6 +1355,36 @@ def _validate_examples_zone(
         ))))
 
 
+def _folded_arrow_type(schema: dict, root: Any) -> str | None:
+    """The canonical type this node declares one fold away, or None.
+
+    None for a node with nothing to fold, and None when the fold cannot be
+    done. Folding raises on a node whose contributors contradict each other and
+    on a reference chain deeper than the interpreter unwinds — neither of which
+    is this rule's subject, and neither of which the walk around this can
+    survive: it accumulates errors and raises once at the end, so a raise here
+    discards every error already found and refuses the document under a message
+    that carries no path.
+
+    Refusing here would also make a SAMPLE decide it. The identical
+    unsatisfiable node without `examples` is accepted by this walker, and
+    whether a field records wire evidence is not what should settle a
+    satisfiability question. So the answer is the one this rule gives
+    everywhere it cannot read something: no declaration reached, nothing
+    graded, and no claim that the node is fine. A reference that leads NOWHERE
+    is not in this list — RULE-ENDP-026 refuses that one with the pointer that
+    does not resolve, because it has an owner.
+    """
+    if not any(key in schema for key in ("$ref", "allOf")):
+        return None
+    try:
+        folded = materialize_node(schema, root)
+    except (ValueError, RecursionError):
+        return None
+    arrow = folded.get("arrow_type") if isinstance(folded, dict) else None
+    return arrow if isinstance(arrow, str) and ARROW_TYPE_RE.fullmatch(arrow) else None
+
+
 def _validate_arrow_type_in_json_schema(
     schema: Any, path: str, errors: list[str], negated: bool = False,
     root: Any = None,
@@ -1449,9 +1479,8 @@ def _validate_arrow_type_in_json_schema(
         # grades it because a JSON Schema implementation resolves the
         # reference; grading only the node that spells the type out is the two
         # rules disagreeing about one node.
-        folded = materialize_node(schema, root)
-        folded_arrow = folded.get("arrow_type") if isinstance(folded, dict) else None
-        if isinstance(folded_arrow, str) and ARROW_TYPE_RE.fullmatch(folded_arrow):
+        folded_arrow = _folded_arrow_type(schema, root)
+        if folded_arrow is not None:
             _validate_examples_zone(schema, folded_arrow, path, errors)
     if has_native ^ has_arrow:
         missing = "arrow_type" if has_native else "native_type"

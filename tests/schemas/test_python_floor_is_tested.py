@@ -5,8 +5,8 @@ claim instead: `pip install` admits the interpreter, so a user gets the
 package, and any stdlib behaviour that arrived after the floor reads as working
 code here while refusing their documents there. That is not hypothetical — a
 calendar reader resting on `datetime.fromisoformat` was correct on the versions
-CI ran and called every zone-bearing wire sample impossible on the declared
-floor, because arbitrary-ISO-8601 parsing landed one version later.
+CI ran and called every zone-bearing wire sample impossible on 3.10, then the
+declared floor, because arbitrary-ISO-8601 parsing landed in 3.11.
 
 The floor is owned by each package's `requires-python`; the matrix is owned by
 the workflow. Neither restates the other, and this fails when they part.
@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 import sys
 import tomllib
+
+import pytest
 from pathlib import Path
 
 import yaml
@@ -69,7 +71,10 @@ def _matrix() -> list[tuple[int, int]]:
 
 
 def test_the_packages_agree_on_one_floor():
-    floors = {path.name: _floor(path) for path in _PYPROJECTS}
+    # Keyed on the PACKAGE directory: both files are named `pyproject.toml`,
+    # so keying on the filename collapsed the two into one entry and the
+    # comparison could not fail.
+    floors = {path.parent.name: _floor(path) for path in _PYPROJECTS}
     assert len(set(floors.values())) == 1, (
         f"the packages declare different interpreter floors: {floors}. They "
         "release in lockstep and one installs the other, so the lower floor "
@@ -77,8 +82,13 @@ def test_the_packages_agree_on_one_floor():
     )
 
 
-def test_the_declared_floor_is_tested():
-    floor = _floor(_PYPROJECTS[0])
+@pytest.mark.parametrize(
+    "pyproject", _PYPROJECTS, ids=lambda p: p.parent.name)
+def test_the_declared_floor_is_tested(pyproject):
+    # Each package, not just the first: the validator's own `requires-python`
+    # is what a user's runtime `pip install` behind VALIDATOR_PIN is admitted
+    # against.
+    floor = _floor(pyproject)
     matrix = _matrix()
     assert floor in matrix, (
         f"the packages declare requires-python >={floor[0]}.{floor[1]}, and "
@@ -89,11 +99,13 @@ def test_the_declared_floor_is_tested():
     )
 
 
-def test_this_interpreter_is_at_or_above_the_floor():
+@pytest.mark.parametrize(
+    "pyproject", _PYPROJECTS, ids=lambda p: p.parent.name)
+def test_this_interpreter_is_at_or_above_the_floor(pyproject):
     """The floor is a floor for the suite too — a contributor running it on an
     older interpreter is measuring a configuration the packages do not
     support, and would read its failures as defects."""
-    floor = _floor(_PYPROJECTS[0])
+    floor = _floor(pyproject)
     assert sys.version_info[:2] >= floor, (
         f"this interpreter is {sys.version_info.major}.{sys.version_info.minor}"
         f", below the declared floor {floor[0]}.{floor[1]}"
