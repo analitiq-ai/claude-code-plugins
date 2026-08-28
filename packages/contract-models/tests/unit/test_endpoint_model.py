@@ -3245,40 +3245,24 @@ class TestRecordedWireSampleZone:
         }[descent]
         parse_endpoint(_api_payload_with_field_schema("updated_at", {key: below}))
 
-    #: Deeper than the interpreter unwinds through one fold. A self-referential
-    #: `$ref` is NOT such a case — the fold carries its own cycle guard and
-    #: returns `{}` — so a ring pins nothing here and would pass on the code
-    #: this test exists to hold.
-    _UNFOLDABLY_DEEP = 1500
+    def test_a_node_that_cannot_be_folded_is_not_refused_by_this_rule(self):
+        """Contributors that contradict each other reach no coherent
+        declaration, which is the same answer as declaring nothing — not a
+        refusal. Refusing would make a SAMPLE decide it: the identical node
+        without `examples` is accepted, so whether a field records wire
+        evidence would settle a satisfiability question it has nothing to do
+        with.
 
-    @pytest.mark.parametrize("shape", ["unsatisfiable", "too-deep"])
-    def test_a_node_that_cannot_be_folded_is_not_refused_by_this_rule(self, shape):
-        """Folding raises on these — a `ValueError` on contributors that
-        contradict each other, a `RecursionError` on a chain longer than one
-        fold can unwind — and the walk around it accumulates errors and raises
-        once at the end. So a raise here discarded every error already found
-        and refused the document under a message carrying no path. It also made
-        a SAMPLE decide it: the identical node without `examples` is accepted,
-        so whether a field records wire evidence settled a satisfiability
-        question it has nothing to do with.
-
-        Neither is this rule's subject. Not graded, and not refused — unlike a
-        reference that leads NOWHERE, which RULE-ENDP-026 refuses with the
-        pointer that does not resolve, because that one has an owner."""
-        if shape == "unsatisfiable":
-            node = {"allOf": [{"type": "string"}, {"type": "integer"}],
-                    "examples": ["x"]}
-            defs = {}
-        else:
-            node = {"$ref": "#/$defs/C0", "examples": ["x"]}
-            defs = {f"C{i}": {"$ref": f"#/$defs/C{i + 1}"}
-                    for i in range(self._UNFOLDABLY_DEEP)}
-            defs[f"C{self._UNFOLDABLY_DEEP}"] = {
-                "type": "string", "native_type": "STRING",
-                "arrow_type": "Utf8"}
-        payload = _api_payload_with_field_schema("updated_at", node)
-        payload["operations"]["read"]["response"]["schema"]["$defs"] = defs
-        parse_endpoint(payload)
+        Only what the DOCUMENT declares is absorbed. A chain deeper than the
+        reader unwinds is a fact about the interpreter and propagates —
+        `test_the_walk_does_not_absorb_running_out_of_stack` in
+        `test_embedded_schema_refs.py` holds that boundary, and absorbing it
+        here would accept one declaration at one nesting depth and refuse the
+        identical one deeper down.
+        """
+        parse_endpoint(_api_payload_with_field_schema("updated_at", {
+            "allOf": [{"type": "string"}, {"type": "integer"}],
+            "examples": ["x"]}))
 
     @pytest.mark.parametrize("shape", ["$ref", "allOf"])
     def test_a_sample_is_graded_against_a_type_one_fold_away(self, shape):

@@ -1411,6 +1411,14 @@ def _validate_arrow_type_in_json_schema(
     pairing and the container-shape rules are all defects of the declaration
     itself and are wrong wherever it sits.
 
+    It does not raise for anything the DOCUMENT declares — a contradiction, a
+    reference that leads nowhere, a cycle — because it accumulates and its
+    caller raises once at the end, so a raise from inside would discard what
+    was collected. It CAN exhaust the stack on a document nested deeper than
+    the interpreter unwinds, which is not a property of the declarations and
+    which no walk written this way avoids; `analitiq.validator` contains that
+    and reports it as a check that could not finish.
+
     `root` is the document the walk started from, and (3) needs it: a field
     whose shape is a reused `$defs` target records its sample on the REFERRING
     node, where no `arrow_type` is written. Grading only the node that spells
@@ -4236,28 +4244,36 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     return _materialize(node, node if root is None else root, {}, set())
 
 
-def try_materialize_node(node: Any, root: Any = None) -> Any | None:
-    """:func:`materialize_node`, answering ``None`` where it would raise.
+def try_materialize_node(node: Any, root: Any = None) -> dict[str, Any] | None:
+    """:func:`materialize_node`, answering ``None`` where the fold REFUSES.
 
-    The inspection form, for a caller that cannot raise. Folding fails on a
-    node whose contributors contradict each other and on a chain longer than
-    one fold unwinds, and both are real answers about the document — but a
-    caller that ACCUMULATES findings cannot receive them as exceptions: a
-    raise mid-walk discards everything collected so far and reports under a
-    message carrying no coordinates.
+    The inspection form, for a caller that accumulates findings and so cannot
+    receive a refusal as an exception: a raise mid-walk discards everything
+    collected and reports under a message carrying no coordinates.
 
-    Owned here rather than caught at each call site. Which failures folding
-    has is this function's knowledge, and a caller repeating the except clause
-    is a second copy of it that goes stale the day a third is added — the
-    shape `.claude/rules/no-drift-surfaces.md` forbids. `None` means "no
-    reading available", which is a state every consumer of the read contract
-    already has to handle.
+    `None` means the node reaches no coherent declaration — either it is not a
+    schema object at all, or its contributors contradict each other, which is
+    a fact about the document and the same answer a reader gets from a node
+    that declares nothing. It is deliberately NOT the answer for running out
+    of stack. That is a fact about the interpreter and about where the node
+    happens to sit, so absorbing it would make one declaration refused at one
+    nesting depth and accepted at another, with nothing said either way — the
+    silent wrong answer, dressed as a verdict. A document deeper than this
+    reader unwinds raises, and the layer that can report "could not finish"
+    reports it.
+
+    Distinct from the sites that catch a refusal to RE-RAISE it with their own
+    coordinates (`_validate_records_in_response_schema` and its neighbours).
+    Those translate; this one absorbs, and only a caller with no way to report
+    should use it.
     """
+    if not isinstance(node, dict):
+        # Nothing to fold, and returning the argument would make `None` mean
+        # two things to a caller that cannot tell them apart.
+        return None
     try:
         return materialize_node(node, root)
-    except (ValueError, RecursionError):
-        # ValueError covers DeclarationConflictError, the fold's own refusal.
-        # RecursionError is the interpreter's, on a chain it cannot unwind.
+    except DeclarationConflictError:
         return None
 
 
