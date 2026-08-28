@@ -35,6 +35,14 @@ nothing verifies them.
 
 ## The half a reader has to carry
 
+**An error-severity check needs rung 1.** A rule that refuses documents on a
+reading nobody pinned refuses working ones the moment the reading is off by a
+detail — a nullable `["string", "null"]` where the paraphrase said `string`,
+a fallback the reader has and the paraphrase does not. That is not a
+hypothetical: a rule written that way was built, found to refuse documents the
+reader handles, and withdrawn rather than narrowed. Warn on an unpinned reading
+if it earns its place; refuse only on a pinned one.
+
 **A check must not be wrong when the claim goes stale.** This is the part no
 mechanism covers. A rule whose finding is correct only while the engine
 behaves a certain way starts rejecting working documents the day it changes,
@@ -47,11 +55,14 @@ read it either is a weaker claim than a field typed where the engine will not
 look, and it survives the engine changing. Where that is not possible, the
 record's `rationale` says which way the check fails if the reading goes stale.
 
-**Ask, do not infer.** The engine's behaviour is knowable — there is an agent
-for it, and it answers with file paths. A claim written from a guess has been
-wrong here more than once: a rule justified by "the engine hangs on this" was
-built and reverted after the engine turned out never to follow the construct
-at all. Ask first; the answer is minutes, and the rule you write is different.
+**Ask, do not infer.** The engine's behaviour is knowable by reading the engine,
+and a maintainer's checkout has an agent that does exactly that. A claim
+written from a guess has cost the whole rule rather than a sentence of it: one
+justified by "the engine hangs on this construct" was built and then abandoned,
+because the engine turns out not to follow the construct at all; another was
+built on a predicate paraphrased from the reader rather than read off it, and
+refused documents the reader handles. Ask first. The answer takes minutes and
+the rule you write is a different rule.
 
 **Naming a symbol is not pinning.** `resolve_field_arrow_type` in a docstring
 resolves for nobody holding this clone and reddens nothing when it is renamed.
