@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 19 of the 77 below have no validator, so nothing rejects
+all hold: 19 of the 78 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **34** structural · **27** advisory · **8** referential · **4** procedural · **4** judgment.
+In this file: **34** structural · **27** advisory · **9** referential · **4** procedural · **4** judgment.
 
 ## Contents
 
@@ -125,6 +125,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-ENDP-045 | An operation's `request.path` MUST be a path resolved against the selected transport's origin, and MUST NOT be authored as an absolute URL. | `api-endpoint` | error | — |
 | RULE-ENDP-046 | An API endpoint's `endpoint_id` MUST equal the handle derived from the resource locator its operations declare, and that locator MUST be one a handle can be derived from. | `api-endpoint` | error | validator |
 | RULE-ENDP-047 | Every `transport_ref` an endpoint document names MUST resolve to a transport declared by the connector it ships beside. | `api-endpoint` | error | validator |
+| RULE-ENDP-065 | A field of a read operation's record shape MUST carry its canonical Arrow type on the field node itself, not only behind a `$ref` or a composition keyword. | `api-endpoint` | error | validator |
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
 

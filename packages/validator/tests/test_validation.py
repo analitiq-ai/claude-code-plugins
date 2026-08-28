@@ -310,6 +310,40 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
 
 
+@pytest.mark.parametrize("node, defs, unreadable", [
+    ({"$ref": "#/$defs/S"}, {"S": {"type": "string", "native_type": "STRING",
+                                   "arrow_type": "Utf8"}}, True),
+    ({"allOf": [{"type": "string", "native_type": "STRING",
+                 "arrow_type": "Utf8"}]}, None, True),
+    ({"anyOf": [{"type": "string", "native_type": "STRING",
+                 "arrow_type": "Utf8"}]}, None, True),
+    # Declared where the engine looks.
+    ({"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, None, False),
+    # Declared nowhere, on purpose (RULE-ENDP-006). Saying nothing about a
+    # field is not the same as saying it behind a reference.
+    ({"type": "string"}, None, False),
+    # Declared on the field AND narrowed by a composition beside it: the engine
+    # reads the declaration it needs, so the composition is not what carries it.
+    ({"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+      "allOf": [{"minLength": 1}]}, None, False),
+])
+def test_a_record_field_declares_its_type_where_the_engine_reads_it(
+    validator, node, defs, unreadable,
+):
+    """The engine reads a field node's own `arrow_type` and follows no
+    reference and no composition, so a field typed behind one reaches the run
+    undeclared and fails it — validating clean the whole way. Same shape as a
+    sample contradicting its declaration, one layer out."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["a"] = node
+    if defs:
+        schema["$defs"] = defs
+    hits = [f for f in validator.validate_document(ep)
+            if f["validator"] == "record-field-unreadable"]
+    assert bool(hits) is unreadable, hits
+
+
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
     """The other direction of the same wording. Two tests assert the default
     blame is ABSENT from a document-caused crash, and an absence assertion
