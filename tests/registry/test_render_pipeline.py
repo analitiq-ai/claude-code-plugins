@@ -7,10 +7,12 @@ Three surfaces, each with a regression nothing downstream would catch loudly:
   registry cannot be relied on to exhibit every placement shape and the
   byte-sync test can only pin behavior a committed file shows.
 * `render_all.py` write mode must never invoke `render_schemas.py write` or
-  `render_prose_census.py write` — the one regression every other stage stays
-  green through: a hook fire would auto-cut an immutable schema version or
-  silently press a census re-affirmation, CI's check would then agree with
-  the freshly moved source, and nothing would ever go red.
+  `render_prose_census.py write`, and only ever checks
+  `render_contract_consumption.py`, which has no write mode — the one
+  regression every other stage stays green through: a hook fire would
+  auto-cut an immutable schema version or silently press a census
+  re-affirmation, CI's check would then agree with the freshly moved source,
+  and nothing would ever go red.
 * `render_hook.py`'s two contracts: the path gate in both directions, and
   exit 2 (not 1) on a generator failure — exit 2 is what makes the harness
   feed the failure back to the session that caused it.

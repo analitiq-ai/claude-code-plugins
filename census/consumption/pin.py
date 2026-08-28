@@ -40,10 +40,11 @@ The envelope, and why each key is read the way it is:
   no sites, is unread.
 - ``opaque`` — ``model -> consumer record``: models the engine consumes
   whole, as a JSON grammar (``model_dump`` into an expression tree or a
-  predicate resolver), each mapped to the record of what consumes it. Their
-  fields are never read by attribute, so they never appear in ``claims``,
-  and the walk records the model but does not descend into it: a field
-  under an opaque model is neither read nor unread.
+  predicate resolver), each mapped to the record of what consumes it. A
+  model here may also carry ``claims`` — dumped whole at one site, read by
+  attribute at another — and a claim is a read wherever it appears; the
+  walk records the model but does not descend into it, so an unclaimed
+  field under an opaque model is neither read nor unread.
 - ``kit_reads`` — reads performed by the conformance kit, which grades a
   connector rather than running one. They are recorded so the engine can
   say what its kit looks at; they are never claims.

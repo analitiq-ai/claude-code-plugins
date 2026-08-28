@@ -8,11 +8,11 @@ contract models from the manifest's ``roots`` and classifies every field it
 reaches:
 
 - **read** — the manifest claims the field with at least one site.
-- **opaque** — the field belongs to a model the engine consumes whole as a
-  JSON grammar. The walk records the model and stops: an opaque model's
-  fields never appear in ``claims`` because no attribute read exists, so
-  descending into it would report every field of an expression tree as
-  unread.
+- **opaque** — the field is unclaimed and belongs to a model the engine
+  consumes whole as a JSON grammar. A model may be dumped whole at one site
+  and read by attribute at another, so a claim on an opaque model's field
+  still counts as a read. The walk records the model and stops: descending
+  into it would report every field of an expression tree as unread.
 - **unread** — reachable, not opaque, not claimed. The contract declares it
   and the engine never looks. Each such field needs a
   :class:`~census.consumption.disposition.FieldDisposition`.
@@ -152,10 +152,14 @@ def classify(manifest: dict[str, Any]) -> dict[str, frozenset[FieldRef]]:
         claimed = claims.get(name, {})
         for field_name in cls.model_fields:
             ref = (name, field_name)
-            if name in opaque_models:
-                opaque.add(ref)
-            elif claimed.get(field_name):
+            # A claim wins: a model consumed whole at one site can still be
+            # read by attribute at another, and the artifact lists such a
+            # model under both keys. Only an unclaimed field of an opaque
+            # model is opaque.
+            if claimed.get(field_name):
                 read.add(ref)
+            elif name in opaque_models:
+                opaque.add(ref)
             else:
                 unread.add(ref)
     return {

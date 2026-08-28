@@ -157,7 +157,7 @@ def test_prose_rule_citations_resolve() -> None:
         ids = _cited_ids(path.read_text(encoding="utf-8"))
         if plugins_root in path.parents:
             plugin_cited += len(ids)
-        if census_root in path.parents:
+        if census_root / "consumption" in path.parents:
             census_cited += len(ids)
         if ids - known:
             dangling[str(path.relative_to(REPO_ROOT))] = ids - known
@@ -171,7 +171,7 @@ def test_prose_rule_citations_resolve() -> None:
         "would otherwise pass vacuously."
     )
     assert census_cited, (
-        "no RULE-* citations found under census/ — the consumption "
+        "no RULE-* citations found under census/consumption/ — the "
         "dispositions cite rule ids in their reasons, so the search glob no "
         "longer points at them — a scan over zero citations would otherwise "
         "pass vacuously."

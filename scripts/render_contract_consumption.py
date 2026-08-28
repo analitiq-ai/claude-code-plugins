@@ -66,7 +66,10 @@ def main(argv: list[str]) -> int:
         from census.consumption.reachability import census_report
 
         report = census_report(load_manifest(), DISPOSITIONS)
-    except (ImportError, LookupError, OSError, ValueError) as exc:
+    # Anything at all: a fault the check did not anticipate must still read
+    # as "could not run" (the pin guards carry the same arm), never as a
+    # finding whose remediation is to write a disposition.
+    except Exception as exc:  # noqa: BLE001 — see comment above
         print(
             f"reachability census could not run: {type(exc).__name__}: {exc}",
             file=sys.stderr,

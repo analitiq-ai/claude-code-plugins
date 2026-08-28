@@ -413,8 +413,12 @@ def test_kit_reads_never_count_as_claims():
 
 
 def test_transport_never_counts_as_a_claim():
-    manifest = _manifest(transport=[f"{_ROOT}.plain"])
-    assert (_ROOT, "plain") in classify(manifest)["unread"]
+    """``transport`` is a list of re-serialisation sites, the shape the
+    published manifest carries; it names no field, and its presence must
+    change nothing about what is read."""
+    with_sites = _manifest(transport=["src.models.resolved:65"])
+    assert classify(with_sites) == classify(_manifest(transport=[]))
+    assert (_ROOT, "plain") in classify(with_sites)["unread"]
 
 
 def test_a_claim_with_no_sites_is_not_a_read():
@@ -423,14 +427,17 @@ def test_a_claim_with_no_sites_is_not_a_read():
     assert (_ROOT, "plain") in classify(manifest)["unread"]
 
 
-def test_a_claim_on_an_opaque_model_does_not_make_its_fields_read():
-    """Opaque models are consumed whole; a claim the engine also records on
-    one is bookkeeping, not an attribute read the census could grade."""
+def test_a_claim_on_an_opaque_model_is_a_read_and_its_other_fields_stay_opaque():
+    """The vendored artifact lists a model under both keys — dumped whole at
+    one site, read by attribute at another — so a claim wins wherever it
+    appears, and only the unclaimed fields of an opaque model are opaque."""
     manifest = _manifest()
     manifest["claims"][_GRAMMAR] = {"op": ["src.b:1"]}
     classes = classify(manifest)
-    assert (_GRAMMAR, "op") in classes["opaque"]
-    assert (_GRAMMAR, "op") not in classes["read"]
+    assert (_GRAMMAR, "op") in classes["read"]
+    others = {(_GRAMMAR, f) for f in Grammar.model_fields if f != "op"}
+    assert others and others <= classes["opaque"]
+    assert not any(m == _GRAMMAR for m, _ in classes["unread"])
 
 
 # ---------------------------------------------------------------------------
