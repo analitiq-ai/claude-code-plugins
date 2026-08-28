@@ -32,7 +32,9 @@ packages/
   contract-models/                # -> analitiq-contract-models (PyPI); the contract
   validator/                      # -> analitiq-validator (PyPI)
 schemas/                          # RENDERED public JSON Schemas -> schemas.analitiq.ai
-census/                           # catalogue of the contract's own prose; NOT shipped
+census/                           # catalogues of the contract's own surface; NOT shipped
+  areas/                          #   every prose site, dispositioned and hash-pinned
+  consumption/                    #   vendored engine consumption manifest + unread-field dispositions
 contributing/                     # contributor guide per plugin; outside the artifact
 scripts/
   render_schemas.py               # renders schemas/ from packages/contract-models
@@ -185,6 +187,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 | `schemas/` | a **resource version** | never — rendered, never authored |
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
+| `census/consumption/dispositions.py` | an **unread contract field** — one a root reaches that the engine never reads | the pinned consumption manifest claims no read of it; every such field carries an entry or the build fails |
 | `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
 | `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
 | `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |
@@ -203,6 +206,35 @@ rejects a document that ignores it — a rule id, the model's own shape, a
 written waiver, or `descriptive` for a sentence asking nothing. It lives
 outside `packages/` because it is how this repo keeps its own wording honest,
 not part of the contract, and so does not ship in the wheel.
+
+**The reachability census asks the same question of fields.** A field the
+contract declares, the schema renders and the plugins teach, that no engine
+path ever reads, is invisible to every check above — nothing here can know
+what the engine reads. So the engine publishes it: `contract-consumption`,
+a versioned artifact at `schemas.analitiq.ai` listing the models its
+run-time path holds (`roots`), the fields it reads by attribute
+(`claims`), and the models it consumes whole as a JSON grammar (`opaque`).
+This repo vendors one pinned version at
+`census/consumption/contract_consumption.json`; `census/consumption/pin.py`
+states the pin (version + sha256) once. `census/consumption/reachability.py`
+walks the live models from the roots through their field annotations,
+never descending into an opaque model, and every reachable field the
+manifest does not claim is *unread*: it carries a `FieldDisposition` in
+`census/consumption/dispositions.py` naming what consumes it off the
+run-time path (`authoring_only`), the parse that settles it
+(`structural`), the gap the engine should close (`engine_gap` — what the
+author expects and what happens instead), or the field the contract should
+drop (`contract_surplus` — a removal recorded before it is made). A model no root reaches is not covered — unknown,
+not unread. Guards: `tests/census/test_contract_consumption.py` re-hashes
+the vendored file offline, checks its self-declared version against the
+pin, and fails on an unread field with no entry, an entry for a field the
+manifest now claims, or one outside coverage;
+`scripts/render_contract_consumption.py check` prints the same report; the
+`contract-consumption-pin-guard` CI job byte-compares the vendored file
+against the published immutable object and surfaces a newer engine
+publication as a notice. A pin bump re-vendors, re-runs the census, and
+retires or adds dispositions in the same change — never by editing the
+manifest.
 
 **Where a new fact goes.** Something a document must satisfy is a model field,
 and a name for it is a record. Something an author must judge is plugin craft.

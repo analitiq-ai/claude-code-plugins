@@ -117,6 +117,30 @@ jobs:
       - name: Check the vendored grammar against the published objects
         run: python3 scripts/check_engine_grammar_pin.py
 
+  contract-consumption-pin-guard:
+    # The reachability census grades every contract field against a VENDORED
+    # copy of the engine-published contract-consumption manifest — the fields
+    # the engine's run-time path reads. pytest pins the vendored bytes to the
+    # sha256 stated in census/consumption/pin.py offline; this job is the
+    # network half: the published immutable object at the pinned version
+    # must be byte-identical to the vendored copy, the manifest must
+    # self-declare the version its pin names, and a newer engine publication
+    # surfaces as a notice (adopting it is a deliberate pin bump, never
+    # automatic). The script owns the full semantics; stdlib-only, so no
+    # dependency install step.
+    #
+    # Never add --offline here: it would make this job green having verified
+    # nothing about the engine's published truth. test_ci_job_is_wired pins that.
+    name: vendored consumption manifest matches published object
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check the vendored consumption manifest against the published object
+        run: python3 scripts/check_contract_consumption_pin.py
+
   pinned-validator-guard:
     # Everything in the pytest job grades the IN-REPO contract source; the
     # plugins' runtime validator is the PUBLISHED wheel behind VALIDATOR_PIN,
