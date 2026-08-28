@@ -311,51 +311,6 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
 
 
-#: A record field, and whether its type sits where the batch reader looks.
-#: The reader takes `arrow_type` off the node, or failing that the node's own
-#: `type` through the read map, and follows neither `$ref` nor a composition.
-#: The discriminating rows are the ones where a keyword is present and the
-#: field is readable anyway, and where nothing is declared at all.
-_RECORD_FIELD_CASES = [
-    ({"$ref": "#/$defs/S"}, True, "a"),
-    ({"allOf": [{"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}]}, True, "a"),
-    # Readable: the node carries its own `type`, which the read map resolves.
-    ({"type": "string", "$ref": "#/$defs/S"}, False, None),
-    ({"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, False, None),
-    ({**{"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, "not": {"const": "x"}}, False, None),
-    ({**{"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, "anyOf": [{"minLength": 1}]}, False, None),
-    ({"type": "string", "not": {"const": "x"}}, False, None),
-    ({"type": "string"}, False, None),
-    # The reader resolves every leaf on its own, so it descends too.
-    ({"type": "object", "native_type": "o", "arrow_type": "Object",
-      "properties": {"zip": {"$ref": "#/$defs/S"}}}, True, "a.zip"),
-    ({"type": "array", "native_type": "arr", "arrow_type": "List",
-      "items": {"$ref": "#/$defs/S"}}, True, "a.items"),
-]
-
-
-@pytest.mark.parametrize("node, unreadable, named", _RECORD_FIELD_CASES)
-def test_a_record_field_is_typed_where_the_batch_reader_looks(
-    validator, node, unreadable, named,
-):
-    """A field typed only behind a reference reaches the run undeclared and
-    fails it, having validated clean the whole way. Asked as the difference
-    between the node as authored and the same node with what unconditionally
-    applies folded in, so a field carrying a composition for its CONSTRAINTS
-    is untouched, a field carrying its own `type` is readable, and a field
-    annotated nowhere stays the author's choice."""
-    ep = _endpoint("STRING", "Utf8")
-    schema = ep["operations"]["read"]["response"]["schema"]
-    schema["$defs"] = {"S": {"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}}
-    schema["items"]["properties"]["a"] = node
-    hits = [f for f in validator.validate_document(ep)
-            if f["validator"] == "record-field-unreadable"]
-    assert bool(hits) is unreadable, hits
-    if named:
-        assert f"{named!r}" in hits[0]["message"], hits[0]
-        assert hits[0]["path"].startswith("/operations/read/response/schema/items"), hits[0]
-
-
 def test_the_fixture_screen_refuses_a_crash(validator):
     """The screen every other test here leans on, pinned.
 
@@ -364,9 +319,7 @@ def test_the_fixture_screen_refuses_a_crash(validator):
     once, when a renamed message left the probe registry's crash tripwire
     matching nothing.
     """
-    ep = _endpoint("STRING", "Utf8")
-    ep["operations"]["read"]["response"]["schema"]["items"]["properties"]["a"] = {
-        "allOf": [{"type": "object"}, {"type": "string"}]}
+    ep = _sample_endpoint({"$ref": "#/$defs/Missing", "examples": [1]})
 
     with pytest.raises(AssertionError, match="a check crashed on this document"):
         validator.validate_document(ep)
@@ -392,42 +345,20 @@ def test_the_fixture_screen_covers_the_other_entry_point(
         validator.check_coverage(connector_base, tmp_path / "connector.json")
 
 
-def test_a_record_shape_that_cannot_be_folded_costs_only_that_check(validator):
-    """Folding a record shape raises on author content — an `allOf` branch
-    declaring a type another one rules out. Unguarded, that escapes the
-    dispatch and replaces every finding on the document with one line telling
-    the author to report a validator bug, losing the defect they were fixing."""
-    ep = _endpoint("STRING", "Utf8")
+def test_a_sample_that_cannot_be_graded_costs_only_that_check(validator):
+    """Grading a sample raises on author content — a reference with no target.
+    Unguarded, that escapes the dispatch and replaces every finding on the
+    document with one line telling the author to report a validator bug,
+    losing the defect they were fixing."""
+    ep = _sample_endpoint({"$ref": "#/$defs/Missing", "examples": [1]})
     ep["endpoint_id"] = "WRONG NAME"
-    ep["operations"]["read"]["response"]["schema"]["items"]["properties"]["a"] = {
-        "allOf": [{"type": "object"}, {"type": "string"}]}
     findings = validator.validate_document(ep, expect_crash=True)
     crashed = [f for f in findings if is_guard_finding(f)]
     assert len(crashed) == 1, findings
-    assert crashed[0]["validator"] == "record-field-unreadable", crashed
+    assert crashed[0]["validator"] == "embedded-schema-example", crashed
     assert GUARD_DEFAULT_BLAME not in crashed[0]["message"], crashed[0]
     # The unrelated defect survives it.
     assert any(f["validator"] == "endpoint-id-locator" for f in findings), findings
-
-
-def test_a_record_field_finding_points_at_the_field(validator):
-    """The record sits wherever `records.ref` lands, and a field name may carry
-    a `/`. A constant pointer names a node that is not there, and the same node
-    for two differently-shaped documents."""
-    ep = _endpoint("STRING", "Utf8")
-    ep["operations"]["read"]["response"]["records"] = {"ref": "response.body.data"}
-    schema = ep["operations"]["read"]["response"]["schema"]
-    schema["$defs"] = {"S": {"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}}
-    schema["properties"] = {"data": {"type": "array", "items": {
-        "type": "object", "properties": {"a/b": {"$ref": "#/$defs/S"}}}}}
-    del schema["items"]
-    schema["type"] = "object"
-    hits = [f for f in validator.validate_document(ep)
-            if f["validator"] == "record-field-unreadable"]
-    assert len(hits) == 1, hits
-    assert hits[0]["path"] == (
-        "/operations/read/response/schema/properties/data/items/properties/a~1b"
-    ), hits[0]
 
 
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):

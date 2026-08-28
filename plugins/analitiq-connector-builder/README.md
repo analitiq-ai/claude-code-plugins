@@ -97,9 +97,7 @@ Schemas are generated from — so there is no schema fetch. It runs:
    (`type-map-coverage`, `endpoint-filename`, `endpoint-id-unique`,
    `endpoint-id-locator`, `endpoint-transport-ref`), embedded-schema validity
    (`embedded-json-schema`), the wire samples a schema records
-   (`embedded-schema-example`) and a record field typed where the batch
-   reader does not look (`record-field-unreadable`), and quality warnings on
-   a type map
+   (`embedded-schema-example`), and quality warnings on a type map
    (`type-map-rule`, `type-map-write-coverage`). A document matching no known
    artifact kind reports under `document`.
 

@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 19 of the 78 below have no validator, so nothing rejects
+all hold: 19 of the 77 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **34** structural · **28** advisory · **8** referential · **4** procedural · **4** judgment.
+In this file: **34** structural · **27** advisory · **8** referential · **4** procedural · **4** judgment.
 
 ## Contents
 
@@ -108,7 +108,6 @@ single field looks wrong.
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | A node of an endpoint's response or write-input schema that records wire samples under `examples` and declares a canonical Arrow type MUST declare one whose zone-awareness those samples bear out. Recording a sample never obliges a node to declare a type it has no evidence for. | `api-endpoint` | error | validator |
 | RULE-ENDP-064 | Every entry a node of an endpoint's response or write-input schema records under `examples` MUST satisfy that node's own declarations. | `api-endpoint` | error | validator |
-| RULE-ENDP-065 | A field of a read operation's record shape MUST carry its canonical Arrow type on the field node itself, and MUST NOT leave it reachable only by folding in a `$ref` target or an `allOf` branch. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential
