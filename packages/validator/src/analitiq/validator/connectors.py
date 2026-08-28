@@ -67,6 +67,7 @@ try:
             DatabaseEndpointDoc,
             SLUG_RE,
             SAMPLE_CONTRADICTION_REMEDY,
+            JSON_SCHEMA_NEGATED_SCHEMA_KEYS,
             iter_schema_nodes,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
@@ -288,13 +289,10 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
             _one_embedded_schema_findings, schema, pointer, where,
             vid="embedded-json-schema",
             path=pointer,
-            blame=(
-                f"the embedded schema at {where} could not be read far enough "
-                "to check — it nests deeper, or runs larger, than this tool "
-                "can walk. Every other schema on this document was still "
-                "checked"
-            ),
-            resource_only=True))
+            scope=(
+                f"The embedded schema at {where} was not checked; every other "
+                "schema on this document was."
+            )))
     return findings
 
 
@@ -354,6 +352,19 @@ def _one_embedded_schema_findings(
             f"read the whole document in {_DRAFT_2020_12_SCHEMA!r} — so "
             "the subtree is graded against keywords that mean something "
             "else there. Declare the draft once at the top, or not at all"))
+        # `check_schema` still runs: it grades against this class's own
+        # metaschema, which a nested `$schema` does not reach, so its findings
+        # are the author's either way and withholding them costs a rerun.
+        # Only the sample grading is withheld — that one goes through
+        # `evolve`, which IS where the switch happens and where a subtree
+        # would really be read in another draft's terms.
+        try:
+            Draft202012Validator.check_schema(schema)
+        except SchemaError as exc:
+            findings.append(finding(
+                "embedded-json-schema", "error", pointer,
+                f"embedded schema at {where} is not a valid JSON Schema Draft "
+                f"2020-12 document: {exc.message}"))
         return findings
     try:
         Draft202012Validator.check_schema(schema)
@@ -387,6 +398,17 @@ def _sample_findings(validator, example, index, node_pointer, pointer, where) ->
         f"recorded sample {example!r} at {at} does not satisfy the "
         f"declaration it sits on: {error.message}. "
         f"{SAMPLE_CONTRADICTION_REMEDY}")]
+
+
+def _sits_under_a_negation(node_pointer: str) -> bool:
+    """Whether this node is reached through a position that inverts it.
+
+    Read off the pointer, which is the record of how the walk got here — no
+    second traversal — and against the contract's own set, which owns which
+    positions those are for the same reason it owns the walk.
+    """
+    return bool(
+        JSON_SCHEMA_NEGATED_SCHEMA_KEYS.intersection(node_pointer.split("/")))
 
 
 def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dict]:
@@ -423,6 +445,7 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
         (node_pointer, node)
         for node_pointer, node in iter_schema_nodes(schema)
         if isinstance(node.get("examples"), list)
+        and not _sits_under_a_negation(node_pointer)
     ]
     if not nodes:
         return []
@@ -450,13 +473,15 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                 vid="embedded-schema-example",
                 path=f"{pointer}{node_pointer}/examples/{index}",
                 blame=(
-                    f"the recorded sample at {at} could not be graded. "
-                    "Something the node reaches takes the JSON Schema "
+                    "something the node reaches takes the JSON Schema "
                     "implementation somewhere it cannot come back from — a "
                     "reference that leads back to itself, or a value a keyword "
-                    "cannot compute against. Every other sample on this "
-                    "document was still attempted — one that reaches the same "
-                    "construct reports the same way"
+                    "cannot compute against."
+                ),
+                scope=(
+                    f"The recorded sample at {at} was not graded; every other "
+                    "sample on this document was still attempted, and one "
+                    "reaching the same construct reports the same way."
                 )))
     return findings
 
@@ -857,6 +882,21 @@ def _load_type_map(path: Path) -> tuple[list | None, list[dict]]:
     return _load_json_sibling(path, "type-map-coverage")
 
 
+def _guarded_type_map_findings(doc: Any, direction: str, name: str) -> list[dict]:
+    """`_type_map_findings`, contained to the map it was reading.
+
+    A sibling type map is a second document, walked before any endpoint is
+    reached. Unguarded, a crash on it escapes to the dispatch and costs every
+    endpoint in the connector its findings — the same containment the endpoint
+    loop below has, one document earlier.
+    """
+    return _run_guarded(
+        _type_map_findings, doc, direction,
+        vid="type-map-coverage",
+        path="/",
+        scope=f"The sibling {name} was not checked; the rest of the connector was.")
+
+
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:
     """Validate a loaded type-map document: model errors + advisory rule
     warnings + (write-vocabulary coverage on the write direction). The single
@@ -898,7 +938,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                 doc_, load = _load_type_map(path)
                 findings.extend(load)
                 if doc_ is not None:
-                    findings.extend(_type_map_findings(doc_, direction))
+                    findings.extend(_guarded_type_map_findings(
+                        doc_, direction, path.name))
         return findings
 
     if not read_path.is_file():
@@ -909,7 +950,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     findings.extend(load)
     if read_doc is None:
         return findings
-    findings.extend(_type_map_findings(read_doc, "read"))
+    findings.extend(_guarded_type_map_findings(
+        read_doc, "read", _READ_MAP_FILENAME))
 
     if kind in _DATABASE_KINDS:
         if not write_path.is_file():
@@ -919,7 +961,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         write_doc, load = _load_type_map(write_path)
         findings.extend(load)
         if write_doc is not None:
-            findings.extend(_type_map_findings(write_doc, "write"))
+            findings.extend(_guarded_type_map_findings(
+                write_doc, "write", _WRITE_MAP_FILENAME))
         return findings
 
     # api: no write map, and every endpoint's natives must be covered by the read map.
@@ -962,23 +1005,20 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             findings.extend(load)
             continue
         # Guarded as ONE unit, per endpoint. Every check below walks the same
-        # author-supplied nesting recursively, the model layer first and
-        # deepest, so whichever reaches the document's depth first is where the
-        # stack ends — and unguarded that escapes to the dispatch, which
-        # discards every finding on every OTHER endpoint in the connector too.
-        # Guarding one of them and not the rest reads as covered and is not:
-        # the one that raises is whichever walk got there, not the one wrapped.
+        # author-supplied structure, and which one gives out first is not a
+        # property of the code but of the document: measured on this tree the
+        # embedded-schema walk is the shallowest and the contract models the
+        # deepest, and a document contrived the other way is a document
+        # nobody has written yet. Guarding one of them and not the rest reads
+        # as covered and is not — unguarded, a raise escapes to the dispatch,
+        # which discards every finding on every OTHER endpoint too.
         findings.extend(_run_guarded(
             _one_endpoint_findings, ep_doc, ep_path, doc, read_doc, seen_ids,
             vid="type-map-coverage",
             path="/",
-            blame=(
-                f"{ep_path.name} could not be checked to the end. Something "
-                "it declares takes a walk over it somewhere it cannot come "
-                "back from — a nesting deeper than this tool unwinds, a "
-                "reference that leads back to itself, or a value a keyword "
-                "cannot compute against. Every other endpoint in this "
-                "connector was still checked"
+            scope=(
+                f"Endpoint {ep_path.name} was not checked to the end; every "
+                "other endpoint in this connector was."
             )))
     return findings
 
@@ -991,8 +1031,11 @@ def _one_endpoint_findings(
 
     `seen_ids` is carried across endpoints and mutated here, because
     `endpoint-id-unique` is a property of the set rather than of any one
-    document. An endpoint whose checks crash contributes nothing to it, which
-    is right: its id was never established.
+    document. It is registered as soon as the id is read, before the walks
+    below — so an endpoint whose later checks crash has still claimed its id,
+    and a duplicate in a subsequent file is still reported. That is the right
+    way round: the id WAS established, and only what the document declares
+    underneath it was not.
     """
     findings: list[dict] = []
     # Each sibling endpoint is a full api-endpoint document — validate it

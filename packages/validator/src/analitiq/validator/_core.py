@@ -159,59 +159,77 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
 
 def _run_guarded(
     fn: Callable, *args, vid: str, path: str = "", blame: str | None = None,
-    resource_only: bool = False,
+    scope: str | None = None,
 ) -> list[dict]:
     """Run a check; a crash becomes one error finding so other checks survive.
 
-    `blame` is what the reader is told to do about it. The default says the
-    validator is at fault, which is right where a check crashed on a document
-    the contract accepts. It is NOT right everywhere: a check that runs
-    arbitrary keyword logic over author-supplied content can be brought down by
-    the content, and telling that author to report a validator bug names the
-    wrong culprit and gives them nothing to fix. Such a caller passes its own
-    wording.
+    The message has two halves, and they are answered by different things.
+
+    The CAUSE — what went wrong and who can fix it — is decided by the
+    exception TYPE, never by reading a message. `TypeError`, `AttributeError`
+    and their kin are how code goes wrong, not how a document does, so they
+    are always this tool's to answer for whatever the caller believes.
+    Running out of stack or memory is always the document's size: every walk
+    here recurses on the document's own nesting, so a deep enough one
+    exhausts the stack in whichever walk reaches it first — including walks no
+    guard wraps, which land on the dispatch guard where the default would send
+    the author to file a bug about their own document. What is left is a
+    check brought down by the content it was reading, and there the caller
+    knows more than the type does: a `$ref` that leads back to itself and a
+    value a keyword cannot compute against are the same thing to the author,
+    and only the code that ran them can say so. That is what `blame` is for.
+
+    The SCOPE — which slot was being checked and what survived — is the
+    caller's alone, and is appended whatever the cause turns out to be. It was
+    folded into `blame` once, which made every caller's scope sentence
+    conditional on their guess about the cause being right: a coding defect in
+    a check reported as "this document nests too deep" AND lost the only line
+    naming which endpoint it happened on.
 
     `path` locates the crash. A check that runs per-slot has more than one
     place to crash, and without it every one of them reports the same finding.
-
-    Which default applies is decided by the exception TYPE, not by reading any
-    message. Running out of stack or memory is the document's size rather than
-    a defect in this tool: every walk here recurses on the document's own
-    nesting, so a deep enough one exhausts the stack in whichever walk reaches
-    it first — including walks no guard wraps, which land on the dispatch guard
-    where the default blame would send the author to file a bug about their own
-    document.
-
-    A caller's `blame` still wins over both, so it has to be true of ANY crash
-    at its site: a `$ref` that leads back to itself and a value a keyword
-    cannot compute against arrive as different exception types and are the same
-    thing to the author, and a caller that names only one of them describes the
-    other wrongly. `resource_only` is the escape for a caller whose wording is
-    true of running out of room and of nothing else — it keeps that wording for
-    a `RecursionError` or a `MemoryError` and hands anything else back to the
-    default, rather than describing a bug here as a document that is too big.
     """
     try:
         return fn(*args)
+    except _TOOL_DEFECT_TYPES as exc:
+        return [_guard_finding(vid, path, _detail(exc), GUARD_DEFAULT_BLAME, scope)]
     except (RecursionError, MemoryError) as exc:
-        # No detail from the exception: a `RecursionError` raised while
-        # unwinding names whichever frame was innermost, which is not the walk
-        # that filled the stack and reads to an author as though it were.
-        return [finding(vid, "error", path,
-                        f"{_guard_opening(vid)} ({type(exc).__name__}); "
-                        + (blame or GUARD_RESOURCE_BLAME))]
+        # No detail beyond the type: a `RecursionError` raised while unwinding
+        # names whichever frame was innermost, which is not the walk that
+        # filled the stack and reads to an author as though it were.
+        return [_guard_finding(vid, path, type(exc).__name__,
+                               GUARD_RESOURCE_BLAME, scope)]
     except Exception as exc:  # noqa: BLE001 - last-resort guard
-        if resource_only:
-            blame = None
-        # The exception text is truncated: `jsonschema`'s referencing errors
-        # embed the whole schema root in their repr, which on a real endpoint
-        # is kilobytes of JSON inside one finding an agent has to read.
-        detail = f"{type(exc).__name__}: {exc}"
-        if len(detail) > _GUARD_DETAIL_MAX:
-            detail = detail[:_GUARD_DETAIL_MAX] + "…"
-        return [finding(vid, "error", path,
-                        f"{_guard_opening(vid)} ({detail}); "
-                        + (blame or GUARD_DEFAULT_BLAME))]
+        return [_guard_finding(vid, path, _detail(exc),
+                               blame or GUARD_DEFAULT_BLAME, scope)]
+
+
+#: How code goes wrong, as opposed to how a document does. A check meeting one
+#: of these has a defect in it whatever it was reading, so no caller's reading
+#: of its own failure modes applies — the author is told to report it.
+_TOOL_DEFECT_TYPES = (
+    TypeError, AttributeError, KeyError, IndexError, NameError, ImportError,
+)
+
+
+def _detail(exc: BaseException) -> str:
+    """The exception's own text, bounded.
+
+    Truncated because `jsonschema`'s referencing errors embed the whole schema
+    root in their repr, which on a real endpoint is kilobytes of JSON inside
+    one finding an agent has to read.
+    """
+    detail = f"{type(exc).__name__}: {exc}"
+    if len(detail) > _GUARD_DETAIL_MAX:
+        detail = detail[:_GUARD_DETAIL_MAX] + "…"
+    return detail
+
+
+def _guard_finding(
+    vid: str, path: str, detail: str, cause: str, scope: str | None,
+) -> dict:
+    tail = f"{cause} {scope}" if scope else cause
+    return finding(vid, "error", path, f"{_guard_opening(vid)} ({detail}); {tail}")
 
 
 #: The halves of the guard's message that anything recognising one of its

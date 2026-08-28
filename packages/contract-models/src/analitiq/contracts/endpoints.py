@@ -1547,6 +1547,20 @@ def _validate_arrow_type_in_json_schema(
 #: on an unchanged document got them back rearranged. Sorting at each call site
 #: worked and left the next walk written free to forget; iterating these does
 #: not.
+#: The subset of the single-schema positions whose subschema does NOT describe
+#: the instance: `not` and `if` describe what it must not be or what selects a
+#: branch, and `propertyNames` constrains the KEYS rather than any value. A
+#: consumer asking "does this node's declaration apply to this value" has to
+#: know the difference — RULE-ENDP-064 grades a recorded sample against "that
+#: node's own declarations", and under one of these those declarations
+#: describe the value's opposite, so the correct counter-example reads as a
+#: contradiction. Owned here because it is a fact about the draft's
+#: applicators, the same as the sets above, and the validator that needs it
+#: would otherwise keep a second copy of three of their members.
+JSON_SCHEMA_NEGATED_SCHEMA_KEYS: frozenset[str] = frozenset({
+    "not", "if", "propertyNames",
+})
+
 JSON_SCHEMA_SUBSCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SUBSCHEMA_KEYS))
 JSON_SCHEMA_LIST_OF_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS))
 JSON_SCHEMA_SINGLE_SCHEMA_ORDER: tuple[str, ...] = tuple(sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS))

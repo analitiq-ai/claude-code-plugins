@@ -70,7 +70,18 @@ class _ScreenedValidator:
         self._module = module
 
     def __getattr__(self, name):
-        return getattr(self._module, name)
+        attr = getattr(self._module, name)
+        if callable(attr) and any(
+                shape in name for shape in SCREENED_NAME_SHAPES):
+            # Reaching a finding-returning helper through the fixture is the
+            # channel the import check cannot see — an attribute access is not
+            # an import. Screened here so both channels answer the same, and
+            # `SCREENED_NAME_SHAPES` is the one statement of which names those
+            # are rather than two lists to keep level.
+            def _screened(*args, expect_crash: bool = False, **kwargs):
+                return self._screen(attr(*args, **kwargs), expect_crash)
+            return _screened
+        return attr
 
     def _screen(self, findings: list, expect_crash: bool) -> list:
         crashed = [f for f in findings if self._module.is_guard_finding(f)]

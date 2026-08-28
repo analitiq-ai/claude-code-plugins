@@ -227,9 +227,13 @@ _WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
 #: leap second (RFC 3339 §5.6), which a wire value can carry and no
 #: `datetime` can hold.
 _MAX_WIRE_SECOND = 60
-#: The largest offset hour a real zone can carry. `+24:00` exists; nothing
-#: beyond it does.
-_MAX_OFFSET_HOUR = 24
+#: The largest offset hour a zone can carry, from the same RFC 3339 §5.6
+#: grammar the seconds bound above is read off (`time-hour = 2DIGIT ; 00-23`).
+#: Reading one position out of that grammar and exceeding the next would make
+#: the profile's source a matter of which line it happened to suit.
+_MAX_OFFSET_HOUR = 23
+#: And its minutes, from `time-minute = 2DIGIT ; 00-59` in the same grammar.
+_MAX_OFFSET_MINUTE = 59
 
 #: `${name}` placeholder of type-map render templates. Must be a valid
 #: identifier, matching the native capture-group naming it resolves from.
@@ -662,10 +666,16 @@ def _read_wire_datetime(sample: Any) -> re.Match[str] | None:
     """
     if not isinstance(sample, str):
         return None
-    # `fullmatch`, not `match`: the pattern is anchored, and `$` matches
-    # before a trailing newline, so `match` would read `"…05Z\n"` as a clean
-    # sample. Same trap `_validate_arrow_type_in_json_schema` names.
-    return _WIRE_DATETIME_RE.fullmatch(sample)
+    # Stripped first. A sample is copied out of provider documentation, and a
+    # copy carries the whitespace around what was selected; `"…05Z\n"` is the
+    # same wire value as `"…05Z"` and reading it as a different KIND of value
+    # would quietly exempt the field from grading — the shape it takes is what
+    # decides whether it is graded at all, so whitespace would decide that too.
+    # `fullmatch` then, not `match`: the pattern is anchored and `$` matches
+    # before a trailing newline, so `match` would read anything appended to a
+    # date-time as a date-time. Same trap `_validate_arrow_type_in_json_schema`
+    # names, in the direction it applies here.
+    return _WIRE_DATETIME_RE.fullmatch(sample.strip())
 
 
 def _offset_is_real(zone: str | None) -> bool:
@@ -673,15 +683,15 @@ def _offset_is_real(zone: str | None) -> bool:
 
     True for an absent zone and for `Z`, neither of which is an offset. The
     profile admits `+HH`, `+HHMM` and `+HH:MM`, all with unbounded digits, so
-    the positions are read the way the clock positions are — the hours run to
-    24, since `+24:00` is a real offset and `24:01` is not.
+    the positions are read the way the clock positions are, against the same
+    RFC 3339 grammar.
     """
     if zone is None or zone in "Zz":
         return True
     digits = zone[1:].replace(":", "")
     hour = int(digits[:2])
     minute = int(digits[2:]) if len(digits) > 2 else 0
-    return hour <= _MAX_OFFSET_HOUR and minute <= 59 and (hour, minute) <= (24, 0)
+    return hour <= _MAX_OFFSET_HOUR and minute <= _MAX_OFFSET_MINUTE
 
 
 def sample_names_an_instant(sample: Any) -> bool:
@@ -693,12 +703,15 @@ def sample_names_an_instant(sample: Any) -> bool:
 
     The calendar arithmetic — which months have 31 days, which years have a
     29th of February — is `datetime.date`'s, from the captured positions.
-    Handing the whole string to a parser instead would tie the profile to
-    whatever that parser accepts: `datetime.fromisoformat` gained the spellings
-    this profile admits only in 3.11, so on the floor these packages declare it
-    refuses a `Z`-suffixed sample and this reader would call every zoned wire
-    value on the interpreter impossible. Constructing from the positions asks
-    the calendar and nothing else, and answers the same on every version.
+    What is deliberately NOT delegated is which spellings count: handing the
+    whole string to a parser would make this profile whatever that parser
+    accepts on the interpreter in front of it, and the profile is the
+    contract's to define. `datetime.fromisoformat` is the worked example — the
+    spellings admitted here arrived in it only in 3.11, so a reader resting on
+    it called every zoned wire value impossible on interpreters these packages
+    then supported, in a finding telling the author to drop the evidence.
+    Constructing from the positions asks the calendar and nothing else, and
+    answers the same everywhere.
 
     A second of 60 is a leap second, which RFC 3339 admits and providers emit;
     `datetime` has no representation for one, so the seconds position is

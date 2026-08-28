@@ -573,9 +573,14 @@ class TestRecordedWireSamples:
         # and the comma fraction separator.
         ("2024-01-02T03:04:05+02", True),
         ("2024-01-02T03:04:05,123Z", True),
-        # Anchored and read with `fullmatch`, so a trailing newline is not a
-        # date-time literal rather than a clean one.
-        ("2024-01-02T03:04:05Z\n", None),
+        # Whitespace around a sample is how a copy out of provider docs
+        # arrives, not a different kind of value — the wire value is the same
+        # one, and reading it otherwise exempts the field from grading.
+        ("2024-01-02T03:04:05Z\n", True),
+        ("  2024-01-02T03:04:05  ", False),
+        # Still anchored under the whitespace: a date-time with words around
+        # it is not a date-time sample.
+        ("seen at 2024-01-02T03:04:05Z", None),
         ("2024-01-02T03:04:05", False),
         ("2024-01-02T03:04", False),
         # Not a date-time literal: a date, an epoch, a provider spelling, and a
@@ -583,7 +588,6 @@ class TestRecordedWireSamples:
         ("2024-01-02", None),
         ("1712345678", None),
         ("02/01/2024 03:04:05", None),
-        ("seen at 2024-01-02T03:04:05Z", None),
         # Non-strings carry no zone-awareness a reader can see.
         (1712345678, None),
         (True, None),
@@ -620,10 +624,13 @@ class TestRecordedWireSamples:
         ("2024-01-02T03:04:05+25:99", False),
         ("2024-01-02T03:04:05+99", False),
         ("2024-01-02T03:04:05+9999", False),
-        ("2024-01-02T03:04:05+24:01", False),
-        # `+24:00` exists, and every spelling of a real offset the profile
-        # admits reads as one.
-        ("2024-01-02T03:04:05+24:00", True),
+        # RFC 3339 §5.6 bounds an offset's hour at 23, the same grammar the
+        # leap second above is read off; exceeding it for one position and
+        # obeying it for the other would make the source a matter of taste.
+        ("2024-01-02T03:04:05+24:00", False),
+        ("2024-01-02T03:04:05+23:60", False),
+        # Every spelling of a real offset the profile admits reads as one.
+        ("2024-01-02T03:04:05+23:59", True),
         ("2024-01-02T03:04:05-08", True),
         ("2024-01-02T03:04:05+0530", True),
         ("2024-01-02T03:60:00Z", False),
