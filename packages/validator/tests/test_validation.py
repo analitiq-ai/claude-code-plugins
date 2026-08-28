@@ -305,7 +305,8 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     the grading failure reads as the document's rather than as a bug in this
     tool — the reference IS the author's to fix."""
     ep = _sample_endpoint({"$ref": ref, "examples": [1]})
-    findings = validator.validate_document(ep)
+    # The reference is what makes grading raise, so the crash IS the subject.
+    findings = validator.validate_document(ep, expect_crash=True)
     assert any(ref in f["message"] for f in findings), findings
     assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
 
@@ -399,7 +400,7 @@ def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):
     ep = _sample_endpoint({
         "type": "number", "multipleOf": 0.5, "examples": [int("9" * 400)]})
     ep["endpoint_id"] = "WRONG NAME"
-    findings = validator.validate_document(ep)
+    findings = validator.validate_document(ep, expect_crash=True)
     crashed = [f for f in findings if is_guard_finding(f)]
     assert len(crashed) == 1, findings
     assert crashed[0]["validator"] == "embedded-schema-example", crashed
@@ -530,7 +531,8 @@ def test_a_bad_reference_does_not_suppress_samples_elsewhere(validator):
     # nothing — which is how the per-schema guard survived a round.
     props["b"] = {"$ref": "#/$defs/Missing", "examples": [1]}
     props["c"] = dict(good)
-    findings = validator.validate_document(ep)
+    # `b` raises on purpose; the point is that `a` and `c` still report.
+    findings = validator.validate_document(ep, expect_crash=True)
     graded = {f["path"] for f in findings
               if f["validator"] == "embedded-schema-example"}
     for field in ("a", "b", "c"):
