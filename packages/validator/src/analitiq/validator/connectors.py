@@ -356,7 +356,12 @@ def _one_embedded_schema_findings(
         # are the author's either way and withholding them costs a rerun.
         # Only the sample grading is withheld — that one goes through
         # `evolve`, which IS where the switch happens and where a subtree
-        # would really be read in another draft's terms.
+        # would really be read in another draft's terms. Withheld for the
+        # whole embedded schema, not for the offending subtree: one validator
+        # is built per schema and `evolve` picks the draft per node, so
+        # grading the rest would mean deciding, per sample, which draft it was
+        # read under. The draft error is reported at error severity, so the
+        # document fails either way and the author fixes one declaration.
         try:
             Draft202012Validator.check_schema(schema)
         except SchemaError as exc:

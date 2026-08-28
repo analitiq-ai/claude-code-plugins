@@ -26,6 +26,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+from analitiq.validator._core import _guard_opening
 from conftest import (
     SCREENED_ENTRY_POINTS,
     SCREENED_NAME_SHAPES,
@@ -134,6 +137,26 @@ def test_every_screened_entry_point_has_a_wrapper_that_screens_it():
         "have no wrapper method on _ScreenedValidator and their names match "
         "no shape __getattr__ wraps, so a caller gets the raw function"
     )
+
+    # Existing is not screening. Each wrapper is driven with a finding list
+    # carrying a crash, and must refuse it — a wrapper that forgot `_screen`
+    # and returned the raw call satisfies the check above exactly as well.
+    class _Crashing:
+        def __getattr__(self, name):
+            def _one(*_args, **_kwargs):
+                return [{"validator": "document", "severity": "error", "path": "/",
+                         "message": _guard_opening("document") + " (X); why"}]
+            return _one
+
+        @staticmethod
+        def is_guard_finding(item):
+            from analitiq.validator import is_guard_finding
+            return is_guard_finding(item)
+
+    screened = _ScreenedValidator(_Crashing())
+    for name in SCREENED_ENTRY_POINTS:
+        with pytest.raises(AssertionError, match="a check crashed"):
+            getattr(screened, name)()
 
 
 def test_no_test_module_calls_an_entry_point_out_from_under_the_screen():

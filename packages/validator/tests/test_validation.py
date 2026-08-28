@@ -331,18 +331,26 @@ def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name)
 
 
 @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
-def test_a_typed_sample_under_a_negation_parses_and_is_exempt(validator, key):
+@pytest.mark.parametrize("descent", ["properties", "anyOf", "items"])
+def test_a_typed_sample_under_a_negation_parses_and_is_exempt(
+    validator, key, descent,
+):
     """The end-to-end case neither half covered: a node carrying an
     `arrow_type` under a negating position. The contract models have to let the
     document through AND this check has to pass over it — an untyped node
     cannot tell the two apart, since a model rejection would satisfy the same
     empty result.
 
-    Nested one level down, so the flag's propagation is pinned and not only
-    the place it is set."""
-    ep = _sample_endpoint({key: {"type": "object", "properties": {"inner": {
-        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
-        "examples": [7]}}}})
+    Nested one level down, once per descent SHAPE: the flag travels through
+    three loops, and nesting under `properties` alone pins one of them."""
+    inner = {"type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+             "examples": [7]}
+    below = {
+        "properties": {"type": "object", "properties": {"inner": inner}},
+        "anyOf": {"anyOf": [inner]},
+        "items": {"type": "array", "items": inner},
+    }[descent]
+    ep = _sample_endpoint({key: below})
     findings = validator.validate_document(ep)
     assert not [f for f in findings if f["validator"] == "contract-model"], findings
     assert not [f for f in findings
@@ -561,6 +569,22 @@ def test_the_cause_a_crash_names_is_chosen_by_what_went_wrong(validator):
     # And with no caller wording, it falls back rather than inventing one.
     unnamed = _run_guarded(_content, vid="document", path="/")
     assert GUARD_DEFAULT_BLAME in unnamed[0]["message"], unnamed
+
+
+def test_the_rendered_cause_is_the_one_a_finding_carries(validator):
+    """The plugin README renders `GUARD_RESOURCE_CAUSE` as the literal text a
+    reader matches a finding against, and findings carry
+    `GUARD_RESOURCE_BLAME`. Nothing else holds the two together: a rewording
+    of BLAME that stopped opening with CAUSE would render a clause no finding
+    contains, and the block check compares the file to the renderer, so both
+    would move together and nothing would go red."""
+    from analitiq.validator import GUARD_RESOURCE_CAUSE
+
+    assert GUARD_RESOURCE_BLAME.startswith(GUARD_RESOURCE_CAUSE), (
+        "the README renders the cause clause on its own; a finding must open "
+        "with the same words or the reader is matching against text no "
+        "finding carries"
+    )
 
 
 def test_the_scope_a_crash_names_survives_whatever_the_cause_was(validator):
