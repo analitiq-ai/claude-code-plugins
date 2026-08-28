@@ -58,6 +58,9 @@ PIPELINE = [
     # prose site's hash, which IS the re-affirmation the census exists to
     # demand from a person — an automated restamp would press it silently.
     ("render_prose_census.py", [["check"]], ["check"]),
+    # Check-only for the same reason: a disposition is a judgment about an
+    # unread field, and no mode of the script writes one.
+    ("render_contract_consumption.py", [["check"]], ["check"]),
     # Last: Contents sections derive from the documents' final headings, which
     # the renderers above may have just rewritten.
     ("render_reference_toc.py", [["write"]], ["check"]),

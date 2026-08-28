@@ -95,7 +95,9 @@ def test_write_mode_never_writes_the_judgment_generators(monkeypatch):
     monkeypatch.setattr(render_all, "_run",
                         lambda script, args: calls.append((script, tuple(args))) or 0)
     assert render_all.main(["write"]) == 0
-    for script in ("render_schemas.py", "render_prose_census.py"):
+    for script in (
+        "render_schemas.py", "render_prose_census.py", "render_contract_consumption.py",
+    ):
         modes = [args for s, args in calls if s == script]
         assert modes and all(args == ("check",) for args in modes), (script, modes)
 
