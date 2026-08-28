@@ -13,7 +13,7 @@ name = "analitiq-validator"
 version = "1.0.0rc23"
 description = "The Analitiq artifact validator: offline validation of Analitiq documents against the contract models (`analitiq-contract-models`) plus the cross-file and cross-document checks a single-document model cannot express. Today it validates connector-package documents (connector, endpoint, type-map files) and the referential integrity of an assembled pipeline bundle. Import as `analitiq.validator`; CLI `analitiq-validate`."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Analitiq" }]
 keywords = ["analitiq", "connector", "pipeline", "validation", "type-map", "contract"]

@@ -100,6 +100,60 @@ class _ScreenedValidator:
             self._module.check_coverage(*args, **kwargs), expect_crash)
 
 
+#: What the CLI is driven with, and where it imports from. Only the two public
+#: source trees, matching an installed consumer exactly.
+_CLI_CODE = "from analitiq.validator import main; import sys; sys.exit(main())"
+
+
+def run_cli(tmp_path, doc, filename="doc.json"):
+    """Drive `analitiq-validate --document` on one authored document, screened.
+
+    The CLI is the path no fixture can wrap — it runs out of process — and it
+    is the one where a crash is hardest to see: `main()` exits 1 on any
+    error-severity finding, so a guard finding produces exactly the
+    `returncode == 1` / `passed is False` a caller asserts, and the test passes
+    on a document nothing judged. So the screen is applied here, once, and
+    every CLI test in this suite goes through it.
+
+    Returns the `CompletedProcess`; callers assert the exit code and parse
+    stdout themselves.
+    """
+    import json
+    import subprocess
+
+    path = tmp_path / filename
+    path.write_text(json.dumps(doc))
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(
+            [str(VALIDATOR_SRC_ROOT), str(CONTRACTS_SRC_ROOT)]),
+        "DOMAIN": "analitiq.ai",
+    }
+    result = subprocess.run(
+        [sys.executable, "-c", _CLI_CODE, "--document", str(path)],
+        capture_output=True, text=True, env=env, check=False)
+    # Asserted, not tolerated: the CLI's contract is that it always emits
+    # `{"passed": …, "findings": […]}`. Falling back to "no findings" on
+    # unparseable output would screen nothing and say nothing, which is the
+    # shape this helper exists to remove.
+    assert result.stdout.strip(), (
+        "the CLI produced no stdout, so there is no verdict to screen or to "
+        f"assert against. stderr:\n{result.stderr}")
+    payload = json.loads(result.stdout)
+    assert isinstance(payload, dict) and "findings" in payload, (
+        f"the CLI emitted no `findings` key: {result.stdout[:400]}")
+
+    import analitiq.validator
+
+    crashed = [f for f in payload["findings"]
+               if analitiq.validator.is_guard_finding(f)]
+    assert not crashed, (
+        "a check crashed inside the CLI, so this test's exit code says "
+        "nothing about what the validator decided:\n"
+        + "\n".join(f["message"] for f in crashed))
+    return result
+
+
 @pytest.fixture(scope="session")
 def validator():
     """The validator package, imported from this repo's source (src layout).

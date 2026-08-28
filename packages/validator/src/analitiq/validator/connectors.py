@@ -983,17 +983,40 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # are in hand.
         findings.extend(_endpoint_transport_ref_findings(
             ep_doc, doc.get("transports"), label=ep_path.name))
-        for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-            rendered = _render_canonical(native, read_doc)
-            site = f"{ep_path.name}{pointer}"
-            if rendered is None:
-                findings.append(finding("type-map-coverage", "error", "/",
-                                        f"native_type {native!r} at {site} has no matching rule in "
-                                        f"sibling {_READ_MAP_FILENAME}."))
-            elif not _canonical_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
-                findings.append(finding("type-map-coverage", "error", "/",
-                                        f"native_type {native!r} at {site} resolves to {rendered!r} via "
-                                        f"{_READ_MAP_FILENAME} but the endpoint declares arrow_type={arrow!r}."))
+        # Guarded: this walks the same schemas the check above just walked,
+        # recursively, over the same author-supplied nesting. Unguarded it
+        # re-raises whatever that one caught and escapes to the dispatch, which
+        # discards the guard finding just produced along with every finding on
+        # every other endpoint in the connector.
+        findings.extend(_run_guarded(
+            _type_map_coverage_findings, ep_doc, read_doc, ep_path.name,
+            vid="type-map-coverage",
+            path="/",
+            blame=(
+                f"the declared types in {ep_path.name} could not be collected "
+                "to check against the read type map. Every other endpoint in "
+                "this connector was still checked"
+            )))
+    return findings
+
+
+def _type_map_coverage_findings(
+    ep_doc: dict, read_doc: Any, label: str,
+) -> list[dict]:
+    """Each `native_type` an endpoint declares must resolve through the read
+    map to the `arrow_type` declared beside it."""
+    findings: list[dict] = []
+    for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
+        rendered = _render_canonical(native, read_doc)
+        site = f"{label}{pointer}"
+        if rendered is None:
+            findings.append(finding("type-map-coverage", "error", "/",
+                                    f"native_type {native!r} at {site} has no matching rule in "
+                                    f"sibling {_READ_MAP_FILENAME}."))
+        elif not _canonical_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
+            findings.append(finding("type-map-coverage", "error", "/",
+                                    f"native_type {native!r} at {site} resolves to {rendered!r} via "
+                                    f"{_READ_MAP_FILENAME} but the endpoint declares arrow_type={arrow!r}."))
     return findings
 
 

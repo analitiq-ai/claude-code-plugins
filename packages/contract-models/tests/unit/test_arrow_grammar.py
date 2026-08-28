@@ -609,6 +609,17 @@ class TestRecordedWireSamples:
         ("2024-01-02t03:04:05,123z", True),
         ("2024-01-02 03:04", True),
         ("2024-02-29T00:00:00+05:30", True),
+        # A leap second: RFC 3339 admits `:60` and providers emit it, so a
+        # reader calling it impossible refuses real wire evidence and tells the
+        # author to drop it.
+        ("2024-01-02T23:59:60Z", True),
+        # The positions above the seconds have no leap case.
+        ("2024-01-02T24:00:00Z", False),
+        ("2024-01-02T03:60:00Z", False),
+        # The calendar, not a digit range: a 29th of February exists in a leap
+        # year and does not in the year before it.
+        ("2024-02-29T00:00:00Z", True),
+        ("2023-02-29T00:00:00Z", False),
         # Not date-time shaped at all, so not malformed either — a different
         # kind of value, which `sample_carries_zone` passes over.
         ("1712345678", True),

@@ -98,8 +98,11 @@ Schemas are generated from — so there is no schema fetch. It runs:
    `endpoint-id-locator`, `endpoint-transport-ref`), embedded-schema validity
    (`embedded-json-schema`), the wire samples a schema records
    (`embedded-schema-example`), and quality warnings on a type map
-   (`type-map-rule`, `type-map-write-coverage`). A document matching no known
-   artifact kind reports under `document`.
+   (`type-map-rule`, `type-map-write-coverage`). `document` carries the two
+   outcomes that are not a verdict about an artifact: a document matching no
+   known artifact kind, and a check that could not finish — whose message
+   opens `check '<id>' could not finish`. A finding of that shape is not a
+   rejection; nothing was decided about what it names.
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.
