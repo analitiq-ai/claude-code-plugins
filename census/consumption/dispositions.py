@@ -152,13 +152,13 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition(
         "endpoints.Param", "operators", "authoring_only",
-        "read by the registry service's on-save comparison of a stream's "
-        "filter operators against the subset this param declares, the "
-        "consumer RULE-STRM-026's rationale describes, and by the validator "
-        "over the set itself; RULE-STRM-026 names the obligation on the "
-        "filter, RULE-ENDP-002 and RULE-ENDP-055 the obligations on the set. "
-        "The pinned manifest claims no read of the set, so the run sends the "
-        "filter with whatever operator the stream declares",
+        "read by the registry service's on-save comparison — the consumer "
+        "RULE-STRM-026's rationale describes — of a stream's filter against "
+        "the operators this param declares. RULE-STRM-026 names the "
+        "obligation on the filter; RULE-ENDP-002 and RULE-ENDP-055 name the "
+        "obligations on the set. The pinned manifest claims no read of the "
+        "set, so the run sends the filter with whatever operator the stream "
+        "declares",
     ),
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
