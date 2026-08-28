@@ -117,8 +117,8 @@ def _move_record_to_another_envelope_key(response: dict) -> None:
 
 
 @pytest.mark.parametrize("mutate, expected", [
-    (_move_record_behind_a_ref, "does not resolve to"),
-    (_move_record_to_another_envelope_key, "is no longer the `items` of"),
+    (_move_record_behind_a_ref, "moved behind a reference"),
+    (_move_record_to_another_envelope_key, r"records\.ref` is now"),
 ])
 def test_the_record_locator_refuses_an_example_whose_record_moved(
     mutate, expected,
@@ -133,7 +133,9 @@ def test_the_record_locator_refuses_an_example_whose_record_moved(
     green through all of it.
 
     Each half is driven separately, because a document breaking both is
-    satisfied by either check alone and pins neither.
+    satisfied by either check alone and pins neither — and each expects the
+    message that half produces, so a guard reduced to one clause fails with
+    the wrong text rather than passing on the right exception.
     """
     doc = _REGISTRY._read_endpoint()
     mutate(doc["operations"]["read"]["response"])

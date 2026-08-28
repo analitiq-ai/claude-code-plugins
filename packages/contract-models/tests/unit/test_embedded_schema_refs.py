@@ -1275,6 +1275,9 @@ class TestKeywordVocabularyHasOneOwner:
             ep.JSON_SCHEMA_SUBSCHEMA_ORDER,
             ep.JSON_SCHEMA_LIST_OF_SCHEMA_ORDER,
             ep.JSON_SCHEMA_SINGLE_SCHEMA_ORDER,
+            # A subset of the single-schema positions, published for the
+            # consumers that must know which of them invert the instance.
+            ep.JSON_SCHEMA_NEGATED_SCHEMA_KEYS,
         )
         restated = sorted(
             name for name, value in vars(vc).items()

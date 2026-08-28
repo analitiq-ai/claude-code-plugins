@@ -297,6 +297,32 @@ def test_a_sample_is_graded_against_its_own_node_not_the_composition(validator):
     ], errors
 
 
+@pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+def test_a_sample_under_a_negation_is_not_graded_against_its_own_opposite(
+    validator, key,
+):
+    """RULE-ENDP-064 grades a sample against "that node's own declarations".
+    Under one of these the declarations describe what the value must NOT be —
+    a `"0"` recorded beside `not: {type: boolean}` is the correct
+    counter-example — so grading it reports the author's right answer as a
+    contradiction, error-severity, telling them to change one of the two.
+
+    `propertyNames` is the same shape by a different route: it constrains the
+    KEYS, and a sample is never a key."""
+    ep = _sample_endpoint({key: {"type": "boolean", "examples": ["0"]}})
+    assert _example_errors(validator, ep) == []
+
+
+def test_a_sample_beside_a_negation_is_still_graded(validator):
+    """The negation is a position, not a spreading property: a node that
+    merely HAS a `not` still grades the sample recorded on itself."""
+    ep = _sample_endpoint({
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "not": {"const": "x"}, "examples": [7]})
+    errors = _example_errors(validator, ep)
+    assert len(errors) == 1, errors
+
+
 def test_samples_are_graded_wherever_a_declaration_can_sit(validator):
     """`properties` is where a record's fields live, and it is not the only
     schema position the walk reaches."""
@@ -462,61 +488,110 @@ def test_a_document_too_deep_to_walk_is_not_the_authors_bug_to_file(validator):
     assert "RecursionError" in crashed[0]["message"], crashed[0]
 
 
-def test_the_blame_a_crash_carries_is_chosen_by_what_went_wrong(validator):
-    """`_run_guarded`'s three ways to answer, at the level they are decided.
+def test_the_cause_a_crash_names_is_chosen_by_what_went_wrong(validator):
+    """Which of the three causes a crash reports, at the level it is decided.
 
-    End to end only ever exercises whichever walk reached the depth first, so
-    the branches are driven here: a caller that named nothing gets the wording
-    for running out of room rather than the one for a bug, and a caller whose
-    wording is true of running out of room and of nothing else gets handed back
-    to the default when something else goes wrong."""
+    End to end only ever exercises whichever walk crashed first, so the
+    branches are driven here. What each must not do is describe a defect in
+    this tool as something the author wrote: a caller's reading of its own
+    failure modes is a reading of what a DOCUMENT can do to it, and a
+    `TypeError` is not that however confident the caller was."""
     from analitiq.validator._core import _run_guarded
 
     def _deep():
         raise RecursionError
     def _bug():
         raise TypeError("not a size problem")
+    def _content():
+        raise OverflowError("int too large")
 
-    unnamed = _run_guarded(_deep, vid="document", path="/")
-    assert GUARD_RESOURCE_BLAME in unnamed[0]["message"], unnamed
+    # Out of room: the type answers, and a caller's wording does not enter
+    # into it — nothing a caller knows makes a full stack something else.
+    for kwargs in ({}, {"blame": "mine"}):
+        out_of_room = _run_guarded(_deep, vid="document", path="/", **kwargs)
+        assert GUARD_RESOURCE_BLAME in out_of_room[0]["message"], out_of_room
+        assert "mine" not in out_of_room[0]["message"], out_of_room
 
-    named = _run_guarded(_deep, vid="document", path="/", blame="mine")
-    assert "mine" in named[0]["message"], named
+    # A defect in this tool: likewise not the caller's to reinterpret.
+    ours = _run_guarded(_bug, vid="document", path="/", blame="mine")
+    assert GUARD_DEFAULT_BLAME in ours[0]["message"], ours
+    assert "mine" not in ours[0]["message"], ours
 
-    resource_only = _run_guarded(
-        _bug, vid="document", path="/", blame="only true of size",
-        resource_only=True)
-    assert "only true of size" not in resource_only[0]["message"], resource_only
-    assert GUARD_DEFAULT_BLAME in resource_only[0]["message"], resource_only
+    # Brought down by what it was reading, which is the one the caller knows
+    # more about than the type does.
+    theirs = _run_guarded(_content, vid="document", path="/", blame="mine")
+    assert "mine" in theirs[0]["message"], theirs
+    assert GUARD_DEFAULT_BLAME not in theirs[0]["message"], theirs
+    # And with no caller wording, it falls back rather than inventing one.
+    unnamed = _run_guarded(_content, vid="document", path="/")
+    assert GUARD_DEFAULT_BLAME in unnamed[0]["message"], unnamed
 
 
-def test_one_endpoint_that_cannot_be_walked_costs_only_that_endpoint(
-    tmp_path, connector_base, validator,
+def test_the_scope_a_crash_names_survives_whatever_the_cause_was(validator):
+    """Which slot was being checked and what else survived is the caller's
+    alone, and true whichever way the check went wrong.
+
+    Folded into the cause it was conditional on the caller's guess being
+    right: a coding defect reported as "this document nests too deep" ALSO
+    lost the only line naming which endpoint it happened on."""
+    from analitiq.validator._core import _run_guarded
+
+    for boom in (RecursionError, TypeError, OverflowError):
+        def _raise(exc=boom):
+            raise exc("x")
+        out = _run_guarded(_raise, vid="document", path="/",
+                           blame="mine", scope="Endpoint a.json was not checked.")
+        assert "Endpoint a.json was not checked." in out[0]["message"], out
+
+
+@pytest.mark.parametrize("crashing_check", [
+    "_model_findings",
+    "_endpoint_locator_findings",
+    "_endpoint_transport_ref_findings",
+    "_type_map_coverage_findings",
+])
+def test_one_endpoint_that_cannot_be_checked_costs_only_that_endpoint(
+    tmp_path, connector_base, validator, monkeypatch, crashing_check,
 ):
-    """A connector's endpoints are checked in one loop, and every check in it
-    walks the document's own nesting — the contract models first and deepest.
-    Whichever walk reaches the depth is where the stack ends, so guarding one
-    of them leaves the rest to escape to the dispatch, which discards every
-    finding on every OTHER endpoint too. The unit guarded is the endpoint."""
-    deep = _endpoint("STRING", "Utf8")
-    deep["endpoint_id"] = "deepone"
-    deep["operations"]["read"]["response"]["schema"]["items"] = (
-        _deeply_nested_schema())
+    """A connector's endpoints are checked in one loop, and a raise anywhere in
+    it escapes to the dispatch — which discards every finding on every OTHER
+    endpoint too. The guarded unit is therefore the endpoint, not one check
+    inside it.
+
+    Driven by making each check raise in turn rather than by a document deep
+    enough to exhaust it, because which walk gives out first is a property of
+    the document: on this tree the embedded-schema walk goes first, at a depth
+    the JSON writer building the fixture cannot itself reach on every
+    interpreter. What is under test is the containment, and the containment is
+    the same whichever check it was.
+    """
+    from analitiq.validator import connectors
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("brought down by this endpoint")
+
+    monkeypatch.setattr(connectors, crashing_check, _boom)
+    bad = _endpoint("STRING", "Utf8")
+    bad["endpoint_id"] = "badone"
     other = _endpoint("STRING", "Utf8")
     other["endpoint_id"] = "WRONG NAME"
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
-                {"deepone.json": deep, "widgets.json": other})
+                {"badone.json": bad, "widgets.json": other})
     findings = validator.check_coverage(
         connector_base, tmp_path / "connector.json", expect_crash=True)
     crashed = [f for f in findings if is_guard_finding(f)]
-    assert len(crashed) == 1, findings
-    # The offending file is named: `path` is `/`, so without it the author is
-    # told a connector somewhere has an endpoint they cannot find.
-    assert "deepone.json" in crashed[0]["message"], crashed[0]
-    # The other endpoint's defects survive it.
-    assert {f["validator"] for f in findings if not is_guard_finding(f)} >= {
-        "endpoint-filename", "endpoint-id-locator"}, findings
+    # Every endpoint meets the same broken check, so every endpoint reports —
+    # which is the containment: the first crash did not stop the loop reaching
+    # the second. Each names its own file, because `path` is `/` and without
+    # the name the author is told a connector somewhere has an endpoint they
+    # cannot find.
+    #
+    # Not a count: `_model_findings` is also how the sibling type map is read,
+    # so that parametrisation reports for the map as well — contained the same
+    # way, one document earlier.
+    scoped = " ".join(f["message"] for f in crashed)
+    assert "badone.json" in scoped and "widgets.json" in scoped, crashed
 
 
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
@@ -575,6 +650,23 @@ def test_a_wrong_root_draft_does_not_stop_the_rest_of_the_checks(validator):
     schema["$schema"] = "http://json-schema.org/draft-07/schema#"
     ids = {f["validator"] for f in validator.validate_document(ep)}
     assert {"embedded-json-schema", "embedded-schema-example"} <= ids, ids
+
+
+def test_a_nested_draft_does_not_withhold_the_metaschema_findings(validator):
+    """A nested `$schema` changes which draft `evolve` reads a SUBTREE in, so
+    the sample grading is withheld. It does not reach `check_schema`, which
+    grades against this class's own metaschema — so withholding those findings
+    too would cost the author a rerun for nothing."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["a"] = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "array", "minItems": "notanumber"}
+    messages = [f["message"] for f in validator.validate_document(ep)
+                if f["validator"] == "embedded-json-schema"]
+    assert any("another draft" in m for m in messages), messages
+    assert any("not a valid JSON Schema Draft 2020-12" in m
+               for m in messages), messages
 
 
 def test_a_crash_while_grading_costs_this_check_and_nothing_else(validator):

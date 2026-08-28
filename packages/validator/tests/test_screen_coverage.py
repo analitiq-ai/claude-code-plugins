@@ -11,10 +11,15 @@ Nothing about that is visible at the call site, so it is decided here instead â€
 lexically, over the import statements, which is a question about which name a
 module binds and not about what any of its tests mean.
 
-What it does not reach: a test outside this package's own tree, and a
-subprocess. The out-of-process path has its own screen at `conftest.run_cli`,
-which every CLI test here goes through; the other suites under `tests/` call
-the validator to assert an example is clean, where a crash fails them anyway.
+This is one of three channels, and the three are screened by one statement of
+which names matter (`SCREENED_ENTRY_POINTS` and `SCREENED_NAME_SHAPES`): an
+import is caught here, an attribute access on the fixture is wrapped by
+`_ScreenedValidator.__getattr__`, and the out-of-process path is screened at
+`conftest.run_cli_argv`, which every CLI test here goes through.
+
+What none of them reaches is a test outside this package's own tree. Those
+suites call the validator to assert an example is clean, where a crash fails
+them anyway.
 """
 from __future__ import annotations
 

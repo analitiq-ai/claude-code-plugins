@@ -102,10 +102,11 @@ Schemas are generated from — so there is no schema fetch. It runs:
    artifact kind reports under `document`.
 
    A finding under any id may be a check that could not finish rather than a
-   verdict: a document can bring a check down, and one that does is reported
-   under that check's own id so the rest of the run survives it. Such a
-   finding says so in its message and names what to do about it; nothing was
-   decided about what it points at, in either direction.
+   verdict: a document can bring a check down, and the run reports that and
+   carries on. Such a finding says so in its message, names which slot was
+   being checked and what else still ran, and says whether the cause is the
+   document or this tool. Nothing was decided about what it points at, in
+   either direction — it is neither a rejection nor a pass.
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.

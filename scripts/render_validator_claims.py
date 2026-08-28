@@ -173,12 +173,17 @@ def _record_node(doc: dict) -> dict:
         # Raised, not asserted: `-O` strips an assert, and a check that
         # disappears under an optimisation flag is not a check. This module
         # already reports its own defects this way.
+        moved = ("its `records.ref` is now "
+                 f"{response['records']['ref']!r}, not {indexed_ref!r}"
+                 if response.get("records", {}).get("ref") != indexed_ref
+                 else "the record shape at that path is not what the read "
+                      "contract resolves to — it has moved behind a reference "
+                      "or a composition")
         raise RuntimeError(
-            f"the example endpoint's record shape is no longer the `items` of "
-            f"{indexed_ref!r} (its `records.ref` is "
-            f"{response['records']['ref']!r}); probes would declare their "
-            "fields on a node the read contract does not resolve to. Reach it "
-            "the way `resolve_read_record_schema` does, on the live document."
+            f"the example endpoint's record shape is not where probes reach "
+            f"it: {moved}. They would declare their fields on a node the read "
+            "contract does not resolve to. Reach it the way "
+            "`resolve_read_record_schema` does, on the live document."
         )
     return node
 
