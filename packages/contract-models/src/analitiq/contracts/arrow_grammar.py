@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -640,21 +641,60 @@ def declares_zone(value: str) -> bool | None:
     return arg != params[index]["null_sentinel"]
 
 
-def sample_carries_zone(sample: Any) -> bool | None:
-    """Whether a recorded wire sample carries a zone — None when it cannot say.
+def _read_wire_datetime(sample: Any) -> re.Match[str] | None:
+    """The date-time shape a sample takes, or None if it takes none.
 
-    Only a string in :data:`_WIRE_DATETIME_PATTERN` form is decidable. Every
-    other sample returns None, which reads downstream as "no evidence" and
-    never as "no zone": a provider that sends `1712345678` has not said its
-    instants are naive, it has said nothing this reader can hear.
+    Shape only — whether the digits name a real instant is
+    :func:`sample_names_an_instant`'s question, because the two answers are
+    used for different things: one decides whether a sample is evidence about
+    zones, the other decides whether it is evidence at all.
     """
     if not isinstance(sample, str):
         return None
     # `fullmatch`, not `match`: the pattern is anchored, and `$` matches
     # before a trailing newline, so `match` would read `"…05Z\n"` as a clean
     # sample. Same trap `_validate_arrow_type_in_json_schema` names.
-    match = _WIRE_DATETIME_RE.fullmatch(sample)
-    if match is None:
+    return _WIRE_DATETIME_RE.fullmatch(sample)
+
+
+def sample_names_an_instant(sample: Any) -> bool:
+    """Whether a date-time-shaped sample names a moment that exists.
+
+    The shape regex answers which spellings the authoring profile admits; it
+    cannot answer whether `2024-13-45T99:99:99Z` is a date, and reading a
+    month of 13 as evidence about anything is worse than reading nothing. The
+    calendar arithmetic is `datetime.fromisoformat`'s, not this module's — the
+    profile admits three spellings it does not (a lowercase separator, a
+    lowercase zone, a comma before the fraction), so those are normalized to
+    their canonical form on the way in rather than reimplemented here.
+
+    False only for a sample that HAS the shape. A sample that has no date-time
+    shape is not malformed; it is a different kind of value, and
+    :func:`sample_carries_zone` passes it over.
+    """
+    if _read_wire_datetime(sample) is None:
+        return True
+    normalized = (sample.replace("t", "T", 1).replace(",", ".", 1)
+                  .replace("z", "Z"))
+    try:
+        datetime.fromisoformat(normalized)
+    except ValueError:
+        return False
+    return True
+
+
+def sample_carries_zone(sample: Any) -> bool | None:
+    """Whether a recorded wire sample carries a zone — None when it cannot say.
+
+    Only a string in :data:`_WIRE_DATETIME_PATTERN` form naming a real instant
+    is decidable. Every other sample returns None, which reads downstream as
+    "no evidence" and never as "no zone": a provider that sends `1712345678`
+    has not said its instants are naive, it has said nothing this reader can
+    hear, and a sample reading `2024-13-45T99:99:99Z` has said nothing either
+    — a `Z` on an impossible date is not a report about zones.
+    """
+    match = _read_wire_datetime(sample)
+    if match is None or not sample_names_an_instant(sample):
         return None
     return match.group("zone") is not None
 

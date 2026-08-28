@@ -134,7 +134,13 @@ def validate_document(doc: Any, doc_path: Path | None = None,
     ambiguous (a caller passing `--schema-url .../type-map-write/latest.json`
     from a temp file): it disambiguates read vs write when the filename can't.
     """
-    return _run_guarded(_dispatch, doc, doc_path, schema_url, vid="contract-model")
+    # `document`, not `contract-model`: a crash anywhere under the dispatch is
+    # not a pydantic rejection, and reporting one under the id that means
+    # "this document failed its contract model" hands an agent filtering for
+    # model errors a crash to render as one. `document` is the id for "there
+    # is no verdict about this document", which is what a crash leaves.
+    return _run_guarded(_dispatch, doc, doc_path, schema_url,
+                        vid="document", path="/")
 
 
 def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) -> list[dict]:
@@ -177,11 +183,11 @@ def _run_guarded(
         if len(detail) > _GUARD_DETAIL_MAX:
             detail = detail[:_GUARD_DETAIL_MAX] + "…"
         return [finding(vid, "error", path,
-                        f"{GUARD_PREFIX} {vid!r} {GUARD_VERB} ({detail}); "
+                        f"{_guard_opening(vid)} ({detail}); "
                         + (blame or GUARD_DEFAULT_BLAME))]
 
 
-#: The two halves of the guard's message that anything recognising one of its
+#: The halves of the guard's message that anything recognising one of its
 #: findings has to match. Stated here because they ARE the recognition: the
 #: probe registry refuses to let a crash satisfy a probe that expects a
 #: rejection, and it identifies a crash by this wording. Reworded in place and
@@ -189,6 +195,17 @@ def _run_guarded(
 #: "crashed unexpectedly" left the tripwire matching nothing.
 GUARD_PREFIX = "check"
 GUARD_VERB = "could not finish"
+
+
+def _guard_opening(vid: str) -> str:
+    """The opening a guard finding is written with, and recognised by.
+
+    One statement of it, used by the writer and by :func:`is_guard_finding`,
+    so recognition cannot drift from emission: a message assembled here and
+    matched by two loose substrings elsewhere would also match a real finding
+    whose text happens to begin "checked" and contain the verb.
+    """
+    return f"{GUARD_PREFIX} {vid!r} {GUARD_VERB}"
 #: What a crash tells the reader to do when the caller names nothing better.
 #: Stated here because the tests over it assert its ABSENCE — that a
 #: document-caused crash does not send the author to file a bug — and an
@@ -207,7 +224,10 @@ def is_guard_finding(item: dict) -> bool:
     good, and not that the rejection a caller was expecting happened.
     """
     message = item.get("message", "")
-    return message.startswith(GUARD_PREFIX) and GUARD_VERB in message
+    vid = item.get("validator")
+    if not isinstance(vid, str):
+        return False
+    return message.startswith(_guard_opening(vid))
 
 
 # ---------------------------------------------------------------------------

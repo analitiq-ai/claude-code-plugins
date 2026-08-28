@@ -5,7 +5,7 @@ statement: >
 tier: structural
 severity: error
 scopes: [api-endpoint]
-validator: "analitiq.validator.connectors::_embedded_schema_findings"
+validator: "analitiq.validator.connectors::_one_embedded_schema_findings"
 owners: [connector-plugin, engine]
 rationale: >
   The contract models grade what an embedded schema declares about types — the
