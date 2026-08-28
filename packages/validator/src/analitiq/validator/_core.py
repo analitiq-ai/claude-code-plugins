@@ -268,10 +268,18 @@ GUARD_DEFAULT_BLAME = "this is a validator bug — please report."
 #: recurses on anything but the document, so the document is what was too big.
 #: Claims no scope: this is the default a caller did not override, so it does
 #: not know what else in the run survived.
+#: Its first clause names the cause on its own, because the plugin README
+#: renders that clause as the literal text a reader matches a finding against.
+#: Stated as its own constant rather than cut out of the sentence: a `.` added
+#: anywhere earlier — an abbreviation, a reordering — would silently render a
+#: fragment, and the generated-block check compares the file to the renderer,
+#: so both would move together and nothing would go red.
+GUARD_RESOURCE_CAUSE = (
+    "the document nests deeper, or runs larger, than this tool can walk"
+)
 GUARD_RESOURCE_BLAME = (
-    "the document nests deeper, or runs larger, than this tool can walk. "
-    "Nothing was decided about it either way; flattening the nesting is what "
-    "gets it checked."
+    f"{GUARD_RESOURCE_CAUSE}. Nothing was decided about it either way; "
+    "flattening the nesting is what gets it checked."
 )
 #: How much of an exception's own text a finding carries.
 _GUARD_DETAIL_MAX = 300

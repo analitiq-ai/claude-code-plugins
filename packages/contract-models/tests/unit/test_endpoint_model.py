@@ -3216,6 +3216,19 @@ class TestRecordedWireSampleZone:
             {key: self._temporal("Timestamp(MICROSECOND, UTC)",
                                  ["2024-01-02T03:04:05"])}))
 
+    @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+    def test_the_exemption_reaches_below_the_negating_position(self, key):
+        """The flag is set where the walk descends into one of these and is
+        carried down from there. Pinned separately from where it is SET,
+        because the loops that carry it are dead weight to a suite that only
+        ever puts the typed node directly under the keyword — and the next
+        simplification of them re-creates the contradiction this rule and
+        RULE-ENDP-064 were just made to agree on."""
+        parse_endpoint(_api_payload_with_field_schema(
+            "updated_at",
+            {key: {"type": "object", "properties": {"inner": self._temporal(
+                "Timestamp(MICROSECOND, UTC)", ["2024-01-02T03:04:05"])}}}))
+
     def test_a_sample_that_is_not_a_date_time_is_still_passed_over(self):
         """The calendar check applies to values wearing the date-time shape.
         An epoch is a different kind of value, not a malformed instant, and

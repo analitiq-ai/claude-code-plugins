@@ -53,11 +53,17 @@ def _validator_modules() -> frozenset[str]:
     # `rglob`: a subpackage is as importable as a top-level module, and the
     # non-empty guard below cannot see one missing — it is satisfied by the
     # flat modules that will always be there.
-    modules = {
-        "analitiq.validator." + ".".join(
-            path.relative_to(package).with_suffix("").parts)
-        for path in package.rglob("*.py") if path.stem != "__init__"
-    }
+    modules = set()
+    for path in package.rglob("*.py"):
+        parts = path.relative_to(package).with_suffix("").parts
+        # A subpackage is importable under its OWN dotted name too, and that
+        # name is spelled by its `__init__.py` — dropping every `__init__`
+        # outright leaves `analitiq.validator.sub` unreachable while
+        # `analitiq.validator.sub.mod` is covered.
+        if parts[-1] == "__init__":
+            parts = parts[:-1]
+        if parts:
+            modules.add("analitiq.validator." + ".".join(parts))
     assert modules, (
         f"no modules found under {package} — this walk is reading nothing and "
         "would report agreement over an empty set"
@@ -106,6 +112,28 @@ def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
                 if alias.name in _VALIDATOR_MODULES:
                     bound.add(f"{alias.name} (as a module)")
     return bound
+
+
+def test_every_screened_entry_point_has_a_wrapper_that_screens_it():
+    """The tuple is read by two things, and only one of them was enforced.
+
+    A name added to it whose spelling matches no `SCREENED_NAME_SHAPES` gets
+    handed back raw by `__getattr__`, while this module goes on reporting the
+    import channel covered — which is the state `validate_pipeline_bundle` was
+    in before it was noticed. Closing the instance leaves the class open.
+    """
+    from conftest import _ScreenedValidator
+
+    unwrapped = sorted(
+        name for name in SCREENED_ENTRY_POINTS
+        if name not in vars(_ScreenedValidator)
+        and not any(shape in name for shape in SCREENED_NAME_SHAPES)
+    )
+    assert not unwrapped, (
+        f"{unwrapped} are named as screened but nothing screens them: they "
+        "have no wrapper method on _ScreenedValidator and their names match "
+        "no shape __getattr__ wraps, so a caller gets the raw function"
+    )
 
 
 def test_no_test_module_calls_an_entry_point_out_from_under_the_screen():

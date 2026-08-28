@@ -2,9 +2,11 @@ id: RULE-ENDP-064
 statement: >
   Every entry a node of an endpoint's response or write-input schema records
   under `examples` MUST satisfy that node's own declarations, unless the node
-  is reached through a position that describes what an instance must NOT be —
-  where the sample is a counter-example, and satisfying the declaration beside
-  it would be the defect.
+  is reached through a position whose subschema does not describe the instance
+  — `not`, which says what it must not be; `if`, which selects a branch;
+  `propertyNames`, which constrains keys — where the sample is a
+  counter-example and satisfying the declaration beside it would be the
+  defect.
 tier: advisory
 severity: error
 scopes: [api-endpoint]

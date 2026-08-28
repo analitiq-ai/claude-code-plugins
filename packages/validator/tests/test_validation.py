@@ -330,6 +330,25 @@ def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name)
     assert any(f"/properties/{name}/examples/0" in p for p in paths), paths
 
 
+@pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+def test_a_typed_sample_under_a_negation_parses_and_is_exempt(validator, key):
+    """The end-to-end case neither half covered: a node carrying an
+    `arrow_type` under a negating position. The contract models have to let the
+    document through AND this check has to pass over it — an untyped node
+    cannot tell the two apart, since a model rejection would satisfy the same
+    empty result.
+
+    Nested one level down, so the flag's propagation is pinned and not only
+    the place it is set."""
+    ep = _sample_endpoint({key: {"type": "object", "properties": {"inner": {
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [7]}}}})
+    findings = validator.validate_document(ep)
+    assert not [f for f in findings if f["validator"] == "contract-model"], findings
+    assert not [f for f in findings
+                if f["validator"] == "embedded-schema-example"], findings
+
+
 def test_a_sample_beside_a_negation_is_still_graded(validator):
     """The negation is a position, not a spreading property: a node that
     merely HAS a `not` still grades the sample recorded on itself."""
