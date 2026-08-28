@@ -34,7 +34,7 @@ os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 for _src in (REPO_ROOT / "packages" / "contract-models" / "src",
              REPO_ROOT / "packages" / "validator" / "src",
-             # `census/` is this repo's catalogue of the contract's own prose —
+             # `census/` holds this repo's catalogues of the contract's own surface —
              # maintenance machinery, deliberately outside `src/` so it stays
              # out of the wheel, and on the path because the suite reads it.
              REPO_ROOT):
