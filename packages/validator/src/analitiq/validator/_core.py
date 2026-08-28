@@ -159,6 +159,7 @@ def _dispatch(doc: Any, doc_path: Path | None, schema_url: str | None = None) ->
 
 def _run_guarded(
     fn: Callable, *args, vid: str, path: str = "", blame: str | None = None,
+    resource_only: bool = False,
 ) -> list[dict]:
     """Run a check; a crash becomes one error finding so other checks survive.
 
@@ -173,21 +174,35 @@ def _run_guarded(
     `path` locates the crash. A check that runs per-slot has more than one
     place to crash, and without it every one of them reports the same finding.
 
-    One class of crash overrides both: running out of stack or memory says
-    what the cause was, whatever the caller expected. Every walk here recurses
-    on the document's own nesting, so a deep enough one exhausts the stack in
-    whichever walk reaches it first — including walks no guard wraps, which
-    land on the dispatch guard where the default blame would send the author
-    to file a bug about their own document. The exception TYPE decides that,
-    not a reading of any message.
+    Which default applies is decided by the exception TYPE, not by reading any
+    message. Running out of stack or memory is the document's size rather than
+    a defect in this tool: every walk here recurses on the document's own
+    nesting, so a deep enough one exhausts the stack in whichever walk reaches
+    it first — including walks no guard wraps, which land on the dispatch guard
+    where the default blame would send the author to file a bug about their own
+    document.
+
+    A caller's `blame` still wins over both, so it has to be true of ANY crash
+    at its site: a `$ref` that leads back to itself and a value a keyword
+    cannot compute against arrive as different exception types and are the same
+    thing to the author, and a caller that names only one of them describes the
+    other wrongly. `resource_only` is the escape for a caller whose wording is
+    true of running out of room and of nothing else — it keeps that wording for
+    a `RecursionError` or a `MemoryError` and hands anything else back to the
+    default, rather than describing a bug here as a document that is too big.
     """
     try:
         return fn(*args)
     except (RecursionError, MemoryError) as exc:
+        # No detail from the exception: a `RecursionError` raised while
+        # unwinding names whichever frame was innermost, which is not the walk
+        # that filled the stack and reads to an author as though it were.
         return [finding(vid, "error", path,
                         f"{_guard_opening(vid)} ({type(exc).__name__}); "
-                        + GUARD_RESOURCE_BLAME)]
+                        + (blame or GUARD_RESOURCE_BLAME))]
     except Exception as exc:  # noqa: BLE001 - last-resort guard
+        if resource_only:
+            blame = None
         # The exception text is truncated: `jsonschema`'s referencing errors
         # embed the whole schema root in their repr, which on a real endpoint
         # is kilobytes of JSON inside one finding an agent has to read.
@@ -228,16 +243,14 @@ def _guard_opening(vid: str) -> str:
 #: not silent either.
 GUARD_DEFAULT_BLAME = "this is a validator bug — please report."
 #: What a crash tells the reader when the interpreter ran out of stack or
-#: memory. Overrides every caller's wording, because the cause is settled by
-#: the exception type: no check here allocates or recurses on anything but the
-#: document, so the document is the size that was too big. Carries no detail
-#: from the exception — a `RecursionError` raised while unwinding is as likely
-#: to name an inner frame as the walk that filled the stack.
+#: memory and the caller named nothing better. No check here allocates or
+#: recurses on anything but the document, so the document is what was too big.
+#: Claims no scope: this is the default a caller did not override, so it does
+#: not know what else in the run survived.
 GUARD_RESOURCE_BLAME = (
-    "the document nests deeper, or runs larger, than this tool can walk. That "
-    "is a limit here rather than a defect in the document, but a schema that "
-    "deep is worth flattening either way — the engine walks it too. Every "
-    "other document in this run was still checked."
+    "the document nests deeper, or runs larger, than this tool can walk. "
+    "Nothing was decided about it either way; flattening the nesting is what "
+    "gets it checked."
 )
 #: How much of an exception's own text a finding carries.
 _GUARD_DETAIL_MAX = 300

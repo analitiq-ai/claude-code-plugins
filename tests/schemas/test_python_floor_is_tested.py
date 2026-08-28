@@ -18,6 +18,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 _PYPROJECTS = (
@@ -39,16 +41,31 @@ def _floor(pyproject: Path) -> tuple[int, int]:
 
 
 def _matrix() -> list[tuple[int, int]]:
-    text = _WORKFLOW.read_text(encoding="utf-8")
-    match = re.search(r"^\s*python-version:\s*\[(.*?)\]\s*$", text, re.M)
-    assert match, (
-        f"no `python-version:` matrix list found in {_WORKFLOW.name} — the "
-        "job may have been restructured, in which case this guard is reading "
-        "nothing and reporting agreement"
-    )
-    versions = re.findall(r"'(\d+)\.(\d+)'", match.group(1))
-    assert versions, f"the matrix list is empty: {match.group(1)!r}"
-    return [(int(major), int(minor)) for major, minor in versions]
+    """The pytest job's matrix, reached by name rather than by position.
+
+    Parsed, not matched: a regex for the first bracketed `python-version:` in
+    the file grades whichever job happens to come first, so a second matrixed
+    job landing above this one would silently move the guard onto it and it
+    would go on reporting agreement.
+    """
+    workflow = yaml.safe_load(_WORKFLOW.read_text(encoding="utf-8"))
+    try:
+        declared = workflow["jobs"]["pytest"]["strategy"]["matrix"]["python-version"]
+    except (KeyError, TypeError) as exc:
+        raise AssertionError(
+            f"{_WORKFLOW.name} has no jobs.pytest.strategy.matrix."
+            f"python-version ({exc}) — the job may have been renamed or "
+            "restructured, in which case this guard is reading nothing and "
+            "reporting agreement"
+        ) from exc
+    assert isinstance(declared, list) and declared, (
+        f"the pytest matrix is not a non-empty list: {declared!r}")
+    versions = []
+    for entry in declared:
+        match = re.fullmatch(r"(\d+)\.(\d+)", str(entry))
+        assert match, f"matrix entry {entry!r} is not an `X.Y` version"
+        versions.append((int(match.group(1)), int(match.group(2))))
+    return versions
 
 
 def test_the_packages_agree_on_one_floor():

@@ -8,13 +8,9 @@ document passes and an invalid one fails. Detection is also checked to be mutual
 exclusive: no authored kind claims another's shape.
 """
 import json
-from pathlib import Path
 
 from conftest import run_cli
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-CONTRACTS_SRC_ROOT = _REPO_ROOT / "contract-models" / "src"
-SRC_ROOT = _REPO_ROOT / "validator" / "src"
 
 SOURCE_CONN = "11111111-1111-4111-8111-111111111111"
 DEST_CONN = "22222222-2222-4222-8222-222222222222"

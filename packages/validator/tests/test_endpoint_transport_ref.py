@@ -378,9 +378,7 @@ class TestStandaloneEndpointValidation:
             },
         }
 
-    def _run(self, tmp_path, connector_body):
-        from analitiq.validator.connectors import _validate_api_endpoint
-
+    def _run(self, tmp_path, connector_body, validator):
         pkg = tmp_path / "pkg"
         (pkg / "endpoints").mkdir(parents=True)
         if connector_body is not None:
@@ -388,36 +386,41 @@ class TestStandaloneEndpointValidation:
         doc_path = pkg / "endpoints" / "thing.json"
         doc = self._endpoint()
         doc_path.write_text(json.dumps(doc))
-        return _validate_api_endpoint(doc, doc_path, None)
+        # Through the fixture, not `_validate_api_endpoint` directly: the
+        # dispatch routes an api-endpoint here anyway, and the screen refuses
+        # to let a crash satisfy the absence assertions below.
+        return validator.validate_document(doc, doc_path)
 
     def _ids(self, findings):
         return {(f["validator"], f["severity"]) for f in findings}
 
-    def test_declared_transport_resolves_clean(self, tmp_path):
-        findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}')
+    def test_declared_transport_resolves_clean(self, tmp_path, validator):
+        findings = self._run(tmp_path, '{"kind":"api","transports":{"api":{}}}', validator)
         assert not [f for f in findings if f["validator"] == "endpoint-transport-ref"]
 
-    def test_undeclared_transport_is_an_error(self, tmp_path):
-        findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}')
+    def test_undeclared_transport_is_an_error(self, tmp_path, validator):
+        findings = self._run(tmp_path, '{"kind":"api","transports":{"other":{}}}', validator)
         assert ("endpoint-transport-ref", "error") in self._ids(findings)
 
-    def test_connector_without_transports_warns_rather_than_passing_clean(self, tmp_path):
+    def test_connector_without_transports_warns_rather_than_passing_clean(
+        self, tmp_path, validator,
+    ):
         # The silent-clean-pass case. `_endpoint_transport_ref_findings` returns
         # [] here, which is right when the CONNECTOR is under validation (its own
         # model error stands) and wrong here, where that model never runs.
-        findings = self._run(tmp_path, '{"kind":"api"}')
+        findings = self._run(tmp_path, '{"kind":"api"}', validator)
         assert ("endpoint-transport-ref", "warning") in self._ids(findings)
 
-    def test_connector_with_non_dict_transports_warns(self, tmp_path):
-        findings = self._run(tmp_path, '{"kind":"api","transports":[]}')
+    def test_connector_with_non_dict_transports_warns(self, tmp_path, validator):
+        findings = self._run(tmp_path, '{"kind":"api","transports":[]}', validator)
         assert ("endpoint-transport-ref", "warning") in self._ids(findings)
 
-    def test_absent_connector_warns(self, tmp_path):
-        findings = self._run(tmp_path, None)
+    def test_absent_connector_warns(self, tmp_path, validator):
+        findings = self._run(tmp_path, None, validator)
         assert ("endpoint-transport-ref", "warning") in self._ids(findings)
 
-    def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path):
-        findings = self._run(tmp_path, "{not json")
+    def test_unparseable_connector_is_reported_under_this_checks_own_id(self, tmp_path, validator):
+        findings = self._run(tmp_path, "{not json", validator)
         reported = {f["validator"] for f in findings}
         assert "endpoint-transport-ref" in reported
         assert "type-map-coverage" not in reported, (
@@ -425,12 +428,14 @@ class TestStandaloneEndpointValidation:
             "filtering on endpoint-transport-ref would never see it"
         )
 
-    def test_unparseable_connector_is_not_described_as_unreachable(self, tmp_path):
+    def test_unparseable_connector_is_not_described_as_unreachable(
+        self, tmp_path, validator,
+    ):
         """The file was found and read; only the parse failed. Reporting it as
         "no sibling connector.json was reachable" contradicts the parse error
         emitted beside it under the same id, and points the author at the wrong
         problem."""
-        findings = self._run(tmp_path, "{not json")
+        findings = self._run(tmp_path, "{not json", validator)
         warnings = [
             f for f in findings
             if f["validator"] == "endpoint-transport-ref" and f["severity"] == "warning"
@@ -441,14 +446,12 @@ class TestStandaloneEndpointValidation:
 
     @pytest.mark.parametrize("shape", ["relative", "dotdot"])
     def test_a_non_absolute_document_path_still_finds_the_sibling(
-        self, tmp_path, monkeypatch, shape
+        self, tmp_path, monkeypatch, shape, validator
     ):
         """`Path("thing.json").parent.parent` is `.`, so a relative `--document`
         run from inside `endpoints/` missed the connector entirely and downgraded
         a genuinely broken `transport_ref` to a warning — a silent pass on the
         one check this adds."""
-        from analitiq.validator.connectors import _validate_api_endpoint
-
         pkg = tmp_path / "pkg"
         (pkg / "endpoints").mkdir(parents=True)
         (pkg / "connector.json").write_text('{"kind":"api","transports":{"other":{}}}')
@@ -460,7 +463,7 @@ class TestStandaloneEndpointValidation:
             Path("thing.json") if shape == "relative"
             else Path("..") / "endpoints" / "thing.json"
         )
-        findings = _validate_api_endpoint(doc, doc_path, None)
+        findings = validator.validate_document(doc, doc_path)
         assert ("endpoint-transport-ref", "error") in self._ids(findings), (
             "the undeclared transport_ref was downgraded to a warning because "
             "the sibling lookup missed"

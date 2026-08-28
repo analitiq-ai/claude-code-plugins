@@ -7,14 +7,11 @@ the two is a real defect. The two are kept in sync on BOTH fronts:
   - the validator pins contract-models with an EXACT `==` at that same version.
 This test is the CI equality gate — it fails the build if either diverges.
 
-Fields are parsed with a small regex rather than `tomllib`: `tomllib` is stdlib
-only on Python 3.11+, but both packages declare `requires-python = ">=3.10"`, so
-the test suite must import on 3.10 too. The two fields we read have a fixed,
-simple shape.
 """
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -22,22 +19,31 @@ VALIDATOR_PYPROJECT = REPO_ROOT / "validator" / "pyproject.toml"
 CONTRACT_MODELS_PYPROJECT = REPO_ROOT / "contract-models" / "pyproject.toml"
 
 
+def _project(pyproject: Path) -> dict:
+    return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]
+
+
 def _project_version(pyproject: Path) -> str:
-    m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject.read_text(), re.MULTILINE)
-    assert m, f"no [project].version found in {pyproject}"
-    return m.group(1)
+    version = _project(pyproject).get("version")
+    assert isinstance(version, str), f"no [project].version found in {pyproject}"
+    return version
 
 
 def _validator_contract_models_specifier() -> str:
-    # Matches only the dependency form `"analitiq-contract-models<spec>"` (the
-    # name preceded by a double-quote); the backticked mention in the package
-    # description cannot match.
-    text = VALIDATOR_PYPROJECT.read_text()
-    matches = re.findall(r'"analitiq-contract-models([^"]*)"', text)
+    """The specifier the validator pins contract-models with.
+
+    Read out of `[project].dependencies`, so the backticked mention in the
+    package description is not a place this can find one.
+    """
+    matches = [
+        dep[len("analitiq-contract-models"):].strip()
+        for dep in _project(VALIDATOR_PYPROJECT).get("dependencies", [])
+        if dep.replace(" ", "").startswith("analitiq-contract-models")
+    ]
     assert len(matches) == 1, (
         f"expected exactly one analitiq-contract-models dependency, got {matches!r}"
     )
-    return matches[0].strip()
+    return matches[0]
 
 
 def test_validator_pins_contract_models_exactly():
