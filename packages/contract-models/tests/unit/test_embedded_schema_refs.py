@@ -811,15 +811,16 @@ class TestRecursiveSchemasTerminate:
         assert isinstance(_run_with_timeout(lambda: parse_endpoint(_read_doc(schema))), ApiEndpointDoc)
 
 
-# ---------------------------------------------------------------------------
-# The two together: cross-block paths (RULE-ENDP-023) resolving through `$defs`
-# ---------------------------------------------------------------------------
-
-
-    #: `(node, expected findings)` — shapes whose DECLARATIONS fail to fold,
-    #: paired with what the walk owes each. Every row reaches the fold, and
-    #: the count is asserted: without it the test cannot tell a walk that ran
-    #: and found nothing from one that returned on its first line.
+    #: `(name, node, findings owed, arrow type the fold reaches)` — shapes
+    #: whose declaration a walk cannot simply read off the node. Only the
+    #: first REFUSES to fold; the rest fold cleanly and reach no
+    #: `arrow_type`, which is a different answer arriving at the same place,
+    #: and the last folds and reaches one that its sample contradicts.
+    #:
+    #: All four values are asserted. The counts separate a walk that ran from
+    #: one that returned on its first line; the fold's own answer separates a
+    #: fold that worked from one gutted to `None`, which the counts alone
+    #: cannot see for four of the five rows.
     #:
     #: Depth is deliberately absent. A document nested deeper than the
     #: interpreter unwinds raises out of any walk written this way, so a row
@@ -830,18 +831,19 @@ class TestRecursiveSchemasTerminate:
          {"allOf": [{"type": "string", "native_type": "S",
                      "arrow_type": "Timestamp(MICROSECOND, UTC)"},
                     {"type": "integer"}],
-          "examples": ["2024-01-02T03:04:05"]}, 0),
+          "examples": ["2024-01-02T03:04:05"]}, 0, None),
         ("self-reference",
-         {"$ref": "#/$defs/Ring", "examples": ["2024-01-02T03:04:05"]}, 0),
+         {"$ref": "#/$defs/Ring", "examples": ["2024-01-02T03:04:05"]}, 0, ""),
         ("dangling-reference",
-         {"$ref": "#/$defs/Absent", "examples": ["2024-01-02T03:04:05"]}, 0),
+         {"$ref": "#/$defs/Absent", "examples": ["2024-01-02T03:04:05"]}, 0, ""),
         ("allOf-onto-a-ring",
-         {"allOf": [{"$ref": "#/$defs/Ring"}], "examples": [1]}, 0),
+         {"allOf": [{"$ref": "#/$defs/Ring"}], "examples": [1]}, 0, ""),
         # Folds cleanly, and the declaration it reaches is contradicted — the
         # positive control. Without a row the walk owes a finding on, every
         # assertion above is satisfied by a walk that does nothing.
         ("folds-and-disagrees",
-         {"$ref": "#/$defs/Stamp", "examples": ["2024-01-02T03:04:05"]}, 1),
+         {"$ref": "#/$defs/Stamp", "examples": ["2024-01-02T03:04:05"]}, 1,
+         "Timestamp(MICROSECOND, UTC)"),
     )
 
     #: Reachable through `$defs` from every row above.
@@ -852,8 +854,8 @@ class TestRecursiveSchemasTerminate:
     }
 
     @pytest.mark.parametrize(
-        "node, owed", [(n, owed) for _, n, owed in UNFOLDABLE_NODES],
-        ids=[name for name, _, _ in UNFOLDABLE_NODES])
+        "node, owed", [(n, owed) for _, n, owed, _a in UNFOLDABLE_NODES],
+        ids=[name for name, _, _, _a in UNFOLDABLE_NODES])
     def test_the_arrow_walk_accumulates_what_a_document_declares(self, node, owed):
         """The walk's contract, asserted rather than remembered.
 
@@ -900,18 +902,31 @@ class TestRecursiveSchemasTerminate:
                     "examples": ["2024-01-02T03:04:05"]}}},
                 "s", [])
 
-    @pytest.mark.parametrize("node, _owed", [
-        (n, owed) for _, n, owed in UNFOLDABLE_NODES],
-        ids=[name for name, _, _ in UNFOLDABLE_NODES])
-    def test_try_materialize_node_answers_rather_than_raising(self, node, _owed):
-        """The fold's inspection form, driven directly. Its contract is
-        inferred from a walk-level side effect otherwise."""
+    @pytest.mark.parametrize(
+        "node, arrow", [(n, a) for _, n, _o, a in UNFOLDABLE_NODES],
+        ids=[name for name, _, _o, _a in UNFOLDABLE_NODES])
+    def test_try_materialize_node_answers_what_each_shape_reaches(
+        self, node, arrow,
+    ):
+        """The fold's inspection form, driven directly and asked what it
+        ANSWERED — `None` where it refuses, the reached `arrow_type` where it
+        folds, `""` where it folds and reaches none.
+
+        Asserting only that the result is a dict or `None` would be true of
+        every value the signature admits, so it would pass with the fold
+        replaced by `lambda *_: None`. The walk's own table catches that on one
+        row of five; this catches it on all of them.
+        """
         from analitiq.contracts import endpoints as ep
 
         root = {"$defs": dict(self.UNFOLDABLE_DEFS),
                 "properties": {"f": node}}
         folded = ep.try_materialize_node(node, root)
-        assert folded is None or isinstance(folded, dict)
+        if arrow is None:
+            assert folded is None, folded
+        else:
+            assert isinstance(folded, dict), folded
+            assert folded.get("arrow_type", "") == arrow, folded
 
     @pytest.mark.parametrize("value", [None, False, True, 7, "s", []])
     def test_try_materialize_node_answers_none_for_a_non_schema(self, value):
@@ -921,6 +936,12 @@ class TestRecursiveSchemasTerminate:
         from analitiq.contracts import endpoints as ep
 
         assert ep.try_materialize_node(value) is None
+
+
+# ---------------------------------------------------------------------------
+# The two together: cross-block paths (RULE-ENDP-023) resolving through `$defs`
+# ---------------------------------------------------------------------------
+
 
 class TestCrossBlockPathsThroughRefs:
     SCHEMA = {

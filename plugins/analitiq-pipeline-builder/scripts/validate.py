@@ -131,6 +131,18 @@ def _model_findings(entity: str, doc) -> list[dict]:
                      "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
             for err in exc.errors()
         ]
+    except (RecursionError, MemoryError) as exc:
+        # The only path in this script that reaches a contract model without
+        # going through `analitiq.validator`, which turns a crash into a
+        # finding. A document nested deeper than the interpreter unwinds would
+        # otherwise leave this script as a raw traceback, which is neither a
+        # verdict nor something an author can act on.
+        return [_finding(
+            "document", "error", "/",
+            f"{entity} could not be checked ({type(exc).__name__}): the "
+            "document nests deeper, or runs larger, than this tool can walk. "
+            "Nothing was decided about it either way; flattening the nesting "
+            "is what gets it checked.")]
 
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:

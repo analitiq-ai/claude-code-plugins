@@ -638,15 +638,20 @@ class TestRecordedWireSamples:
         # year and does not in the year before it.
         ("2024-02-29T00:00:00Z", True),
         ("2023-02-29T00:00:00Z", False),
-        # Not date-time shaped at all, so not malformed either — a different
-        # kind of value, which `sample_carries_zone` passes over.
-        ("1712345678", True),
-        ("2024-01-02", True),
-        (None, True),
-        (17, True),
+        # No date-time shape at all: nothing was verified, so the answer is
+        # None rather than True — True would let a caller read "this is a real
+        # instant" out of a value nothing read.
+        ("1712345678", None),
+        ("2024-01-02", None),
+        (None, None),
+        (17, None),
     ])
     def test_sample_names_an_instant(self, sample, expected):
         """The calendar question, asked apart from the zone one. A month of 13
         is not a zone-naive instant and not a zoned one; it is not an instant,
-        and the two readers answer for their own subject."""
+        and the two readers answer for their own subject.
+
+        Three-valued like its neighbours, so a caller must ask `is False` to
+        report — reading the answer as a boolean would treat "not verified" as
+        "impossible" and refuse every epoch on the wire."""
         assert arrow_grammar.sample_names_an_instant(sample) is expected
