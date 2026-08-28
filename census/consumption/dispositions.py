@@ -78,12 +78,12 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "validation failure on that assignment to follow it; the pinned manifest "
     "claims no read of the override, so a validation failure follows the "
     "pipeline runtime's error handling — the outcome RULE-STRM-040 tells "
-    "authors to expect. The record leaves adopt-or-drop to the owners of "
-    "both sides; until they decide, the entry sits here because the record's "
+    "authors to expect. This census records removal: the record's "
     "statement already tells authors not to author the block as the policy "
     "and its rationale that the run never consults it — a knob nothing "
-    "honours and, as the contract stands, nothing should. A decision to "
-    "adopt moves these entries to engine_gap"
+    "honours and, as the contract stands, nothing should. The record "
+    "leaves the owners of both sides free to adopt instead; that decision "
+    "moves these entries to engine_gap"
 )
 
 #: The page size of a database pagination variant.
@@ -127,7 +127,11 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "that goes. The model validators that read it — the slot agreement, "
         "the style/explode requirement on an array or object query param, "
         "and the refusal of a body param on a GET read — each re-key onto "
-        "the binding slot, which is the same fact stated once",
+        "the binding slot. The style/explode rule also has a declarative "
+        "mirror in the published schema, keyed on the wire name of this "
+        "field; a schema cannot see the binding slot, so that half is "
+        "lost on removal and survives only as the model validator — the "
+        "cost the removal accepts",
     ),
     FieldDisposition(
         "endpoints.Param", "required", "engine_gap",
@@ -148,8 +152,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition(
         "endpoints.Param", "operators", "authoring_only",
         "read by the registry service's on-save comparison of a stream's "
-        "filter operators against the subset this param declares "
-        "(RULE-STRM-026 names the obligation); the pinned manifest claims no "
+        "filter operators against the subset this param declares — the "
+        "consumer RULE-STRM-026's rationale describes, beside the "
+        "obligation its statement names on the filter; the pinned manifest claims no "
         "read of the set, so the run sends the filter with whatever operator "
         "the stream declares",
     ),
