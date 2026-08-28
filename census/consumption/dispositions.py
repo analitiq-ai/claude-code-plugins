@@ -155,8 +155,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "read by the registry service's on-save comparison of a stream's "
         "filter operators against the subset this param declares — the "
         "consumer RULE-STRM-026's rationale describes, beside the "
-        "obligation its statement names on the filter — and by the checks "
-        "RULE-ENDP-002 and RULE-ENDP-055 name on the set itself; the pinned "
+        "obligation its statement names on the filter — and by the "
+        "obligations RULE-ENDP-002 and RULE-ENDP-055 name on the set, beside "
+        "controlled_by and over its members; the pinned "
         "manifest claims no "
         "read of the set, so the run sends the filter with whatever operator "
         "the stream declares",
