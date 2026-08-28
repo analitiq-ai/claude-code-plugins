@@ -4,8 +4,8 @@ The guard's network half runs only in CI (`contract-consumption-pin-guard`
 job), so its direction logic — newer publish = notice, lagging pointer =
 failure, malformed anything = GuardError — would otherwise only ever execute
 against live healthy data, where an inverted comparison is a permanent false
-green. Same charter as test_engine_grammar_guard.py: every verdict branch
-offline, with the fetch monkeypatched out.
+green. Same charter as `tests/schemas/test_engine_grammar_guard.py`: every
+verdict branch offline, with the fetch monkeypatched out.
 """
 from __future__ import annotations
 

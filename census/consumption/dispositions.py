@@ -89,8 +89,8 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
 #: The page size of a database pagination variant.
 DATABASE_PAGE_SIZE = (
     "the pinned manifest claims no read of it, and the field's own published "
-    "description already says so: the size is the pipeline runtime's "
-    "batching value for every stream. Removed rather than adopted because "
+    "description already states that no engine release consumes it, a "
+    "sentence the prose census pins. Removed rather than adopted because "
     "the contract has already told authors the knob is inert — adoption "
     "would honour a value the description promises nothing for; that "
     "sentence is the obligation's only statement, and the prose census "

@@ -62,14 +62,16 @@ DispositionKind = Literal[
 
 #: Catalog labels and descriptions.
 HUMAN_METADATA = (
-    "human-facing metadata: read by a person in the catalog, the registry "
-    "diff and the plugin's own summaries, never by the run-time path"
+    "the pinned manifest claims no read of it; human-facing metadata, read "
+    "by a person in the catalog, the registry diff and the plugin's own "
+    "summaries"
 )
 
 #: A union tag.
 UNION_DISCRIMINATOR = (
-    "union discriminator: the value selects the member pydantic builds, so "
-    "the engine holds the member type and never reads the tag"
+    "the pinned manifest claims no read of it; a union discriminator, whose "
+    "value selects the member pydantic builds, so the tag is settled before "
+    "any run-time read"
 )
 
 

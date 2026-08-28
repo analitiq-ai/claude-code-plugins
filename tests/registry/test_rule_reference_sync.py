@@ -10,7 +10,8 @@ guidance.
 It also guards the *citations*: prose cites rules by id (`RULE-ENDP-009`)
 instead of restating them, so a retired or renumbered id must not be allowed
 to leave dangling references behind a green build. That gate spans EVERY
-plugin under `plugins/` plus the repo-root docs — the registry is one shared
+plugin under `plugins/`, the repo-root docs and the reachability census's
+reasons under `census/` — the registry is one shared
 source, so one scan pins every citation site; a per-plugin copy of the
 scanner would itself be a drift surface.
 
