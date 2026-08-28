@@ -234,6 +234,68 @@ def probe_pinned_wheel(pin: str, drivers: list[str]) -> list[str]:
             ) from exc
 
 
+#: Where a plugin reaches into the validator at run time. These run from the
+#: user's plugin cache against the wheel `VALIDATOR_PIN` names, so a symbol
+#: newer than that pin is an ImportError on every user's machine — and the
+#: suite cannot see it, because the suite runs the in-repo source.
+PLUGIN_SCRIPT_GLOBS = ("plugins/*/scripts/*.py", "plugins/*/agents/*.py")
+
+
+def read_plugin_validator_imports() -> dict[str, set[str]]:
+    """Every name a plugin script imports from `analitiq.validator`.
+
+    Read from the AST rather than by matching text: the question is which
+    names a module binds, which is what an import statement IS, and a regex
+    over the same lines would answer for `# from analitiq.validator import x`
+    as readily.
+    """
+    import ast
+
+    found: dict[str, set[str]] = {}
+    for glob in PLUGIN_SCRIPT_GLOBS:
+        for path in sorted(REPO_ROOT.glob(glob)):
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except SyntaxError:
+                continue
+            names = {
+                alias.name
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom)
+                and node.module == "analitiq.validator"
+                for alias in node.names
+            }
+            if names:
+                found[path.relative_to(REPO_ROOT).as_posix()] = names
+    return found
+
+
+def probe_pinned_exports(pin: str, wanted: dict[str, set[str]]) -> dict[str, set[str]]:
+    """Which of those names the pinned wheel does not export, per file."""
+    if not wanted:
+        return {}
+    every = sorted({n for names in wanted.values() for n in names})
+    with tempfile.TemporaryDirectory() as tmp:
+        venv_dir = Path(tmp) / "venv"
+        py = venv_dir / ("Scripts" if os.name == "nt" else "bin") / "python"
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)],
+                       check=True, capture_output=True)
+        subprocess.run([str(py), "-m", "pip", "install", "--quiet", pin],
+                       check=True, capture_output=True, text=True)
+        probe = (
+            "import json, sys, analitiq.validator as v\n"
+            "json.dump([n for n in json.loads(sys.argv[1]) "
+            "if not hasattr(v, n)], sys.stdout)"
+        )
+        result = subprocess.run([str(py), "-c", probe, json.dumps(every)],
+                                capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise GuardError(f"export probe crashed inside the venv:\n{result.stderr}")
+        missing = set(json.loads(result.stdout))
+    return {path: sorted(names & missing)
+            for path, names in wanted.items() if names & missing}
+
+
 def main() -> int:
     try:
         pin = read_pin()
@@ -246,6 +308,11 @@ def main() -> int:
         print(f"canonical drivers ({CANON_SOURCE.name}): {', '.join(drivers)}")
 
         rejected = probe_pinned_wheel(pin, drivers)
+
+        wanted = read_plugin_validator_imports()
+        print(f"plugin imports from analitiq.validator: "
+              f"{sum(len(n) for n in wanted.values())} across {len(wanted)} file(s)")
+        unexported = probe_pinned_exports(pin, wanted)
     except PinNotPublished as exc:
         print(f"NOT PUBLISHED YET: {exc}", file=sys.stderr)
         print(
@@ -262,8 +329,23 @@ def main() -> int:
         print(f"GUARD ERROR (not a verdict): {exc}", file=sys.stderr)
         return 2
 
+    if unexported:
+        # Always fatal, in every window. A driver the pin rejects is a
+        # tightening the release closes; a name it does not export is an
+        # ImportError the moment a user runs the plugin, and no window makes
+        # that tolerable.
+        print("FAIL: plugin scripts import names the pinned release does not "
+              "export — every user would get an ImportError:", file=sys.stderr)
+        for path, names in sorted(unexported.items()):
+            print(f"  {path}: {', '.join(names)}", file=sys.stderr)
+        print(f"\nEither stop using them from plugin code, or publish a "
+              f"release carrying them and move VALIDATOR_PIN past {pin}.",
+              file=sys.stderr)
+        return 1
+
     if not rejected:
-        print("OK: the pinned release accepts every canonical driver.")
+        print("OK: the pinned release accepts every canonical driver, and "
+              "exports every name the plugins import from it.")
         return 0
 
     verdict = (
