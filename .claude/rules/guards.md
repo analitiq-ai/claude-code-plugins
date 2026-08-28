@@ -87,7 +87,23 @@ needed yet.
 
 - **Non-vacuous.** Zero matched citation/fence/example sites is a red build, not
   a silent exemption. An extractor that finds nothing has stopped measuring, and
-  says so in the same voice as one finding nothing wrong.
+  says so in the same voice as one finding nothing wrong. This reaches the
+  guard's own inputs: a check that iterates a set the contract owns asserts
+  that set is non-empty first, or emptying the set reports agreement.
+- **Falsifiable at the line it is written on.** An assertion that cannot fail
+  is worse than no assertion, because it reports coverage of what it does not
+  reach. Three shapes have shipped here: asserting a property of a value the
+  test itself constructed (`isinstance(errors, list)` on the list it passed
+  in); asserting downstream of a helper that already raises on the same
+  condition, so the earlier frame is what fails; and driving a case that never
+  reaches the code path it names (a table of `$ref` chains handed to a walk
+  that does not follow `$ref`). Before writing an assertion, name the change
+  that would make it fail — and if a green suite survives that change, the
+  assertion is decoration.
+- **Paired with a case that owes a finding.** A table of inputs a check should
+  pass over cannot tell a check that ran from one that returned on its first
+  line. One row that owes a finding, with the count asserted, is what separates
+  them.
 - **Fix-hints that resolve.** Failure-message hints are part of the guard, so a
   hint naming a file or section that no longer carries the fact is a defect;
   hints move in the commit that moves the fact.

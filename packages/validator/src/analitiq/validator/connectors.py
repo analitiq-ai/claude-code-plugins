@@ -300,13 +300,9 @@ def _one_embedded_schema_findings(
 ) -> list[dict]:
     """One embedded schema: its draft, its metaschema validity, its samples.
 
-    Imported lazily for the reason its caller states; the module is already
-    in `sys.modules` by the time this runs, so the name lookup is what
-    repeats, not the import.
+    Imports nothing from `jsonschema` itself — the two helpers it delegates to
+    do, each lazily, for the reason the caller states.
     """
-    from jsonschema import Draft202012Validator
-    from jsonschema.exceptions import SchemaError
-
     findings: list[dict] = []
     # A non-STRING `$schema` is malformed, not another draft — the same
     # reading the nested check below applies. Without the type test this

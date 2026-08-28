@@ -94,27 +94,42 @@ def _returns_findings(name: str) -> bool:
 def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
     """Screened names this module can call without going through the fixture.
 
-    Every import spelling, because they are equally effective and only one of
-    them is the obvious one: `from analitiq.validator import validate_document`
-    binds the name; `from analitiq import validator` and `import
-    analitiq.validator as v` bind the module and reach the same function
-    through an attribute; and each also lives in a defining module of its own,
-    which `analitiq.validator` only re-exports.
+    Two kinds of reach, and both are decided by shape rather than by intent.
+
+    A NAME import binds the function itself, so importing it is the whole of
+    the hazard. A MODULE import is not — a module is imported to patch it as
+    often as to call through it, and `monkeypatch.setattr(connectors, ...)` is
+    a legitimate reason this suite has. So a bound module counts only where the
+    file also CALLS a screened name on it: `connectors._embedded_schema_findings(...)`
+    is a call site, and passing the module to something else is not. That is a
+    question about the shape of an expression, not about what a test means by
+    it — `.claude/rules/guards.md` draws the line there, and a waiver list
+    beside this check would be the admission that a reader was deciding.
     """
     bound: set[str] = set()
+    modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             if node.module in _VALIDATOR_MODULES:
                 bound |= {a.name for a in node.names if _returns_findings(a.name)}
-            # `from analitiq import validator` — the module itself, from which
-            # an attribute access reaches any entry point on it.
-            if node.module == "analitiq" and any(
-                    a.name == "validator" for a in node.names):
-                bound.add("analitiq.validator (as a module)")
+            # `from analitiq import validator`, and `from analitiq.validator
+            # import connectors` — a module rather than a name. Recorded, and
+            # judged below by whether anything is called on it.
+            for alias in node.names:
+                if f"{node.module}.{alias.name}" in _VALIDATOR_MODULES:
+                    modules.add(alias.asname or alias.name)
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name in _VALIDATOR_MODULES:
-                    bound.add(f"{alias.name} (as a module)")
+                    modules.add(alias.asname or alias.name.split(".")[0])
+    # A bound module reaches a screened name only through a call on it.
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id in modules
+                and _returns_findings(node.func.attr)):
+            bound.add(f"{node.func.value.id}.{node.func.attr}()")
     return bound
 
 
