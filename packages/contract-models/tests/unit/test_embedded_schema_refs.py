@@ -1243,6 +1243,75 @@ class TestKeywordVocabularyHasOneOwner:
         doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
         return doc["$defs"]["JsonSchemaPropertyNode"]
 
+    #: Shapes an author can write that have made a walk over them raise, or
+    #: plausibly would. Not a corpus of valid documents — the point is the
+    #: hostile ones, since a valid document raising is caught by every other
+    #: test here and a hostile one is caught by none.
+    ADVERSARIAL_NODES = (
+        {"allOf": [{"type": "string"}, {"type": "integer"}]},
+        {"allOf": [{"type": "string"}, {"type": "integer"}], "examples": ["x"]},
+        {"$ref": "#/$defs/Ring"},
+        {"$ref": "#/$defs/Ring", "examples": ["x"]},
+        {"$ref": "#/$defs/Absent", "examples": [1]},
+        {"$ref": "#/$defs/Deep", "examples": ["x"]},
+        {"allOf": [{"$ref": "#/$defs/Ring"}], "examples": [1]},
+        {"not": {"$ref": "#/$defs/Deep", "examples": ["x"]}},
+        {"items": [{"$ref": "#/$defs/Deep", "examples": ["x"]}]},
+        {"properties": {"a": {"$ref": "#/$defs/Deep", "examples": [1]}}},
+        {"examples": [1], "arrow_type": None, "native_type": None},
+        {"examples": "not-a-list", "arrow_type": "Utf8", "native_type": "S"},
+    )
+
+    def _adversarial_root(self):
+        from analitiq.contracts import endpoints as ep  # noqa: F401
+
+        depth = 1500
+        defs = {"Ring": {"$ref": "#/$defs/Ring"},
+                "Deep": {"$ref": "#/$defs/D0"}}
+        defs.update({f"D{i}": {"$ref": f"#/$defs/D{i + 1}"}
+                     for i in range(depth)})
+        defs[f"D{depth}"] = {"type": "string", "native_type": "S",
+                             "arrow_type": "Utf8"}
+        return defs
+
+    @pytest.mark.parametrize(
+        "node", ADVERSARIAL_NODES, ids=lambda n: sorted(n)[0])
+    def test_the_arrow_type_walk_accumulates_and_never_raises(self, node):
+        """The walk's contract, asserted rather than remembered.
+
+        It appends to `errors` and its caller raises once at the end, so a
+        raise from inside it discards everything already collected, skips the
+        checks that run after, and reports under whatever message the
+        exception happened to carry — no rule id, no path. That is not a
+        failure mode a reader can see at the call site: it looks like an
+        ordinary function call, and the suite stays green because no test
+        constructs the shape that raises.
+
+        This is the invariant that would have caught it. A fallible operation
+        was added inside the walk and the whole suite passed; a reviewer found
+        it. Anything reached from here answers or accumulates — it does not
+        raise.
+        """
+        from analitiq.contracts import endpoints as ep
+
+        errors: list[str] = []
+        schema = {"type": "object", "properties": {"f": node},
+                  "$defs": self._adversarial_root()}
+        ep._validate_arrow_type_in_json_schema(schema, "s", errors)
+        assert isinstance(errors, list)
+
+    @pytest.mark.parametrize(
+        "node", ADVERSARIAL_NODES, ids=lambda n: sorted(n)[0])
+    def test_the_node_walk_terminates_and_never_raises(self, node):
+        """The same contract for the generator every consumer iterates. A
+        raise mid-iteration reaches whichever caller was consuming it, and
+        those are the ones collecting findings."""
+        from analitiq.contracts import endpoints as ep
+
+        schema = {"type": "object", "properties": {"f": node},
+                  "$defs": self._adversarial_root()}
+        assert list(ep.iter_schema_nodes(schema))
+
     def test_every_negating_key_is_a_single_schema_position(self):
         """Both walkers set the negation flag in the single-schema loop only,
         on the strength of this. A member landing in another inventory — or in
