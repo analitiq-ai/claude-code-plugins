@@ -33,11 +33,11 @@ class _ScreenedValidator:
     A check that crashes becomes one guard finding — by design, so the rest of
     a document still reports. That makes a crash indistinguishable from a
     verdict to a test that only looks at how many findings came back or what
-    is in them, and four tests here asserted a property their document could
-    not exhibit because of it: a document the model layer aborted on returned
-    one guard finding, which satisfied a count, an ordering comparison and a
-    liveness assert while measuring nothing. Each mutation of the thing under
-    test then left the suite green.
+    is in them. A document the model layer aborts on returns one guard finding,
+    and a test comparing what came back then compares one crash against itself
+    — satisfying a count, an ordering, or a liveness assert while measuring
+    nothing, so a mutation of the thing under test leaves the suite green.
+    That is how the ordering guard here came to pass for a while.
 
     So the screen is here rather than in each test: every `validate_document`
     call refuses a guard finding, and a test that means to provoke one says so

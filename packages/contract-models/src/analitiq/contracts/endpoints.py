@@ -24,7 +24,8 @@ dispatches a payload to its kind; :func:`is_valid_conflict_keys` is the
 conflict-key predicate the paths that never run the model share;
 :func:`iter_schema_nodes` walks an embedded schema's structural positions; :func:`resolve_local_pointer`,
 :func:`resolve_schema_ref`, :func:`resolve_declared_path`,
-:func:`resolve_read_record_schema`, :func:`find_record_field_properties`,
+:func:`resolve_read_record_schema`, :func:`find_record_field_declarations`,
+:func:`find_record_field_properties`,
 :func:`effective_properties` and :func:`materialize_node` are the read
 contract's resolution surface, which every consumer of it shares rather than
 re-deriving.
@@ -4677,6 +4678,45 @@ def resolve_read_record_schema(response: Any, response_schema: Any) -> Any:
     return node if isinstance(node, dict) else None
 
 
+def _record_field_declarations(record_schema: Any, root: Any = None):
+    """The record's field map as AUTHORED, plus the document to resolve in.
+
+    The `items`-chain walk both readings share — an array-of-records envelope
+    may nest the record object under `items`, and each step is materialized so
+    a record shape assembled from `allOf` branches or reached through an
+    in-document `$ref` finds the same map an inline one would. What it does
+    NOT do is materialize the descriptors it finds: that is the difference
+    between the two readings below, and having one walk under both is what
+    keeps them enumerating the same fields.
+    """
+    document = record_schema if root is None else root
+    current = materialize_node(record_schema, document)
+    while isinstance(current, dict):
+        props = current.get("properties")
+        if isinstance(props, dict):
+            return props, document
+        items = current.get("items")
+        if not isinstance(items, dict):
+            return None, document
+        current = materialize_node(items, document)
+    return None, document
+
+
+def find_record_field_declarations(
+    record_schema: Any, root: Any = None
+) -> dict[str, Any] | None:
+    """A record schema's field map exactly as the document declares it.
+
+    The counterpart of :func:`find_record_field_properties`: same fields, same
+    walk, descriptors left alone. What a consumer that reads a declaration off
+    the node itself — following neither a reference nor a composition — sees.
+    The difference between the two is what a check can ask to find a field
+    typed somewhere such a consumer will not look.
+    """
+    props, _ = _record_field_declarations(record_schema, root)
+    return props
+
+
 def find_record_field_properties(
     record_schema: Any, root: Any = None
 ) -> dict[str, Any] | None:
@@ -4697,29 +4737,20 @@ def find_record_field_properties(
     embedded schema) whenever ``record_schema`` is a subtree, or its `$ref`s
     have no `$defs` to resolve against.
     """
-    document = record_schema if root is None else root
-    current = materialize_node(record_schema, document)
-    while isinstance(current, dict):
-        props = current.get("properties")
-        if isinstance(props, dict):
-            # Materialize each DESCRIPTOR too. Materializing only the walk left
-            # a field declared as `{"$ref": "#/$defs/Addr"}` coming back raw —
-            # no `type`, no `arrow_type` — and the documented consumer
-            # (plugins/analitiq-pipeline-builder/skills/endpoint-spec/
-            # spec-new-table.md) reads exactly those annotations off exactly
-            # this map. With nothing to read it invents a column type, which is
-            # the silent wrong-data outcome this whole PR exists to remove, one
-            # level below where it was fixed.
-            return {
-                name: materialize_node(declaration, document)
-                for name, declaration in props.items()
-            }
-        items = current.get("items")
-        if not isinstance(items, dict):
-            return None
-        current = materialize_node(items, document)
-    return None
-
+    props, document = _record_field_declarations(record_schema, root)
+    if props is None:
+        return None
+    # Materialize each DESCRIPTOR too. Materializing only the walk left a field
+    # declared as `{"$ref": "#/$defs/Addr"}` coming back raw — no `type`, no
+    # `arrow_type` — and the documented consumer
+    # (plugins/analitiq-pipeline-builder/skills/endpoint-spec/spec-new-table.md)
+    # reads exactly those annotations off exactly this map. With nothing to
+    # read it invents a column type, which is the silent wrong-data outcome
+    # this whole PR exists to remove, one level below where it was fixed.
+    return {
+        name: materialize_node(declaration, document)
+        for name, declaration in props.items()
+    }
 
 def _validate_records_in_response_schema(
     response: ResponseExtraction,
