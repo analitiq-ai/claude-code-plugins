@@ -21,6 +21,11 @@ rationale: >
   asked as the difference between the two readings, the node's own and the
   folded one, so a field carrying a composition for constraints rather than
   for its type is untouched: a keyword being present is not the same as a type
-  hiding behind it.
+  hiding behind it, and neither is a missing `arrow_type` — a field carrying
+  its own `type` is read through the connector's map and is fine. It is
+  applied from `analitiq.validator` rather than the models because the reading
+  it compares against is a second document's: the type map the field's `type`
+  would resolve through ships beside the endpoint, so what counts as readable
+  is not settled by the endpoint alone.
 status: active
 superseded_by: null

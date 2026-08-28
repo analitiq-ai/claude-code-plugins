@@ -41,6 +41,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any, Callable
 
 from ._core import (
@@ -69,8 +70,10 @@ try:
             SAMPLE_CONTRADICTION_REMEDY,
         )
         from analitiq.contracts.endpoints import (
-            iter_schema_nodes,
+            _escape_pointer_token,
+            find_record_field_declarations,
             materialize_node,
+            iter_schema_nodes,
             resolve_read_record_schema,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
@@ -239,29 +242,72 @@ def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
     return out
 
 
+def _node_is_readable(node: Any) -> bool:
+    """Whether the batch reader can type this node from the node alone.
+
+    It takes `arrow_type` off the node; failing that it takes the node's own
+    `type` and resolves it through the connector's read type map. Only a node
+    carrying NEITHER reaches the schema build undeclared. A node typed
+    `string` that also carries a `$ref` is read fine — reporting it would be
+    reporting a document that runs.
+    """
+    return (isinstance(node, dict)
+            and (node.get("arrow_type") is not None
+                 or isinstance(node.get("type"), str)))
+
+
+def _unreadable_record_fields(
+    authored: Any, root: Any, pointer: str, trail: str,
+) -> Iterator[tuple[str, str, str]]:
+    """Every place a field is typed somewhere the reader will not look.
+
+    Yields `(pointer, dotted name, arrow_type)`. Each descriptor is compared
+    against its own folded reading, and the walk recurses the way the reader
+    does — into a declared `Object`'s properties and a declared `List`'s
+    items — because each leaf has to resolve on its own or the schema build
+    raises there. `find_record_field_properties` folds the record's top-level
+    descriptors only, so the folding below this is done here, one level at a
+    time as the walk reaches it.
+    """
+    if not isinstance(authored, dict):
+        return
+    for name in sorted(k for k in authored if isinstance(k, str)):
+        declared = authored[name]
+        resolved = materialize_node(declared, root)
+        if not isinstance(resolved, dict):
+            continue
+        at = f"{pointer}/properties/{_escape_pointer_token(name)}"
+        path = f"{trail}{name}"
+        if not _node_is_readable(declared) and resolved.get("arrow_type") is not None:
+            yield at, path, resolved["arrow_type"]
+            continue
+        if resolved.get("arrow_type") == "Object":
+            yield from _unreadable_record_fields(
+                resolved.get("properties"), root, at, f"{path}.")
+        elif resolved.get("arrow_type") == "List":
+            yield from _unreadable_record_fields(
+                {"items": resolved.get("items")}, root, at, f"{path}.")
+
+
 def _unreadable_record_field_findings(ep_doc: dict, label: str = "") -> list[dict]:
-    """RULE-ENDP-065: a record field's type must sit where the engine reads it.
+    """RULE-ENDP-065: a record field's type must sit where the batch reader
+    looks.
 
-    The engine reads a field node's own `type` / `arrow_type` and follows
-    neither `$ref` nor a composition: `resolve_field_arrow_type` sees a bare
-    `{"$ref": …}` as untyped and `SchemaContract` then refuses the read with
-    "field has no 'arrow_type' declaration", before a request is sent. The
-    document is verbatim by then — nothing between the authored file and that
-    reader resolves anything.
+    That reader takes a field's `arrow_type` off the node, or failing that the
+    node's own `type` through the read map, and follows neither `$ref` nor a
+    composition. A field typed only behind one reaches the run undeclared and
+    fails it before a request is sent. That is a fact about a consumer this
+    repo does not contain; RULE-ENDP-065's rationale states it, and the plugin
+    prose cites the id rather than restating it.
 
-    The question asked of each field is therefore not "does this node carry a
-    keyword" — a typed field may carry `not` or `anyOf` for constraints the
-    engine ignores and be perfectly readable — but "is this field's type
-    somewhere the engine will not look": absent from the node, present once
-    the contract folds in what unconditionally applies. `materialize_node`
-    answers exactly that and is the module's own answer to it, so the check
-    is the difference between the two readings rather than a guess about
-    which keywords hide a type.
-
-    A field the provider documents no type for is annotated nowhere, so both
-    readings agree and it is not reported — declaring nothing is authored on
-    purpose (RULE-ENDP-005), and is not the same as declaring somewhere the
-    engine cannot see.
+    The question asked of each field is the difference between the contract's
+    two readings of one map — as authored, and with what unconditionally
+    applies folded in — both from a single walk, so the fields compared are
+    the same fields through an `items` chain and a `$ref`'d record shape
+    alike. A keyword being present is not the question, and neither is
+    `arrow_type` alone: a field carrying its own `type` is readable, and a
+    field the provider documents no type for is untyped in both readings
+    (RULE-ENDP-005).
     """
     findings: list[dict] = []
     ops = ep_doc.get("operations")
@@ -274,23 +320,33 @@ def _unreadable_record_field_findings(ep_doc: dict, label: str = "") -> list[dic
     if not isinstance(record, dict):
         return findings
     where = f"{label}: " if label else ""
-    for name, node in sorted((record.get("properties") or {}).items()):
-        if not isinstance(node, dict) or node.get("arrow_type") is not None:
-            continue
-        folded = materialize_node(node, root)
-        if not isinstance(folded, dict) or folded.get("arrow_type") is None:
-            continue
+    for at, path, arrow in _unreadable_record_fields(
+        find_record_field_declarations(record, root), root,
+        _record_shape_pointer(response), "",
+    ):
         findings.append(finding(
-            "record-field-unreadable", "error",
-            f"/operations/read/response/schema/properties/{name}",
-            f"{where}record field {name!r} is typed "
-            f"{folded['arrow_type']!r}, but not on the field: the declaration "
-            "is reached by folding in a `$ref` target or an `allOf` branch. "
-            "The engine reads a field's `arrow_type` off the node and follows "
-            "neither, so this field reaches the run undeclared and fails it "
-            "before the first request. Put the declaration on the field"))
+            "record-field-unreadable", "error", at,
+            f"{where}record field {path!r} is typed {arrow!r}, but not where "
+            "it is read: the declaration is reached by folding in a `$ref` "
+            "target or an `allOf` branch, and the field carries no `type` of "
+            "its own either. The reader that builds the record batch takes "
+            "both off the node and follows neither, so this field reaches the "
+            "run undeclared and fails it before the first request. Put the "
+            "declaration on the field"))
     return findings
 
+def _record_shape_pointer(response: dict) -> str:
+    """Where the record shape sits, as a pointer into the endpoint document.
+
+    Built from the document rather than written out: `records.ref` decides how
+    deep the record is, so a constant would name a node that is not there and
+    would name the SAME node for two differently-shaped documents."""
+    ref = response.get("records", {}).get("ref", "")
+    tail = ref.removeprefix("response.body").lstrip(".")
+    pointer = "/operations/read/response/schema"
+    for segment in filter(None, tail.split(".")):
+        pointer += f"/properties/{_escape_pointer_token(segment)}"
+    return f"{pointer}/items"
 
 def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     """The endpoint's embedded JSON-Schema documents as `(pointer, schema)` —
@@ -1005,8 +1061,16 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
-        findings.extend(_unreadable_record_field_findings(
-            ep_doc, label=ep_path.name))
+        findings.extend(_run_guarded(
+            _unreadable_record_field_findings, ep_doc, ep_path.name,
+            vid="record-field-unreadable",
+            path=f"{ep_path.name}:/operations/read/response/schema",
+            blame=(
+                f"the record shape of {ep_path.name} could not be read. "
+                "Folding it together met a contradiction — an `allOf` branch "
+                "or a `$ref` target declaring a type another one rules out. "
+                "Every other check on this connector still ran"
+            )))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
         # connector's `transports` — checkable only here, where both documents
         # are in hand.
@@ -1052,7 +1116,16 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
-        findings += _unreadable_record_field_findings(doc)
+        findings += _run_guarded(
+            _unreadable_record_field_findings, doc,
+            vid="record-field-unreadable",
+            path="/operations/read/response/schema",
+            blame=(
+                "the record shape could not be read. Folding it together met "
+                "a contradiction — an `allOf` branch or a `$ref` target "
+                "declaring a type another one rules out. Every other check on "
+                "this document still ran"
+            ))
         # `endpoint-transport-ref` is cross-document: it needs the sibling
         # connector.json's `transports`, which only `check_coverage` has. Say so
         # rather than returning a silent clean pass — an author validating a
