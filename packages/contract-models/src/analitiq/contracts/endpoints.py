@@ -1357,6 +1357,7 @@ def _validate_examples_zone(
 
 def _validate_arrow_type_in_json_schema(
     schema: Any, path: str, errors: list[str], negated: bool = False,
+    root: Any = None,
 ) -> None:
     """Walk a JSON Schema document and enforce arrow_type contract rules.
 
@@ -1382,11 +1383,20 @@ def _validate_arrow_type_in_json_schema(
     (3) alone: a canonicity error, a cross-parameter bound, the native/arrow
     pairing and the container-shape rules are all defects of the declaration
     itself and are wrong wherever it sits.
+
+    `root` is the document the walk started from, and (3) needs it: a field
+    whose shape is a reused `$defs` target records its sample on the REFERRING
+    node, where no `arrow_type` is written. Grading only the node that spells
+    the type out leaves that sample ungraded — and RULE-ENDP-064 grades it,
+    because a JSON Schema implementation resolves the reference, so the two
+    rules would answer differently about one node again.
     """
     # JSON Schema 2020-12 permits `true` / `false` as a whole-schema short-form
     # ("anything" / "nothing"). Those are valid but carry no arrow_type, so
     # walk past them. Non-bool, non-dict values in a schema position are
     # malformed JSON Schema; surface them rather than silently skipping.
+    if root is None:
+        root = schema
     if isinstance(schema, bool):
         return
     if not isinstance(schema, dict):
@@ -1432,6 +1442,17 @@ def _validate_arrow_type_in_json_schema(
                 # subject — a sample is evidence about a declaration, or it is
                 # not, and which layer reads it cannot change the answer.
                 _validate_examples_zone(schema, arrow_value, path, errors)
+    elif not negated and isinstance(schema.get("examples"), list):
+        # The sample sits on a node whose type is one fold away — a reused
+        # `$defs` target, or an `allOf` branch carrying the declaration. The
+        # sample is still that field's evidence, and RULE-ENDP-064 already
+        # grades it because a JSON Schema implementation resolves the
+        # reference; grading only the node that spells the type out is the two
+        # rules disagreeing about one node.
+        folded = materialize_node(schema, root)
+        folded_arrow = folded.get("arrow_type") if isinstance(folded, dict) else None
+        if isinstance(folded_arrow, str) and ARROW_TYPE_RE.fullmatch(folded_arrow):
+            _validate_examples_zone(schema, folded_arrow, path, errors)
     if has_native ^ has_arrow:
         missing = "arrow_type" if has_native else "native_type"
         errors.append(
@@ -1531,14 +1552,15 @@ def _validate_arrow_type_in_json_schema(
         if isinstance(child, dict):
             for sub_key, sub_schema in child.items():
                 _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}.{sub_key}", errors, negated
+                    sub_schema, f"{path}.{key}.{sub_key}", errors, negated, root
                 )
     for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}[{idx}]", errors, negated
+                    sub_schema, f"{path}.{key}[{idx}]", errors, negated,
+                    root
                 )
     for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
@@ -1555,11 +1577,11 @@ def _validate_arrow_type_in_json_schema(
         if isinstance(child, list):
             for idx, sub_schema in enumerate(child):
                 _validate_arrow_type_in_json_schema(
-                    sub_schema, f"{path}.{key}[{idx}]", errors, under
+                    sub_schema, f"{path}.{key}[{idx}]", errors, under, root
                 )
         else:
             _validate_arrow_type_in_json_schema(
-                child, f"{path}.{key}", errors, under)
+                child, f"{path}.{key}", errors, under, root)
 
 
 #: The subset of the single-schema positions whose subschema does NOT describe

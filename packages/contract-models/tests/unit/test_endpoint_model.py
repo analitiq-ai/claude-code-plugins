@@ -3217,17 +3217,49 @@ class TestRecordedWireSampleZone:
                                  ["2024-01-02T03:04:05"])}))
 
     @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
-    def test_the_exemption_reaches_below_the_negating_position(self, key):
+    @pytest.mark.parametrize("descent", ["properties", "anyOf", "items"])
+    def test_the_exemption_reaches_below_the_negating_position(self, key, descent):
         """The flag is set where the walk descends into one of these and is
         carried down from there. Pinned separately from where it is SET,
         because the loops that carry it are dead weight to a suite that only
         ever puts the typed node directly under the keyword — and the next
         simplification of them re-creates the contradiction this rule and
-        RULE-ENDP-064 were just made to agree on."""
-        parse_endpoint(_api_payload_with_field_schema(
-            "updated_at",
-            {key: {"type": "object", "properties": {"inner": self._temporal(
-                "Timestamp(MICROSECOND, UTC)", ["2024-01-02T03:04:05"])}}}))
+        RULE-ENDP-064 were just made to agree on.
+
+        One case per descent SHAPE, because the flag travels through three
+        loops and a test nesting under `properties` alone pins one of them.
+        `not: {anyOf: [...]}` is the ordinary spelling of "must not be any of
+        these", so the unpinned loops were reachable from documents authors
+        write."""
+        inner = self._temporal("Timestamp(MICROSECOND, UTC)",
+                               ["2024-01-02T03:04:05"])
+        below = {
+            "properties": {"type": "object", "properties": {"inner": inner}},
+            "anyOf": {"anyOf": [inner]},
+            "items": {"type": "array", "items": inner},
+        }[descent]
+        parse_endpoint(_api_payload_with_field_schema("updated_at", {key: below}))
+
+    @pytest.mark.parametrize("shape", ["$ref", "allOf"])
+    def test_a_sample_is_graded_against_a_type_one_fold_away(self, shape):
+        """A field whose shape is a reused `$defs` target records its sample on
+        the REFERRING node, where no `arrow_type` is written. Grading only the
+        node that spells the type out left that sample ungraded here while
+        RULE-ENDP-064 graded it — a JSON Schema implementation resolves the
+        reference — so the two rules answered differently about one node."""
+        stamp = {"type": "string", "native_type": "date-time",
+                 "arrow_type": "Timestamp(MICROSECOND, UTC)"}
+        node = ({"$ref": "#/$defs/Stamp"} if shape == "$ref"
+                else {"allOf": [stamp]})
+        node["examples"] = ["2024-01-02T03:04:05"]
+        payload = _api_payload_with_response_schema({
+            "$schema": JSON_SCHEMA,
+            "$defs": {"Stamp": stamp},
+            "type": "array",
+            "items": {"type": "object", "properties": {"updated_at": node}},
+        })
+        with pytest.raises(ValidationError, match="RULE-ENDP-063"):
+            parse_endpoint(payload)
 
     def test_a_sample_that_is_not_a_date_time_is_still_passed_over(self):
         """The calendar check applies to values wearing the date-time shape.
