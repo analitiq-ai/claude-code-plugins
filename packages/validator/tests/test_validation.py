@@ -356,6 +356,42 @@ def test_a_record_field_is_typed_where_the_batch_reader_looks(
         assert hits[0]["path"].startswith("/operations/read/response/schema/items"), hits[0]
 
 
+def test_the_fixture_screen_refuses_a_crash(validator):
+    """The screen every other test here leans on, pinned.
+
+    Nothing else can see it: it only ever ADDS an assertion, so neutering it
+    leaves every suite green — the silent-death shape this branch already met
+    once, when a renamed message left the probe registry's crash tripwire
+    matching nothing.
+    """
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["items"]["properties"]["a"] = {
+        "allOf": [{"type": "object"}, {"type": "string"}]}
+
+    with pytest.raises(AssertionError, match="a check crashed on this document"):
+        validator.validate_document(ep)
+
+    # And the other direction: a flag that stopped describing its document.
+    with pytest.raises(AssertionError, match="nothing crashed"):
+        validator.validate_document(_endpoint("STRING", "Utf8"), expect_crash=True)
+
+
+def test_the_fixture_screen_covers_the_other_entry_point(
+    tmp_path, connector_base, validator,
+):
+    """`check_coverage` returns findings too, so a crash reaches a test through
+    it just as well. Screening one entry point and not the other is a screen
+    with a hole exactly where nobody is looking."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["items"]["properties"]["a"] = {
+        "$ref": "#/$defs/Missing", "examples": [1]}
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                {"widgets.json": ep})
+    with pytest.raises(AssertionError, match="a check crashed on this document"):
+        validator.check_coverage(connector_base, tmp_path / "connector.json")
+
+
 def test_a_record_shape_that_cannot_be_folded_costs_only_that_check(validator):
     """Folding a record shape raises on author content — an `allOf` branch
     declaring a type another one rules out. Unguarded, that escapes the
@@ -510,8 +546,8 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         "contains": dict(sample),
     }
 
+    # The fixture refuses a guard finding, so what comes back is verdicts.
     baseline = validator.validate_document(ep)
-    assert not any(is_guard_finding(f) for f in baseline), baseline
     assert len(baseline) > 1, baseline
 
     program = textwrap.dedent(
@@ -560,7 +596,6 @@ def test_a_sample_is_graded_with_the_whole_document_in_scope(validator):
         "type": "object", "properties": {"x": {"$ref": "#/$defs/S"}},
         "examples": [{"x": 1}]}
     findings = validator.validate_document(ep)
-    assert not any(is_guard_finding(f) for f in findings), findings
     assert any("is not of type 'string'" in f["message"] for f in findings), findings
 
 

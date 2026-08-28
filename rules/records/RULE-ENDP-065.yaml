@@ -26,6 +26,10 @@ rationale: >
   applied from `analitiq.validator` rather than the models because the reading
   it compares against is a second document's: the type map the field's `type`
   would resolve through ships beside the endpoint, so what counts as readable
-  is not settled by the endpoint alone.
+  is not settled by the endpoint alone. The reader was asked rather than
+  assumed, and no artifact publishes it, so this is that reading as it stands:
+  were the engine to start folding, the rule would refuse documents that run,
+  and the finding names the fold it objects to so the staleness is visible in
+  the message rather than only here.
 status: active
 superseded_by: null

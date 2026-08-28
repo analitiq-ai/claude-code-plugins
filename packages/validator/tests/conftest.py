@@ -50,11 +50,20 @@ class _ScreenedValidator:
     def __getattr__(self, name):
         return getattr(self._module, name)
 
-    def validate_document(self, *args, expect_crash: bool = False, **kwargs):
-        findings = self._module.validate_document(*args, **kwargs)
-        if expect_crash:
-            return findings
+    def _screen(self, findings: list, expect_crash: bool) -> list:
         crashed = [f for f in findings if self._module.is_guard_finding(f)]
+        if expect_crash:
+            # An assertion, not a bypass: a test saying the crash IS its
+            # subject has to keep provoking one. Otherwise the day the crash
+            # stops happening — which is the day something got better — the
+            # test keeps passing and nobody is told it now proves nothing.
+            assert crashed, (
+                "expect_crash=True, but nothing crashed. Either this document "
+                "no longer provokes a crash — in which case drop the flag and "
+                "assert what the validator now decides — or the test is "
+                "pointed at the wrong document."
+            )
+            return findings
         assert not crashed, (
             "a check crashed on this document, so every assertion below is "
             "about the crash rather than about what the validator decided:\n"
@@ -63,6 +72,17 @@ class _ScreenedValidator:
             "IS what this test is about."
         )
         return findings
+
+    def validate_document(self, *args, expect_crash: bool = False, **kwargs):
+        return self._screen(
+            self._module.validate_document(*args, **kwargs), expect_crash)
+
+    def check_coverage(self, *args, expect_crash: bool = False, **kwargs):
+        """Screened too. It is the other entry point that returns findings, so
+        leaving it to `__getattr__` covered one of the two ways a crash reaches
+        a test."""
+        return self._screen(
+            self._module.check_coverage(*args, **kwargs), expect_crash)
 
 
 @pytest.fixture(scope="session")
