@@ -227,13 +227,14 @@ _WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
 #: leap second (RFC 3339 §5.6), which a wire value can carry and no
 #: `datetime` can hold.
 _MAX_WIRE_SECOND = 60
-#: The largest offset hour a zone can carry, from the same RFC 3339 §5.6
-#: grammar the seconds bound above is read off (`time-hour = 2DIGIT ; 00-23`).
-#: Reading one position out of that grammar and exceeding the next would make
-#: the profile's source a matter of which line it happened to suit.
-_MAX_OFFSET_HOUR = 23
-#: And its minutes, from `time-minute = 2DIGIT ; 00-59` in the same grammar.
-_MAX_OFFSET_MINUTE = 59
+#: `time-hour = 2DIGIT ; 00-23` from the same RFC 3339 §5.6 grammar the
+#: seconds bound above is read off. It bounds the clock hour AND the offset
+#: hour, because the grammar spells both with that one production — and
+#: reading one position out of it while exceeding the next would make the
+#: profile's source a matter of which line it happened to suit.
+_MAX_WIRE_HOUR = 23
+#: `time-minute = 2DIGIT ; 00-59`, likewise for both positions.
+_MAX_WIRE_MINUTE = 59
 
 #: `${name}` placeholder of type-map render templates. Must be a valid
 #: identifier, matching the native capture-group naming it resolves from.
@@ -683,15 +684,16 @@ def _offset_is_real(zone: str | None) -> bool:
 
     True for an absent zone and for `Z`, neither of which is an offset. The
     profile admits `+HH`, `+HHMM` and `+HH:MM`, all with unbounded digits, so
-    the positions are read the way the clock positions are, against the same
-    RFC 3339 grammar.
+    the positions are read against the same RFC 3339 productions the clock
+    positions are, through the same two constants: the grammar spells the
+    hour and the minute once and both readings are of it.
     """
-    if zone is None or zone in "Zz":
+    if zone is None or zone in ("Z", "z"):
         return True
     digits = zone[1:].replace(":", "")
     hour = int(digits[:2])
     minute = int(digits[2:]) if len(digits) > 2 else 0
-    return hour <= _MAX_OFFSET_HOUR and minute <= _MAX_OFFSET_MINUTE
+    return hour <= _MAX_WIRE_HOUR and minute <= _MAX_WIRE_MINUTE
 
 
 def sample_names_an_instant(sample: Any) -> bool:
@@ -727,7 +729,8 @@ def sample_names_an_instant(sample: Any) -> bool:
     match = _read_wire_datetime(sample)
     if match is None:
         return True
-    if int(match.group("hour")) > 23 or int(match.group("minute")) > 59:
+    if (int(match.group("hour")) > _MAX_WIRE_HOUR
+            or int(match.group("minute")) > _MAX_WIRE_MINUTE):
         return False
     # The seconds position is optional in the profile.
     second = match.group("second")

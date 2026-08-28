@@ -1603,8 +1603,10 @@ _REFUSED_REFERENCE_KEYWORDS: dict[str, str] = {
 }
 
 
-def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dict]]:
-    """Every schema node under `schema`, as `(json_pointer, node)`.
+def iter_schema_nodes(
+    schema: Any, pointer: str = "", negated: bool = False,
+) -> Iterator[tuple[str, dict, bool]]:
+    """Every schema node under `schema`, as `(json_pointer, node, negated)`.
 
     The one generic traversal of an embedded schema's structural positions:
     it recurses through the shared `JSON_SCHEMA_SUBSCHEMA_ORDER` /
@@ -1617,6 +1619,14 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     nothing in this module walks with it. Pointers are RFC 6901 escaped, so one
     resolves back to the node it came from even under a property named `a/b`.
 
+    `negated` says the node was reached through a position whose subschema
+    does not describe the instance (:data:`JSON_SCHEMA_NEGATED_SCHEMA_KEYS`),
+    and stays true for everything below one. It is reported by the walk rather
+    than read back off the pointer, because a pointer segment is a property
+    NAME as often as it is a keyword: `/properties/not` is a field a provider
+    called `not`, and a consumer parsing the pointer cannot tell it from the
+    `not` position and would silently treat the field as negated.
+
     The error-collecting walkers in this module predate it and stay as they
     are: they report paths in a dotted spelling rather than as pointers, and
     `_validate_arrow_type_in_json_schema` re-enters on a non-dict child to
@@ -1624,28 +1634,33 @@ def iter_schema_nodes(schema: Any, pointer: str = "") -> Iterator[tuple[str, dic
     """
     if not isinstance(schema, dict):
         return
-    yield pointer, schema
+    yield pointer, schema, negated
     for key in JSON_SCHEMA_SUBSCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, dict):
+            under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
             for name, sub in child.items():
                 yield from iter_schema_nodes(
-                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}")
+                    sub, f"{pointer}/{key}/{_escape_pointer_token(name)}", under)
     for key in JSON_SCHEMA_LIST_OF_SCHEMA_ORDER:
         child = schema.get(key)
         if isinstance(child, list):
+            under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
             for index, sub in enumerate(child):
-                yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
+                yield from iter_schema_nodes(
+                    sub, f"{pointer}/{key}/{index}", under)
     for key in JSON_SCHEMA_SINGLE_SCHEMA_ORDER:
         if key not in schema:
             continue
         child = schema[key]
+        under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
         # Draft 2019-09 tuple-form `items: [...]`, as elsewhere here.
         if isinstance(child, list):
             for index, sub in enumerate(child):
-                yield from iter_schema_nodes(sub, f"{pointer}/{key}/{index}")
+                yield from iter_schema_nodes(
+                    sub, f"{pointer}/{key}/{index}", under)
         else:
-            yield from iter_schema_nodes(child, f"{pointer}/{key}")
+            yield from iter_schema_nodes(child, f"{pointer}/{key}", under)
 
 
 def _escape_pointer_token(name: str) -> str:

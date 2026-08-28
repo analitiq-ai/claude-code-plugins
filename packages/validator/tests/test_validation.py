@@ -313,6 +313,23 @@ def test_a_sample_under_a_negation_is_not_graded_against_its_own_opposite(
     assert _example_errors(validator, ep) == []
 
 
+@pytest.mark.parametrize("name", ["not", "if", "propertyNames"])
+def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name):
+    """A pointer segment is a property NAME as often as it is a keyword
+    position, and `/properties/not` is a field a provider called `not`. Read
+    back off the pointer, the two are the same string — so a field named for a
+    keyword dropped out of grading silently, which is the validates-clean-and-
+    breaks shape this rule exists to close, on any provider whose field is
+    called `if`."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"][name] = {
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [7]}
+    paths = [e["path"] for e in _example_errors(validator, ep)]
+    assert any(f"/properties/{name}/examples/0" in p for p in paths), paths
+
+
 def test_a_sample_beside_a_negation_is_still_graded(validator):
     """The negation is a position, not a spreading property: a node that
     merely HAS a `not` still grades the sample recorded on itself."""
