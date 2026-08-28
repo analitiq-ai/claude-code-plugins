@@ -95,7 +95,8 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "adopt moves these entries to engine_gap"
 )
 
-#: The page size of a database pagination variant.
+#: The page size of a database pagination variant. One fact per variant —
+#: the manifest claims per carrier — under one reason.
 DATABASE_PAGE_SIZE = (
     "an author declaring a page size expects the read fetched in pages of "
     "that size; the pinned manifest claims no read of it, so a database "

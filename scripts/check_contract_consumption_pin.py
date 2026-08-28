@@ -58,9 +58,6 @@ published truth; `test_ci_job_is_wired` in
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
-import re
 import sys
 from pathlib import Path
 
@@ -74,6 +71,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # exact class the fetch raises.
 from _guard_lib import BASE_URL, GuardError, ObjectMissing, surface_warning  # noqa: E402
 from _guard_lib import fetch as _fetch  # noqa: E402
+from _guard_lib import (  # noqa: E402
+    fetch_json,
+    parse_object,
+    parse_version,
+    report_failures,
+    sha256,
+)
+
+
+def _fetch_json(url: str) -> dict:
+    # Bound to THIS module's `_fetch` so the suite monkeypatches one name.
+    return fetch_json(url, fetcher=_fetch)
 
 __all__ = ["GuardError", "ObjectMissing", "check_offline", "check_published", "main"]
 
@@ -89,34 +98,6 @@ except Exception as exc:  # noqa: BLE001 — see comment above
 else:
     _IMPORT_ERROR = None
 
-_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-def _parse_object(raw: bytes, *, context: str) -> dict:
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise GuardError(f"{context} is not valid JSON: {exc}") from exc
-    if not isinstance(parsed, dict):
-        raise GuardError(f"{context} parsed to {type(parsed).__name__}, expected object")
-    return parsed
-
-
-def _fetch_json(url: str) -> dict:
-    return _parse_object(_fetch(url), context=url)
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _parse_version(value: str, *, context: str) -> tuple[int, ...]:
-    # Exactly three non-negative components: a malformed pointer must be a
-    # GuardError, not a crafted (and wrong) "pin AHEAD of latest" verdict from
-    # comparing tuples of different lengths.
-    if not _VERSION_RE.match(value):
-        raise GuardError(f"{context}: unparseable version {value!r}")
-    return tuple(int(part) for part in value.split("."))
 
 
 def _pinned_url() -> str:
@@ -151,7 +132,7 @@ def check_offline() -> list[str]:
     the vendored copy only — which is still the file the census grades from.
     """
     raw = _read_vendored()
-    digest = _sha256(raw)
+    digest = sha256(raw)
     if digest != pin.CONSUMPTION_SHA256:
         # Return early: with the bytes unaccounted for, anything parsed out of
         # them describes a file we have already rejected.
@@ -210,8 +191,8 @@ def check_published(failures: list[str]) -> tuple[list[str], bool]:
         raise GuardError(
             f"{pointer_name} has no string `{pin.ARTIFACT_VERSION_KEY}`"
         )
-    latest_v = _parse_version(latest, context=pointer_name)
-    pinned_v = _parse_version(
+    latest_v = parse_version(latest, context=pointer_name)
+    pinned_v = parse_version(
         pin.CONSUMPTION_VERSION, context=f"{pin.CONSUMPTION_RESOURCE} pin"
     )
     if latest_v > pinned_v:
@@ -261,14 +242,6 @@ def check_published(failures: list[str]) -> tuple[list[str], bool]:
     return notices, pointer_sha_compared
 
 
-def _report(failures: list[str]) -> None:
-    """Print divergences found so far. Called on every exit path, including the
-    GuardError ones — a definite verdict already reached must never be dropped
-    because a later check could not run."""
-    for failure in failures:
-        print(f"::error::{failure}", file=sys.stderr)
-
-
 def main(argv: list[str] | None = None) -> int:
     # `__doc__` is None under `python -OO`; falling over here would exit 1 —
     # the "manifest diverged, go re-vendor" verdict — for a flag that has
@@ -296,7 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Owned here, not inside the checks, so every exit path below can report
-    # what was already found (see `_report`).
+    # what was already found (see `report_failures`).
     failures: list[str] = []
     notices: list[str] = []
     pointer_sha_compared = False
@@ -306,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
             published_notices, pointer_sha_compared = check_published(failures)
             notices.extend(published_notices)
     except GuardError as exc:
-        _report(failures)
+        report_failures(failures)
         print(
             f"::error::contract-consumption-pin guard could not run: {exc}",
             file=sys.stderr,
@@ -319,7 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         # engine truth") whose remediation is re-vendoring — a confident and
         # wrong instruction. Reachable: `urlopen` raising ValueError or
         # UnicodeError, which `_fetch` does not catch.
-        _report(failures)
+        report_failures(failures)
         print(
             "::error::contract-consumption-pin guard could not run: unexpected "
             f"{type(exc).__name__}: {exc}",
@@ -332,7 +305,7 @@ def main(argv: list[str] | None = None) -> int:
         # Actions this also annotates the checks UI and the step summary.
         surface_warning(notice, title="contract-consumption pin")
     if failures:
-        _report(failures)
+        report_failures(failures)
         return 1
     if args.offline:
         scope = "offline hash + shape + declared version"

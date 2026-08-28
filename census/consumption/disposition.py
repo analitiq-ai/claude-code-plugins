@@ -81,8 +81,13 @@ class FieldDisposition:
     ``model`` is the ``analitiq.contracts``-relative dotted path of the
     reachable class that CARRIES the field (``endpoints.Param``,
     ``pipelines.config.Logging``, ``stream.StreamSource``) — inherited fields
-    included, since the walk reads ``model_fields`` — not necessarily the
-    class declaring it; ``field`` is the field name on that model.
+    included, since the walk reads ``model_fields`` — not the class declaring
+    it. That is the manifest's own unit: ``claims`` are keyed by the class
+    the engine holds, so a field inherited by several variants is read or
+    unread per variant, and one base-class field can carry one entry per
+    variant with one shared reason. The prose census keys the same field by
+    its declaring owner because there the unit is one description; here the
+    unit is one read. ``field`` is the field name on that model.
     ``kind`` is the disposition and ``reason`` the sentence a reviewer reads
     to judge it. A ``reason`` is required for every kind: an ``engine_gap``
     with no stated consequence is an alarm with no text, and an

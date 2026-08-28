@@ -69,9 +69,6 @@ run catches a hash or declared-version mismatch without network.
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
-import re
 import sys
 from pathlib import Path
 
@@ -84,6 +81,18 @@ from _guard_lib import BASE_URL, GuardError  # noqa: E402
 # this guard has no state where a missing object is anything but
 # infrastructure, so it needs no special case — exit 2 either way.
 from _guard_lib import fetch as _fetch  # noqa: E402
+from _guard_lib import (  # noqa: E402
+    fetch_json,
+    parse_object,
+    parse_version,
+    report_failures,
+    sha256,
+)
+
+
+def _fetch_json(url: str) -> dict:
+    # Bound to THIS module's `_fetch` so the suite monkeypatches one name.
+    return fetch_json(url, fetcher=_fetch)
 
 # The import itself is part of the guard: `arrow_grammar` loads and derives
 # from the vendored manifest at import time, so a missing/corrupt vendored
@@ -99,34 +108,6 @@ except Exception as exc:  # noqa: BLE001 — see comment above
 else:
     _IMPORT_ERROR = None
 
-_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
-
-
-def _parse_object(raw: bytes, *, context: str) -> dict:
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise GuardError(f"{context} is not valid JSON: {exc}") from exc
-    if not isinstance(parsed, dict):
-        raise GuardError(f"{context} parsed to {type(parsed).__name__}, expected object")
-    return parsed
-
-
-def _fetch_json(url: str) -> dict:
-    return _parse_object(_fetch(url), context=url)
-
-
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def _parse_version(value: str, *, context: str) -> tuple[int, ...]:
-    # Exactly three non-negative components: a malformed pointer must be a
-    # GuardError, not a crafted (and wrong) "pin AHEAD of latest" verdict from
-    # comparing tuples of different lengths.
-    if not _VERSION_RE.match(value):
-        raise GuardError(f"{context}: unparseable version {value!r}")
-    return tuple(int(part) for part in value.split("."))
 
 
 def _declared_version(obj: dict, *, context: str) -> str:
@@ -186,7 +167,7 @@ def check_offline() -> list[str]:
     # not-public-API, not not-touchable. (Same at the read in check_published.)
     vendored = arrow_grammar._GRAMMAR_PATH  # skipcq: PYL-W0212
     raw = vendored.read_bytes()
-    digest = _sha256(raw)
+    digest = sha256(raw)
     if digest != arrow_grammar.ENGINE_GRAMMAR_SHA256:
         # Return early: with the bytes unaccounted for, anything parsed out of
         # them describes a file we have already rejected.
@@ -196,7 +177,7 @@ def check_offline() -> list[str]:
             "the vendored file and the pin must move together"
         ]
     context = f"vendored {vendored.name}"
-    declared = _declared_version(_parse_object(raw, context=context), context=context)
+    declared = _declared_version(parse_object(raw, context=context), context=context)
     return _version_mismatch(
         declared,
         arrow_grammar.ENGINE_GRAMMAR_VERSION,
@@ -361,16 +342,16 @@ def check_published(failures: list[str]) -> list[str]:
         f"{arrow_grammar.CONVERSION_MATRIX_FILENAME}"
     )
     matrix_raw = _fetch(matrix_url)
-    if _sha256(matrix_raw) != arrow_grammar.CONVERSION_MATRIX_SHA256:
+    if sha256(matrix_raw) != arrow_grammar.CONVERSION_MATRIX_SHA256:
         failures.append(
-            f"published {matrix_url} hashes to {_sha256(matrix_raw)}, pin says "
+            f"published {matrix_url} hashes to {sha256(matrix_raw)}, pin says "
             f"{arrow_grammar.CONVERSION_MATRIX_SHA256}"
         )
     else:
         # Guarded parse + shape check even though the sha matched — a pin
         # minted against corrupt bytes must be a GuardError, not a traceback
         # or a confidently wrong family-diff verdict.
-        matrix = _parse_object(matrix_raw, context=matrix_url)
+        matrix = parse_object(matrix_raw, context=matrix_url)
         mislabel = _version_mismatch(
             _declared_version(matrix, context=matrix_url),
             arrow_grammar.CONVERSION_MATRIX_VERSION,
@@ -409,8 +390,8 @@ def check_published(failures: list[str]) -> list[str]:
         latest = pointer.get("version")
         if not isinstance(latest, str):
             raise GuardError(f"{resource}/latest.json has no string `version`")
-        latest_v = _parse_version(latest, context=f"{resource}/latest.json")
-        pinned_v = _parse_version(pinned, context=f"{resource} pin")
+        latest_v = parse_version(latest, context=f"{resource}/latest.json")
+        pinned_v = parse_version(pinned, context=f"{resource} pin")
         if latest_v > pinned_v:
             notices.append(
                 f"{resource}: engine has published v{latest}, pin is v{pinned} "
@@ -435,14 +416,6 @@ def check_published(failures: list[str]) -> list[str]:
                 "re-vendoring does not fix the pointer"
             )
     return notices
-
-
-def _report(failures: list[str]) -> None:
-    """Print divergences found so far. Called on every exit path, including the
-    GuardError ones — a definite verdict already reached must never be dropped
-    because a later check could not run."""
-    for failure in failures:
-        print(f"::error::{failure}", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -472,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # Owned here, not inside the checks, so every exit path below can report
-    # what was already found (see `_report`).
+    # what was already found (see `report_failures`).
     failures: list[str] = []
     notices: list[str] = []
     try:
@@ -480,7 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.offline and not failures:
             notices.extend(check_published(failures))
     except GuardError as exc:
-        _report(failures)
+        report_failures(failures)
         print(f"::error::engine-grammar-pin guard could not run: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:  # noqa: BLE001 — see comment below
@@ -491,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
         # wrong instruction. Reachable: the vendored file disappearing between
         # import and read, or `urlopen` raising ValueError/UnicodeError, which
         # `_fetch` does not catch.
-        _report(failures)
+        report_failures(failures)
         print(
             "::error::engine-grammar-pin guard could not run: unexpected "
             f"{type(exc).__name__}: {exc}",
@@ -502,7 +475,7 @@ def main(argv: list[str] | None = None) -> int:
     for notice in notices:
         print(f"::notice::{notice}")
     if failures:
-        _report(failures)
+        report_failures(failures)
         return 1
     scope = (
         "offline hash + declared version"

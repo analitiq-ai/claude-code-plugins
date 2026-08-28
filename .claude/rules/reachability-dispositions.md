@@ -20,6 +20,17 @@ dataclass carries. **Neither decides whether the kind is right or the reason
 honest.** That is a reader's,
 and this file is what the reader applies.
 
+## The unit
+
+An entry is keyed by the class that carries the field, inherited or not,
+because that is how the manifest claims: by the class the engine holds. A
+base-class field is therefore one entry per variant that reaches it, each a
+separate fact — a read on one variant and none on another is exactly the
+state `stream.FullRefreshReplication.safety_window_seconds` records — and
+variants with the same verdict share a named reason rather than a merged
+entry. The prose census keys by declaring owner because its unit is one
+description; do not carry that keying here.
+
 ## The kind
 
 `DispositionKind` in `census/consumption/disposition.py` owns the names; the

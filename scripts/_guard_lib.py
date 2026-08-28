@@ -15,9 +15,12 @@ Import shape: every guard inserts its own directory on `sys.path` before
 """
 from __future__ import annotations
 
+import hashlib
 import http.client
+import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -126,3 +129,53 @@ def surface_warning(text: str, *, title: str) -> None:
         if summary_path:
             with open(summary_path, "a", encoding="utf-8") as fh:
                 fh.write(f"⚠️ {text}\n")
+
+
+#: The version triple every engine-published artifact and pointer declares.
+VERSION_TRIPLE_RE = re.compile(r"^\d+\.\d+\.\d+$")
+
+
+def parse_object(raw: bytes, *, context: str) -> dict:
+    """A fetched or vendored document as a JSON object, or a GuardError.
+
+    Malformed JSON and a non-object top level are both "the guard cannot
+    read this", never a divergence verdict about bytes it could not parse.
+    """
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise GuardError(f"{context} is not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise GuardError(f"{context} parsed to {type(parsed).__name__}, expected object")
+    return parsed
+
+
+def fetch_json(url: str, *, fetcher=fetch) -> dict:
+    """`parse_object` over `fetcher(url)`. Each guard binds its own module-level
+    fetch name here so its test suite can monkeypatch that one name."""
+    return parse_object(fetcher(url), context=url)
+
+
+def sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def parse_version(value: str, *, context: str) -> tuple[int, ...]:
+    """A version triple as a comparable tuple, or a GuardError.
+
+    Exactly three non-negative components: a malformed pointer must be a
+    GuardError, not a crafted (and wrong) "pin AHEAD of latest" verdict from
+    comparing tuples of different lengths.
+    """
+    if not VERSION_TRIPLE_RE.match(value):
+        raise GuardError(f"{context}: unparseable version {value!r}")
+    return tuple(int(part) for part in value.split("."))
+
+
+def report_failures(failures: list[str]) -> None:
+    """Print divergences found so far as workflow error annotations. Called on
+    every exit path, including the GuardError ones — a definite verdict
+    already reached must never be dropped because a later check could not
+    run."""
+    for failure in failures:
+        print(f"::error::{failure}", file=sys.stderr)
