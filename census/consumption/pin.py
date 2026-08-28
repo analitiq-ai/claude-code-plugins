@@ -5,8 +5,10 @@ run-time path can hold, the fields that path reads. It is a fact about the
 engine, so only the engine can make it true, and it is published the way the
 Arrow type grammar is (``analitiq.contracts.arrow_grammar``):
 
-    https://schemas.analitiq.ai/contract-consumption/latest.json            (pointer)
-    https://schemas.analitiq.ai/contract-consumption/v{V}/contract_consumption.json
+    {BASE_URL}/{CONSUMPTION_RESOURCE}/latest.json                          (pointer)
+    {BASE_URL}/{CONSUMPTION_RESOURCE}/v{CONSUMPTION_VERSION}/{CONSUMPTION_FILENAME}
+
+(``BASE_URL`` is the serving host ``scripts/_guard_lib.py`` states.)
 
 This module vendors ONE pinned, immutable version — the file beside it,
 byte-identical to the published object — and names the pin (version + sha256)
@@ -14,10 +16,21 @@ once. Guards: ``tests/census/test_contract_consumption.py`` re-hashes the
 vendored bytes against the pin and checks the document's self-declared
 version, offline, so an edited or swapped copy fails in any plain pytest run;
 the CI guard fetches the published object and byte-compares it against the
-vendored copy, so a pin the engine has withdrawn or superseded is reported.
+vendored copy, so a withdrawn pin fails the guard and a superseded one
+surfaces as a notice.
 
 The envelope, and why each key is read the way it is:
 
+- ``version`` — the artifact's self-declaration, asserted against
+  ``CONSUMPTION_VERSION`` so a consumer checks the version it got rather
+  than trusting the URL it asked for.
+- ``contract_models_version`` — the ``analitiq-contract-models`` release the
+  engine generated the manifest against. Compared to the version in
+  ``packages/contract-models/pyproject.toml``: it must be at or behind the
+  tree, because a manifest generated against a newer models release can
+  claim fields this tree does not declare. (``tests/census`` holds it.)
+- ``scope`` — the engine's own extraction scope, the packages it walked for
+  ``runtime`` and ``kit`` reads. Not read here.
 - ``roots`` — the models the engine hands to its run-time path directly.
   Coverage is defined by them: a field belongs to the census only when its
   model is reachable from a root through field annotations, because that is
@@ -25,8 +38,9 @@ The envelope, and why each key is read the way it is:
   reaches is not covered — unknown, not unread.
 - ``claims`` — ``model -> field -> sites``: the attribute reads the engine's
   run-time path performs. A reachable field absent here is unread.
-- ``opaque`` — models the engine consumes whole, as a JSON grammar
-  (``model_dump`` into an expression tree or a predicate resolver). Their
+- ``opaque`` — ``model -> consumer record``: models the engine consumes
+  whole, as a JSON grammar (``model_dump`` into an expression tree or a
+  predicate resolver), each mapped to the record of what consumes it. Their
   fields are never read by attribute, so they never appear in ``claims``,
   and the walk records the model but does not descend into it: a field
   under an opaque model is neither read nor unread.
@@ -34,7 +48,8 @@ The envelope, and why each key is read the way it is:
   connector rather than running one. They are recorded so the engine can
   say what its kit looks at; they are never claims.
 - ``transport`` — sites that re-serialise a document unchanged. Passing a
-  field through is not reading it.
+  field through is not reading it. Optional: an envelope without it is
+  accepted, since nothing here consults it.
 
 This module is stdlib-only: the pin and the envelope check are read by the
 CI guard and by the census tests before any contract model is imported.
@@ -74,11 +89,9 @@ MANIFEST_PATH = Path(__file__).with_name(CONSUMPTION_FILENAME)
 def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     """The vendored manifest, parsed and envelope-checked.
 
-    Refuses (``ValueError``) a document that cannot define a census: no
-    non-empty ``roots`` list (nothing would be covered, and an empty census
-    passes vacuously), or a ``claims`` / ``opaque`` / ``kit_reads`` that is
-    not a mapping, or a ``version`` that is not a string (the self-declared
-    version is what the pin is asserted against). Kept as a function so the
+    Refuses (``ValueError``) an envelope the walk cannot read — one that
+    would define no census, or would make the walk look up a claim on a
+    shape that is not ``model -> field -> sites``. Kept as a function so the
     guards re-read the file: hash checks compare bytes, not this parse.
     """
     document = json.loads(path.read_text(encoding="utf-8"))
@@ -100,6 +113,14 @@ def load_manifest(path: Path = MANIFEST_PATH) -> dict[str, Any]:
     for key in (CLAIMS_KEY, OPAQUE_KEY, KIT_READS_KEY):
         if not isinstance(document.get(key), dict):
             raise ValueError(f"{path.name}: `{key}` must be a mapping")
+    for model, fields in document[CLAIMS_KEY].items():
+        if not isinstance(fields, dict) or not all(
+            isinstance(sites, list) for sites in fields.values()
+        ):
+            raise ValueError(
+                f"{path.name}: `{CLAIMS_KEY}` entry {model!r} must map each field "
+                "to a list of sites"
+            )
     if not isinstance(document.get(TRANSPORT_KEY, []), list):
         raise ValueError(f"{path.name}: `{TRANSPORT_KEY}` must be a list")
     return document

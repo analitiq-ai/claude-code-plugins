@@ -125,7 +125,8 @@ def test_prose_rule_citations_resolve() -> None:
     citations behind a green build.
 
     Scope is every `*.md` under `plugins/` (all plugins — the registry they cite
-    is shared) plus the repo-root docs. The pre-monorepo globs scanned
+    is shared), the repo-root docs, and every `*.py` under `census/` — the
+    consumption dispositions cite rule ids in their reasons. The pre-monorepo globs scanned
     `REPO_ROOT/src`; the move of that tree to `plugins/` did not repoint the
     scan, so the gate ran vacuously green over zero citations and every pipeline
     citation sat unpinned. Hence the found-citations assert below, which turns a
@@ -144,7 +145,12 @@ def test_prose_rule_citations_resolve() -> None:
     dangling: dict[str, set[str]] = {}
     plugins_root = REPO_ROOT / "plugins"
     plugin_cited = 0
-    for path in [*REPO_ROOT.glob("*.md"), *plugins_root.rglob("*.md")]:
+    census_root = REPO_ROOT / "census"
+    for path in [
+        *REPO_ROOT.glob("*.md"),
+        *plugins_root.rglob("*.md"),
+        *census_root.rglob("*.py"),
+    ]:
         if path in generated:
             continue  # generated from the registry; covered by the sync test
         ids = _cited_ids(path.read_text(encoding="utf-8"))

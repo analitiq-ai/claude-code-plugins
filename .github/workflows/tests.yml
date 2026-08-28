@@ -121,7 +121,7 @@ jobs:
     # The reachability census grades every contract field against a VENDORED
     # copy of the engine-published contract-consumption manifest — the fields
     # the engine's run-time path reads. pytest pins the vendored bytes to the
-    # sha256 stated in census/consumption/pin.py offline; this job is the
+    # sha256 stated in `census/consumption/pin.py` offline; this job is the
     # network half: the published immutable object at the pinned version
     # must be byte-identical to the vendored copy, the manifest must
     # self-declare the version its pin names, and a newer engine publication
@@ -130,7 +130,8 @@ jobs:
     # dependency install step.
     #
     # Never add --offline here: it would make this job green having verified
-    # nothing about the engine's published truth. test_ci_job_is_wired pins that.
+    # nothing about the engine's published truth. `test_ci_job_is_wired` in
+    # `tests/schemas/test_contract_consumption_guard.py` pins that.
     name: vendored consumption manifest matches published object
     runs-on: ubuntu-latest
     steps:

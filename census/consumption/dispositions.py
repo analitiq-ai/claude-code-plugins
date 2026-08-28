@@ -8,10 +8,15 @@ and so does an entry for a field the manifest now claims or no longer
 reaches, so a pin bump that starts reading a field retires its entry here
 in the same change.
 
-Every ``engine_gap`` and ``contract_surplus`` reason is a reading of the
-pinned manifest — "claims no read of" — never a prediction about the engine. The manifest is the only
-statement of engine behaviour this repo holds, and the pin guard is what
-keeps that statement current.
+Every ``engine_gap``, ``contract_surplus`` and ``manifest_gap`` reason has
+a manifest half and a consequence half. The manifest half — "the pinned
+manifest claims no read of …" — is a comparison against the published
+artifact (the pinned rung of ``.claude/rules/engine-behaviour-claims.md``),
+and the pin guard is what keeps it current. The consequence half — what the
+run does with the field today — is a reading of the engine as it stands,
+and no check rests on it: the gate is ``claims`` membership only.
+``.claude/rules/reachability-dispositions.md`` is how a reader judges an
+entry.
 """
 from __future__ import annotations
 
@@ -34,20 +39,19 @@ SCHEMA_URL_LITERAL = (
 #: reaches the run at all, as the JSON sub-tree of a model the engine dumps
 #: whole. No attribute read exists because the shape is never unpacked.
 NESTED_SHAPE_DECLARATION = (
-    "nested shape declaration: the container-shape rule grades it against the "
-    "declared arrow_type at validation time, and the run lands the destination "
+    "nested shape declaration: RULE-STRM-006 and RULE-STRM-007 name what it "
+    "must agree with at validation time, and the run lands the destination "
     "shape by dumping the assignment target whole — an opaque model — so no "
     "field of the sub-tree is read by attribute"
 )
 
-#: A per-parameter value constraint the validator grades nothing against and
-#: the manifest claims no read of: the request carries whatever the binding
-#: resolves to.
+#: A per-parameter value constraint the manifest claims no read of: the
+#: request carries whatever the binding resolves to.
 PARAM_VALUE_CONSTRAINT = (
     "an author declaring a value constraint expects a request carrying a value "
     "outside it to be refused before it is sent; the pinned manifest claims no "
-    "read of the constraint, and the validator grades no authored value "
-    "against it, so the request goes out with the value the binding resolved"
+    "read of the constraint, so the request goes out with the value the "
+    "binding resolved"
 )
 
 #: The wire half of a cursor mapping: how the watermark is compared and in
@@ -56,7 +60,7 @@ CURSOR_MAPPING_WIRE = (
     "an author declaring how the watermark is compared and formatted expects "
     "the incremental request to send it that way; the pinned manifest claims "
     "no read of the wire half of a cursor mapping, so the watermark goes out "
-    "as the stored value, compared however the provider defaults"
+    "as the stored value"
 )
 
 #: Write-result extraction: the block an author fills in so a write's outcome
@@ -81,7 +85,7 @@ RUNTIME_LOGGING = (
 VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "an author declaring a per-assignment error-handling override expects a "
     "validation failure on that assignment to follow it; the pinned manifest "
-    "claims no read of the override, so every validation failure follows the "
+    "claims no read of the override, so a validation failure follows the "
     "pipeline runtime's error handling — the outcome RULE-STRM-040 tells "
     "authors to expect"
 )
@@ -110,9 +114,10 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition(
         "endpoints.Param", "location", "contract_surplus",
         "the request slot a binding sits in already states where the value "
-        "goes; the declared location restates it, RULE-ENDP-008 exists only "
-        "to hold the two copies together, and the pinned manifest claims no "
-        "read of it — one of the two placements goes, and it is this one",
+        "goes, and the slot and the field state the same placement; "
+        "RULE-ENDP-008's location clause holds the copy to the slot, the "
+        "pinned manifest claims no read of the field, and the field is the "
+        "copy that goes",
     ),
     FieldDisposition(
         "endpoints.Param", "required", "engine_gap",
@@ -133,36 +138,34 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition(
         "endpoints.Param", "operators", "engine_gap",
         "an author publishing a param's operator set expects a stream filter "
-        "using an operator outside it to be refused (RULE-STRM-026, which no "
-        "validator applies); the pinned manifest claims no read of the set, so "
-        "the filter is sent with whatever operator the stream declares",
+        "using an operator outside it to be refused (RULE-STRM-026 names the "
+        "obligation); the pinned manifest claims no read of the set, so the "
+        "filter is sent with whatever operator the stream declares",
     ),
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
         "endpoints.Replication", "supported_methods", "engine_gap",
         "an author naming the methods an endpoint supports expects a stream "
-        "selecting another to be refused (RULE-STRM-025 and RULE-STRM-029, "
-        "which no validator applies); the pinned manifest claims no read of "
-        "the set, so the stream's method runs whether or not the endpoint "
-        "declared it",
+        "selecting another to be refused (RULE-STRM-025 and RULE-STRM-029 "
+        "name the obligation); the pinned manifest claims no read of the set, "
+        "so the stream's method runs whether or not the endpoint declared it",
     ),
     # --- endpoints.ResponseExtraction: named metadata extractions -----------
     FieldDisposition(
         "endpoints.ResponseExtraction", "metadata", "engine_gap",
         "an author declaring named metadata extractions expects each to be "
         "evaluated against the response and exposed under the response scope "
-        "(RULE-ENDP-023 grades the keys); the pinned manifest claims no read "
-        "of the block, so a ref to a declared metadata key resolves to nothing",
+        "(RULE-ENDP-023 names the obligation on the keys); the pinned manifest "
+        "claims no read of the block, so the declared key is never populated",
     ),
     # --- endpoints.SingleCursorMapping: cursor_field and param are read,
     # the wire half is not.
     FieldDisposition(
         "endpoints.SingleCursorMapping", "operator", "contract_surplus",
-        "a required field the pinned manifest claims no read of: every author "
+        "a required field the pinned manifest claims no read of: an author "
         "must choose a comparison operator and the read applies none, so the "
         "requirement is a promise the document cannot keep — the field is "
-        "removed rather than adopted, the wire comparison being the "
-        "provider's, stated by the param the cursor binds to",
+        "removed rather than adopted",
     ),
     FieldDisposition("endpoints.SingleCursorMapping", "format", "engine_gap", CURSOR_MAPPING_WIRE),
     # --- endpoints.WindowCursorMapping: the whole windowed form is unread ---
@@ -197,10 +200,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "endpoints.WriteOperation", "conflict_keys", "engine_gap",
         "an author naming the upsert's conflict keys expects the run to match "
         "on them — at least to reject a batch whose records collide on the "
-        "key (RULE-ENDP-014 and RULE-ENDP-019 grade the declaration); the "
-        "pinned manifest claims no read of the list, so matching is whatever "
-        "the request template spells for the provider and collisions are the "
-        "provider's to resolve",
+        "key (RULE-ENDP-014 and RULE-ENDP-019 name the obligation on the "
+        "declaration); the pinned manifest claims no read of the list, so "
+        "matching is whatever the request template spells",
     ),
     FieldDisposition("endpoints.WriteOperation", "response", "engine_gap", WRITE_RESPONSE_EXTRACTION),
     FieldDisposition("endpoints.WriteResponse", "success_when", "engine_gap", WRITE_RESPONSE_EXTRACTION),
@@ -226,8 +228,8 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "stream.ConnectionEndpointRef", "database_object", "engine_gap",
         "an author supplying the verbatim locator expects it to be the "
         "identity the run resolves (RULE-DBEP-007; RULE-STRM-003 holds the "
-        "handle to it at validation time); the pinned manifest claims reads "
-        "of endpoint_id only, so the run resolves the derived handle and the "
+        "handle to it at validation time); the pinned manifest claims no read "
+        "of database_object, so the run resolves the derived handle and the "
         "locator the stream carries is never consulted",
     ),
     # --- stream.ConstantAssignmentValue: the AssignmentValue tag ------------
@@ -257,10 +259,10 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition(
         "stream.FullRefreshReplication", "safety_window_seconds", "contract_surplus",
         "an author declaring a late-arrival window on a full refresh expects "
-        "an overlap; the pinned manifest claims the read on the incremental "
-        "variant only, and a full refresh has no cursor to overlap, so the "
-        "value is meaningless where it sits — the window is declared on the "
-        "incremental variant alone",
+        "an overlap; the pinned manifest claims no read of "
+        "safety_window_seconds on the full-refresh variant, and a full "
+        "refresh has no cursor to overlap, so the value is meaningless where "
+        "it sits — the window is declared on the incremental variant alone",
     ),
     # --- stream.KeysetDatabasePagination / OffsetDatabasePagination: the
     # tag selects the shape; the size reaches nobody, as the field's own
@@ -268,24 +270,25 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition(
         "stream.KeysetDatabasePagination", "page_size", "engine_gap",
         "an author declaring a page size expects the read fetched in pages of "
-        "that size; the pinned manifest claims no read of it, so every "
-        "database read pages at the pipeline runtime's batch size",
+        "that size; the pinned manifest claims no read of it, so a database "
+        "read pages at the pipeline runtime's batch size",
     ),
     FieldDisposition("stream.KeysetDatabasePagination", "type", "structural", UNION_DISCRIMINATOR),
     FieldDisposition(
         "stream.OffsetDatabasePagination", "page_size", "engine_gap",
         "an author declaring a page size expects the read fetched in pages of "
-        "that size; the pinned manifest claims no read of it, so every "
-        "database read pages at the pipeline runtime's batch size",
+        "that size; the pinned manifest claims no read of it, so a database "
+        "read pages at the pipeline runtime's batch size",
     ),
     FieldDisposition("stream.OffsetDatabasePagination", "type", "structural", UNION_DISCRIMINATOR),
     # --- stream.StreamSource: the stream-owned identity hint ----------------
     FieldDisposition(
-        "stream.StreamSource", "primary_keys", "engine_gap",
-        "an author declaring source primary keys where the endpoint carries "
-        "none expects them to supply record identity (RULE-STRM-030, which no "
-        "validator applies); the pinned manifest claims no read of the list, "
-        "so identity comes from the endpoint's metadata or from nothing",
+        "stream.StreamSource", "primary_keys", "manifest_gap",
+        "the pinned manifest claims no read of primary_keys: the engine "
+        "reports reading the field through the resolved source's dict rather "
+        "than a model attribute, which the pinned manifest records as "
+        "transport and not as a claim; the manifest claiming dict-path reads "
+        "is what retires this entry",
     ),
     # --- stream.StreamValidationErrorHandling / Validation.error_handling ---
     FieldDisposition("stream.StreamValidationErrorHandling", "strategy", "engine_gap", VALIDATION_ERROR_HANDLING_OVERRIDE),

@@ -14,6 +14,13 @@ lint and this tool can never disagree.
 Usage:
     render_contract_consumption.py check    # exit 1 on any finding (CI)
 
+Exit codes: 0 when the census is complete and current, 1 on any finding, 2
+when the check could not run — a usage error, a vendored manifest the
+envelope check refuses, a manifest naming a model the live tree does not
+hold, or a contract tree that does not import. A check that cannot run
+prints a "could not run" line and never reads as a finding: the exit-1
+remediation is "write or retire a disposition", which fixes none of those.
+
 There is no ``write`` mode. A disposition is a judgment — which consumer
 reads the field off the run-time path, or what an author loses when the
 engine ignores it — and nothing here can make it; the report names each
@@ -50,11 +57,19 @@ def main(argv: list[str]) -> int:
         print(f"usage: {argv[0]} [check]", file=sys.stderr)
         return 2
 
-    from census.consumption.dispositions import DISPOSITIONS
-    from census.consumption.pin import load_manifest
-    from census.consumption.reachability import census_report
+    try:
+        from census.consumption.dispositions import DISPOSITIONS
+        from census.consumption.pin import load_manifest
+        from census.consumption.reachability import census_report
 
-    return check(census_report(load_manifest(), DISPOSITIONS))
+        report = census_report(load_manifest(), DISPOSITIONS)
+    except (ImportError, LookupError, OSError, ValueError) as exc:
+        print(
+            f"reachability census could not run: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+    return check(report)
 
 
 if __name__ == "__main__":

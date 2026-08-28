@@ -25,8 +25,9 @@ published truth:
      problem, not an unpublished pin: this step runs only after step 2
      fetched the pinned immutable object (a genuinely unpublished pin dies
      there as a GuardError, exit 2), so the mutable pointer is lagging a
-     published object — a stale latest.json (the pointers rely on a
-     5-minute TTL, not invalidation) or a half-completed publish.
+     published object — a stale latest.json (the pointers rely on the
+     short TTL the publish workflow's cache-control states, not
+     invalidation) or a half-completed publish.
      Remediation: re-check after the TTL and repair the pointer if it
      persists — re-vendoring does not fix the pointer.
 
@@ -44,9 +45,10 @@ forever. `--offline` runs only step 1 (local dev convenience; CI always runs
 the full check).
 
 Wiring: the `contract-consumption-pin-guard` job in
-.github/workflows/tests.yml — which must NOT pass `--offline` (that would
+`.github/workflows/tests.yml` — which must NOT pass `--offline` (that would
 make the job permanently green having verified nothing about the engine's
-published truth; `test_ci_job_is_wired` pins this).
+published truth; `test_ci_job_is_wired` in
+`tests/schemas/test_contract_consumption_guard.py` pins this).
 """
 from __future__ import annotations
 
@@ -61,11 +63,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _guard_lib import BASE_URL, GuardError, ObjectMissing, surface_warning  # noqa: E402
 # A 403/404 arrives as `ObjectMissing`, a GuardError subclass: this guard has
 # no state where a missing object is anything but infrastructure, so it needs
 # no special case — exit 2 either way. Re-exported so the suite can raise the
 # exact class the fetch raises.
+from _guard_lib import BASE_URL, GuardError, ObjectMissing, surface_warning  # noqa: E402
 from _guard_lib import fetch as _fetch  # noqa: E402
 
 __all__ = ["GuardError", "ObjectMissing", "check_offline", "check_published", "main"]
@@ -222,8 +224,9 @@ def check_published(failures: list[str]) -> list[str]:
             f"{pin.CONSUMPTION_RESOURCE}: latest.json says v{latest}, but the "
             f"pinned v{pin.CONSUMPTION_VERSION} object is published — this "
             "same run just fetched it. The mutable pointer lags a published "
-            "pinned object: a stale latest.json (the pointers rely on a "
-            "5-minute TTL, not invalidation) or a half-completed publish. "
+            "pinned object: a stale latest.json (the pointers rely on the "
+            "short TTL the publish workflow's cache-control states, not "
+            "invalidation) or a half-completed publish. "
             "Re-check after the TTL and repair the pointer if it persists — "
             "re-vendoring does not fix the pointer"
         )

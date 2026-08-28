@@ -1,4 +1,4 @@
-"""Pin the verdict semantics of scripts/check_contract_consumption_pin.py.
+"""Pin the verdict semantics of `scripts/check_contract_consumption_pin.py`.
 
 The guard's network half runs only in CI (`contract-consumption-pin-guard`
 job), so its direction logic — newer publish = notice, lagging pointer =
@@ -74,10 +74,10 @@ def test_healthy_publication_passes(guard, monkeypatch, capsys):
 def test_newer_engine_publication_is_a_notice_not_a_failure(guard, monkeypatch, capsys):
     _stub_fetch(guard, monkeypatch, latest="9.0.0")
     assert guard.main([]) == 0
-    out = capsys.readouterr().out
+    out, err = capsys.readouterr()
     assert "engine has published v9.0.0" in out
     # A notice must not read as the exit-1 remediation.
-    assert "re-vendor the published object (and re-run" not in out
+    assert "re-vendor the published object (and re-run" not in err
 
 
 def test_newer_publication_notice_is_annotated_on_actions(guard, monkeypatch, capsys):
@@ -107,7 +107,6 @@ def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
     assert "stale latest.json" in err
     assert "Re-check after the TTL" in err
     assert "re-vendoring does not fix the pointer" in err
-    assert "has not published" not in err
 
 
 def test_published_object_differing_from_the_vendored_copy_fails(
@@ -282,22 +281,96 @@ def test_offline_healthy_passes_and_never_touches_the_network(
     assert "offline hash + shape + declared version" in out
 
 
+def _job_block(workflow: str, job: str) -> list[str]:
+    """The lines of one top-level job: from its `<job>:` key to the next
+    key at the same indentation."""
+    lines = workflow.splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith(f"  {job}:")]
+    assert len(starts) == 1, f"job {job!r} not found exactly once"
+    indent = "  "
+    block = [lines[starts[0]]]
+    for line in lines[starts[0] + 1:]:
+        if line.startswith(indent) and not line.startswith(indent + " ") and line.strip():
+            break
+        block.append(line)
+    return block
+
+
 def test_ci_job_is_wired():
-    workflow = _WORKFLOW.read_text()
-    assert "contract-consumption-pin-guard:" in workflow
-    assert "check_contract_consumption_pin.py" in workflow
+    block = _job_block(_WORKFLOW.read_text(), "contract-consumption-pin-guard")
+    assert any("check_contract_consumption_pin.py" in line for line in block)
     # The one flag that makes the guard not run is the one this test has to
     # forbid: `--offline` is the obvious "fix" when the CDN flakes, and it
     # would leave the job permanently green having verified nothing about the
-    # engine's published truth. Checked over every non-comment line rather
-    # than the guard's own `run:` line, so a `run: |` block form cannot slip
-    # past.
+    # engine's published truth. Checked over every non-comment line of this
+    # job's block rather than the guard's own `run:` line, so a `run: |`
+    # block form cannot slip past; other guards' jobs are their own tests'.
     invocations = [
         line
-        for line in workflow.splitlines()
+        for line in block
         if "--offline" in line and not line.lstrip().startswith("#")
     ]
     assert not invocations, f"--offline must never run in CI: {invocations}"
+
+
+def test_hash_mismatch_online_fails_without_fetching(guard, monkeypatch, capsys):
+    """Step 1 fails, so steps 2-3 never run: a vendored file the pin does not
+    account for is exit 1 on its own, and nothing is fetched to compare it
+    against."""
+    attempted: list[str] = []
+    monkeypatch.setattr(guard, "_fetch", lambda url: attempted.append(url) or b"")
+    monkeypatch.setattr(guard.pin, "CONSUMPTION_SHA256", "0" * 64)
+    assert guard.main([]) == 1
+    assert not attempted, f"a failed step 1 must not fetch, but tried {attempted}"
+    assert "must move together" in capsys.readouterr().err
+
+
+def test_pin_import_failure_is_a_guard_error(guard, monkeypatch, capsys):
+    monkeypatch.setattr(guard, "pin", None)
+    monkeypatch.setattr(guard, "_IMPORT_ERROR", ImportError("no pin"))
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err and "no pin" in err
+
+
+def test_an_unclassified_exception_still_reports_divergences_already_found(
+    guard, monkeypatch, capsys
+):
+    """Step 2 finds a divergence, then the pointer fetch raises something no
+    check classified. Exit 2, and the divergence is still printed."""
+    urls = _urls(guard)
+    divergent = _vendored_bytes(guard) + b"\n"
+
+    def _fetch(url):
+        if url == urls["object"]:
+            return divergent
+        raise ValueError("unknown url type")
+
+    monkeypatch.setattr(guard, "_fetch", _fetch)
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err
+    assert "differs from the vendored copy" in err
+
+
+def test_malformed_pin_version_online_is_a_guard_error(
+    guard, monkeypatch, capsys, tmp_path
+):
+    """The pin constant itself is malformed, and the vendored file declares the
+    same malformed version so step 1 passes. Step 3 must refuse to compare it
+    against the pointer rather than fabricate a direction verdict."""
+    manifest = json.loads(_vendored_bytes(guard))
+    manifest[guard.pin.ARTIFACT_VERSION_KEY] = "0.3"
+    raw = json.dumps(manifest).encode()
+    path = tmp_path / guard.pin.CONSUMPTION_FILENAME
+    path.write_bytes(raw)
+    monkeypatch.setattr(guard.pin, "MANIFEST_PATH", path)
+    monkeypatch.setattr(guard.pin, "CONSUMPTION_SHA256", hashlib.sha256(raw).hexdigest())
+    monkeypatch.setattr(guard.pin, "CONSUMPTION_VERSION", "0.3")
+    _stub_fetch(guard, monkeypatch, latest="0.3.0", object_bytes=raw)
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err and "unparseable version" in err
 
 
 def test_fetch_refuses_a_url_outside_the_pinned_base(guard):
@@ -305,10 +378,13 @@ def test_fetch_refuses_a_url_outside_the_pinned_base(guard):
     the urlopen suppression rests on could be deleted unnoticed. The lookalike
     host covers the sharp edge: a bare startswith(BASE_URL) would admit a host
     that merely begins with the pinned one."""
+    urls = _urls(guard)
+    base = guard.BASE_URL
+    scheme, _, host = base.partition("://")
     for url in (
-        "https://evil.example/contract-consumption/v0.3.0/contract_consumption.json",
-        "https://schemas.analitiq.ai.evil.example/contract-consumption/latest.json",
-        "http://schemas.analitiq.ai/contract-consumption/latest.json",
+        urls["latest"].replace(base, f"{scheme}://evil.example"),
+        urls["latest"].replace(base, f"{scheme}://{host}.evil.example"),
+        urls["latest"].replace(f"{scheme}://", "http://"),
     ):
         with pytest.raises(guard.GuardError, match="refusing non-"):
             guard._fetch(url)

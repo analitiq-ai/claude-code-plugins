@@ -27,14 +27,16 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Annotated, Literal, Optional, Union
+import re
+from typing import Annotated, Literal, Optional, Union, get_args
 
 import pytest
 from pydantic import BaseModel, Field
 
 from census.consumption import pin
-from census.consumption.disposition import FieldDisposition
+from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
+    _is_literal,
     census_report,
     classify,
     qualified_name,
@@ -139,6 +141,53 @@ def test_load_manifest_refuses_a_non_object(tmp_path):
         pin.load_manifest(_write(tmp_path, ["a.B"]))
 
 
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"a.B": ["x"]},  # a model's claims are not a mapping
+        {"a.B": {"x": "src.a:1"}},  # a field's sites are not a list
+        {"a.B": {"x": None}},
+    ],
+)
+def test_load_manifest_refuses_claims_that_are_not_field_to_sites(tmp_path, claims):
+    """``classify`` looks a field up on each model's claims; a value that is
+    not ``field -> sites`` would crash the walk instead of being refused."""
+    with pytest.raises(ValueError, match="must map each field"):
+        pin.load_manifest(_write(tmp_path, {**_WELL_FORMED, "claims": claims}))
+
+
+def test_load_manifest_accepts_an_envelope_without_transport(tmp_path):
+    document = {k: v for k, v in _WELL_FORMED.items() if k != "transport"}
+    assert pin.load_manifest(_write(tmp_path, document)) == document
+
+
+# ---------------------------------------------------------------------------
+# 2b. The disposition datum
+# ---------------------------------------------------------------------------
+
+
+def test_accepted_kinds_are_exactly_the_literal():
+    """``__post_init__`` derives the accepted set from ``DispositionKind``, so
+    adding a kind is one edit — proven by every member being accepted and
+    nothing else."""
+    for kind in get_args(DispositionKind):
+        assert FieldDisposition("a.B", "x", kind, "reason").kind == kind
+    with pytest.raises(ValueError, match="unknown kind"):
+        FieldDisposition("a.B", "x", "documented", "reason")
+
+
+@pytest.mark.parametrize("reason", ["", "   "])
+def test_disposition_requires_a_reason(reason):
+    with pytest.raises(ValueError, match="a reason is required"):
+        FieldDisposition("a.B", "x", "authoring_only", reason)
+
+
+@pytest.mark.parametrize("model", ["", "Param"])
+def test_disposition_requires_a_dotted_model_path(model):
+    with pytest.raises(ValueError, match="dotted path"):
+        FieldDisposition(model, "x", "authoring_only", "reason")
+
+
 # ---------------------------------------------------------------------------
 # 3. The walk — synthetic models
 # ---------------------------------------------------------------------------
@@ -231,11 +280,54 @@ def test_resolve_model_imports_by_module_path():
 
 @pytest.mark.parametrize(
     "path", ["tests.census.test_contract_consumption.Missing", "no.such.module.X",
-             "tests.census.test_contract_consumption._manifest"]
+             "tests.census.test_contract_consumption._manifest", "Dotless", ""]
 )
 def test_resolve_model_refuses_what_the_tree_does_not_hold(path):
     with pytest.raises(LookupError):
         resolve_model(path)
+
+
+class Node(BaseModel):
+    """Self-referential — the walk must terminate."""
+
+    next: Optional["Node"] = None
+    value: int = 0
+
+
+def test_walk_terminates_on_a_cycle():
+    """A walk that forgets what it has visited loops forever on this model,
+    which a plain assertion turns into a stalled run, not a red one. The
+    alarm is what makes the regression fail."""
+    import signal
+
+    def _stalled(_signum, _frame):
+        raise AssertionError("reachable_models did not terminate on a self-referential model")
+
+    previous = signal.signal(signal.SIGALRM, _stalled)
+    signal.alarm(5)
+    try:
+        node = qualified_name(Node)
+        reached = reachable_models(_manifest(roots=[node], claims={}, opaque={}))
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert set(reached) == {node}
+
+
+class Shapes(BaseModel):
+    plain: Literal["x"]
+    optional: Optional[Literal["x"]] = None
+    annotated: Annotated[Literal["x"], Field(description="pinned")]
+    mixed: Union[Literal["x"], str]
+    free: str
+
+
+@pytest.mark.parametrize(
+    "field,expected",
+    [("plain", True), ("optional", True), ("annotated", True), ("mixed", False), ("free", False)],
+)
+def test_is_literal_accepts_only_shapes_pydantic_settles(field, expected):
+    assert _is_literal(Shapes.model_fields[field].annotation) is expected
 
 
 def test_walk_reaches_models_through_every_container_shape():
@@ -410,7 +502,7 @@ def test_disposition_of_an_unknown_field_is_a_finding(shadowed, entry):
     report = census_report(shadowed, _COMPLETE + (entry,))
     assert not report.ok
     assert report.disposition_of_unknown_field == (entry,)
-    assert entry.field in report.render()
+    assert f"{entry.qualified_model}.{entry.field}" in report.render()
 
 
 def test_duplicate_dispositions_are_a_finding(shadowed):
@@ -435,6 +527,30 @@ def test_structural_disposition_on_a_literal_field_is_accepted(shadowed):
     assert report.structural_not_literal == ()
 
 
+def test_claim_of_a_field_the_model_does_not_declare_is_a_finding(shadowed):
+    shadowed["claims"][f"{_SHADOW}.Root"]["vanished"] = ["s:9"]
+    report = census_report(shadowed, _COMPLETE)
+    assert not report.ok
+    assert report.claim_of_unknown_field == ((f"{_SHADOW}.Root", "vanished"),)
+    assert f"{_SHADOW}.Root.vanished" in report.render()
+
+
+@pytest.mark.parametrize("key", ["claims", "opaque"])
+def test_manifest_key_naming_a_model_outside_coverage_is_a_finding(shadowed, key):
+    record = {"x": ["s:9"]} if key == "claims" else {"consumer": "x", "dumps": [], "entries": []}
+    shadowed[key][f"{_SHADOW}.Orphan"] = record
+    report = census_report(shadowed, _COMPLETE)
+    assert not report.ok
+    assert report.manifest_names_unknown_model == (f"{_SHADOW}.Orphan",)
+    assert f"{_SHADOW}.Orphan" in report.render()
+
+
+def test_manifest_key_naming_a_model_the_tree_does_not_hold_is_a_finding(shadowed):
+    shadowed["claims"][f"{_SHADOW}.Gone"] = {"x": ["s:9"]}
+    report = census_report(shadowed, _COMPLETE)
+    assert report.manifest_names_unknown_model == (f"{_SHADOW}.Gone",)
+
+
 # ---------------------------------------------------------------------------
 # 6. The live gate
 # ---------------------------------------------------------------------------
@@ -450,6 +566,42 @@ def test_every_root_and_claimed_model_is_in_the_live_tree():
         "the manifest claims fields on models no root reaches — the engine "
         "and the live contract tree disagree about what is reachable: "
         f"{unreached_claims}"
+    )
+
+
+_PEP440_RE = re.compile(r"^(\d+(?:\.\d+)*)(?:(a|b|rc)(\d+))?$")
+
+
+def _version_key(value: str) -> tuple:
+    """A PEP 440-tolerant sort key over the shapes this repo's versions take:
+    a release segment plus an optional ``a``/``b``/``rc`` pre-release. A
+    final release sorts after its pre-releases."""
+    match = _PEP440_RE.match(value)
+    assert match, f"version {value!r} is not release[.release][pre]"
+    release = tuple(int(part) for part in match.group(1).split("."))
+    pre = (match.group(2), int(match.group(3))) if match.group(2) else ("z", 0)
+    return release, pre
+
+
+def _tree_contract_models_version() -> str:
+    text = (REPO_ROOT / "packages" / "contract-models" / "pyproject.toml").read_text()
+    match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    assert match, "packages/contract-models/pyproject.toml states no version"
+    return match.group(1)
+
+
+def test_manifest_was_generated_against_this_tree_or_an_older_one():
+    """The manifest names the ``analitiq-contract-models`` release the engine
+    generated it against. A manifest generated against a NEWER release can
+    claim fields this tree does not declare — a census over models the
+    engine has moved past. At or behind is the safe direction."""
+    manifest = pin.load_manifest()
+    generated_against = manifest["contract_models_version"]
+    assert isinstance(generated_against, str)
+    tree = _tree_contract_models_version()
+    assert _version_key(generated_against) <= _version_key(tree), (
+        f"the vendored manifest was generated against analitiq-contract-models "
+        f"{generated_against}, ahead of this tree's {tree}"
     )
 
 

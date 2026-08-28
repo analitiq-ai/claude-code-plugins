@@ -20,11 +20,11 @@ One disposition per kind of consumer an unread field may have:
   union dispatches on, a literal the schema pins. No attribute read exists
   because pydantic settled the value before the engine held the object.
 - ``engine_gap`` — the contract permits something the engine ignores and
-  should honour. The request goes out, just not the one the author wrote.
-  The ``reason`` states what an author writing the field expects and what
-  happens instead; it is the declared, reviewable state that replaces "found
-  sixteen schema versions later", and the entry is what gets filed against
-  the engine.
+  should honour: what the author declared has no effect on the run. The
+  ``reason`` states what an author writing the field expects and what the
+  run does instead; it is the declared, reviewable state that replaces
+  discovering the gap after the field has shipped in published schemas, and
+  the entry is what gets filed against the engine.
 - ``contract_surplus`` — the contract declares something neither side
   needs: a knob nothing honours and nothing should, a value the document
   already states elsewhere, a setting meaningless in the shape it sits on.
@@ -32,6 +32,15 @@ One disposition per kind of consumer an unread field may have:
   resource that carries it — and the ``reason`` states why removal rather
   than adoption is the answer. An entry of this kind is a decision recorded,
   not a gap waiting on the engine.
+- ``manifest_gap`` — the engine reports reading the field by a means its
+  manifest extractor cannot attribute (a dict-path read the manifest records
+  under ``transport``), so the pinned artifact claims no read while the
+  run-time path does read it. The entry is filed against the manifest
+  generator, and is retired by the ``disposition_now_claimed`` finding the
+  moment a manifest version claims the field.
+
+Whether an entry's ``kind`` and ``reason`` are the right ones is the
+reader's call — ``.claude/rules/reachability-dispositions.md`` carries it.
 
 Like the prose census, this module imports no contract models: entries name
 a model by its ``analitiq.contracts``-relative dotted path and a field by
@@ -40,10 +49,10 @@ name, so the guard can be read without pydantic.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, get_args
 
 DispositionKind = Literal[
-    "authoring_only", "structural", "engine_gap", "contract_surplus"
+    "authoring_only", "structural", "engine_gap", "contract_surplus", "manifest_gap"
 ]
 
 #: Named reasons, so the census is countable by category and one edit
@@ -84,9 +93,7 @@ class FieldDisposition:
     reason: str
 
     def __post_init__(self) -> None:
-        if self.kind not in (
-            "authoring_only", "structural", "engine_gap", "contract_surplus"
-        ):
+        if self.kind not in get_args(DispositionKind):
             raise ValueError(f"{self.model}.{self.field}: unknown kind {self.kind!r}")
         if not self.reason.strip():
             raise ValueError(f"{self.model}.{self.field}: a reason is required")

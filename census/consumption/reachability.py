@@ -38,7 +38,7 @@ from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
 from pydantic import BaseModel
 
-from census.consumption.disposition import FieldDisposition
+from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.pin import CLAIMS_KEY, OPAQUE_KEY, ROOTS_KEY
 
 __all__ = [
@@ -68,7 +68,9 @@ def resolve_model(qualified: str) -> type[BaseModel]:
     try:
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
-    except (ImportError, AttributeError) as exc:
+    except (ImportError, AttributeError, ValueError) as exc:
+        # ValueError: a dotless or otherwise malformed name, which importlib
+        # refuses before it looks anywhere.
         raise LookupError(
             f"manifest names {qualified!r}, which the live contract tree does not hold"
         ) from exc
@@ -168,8 +170,9 @@ class ConsumptionReport:
     """The classification diffed against the dispositions.
 
     Every finding is a set comparison or an annotation shape check. Whether
-    a disposition's ``reason`` is the RIGHT one is a judgment a reviewer
-    makes reading the entry; a finding here is how that reviewer is summoned.
+    a reason is the right one is the reader's —
+    ``.claude/rules/reachability-dispositions.md`` — and a finding here is
+    how that reader is summoned.
     """
 
     #: Reachable, unclaimed, and no entry says what consumes it.
@@ -186,6 +189,12 @@ class ConsumptionReport:
     #: ``structural`` claims pydantic settles the value at parse time, and
     #: the field's annotation is not the ``Literal`` shape that would.
     structural_not_literal: tuple[FieldDisposition, ...]
+    #: A claim naming a field the live model does not declare — the manifest
+    #: was generated against another contract version.
+    claim_of_unknown_field: tuple[FieldRef, ...]
+    #: A ``claims`` or ``opaque`` key naming a model no root reaches, or one
+    #: the live tree does not hold at all.
+    manifest_names_unknown_model: tuple[str, ...]
 
     @property
     def ok(self) -> bool:
@@ -195,6 +204,8 @@ class ConsumptionReport:
             or self.disposition_of_unknown_field
             or self.duplicate_dispositions
             or self.structural_not_literal
+            or self.claim_of_unknown_field
+            or self.manifest_names_unknown_model
         )
 
     def render(self) -> str:
@@ -233,14 +244,34 @@ class ConsumptionReport:
         )
         group(
             "structural dispositions on fields that are not Literal-typed — "
-            "pydantic settles nothing here; the disposition is authoring_only, "
-            "engine_gap or contract_surplus",
+            "pydantic settles nothing here; the disposition is a kind pydantic "
+            f"does not settle: {', '.join(_NON_STRUCTURAL_KINDS)}",
             self.structural_not_literal,
             lambda d: f"{d.qualified_model}.{d.field}",
+        )
+        group(
+            "claims of fields the live model does not declare — the manifest "
+            "was generated against another contract version; re-vendor or "
+            "hold the pin",
+            self.claim_of_unknown_field,
+            lambda ref: f"{ref[0]}.{ref[1]}",
+        )
+        group(
+            "manifest keys naming models outside coverage — no root reaches "
+            "the model, or the live tree does not hold it",
+            self.manifest_names_unknown_model,
+            lambda name: name,
         )
         if not lines:
             return "reachability census is complete and current"
         return "\n".join(lines).rstrip()
+
+
+#: The kinds a ``structural`` finding points the author at: every kind but
+#: ``structural`` itself.
+_NON_STRUCTURAL_KINDS = tuple(
+    kind for kind in get_args(DispositionKind) if kind != "structural"
+)
 
 
 def census_report(
@@ -249,6 +280,19 @@ def census_report(
     models = reachable_models(manifest)
     opaque_models = set(manifest[OPAQUE_KEY])
     classes = classify(manifest)
+
+    unknown_models = sorted(
+        name
+        for name in {*manifest[CLAIMS_KEY], *opaque_models}
+        if name not in models
+    )
+    unknown_claims = sorted(
+        (name, field_name)
+        for name, fields in manifest[CLAIMS_KEY].items()
+        if name in models
+        for field_name in fields
+        if field_name not in models[name].model_fields
+    )
 
     seen: dict[FieldRef, int] = {}
     for entry in dispositions:
@@ -282,4 +326,6 @@ def census_report(
         disposition_of_unknown_field=tuple(unknown),
         duplicate_dispositions=duplicates,
         structural_not_literal=tuple(not_literal),
+        claim_of_unknown_field=tuple(unknown_claims),
+        manifest_names_unknown_model=tuple(unknown_models),
     )
