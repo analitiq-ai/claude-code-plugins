@@ -816,6 +816,112 @@ class TestRecursiveSchemasTerminate:
 # ---------------------------------------------------------------------------
 
 
+    #: `(node, expected findings)` — shapes whose DECLARATIONS fail to fold,
+    #: paired with what the walk owes each. Every row reaches the fold, and
+    #: the count is asserted: without it the test cannot tell a walk that ran
+    #: and found nothing from one that returned on its first line.
+    #:
+    #: Depth is deliberately absent. A document nested deeper than the
+    #: interpreter unwinds raises out of any walk written this way, so a row
+    #: for it would assert an invariant the code does not have — see
+    #: `test_the_walk_does_not_absorb_running_out_of_stack`.
+    UNFOLDABLE_NODES = (
+        ("contradictory-allOf",
+         {"allOf": [{"type": "string", "native_type": "S",
+                     "arrow_type": "Timestamp(MICROSECOND, UTC)"},
+                    {"type": "integer"}],
+          "examples": ["2024-01-02T03:04:05"]}, 0),
+        ("self-reference",
+         {"$ref": "#/$defs/Ring", "examples": ["2024-01-02T03:04:05"]}, 0),
+        ("dangling-reference",
+         {"$ref": "#/$defs/Absent", "examples": ["2024-01-02T03:04:05"]}, 0),
+        ("allOf-onto-a-ring",
+         {"allOf": [{"$ref": "#/$defs/Ring"}], "examples": [1]}, 0),
+        # Folds cleanly, and the declaration it reaches is contradicted — the
+        # positive control. Without a row the walk owes a finding on, every
+        # assertion above is satisfied by a walk that does nothing.
+        ("folds-and-disagrees",
+         {"$ref": "#/$defs/Stamp", "examples": ["2024-01-02T03:04:05"]}, 1),
+    )
+
+    #: Reachable through `$defs` from every row above.
+    UNFOLDABLE_DEFS = {
+        "Ring": {"$ref": "#/$defs/Ring"},
+        "Stamp": {"type": "string", "native_type": "date-time",
+                  "arrow_type": "Timestamp(MICROSECOND, UTC)"},
+    }
+
+    @pytest.mark.parametrize(
+        "node, owed", [(n, owed) for _, n, owed in UNFOLDABLE_NODES],
+        ids=[name for name, _, _ in UNFOLDABLE_NODES])
+    def test_the_arrow_walk_accumulates_what_a_document_declares(self, node, owed):
+        """The walk's contract, asserted rather than remembered.
+
+        It appends to `errors` and its caller raises once at the end, so a
+        raise from inside discards everything already collected, skips the
+        checks that follow, and reports under whatever message the exception
+        carried — no rule id, no path. That is invisible at the call site: it
+        looks like an ordinary call, and the suite stays green because no test
+        constructs the shape that raises. A fallible fold was added inside this
+        walk and every test passed; a reviewer found it.
+
+        The counts are the other half. `never raised` alone is satisfied by a
+        walk that returns immediately, which is why one row owes a finding.
+        """
+        from analitiq.contracts import endpoints as ep
+
+        errors: list[str] = []
+        ep._validate_arrow_type_in_json_schema(
+            {"type": "object", "properties": {"f": node},
+             "$defs": dict(self.UNFOLDABLE_DEFS)},
+            "s", errors)
+        assert len(errors) == owed, errors
+
+    def test_the_walk_does_not_absorb_running_out_of_stack(self):
+        """The boundary the fold's `None` deliberately stops at.
+
+        A contradiction is a fact about the document and reads as no
+        declaration. Running out of stack is a fact about the interpreter and
+        about where the node sits — absorbing it would refuse one declaration
+        at one nesting depth and accept the identical one deeper down, saying
+        nothing either way. So it propagates, and the layer that can report a
+        check it could not finish reports it.
+        """
+        from analitiq.contracts import endpoints as ep
+
+        depth = 1500
+        defs = {f"D{i}": {"$ref": f"#/$defs/D{i + 1}"} for i in range(depth)}
+        defs[f"D{depth}"] = {"type": "string", "native_type": "date-time",
+                             "arrow_type": "Timestamp(MICROSECOND, UTC)"}
+        with pytest.raises(RecursionError):
+            ep._validate_arrow_type_in_json_schema(
+                {"type": "object", "$defs": defs, "properties": {"f": {
+                    "$ref": "#/$defs/D0",
+                    "examples": ["2024-01-02T03:04:05"]}}},
+                "s", [])
+
+    @pytest.mark.parametrize("node, _owed", [
+        (n, owed) for _, n, owed in UNFOLDABLE_NODES],
+        ids=[name for name, _, _ in UNFOLDABLE_NODES])
+    def test_try_materialize_node_answers_rather_than_raising(self, node, _owed):
+        """The fold's inspection form, driven directly. Its contract is
+        inferred from a walk-level side effect otherwise."""
+        from analitiq.contracts import endpoints as ep
+
+        root = {"$defs": dict(self.UNFOLDABLE_DEFS),
+                "properties": {"f": node}}
+        folded = ep.try_materialize_node(node, root)
+        assert folded is None or isinstance(folded, dict)
+
+    @pytest.mark.parametrize("value", [None, False, True, 7, "s", []])
+    def test_try_materialize_node_answers_none_for_a_non_schema(self, value):
+        """`materialize_node` hands a non-dict back unchanged, so a caller
+        could not tell `None`-the-node from `None`-the-refusal, and a boolean
+        schema — legal, and falsy — read as a failure."""
+        from analitiq.contracts import endpoints as ep
+
+        assert ep.try_materialize_node(value) is None
+
 class TestCrossBlockPathsThroughRefs:
     SCHEMA = {
         "type": "object",
@@ -1242,75 +1348,6 @@ class TestKeywordVocabularyHasOneOwner:
         repo = Path(__file__).resolve().parents[4]
         doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
         return doc["$defs"]["JsonSchemaPropertyNode"]
-
-    #: Shapes an author can write that have made a walk over them raise, or
-    #: plausibly would. Not a corpus of valid documents — the point is the
-    #: hostile ones, since a valid document raising is caught by every other
-    #: test here and a hostile one is caught by none.
-    ADVERSARIAL_NODES = (
-        {"allOf": [{"type": "string"}, {"type": "integer"}]},
-        {"allOf": [{"type": "string"}, {"type": "integer"}], "examples": ["x"]},
-        {"$ref": "#/$defs/Ring"},
-        {"$ref": "#/$defs/Ring", "examples": ["x"]},
-        {"$ref": "#/$defs/Absent", "examples": [1]},
-        {"$ref": "#/$defs/Deep", "examples": ["x"]},
-        {"allOf": [{"$ref": "#/$defs/Ring"}], "examples": [1]},
-        {"not": {"$ref": "#/$defs/Deep", "examples": ["x"]}},
-        {"items": [{"$ref": "#/$defs/Deep", "examples": ["x"]}]},
-        {"properties": {"a": {"$ref": "#/$defs/Deep", "examples": [1]}}},
-        {"examples": [1], "arrow_type": None, "native_type": None},
-        {"examples": "not-a-list", "arrow_type": "Utf8", "native_type": "S"},
-    )
-
-    def _adversarial_root(self):
-        from analitiq.contracts import endpoints as ep  # noqa: F401
-
-        depth = 1500
-        defs = {"Ring": {"$ref": "#/$defs/Ring"},
-                "Deep": {"$ref": "#/$defs/D0"}}
-        defs.update({f"D{i}": {"$ref": f"#/$defs/D{i + 1}"}
-                     for i in range(depth)})
-        defs[f"D{depth}"] = {"type": "string", "native_type": "S",
-                             "arrow_type": "Utf8"}
-        return defs
-
-    @pytest.mark.parametrize(
-        "node", ADVERSARIAL_NODES, ids=lambda n: sorted(n)[0])
-    def test_the_arrow_type_walk_accumulates_and_never_raises(self, node):
-        """The walk's contract, asserted rather than remembered.
-
-        It appends to `errors` and its caller raises once at the end, so a
-        raise from inside it discards everything already collected, skips the
-        checks that run after, and reports under whatever message the
-        exception happened to carry — no rule id, no path. That is not a
-        failure mode a reader can see at the call site: it looks like an
-        ordinary function call, and the suite stays green because no test
-        constructs the shape that raises.
-
-        This is the invariant that would have caught it. A fallible operation
-        was added inside the walk and the whole suite passed; a reviewer found
-        it. Anything reached from here answers or accumulates — it does not
-        raise.
-        """
-        from analitiq.contracts import endpoints as ep
-
-        errors: list[str] = []
-        schema = {"type": "object", "properties": {"f": node},
-                  "$defs": self._adversarial_root()}
-        ep._validate_arrow_type_in_json_schema(schema, "s", errors)
-        assert isinstance(errors, list)
-
-    @pytest.mark.parametrize(
-        "node", ADVERSARIAL_NODES, ids=lambda n: sorted(n)[0])
-    def test_the_node_walk_terminates_and_never_raises(self, node):
-        """The same contract for the generator every consumer iterates. A
-        raise mid-iteration reaches whichever caller was consuming it, and
-        those are the ones collecting findings."""
-        from analitiq.contracts import endpoints as ep
-
-        schema = {"type": "object", "properties": {"f": node},
-                  "$defs": self._adversarial_root()}
-        assert list(ep.iter_schema_nodes(schema))
 
     def test_every_negating_key_is_a_single_schema_position(self):
         """Both walkers set the negation flag in the single-schema loop only,
