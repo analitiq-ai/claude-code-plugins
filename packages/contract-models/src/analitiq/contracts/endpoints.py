@@ -1730,7 +1730,10 @@ def iter_schema_nodes(
         # `test_every_negating_key_is_a_single_schema_position`. Testing for
         # them in the other two would read as live logic that never fires.
         under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
-        # Draft 2019-09 tuple-form `items: [...]`, as elsewhere here.
+        # Draft 2019-09 tuple-form `items: [...]`, as elsewhere here. `under`
+        # rather than `negated` for symmetry only: no keyword the contract
+        # calls negating takes a list value, so the two are equal on every
+        # document, and nothing can pin the difference.
         if isinstance(child, list):
             for index, sub in enumerate(child):
                 yield from iter_schema_nodes(

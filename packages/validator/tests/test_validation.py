@@ -331,8 +331,7 @@ def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name)
 
 
 @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
-@pytest.mark.parametrize(
-    "descent", ["properties", "anyOf", "items", "items[]"])
+@pytest.mark.parametrize("descent", ["properties", "anyOf", "items"])
 def test_a_typed_sample_under_a_negation_parses_and_is_exempt(
     validator, key, descent,
 ):
@@ -350,8 +349,11 @@ def test_a_typed_sample_under_a_negation_parses_and_is_exempt(
         "properties": {"type": "object", "properties": {"inner": inner}},
         "anyOf": {"anyOf": [inner]},
         "items": {"type": "array", "items": inner},
-        # Draft 2019-09 tuple form — the single-schema loop's other arm.
-        "items[]": {"type": "array", "items": [inner]},
+        # No tuple-form `items` here: 2020-12 requires `items` to be a schema,
+        # so `check_schema` refuses the document and grading never runs — the
+        # assertion would be satisfied by the metaschema rejection rather than
+        # by the exemption. That arm is pinned at the walker instead, in
+        # `test_embedded_schema_refs.py`.
     }[descent]
     ep = _sample_endpoint({key: below})
     findings = validator.validate_document(ep)

@@ -35,7 +35,8 @@ def _floor(pyproject: Path) -> tuple[int, int]:
     declared = spec["requires-python"]
     match = re.fullmatch(r">=\s*(\d+)\.(\d+)", declared.strip())
     assert match, (
-        f"{pyproject.name} declares requires-python {declared!r}; this guard "
+        f"{pyproject.parent.name} declares requires-python {declared!r}; this "
+        f"guard "
         "reads a simple `>=X.Y` floor. Widen it deliberately, or state the "
         "floor in the form it reads"
     )
