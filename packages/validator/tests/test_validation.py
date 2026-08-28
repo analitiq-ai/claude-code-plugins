@@ -549,6 +549,31 @@ def test_a_document_too_deep_to_walk_is_not_the_authors_bug_to_file(validator):
     assert "RecursionError" in crashed[0]["message"], crashed[0]
 
 
+def test_a_document_that_only_the_fold_recurses_on_lands_on_the_guard(validator):
+    """The other shape that exhausts the stack, and the one the contract models
+    deliberately stopped absorbing.
+
+    `_deeply_nested_schema` is deep STRUCTURALLY, so the structural walks give
+    out. This document is flat — a `$defs` map of siblings — and only the fold
+    following the chain recurses. That raise leaves the contract models by
+    design, so what matters is that the layer above turns it into a finding
+    rather than a traceback in an author's terminal."""
+    depth = 1500
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["$defs"] = {f"D{i}": {"$ref": f"#/$defs/D{i + 1}"}
+                       for i in range(depth)}
+    schema["$defs"][f"D{depth}"] = {
+        "type": "string", "native_type": "date-time",
+        "arrow_type": "Timestamp(MICROSECOND, UTC)"}
+    schema["items"]["properties"]["a"] = {
+        "$ref": "#/$defs/D0", "examples": ["2024-01-02T03:04:05"]}
+    findings = validator.validate_document(ep, expect_crash=True)
+    crashed = [f for f in findings if is_guard_finding(f)]
+    assert len(crashed) == 1, findings
+    assert "nests deeper" in crashed[0]["message"], crashed[0]
+
+
 def test_the_cause_a_crash_names_is_chosen_by_what_went_wrong(validator):
     """Which of the three causes a crash reports, at the level it is decided.
 

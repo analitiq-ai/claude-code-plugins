@@ -696,7 +696,7 @@ def _offset_is_real(zone: str | None) -> bool:
     return hour <= _MAX_WIRE_HOUR and minute <= _MAX_WIRE_MINUTE
 
 
-def sample_names_an_instant(sample: Any) -> bool:
+def sample_names_an_instant(sample: Any) -> bool | None:
     """Whether a date-time-shaped sample names a moment that exists.
 
     The shape regex answers which spellings the authoring profile admits; it
@@ -722,13 +722,16 @@ def sample_names_an_instant(sample: Any) -> bool:
     does not exist, and reading one as evidence of a zone is the whole failure
     this function was written to stop.
 
-    False only for a sample that HAS the shape. A sample that has no date-time
-    shape is not malformed; it is a different kind of value, and
-    :func:`sample_carries_zone` passes it over.
+    Three answers, like its neighbours: True for a real instant, False for a
+    value written as a date-time that names no such moment, and None for a
+    value with no date-time shape at all. None rather than True for that last
+    case — an epoch or a provider spelling has not been verified, and answering
+    True would let a caller read "this is a real instant" out of a value
+    nothing read.
     """
     match = _read_wire_datetime(sample)
     if match is None:
-        return True
+        return None
     if (int(match.group("hour")) > _MAX_WIRE_HOUR
             or int(match.group("minute")) > _MAX_WIRE_MINUTE):
         return False
@@ -757,7 +760,7 @@ def sample_carries_zone(sample: Any) -> bool | None:
     — a `Z` on an impossible date is not a report about zones.
     """
     match = _read_wire_datetime(sample)
-    if match is None or not sample_names_an_instant(sample):
+    if match is None or sample_names_an_instant(sample) is False:
         return None
     return match.group("zone") is not None
 

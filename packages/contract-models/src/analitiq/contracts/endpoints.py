@@ -1336,7 +1336,7 @@ def _validate_examples_zone(
     # digits are the provider's business — the calendar has nothing to say
     # about a value nothing here reads as a time.
     for index, example in enumerate(examples):
-        if not sample_names_an_instant(example):
+        if sample_names_an_instant(example) is False:
             errors.append(str(violation("RULE-ENDP-063", (
                 f"{path}.examples[{index}]={example!r} is written as a "
                 "date-time and names no moment that exists, so it bears out "
@@ -1359,16 +1359,16 @@ def _validate_examples_zone(
 def _folded_arrow_type(schema: dict, root: Any) -> str | None:
     """The canonical type this node declares one fold away, or None.
 
-    None for a node with nothing to fold, and None when the fold cannot be
-    done. Folding raises on a node whose contributors contradict each other and
-    on a reference chain deeper than the interpreter unwinds — neither of which
-    is this rule's subject, and neither of which the walk around this can
-    survive: it accumulates errors and raises once at the end, so a raise here
-    discards every error already found and refuses the document under a message
-    that carries no path.
+    None for a node with nothing to fold, and None where the fold refuses —
+    contributors that contradict each other, which is a fact about the document
+    and reads as no declaration. A chain deeper than the interpreter unwinds is
+    NOT absorbed: :func:`try_materialize_node` draws that line and says why.
+    A raise here would matter, though, which is why it delegates rather than
+    calling the fold itself: this walk accumulates and raises once at the end,
+    so a raise from inside discards every error already found and refuses the
+    document under a message carrying no path.
 
-    An unfoldable node reads as no declaration rather than as a refusal, which
-    is what :func:`try_materialize_node` answers. Refusing would make a SAMPLE
+    Refusing a contradiction here would make a SAMPLE
     decide it: the identical unsatisfiable node without `examples` is accepted
     by this walker, and whether a field records wire evidence is not what
     settles a satisfiability question. A reference that leads NOWHERE is a
@@ -4262,10 +4262,12 @@ def try_materialize_node(node: Any, root: Any = None) -> dict[str, Any] | None:
     reader unwinds raises, and the layer that can report "could not finish"
     reports it.
 
-    Distinct from the sites that catch a refusal to RE-RAISE it with their own
-    coordinates (`_validate_records_in_response_schema` and its neighbours).
-    Those translate; this one absorbs, and only a caller with no way to report
-    should use it.
+    Two intents exist around this fold and they are easy to confuse.
+    `_validate_records_in_response_schema` catches a refusal to RE-RAISE it
+    with its own coordinates — a translation, which is what a caller that CAN
+    report should do. :func:`resolve_read_record_schema` absorbs, as this does,
+    because it answers "which node is the record" and a node it cannot reach is
+    no answer. Use this one only where there is no way to report.
     """
     if not isinstance(node, dict):
         # Nothing to fold, and returning the argument would make `None` mean
