@@ -27,14 +27,53 @@ for _root in (CONTRACTS_SRC_ROOT, VALIDATOR_SRC_ROOT):
         sys.path.insert(0, str(_root))
 
 
+class _ScreenedValidator:
+    """The validator package, with `validate_document` screened.
+
+    A check that crashes becomes one guard finding — by design, so the rest of
+    a document still reports. That makes a crash indistinguishable from a
+    verdict to a test that only looks at how many findings came back or what
+    is in them, and four tests here asserted a property their document could
+    not exhibit because of it: a document the model layer aborted on returned
+    one guard finding, which satisfied a count, an ordering comparison and a
+    liveness assert while measuring nothing. Each mutation of the thing under
+    test then left the suite green.
+
+    So the screen is here rather than in each test: every `validate_document`
+    call refuses a guard finding, and a test that means to provoke one says so
+    with `expect_crash=True`. Forgetting is not an available move.
+    """
+
+    def __init__(self, module):
+        self._module = module
+
+    def __getattr__(self, name):
+        return getattr(self._module, name)
+
+    def validate_document(self, *args, expect_crash: bool = False, **kwargs):
+        findings = self._module.validate_document(*args, **kwargs)
+        if expect_crash:
+            return findings
+        crashed = [f for f in findings if self._module.is_guard_finding(f)]
+        assert not crashed, (
+            "a check crashed on this document, so every assertion below is "
+            "about the crash rather than about what the validator decided:\n"
+            + "\n".join(f["message"] for f in crashed)
+            + "\n\nFix the document, or pass expect_crash=True if the crash "
+            "IS what this test is about."
+        )
+        return findings
+
+
 @pytest.fixture(scope="session")
 def validator():
     """The validator package, imported from this repo's source (src layout).
 
     `analitiq` resolves as a PEP 420 namespace spanning both source trees;
     importing the package self-registers every kind's validators. The returned
-    module re-exports every symbol the tests use.
+    object re-exports every symbol the tests use, and screens
+    `validate_document` — see :class:`_ScreenedValidator`.
     """
     import analitiq.validator
 
-    return analitiq.validator
+    return _ScreenedValidator(analitiq.validator)
