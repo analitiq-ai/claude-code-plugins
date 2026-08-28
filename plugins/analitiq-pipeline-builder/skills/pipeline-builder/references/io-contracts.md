@@ -145,7 +145,7 @@ does not fail validation.
 <!-- BEGIN GENERATED: validator-ids -->
 Finding ids the validator can emit:
 
-`bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `embedded-schema-example`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
+`bundle-connection-ref`, `bundle-connector-ref`, `bundle-endpoint-ref`, `bundle-pipeline`, `bundle-stream-ref`, `contract-model`, `document`, `embedded-json-schema`, `embedded-schema-example`, `endpoint-filename`, `endpoint-id-locator`, `endpoint-id-unique`, `endpoint-transport-ref`, `record-field-unreadable`, `type-map-coverage`, `type-map-rule`, `type-map-write-coverage`
 <!-- END GENERATED: validator-ids -->
 
 Pass `--bundle-root` when validating the stitched pipeline; that is what runs
