@@ -232,14 +232,15 @@ def _guard_finding(
     return finding(vid, "error", path, f"{_guard_opening(vid)} ({detail}); {tail}")
 
 
-#: The halves of the guard's message that anything recognising one of its
-#: findings has to match. Stated here because they ARE the recognition: the
-#: probe registry refuses to let a crash satisfy a probe that expects a
-#: rejection, and it identifies a crash by this wording. Reworded in place and
-#: that check silently stops firing, which is how it was found — a rename from
-#: "crashed unexpectedly" left the tripwire matching nothing.
-GUARD_PREFIX = "check"
-GUARD_VERB = "could not finish"
+#: The halves of the guard's message. Private, and read only by
+#: :func:`_guard_opening` below, which is the single statement of the wording
+#: that both writes a guard finding and recognises one. Nothing outside this
+#: module matches on the text: a consumer asks :func:`is_guard_finding`.
+#: That is not a style preference — the wording was matched by hand once, and
+#: renaming it from "crashed unexpectedly" left a tripwire matching nothing
+#: and firing on no document, silently, until something else found it.
+_GUARD_PREFIX = "check"
+_GUARD_VERB = "could not finish"
 
 
 def _guard_opening(vid: str) -> str:
@@ -248,9 +249,11 @@ def _guard_opening(vid: str) -> str:
     One statement of it, used by the writer and by :func:`is_guard_finding`,
     so recognition cannot drift from emission: a message assembled here and
     matched by two loose substrings elsewhere would also match a real finding
-    whose text happens to begin "checked" and contain the verb.
+    whose text happens to begin "checked" and contain the verb. That is why
+    the two halves below it are private — matching them is not a thing a
+    consumer should be doing.
     """
-    return f"{GUARD_PREFIX} {vid!r} {GUARD_VERB}"
+    return f"{_GUARD_PREFIX} {vid!r} {_GUARD_VERB}"
 
 
 #: What a crash tells the reader to do when the caller names nothing better.

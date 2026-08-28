@@ -26,19 +26,40 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from conftest import SCREENED_ENTRY_POINTS, SCREENED_NAME_SHAPES
+from conftest import (
+    SCREENED_ENTRY_POINTS,
+    SCREENED_NAME_SHAPES,
+    VALIDATOR_SRC_ROOT,
+)
 
 TESTS_DIR = Path(__file__).resolve().parent
 
 
-#: Every module path an entry point is reachable through. `analitiq.validator`
-#: re-exports both, and each also lives in the module that defines it, so a
-#: check reading only the package name settles one spelling of several.
-_VALIDATOR_MODULES = frozenset({
-    "analitiq.validator",
-    "analitiq.validator._core",
-    "analitiq.validator.connectors",
-})
+def _validator_modules() -> frozenset[str]:
+    """Every module path a finding-returning function is reachable through.
+
+    Derived, not listed. `analitiq.validator` re-exports the entry points, and
+    each finding-returning function also lives in the module that defines it —
+    so a hand-kept list settles the spellings someone happened to think of, and
+    reports the same green when a new module joins the package. `pipelines`
+    already defines one this list would not have named.
+
+    Read off the filesystem rather than by importing the package: an `import
+    analitiq.validator` here is a statement this module's own check would see
+    and report, correctly, since it cannot tell locating a package from
+    calling into one.
+    """
+    package = VALIDATOR_SRC_ROOT / "analitiq" / "validator"
+    modules = {f"analitiq.validator.{path.stem}"
+               for path in package.glob("*.py") if path.stem != "__init__"}
+    assert modules, (
+        f"no modules found under {package} — this walk is reading nothing and "
+        "would report agreement over an empty set"
+    )
+    return frozenset(modules | {"analitiq.validator"})
+
+
+_VALIDATOR_MODULES = _validator_modules()
 
 
 def _returns_findings(name: str) -> bool:

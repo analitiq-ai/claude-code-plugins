@@ -67,7 +67,6 @@ try:
             DatabaseEndpointDoc,
             SLUG_RE,
             SAMPLE_CONTRADICTION_REMEDY,
-            JSON_SCHEMA_NEGATED_SCHEMA_KEYS,
             iter_schema_nodes,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
@@ -207,7 +206,7 @@ def _canonical_eq(a: str, b: str) -> bool:
 
 def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
     """Collect `(native_type, arrow_type)` pairs from a JSON Schema."""
-    for node_pointer, node in iter_schema_nodes(schema, pointer):
+    for node_pointer, node, _negated in iter_schema_nodes(schema, pointer):
         nt, at = node.get("native_type"), node.get("arrow_type")
         if isinstance(nt, str) and isinstance(at, str):
             out.append((nt, at, node_pointer))
@@ -338,7 +337,7 @@ def _one_embedded_schema_findings(
     # `check_schema`, which names it.
     nested = sorted(
         node_pointer
-        for node_pointer, node in iter_schema_nodes(schema)
+        for node_pointer, node, _negated in iter_schema_nodes(schema)
         if node_pointer
         and isinstance(node.get("$schema"), str)
         and node["$schema"] != _DRAFT_2020_12_SCHEMA
@@ -400,17 +399,6 @@ def _sample_findings(validator, example, index, node_pointer, pointer, where) ->
         f"{SAMPLE_CONTRADICTION_REMEDY}")]
 
 
-def _sits_under_a_negation(node_pointer: str) -> bool:
-    """Whether this node is reached through a position that inverts it.
-
-    Read off the pointer, which is the record of how the walk got here — no
-    second traversal — and against the contract's own set, which owns which
-    positions those are for the same reason it owns the walk.
-    """
-    return bool(
-        JSON_SCHEMA_NEGATED_SCHEMA_KEYS.intersection(node_pointer.split("/")))
-
-
 def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dict]:
     """RULE-ENDP-064: every `examples` entry must satisfy the node declaring it.
 
@@ -443,9 +431,8 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
 
     nodes = [
         (node_pointer, node)
-        for node_pointer, node in iter_schema_nodes(schema)
-        if isinstance(node.get("examples"), list)
-        and not _sits_under_a_negation(node_pointer)
+        for node_pointer, node, negated in iter_schema_nodes(schema)
+        if isinstance(node.get("examples"), list) and not negated
     ]
     if not nodes:
         return []
