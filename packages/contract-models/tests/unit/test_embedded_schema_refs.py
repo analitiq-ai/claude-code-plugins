@@ -1243,6 +1243,20 @@ class TestKeywordVocabularyHasOneOwner:
         doc = json.loads((repo / "schemas/api-endpoint/latest.json").read_text())
         return doc["$defs"]["JsonSchemaPropertyNode"]
 
+    def test_every_negating_key_is_a_single_schema_position(self):
+        """Both walkers set the negation flag in the single-schema loop only,
+        on the strength of this. A member landing in another inventory — or in
+        none — is never descended into with the flag set, so everything under
+        it is graded as though it described the instance, silently."""
+        from analitiq.contracts import endpoints as ep
+
+        assert ep.JSON_SCHEMA_NEGATED_SCHEMA_KEYS <= ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS, (
+            "these negating positions are not single-schema keywords: "
+            f"{sorted(ep.JSON_SCHEMA_NEGATED_SCHEMA_KEYS - ep.JSON_SCHEMA_SINGLE_SCHEMA_KEYS)}"
+            " — the walkers check for them in that loop alone, so they would "
+            "mark nothing"
+        )
+
     def test_the_validator_keeps_no_copy_of_the_vocabulary(self):
         """It walks with the contract's own iterator, so there is no second set
         to compare.

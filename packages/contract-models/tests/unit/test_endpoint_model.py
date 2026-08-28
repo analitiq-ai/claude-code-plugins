@@ -3200,6 +3200,22 @@ class TestRecordedWireSampleZone:
                                ["2024-13-45T99:99:99Z"])))
         assert "names no moment that exists" in str(exc.value), exc.value
 
+    @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+    def test_a_sample_under_a_negation_is_not_graded_here_either(self, key):
+        """The same reading RULE-ENDP-064 applies, applied by the rule that
+        shares its subject. Under one of these positions the declaration says
+        what the value must NOT be, so the sample is the author's
+        counter-example — and this rule refusing it while the other exempts it
+        is the two of them disagreeing about whether a sample is evidence.
+
+        It is the sharper half of the disagreement: this one rejects at the
+        MODEL, so the document never parses and the other rule's exemption is
+        never reached at all."""
+        parse_endpoint(_api_payload_with_field_schema(
+            "updated_at",
+            {key: self._temporal("Timestamp(MICROSECOND, UTC)",
+                                 ["2024-01-02T03:04:05"])}))
+
     def test_a_sample_that_is_not_a_date_time_is_still_passed_over(self):
         """The calendar check applies to values wearing the date-time shape.
         An epoch is a different kind of value, not a malformed instant, and
