@@ -68,7 +68,11 @@ try:
             SLUG_RE,
             SAMPLE_CONTRADICTION_REMEDY,
         )
-        from analitiq.contracts.endpoints import iter_schema_nodes
+        from analitiq.contracts.endpoints import (
+            iter_schema_nodes,
+            materialize_node,
+            resolve_read_record_schema,
+        )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
         # Reuse the contract's regex primitives (ECMA named-group + `${name}`
@@ -106,6 +110,7 @@ register_validator_ids({
     "endpoint-transport-ref",
     "embedded-json-schema",
     "embedded-schema-example",
+    "record-field-unreadable",
 })
 
 
@@ -232,6 +237,59 @@ def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
                 _walk_schema_pairs(block["input"].get("schema"),
                                    f"/operations/write/{mode}/input/schema", out)
     return out
+
+
+def _unreadable_record_field_findings(ep_doc: dict, label: str = "") -> list[dict]:
+    """RULE-ENDP-065: a record field's type must sit where the engine reads it.
+
+    The engine reads a field node's own `type` / `arrow_type` and follows
+    neither `$ref` nor a composition: `resolve_field_arrow_type` sees a bare
+    `{"$ref": …}` as untyped and `SchemaContract` then refuses the read with
+    "field has no 'arrow_type' declaration", before a request is sent. The
+    document is verbatim by then — nothing between the authored file and that
+    reader resolves anything.
+
+    The question asked of each field is therefore not "does this node carry a
+    keyword" — a typed field may carry `not` or `anyOf` for constraints the
+    engine ignores and be perfectly readable — but "is this field's type
+    somewhere the engine will not look": absent from the node, present once
+    the contract folds in what unconditionally applies. `materialize_node`
+    answers exactly that and is the module's own answer to it, so the check
+    is the difference between the two readings rather than a guess about
+    which keywords hide a type.
+
+    A field the provider documents no type for is annotated nowhere, so both
+    readings agree and it is not reported — declaring nothing is authored on
+    purpose (RULE-ENDP-005), and is not the same as declaring somewhere the
+    engine cannot see.
+    """
+    findings: list[dict] = []
+    ops = ep_doc.get("operations")
+    read = ops.get("read") if isinstance(ops, dict) else None
+    response = read.get("response") if isinstance(read, dict) else None
+    if not isinstance(response, dict) or not isinstance(response.get("schema"), dict):
+        return findings
+    root = response["schema"]
+    record = resolve_read_record_schema(response, root)
+    if not isinstance(record, dict):
+        return findings
+    where = f"{label}: " if label else ""
+    for name, node in sorted((record.get("properties") or {}).items()):
+        if not isinstance(node, dict) or node.get("arrow_type") is not None:
+            continue
+        folded = materialize_node(node, root)
+        if not isinstance(folded, dict) or folded.get("arrow_type") is None:
+            continue
+        findings.append(finding(
+            "record-field-unreadable", "error",
+            f"/operations/read/response/schema/properties/{name}",
+            f"{where}record field {name!r} is typed "
+            f"{folded['arrow_type']!r}, but not on the field: the declaration "
+            "is reached by folding in a `$ref` target or an `allOf` branch. "
+            "The engine reads a field's `arrow_type` off the node and follows "
+            "neither, so this field reaches the run undeclared and fails it "
+            "before the first request. Put the declaration on the field"))
+    return findings
 
 
 def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
@@ -947,6 +1005,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+        findings.extend(_unreadable_record_field_findings(
+            ep_doc, label=ep_path.name))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
         # connector's `transports` — checkable only here, where both documents
         # are in hand.
@@ -992,6 +1052,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
+        findings += _unreadable_record_field_findings(doc)
         # `endpoint-transport-ref` is cross-document: it needs the sibling
         # connector.json's `transports`, which only `check_coverage` has. Say so
         # rather than returning a silent clean pass — an author validating a

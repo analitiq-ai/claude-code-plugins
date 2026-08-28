@@ -1,0 +1,26 @@
+id: RULE-ENDP-065
+statement: >
+  A field of a read operation's record shape MUST carry its canonical Arrow
+  type on the field node itself, and MUST NOT leave it reachable only by
+  folding in a `$ref` target or an `allOf` branch.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.validator.connectors::_unreadable_record_field_findings"
+owners: [connector-plugin, engine]
+targets: [ResponseExtraction]
+rationale: >
+  An embedded schema may use `$ref` and composition — RULE-ENDP-026 says how,
+  and this contract folds both when it reads a record shape. The reader that
+  builds the record batch does not: it takes a field's `arrow_type` off the
+  node, follows nothing, and refuses the read when it finds none. So a field
+  typed behind a reference is typed for every consumer except the one the
+  declaration exists for, and the run fails on a field the document plainly
+  annotates — the validates-clean-and-breaks shape the recorded-sample rules
+  close for a field's value, one layer out at its declaration. The question is
+  asked as the difference between the two readings, the node's own and the
+  folded one, so a field carrying a composition for constraints rather than
+  for its type is untouched: a keyword being present is not the same as a type
+  hiding behind it.
+status: active
+superseded_by: null
