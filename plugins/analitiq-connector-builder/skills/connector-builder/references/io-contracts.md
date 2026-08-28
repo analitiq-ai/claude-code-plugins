@@ -322,7 +322,8 @@ access and may not guess field types).
               "endpoint-id-locator",
               "endpoint-transport-ref",
               "embedded-json-schema",
-              "embedded-schema-example"
+              "embedded-schema-example",
+              "record-field-unreadable"
             ]
           },
           "severity": { "type": "string", "enum": ["error", "warning"] },

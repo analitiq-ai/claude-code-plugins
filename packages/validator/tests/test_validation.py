@@ -310,6 +310,41 @@ def test_a_reference_that_does_not_resolve_still_names_itself(validator, ref):
     assert not any(GUARD_DEFAULT_BLAME in f["message"] for f in findings), findings
 
 
+#: A field node, the `$defs` it needs, and whether its type sits where the
+#: batch reader looks. The pairs that discriminate are the last four: a
+#: composition present on a field is not the same as a type hiding behind one,
+#: and a field annotated nowhere is annotated nowhere for everybody.
+_RECORD_FIELD_CASES = [
+    ({"$ref": "#/$defs/S"}, {"S": {"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}}, True),
+    ({"allOf": [{"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}]}, None, True),
+    ({"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, None, False),
+    ({**{"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, "not": {"const": "x"}}, None, False),
+    ({**{"type": "string", "native_type": "STRING", "arrow_type": "Utf8"}, "anyOf": [{"minLength": 1}]}, None, False),
+    ({"type": "string", "not": {"const": "x"}}, None, False),
+    ({"type": "string"}, None, False),
+]
+
+
+@pytest.mark.parametrize("node, defs, unreadable", _RECORD_FIELD_CASES)
+def test_a_record_field_is_typed_where_the_batch_reader_looks(
+    validator, node, defs, unreadable,
+):
+    """The reader that builds the record batch takes a field's `arrow_type`
+    off the node and follows neither `$ref` nor composition, so a field typed
+    behind one reaches the run undeclared and fails it — validating clean the
+    whole way. Asked as the difference between the node's own reading and the
+    folded one, so a field carrying a composition for its CONSTRAINTS is
+    untouched and a field annotated nowhere stays the author's choice."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["a"] = node
+    if defs:
+        schema["$defs"] = defs
+    hits = [f for f in validator.validate_document(ep)
+            if f["validator"] == "record-field-unreadable"]
+    assert bool(hits) is unreadable, hits
+
+
 def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
     """The other direction of the same wording. Two tests assert the default
     blame is ABSENT from a document-caused crash, and an absence assertion
