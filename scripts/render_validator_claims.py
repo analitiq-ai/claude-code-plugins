@@ -1469,7 +1469,7 @@ def render_unfinished_check() -> str:
     """How to read a finding that is a crash rather than a verdict.
 
     Generated because every word of it is a fact about `_run_guarded`: the
-    opening it writes, and the two causes it chooses between. A probe cannot
+    opening it writes, and the causes it chooses between. A probe cannot
     carry this one — `run_probe` treats any guard finding as a probe failure,
     by design, since a crash proves no claim in either direction — so the
     rung above it is where the claim goes.
@@ -1520,7 +1520,8 @@ def block_probe_ids(block_id: str) -> set[str]:
         return set()  # data-backed, not probe-backed — see `_release_table`
     if block_id == "unfinished-check":
         # Code-backed, not probe-backed: every word is rendered from the
-        # guard's own opening and its two causes, so it moves with them by
+        # guard's own opening and the causes it chooses between, so it moves
+        # with them by
         # construction. A probe could not carry it either way — `run_probe`
         # treats any guard finding as a probe failure, since a crash proves no
         # claim in either direction, so a probe expecting one cannot be

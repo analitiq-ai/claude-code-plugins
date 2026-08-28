@@ -106,9 +106,11 @@ synthesize an example for every field that declares none, from a fixed set of
 faker constants — the same handful of values turning up across unrelated
 fields, and a date-time that always carries `Z` whatever the provider sends.
 Recording one hands the creator zoned evidence for a field the provider may
-send naive, and the declaration that follows validates cleanly while shifting
-every value the destination reads. A value you cannot tell from furniture is
-one to omit, saying so in `notes`.
+send naive.
+<!-- PROBE: recorded-sample-agreeing -->
+The declaration that follows agrees with the sample, so nothing here objects to
+it — and what a wrong zone then costs at run time is `RULE-SHRD-002`. A value
+you cannot tell from furniture is one to omit, saying so in `notes`.
 
 **A documented type and a documented example that disagree are the finding.**
 Providers whose field table says `boolean` and whose example response shows

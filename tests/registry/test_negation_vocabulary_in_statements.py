@@ -13,8 +13,12 @@ both statements teaching an exemption narrower than the one enforced, and no
 renderer reads statement text.
 
 This locates rather than decides (`.claude/rules/guards.md`): it asks whether
-each member the contract owns appears backticked in the statement. Whether the
-sentence around it still reads correctly is the author's half.
+each member the contract owns appears backticked in the statement, and whether
+any single-schema keyword the contract does NOT own appears there — both
+directions, because a member leaving the set is as silent as one landing on it.
+Whether the sentence around the names still reads correctly is the author's
+half, and that half is not small: the reason attached to the enumeration has to
+hold for every member, and it did not when it was first written.
 """
 from __future__ import annotations
 
@@ -38,4 +42,20 @@ def test_the_statement_names_every_negating_position(rule_id):
         f"name {missing} — the contract owns that set, and this statement is "
         "read by an author deciding whether the exemption reaches their node. "
         "It renders into the wheel and into the plugin reference."
+    )
+
+    # The other direction. A member LEAVING the set leaves both statements
+    # teaching an exemption broader than the one enforced — an author reads
+    # that their sample under that position is exempt, and it is graded.
+    from analitiq.contracts.endpoints import JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+
+    overreach = sorted(
+        key for key in JSON_SCHEMA_SINGLE_SCHEMA_KEYS
+        - JSON_SCHEMA_NEGATED_SCHEMA_KEYS
+        if f"`{key}`" in statement
+    )
+    assert not overreach, (
+        f"{rule_id}'s statement names {overreach} among the exempt positions, "
+        "and the contract does not — so it teaches an exemption the validator "
+        "does not apply, and the sample is graded after all"
     )

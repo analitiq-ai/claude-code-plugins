@@ -260,7 +260,7 @@ def _guard_opening(vid: str) -> str:
 #: Stated here because the tests over it assert its ABSENCE — that a
 #: document-caused crash does not send the author to file a bug — and an
 #: absence assertion against a hand-typed string goes quiet, not red, when the
-#: string moves. One test requires it where it does belong, so emptying it is
+#: string moves. Tests also require it where it does belong, so emptying it is
 #: not silent either.
 GUARD_DEFAULT_BLAME = "this is a validator bug — please report."
 #: What a crash tells the reader when the interpreter ran out of stack or

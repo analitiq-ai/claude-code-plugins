@@ -3,10 +3,10 @@ statement: >
   Every entry a node of an endpoint's response or write-input schema records
   under `examples` MUST satisfy that node's own declarations, unless the node
   is reached through a position whose subschema does not describe the instance
-  — `not`, which says what it must not be; `if`, which selects a branch;
-  `propertyNames`, which constrains keys — where the sample is a
-  counter-example and satisfying the declaration beside it would be the
-  defect.
+  — `not`, which says what the instance must not be; `if`, which selects a
+  branch rather than constraining; and `propertyNames`, which constrains the
+  KEYS. A sample recorded at one of those is not a value the declaration
+  beside it claims to describe.
 tier: advisory
 severity: error
 scopes: [api-endpoint]

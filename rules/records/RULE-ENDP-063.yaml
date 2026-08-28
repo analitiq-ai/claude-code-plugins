@@ -1,13 +1,16 @@
 id: RULE-ENDP-063
 statement: >
   A node of an endpoint's response or write-input schema that records wire
-  samples under `examples` and declares a canonical Arrow type whose family
+  samples under `examples` and declares — on the node, or one fold away in a
+  `$ref` target or `allOf` branch — a canonical Arrow type whose family
   carries a timezone position MUST declare one whose zone-awareness those
   samples bear out, and each such sample written as a date-time MUST name a
   moment that exists. A node reached through a position whose subschema does
-  not describe the instance — `not`, which says what it must not be; `if`,
-  which selects a branch; `propertyNames`, which constrains keys — is exempt:
-  the sample recorded there is a counter-example. Recording a sample never obliges a node to declare a type it
+  not describe the instance is exempt — `not`, which says what the instance
+  must not be; `if`, which selects a branch rather than constraining; and
+  `propertyNames`, which constrains the KEYS. A sample recorded at one of
+  those is not a value the declaration beside it claims to describe, so
+  agreement between them says nothing either way. Recording a sample never obliges a node to declare a type it
   has no evidence for.
 tier: advisory
 severity: error
@@ -27,7 +30,8 @@ rationale: >
   carrying none are the same `type: string`, so nothing in the draft the
   embedded schema is written in can object. Only what can be read is graded —
   a family with no timezone position has nothing to contradict, a sample that
-  is not a date-time literal answers nothing, and a sample recorded where the
+  is not a date-time literal answers nothing, a node whose declaration cannot
+  be folded together reaches no declaration at all, and a sample recorded where the
   declaration describes the instance's opposite is a counter-example rather
   than evidence against itself — so silence here is absence of evidence, never
   evidence the declaration is right. The exception is a

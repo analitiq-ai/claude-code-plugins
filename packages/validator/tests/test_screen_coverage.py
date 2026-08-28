@@ -31,6 +31,7 @@ import pytest
 from analitiq.validator._core import _guard_opening
 from conftest import (
     SCREENED_ENTRY_POINTS,
+    _ScreenedValidator,
     SCREENED_NAME_SHAPES,
     VALIDATOR_SRC_ROOT,
 )
@@ -80,7 +81,7 @@ _VALIDATOR_MODULES = _validator_modules()
 def _returns_findings(name: str) -> bool:
     """Whether importing this name hands a caller an unscreened finding list.
 
-    The two entry points by name, and every other finding-returning function
+    The entry points by name, and every other finding-returning function
     by the shape of its name — a per-kind `_validate_*`, or anything ending
     `_findings`. Both shapes are conventions this package keeps, and a
     function that returns findings under some third name is the reader's to
@@ -97,7 +98,7 @@ def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
     them is the obvious one: `from analitiq.validator import validate_document`
     binds the name; `from analitiq import validator` and `import
     analitiq.validator as v` bind the module and reach the same function
-    through an attribute; and both live in a defining module of their own,
+    through an attribute; and each also lives in a defining module of its own,
     which `analitiq.validator` only re-exports.
     """
     bound: set[str] = set()
@@ -106,7 +107,7 @@ def _reaches_an_entry_point(tree: ast.AST) -> set[str]:
             if node.module in _VALIDATOR_MODULES:
                 bound |= {a.name for a in node.names if _returns_findings(a.name)}
             # `from analitiq import validator` — the module itself, from which
-            # an attribute access reaches either entry point.
+            # an attribute access reaches any entry point on it.
             if node.module == "analitiq" and any(
                     a.name == "validator" for a in node.names):
                 bound.add("analitiq.validator (as a module)")
@@ -125,8 +126,6 @@ def test_every_screened_entry_point_has_a_wrapper_that_screens_it():
     import channel covered — which is the state `validate_pipeline_bundle` was
     in before it was noticed. Closing the instance leaves the class open.
     """
-    from conftest import _ScreenedValidator
-
     unwrapped = sorted(
         name for name in SCREENED_ENTRY_POINTS
         if name not in vars(_ScreenedValidator)
@@ -155,6 +154,14 @@ def test_every_screened_entry_point_has_a_wrapper_that_screens_it():
 
     screened = _ScreenedValidator(_Crashing())
     for name in SCREENED_ENTRY_POINTS:
+        with pytest.raises(AssertionError, match="a check crashed"):
+            getattr(screened, name)()
+
+    # And the OTHER channel. The names above all have explicit methods, so a
+    # loop over them alone never drives `__getattr__`'s wrapper — which covers
+    # every `_validate_*` / `*_findings` helper and is the larger surface.
+    for name in ("_validate_api_endpoint", "_embedded_schema_findings"):
+        assert any(shape in name for shape in SCREENED_NAME_SHAPES), name
         with pytest.raises(AssertionError, match="a check crashed"):
             getattr(screened, name)()
 

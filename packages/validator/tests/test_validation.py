@@ -331,7 +331,8 @@ def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name)
 
 
 @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
-@pytest.mark.parametrize("descent", ["properties", "anyOf", "items"])
+@pytest.mark.parametrize(
+    "descent", ["properties", "anyOf", "items", "items[]"])
 def test_a_typed_sample_under_a_negation_parses_and_is_exempt(
     validator, key, descent,
 ):
@@ -349,6 +350,8 @@ def test_a_typed_sample_under_a_negation_parses_and_is_exempt(
         "properties": {"type": "object", "properties": {"inner": inner}},
         "anyOf": {"anyOf": [inner]},
         "items": {"type": "array", "items": inner},
+        # Draft 2019-09 tuple form — the single-schema loop's other arm.
+        "items[]": {"type": "array", "items": [inner]},
     }[descent]
     ep = _sample_endpoint({key: below})
     findings = validator.validate_document(ep)
@@ -385,11 +388,24 @@ def test_an_empty_examples_array_records_nothing_and_is_graded_as_nothing(
     validator,
 ):
     """The boundary between "no samples" and "samples": the key is present, so
-    the node is collected, and there is still nothing to disagree with."""
+    the node is collected, and there is still nothing to disagree with.
+
+    Asserted beside a node that DOES record one, because an empty list alone is
+    indistinguishable from a collection predicate that stopped collecting:
+    relaxing `isinstance(node.get("examples"), list)` to a truthiness test
+    leaves an empty-list-only document green either way.
+    """
     ep = _sample_endpoint({
         "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
         "examples": []})
-    assert _example_errors(validator, ep) == []
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["b"] = {
+        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
+        "examples": [7]}
+    paths = [e["path"] for e in _example_errors(validator, ep)]
+    assert paths == [
+        "/operations/read/response/schema/items/properties/b/examples/0"
+    ], paths
 
 
 def test_the_finding_carries_the_shared_remedy(validator):
@@ -574,10 +590,11 @@ def test_the_cause_a_crash_names_is_chosen_by_what_went_wrong(validator):
 def test_the_rendered_cause_is_the_one_a_finding_carries(validator):
     """The plugin README renders `GUARD_RESOURCE_CAUSE` as the literal text a
     reader matches a finding against, and findings carry
-    `GUARD_RESOURCE_BLAME`. Nothing else holds the two together: a rewording
-    of BLAME that stopped opening with CAUSE would render a clause no finding
-    contains, and the block check compares the file to the renderer, so both
-    would move together and nothing would go red."""
+    `GUARD_RESOURCE_BLAME`. Today an f-string holds them together, and this is
+    the tripwire against inlining the text instead: a rewording of BLAME that
+    stopped opening with CAUSE would render a clause no finding contains, and
+    the block check compares the file to the renderer, so both would move
+    together and nothing else would go red."""
     from analitiq.validator import GUARD_RESOURCE_CAUSE
 
     assert GUARD_RESOURCE_BLAME.startswith(GUARD_RESOURCE_CAUSE), (
@@ -698,18 +715,39 @@ def test_a_non_string_dialect_below_the_root_is_malformed_not_another_draft(
     assert not any("another draft" in m for m in messages), messages
 
 
-def test_a_wrong_root_draft_does_not_stop_the_rest_of_the_checks(validator):
-    """The root's declared draft changes nothing about how this document is
-    read: `check_schema` and the sample grading are 2020-12 either way, and
-    2020-12 is what the author has to reach. Their findings still stand after
-    the `$schema` is fixed, so withholding them costs a rerun each."""
-    ep = _sample_endpoint({
-        "type": "string", "native_type": "STRING", "arrow_type": "Utf8",
-        "examples": [7]})
+def test_a_wrong_root_draft_still_reports_the_metaschema_errors(validator):
+    """`check_schema` grades against this class's own metaschema whatever the
+    document declares, so its findings stand after the `$schema` is fixed and
+    withholding them costs a rerun."""
+    ep = _endpoint("STRING", "Utf8")
     schema = ep["operations"]["read"]["response"]["schema"]
     schema["$schema"] = "http://json-schema.org/draft-07/schema#"
-    ids = {f["validator"] for f in validator.validate_document(ep)}
-    assert {"embedded-json-schema", "embedded-schema-example"} <= ids, ids
+    schema["items"]["properties"]["a"] = {"type": "array", "minItems": "no"}
+    messages = [f["message"] for f in validator.validate_document(ep)
+                if f["validator"] == "embedded-json-schema"]
+    assert any("declares $schema" in m for m in messages), messages
+    assert any("not a valid JSON Schema Draft 2020-12" in m
+               for m in messages), messages
+
+
+def test_a_wrong_root_draft_withholds_the_sample_grading(validator):
+    """`evolve` reads `$schema` off the node it is handed, and for the ROOT
+    that node is the schema itself — so a foreign draft there is picked up and
+    every sample in the document is graded under it. A `prefixItems` violation
+    goes unreported under draft-07, which has no such keyword: the author would
+    be told their sample is fine in a dialect the contract does not run."""
+    ep = _endpoint("STRING", "Utf8")
+    schema = ep["operations"]["read"]["response"]["schema"]
+    schema["items"]["properties"]["a"] = {
+        "type": "array", "prefixItems": [{"type": "integer"}],
+        "examples": [["x"]]}
+    graded = {f["validator"] for f in validator.validate_document(ep)}
+    assert "embedded-schema-example" in graded, graded
+
+    schema["$schema"] = "http://json-schema.org/draft-07/schema#"
+    withheld = {f["validator"] for f in validator.validate_document(ep)}
+    assert "embedded-schema-example" not in withheld, withheld
+    assert "embedded-json-schema" in withheld, withheld
 
 
 def test_a_nested_draft_does_not_withhold_the_metaschema_findings(validator):
@@ -778,9 +816,12 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
     reran the validator on an unchanged document and got the same findings in a
     different order. Subprocesses, because a seed is fixed for the life of one.
 
-    Two things the document has to be, both learned the hard way. Several
+    Three things the document has to be, each learned the hard way. Several
     members of one bucket on ONE node — with one member per bucket the loop has
-    no order to vary and every sort here is unpinned. And no crash: a document
+    no order to vary and every sort here is unpinned. Several that actually
+    PRODUCE a finding: `not` is exempt from grading, so a bucket holding `not`
+    and one other left nothing to reorder and this reddened on some hash seeds
+    and not others. And no crash: a document
     the model layer aborts on yields a single guard finding, which compares
     equal across every seed while measuring nothing, and a liveness assert on a
     non-empty list is satisfied by it.
@@ -800,6 +841,8 @@ def test_findings_come_back_in_the_same_order_every_run(validator):
         "anyOf": [dict(sample)],
         "not": dict(sample),
         "contains": dict(sample),
+        "additionalProperties": dict(sample),
+        "then": dict(sample),
     }
 
     # The fixture refuses a guard finding, so what comes back is verdicts.
