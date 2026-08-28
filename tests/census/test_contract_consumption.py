@@ -1,4 +1,5 @@
-"""The reachability census — every contract field names its consumer.
+"""The reachability census — every contract field a manifest root reaches
+names its consumer.
 
 The engine publishes ``contract-consumption``, the fields its run-time path
 reads; ``census.consumption.pin`` vendors one pinned version. This suite is

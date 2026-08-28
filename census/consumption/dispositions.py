@@ -2,7 +2,8 @@
 
 One :class:`FieldDisposition` per (model, field) the reachability walk finds
 and ``claims`` does not — keyed and grouped by the model that carries the
-field, in the order the walk reports them. The guard in ``tests/census`` holds this
+field, models in sorted qualified-name order and fields in the model's own
+declaration order, so an entry sits beside the field list it describes. The guard in ``tests/census`` holds this
 tuple to the manifest in each direction: an unread field with no entry fails,
 and so does an entry for a field the manifest now claims or no longer
 reaches, so a pin bump that starts reading a field retires its entry here
@@ -85,8 +86,7 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "adopt moves these entries to engine_gap"
 )
 
-#: The page size of a database pagination variant: one entry per variant
-#: (the census unit), one reason.
+#: The page size of a database pagination variant.
 DATABASE_PAGE_SIZE = (
     "an author declaring a page size expects the read fetched in pages of "
     "that size; the pinned manifest claims no read of it, so a database "
