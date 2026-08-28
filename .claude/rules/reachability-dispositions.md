@@ -12,12 +12,13 @@ same split on fields.
 
 ## What the guard decides, and what a reader decides
 
-`census/consumption/reachability.py` compares sets, and `ConsumptionReport`
-there carries every finding that comparison can reach.
+`census/consumption/reachability.py` compares sets and checks one
+annotation shape (a `structural` entry must sit on a `Literal`), and
+`ConsumptionReport` there carries every finding those can reach.
 `tests/census/test_contract_consumption.py` and
 `scripts/render_contract_consumption.py check` fail on every finding that
-dataclass carries. **Neither decides whether the kind is right or the reason
-honest.** That is a reader's,
+dataclass carries. **Neither decides whether a reason is honest, nor which
+of the kinds pydantic does not settle is right.** That is a reader's,
 and this file is what the reader applies.
 
 ## The unit

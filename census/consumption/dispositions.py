@@ -30,9 +30,7 @@ SCHEMA_URL_LITERAL = (
     "other value, so the engine holds a document already known to be this kind"
 )
 
-#: A nested shape declaration graded at validation time and landed, when it
-#: reaches the run at all, as the JSON sub-tree of a model the engine dumps
-#: whole. No attribute read exists because the shape is never unpacked.
+#: A nested arrow shape declaration.
 NESTED_SHAPE_DECLARATION = (
     "nested shape declaration: RULE-STRM-006 and RULE-STRM-007 name what it "
     "must agree with at validation time, and the run lands the destination "
@@ -40,8 +38,7 @@ NESTED_SHAPE_DECLARATION = (
     "field of the sub-tree is read by attribute"
 )
 
-#: A per-parameter value constraint the manifest claims no read of: the
-#: request carries whatever the binding resolves to.
+#: A per-parameter value constraint.
 PARAM_VALUE_CONSTRAINT = (
     "an author declaring a value constraint expects a request carrying a value "
     "outside it to be refused before it is sent; the pinned manifest claims no "
@@ -49,8 +46,7 @@ PARAM_VALUE_CONSTRAINT = (
     "binding resolved"
 )
 
-#: The wire half of a cursor mapping: how the watermark is compared and in
-#: what format it is sent.
+#: The wire half of a cursor mapping.
 CURSOR_MAPPING_WIRE = (
     "an author declaring how the watermark is compared and formatted expects "
     "the incremental request to send it that way; the pinned manifest claims "
@@ -58,8 +54,7 @@ CURSOR_MAPPING_WIRE = (
     "as the stored value"
 )
 
-#: Write-result extraction: the block an author fills in so a write's outcome
-#: is judged from the provider's response body.
+#: Write-result extraction.
 WRITE_RESPONSE_EXTRACTION = (
     "an author declaring write-result extraction expects the run to judge each "
     "write from the provider's response body — success, error detail, "
@@ -178,11 +173,13 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "form is read except for operator and format, so a required field the "
         "read path ignores misleads in a form that otherwise works — unlike "
         "the windowed form, unread as a whole and dispositioned as one gap. "
-        "Removed rather than adopted because the field is required: while "
-        "it stands, every document must state a comparison the run does not "
-        "apply, and the contract cannot keep demanding a value it cannot "
-        "promise to honour — adoption, if the owners choose it, lands as an "
-        "optional field alongside the windowed form's decision",
+        "Removed rather than adopted because neither side needs the value: "
+        "the read runs the single form without it, and the document has no "
+        "other use for it — yet it is required, so every document must state "
+        "a comparison the run does not apply. The one check that reads it, "
+        "the refusal of a cursor mapping mixing the single and windowed "
+        "forms, detects the single form by the presence of param and "
+        "operator, and re-keys onto param alone",
     ),
     FieldDisposition("endpoints.SingleCursorMapping", "format", "engine_gap", CURSOR_MAPPING_WIRE),
     # --- endpoints.WindowCursorMapping: the whole windowed form is unread ---

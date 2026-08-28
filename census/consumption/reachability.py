@@ -248,8 +248,8 @@ class ConsumptionReport:
         )
         group(
             "structural dispositions on fields that are not Literal-typed — "
-            "pydantic settles nothing here; the disposition is a kind pydantic "
-            f"does not settle: {', '.join(_NON_STRUCTURAL_KINDS)}",
+            "pydantic settles nothing here; use a kind pydantic does not settle: "
+            f"{', '.join(_NON_STRUCTURAL_KINDS)}",
             self.structural_not_literal,
             lambda d: f"{d.qualified_model}.{d.field}",
         )

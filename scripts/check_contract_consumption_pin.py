@@ -30,9 +30,9 @@ published truth:
      pin fails, as a POINTER problem, not an unpublished pin: this step runs only after step 2
      fetched the pinned immutable object (a genuinely unpublished pin dies
      there as a GuardError, exit 2), so the mutable pointer is lagging a
-     published object — a stale latest.json (the pointers rely on a short
-     TTL, not invalidation; `.github/workflows/schemas-publish.yml` owns the
-     cache-control) or a half-completed publish.
+     published object — a stale latest.json (the engine's publish relies on
+     the short TTL its cache-control states, not invalidation) or a
+     half-completed publish.
      Remediation: re-check after the TTL and repair the pointer if it
      persists — re-vendoring does not fix the pointer.
 
@@ -232,9 +232,9 @@ def check_published(failures: list[str]) -> tuple[list[str], bool]:
             f"{pin.CONSUMPTION_RESOURCE}: latest.json says v{latest}, but the "
             f"pinned v{pin.CONSUMPTION_VERSION} object is published — this "
             "same run just fetched it. The mutable pointer lags a published "
-            "pinned object: a stale latest.json (the pointers rely on a short "
-            "TTL, not invalidation; .github/workflows/schemas-publish.yml "
-            "owns the cache-control) or a half-completed publish. "
+            "pinned object: a stale latest.json (the engine's publish relies "
+            "on the short TTL its cache-control states, not invalidation) or "
+            "a half-completed publish. "
             "Re-check after the TTL and repair the pointer if it persists — "
             "re-vendoring does not fix the pointer"
         )

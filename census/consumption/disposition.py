@@ -55,9 +55,9 @@ DispositionKind = Literal[
     "authoring_only", "structural", "engine_gap", "contract_surplus", "manifest_gap"
 ]
 
-#: Named reasons, so the census is countable by category and one edit
-#: re-words a category everywhere. A bespoke ``reason`` is still right when a
-#: field's situation is not one of these.
+# Named reasons, so the census is countable by category and one edit
+# re-words a category everywhere. A bespoke ``reason`` is still right when a
+# field's situation is not one of these.
 
 #: Catalog labels and descriptions.
 HUMAN_METADATA = (

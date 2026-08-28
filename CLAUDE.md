@@ -212,7 +212,7 @@ contract declares, the schema renders and the plugins teach, that no engine
 path ever reads, is invisible to every check above — nothing here can know
 what the engine reads. So the engine publishes it: `contract-consumption`,
 a versioned artifact at `schemas.analitiq.ai` listing the models its
-run-time path holds (`roots`), the fields it reads by attribute
+hands to its run-time path directly (`roots`), the fields it reads by attribute
 (`claims`), and the models it consumes whole as a JSON grammar (`opaque`).
 This repo vendors one pinned version at
 `census/consumption/contract_consumption.json`; `census/consumption/pin.py`
