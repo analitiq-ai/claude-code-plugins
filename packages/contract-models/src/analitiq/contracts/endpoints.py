@@ -1359,14 +1359,19 @@ def _validate_examples_zone(
 def _folded_arrow_type(schema: dict, root: Any) -> str | None:
     """The canonical type this node declares one fold away, or None.
 
-    None for a node with nothing to fold, and None where the fold refuses —
-    contributors that contradict each other, which is a fact about the document
-    and reads as no declaration. A chain deeper than the interpreter unwinds is
-    NOT absorbed: :func:`try_materialize_node` draws that line and says why.
-    A raise here would matter, though, which is why it delegates rather than
-    calling the fold itself: this walk accumulates and raises once at the end,
-    so a raise from inside discards every error already found and refuses the
-    document under a message carrying no path.
+    None for a node with nothing to fold, and None where
+    :func:`materialize_node` refuses — contributors that contradict each other,
+    which is a fact about the document and reads as no declaration.
+    :func:`try_materialize_node` absorbs that one and only that one; a chain
+    deeper than the interpreter unwinds raises straight through both, by
+    design, and is caught a layer up where a check that could not finish can
+    be reported.
+
+    Why the absorbed half matters: this walk accumulates and raises once at the
+    end, so a refusal arriving as an exception would discard every error
+    already found and report under a message carrying no path. A contradiction
+    is common enough in an authored document to be worth that; running out of
+    stack is not something any answer here could be right about.
 
     Refusing a contradiction here would make a SAMPLE
     decide it: the identical unsatisfiable node without `examples` is accepted

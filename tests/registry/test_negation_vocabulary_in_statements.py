@@ -24,10 +24,27 @@ from __future__ import annotations
 
 import pytest
 
-CARVE_OUT_RULES = ("RULE-ENDP-063", "RULE-ENDP-064")
+#: The phrase every carve-out statement is written around. Used to FIND the
+#: rules, not to grade them — a statement that stops carving out simply leaves
+#: the set, and one that starts carving out joins it without an edit here.
+#: A hand list would silently miss the third rule to grow the exemption.
+_CARVE_OUT_PHRASE = "does not describe the instance"
 
 
-@pytest.mark.parametrize("rule_id", CARVE_OUT_RULES)
+def _carve_out_rules():
+    from analitiq.contracts.shared.rules import all_rules
+
+    found = sorted(r.id for r in all_rules()
+                   if _CARVE_OUT_PHRASE in (r.statement or ""))
+    assert found, (
+        f"no rule statement contains {_CARVE_OUT_PHRASE!r} — either the "
+        "carve-out was reworded, in which case this guard is reading nothing "
+        "and reporting agreement, or it was removed and this file goes"
+    )
+    return found
+
+
+@pytest.mark.parametrize("rule_id", _carve_out_rules())
 def test_the_statement_names_every_negating_position(rule_id):
     from analitiq.contracts.endpoints import JSON_SCHEMA_NEGATED_SCHEMA_KEYS
     from analitiq.contracts.shared.rules import all_rules

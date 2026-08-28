@@ -195,15 +195,15 @@ def _run_guarded(
     try:
         return fn(*args)
     except _TOOL_DEFECT_TYPES as exc:
-        return [_guard_finding(vid, path, _detail(exc), GUARD_DEFAULT_BLAME, scope)]
+        return [guard_finding(vid, path, _detail(exc), GUARD_DEFAULT_BLAME, scope)]
     except (RecursionError, MemoryError) as exc:
         # No detail beyond the type: a `RecursionError` raised while unwinding
         # names whichever frame was innermost, which is not the walk that
         # filled the stack and reads to an author as though it were.
-        return [_guard_finding(vid, path, type(exc).__name__,
+        return [guard_finding(vid, path, type(exc).__name__,
                                GUARD_RESOURCE_BLAME, scope)]
     except Exception as exc:  # noqa: BLE001 - last-resort guard
-        return [_guard_finding(vid, path, _detail(exc),
+        return [guard_finding(vid, path, _detail(exc),
                                blame or GUARD_DEFAULT_BLAME, scope)]
 
 
@@ -228,9 +228,19 @@ def _detail(exc: BaseException) -> str:
     return detail
 
 
-def _guard_finding(
-    vid: str, path: str, detail: str, cause: str, scope: str | None,
+def guard_finding(
+    vid: str, path: str, detail: str, cause: str, scope: str | None = None,
 ) -> dict:
+    """A finding that says a check could not finish, in the one shape
+    :func:`is_guard_finding` recognises.
+
+    Public because this package is not the only thing that runs a check and
+    meets a crash — the plugins drive contract models directly for the kinds
+    the validator has no entry point for. A second emitter writing the wording
+    by hand produces something that reads like a guard finding to a person and
+    like a REJECTION to `is_guard_finding`, which is how an undecided document
+    gets counted as a refused one.
+    """
     tail = f"{cause} {scope}" if scope else cause
     return finding(vid, "error", path, f"{_guard_opening(vid)} ({detail}); {tail}")
 
