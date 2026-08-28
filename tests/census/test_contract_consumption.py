@@ -59,9 +59,8 @@ def test_vendored_manifest_hashes_to_the_pin():
     digest = hashlib.sha256(pin.MANIFEST_PATH.read_bytes()).hexdigest()
     assert digest == pin.CONSUMPTION_SHA256, (
         f"vendored {pin.MANIFEST_PATH.name} hashes to {digest}, but the pin "
-        f"says {pin.CONSUMPTION_SHA256}. The vendored file and the pin "
-        "constants must move together (re-vendor the published object, then "
-        "re-disposition whatever the new manifest leaves unread)."
+        f"says {pin.CONSUMPTION_SHA256}. The procedure is the pin-bump "
+        "section of .claude/rules/reachability-dispositions.md."
     )
 
 

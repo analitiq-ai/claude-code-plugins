@@ -16,8 +16,8 @@ once. Guards: ``tests/census/test_contract_consumption.py`` re-hashes the
 vendored bytes against the pin and checks the document's self-declared
 version, offline, so an edited or swapped copy fails in any plain pytest run;
 the CI guard fetches the published object and byte-compares it against the
-vendored copy, so a withdrawn pin fails the guard and a superseded one
-surfaces as a notice.
+vendored copy, so a withdrawn pin leaves the guard unable to run (its exit-2
+verdict), a superseded one surfaces as a notice.
 
 The envelope, and why each key is read the way it is:
 
@@ -30,8 +30,6 @@ The envelope, and why each key is read the way it is:
   tree, because a manifest generated against a newer models release can
   claim fields this tree does not declare. (``tests/census`` holds it;
   the envelope check only requires the key to be a string.)
-- ``scope`` — the engine's own extraction scope, the packages it walked for
-  ``runtime`` and ``kit`` reads. Not read here.
 - ``roots`` — the models the engine hands to its run-time path directly.
   Coverage is defined by them: a field belongs to the census only when its
   model is reachable from a root through field annotations, because that is
@@ -52,12 +50,13 @@ The envelope, and why each key is read the way it is:
   field through is not reading it. Optional: an envelope without it is
   accepted, since nothing here consults it.
 
+Keys this module does not name are not read here.
+
 This module is stdlib-only: the pin and the envelope check are read by the
 CI guard and by the census tests before any contract model is imported.
 
 Updating the pin is the pin-bump section of
-``.claude/rules/reachability-dispositions.md``; the constants that move
-together are ``CONSUMPTION_VERSION`` and ``CONSUMPTION_SHA256``.
+``.claude/rules/reachability-dispositions.md``.
 """
 from __future__ import annotations
 
@@ -78,6 +77,10 @@ ARTIFACT_VERSION_KEY = "version"
 #: Key the artifact names the ``analitiq-contract-models`` release it was
 #: generated against under.
 CONTRACT_MODELS_VERSION_KEY = "contract_models_version"
+#: Key the ``latest.json`` pointer states the sha256 of the object it names
+#: under; the pin guard holds it to ``CONSUMPTION_SHA256`` when the pointer
+#: names the pinned version.
+POINTER_SHA256_KEY = "sha256"
 #: Envelope keys, each read by name — never the document itself.
 ROOTS_KEY = "roots"
 CLAIMS_KEY = "claims"

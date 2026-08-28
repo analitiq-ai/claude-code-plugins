@@ -87,9 +87,17 @@ VALIDATION_ERROR_HANDLING_OVERRIDE = (
     "validation failure on that assignment to follow it; the pinned manifest "
     "claims no read of the override, so a validation failure follows the "
     "pipeline runtime's error handling — the outcome RULE-STRM-040 tells "
-    "authors to expect. That record leaves adopt-or-drop open; the entry "
-    "sits on the engine side meanwhile because nothing in the contract makes "
-    "the block redundant, which is the test contract_surplus applies"
+    "authors to expect. Removal follows that record: its statement says the "
+    "block MUST NOT be authored as the policy, and its rationale that the "
+    "run never consults it, so adoption would honour a knob the registry "
+    "already tells authors not to set"
+)
+
+#: The page size of a database pagination variant.
+DATABASE_PAGE_SIZE = (
+    "an author declaring a page size expects the read fetched in pages of "
+    "that size; the pinned manifest claims no read of it, so a database "
+    "read pages at the pipeline runtime's batch size"
 )
 
 
@@ -138,18 +146,19 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "min_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition(
-        "endpoints.Param", "operators", "engine_gap",
-        "an author publishing a param's operator set expects a stream filter "
-        "using an operator outside it to be refused (RULE-STRM-026 names the "
-        "obligation); the pinned manifest claims no read of the set, so the "
-        "filter is sent with whatever operator the stream declares",
+        "endpoints.Param", "operators", "authoring_only",
+        "read by the registry's on-save comparison of a stream's filter "
+        "operators against the subset this param declares (RULE-STRM-026 "
+        "names the obligation); the pinned manifest claims no read of the "
+        "set, so the run sends the filter with whatever operator the stream "
+        "declares, the save having already refused one outside the set",
     ),
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
         "endpoints.Replication", "supported_methods", "engine_gap",
         "an author naming the methods an endpoint supports expects a stream "
-        "selecting another to be refused (RULE-STRM-025 and RULE-STRM-029 "
-        "name the obligation); the pinned manifest claims no read of the set, "
+        "selecting another to be refused (RULE-STRM-025 names the "
+        "obligation); the pinned manifest claims no read of the set, "
         "so the stream's method runs whether or not the endpoint declared it",
     ),
     # --- endpoints.ResponseExtraction: named metadata extractions -----------
@@ -177,7 +186,7 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition(
         "endpoints.WindowCursorMapping", "cursor_field", "engine_gap",
         "an author declaring a windowed cursor mapping expects an incremental "
-        "read bounded at both ends by the watermark; the pinned manifest "
+        "read bounded at each end by the watermark; the pinned manifest "
         "claims no read of any field of the windowed form, so the document "
         "validates and the read runs as though no cursor mapping were declared",
     ),
@@ -275,19 +284,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     # --- stream.KeysetDatabasePagination / OffsetDatabasePagination: the
     # tag selects the shape; the size reaches nobody, as the field's own
     # description already states.
-    FieldDisposition(
-        "stream.KeysetDatabasePagination", "page_size", "engine_gap",
-        "an author declaring a page size expects the read fetched in pages of "
-        "that size; the pinned manifest claims no read of it, so a database "
-        "read pages at the pipeline runtime's batch size",
-    ),
+    FieldDisposition("stream.KeysetDatabasePagination", "page_size", "engine_gap", DATABASE_PAGE_SIZE),
     FieldDisposition("stream.KeysetDatabasePagination", "type", "structural", UNION_DISCRIMINATOR),
-    FieldDisposition(
-        "stream.OffsetDatabasePagination", "page_size", "engine_gap",
-        "an author declaring a page size expects the read fetched in pages of "
-        "that size; the pinned manifest claims no read of it, so a database "
-        "read pages at the pipeline runtime's batch size",
-    ),
+    FieldDisposition("stream.OffsetDatabasePagination", "page_size", "engine_gap", DATABASE_PAGE_SIZE),
     FieldDisposition("stream.OffsetDatabasePagination", "type", "structural", UNION_DISCRIMINATOR),
     # --- stream.StreamSource: the stream-owned identity hint ----------------
     FieldDisposition(
@@ -299,8 +298,8 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "claiming the read is what retires this entry",
     ),
     # --- stream.StreamValidationErrorHandling / Validation.error_handling ---
-    FieldDisposition("stream.StreamValidationErrorHandling", "strategy", "engine_gap", VALIDATION_ERROR_HANDLING_OVERRIDE),
-    FieldDisposition("stream.StreamValidationErrorHandling", "max_retries", "engine_gap", VALIDATION_ERROR_HANDLING_OVERRIDE),
-    FieldDisposition("stream.StreamValidationErrorHandling", "retry_delay_seconds", "engine_gap", VALIDATION_ERROR_HANDLING_OVERRIDE),
-    FieldDisposition("stream.Validation", "error_handling", "engine_gap", VALIDATION_ERROR_HANDLING_OVERRIDE),
+    FieldDisposition("stream.StreamValidationErrorHandling", "strategy", "contract_surplus", VALIDATION_ERROR_HANDLING_OVERRIDE),
+    FieldDisposition("stream.StreamValidationErrorHandling", "max_retries", "contract_surplus", VALIDATION_ERROR_HANDLING_OVERRIDE),
+    FieldDisposition("stream.StreamValidationErrorHandling", "retry_delay_seconds", "contract_surplus", VALIDATION_ERROR_HANDLING_OVERRIDE),
+    FieldDisposition("stream.Validation", "error_handling", "contract_surplus", VALIDATION_ERROR_HANDLING_OVERRIDE),
 )

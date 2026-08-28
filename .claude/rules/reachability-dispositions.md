@@ -29,8 +29,7 @@ means. What a reader settles is which one applies:
 - Something off the run-time path consumes the field → `authoring_only`, and
   the reason **names that consumer**. "Documentation" names nothing.
 - Pydantic settles the value before the engine holds the object →
-  `structural`, the kind with a mechanical half: the guard refuses it on a
-  field that is not `Literal`-typed.
+  `structural`.
 - Nothing consumes it, and the question is **who owes the fix**:
   - the engine → `engine_gap`;
   - the contract → `contract_surplus`, and the reason says why removal
@@ -66,7 +65,8 @@ pin guard and the root `CLAUDE.md` point here rather than restating it.
 1. Replace the vendored manifest with the newly published object, byte for
    byte, and move the version and sha256 constants in
    `census/consumption/pin.py` together (the sha is `sha256` of the published
-   bytes; `latest.json` also states it). The manifest itself is never edited.
+   bytes; the pin guard holds the pointer's `sha256` to it). The manifest
+   itself is never edited.
 2. Run `scripts/render_contract_consumption.py check`. It reports the entries
    whose fields the new manifest now claims — delete those — and the fields
    it leaves unread with no entry — write a disposition for each, by hand,

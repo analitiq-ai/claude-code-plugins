@@ -43,19 +43,29 @@ def _urls(guard):
     }
 
 
+def _pointer(guard, latest, sha256=None) -> bytes:
+    """A `latest.json` document: version plus the sha256 the pointer states
+    for the object it names — the pin's, unless a test says otherwise."""
+    return json.dumps(
+        {
+            "version": latest,
+            guard.pin.POINTER_SHA256_KEY: (
+                guard.pin.CONSUMPTION_SHA256 if sha256 is None else sha256
+            ),
+        }
+    ).encode()
+
+
 def _stub_fetch(guard, monkeypatch, *, latest, object_bytes=None, latest_bytes=None):
     """Healthy by default: the published object IS the vendored bytes and the
-    pointer names the pin. `object_bytes` expresses a divergent republish —
-    step 2 is the check the whole guard exists for, so it must be expressible
-    here; `latest_bytes` expresses a malformed pointer document."""
+    pointer names the pin, version and sha256. `object_bytes` expresses a
+    divergent republish — step 2 is the check the whole guard exists for, so
+    it must be expressible here; `latest_bytes` expresses a pointer document
+    a test shapes itself."""
     urls = _urls(guard)
     responses = {
         urls["object"]: _vendored_bytes(guard) if object_bytes is None else object_bytes,
-        urls["latest"]: (
-            json.dumps({"version": latest}).encode()
-            if latest_bytes is None
-            else latest_bytes
-        ),
+        urls["latest"]: _pointer(guard, latest) if latest_bytes is None else latest_bytes,
     }
     monkeypatch.setattr(guard, "_fetch", lambda url: responses[url])
 
@@ -67,7 +77,7 @@ def test_healthy_publication_passes(guard, monkeypatch, capsys):
     assert "engine has published" not in out
     # The full-run banner names everything the network half certified — it is
     # the only signal a CI reader gets about which checks actually executed.
-    assert "published object + hash + shape + declared version + latest pointer" in out
+    assert "published object + hash + shape + declared version + latest pointer + pointer sha" in out
 
 
 def test_newer_engine_publication_is_a_notice_not_a_failure(guard, monkeypatch, capsys):
@@ -77,6 +87,55 @@ def test_newer_engine_publication_is_a_notice_not_a_failure(guard, monkeypatch, 
     assert "engine has published v9.0.0" in out
     # A notice must not read as the exit-1 remediation.
     assert "re-vendor the published object (and re-run" not in err
+
+
+def test_newer_pointer_with_a_different_sha_is_still_a_notice(guard, monkeypatch, capsys):
+    """The pin says nothing about bytes it does not vendor: a newer pointer
+    naming its own sha is the notice, never the sha divergence."""
+    _stub_fetch(
+        guard, monkeypatch, latest="9.0.0", latest_bytes=_pointer(guard, "9.0.0", "f" * 64)
+    )
+    assert guard.main([]) == 0
+    out, err = capsys.readouterr()
+    assert "engine has published v9.0.0" in out
+    assert "different bytes" not in err
+
+
+def test_pointer_at_the_pin_naming_different_bytes_is_a_divergence(
+    guard, monkeypatch, capsys
+):
+    """The pointer names the pinned version but a sha the pin does not:
+    exit 1, and the divergence names the pointer, not the vendored file."""
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        latest=guard.pin.CONSUMPTION_VERSION,
+        latest_bytes=_pointer(guard, guard.pin.CONSUMPTION_VERSION, "f" * 64),
+    )
+    assert guard.main([]) == 1
+    err = capsys.readouterr().err
+    assert "the pointer names different bytes than the pin" in err
+    assert "differs from the vendored copy" not in err
+
+
+@pytest.mark.parametrize("sha256", [None, 3, ["abc"]])
+def test_pointer_at_the_pin_without_string_sha_is_a_guard_error(
+    guard, monkeypatch, capsys, sha256
+):
+    """A pointer the guard cannot hold to the pin is "could not run", never
+    a divergence and never green."""
+    document = {"version": guard.pin.CONSUMPTION_VERSION}
+    if sha256 is not None:
+        document[guard.pin.POINTER_SHA256_KEY] = sha256
+    _stub_fetch(
+        guard,
+        monkeypatch,
+        latest=guard.pin.CONSUMPTION_VERSION,
+        latest_bytes=json.dumps(document).encode(),
+    )
+    assert guard.main([]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err and "has no string `sha256`" in err
 
 
 def test_newer_publication_notice_is_annotated_on_actions(guard, monkeypatch, capsys):

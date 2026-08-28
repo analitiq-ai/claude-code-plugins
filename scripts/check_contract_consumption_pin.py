@@ -17,11 +17,16 @@ published truth:
      both fail — the publish side is first-write-wins, so bytes must agree).
      Byte-equality is what lets step 1 assert the published manifest's
      self-declared version by asserting the vendored copy's.
-  3. The published `latest.json` pointer is consulted: a newer engine version
-     than the pin is a NOTICE, not a failure — the census still grades
-     against a manifest the engine did publish; adopting it is a deliberate
-     pin bump, never an automatic one (the procedure is the pin-bump section
-     of `.claude/rules/reachability-dispositions.md`). A pointer BELOW the
+  3. The published `latest.json` pointer is consulted. A pointer AT the pin
+     must also carry a string `sha256` equal to the pinned one: the pointer
+     naming the pinned version but different bytes is a divergence, and a
+     pointer at the pinned version with no string `sha256` is a GuardError
+     (the pointer cannot be held to the pin). A newer engine version than
+     the pin is a NOTICE, not a failure — the census still grades against a
+     manifest the engine did publish; adopting it is a deliberate pin bump,
+     never an automatic one (the procedure is the pin-bump section of
+     `.claude/rules/reachability-dispositions.md`), and its sha is not
+     compared, since the pin says nothing about it. A pointer BELOW the
      pin fails, as a POINTER problem, not an unpublished pin: this step runs only after step 2
      fetched the pinned immutable object (a genuinely unpublished pin dies
      there as a GuardError, exit 2), so the mutable pointer is lagging a
@@ -127,7 +132,8 @@ def _read_vendored() -> bytes:
     except OSError as exc:
         raise GuardError(
             f"cannot read the vendored manifest {pin.MANIFEST_PATH}: {exc} — "
-            "re-vendor the published object (see census/consumption/pin.py)"
+            "re-vendor the published object — the procedure is the pin-bump "
+            "section of .claude/rules/reachability-dispositions.md"
         ) from exc
 
 
@@ -213,7 +219,24 @@ def check_published(failures: list[str]) -> list[str]:
             "bump — the procedure is the pin-bump section of "
             ".claude/rules/reachability-dispositions.md"
         )
-    elif latest_v < pinned_v:
+    elif latest_v == pinned_v:
+        # The pointer names the pinned version, so it must name the pinned
+        # bytes too. A newer pointer is not held to anything: the pin says
+        # nothing about bytes it does not vendor.
+        pointer_sha = pointer.get(pin.POINTER_SHA256_KEY)
+        if not isinstance(pointer_sha, str):
+            raise GuardError(
+                f"{pointer_name} names the pinned v{latest} but has no string "
+                f"`{pin.POINTER_SHA256_KEY}` to hold to the pin"
+            )
+        if pointer_sha != pin.CONSUMPTION_SHA256:
+            failures.append(
+                f"{pin.CONSUMPTION_RESOURCE}: latest.json names v{latest} with "
+                f"sha256 {pointer_sha}, but the pin says "
+                f"{pin.CONSUMPTION_SHA256} — the pointer names different bytes "
+                "than the pin"
+            )
+    else:
         # Reachable only AFTER step 2 fetched the pinned immutable object
         # successfully (a genuinely unpublished pin raises GuardError at that
         # fetch, exit 2, and never gets here) — so "the engine has not
@@ -308,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
     scope = (
         "offline hash + shape + declared version"
         if args.offline
-        else "published object + hash + shape + declared version + latest pointer"
+        else "published object + hash + shape + declared version + latest pointer + pointer sha"
     )
     print(
         f"contract-consumption pin OK ({scope}): "
