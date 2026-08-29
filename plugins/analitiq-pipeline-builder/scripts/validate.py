@@ -152,14 +152,15 @@ def _model_findings(entity: str, doc) -> list[dict]:
         ]
         if len(decided) == len(errors):
             return decided
+        also = ("Anything else reported here is what was decided before it "
+                "stopped" if decided else "Nothing else was decided")
         return decided + [_finding(
             "document", "error", "/",
             f"the {entity} document could not be checked to the end: it nests "
-            "deeper than this tool can walk. What is reported above is what "
-            "was decided before it stopped — the absence of a finding "
-            "anywhere else proves nothing, and the cycle the underlying error "
-            "names is the walk's own, not the document's. Flattening the "
-            "nesting is what gets the rest checked.")]
+            f"deeper than this tool can walk. {also} — the absence of a "
+            "finding elsewhere proves nothing, and the cycle the underlying "
+            "error names is the walk's own, not the document's. Flattening "
+            "the nesting is what gets the rest checked.")]
 
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:

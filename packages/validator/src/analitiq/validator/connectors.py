@@ -490,11 +490,12 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                     "something the node reaches takes the JSON Schema "
                     "implementation somewhere it cannot come back from: a "
                     "reference with no target, one that leads back to itself, "
-                    "or a value a keyword cannot compute against. A "
-                    "`RecursionError` above means the reference leads back to "
-                    "itself, or the schema nests deeper than this tool walks — "
-                    "that clause carries the type alone, deliberately. Any "
-                    "other text names the failure directly. RULE-ENDP-026 "
+                    "a value a keyword cannot compute against, or a schema "
+                    "too large to hold. Where the text above is a bare type "
+                    "name — `RecursionError`, `MemoryError` — it carries no "
+                    "more than that, deliberately: the reference leads back to "
+                    "itself, or the document is bigger than this tool walks. "
+                    "Any other text names the failure directly. RULE-ENDP-026 "
                     "governs what a reference here may be"
                 ),
                 scope=(
@@ -891,7 +892,7 @@ def _load_json_sibling(path: Path, validator_id: str) -> tuple[Any, list[dict]]:
     """
     try:
         return json.loads(path.read_text()), []
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         return None, [finding(validator_id, "error", "/",
                               f"sibling {path.name} could not be read or parsed ({exc}).")]
 

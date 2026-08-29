@@ -262,18 +262,21 @@ PLUGIN_SOURCE_GLOBS = ("plugins/*/scripts/*.py", "plugins/*/agents/*.py")
 PLUGIN_PROSE_GLOBS = ("plugins/*/agents/*.md",)
 
 #: `from <pinned module> import …` as written in prose, in either the bare or
-#: the parenthesised form, wherever on the line it starts. Locating, not
-#: deciding (`.claude/rules/guards.md`): it finds import statements, and the
-#: pinned wheel decides whether the names exist.
+#: the parenthesised form. Anchored at the start of a line (allowing a fence's
+#: indent) because agent prose is where a sentence MENTIONS an import inline —
+#: matching one of those makes the guard refuse a symbol nobody asked to have
+#: checked. Locating, not deciding (`.claude/rules/guards.md`): it finds import
+#: statements, and the pinned wheel decides whether the names exist.
 #: Bounded to ONE line. `\s` matches a newline, so an unbounded name list
 #: runs past the statement and collects whatever follows — which reported a
 #: name no import ever wrote.
 _PROSE_IMPORT_RE = re.compile(
-    r"from[^\S\n]+"
+    r"^[^\S\n]*from[^\S\n]+"
     r"((?:analitiq\.validator|analitiq\.contracts)"
     r"(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
     r"[^\S\n]+import[^\S\n]+"
-    r"(\([^)]*\)|[^\n;#\"']+)",
+    r"(\([^)]*\)|[^\n;#]+)",
+    re.MULTILINE,
 )
 
 
@@ -284,10 +287,16 @@ def _import_names(clause: str) -> list[str]:
     (the bound name is what a caller could use, but the WHEEL is asked for the
     exported one, so the left half is what matters), and a trailing comment.
     A clause this cannot read is an error at the call site, not a silent skip.
+
+    Comments are stripped per LINE, before the split on commas. Stripping them
+    per comma-part loses every name after a `#` up to the next comma — which,
+    in the parenthesised form, is the rest of the following lines. That dropped
+    names silently and the guard then printed OK.
     """
+    body = "\n".join(line.split("#")[0] for line in clause.splitlines())
     names = []
-    for part in clause.strip().strip("()").split(","):
-        name = part.split("#")[0].split(" as ")[0].strip()
+    for part in body.strip().strip("()").split(","):
+        name = part.split(" as ")[0].strip()
         if not name:
             continue
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
@@ -315,7 +324,7 @@ def _validator_module(name: str | None) -> bool:
 
 
 def read_plugin_validator_imports() -> dict[str, set[tuple[str, str]]]:
-    """Every name plugin code imports from `analitiq.validator` or a submodule.
+    """Every name plugin code imports from a pinned package or a submodule.
 
     Python is read from the AST: the question is which names a module binds,
     which is what an import statement IS, and a regex over the same lines
@@ -386,7 +395,7 @@ def probe_pinned_exports(
                         for module, name in names})
     if not qualified:
         raise GuardError(
-            "no plugin source imports anything from analitiq.validator — the "
+            "no plugin source imports anything from the pinned packages — the "
             f"globs {PLUGIN_SOURCE_GLOBS + PLUGIN_PROSE_GLOBS} match nothing, "
             "so this check is reading nothing and would report agreement"
         )
@@ -436,7 +445,7 @@ def main() -> int:
         print(f"canonical drivers ({CANON_SOURCE.name}): {', '.join(drivers)}")
 
         wanted = read_plugin_validator_imports()
-        print(f"plugin imports from analitiq.validator: "
+        print(f"plugin imports from the pinned packages: "
               f"{sum(len(n) for n in wanted.values())} across {len(wanted)} file(s)")
 
         rejected, unexported = probe_pinned_wheel(pin, drivers, wanted)

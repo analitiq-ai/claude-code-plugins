@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CONTRACTS_SRC_ROOT = REPO_ROOT / "contract-models" / "src"
-VALIDATOR_SRC_ROOT = REPO_ROOT / "validator" / "src"
+PACKAGES_ROOT = Path(__file__).resolve().parents[2]
+CONTRACTS_SRC_ROOT = PACKAGES_ROOT / "contract-models" / "src"
+VALIDATOR_SRC_ROOT = PACKAGES_ROOT / "validator" / "src"
 
 # The contract models bind DOMAIN at import for the `$schema` host Literal. The
 # published package pins it; in-repo the ambient value wins, so set the public

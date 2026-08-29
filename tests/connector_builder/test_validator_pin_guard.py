@@ -212,6 +212,38 @@ def test_an_unexported_name_fails_in_every_window(guard, monkeypatch, shipped):
     assert guard.main() == 1
 
 
+@pytest.mark.parametrize("clause, expected", [
+    ("main", ["main"]),
+    ("a, b", ["a", "b"]),
+    ("main as m", ["main"]),
+    ("main  # noqa: F401", ["main"]),
+    ("(validate_document, check_coverage)", ["validate_document", "check_coverage"]),
+    # The two together. Stripping comments per comma-part instead of per line
+    # loses every name after the `#` up to the next comma — which here is the
+    # rest of the following lines — and the guard then prints OK.
+    ("(  # the pinned models\n    First,\n    Second,\n)", ["First", "Second"]),
+    ("(\n    first,   # the entry point\n    second,\n)", ["first", "second"]),
+])
+def test_the_import_reader_reads_the_forms_an_author_writes(guard, clause, expected):
+    """The accept path. Its refusal had a test and this did not, which is why
+    a parser that silently dropped half a parenthesised list shipped green."""
+    assert guard._import_names(clause) == expected
+
+
+def test_the_import_reader_ignores_an_inline_mention(guard, monkeypatch, tmp_path):
+    """Agent prose is where a sentence MENTIONS an import inside backticks.
+    Matching one makes the guard refuse a symbol nobody asked to have checked,
+    and accuse the author of dropping coverage."""
+    agents = tmp_path / "plugins" / "p" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "a.md").write_text(
+        "The script does `from analitiq.validator import validate_document` "
+        "before it runs.\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "REPO_ROOT", tmp_path)
+
+    assert guard.read_plugin_validator_imports() == {}
+
+
 def test_the_import_reader_refuses_a_clause_it_cannot_read(guard, monkeypatch, tmp_path):
     """Prose has no AST, so the name list is parsed by hand — and a clause the
     parser cannot read must be an error, not a silent skip under an OK line
