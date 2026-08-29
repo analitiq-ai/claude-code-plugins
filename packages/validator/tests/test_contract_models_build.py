@@ -70,6 +70,7 @@ def test_dependency_guard_rejects_a_private_import(tmp_path, monkeypatch):
     leaky = tmp_path / "connection.py"
     leaky.write_text("from alq.dynamodb import get_store\n")
     monkeypatch.setattr(b, "_source_files", lambda: [leaky])
+    # `build.py`'s own constant, not this module's.
     monkeypatch.setattr(b, "REPO_ROOT", tmp_path)
     with pytest.raises(SystemExit, match="cannot depend"):
         b.dependency_guard()

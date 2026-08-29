@@ -14,9 +14,9 @@ import re
 import tomllib
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-VALIDATOR_PYPROJECT = REPO_ROOT / "validator" / "pyproject.toml"
-CONTRACT_MODELS_PYPROJECT = REPO_ROOT / "contract-models" / "pyproject.toml"
+PACKAGES_ROOT = Path(__file__).resolve().parents[2]
+VALIDATOR_PYPROJECT = PACKAGES_ROOT / "validator" / "pyproject.toml"
+CONTRACT_MODELS_PYPROJECT = PACKAGES_ROOT / "contract-models" / "pyproject.toml"
 
 
 def _project(pyproject: Path) -> dict:

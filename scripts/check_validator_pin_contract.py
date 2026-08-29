@@ -261,48 +261,64 @@ def probe_pinned_wheel(
 PLUGIN_SOURCE_GLOBS = ("plugins/*/scripts/*.py", "plugins/*/agents/*.py")
 PLUGIN_PROSE_GLOBS = ("plugins/*/agents/*.md",)
 
-#: `from <pinned module> import …` as written in prose, in either the bare or
-#: the parenthesised form. Anchored at the start of a line (allowing a fence's
-#: indent) because agent prose is where a sentence MENTIONS an import inline —
-#: matching one of those makes the guard refuse a symbol nobody asked to have
-#: checked. Locating, not deciding (`.claude/rules/guards.md`): it finds import
-#: statements, and the pinned wheel decides whether the names exist.
-#: Bounded to ONE line. `\s` matches a newline, so an unbounded name list
-#: runs past the statement and collects whatever follows — which reported a
-#: name no import ever wrote.
-_PROSE_IMPORT_RE = re.compile(
-    r"^[^\S\n]*from[^\S\n]+"
+#: Where a `from <pinned module> import …` statement STARTS, in prose. Only
+#: the opening is matched; the clause is read by scanning forward, because a
+#: regex for the parenthesised form stops at the first `)` — and a `)` inside
+#: a comment is not the closing one, so it truncated the list silently.
+#:
+#: Anchored at the start of a line, after any quoting or list marker a
+#: markdown file puts there, because agent prose is where a sentence MENTIONS
+#: an import inline: matching one of those makes the guard refuse a symbol
+#: nobody asked to have checked.
+_PROSE_IMPORT_START = re.compile(
+    r"^[>\-*\s]*from[^\S\n]+"
     r"((?:analitiq\.validator|analitiq\.contracts)"
     r"(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
-    r"[^\S\n]+import[^\S\n]+"
-    r"(\([^)]*\)|[^\n;#]+)",
-    re.MULTILINE,
+    r"[^\S\n]+import[^\S\n]+(.*)$",
 )
 
 
-def _import_names(clause: str) -> list[str]:
-    """The names an import clause binds, or `[]` if it binds none readably.
+def _strip_comment(line: str) -> str:
+    """The code half of a line. Quotes are not tracked — a `#` inside a string
+    here would be prose about an import, not one."""
+    return line.split("#")[0]
 
-    Handles what an author actually writes: `(a, b)` across lines, `a as b`
-    (the bound name is what a caller could use, but the WHEEL is asked for the
-    exported one, so the left half is what matters), and a trailing comment.
-    A clause this cannot read is an error at the call site, not a silent skip.
 
-    Comments are stripped per LINE, before the split on commas. Stripping them
-    per comma-part loses every name after a `#` up to the next comma — which,
-    in the parenthesised form, is the rest of the following lines. That dropped
-    names silently and the guard then printed OK.
+def _iter_prose_imports(text: str):
+    """`(module, clause)` for each import statement prose spells out.
+
+    Scans rather than matches. The bare form ends at its line; the
+    parenthesised form ends at the `)` that closes it, counted over
+    comment-stripped lines so a paren inside a comment cannot end it early,
+    and so a list spanning lines is read whole.
     """
-    body = "\n".join(line.split("#")[0] for line in clause.splitlines())
-    names = []
-    for part in body.strip().strip("()").split(","):
-        name = part.split(" as ")[0].strip()
-        if not name:
+    lines = text.splitlines()
+    index = 0
+    while index < len(lines):
+        match = _PROSE_IMPORT_START.match(lines[index])
+        if not match:
+            index += 1
             continue
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-            return []
-        names.append(name)
-    return names
+        module, rest = match.group(1), match.group(2)
+        code = _strip_comment(rest)
+        if "(" not in code:
+            yield module, code
+            index += 1
+            continue
+        depth = code.count("(") - code.count(")")
+        clause = [code]
+        index += 1
+        while depth > 0 and index < len(lines):
+            code = _strip_comment(lines[index])
+            depth += code.count("(") - code.count(")")
+            clause.append(code)
+            index += 1
+        if depth > 0:
+            raise GuardError(
+                f"an import from {module} opens a name list that never closes: "
+                f"{' '.join(c.strip() for c in clause)!r}"
+            )
+        yield module, "\n".join(clause)
 
 
 #: Both packages the pin installs. `analitiq-validator` depends on
@@ -310,6 +326,34 @@ def _import_names(clause: str) -> list[str]:
 #: contract model at run time is admitted against the version that pin
 #: resolves to, exactly as it is for the validator's own names.
 _PINNED_ROOTS = ("analitiq.validator", "analitiq.contracts")
+
+
+def _import_names(clause: str) -> list[str]:
+    """The names an import clause binds, or `[]` if it binds none readably.
+
+    The clause arrives comment-stripped from :func:`_iter_prose_imports`, so
+    this only has to read the list: `a, b`, the parenthesised form across
+    lines, and `a as b` — where the WHEEL is asked for the exported name, so
+    the left half is what matters.
+
+    A clause this cannot read is an error at the call site, not a silent skip:
+    a name dropped here is a name the guard never asks about, under an OK line
+    saying it asked about every one.
+    """
+    # A shell quote closing a `python3 -c "…"` one-liner is part of the
+    # SENTENCE, not of the last name — and the connector agent writes exactly
+    # that form. Stripped from the end only, so a quote anywhere a name could
+    # be still makes the clause unreadable.
+    body = clause.replace("(", " ").replace(")", " ").rstrip().rstrip("\"'")
+    names = []
+    for part in body.split(","):
+        name = part.split(" as ")[0].strip()
+        if not name:
+            continue
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            return []
+        names.append(name)
+    return names
 
 
 def _validator_module(name: str | None) -> bool:
@@ -332,9 +376,16 @@ def read_plugin_validator_imports() -> dict[str, set[tuple[str, str]]]:
     regex because there is no AST for a markdown file — it still only LOCATES
     the statement; the pinned wheel decides.
 
-    Extraction is all-or-error. A source this parser cannot read is a file
-    dropped out of coverage under an OK line claiming full coverage, which is
-    the shape `.claude/rules/guards.md` calls a silent exemption.
+    Extraction is all-or-error for what it FINDS: a source that does not
+    parse, and a clause whose names cannot be read, both raise rather than
+    dropping out of coverage under an OK line claiming full coverage — the
+    shape `.claude/rules/guards.md` calls a silent exemption.
+
+    What it does not reach is the reader's half: an import statement written
+    somewhere the locator does not look. It reads Python from the AST, and
+    prose from the start of a line after any quoting or list marker; an
+    import buried mid-sentence or inside an unusual wrapper is not found, and
+    a green run says nothing about one.
     """
     import ast
 
@@ -364,7 +415,7 @@ def read_plugin_validator_imports() -> dict[str, set[tuple[str, str]]]:
         for path in sorted(REPO_ROOT.glob(glob)):
             rel = path.relative_to(REPO_ROOT).as_posix()
             names = set()
-            for module, clause in _PROSE_IMPORT_RE.findall(
+            for module, clause in _iter_prose_imports(
                     path.read_text(encoding="utf-8")):
                 if not _validator_module(module):
                     continue
@@ -399,16 +450,22 @@ def probe_pinned_exports(
             f"globs {PLUGIN_SOURCE_GLOBS + PLUGIN_PROSE_GLOBS} match nothing, "
             "so this check is reading nothing and would report agreement"
         )
+    # A module that will not import is a defective WHEEL, not a missing name,
+    # so it raises out of the probe and surfaces as exit 2 — laundering it into
+    # the unexported list would make "publish a release carrying them" the
+    # remedy for a broken install. And `from X import Y` binds a SUBMODULE as
+    # readily as an attribute, so the probe asks the question the import asks.
     probe = (
         "import importlib, json, sys\n"
         "missing = []\n"
         "for dotted in json.loads(sys.argv[1]):\n"
         "    module, _, name = dotted.rpartition('::')\n"
+        "    mod = importlib.import_module(module)\n"
+        "    if hasattr(mod, name):\n"
+        "        continue\n"
         "    try:\n"
-        "        mod = importlib.import_module(module)\n"
-        "    except Exception:\n"
-        "        missing.append(dotted); continue\n"
-        "    if not hasattr(mod, name):\n"
+        "        importlib.import_module(f'{module}.{name}')\n"
+        "    except ImportError:\n"
         "        missing.append(dotted)\n"
         "json.dump(missing, sys.stdout)"
     )

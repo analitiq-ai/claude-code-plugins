@@ -61,7 +61,7 @@ def _load_rules(path: Path, direction: str) -> list:
     rule the map intended. Failing loud keeps a reported gap unambiguous."""
     try:
         doc = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError) as exc:
         raise ValueError(f"{path}: {exc}") from exc
     if not isinstance(doc, list):
         raise ValueError(f"{path} is not a JSON array of rules")
@@ -133,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         raw = Path(args.probes_file).read_text() if args.probes_file else sys.stdin.read()
         probes = json.loads(raw)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError) as exc:
         return _fail(f"cannot read probes: {exc}")
     if not isinstance(probes, list) or not all(isinstance(p, str) for p in probes):
         return _fail("probes must be a JSON array of strings")

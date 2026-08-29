@@ -216,18 +216,52 @@ def test_an_unexported_name_fails_in_every_window(guard, monkeypatch, shipped):
     ("main", ["main"]),
     ("a, b", ["a", "b"]),
     ("main as m", ["main"]),
-    ("main  # noqa: F401", ["main"]),
+    # No comment cases here — the scanner strips them before this sees a
+    # clause, and handing one in grades a seam that does not exist.
     ("(validate_document, check_coverage)", ["validate_document", "check_coverage"]),
-    # The two together. Stripping comments per comma-part instead of per line
-    # loses every name after the `#` up to the next comma — which here is the
-    # rest of the following lines — and the guard then prints OK.
-    ("(  # the pinned models\n    First,\n    Second,\n)", ["First", "Second"]),
-    ("(\n    first,   # the entry point\n    second,\n)", ["first", "second"]),
+    ("(\n    first,\n    second,\n)", ["first", "second"]),
 ])
 def test_the_import_reader_reads_the_forms_an_author_writes(guard, clause, expected):
-    """The accept path. Its refusal had a test and this did not, which is why
-    a parser that silently dropped half a parenthesised list shipped green."""
+    """The name list alone, already comment-stripped by the scanner that
+    produces it. Comments are the SCANNER's contract — a case handing them to
+    this function grades a seam that does not exist, which is how a locator
+    truncating the clause went unnoticed while these passed. The file-level
+    cases below cross that seam."""
     assert guard._import_names(clause) == expected
+
+
+@pytest.mark.parametrize("prose, expected", [
+    # The seam the accept-path cases above do not cross. Each of these is a
+    # FILE, read end to end, so a locator that truncates the clause before the
+    # name parser sees it is caught — which the parser's own cases cannot do,
+    # since they are handed complete clauses by hand.
+    ("from analitiq.validator import main\n", ["main"]),
+    ("from analitiq.validator import (\n    main,\n    check_coverage,\n)\n",
+     ["check_coverage", "main"]),
+    # A `)` inside a comment is not the one that closes the list.
+    ("from analitiq.validator import (\n"
+     "    main,   # returns (findings, code)\n"
+     "    check_coverage,\n)\n", ["check_coverage", "main"]),
+    # The shell one-liner the connector agent writes.
+    ('python3 -c "\nfrom analitiq.validator import main\n"\n', ["main"]),
+    # Quoted or listed by markdown.
+    ("> from analitiq.validator import main\n", ["main"]),
+    ("- from analitiq.validator import main\n", ["main"]),
+])
+def test_the_import_reader_reads_a_whole_file(
+    guard, monkeypatch, tmp_path, prose, expected,
+):
+    """End to end, from file text to names — the seam where a truncating
+    locator hides. Grading the parser alone passed a clause the locator could
+    never have produced, so a regex that stopped at the first `)` shipped
+    green over names it never asked the wheel about."""
+    agents = tmp_path / "plugins" / "p" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "a.md").write_text(prose, encoding="utf-8")
+    monkeypatch.setattr(guard, "REPO_ROOT", tmp_path)
+
+    found = guard.read_plugin_validator_imports()
+    assert sorted(n for _m, n in found["plugins/p/agents/a.md"]) == expected
 
 
 def test_the_import_reader_ignores_an_inline_mention(guard, monkeypatch, tmp_path):

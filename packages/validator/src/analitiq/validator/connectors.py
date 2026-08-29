@@ -289,8 +289,8 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
             vid="embedded-json-schema",
             path=pointer,
             scope=(
-                f"The embedded schema at {where} was not checked; every other "
-                "schema on this document was."
+                f"The embedded schema at {where} was not checked; the rest of "
+                "this document was still attempted."
             )))
     return findings
 
@@ -499,8 +499,8 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                     "governs what a reference here may be"
                 ),
                 scope=(
-                    f"The recorded sample at {at} was not graded; every other "
-                    "sample on this document was still attempted, and one "
+                    f"The recorded sample at {at} was not graded; the rest of "
+                    "this document was still attempted, and another sample "
                     "reaching the same construct reports the same way."
                 )))
     return findings
@@ -892,7 +892,7 @@ def _load_json_sibling(path: Path, validator_id: str) -> tuple[Any, list[dict]]:
     """
     try:
         return json.loads(path.read_text()), []
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError) as exc:
         return None, [finding(validator_id, "error", "/",
                               f"sibling {path.name} could not be read or parsed ({exc}).")]
 
@@ -914,7 +914,8 @@ def _guarded_type_map_findings(doc: Any, direction: str, name: str) -> list[dict
         _type_map_findings, doc, direction,
         vid="type-map-coverage",
         path="/",
-        scope=f"The sibling {name} was not checked; the rest of the connector was.")
+        scope=f"The sibling {name} was not checked; the rest of the connector "
+          "was still attempted.")
 
 
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:
@@ -1043,8 +1044,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             vid="document",
             path="/",
             scope=(
-                f"Endpoint {ep_path.name} was not checked to the end; every "
-                "other endpoint in this connector was."
+                f"Endpoint {ep_path.name} was not checked to the end; the "
+                "rest of this connector was still attempted."
             )))
     return findings
 
