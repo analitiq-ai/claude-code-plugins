@@ -56,6 +56,7 @@ instead:
 | `"nothing else"`, `"no others"` beside an enumeration | this sentence still closes the set | `no-cardinality-restatements.md` |
 | `must` / `every` / `only` / `defaults to` | this sentence states an obligation | `contract-prose.md` |
 | a negation beside a validator's name | this sentence asserts validator behaviour | `plugin-prose.md` |
+| `the engine …` in a rationale | this claim is still true of the engine | `engine-behaviour-claims.md` |
 
 An English phrase used only as an **anchor** — find this sentence, then check
 its backticked members against the contract — is not exempt: it decides which

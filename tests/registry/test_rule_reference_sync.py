@@ -10,7 +10,8 @@ guidance.
 It also guards the *citations*: prose cites rules by id (`RULE-ENDP-009`)
 instead of restating them, so a retired or renumbered id must not be allowed
 to leave dangling references behind a green build. That gate spans EVERY
-plugin under `plugins/` plus the repo-root docs — the registry is one shared
+plugin under `plugins/`, the repo-root docs and every census module under
+`census/` — the registry is one shared
 source, so one scan pins every citation site; a per-plugin copy of the
 scanner would itself be a drift surface.
 
@@ -125,7 +126,8 @@ def test_prose_rule_citations_resolve() -> None:
     citations behind a green build.
 
     Scope is every `*.md` under `plugins/` (all plugins — the registry they cite
-    is shared) plus the repo-root docs. The pre-monorepo globs scanned
+    is shared), the repo-root docs, and every `*.py` under `census/` — the
+    consumption dispositions cite rule ids in their reasons. The pre-monorepo globs scanned
     `REPO_ROOT/src`; the move of that tree to `plugins/` did not repoint the
     scan, so the gate ran vacuously green over zero citations and every pipeline
     citation sat unpinned. Hence the found-citations assert below, which turns a
@@ -144,12 +146,20 @@ def test_prose_rule_citations_resolve() -> None:
     dangling: dict[str, set[str]] = {}
     plugins_root = REPO_ROOT / "plugins"
     plugin_cited = 0
-    for path in [*REPO_ROOT.glob("*.md"), *plugins_root.rglob("*.md")]:
+    census_cited = 0
+    census_root = REPO_ROOT / "census"
+    for path in [
+        *REPO_ROOT.glob("*.md"),
+        *plugins_root.rglob("*.md"),
+        *census_root.rglob("*.py"),
+    ]:
         if path in generated:
             continue  # generated from the registry; covered by the sync test
         ids = _cited_ids(path.read_text(encoding="utf-8"))
         if plugins_root in path.parents:
             plugin_cited += len(ids)
+        if census_root / "consumption" in path.parents:
+            census_cited += len(ids)
         if ids - known:
             dangling[str(path.relative_to(REPO_ROOT))] = ids - known
 
@@ -160,6 +170,12 @@ def test_prose_rule_citations_resolve() -> None:
         "no RULE-* citations found under plugins/ — plugin prose cites dozens, "
         "so the search glob no longer points at it — a scan over zero citations "
         "would otherwise pass vacuously."
+    )
+    assert census_cited, (
+        "no RULE-* citations found under census/consumption/ — the "
+        "dispositions cite rule ids in their reasons, so the search glob no "
+        "longer points at them — a scan over zero citations would otherwise "
+        "pass vacuously."
     )
     assert not dangling, (
         f"prose cites rule ids that no longer exist: {dangling}. Update the "

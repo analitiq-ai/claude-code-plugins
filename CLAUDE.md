@@ -32,7 +32,9 @@ packages/
   contract-models/                # -> analitiq-contract-models (PyPI); the contract
   validator/                      # -> analitiq-validator (PyPI)
 schemas/                          # RENDERED public JSON Schemas -> schemas.analitiq.ai
-census/                           # catalogue of the contract's own prose; NOT shipped
+census/                           # catalogues of the contract's own surface; NOT shipped
+  areas/                          #   every prose site, dispositioned and hash-pinned
+  consumption/                    #   vendored engine consumption manifest + unread-field dispositions
 contributing/                     # contributor guide per plugin; outside the artifact
 scripts/
   render_schemas.py               # renders schemas/ from packages/contract-models
@@ -185,6 +187,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 | `schemas/` | a **resource version** | never — rendered, never authored |
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
+| `census/consumption/dispositions.py` | an **unread contract field** — one a root reaches that the manifest does not claim | the pinned consumption manifest claims no read of it; every such field carries an entry or the build fails |
 | `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
 | `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
 | `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |
@@ -203,6 +206,35 @@ rejects a document that ignores it — a rule id, the model's own shape, a
 written waiver, or `descriptive` for a sentence asking nothing. It lives
 outside `packages/` because it is how this repo keeps its own wording honest,
 not part of the contract, and so does not ship in the wheel.
+
+**The reachability census asks the same question of fields.** A field the
+contract declares, the schema renders and the plugins teach, that no engine
+path ever reads, is invisible to every check above — nothing here can know
+what the engine reads. So the engine publishes it: `contract-consumption`,
+a versioned artifact at `schemas.analitiq.ai` listing the models it hands
+to its run-time path directly (`roots`), the fields it reads by attribute
+(`claims`), and the models it consumes whole as a JSON grammar (`opaque`).
+This repo vendors one pinned version at
+`census/consumption/contract_consumption.json`; `census/consumption/pin.py`
+states the pin (version + sha256) once. `census/consumption/reachability.py`
+walks the live models from the roots through their field annotations,
+never descending into an opaque model, and every reachable field the
+manifest does not claim, on a model it does not consume whole, is
+*unread*: it carries a `FieldDisposition` in
+`census/consumption/dispositions.py` whose kind — `DispositionKind` in
+`census/consumption/disposition.py` owns the names — says what consumes it
+or which side owes the fix. A model no root
+reaches is not covered — unknown, not unread. Guards: `tests/census/test_contract_consumption.py` re-hashes
+the vendored file offline, checks its self-declared version against the
+pin, and fails on every finding the `ConsumptionReport` dataclass in
+`census/consumption/reachability.py` carries;
+`scripts/render_contract_consumption.py check` prints the same report; the
+`contract-consumption-pin-guard` CI job byte-compares the vendored file
+against the published immutable object and surfaces a newer engine
+publication as a notice. Adopting a newer publication is a pin bump, whose
+procedure is the pin-bump section of
+`.claude/rules/reachability-dispositions.md` — never an edit to the
+manifest.
 
 **Where a new fact goes.** Something a document must satisfy is a model field,
 and a name for it is a record. Something an author must judge is plugin craft.
@@ -338,10 +370,17 @@ matches what you are editing:
 - `resolvable-referents.md` — before writing any pointer: a ticket, a path, a
   count, "the rule above". The PR template asks you to attest you applied it.
 - `guards.md` — before writing any check that reads prose this repo tracks.
+- `engine-behaviour-claims.md` — before writing any sentence about what the
+  engine does at run time, and before resting a check on one.
+- `reachability-dispositions.md` — before writing or re-affirming a
+  `FieldDisposition` under `census/consumption/`. The guard compares sets;
+  which kind an unread field is, and whether its reason is honest, is the
+  reader's.
 
-`plugin-prose.md` and `contract-prose.md` are keyed to the surface you are
-editing. `no-drift-surfaces.md`, `no-cardinality-restatements.md` and
-`resolvable-referents.md` are keyed to a class of sentence that rots on any
+`plugin-prose.md`, `contract-prose.md` and `reachability-dispositions.md` are
+keyed to the surface you are editing. `no-drift-surfaces.md`,
+`no-cardinality-restatements.md`, `resolvable-referents.md` and
+`engine-behaviour-claims.md` are keyed to a class of sentence that rots on any
 surface. `guards.md` is keyed to the mechanism that reads them.
 
 ## Conventions

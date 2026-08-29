@@ -17,12 +17,14 @@ the Contents sections `render_reference_toc.py` derives come from documents
 the other renderers write into. `check` runs every generator regardless and
 reports all failures at once, since each check only compares committed state.
 
-Two generators are only ever CHECKED here, never written, because their write
-modes press a judgment a pipeline must not press: `render_schemas.py write`
-cuts a new immutable schema version, and `render_prose_census.py write`
-restamps a changed prose site's hash — the re-affirmation the census exists
-to demand from a person. When either check fails, this script fails, and the
-author runs that generator's write deliberately and reads what it says.
+A generator is only ever CHECKED here, never written, when its write mode
+would press a judgment a pipeline must not press, or when it has no write
+mode at all: `render_schemas.py write` cuts a new immutable schema version,
+`render_prose_census.py write` restamps a changed prose site's hash — the
+re-affirmation the census exists to demand from a person — and
+`render_contract_consumption.py` has no write mode, because a disposition is
+a judgment nothing here can make. When such a check fails, this script
+fails, and the author does deliberately what that generator's output says.
 """
 from __future__ import annotations
 
@@ -58,6 +60,9 @@ PIPELINE = [
     # prose site's hash, which IS the re-affirmation the census exists to
     # demand from a person — an automated restamp would press it silently.
     ("render_prose_census.py", [["check"]], ["check"]),
+    # Check-only because it HAS no write mode: a disposition is a judgment
+    # about an unread field, and nothing here can make one.
+    ("render_contract_consumption.py", [["check"]], ["check"]),
     # Last: Contents sections derive from the documents' final headings, which
     # the renderers above may have just rewritten.
     ("render_reference_toc.py", [["write"]], ["check"]),
