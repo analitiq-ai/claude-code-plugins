@@ -55,15 +55,18 @@ read it either is a weaker claim than a field typed where the engine will not
 look, and it survives the engine changing. Where that is not possible, the
 record's `rationale` says which way the check fails if the reading goes stale.
 
-**Ask, do not infer.** The engine's behaviour is knowable by reading the engine,
-and a maintainer's checkout has an agent that does exactly that. A claim
-written from a guess has cost the whole rule rather than a sentence of it: one
-justified by "the engine hangs on this construct" was built and then abandoned,
-because the engine turns out not to follow the construct at all; another was
-built on a predicate paraphrased from the reader rather than read off it, and
-refused documents the reader handles. Ask first. The answer takes minutes and
-the rule you write is a different rule.
+**Ask, do not infer.** The engine's behaviour is readable in the
+`analitiq-engine` repository; a maintainer's checkout has an agent that reads
+it, and a clone of this one does not, which is why a claim written from a guess
+here is a claim nobody downstream can check either.
 
-**Naming a symbol is not pinning.** `resolve_field_arrow_type` in a docstring
-resolves for nobody holding this clone and reddens nothing when it is renamed.
-State the behaviour, not the function that implements it.
+A guess has cost the whole rule rather than a sentence of it. This repo records
+one: `926575f` withdraws a rule whose predicate was paraphrased from the reader
+rather than read off it, after three builds of it each refused documents the
+reader handles. Read that commit before writing the next such rule — it is the
+cheapest version of the lesson available, and the only one a clone contains.
+
+**Naming a symbol is not pinning.** A function name in a docstring — the
+engine's, or this repo's — resolves for nobody holding a clone of the other
+side, and reddens nothing when it is renamed. State the behaviour, not the
+function that implements it.
