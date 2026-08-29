@@ -169,9 +169,10 @@ def _run_guarded(
     exception TYPE, never by reading a message. `TypeError`, `AttributeError`
     and their kin are how code goes wrong, not how a document does, so they
     are always this tool's to answer for whatever the caller believes.
-    Running out of stack or memory is always the document's size: every walk
-    here recurses on the document's own nesting, so a deep enough one
-    exhausts the stack in whichever walk reaches it first — including walks no
+    Running out of stack or memory is the document's doing rather than this
+    tool's: every walk here recurses on the document's own structure, so a deep
+    enough one — or one that leads back to itself — exhausts the stack in
+    whichever walk reaches it first — including walks no
     guard wraps, which land on the dispatch guard where the default would send
     the author to file a bug about their own document. What is left is a
     check brought down by the content it was reading, and there the caller
@@ -247,12 +248,15 @@ def guard_finding(
     """A finding that says a check could not finish, in the one shape
     :func:`is_guard_finding` recognises.
 
-    Public because this package is not the only thing that runs a check and
-    meets a crash — the plugins drive contract models directly for the kinds
-    the validator has no entry point for. A second emitter writing the wording
-    by hand produces something that reads like a guard finding to a person and
-    like a REJECTION to `is_guard_finding`, which is how an undecided document
-    gets counted as a refused one.
+    Public deliberately, and with no consumer in this repo yet. A second
+    emitter exists in the pipeline plugin, which drives contract models for the
+    kinds the validator has no entry point for — and it cannot use this until
+    `VALIDATOR_PIN` moves past the release carrying it, so it says the check
+    did not finish in its own words meanwhile. The export is what makes that a
+    pin bump rather than a rewrite: writing the wording by hand produces
+    something that reads like a guard finding to a person and like a REJECTION
+    to `is_guard_finding`, which is how an undecided document gets counted as a
+    refused one.
     """
     tail = f"{cause} {scope}" if scope else cause
     return finding(vid, "error", path, f"{_guard_opening(vid)} ({detail}); {tail}")

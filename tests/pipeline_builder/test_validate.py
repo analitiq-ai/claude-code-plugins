@@ -81,6 +81,38 @@ def _write(root: Path, rel: str, doc: dict | list) -> Path:
     return p
 
 
+def test_a_document_too_deep_to_walk_is_not_reported_as_a_cycle():
+    """pydantic-core guards its own recursion and reports the result as an
+    ordinary `recursion_loop` error whose message asserts a cyclic reference.
+
+    On a document that is deep rather than cyclic — a nested `ArrowFieldSpec`,
+    which a stream's mapping target reaches — that is a verdict and a wrong
+    one: the author is told to remove a cycle their document does not have,
+    under a path thousands of characters long. The adapter is the one path
+    here that reaches a contract model without `analitiq.validator`, so
+    nothing else would catch it.
+    """
+    target = {"native_type": "TEXT", "arrow_type": "Utf8"}
+    for _ in range(1200):
+        target = {"native_type": "o", "arrow_type": "Object",
+                  "properties": {"x": target}}
+    doc = {
+        "stream_id": "s", "status": "active",
+        "source": {"connector_id": "c", "resource": {"key": "k"}},
+        "destinations": [],
+        "mapping": {"assignments": [
+            {"target": target, "value": {"literal": 1}}]},
+    }
+    findings = V._model_findings("stream", doc)
+    assert findings, "the deep document produced no finding at all"
+    messages = " ".join(f["message"] for f in findings)
+    assert "could not be checked" in messages, findings
+    assert "cyclic reference" not in messages, findings
+    # And an ordinary rejection is still an ordinary rejection.
+    ordinary = V._model_findings("stream", {"stream_id": "s"})
+    assert any(f["validator"] == "contract-model" for f in ordinary), ordinary
+
+
 @pytest.mark.parametrize("entity,doc", [
     ("connection", CONN_PG), ("connection", CONN_WISE),
     ("pipeline", PIPELINE), ("stream", STREAM), ("database_endpoint", DB_ENDPOINT),

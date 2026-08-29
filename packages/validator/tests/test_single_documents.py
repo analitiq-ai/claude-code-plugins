@@ -9,7 +9,7 @@ exclusive: no authored kind claims another's shape.
 """
 import json
 
-from conftest import run_cli
+from _screen import run_cli
 
 
 SOURCE_CONN = "11111111-1111-4111-8111-111111111111"

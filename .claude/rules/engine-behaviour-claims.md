@@ -66,8 +66,8 @@ records one:
     git log --grep="withdraw the record-field-typed-where-the-reader-looks"
 
 That revert withdraws a rule whose predicate was paraphrased from the reader
-rather than read off it, after three builds of it each refused documents the
-reader handles. Read it before writing the next such rule — it is the cheapest
+rather than read off it, after each build of it refused documents the reader
+handles. Read it before writing the next such rule — it is the cheapest
 version of the lesson, and the only one a clone contains.
 
 Cited by subject rather than by hash deliberately: a hash names a commit that a

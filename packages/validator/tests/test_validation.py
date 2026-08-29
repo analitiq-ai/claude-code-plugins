@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import cli_env, run_cli, run_cli_argv
+from _screen import cli_env, run_cli, run_cli_argv
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
 from analitiq.validator import (
     GUARD_DEFAULT_BLAME,

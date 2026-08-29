@@ -64,9 +64,10 @@ What stays contract-owned (authoring-profile policy, not engine facts):
   `fixed_offset_pattern` verbatim.
 - **The `${name}` template grammar** of type-map render rules — a contract
   feature the engine never sees.
-- **The wire date-time profile.** The engine parses whatever its reader
-  accepts; this is the subset a recorded sample's zone-awareness is read from,
-  and a value outside it is read as no evidence rather than as no zone.
+- **The wire date-time profile.** The subset of ISO-8601 a recorded sample's
+  zone-awareness is read from — contract-owned, and narrower than what any
+  particular reader downstream may accept. A value outside it is read as no
+  evidence rather than as no zone.
 """
 from __future__ import annotations
 
@@ -683,10 +684,11 @@ def _offset_is_real(zone: str | None) -> bool:
     """Whether a captured zone names an offset that exists.
 
     True for an absent zone and for `Z`, neither of which is an offset. The
-    profile admits `+HH`, `+HHMM` and `+HH:MM`, all with unbounded digits, so
-    the positions are read against the same RFC 3339 productions the clock
-    positions are, through the same two constants: the grammar spells the
-    hour and the minute once and both readings are of it.
+    profile admits `+HH`, `+HHMM` and `+HH:MM`. Two digits per position, but
+    any VALUE in them — `+99` matches the shape — so the positions are read
+    against the same RFC 3339 productions the clock positions are, through the
+    same two constants: the grammar spells the hour and the minute once and
+    both readings are of it.
     """
     if zone is None or zone in ("Z", "z"):
         return True

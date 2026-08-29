@@ -29,7 +29,7 @@ from pathlib import Path
 import pytest
 
 from analitiq.validator._core import _guard_opening
-from conftest import (
+from _screen import (
     SCREENED_ENTRY_POINTS,
     _ScreenedValidator,
     SCREENED_NAME_SHAPES,

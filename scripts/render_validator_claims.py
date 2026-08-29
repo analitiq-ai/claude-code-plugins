@@ -1482,15 +1482,16 @@ def render_unfinished_check() -> str:
 
     opening = _guard_opening("<id>")
     return "\n".join([
-        f"   A finding whose message opens `{opening}` is a check that",
-        "   could not finish, not a verdict — nothing was decided about what it",
-        "   points at, in either direction, and the run carried on past it. What",
-        "   follows that opening says whose the cause is:",
+        f"A finding whose message opens `{opening}` is a check that could not",
+        "finish, not a verdict — nothing was decided about what it points at, in",
+        "either direction, and the run carried on past it. It can carry any of",
+        "the ids above; which one says where the check was, not what it found.",
+        "What follows that opening says whose the cause is:",
         "",
-        f"   - `{GUARD_DEFAULT_BLAME}` — this tool's, and worth reporting.",
-        f"   - `{GUARD_RESOURCE_CAUSE}.` — the document\'s size.",
-        "   - anything else — the document's own content, described by the check",
-        "     that was reading it.",
+        f"- `{GUARD_DEFAULT_BLAME}` — this tool's, and worth reporting.",
+        f"- `{GUARD_RESOURCE_CAUSE}.` — the document's size.",
+        "- anything else — the document's own content, described by the check",
+        "  that was reading it.",
         "",
     ])
 

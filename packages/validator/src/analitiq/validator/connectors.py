@@ -488,10 +488,11 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                 path=f"{pointer}{node_pointer}/examples/{index}",
                 blame=(
                     "something the node reaches takes the JSON Schema "
-                    "implementation somewhere it cannot come back from — a "
-                    "value a keyword cannot compute against, say. (A "
-                    "reference that leads back to itself exhausts the stack "
-                    "instead, and reports as a size.)"
+                    "implementation somewhere it cannot come back from: a "
+                    "reference with no target, one that leads back to itself, "
+                    "or a value a keyword cannot compute against. The "
+                    "exception's own text above names which, and RULE-ENDP-026 "
+                    "governs what a reference here may be"
                 ),
                 scope=(
                     f"The recorded sample at {at} was not graded; every other "
@@ -1029,7 +1030,13 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # which discards every finding on every OTHER endpoint too.
         findings.extend(_run_guarded(
             _one_endpoint_findings, ep_doc, ep_path, doc, read_doc, seen_ids,
-            vid="type-map-coverage",
+            # `document`, not `type-map-coverage`: this unit runs the contract
+            # model, the filename gate, the locator, id-uniqueness and the
+            # embedded-schema walk before coverage is reached, so reporting a
+            # crash in any of them under the coverage id hands an agent
+            # filtering for coverage failures an endpoint nothing decided. The
+            # dispatch guard one level up made this same move for this reason.
+            vid="document",
             path="/",
             scope=(
                 f"Endpoint {ep_path.name} was not checked to the end; every "

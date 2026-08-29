@@ -11,6 +11,7 @@ extracted from prose must be accepted by the IN-REPO contract, so a guard
 failure can only ever mean the PUBLISHED wheel lags the prose, never that the
 prose itself is wrong.
 """
+import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -103,7 +104,7 @@ def _isolate_actions_env(monkeypatch):
 
 def test_verdict_accepted_is_ok(guard, monkeypatch):
     monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "")
-    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers: [])
+    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers, wanted: ([], {}))
     assert guard.main() == 0
 
 
@@ -112,7 +113,7 @@ def test_verdict_rejection_fails_in_steady_state(guard, monkeypatch):
     monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "")
     monkeypatch.setattr(guard, "read_shipped_version", guard.read_pin_version)
     monkeypatch.setattr(
-        guard, "probe_pinned_wheel", lambda pin, drivers: ["redshift+redshift_connector"]
+        guard, "probe_pinned_wheel", lambda pin, drivers, wanted: (["redshift+redshift_connector"], {})
     )
     assert guard.main() == 1
 
@@ -127,7 +128,7 @@ def test_verdict_rejection_warns_inside_a_release_window(
     monkeypatch.setattr(
         guard, "read_shipped_version", lambda: guard.read_pin_version() + ".post1"
     )
-    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers: ["x+y"])
+    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers, wanted: (["x+y"], {}))
     # Exercise the Actions surfacing against a redirected summary file, so the
     # warn path's visibility mechanism is covered without touching the real
     # job summary (see _isolate_actions_env).
@@ -143,14 +144,14 @@ def test_verdict_env_override_is_strict_even_in_a_window(guard, monkeypatch):
     monkeypatch.setattr(
         guard, "read_shipped_version", lambda: guard.read_pin_version() + ".post1"
     )
-    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers: ["x+y"])
+    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers, wanted: (["x+y"], {}))
     assert guard.main() == 1
 
 
 def test_unrecognized_strict_value_is_a_guard_error(guard, monkeypatch):
     # A typo like 'true' must not silently downgrade strict to warn-only.
     monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "true")
-    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers: [])
+    monkeypatch.setattr(guard, "probe_pinned_wheel", lambda pin, drivers, wanted: ([], {}))
     assert guard.main() == 2
 
 
@@ -160,7 +161,7 @@ def test_unpublished_pin_exits_3_not_2(guard, monkeypatch):
     # from "the runner is broken", or people learn to wave exit 2 through.
     monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "")
 
-    def unpublished(pin, drivers):
+    def unpublished(pin, drivers, wanted):
         raise guard.PinNotPublished(f"{pin} is not on PyPI yet")
 
     monkeypatch.setattr(guard, "probe_pinned_wheel", unpublished)
@@ -194,13 +195,48 @@ def test_unpublished_is_told_apart_from_an_unreachable_index(guard):
     guard._raise_if_unpublished(pin, "ERROR: Failed building wheel for foo")
 
 
+def test_the_import_reader_refuses_a_source_it_cannot_parse(guard, monkeypatch, tmp_path):
+    """A plugin source that does not parse must not drop silently out of
+    coverage: the OK line claims every plugin import was asked of the wheel,
+    and a skipped file makes that false while the guard stays green."""
+    plugin = tmp_path / "plugins" / "p" / "scripts"
+    plugin.mkdir(parents=True)
+    (plugin / "broken.py").write_text("def (:\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "REPO_ROOT", tmp_path)
+
+    with pytest.raises(guard.GuardError, match="does not parse"):
+        guard.read_plugin_validator_imports()
+
+
+def test_the_import_reader_refuses_an_empty_read(guard, monkeypatch, tmp_path):
+    """Zero imports found is a walk that has stopped measuring, not a plugin
+    tree that reaches into nothing — the same floor every other extractor in
+    this file carries."""
+    monkeypatch.setattr(guard, "REPO_ROOT", tmp_path)
+
+    with pytest.raises(guard.GuardError, match="reading nothing"):
+        guard.probe_pinned_exports(Path(sys.executable), {})
+
+
+def test_the_import_reader_sees_submodules_and_agent_prose(guard):
+    """Three channels, all of which shipped uncovered once: the package, a
+    submodule (where the private names live), and an agent's prose — the
+    connector plugin ships no Python at all, so prose is the only surface it
+    has."""
+    by_file = guard.read_plugin_validator_imports()
+    modules = {module for names in by_file.values() for module, _ in names}
+    assert "analitiq.validator" in modules, modules
+    assert any(m.startswith("analitiq.validator.") for m in modules), modules
+    assert any(path.endswith(".md") for path in by_file), sorted(by_file)
+
+
 def test_guard_error_exits_2_never_a_verdict(guard, monkeypatch):
     # "A guard that cannot run must never read as green" — nor as a
     # contradiction. Both an infrastructure failure in the probe and an
     # unreadable source must exit 2.
     monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "")
 
-    def boom(pin, drivers):
+    def boom(pin, drivers, wanted):
         raise guard.GuardError("venv exploded")
 
     monkeypatch.setattr(guard, "probe_pinned_wheel", boom)

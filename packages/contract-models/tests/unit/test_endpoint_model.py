@@ -3203,10 +3203,12 @@ class TestRecordedWireSampleZone:
     @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
     def test_a_sample_under_a_negation_is_not_graded_here_either(self, key):
         """The same reading RULE-ENDP-064 applies, applied by the rule that
-        shares its subject. Under one of these positions the declaration says
-        what the value must NOT be, so the sample is the author's
-        counter-example — and this rule refusing it while the other exempts it
-        is the two of them disagreeing about whether a sample is evidence.
+        shares its subject. Under one of these positions the subschema does not
+        describe the instance — `not` says what it must not be, `if` selects a
+        branch, `propertyNames` constrains the keys — so the sample is not a
+        value that declaration claims to describe, and this rule refusing it
+        while the other exempts it is the two disagreeing about whether a
+        sample is evidence.
 
         It is the sharper half of the disagreement: this one rejects at the
         MODEL, so the document never parses and the other rule's exemption is

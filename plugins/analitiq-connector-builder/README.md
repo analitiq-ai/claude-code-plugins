@@ -101,20 +101,22 @@ Schemas are generated from — so there is no schema fetch. It runs:
    (`type-map-rule`, `type-map-write-coverage`). A document matching no known
    artifact kind reports under `document`.
 
-   <!-- BEGIN GENERATED: unfinished-check -->
-   A finding whose message opens `check '<id>' could not finish` is a check that
-   could not finish, not a verdict — nothing was decided about what it
-   points at, in either direction, and the run carried on past it. What
-   follows that opening says whose the cause is:
-
-   - `this is a validator bug — please report.` — this tool's, and worth reporting.
-   - `the document nests deeper, or runs larger, than this tool can walk.` — the document's size.
-   - anything else — the document's own content, described by the check
-     that was reading it.
-<!-- END GENERATED: unfinished-check -->
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.
+
+<!-- BEGIN GENERATED: unfinished-check -->
+A finding whose message opens `check '<id>' could not finish` is a check that could not
+finish, not a verdict — nothing was decided about what it points at, in
+either direction, and the run carried on past it. It can carry any of
+the ids above; which one says where the check was, not what it found.
+What follows that opening says whose the cause is:
+
+- `this is a validator bug — please report.` — this tool's, and worth reporting.
+- `the document nests deeper, or runs larger, than this tool can walk.` — the document's size.
+- anything else — the document's own content, described by the check
+  that was reading it.
+<!-- END GENERATED: unfinished-check -->
 
 Run directly (console entry point `analitiq-validate`):
 

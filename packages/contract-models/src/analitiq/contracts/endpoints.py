@@ -1474,13 +1474,14 @@ def _validate_arrow_type_in_json_schema(
                     f"{path}.arrow_type: {exc} (spec: §Native and Arrow Types)"
                 )
             if not negated:
-                # Under `not` / `if` / `propertyNames` the declaration
-                # describes what the value must NOT be, so a sample recorded
-                # there is the author's counter-example and grading it reports
-                # their right answer as a contradiction. The same reading
-                # RULE-ENDP-064 applies, applied by the rule that shares its
-                # subject — a sample is evidence about a declaration, or it is
-                # not, and which layer reads it cannot change the answer.
+                # Under `not` / `if` / `propertyNames` the subschema does not
+                # describe the instance: `not` says what it must not be, `if`
+                # selects a branch rather than constraining, and
+                # `propertyNames` constrains the KEYS. A sample recorded there
+                # is not a value the declaration beside it claims to describe,
+                # so agreement between them says nothing either way — the same
+                # reading RULE-ENDP-064 applies, applied by the rule that
+                # shares its subject.
                 _validate_examples_zone(schema, arrow_value, path, errors)
     elif not negated and isinstance(schema.get("examples"), list):
         # The sample sits on a node whose type is one fold away — a reused
@@ -1742,8 +1743,10 @@ def iter_schema_nodes(
         under = negated or key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS
         # Draft 2019-09 tuple-form `items: [...]`, as elsewhere here. `under`
         # rather than `negated` for symmetry only: no keyword the contract
-        # calls negating takes a list value, so the two are equal on every
-        # document, and nothing can pin the difference.
+        # calls negating takes a list value in any document the draft admits,
+        # so the two are equal wherever it matters and nothing can pin the
+        # difference. These models run no metaschema, so a document that is
+        # not admissible could tell them apart; nothing downstream reads it.
         if isinstance(child, list):
             for index, sub in enumerate(child):
                 yield from iter_schema_nodes(
@@ -4270,9 +4273,11 @@ def try_materialize_node(node: Any, root: Any = None) -> dict[str, Any] | None:
     Two intents exist around this fold and they are easy to confuse.
     `_validate_records_in_response_schema` catches a refusal to RE-RAISE it
     with its own coordinates — a translation, which is what a caller that CAN
-    report should do. :func:`resolve_read_record_schema` absorbs, as this does,
-    because it answers "which node is the record" and a node it cannot reach is
-    no answer. Use this one only where there is no way to report.
+    report should do. :func:`resolve_read_record_schema` absorbs the refusal it
+    meets while RESOLVING a path, because it answers "which node is the record"
+    and a node it cannot reach is no answer; the folds it performs after that
+    are not absorbed and raise like any other. Use this one only where there is
+    no way to report at all.
     """
     if not isinstance(node, dict):
         # Nothing to fold, and returning the argument would make `None` mean

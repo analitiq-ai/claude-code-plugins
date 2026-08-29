@@ -38,6 +38,13 @@ merely a precursor to it.
 
 Exit codes: 0 verdict-ok (or window warning), 1 strict contradiction, 2
 GuardError, 3 the pin is not on PyPI yet (expected mid-release — push the tag).
+Two questions of the same wheel: whether it ACCEPTS the canonical drivers the
+plugin prose teaches, and whether it EXPORTS every name plugin code imports
+from `analitiq.validator`. The second is fatal in every window, unlike the
+first — a driver the pin rejects is a tightening the next release closes, while
+a name it does not export is an ImportError the first time a user runs the
+plugin, and no release window makes that tolerable.
+
 EVERY infrastructure failure — unreadable sources, venv/pip
 failure, probe crash, unparseable probe output — is a GuardError: a guard
 that cannot run must never read as green, and must not be mistaken for a
@@ -195,8 +202,14 @@ def _raise_if_unpublished(pin: str, output: str) -> None:
     )
 
 
-def probe_pinned_wheel(pin: str, drivers: list[str]) -> list[str]:
-    """Install `pin` into a throwaway venv; return the drivers its models reject."""
+def probe_pinned_wheel(
+    pin: str, drivers: list[str], wanted: dict[str, set[tuple[str, str]]],
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Install `pin` into a throwaway venv and ask it both questions.
+
+    One venv: the pin is installed once, and the drivers it rejects and the
+    names it does not export are read off the same wheel rather than two.
+    """
     with tempfile.TemporaryDirectory(prefix="validator-pin-guard-") as tmp:
         venv_dir = Path(tmp) / "venv"
         py = venv_dir / ("Scripts" if os.name == "nt" else "bin") / "python"
@@ -227,73 +240,155 @@ def probe_pinned_wheel(pin: str, drivers: list[str]) -> list[str]:
         if result.returncode != 0:
             raise GuardError(f"probe crashed inside the venv:\n{result.stderr}")
         try:
-            return json.loads(result.stdout)
+            rejected = json.loads(result.stdout)
         except ValueError as exc:
             raise GuardError(
                 f"probe output is not JSON ({exc}) — raw stdout:\n{result.stdout}"
             ) from exc
+        # The same wheel, asked the second question before the venv goes.
+        return rejected, probe_pinned_exports(py, wanted)
 
 
 #: Where a plugin reaches into the validator at run time. These run from the
 #: user's plugin cache against the wheel `VALIDATOR_PIN` names, so a symbol
 #: newer than that pin is an ImportError on every user's machine — and the
 #: suite cannot see it, because the suite runs the in-repo source.
-PLUGIN_SCRIPT_GLOBS = ("plugins/*/scripts/*.py", "plugins/*/agents/*.py")
+#:
+#: Agent prose is here for the same reason its Python is: the connector plugin
+#: ships no `.py` at all, and root `CLAUDE.md` names
+#: `connector-schema-validator.md` as the one unavoidable second copy of the
+#: pin. Its import line is an instruction an agent runs.
+PLUGIN_SOURCE_GLOBS = ("plugins/*/scripts/*.py", "plugins/*/agents/*.py")
+PLUGIN_PROSE_GLOBS = ("plugins/*/agents/*.md",)
+
+#: `from analitiq.validator[.<sub>] import a, b` as written in prose. Locating,
+#: not deciding (`.claude/rules/guards.md`): it finds import statements, and
+#: the pinned wheel decides whether the names exist.
+#: Bounded to ONE line. `\s` matches a newline, so an unbounded name list
+#: runs past the statement and collects whatever follows — which reported a
+#: name no import ever wrote.
+_PROSE_IMPORT_RE = re.compile(
+    r"^[^\S\n]*from[^\S\n]+"
+    r"(analitiq\.validator(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
+    r"[^\S\n]+import[^\S\n]+"
+    r"([A-Za-z_][A-Za-z0-9_,][^\n;]*)",
+    re.MULTILINE,
+)
 
 
-def read_plugin_validator_imports() -> dict[str, set[str]]:
-    """Every name a plugin script imports from `analitiq.validator`.
+def _validator_module(name: str | None) -> bool:
+    """Whether `name` is `analitiq.validator` or a module inside it.
 
-    Read from the AST rather than by matching text: the question is which
-    names a module binds, which is what an import statement IS, and a regex
-    over the same lines would answer for `# from analitiq.validator import x`
-    as readily.
+    Submodules count: `from analitiq.validator.pipelines import _base_id` binds
+    a private name from the same wheel, and private names are the ones most
+    likely to move without notice.
+    """
+    return name == "analitiq.validator" or bool(
+        name and name.startswith("analitiq.validator."))
+
+
+def read_plugin_validator_imports() -> dict[str, set[tuple[str, str]]]:
+    """Every name plugin code imports from `analitiq.validator` or a submodule.
+
+    Python is read from the AST: the question is which names a module binds,
+    which is what an import statement IS, and a regex over the same lines
+    would answer for a commented-out one just as readily. Prose is read with a
+    regex because there is no AST for a markdown file — it still only LOCATES
+    the statement; the pinned wheel decides.
+
+    Extraction is all-or-error. A source this parser cannot read is a file
+    dropped out of coverage under an OK line claiming full coverage, which is
+    the shape `.claude/rules/guards.md` calls a silent exemption.
     """
     import ast
 
     found: dict[str, set[str]] = {}
-    for glob in PLUGIN_SCRIPT_GLOBS:
+    for glob in PLUGIN_SOURCE_GLOBS:
         for path in sorted(REPO_ROOT.glob(glob)):
+            rel = path.relative_to(REPO_ROOT).as_posix()
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8"))
-            except SyntaxError:
-                continue
+            except (SyntaxError, UnicodeDecodeError) as exc:
+                raise GuardError(
+                    f"{rel} does not parse ({exc}); it would drop out of "
+                    "coverage under an OK line claiming every plugin import "
+                    "was checked"
+                ) from exc
             names = {
-                alias.name
+                (node.module, alias.name)
                 for node in ast.walk(tree)
                 if isinstance(node, ast.ImportFrom)
-                and node.module == "analitiq.validator"
+                and _validator_module(node.module)
                 for alias in node.names
             }
             if names:
-                found[path.relative_to(REPO_ROOT).as_posix()] = names
+                found[rel] = names
+
+    for glob in PLUGIN_PROSE_GLOBS:
+        for path in sorted(REPO_ROOT.glob(glob)):
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            names = {
+                (module, name.strip())
+                for module, imported in _PROSE_IMPORT_RE.findall(
+                    path.read_text(encoding="utf-8"))
+                if _validator_module(module)
+                for name in imported.split(",")
+                if name.strip()
+            }
+            if names:
+                found[rel] = found.get(rel, set()) | names
     return found
 
 
-def probe_pinned_exports(pin: str, wanted: dict[str, set[str]]) -> dict[str, set[str]]:
-    """Which of those names the pinned wheel does not export, per file."""
-    if not wanted:
-        return {}
-    every = sorted({n for names in wanted.values() for n in names})
-    with tempfile.TemporaryDirectory() as tmp:
-        venv_dir = Path(tmp) / "venv"
-        py = venv_dir / ("Scripts" if os.name == "nt" else "bin") / "python"
-        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)],
-                       check=True, capture_output=True)
-        subprocess.run([str(py), "-m", "pip", "install", "--quiet", pin],
-                       check=True, capture_output=True, text=True)
-        probe = (
-            "import json, sys, analitiq.validator as v\n"
-            "json.dump([n for n in json.loads(sys.argv[1]) "
-            "if not hasattr(v, n)], sys.stdout)"
+def probe_pinned_exports(
+    py: Path, wanted: dict[str, set[tuple[str, str]]],
+) -> dict[str, list[str]]:
+    """Which of those names the pinned wheel does not export, per file.
+
+    Runs in the venv the driver probe already built, so the pin is installed
+    once and both questions are asked of the same wheel.
+    """
+    qualified = sorted({f"{module}::{name}"
+                        for names in wanted.values()
+                        for module, name in names})
+    if not qualified:
+        raise GuardError(
+            "no plugin source imports anything from analitiq.validator — the "
+            f"globs {PLUGIN_SOURCE_GLOBS + PLUGIN_PROSE_GLOBS} match nothing, "
+            "so this check is reading nothing and would report agreement"
         )
-        result = subprocess.run([str(py), "-c", probe, json.dumps(every)],
-                                capture_output=True, text=True, check=False)
-        if result.returncode != 0:
-            raise GuardError(f"export probe crashed inside the venv:\n{result.stderr}")
+    probe = (
+        "import importlib, json, sys\n"
+        "missing = []\n"
+        "for dotted in json.loads(sys.argv[1]):\n"
+        "    module, _, name = dotted.rpartition('::')\n"
+        "    try:\n"
+        "        mod = importlib.import_module(module)\n"
+        "    except Exception:\n"
+        "        missing.append(dotted); continue\n"
+        "    if not hasattr(mod, name):\n"
+        "        missing.append(dotted)\n"
+        "json.dump(missing, sys.stdout)"
+    )
+    result = subprocess.run(
+        [str(py), "-I", "-c", probe, json.dumps(qualified)],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        raise GuardError(f"export probe crashed inside the venv:\n{result.stderr}")
+    try:
         missing = set(json.loads(result.stdout))
-    return {path: sorted(names & missing)
-            for path, names in wanted.items() if names & missing}
+    except ValueError as exc:
+        raise GuardError(
+            f"export probe output is not JSON ({exc}) — raw stdout:\n"
+            f"{result.stdout}"
+        ) from exc
+    return {
+        path: sorted(f"{module}.{name}" for module, name in names
+                     if f"{module}::{name}" in missing)
+        for path, names in wanted.items()
+        if any(f"{module}::{name}" in missing for module, name in names)
+    }
 
 
 def main() -> int:
@@ -307,12 +402,11 @@ def main() -> int:
         print(f"pin: {pin}  shipped: {shipped}  strict: {strict}")
         print(f"canonical drivers ({CANON_SOURCE.name}): {', '.join(drivers)}")
 
-        rejected = probe_pinned_wheel(pin, drivers)
-
         wanted = read_plugin_validator_imports()
         print(f"plugin imports from analitiq.validator: "
               f"{sum(len(n) for n in wanted.values())} across {len(wanted)} file(s)")
-        unexported = probe_pinned_exports(pin, wanted)
+
+        rejected, unexported = probe_pinned_wheel(pin, drivers, wanted)
     except PinNotPublished as exc:
         print(f"NOT PUBLISHED YET: {exc}", file=sys.stderr)
         print(

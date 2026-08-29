@@ -1,10 +1,9 @@
 """A rule statement that carves out the negating positions names all of them.
 
-Every rule in `CARVE_OUT_RULES` exempts a node reached through a position whose
-subschema does not describe the instance, and each names those positions rather
-than only the class — because naming only the class left an author with a
-sample under one of them concluding, correctly, that the exemption did not
-reach it.
+The rules bound to the functions applying the exemption each name those
+positions rather than only the class — because naming only the class left an
+author with a sample under one of them concluding, correctly, that the
+exemption did not reach it.
 
 That enumeration is a hand copy of `JSON_SCHEMA_NEGATED_SCHEMA_KEYS`, and it
 ships into the wheel as `shared/rules.json` and into the plugin as
@@ -24,22 +23,29 @@ from __future__ import annotations
 
 import pytest
 
-#: The phrase every carve-out statement is written around. Used to FIND the
-#: rules, not to grade them — a statement that stops carving out simply leaves
-#: the set, and one that starts carving out joins it without an edit here.
-#: A hand list would silently miss the third rule to grow the exemption.
-_CARVE_OUT_PHRASE = "does not describe the instance"
+#: The functions that APPLY the exemption — the two that gate on
+#: `JSON_SCHEMA_NEGATED_SCHEMA_KEYS`. A rule bound to one of them exempts
+#: negating positions, so its statement owes the enumeration.
+#:
+#: Selected this way and not by a phrase in the statement: a phrase decides
+#: which sentence gets graded, so rewording one drops it out of grading with a
+#: green build, and the failure would ask the author to put the wording back.
+#: `.claude/rules/guards.md` denies that shape the anchor exemption by name.
+_CARVE_OUT_ENFORCERS = (
+    "analitiq.contracts.endpoints::_validate_examples_zone",
+    "analitiq.validator.connectors::_sample_findings",
+)
 
 
 def _carve_out_rules():
     from analitiq.contracts.shared.rules import all_rules
 
     found = sorted(r.id for r in all_rules()
-                   if _CARVE_OUT_PHRASE in (r.statement or ""))
+                   if r.validator in _CARVE_OUT_ENFORCERS)
     assert found, (
-        f"no rule statement contains {_CARVE_OUT_PHRASE!r} — either the "
-        "carve-out was reworded, in which case this guard is reading nothing "
-        "and reporting agreement, or it was removed and this file goes"
+        f"no rule binds any of {_CARVE_OUT_ENFORCERS} — either they were "
+        "renamed, in which case this guard is reading nothing and reporting "
+        "agreement, or the exemption is gone and this file goes with it"
     )
     return found
 
