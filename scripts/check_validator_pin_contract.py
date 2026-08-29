@@ -261,30 +261,57 @@ def probe_pinned_wheel(
 PLUGIN_SOURCE_GLOBS = ("plugins/*/scripts/*.py", "plugins/*/agents/*.py")
 PLUGIN_PROSE_GLOBS = ("plugins/*/agents/*.md",)
 
-#: `from analitiq.validator[.<sub>] import a, b` as written in prose. Locating,
-#: not deciding (`.claude/rules/guards.md`): it finds import statements, and
-#: the pinned wheel decides whether the names exist.
+#: `from <pinned module> import …` as written in prose, in either the bare or
+#: the parenthesised form, wherever on the line it starts. Locating, not
+#: deciding (`.claude/rules/guards.md`): it finds import statements, and the
+#: pinned wheel decides whether the names exist.
 #: Bounded to ONE line. `\s` matches a newline, so an unbounded name list
 #: runs past the statement and collects whatever follows — which reported a
 #: name no import ever wrote.
 _PROSE_IMPORT_RE = re.compile(
-    r"^[^\S\n]*from[^\S\n]+"
-    r"(analitiq\.validator(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
+    r"from[^\S\n]+"
+    r"((?:analitiq\.validator|analitiq\.contracts)"
+    r"(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
     r"[^\S\n]+import[^\S\n]+"
-    r"([A-Za-z_][A-Za-z0-9_,][^\n;]*)",
-    re.MULTILINE,
+    r"(\([^)]*\)|[^\n;#\"']+)",
 )
 
 
+def _import_names(clause: str) -> list[str]:
+    """The names an import clause binds, or `[]` if it binds none readably.
+
+    Handles what an author actually writes: `(a, b)` across lines, `a as b`
+    (the bound name is what a caller could use, but the WHEEL is asked for the
+    exported one, so the left half is what matters), and a trailing comment.
+    A clause this cannot read is an error at the call site, not a silent skip.
+    """
+    names = []
+    for part in clause.strip().strip("()").split(","):
+        name = part.split("#")[0].split(" as ")[0].strip()
+        if not name:
+            continue
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            return []
+        names.append(name)
+    return names
+
+
+#: Both packages the pin installs. `analitiq-validator` depends on
+#: `analitiq-contract-models` with an exact `==`, so a plugin importing a
+#: contract model at run time is admitted against the version that pin
+#: resolves to, exactly as it is for the validator's own names.
+_PINNED_ROOTS = ("analitiq.validator", "analitiq.contracts")
+
+
 def _validator_module(name: str | None) -> bool:
-    """Whether `name` is `analitiq.validator` or a module inside it.
+    """Whether `name` is one of the pinned packages or a module inside one.
 
     Submodules count: `from analitiq.validator.pipelines import _base_id` binds
     a private name from the same wheel, and private names are the ones most
     likely to move without notice.
     """
-    return name == "analitiq.validator" or bool(
-        name and name.startswith("analitiq.validator."))
+    return bool(name) and any(
+        name == root or name.startswith(f"{root}.") for root in _PINNED_ROOTS)
 
 
 def read_plugin_validator_imports() -> dict[str, set[tuple[str, str]]]:
@@ -327,14 +354,20 @@ def read_plugin_validator_imports() -> dict[str, set[tuple[str, str]]]:
     for glob in PLUGIN_PROSE_GLOBS:
         for path in sorted(REPO_ROOT.glob(glob)):
             rel = path.relative_to(REPO_ROOT).as_posix()
-            names = {
-                (module, name.strip())
-                for module, imported in _PROSE_IMPORT_RE.findall(
-                    path.read_text(encoding="utf-8"))
-                if _validator_module(module)
-                for name in imported.split(",")
-                if name.strip()
-            }
+            names = set()
+            for module, clause in _PROSE_IMPORT_RE.findall(
+                    path.read_text(encoding="utf-8")):
+                if not _validator_module(module):
+                    continue
+                bound = _import_names(clause)
+                if not bound:
+                    raise GuardError(
+                        f"{rel}: cannot read the names imported from "
+                        f"{module} in {clause.strip()!r}; it would drop out "
+                        "of coverage under an OK line claiming every plugin "
+                        "import was checked"
+                    )
+                names |= {(module, name) for name in bound}
             if names:
                 found[rel] = found.get(rel, set()) | names
     return found
@@ -417,9 +450,11 @@ def main() -> int:
             file=sys.stderr,
         )
         return 3
-    except (GuardError, OSError) as exc:
+    except (GuardError, OSError, UnicodeDecodeError) as exc:
         # OSError covers unreadable source files and unlaunchable
-        # subprocesses — infrastructure, exactly like a GuardError.
+        # subprocesses; UnicodeDecodeError covers a source that is readable
+        # and not text — a `ValueError`, so not caught by OSError, and an
+        # uncaught one exits 1, which is this guard's VERDICT code.
         print(f"GUARD ERROR (not a verdict): {exc}", file=sys.stderr)
         return 2
 
@@ -439,7 +474,8 @@ def main() -> int:
 
     if not rejected:
         print("OK: the pinned release accepts every canonical driver, and "
-              "exports every name the plugins import from it.")
+              "the packages it installs export every name the plugins import "
+              "from them.")
         return 0
 
     verdict = (

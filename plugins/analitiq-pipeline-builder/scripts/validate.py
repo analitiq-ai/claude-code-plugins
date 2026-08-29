@@ -129,30 +129,37 @@ def _model_findings(entity: str, doc) -> list[dict]:
         # pydantic-core guards its own recursion and reports the result as an
         # ordinary error: a `recursion_loop` whose message asserts a cyclic
         # reference. On a document that is deep rather than cyclic — a nested
-        # `ArrowFieldSpec`, which a stream's mapping target reaches — that is
-        # a verdict, and a wrong one: the author is told to remove a cycle
-        # their document does not have, under a path thousands of characters
-        # long.
+        # `ArrowFieldSpec`, which a stream's mapping target reaches — that is a
+        # verdict, and a wrong one: the author is told to remove a cycle their
+        # document does not have, under a path thousands of characters long.
         #
-        # Reported as what it is instead. It cannot be given the opening
-        # `is_guard_finding` recognises, because that shape is produced by
-        # `guard_finding`, which is newer than `VALIDATOR_PIN` and so absent
-        # from the wheel this plugin installs. Saying the check did not finish
-        # is still strictly better than asserting a cycle; when the pin moves
-        # past that release, this becomes one call to `guard_finding`.
-        if any(err["type"] == "recursion_loop" for err in exc.errors()):
-            return [_finding(
-                "document", "error", "/",
-                f"the {entity} document could not be checked: it nests deeper "
-                "than this tool can walk. Nothing was decided about it either "
-                "way — this is not a rejection, and the cycle the underlying "
-                "error names is the walk's own, not the document's. "
-                "Flattening the nesting is what gets it checked.")]
-        return [
+        # It is ONE error among the rest, not a terminal condition: everything
+        # pydantic-core graded before giving up is in the same list. So the
+        # `recursion_loop` entries are separated out and the rest are reported
+        # as the rejections they are — short-circuiting on the first one threw
+        # away eight real findings and then told the author nothing had been
+        # decided.
+        #
+        # The separated one cannot be given the opening `is_guard_finding`
+        # recognises: that shape comes from `guard_finding`, which is newer
+        # than `VALIDATOR_PIN` and absent from the wheel this plugin installs.
+        # When the pin moves past that release, this becomes one call to it.
+        errors = exc.errors()
+        decided = [
             _finding("contract-model", "error",
                      "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
-            for err in exc.errors()
+            for err in errors if err["type"] != "recursion_loop"
         ]
+        if len(decided) == len(errors):
+            return decided
+        return decided + [_finding(
+            "document", "error", "/",
+            f"the {entity} document could not be checked to the end: it nests "
+            "deeper than this tool can walk. What is reported above is what "
+            "was decided before it stopped — the absence of a finding "
+            "anywhere else proves nothing, and the cycle the underlying error "
+            "names is the walk's own, not the document's. Flattening the "
+            "nesting is what gets the rest checked.")]
 
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:
@@ -230,7 +237,7 @@ def _connection_type_map_findings(conn_dir: Path) -> list[dict]:
             continue
         try:
             doc = _read_json(path)
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
             findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
                                      f"Cannot read {fname}: {exc}"))
             continue
@@ -246,7 +253,7 @@ def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
     silently dropped document."""
     try:
         doc = _read_json(path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         findings.append(_finding("document", "error", "", f"Cannot read {path.name}: {exc}"))
         return None
     if not isinstance(doc, dict):
@@ -309,7 +316,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
         connectors.add(conn_json.parent.parent.name)  # directory slug
         try:
             cid = _read_json(conn_json).get("connector_id")
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, AttributeError):
             continue
         if isinstance(cid, str) and cid:
             connectors.add(cid)
@@ -346,7 +353,7 @@ def _connector_endpoint_sets(root: Path) -> dict[str, set[str]]:
             ids.add(ep_json.stem)
             try:
                 eid = _read_json(ep_json).get("endpoint_id")
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, AttributeError):
                 eid = None
             if isinstance(eid, str) and eid:
                 ids.add(eid)
@@ -356,7 +363,7 @@ def _connector_endpoint_sets(root: Path) -> dict[str, set[str]]:
         keys = {slug_dir.name}
         try:
             cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, AttributeError):
             cid = None
         if isinstance(cid, str) and cid:
             keys.add(cid)
@@ -442,7 +449,7 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     document short-circuits."""
     try:
         doc = _read_json(document_path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         return _diagnostics([_finding("document", "error", "", f"Cannot read document: {exc}")])
 
     if entity == "database_endpoint":

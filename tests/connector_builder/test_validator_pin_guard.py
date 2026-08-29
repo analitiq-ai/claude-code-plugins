@@ -195,6 +195,37 @@ def test_unpublished_is_told_apart_from_an_unreachable_index(guard):
     guard._raise_if_unpublished(pin, "ERROR: Failed building wheel for foo")
 
 
+@pytest.mark.parametrize("shipped", ["same", "ahead"])
+def test_an_unexported_name_fails_in_every_window(guard, monkeypatch, shipped):
+    """The second question's whole point: a driver the pin rejects is a
+    tightening the next release closes, so it warns inside a release window —
+    a name the pin does not export is an ImportError the first time a user
+    runs the plugin, and no window makes that tolerable."""
+    monkeypatch.setenv("VALIDATOR_PIN_GUARD_STRICT", "")
+    if shipped == "ahead":
+        monkeypatch.setattr(
+            guard, "read_shipped_version",
+            lambda: guard.read_pin_version() + ".post1")
+    monkeypatch.setattr(
+        guard, "probe_pinned_wheel",
+        lambda pin, drivers, wanted: ([], {"plugins/p/scripts/x.py": ["nope"]}))
+    assert guard.main() == 1
+
+
+def test_the_import_reader_refuses_a_clause_it_cannot_read(guard, monkeypatch, tmp_path):
+    """Prose has no AST, so the name list is parsed by hand — and a clause the
+    parser cannot read must be an error, not a silent skip under an OK line
+    claiming every plugin import was asked of the wheel."""
+    agents = tmp_path / "plugins" / "p" / "agents"
+    agents.mkdir(parents=True)
+    (agents / "a.md").write_text(
+        "from analitiq.validator import *\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "REPO_ROOT", tmp_path)
+
+    with pytest.raises(guard.GuardError, match="cannot read the names"):
+        guard.read_plugin_validator_imports()
+
+
 def test_the_import_reader_refuses_a_source_it_cannot_parse(guard, monkeypatch, tmp_path):
     """A plugin source that does not parse must not drop silently out of
     coverage: the OK line claims every plugin import was asked of the wheel,

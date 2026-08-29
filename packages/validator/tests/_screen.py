@@ -12,9 +12,9 @@ import os
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CONTRACTS_SRC_ROOT = REPO_ROOT / "contract-models" / "src"
-VALIDATOR_SRC_ROOT = REPO_ROOT / "validator" / "src"
+PACKAGES_ROOT = Path(__file__).resolve().parents[2]
+CONTRACTS_SRC_ROOT = PACKAGES_ROOT / "contract-models" / "src"
+VALIDATOR_SRC_ROOT = PACKAGES_ROOT / "validator" / "src"
 
 
 #: The entry points that return findings and are therefore screened. Stated

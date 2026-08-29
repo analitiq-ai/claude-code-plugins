@@ -23,9 +23,10 @@ from __future__ import annotations
 
 import pytest
 
-#: The functions that APPLY the exemption — the two that gate on
-#: `JSON_SCHEMA_NEGATED_SCHEMA_KEYS`. A rule bound to one of them exempts
-#: negating positions, so its statement owes the enumeration.
+#: The functions that EMIT the findings the exemption governs — each is the
+#: `validator` of a rule that carves out negating positions, so its statement
+#: owes the enumeration. (The gate itself is in their callers, where `negated`
+#: is in scope; these are the symbols the records name.)
 #:
 #: Selected this way and not by a phrase in the statement: a phrase decides
 #: which sentence gets graded, so rewording one drops it out of grading with a
@@ -40,14 +41,20 @@ _CARVE_OUT_ENFORCERS = (
 def _carve_out_rules():
     from analitiq.contracts.shared.rules import all_rules
 
-    found = sorted(r.id for r in all_rules()
-                   if r.validator in _CARVE_OUT_ENFORCERS)
-    assert found, (
-        f"no rule binds any of {_CARVE_OUT_ENFORCERS} — either they were "
-        "renamed, in which case this guard is reading nothing and reporting "
-        "agreement, or the exemption is gone and this file goes with it"
+    by_enforcer = {
+        enforcer: sorted(r.id for r in all_rules() if r.validator == enforcer)
+        for enforcer in _CARVE_OUT_ENFORCERS
+    }
+    # Per enforcer, not over the union: one of them going stale leaves the
+    # other still matching, so a non-empty union would stay green while the
+    # rule bound to the renamed one stopped being graded entirely.
+    unbound = sorted(e for e, ids in by_enforcer.items() if not ids)
+    assert not unbound, (
+        f"no rule binds {unbound} — either they were renamed, in which case "
+        "this guard has stopped grading whatever they enforced, or the "
+        "exemption is gone and this file goes with it"
     )
-    return found
+    return sorted({rid for ids in by_enforcer.values() for rid in ids})
 
 
 @pytest.mark.parametrize("rule_id", _carve_out_rules())

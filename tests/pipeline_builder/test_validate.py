@@ -106,11 +106,23 @@ def test_a_document_too_deep_to_walk_is_not_reported_as_a_cycle():
     findings = V._model_findings("stream", doc)
     assert findings, "the deep document produced no finding at all"
     messages = " ".join(f["message"] for f in findings)
-    assert "could not be checked" in messages, findings
+    assert "could not be checked to the end" in messages, findings
     assert "cyclic reference" not in messages, findings
+
+    # `recursion_loop` is ONE error among the rest, not a terminal condition:
+    # everything graded before pydantic-core gave up is in the same list.
+    # Short-circuiting on it threw those away and then told the author nothing
+    # had been decided.
+    doc["status"] = "bogus"
+    both = V._model_findings("stream", doc)
+    assert any(f["path"] == "/status" for f in both), (
+        "the rejection pydantic already decided was discarded")
+    assert any(f["validator"] == "document" for f in both), both
+
     # And an ordinary rejection is still an ordinary rejection.
     ordinary = V._model_findings("stream", {"stream_id": "s"})
     assert any(f["validator"] == "contract-model" for f in ordinary), ordinary
+    assert not any(f["validator"] == "document" for f in ordinary), ordinary
 
 
 @pytest.mark.parametrize("entity,doc", [

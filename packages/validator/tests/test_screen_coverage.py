@@ -1,6 +1,6 @@
 """The crash screen covers every path a finding reaches a test by.
 
-`conftest._ScreenedValidator` wraps the entry points that return findings, so
+`_screen._ScreenedValidator` wraps the entry points that return findings, so
 a crash cannot satisfy a count, an ordering or a liveness assertion while
 measuring nothing. The wrap only holds for calls that go through the fixture:
 a module doing `from analitiq.validator import validate_document` calls the
@@ -15,7 +15,7 @@ This is one of three channels, and the three are screened by one statement of
 which names matter (`SCREENED_ENTRY_POINTS` and `SCREENED_NAME_SHAPES`): an
 import is caught here, an attribute access on the fixture is wrapped by
 `_ScreenedValidator.__getattr__`, and the out-of-process path is screened at
-`conftest.run_cli_argv`, which every CLI test here goes through.
+`_screen.run_cli_argv`, which every CLI test here goes through.
 
 What none of them reaches is a test outside this package's own tree. Those
 suites call the validator to assert an example is clean, where a crash fails
