@@ -60,11 +60,19 @@ record's `rationale` says which way the check fails if the reading goes stale.
 it, and a clone of this one does not, which is why a claim written from a guess
 here is a claim nobody downstream can check either.
 
-A guess has cost the whole rule rather than a sentence of it. This repo records
-one: `926575f` withdraws a rule whose predicate was paraphrased from the reader
+A guess has cost the whole rule rather than a sentence of it, and this repo
+records one:
+
+    git log --grep="withdraw the record-field-typed-where-the-reader-looks"
+
+That revert withdraws a rule whose predicate was paraphrased from the reader
 rather than read off it, after three builds of it each refused documents the
-reader handles. Read that commit before writing the next such rule — it is the
-cheapest version of the lesson available, and the only one a clone contains.
+reader handles. Read it before writing the next such rule — it is the cheapest
+version of the lesson, and the only one a clone contains.
+
+Cited by subject rather than by hash deliberately: a hash names a commit that a
+rebase renumbers and a fresh clone never had, which is the same defect one
+paragraph up warns about. A subject survives both.
 
 **Naming a symbol is not pinning.** A function name in a docstring — the
 engine's, or this repo's — resolves for nobody holding a clone of the other
