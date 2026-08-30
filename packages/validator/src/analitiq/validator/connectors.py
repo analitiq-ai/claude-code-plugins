@@ -915,7 +915,7 @@ def _guarded_type_map_findings(doc: Any, direction: str, name: str) -> list[dict
         vid="type-map-coverage",
         path="/",
         scope=f"The sibling {name} was not checked; the rest of the connector "
-          "was still attempted.")
+              "was still attempted.")
 
 
 def _type_map_findings(doc: Any, direction: str) -> list[dict]:

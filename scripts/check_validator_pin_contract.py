@@ -114,6 +114,52 @@ print(json.dumps(rejected))
 """
 
 
+#: Which of the names plugin code imports the pinned wheel does not export.
+#:
+#: The question is exactly the one `from <module> import <name>` asks, so the
+#: probe asks it the same way: an attribute on the imported module, or failing
+#: that a submodule of it — `from X import Y` binds either.
+#:
+#: An ABSENCE is a verdict (the pin does not carry the name; exit 1, attributed
+#: to the file that imports it). Anything else is a defective wheel and raises
+#: out of the probe as a GuardError (exit 2): laundering a module that will not
+#: import into the unexported list would make "publish a release carrying them"
+#: the remedy for a broken install. `ModuleNotFoundError` alone does not
+#: separate the two — a module that exists and imports a dependency the wheel
+#: forgot raises it as well — so the probe reads `.name`, which is the module
+#: that was not found, and treats it as an absence only when it is the module
+#: asked for or one of its parents. That is the same test CPython's own
+#: `from … import …` applies before deciding a name is missing rather than
+#: broken.
+_EXPORT_PROBE = """\
+import importlib, json, sys
+
+def absent(exc, dotted):
+    parts = dotted.split('.')
+    return exc.name in {'.'.join(parts[:i]) for i in range(1, len(parts) + 1)}
+
+missing = []
+for dotted in json.loads(sys.argv[1]):
+    module, _, name = dotted.rpartition('::')
+    try:
+        mod = importlib.import_module(module)
+    except ModuleNotFoundError as exc:
+        if not absent(exc, module):
+            raise
+        missing.append(dotted)
+        continue
+    if hasattr(mod, name):
+        continue
+    try:
+        importlib.import_module(f'{module}.{name}')
+    except ModuleNotFoundError as exc:
+        if exc.name != f'{module}.{name}':
+            raise
+        missing.append(dotted)
+json.dump(missing, sys.stdout)
+"""
+
+
 class PinNotPublished(RuntimeError):
     """The pinned version is not on PyPI yet. Exits 3.
 
@@ -266,12 +312,14 @@ PLUGIN_PROSE_GLOBS = ("plugins/*/agents/*.md",)
 #: regex for the parenthesised form stops at the first `)` — and a `)` inside
 #: a comment is not the closing one, so it truncated the list silently.
 #:
-#: Anchored at the start of a line, after any quoting or list marker a
+#: Anchored at the start of a line, after any quoting, list or diff marker a
 #: markdown file puts there, because agent prose is where a sentence MENTIONS
 #: an import inline: matching one of those makes the guard refuse a symbol
-#: nobody asked to have checked.
+#: nobody asked to have checked. Both diff markers, not just `-`: admitting the
+#: removal marker alone locates the import a fenced diff is REPLACING and skips
+#: the one it replaces it with, which is the half that ships.
 _PROSE_IMPORT_START = re.compile(
-    r"^[>\-*\s]*from[^\S\n]+"
+    r"^[>\-+*\s]*from[^\S\n]+"
     r"((?:analitiq\.validator|analitiq\.contracts)"
     r"(?:\.[A-Za-z_][A-Za-z0-9_]*)*)"
     r"[^\S\n]+import[^\S\n]+(.*)$",
@@ -284,13 +332,33 @@ def _strip_comment(line: str) -> str:
     return line.split("#")[0]
 
 
+def _statement_head(code: str, depth: int) -> tuple[str, int, bool]:
+    """The part of `code` still inside the import statement, the paren depth it
+    leaves behind, and whether the statement ended on this line.
+
+    A statement ends at the `;` that separates it from the next one, or at end
+    of line once every `(` it opened is closed. The `;` counts only outside
+    parens — inside a name list it cannot appear, and treating one there as a
+    terminator would keep half the list.
+    """
+    kept: list[str] = []
+    for char in code:
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == ";" and depth <= 0:
+            return "".join(kept), depth, True
+        kept.append(char)
+    return "".join(kept), depth, depth <= 0
+
+
 def _iter_prose_imports(text: str):
     """`(module, clause)` for each import statement prose spells out.
 
-    Scans rather than matches. The bare form ends at its line; the
-    parenthesised form ends at the `)` that closes it, counted over
-    comment-stripped lines so a paren inside a comment cannot end it early,
-    and so a list spanning lines is read whole.
+    Scans rather than matches, over comment-stripped lines, so a paren or a
+    `;` inside a comment cannot end the statement early and a name list
+    spanning lines is read whole.
     """
     lines = text.splitlines()
     index = 0
@@ -299,21 +367,18 @@ def _iter_prose_imports(text: str):
         if not match:
             index += 1
             continue
-        module, rest = match.group(1), match.group(2)
-        code = _strip_comment(rest)
-        if "(" not in code:
-            yield module, code
+        module = match.group(1)
+        code = _strip_comment(match.group(2))
+        clause: list[str] = []
+        depth = 0
+        while True:
+            head, depth, ended = _statement_head(code, depth)
+            clause.append(head)
             index += 1
-            continue
-        depth = code.count("(") - code.count(")")
-        clause = [code]
-        index += 1
-        while depth > 0 and index < len(lines):
+            if ended or index >= len(lines):
+                break
             code = _strip_comment(lines[index])
-            depth += code.count("(") - code.count(")")
-            clause.append(code)
-            index += 1
-        if depth > 0:
+        if not ended:
             raise GuardError(
                 f"an import from {module} opens a name list that never closes: "
                 f"{' '.join(c.strip() for c in clause)!r}"
@@ -340,11 +405,7 @@ def _import_names(clause: str) -> list[str]:
     a name dropped here is a name the guard never asks about, under an OK line
     saying it asked about every one.
     """
-    # A shell quote closing a `python3 -c "…"` one-liner is part of the
-    # SENTENCE, not of the last name — and the connector agent writes exactly
-    # that form. Stripped from the end only, so a quote anywhere a name could
-    # be still makes the clause unreadable.
-    body = clause.replace("(", " ").replace(")", " ").rstrip().rstrip("\"'")
+    body = clause.replace("(", " ").replace(")", " ")
     names = []
     for part in body.split(","):
         name = part.split(" as ")[0].strip()
@@ -450,27 +511,8 @@ def probe_pinned_exports(
             f"globs {PLUGIN_SOURCE_GLOBS + PLUGIN_PROSE_GLOBS} match nothing, "
             "so this check is reading nothing and would report agreement"
         )
-    # A module that will not import is a defective WHEEL, not a missing name,
-    # so it raises out of the probe and surfaces as exit 2 — laundering it into
-    # the unexported list would make "publish a release carrying them" the
-    # remedy for a broken install. And `from X import Y` binds a SUBMODULE as
-    # readily as an attribute, so the probe asks the question the import asks.
-    probe = (
-        "import importlib, json, sys\n"
-        "missing = []\n"
-        "for dotted in json.loads(sys.argv[1]):\n"
-        "    module, _, name = dotted.rpartition('::')\n"
-        "    mod = importlib.import_module(module)\n"
-        "    if hasattr(mod, name):\n"
-        "        continue\n"
-        "    try:\n"
-        "        importlib.import_module(f'{module}.{name}')\n"
-        "    except ImportError:\n"
-        "        missing.append(dotted)\n"
-        "json.dump(missing, sys.stdout)"
-    )
     result = subprocess.run(
-        [str(py), "-I", "-c", probe, json.dumps(qualified)],
+        [str(py), "-I", "-c", _EXPORT_PROBE, json.dumps(qualified)],
         capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:

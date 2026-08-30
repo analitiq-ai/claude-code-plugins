@@ -125,6 +125,71 @@ def test_a_document_too_deep_to_walk_is_not_reported_as_a_cycle():
     assert not any(f["validator"] == "document" for f in ordinary), ordinary
 
 
+@pytest.mark.parametrize("boom, expected", [
+    (RecursionError, "nests deeper, or runs larger"),
+    (MemoryError, "nests deeper, or runs larger"),
+    (TypeError, "this is a validator bug"),
+])
+def test_a_route_that_crashes_answers_in_diagnostics(
+    tmp_path, monkeypatch, boom, expected,
+):
+    """The routes this adapter owns reach a contract model directly, without
+    the published validator's dispatch guard. Uncontained, a crash in one left
+    the CLI as a traceback on stderr and an empty stdout — which to the calling
+    agent is not a failing verdict but no answer at all, under a non-zero exit
+    that reads like one."""
+    def crash(*_args, **_kwargs):
+        raise boom("boom")
+    monkeypatch.setattr(V, "_model_findings", crash)
+
+    diagnostics = V.diagnostics_for("stream", _write(tmp_path, "s.json", STREAM))
+
+    assert diagnostics["passed"] is False
+    message = " ".join(f["message"] for f in diagnostics["findings"])
+    assert expected in message, diagnostics
+    assert "Nothing was decided" in message, diagnostics
+
+
+def test_a_bundle_crash_keeps_the_verdict_the_document_already_earned(
+    tmp_path, monkeypatch,
+):
+    """The bundle walk reads sibling files; the model check has already
+    finished by the time it runs. Containing them together would throw away
+    findings that were decided."""
+    def crash(*_args, **_kwargs):
+        raise TypeError("boom")
+    monkeypatch.setattr(V, "_bundle_findings", crash)
+    doc = {**PIPELINE, "connections": "not-a-list"}
+
+    diagnostics = V.diagnostics_for(
+        "pipeline", _write(tmp_path, "p.json", doc), bundle_root=tmp_path)
+
+    assert any(f["validator"] == "contract-model"
+               for f in diagnostics["findings"]), diagnostics
+    assert any("could not finish" in f["message"]
+               for f in diagnostics["findings"]), diagnostics
+
+
+def test_running_out_of_memory_is_not_a_file_the_walk_skips(tmp_path, monkeypatch):
+    """A best-effort identity read skips a document it cannot parse — the
+    directory slug still names the connector. It must not skip one because the
+    PROCESS ran out of memory: the next read has no reason to survive either,
+    and the bundle that comes back is quietly missing ids, so the run ends in
+    warnings about refs that do resolve."""
+    slug = tmp_path / "connectors" / "pg" / "definition"
+    slug.mkdir(parents=True)
+    (slug / "connector.json").write_text('{"connector_id": "postgres"}')
+    (slug / "endpoints").mkdir()
+    (slug / "endpoints" / "orders.json").write_text('{"endpoint_id": "orders"}')
+
+    def crash(_path):
+        raise MemoryError("boom")
+    monkeypatch.setattr(V, "_read_json", crash)
+
+    with pytest.raises(MemoryError):
+        V._connector_endpoint_sets(tmp_path)
+
+
 @pytest.mark.parametrize("entity,doc", [
     ("connection", CONN_PG), ("connection", CONN_WISE),
     ("pipeline", PIPELINE), ("stream", STREAM), ("database_endpoint", DB_ENDPOINT),

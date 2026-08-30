@@ -91,6 +91,20 @@ _TYPE_MAP_FILENAMES = {"type_map_read": "type-map-read.json",
 _LEGACY_TYPE_MAP_FILENAME = "type-map.json"
 
 
+# What a best-effort identity read may skip a file over. These are ways ONE
+# document is unusable — unreadable, not JSON, too deep to parse, or JSON that
+# is not an object — and the caller has a defensible answer for each: the
+# directory slug still names the connector, and an endpoint id still comes from
+# the filename. `MemoryError` is deliberately absent: it says the PROCESS ran
+# out, which the next read has no reason to survive, and swallowing it yields a
+# bundle quietly missing ids and a run of warnings about refs that do resolve.
+# It leaves here and lands on the guard, which reports that nothing was decided.
+_BEST_EFFORT_READ_ERRORS = (
+    OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError,
+    AttributeError,
+)
+
+
 # ---------------------------------------------------------------------------
 # Finding + Diagnostics shape
 # ---------------------------------------------------------------------------
@@ -317,7 +331,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
         connectors.add(conn_json.parent.parent.name)  # directory slug
         try:
             cid = _read_json(conn_json).get("connector_id")
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError, AttributeError):
+        except _BEST_EFFORT_READ_ERRORS:
             continue
         if isinstance(cid, str) and cid:
             connectors.add(cid)
@@ -354,7 +368,7 @@ def _connector_endpoint_sets(root: Path) -> dict[str, set[str]]:
             ids.add(ep_json.stem)
             try:
                 eid = _read_json(ep_json).get("endpoint_id")
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError, AttributeError):
+            except _BEST_EFFORT_READ_ERRORS:
                 eid = None
             if isinstance(eid, str) and eid:
                 ids.add(eid)
@@ -364,7 +378,7 @@ def _connector_endpoint_sets(root: Path) -> dict[str, set[str]]:
         keys = {slug_dir.name}
         try:
             cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError, AttributeError):
+        except _BEST_EFFORT_READ_ERRORS:
             cid = None
         if isinstance(cid, str) and cid:
             keys.add(cid)
@@ -456,12 +470,54 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     if entity == "database_endpoint":
         findings = _endpoint_findings(doc, document_path)
     elif entity in _TYPE_MAP_FILENAMES:
-        findings = _type_map_findings(entity, doc, document_path)
+        findings = _guarded(_type_map_findings, entity, doc, document_path,
+                            entity=entity)
     else:
-        findings = _model_findings(entity, doc)
+        findings = _guarded(_model_findings, entity, doc, entity=entity)
         if entity == "pipeline" and bundle_root is not None:
-            findings = findings + _bundle_findings(doc, document_path, bundle_root)
+            findings = findings + _guarded(
+                _bundle_findings, doc, document_path, bundle_root, entity=entity)
     return _diagnostics(findings)
+
+
+def _guarded(fn, *args, entity: str) -> list[dict]:
+    """Run a route; a crash becomes one error finding instead of a traceback.
+
+    The endpoint route arrives already contained — it goes through the
+    published validator, which guards its own dispatch. The routes this module
+    owns do not: it drives the contract models directly for the kinds the
+    validator has no entry point for, and walks a bundle of sibling files, and
+    an exception from either left the CLI as a traceback on stderr. The calling
+    agent reads the Diagnostics JSON on stdout, so that is not a failing
+    verdict to it — it is no answer at all, under a non-zero exit that reads
+    like one.
+
+    A crash decides nothing, so the finding says so rather than describing the
+    document. Running out of stack or memory is the document's doing; every
+    other way a check goes down is this tool's, and the reader is told which.
+
+    `guard_finding` in the published validator states this shape once, and this
+    cannot call it: it is newer than the `VALIDATOR_PIN` this plugin installs,
+    so importing it would be an ImportError on every user's first run. When the
+    pin moves past that release, this becomes one call to it.
+    """
+    try:
+        return fn(*args)
+    except (RecursionError, MemoryError):
+        # No detail beyond the outcome: a `RecursionError` raised while
+        # unwinding names whichever frame was innermost, which is not the walk
+        # that filled the stack and reads to an author as though it were.
+        return [_finding(
+            "document", "error", "",
+            f"the {entity} document could not be checked: it nests deeper, or "
+            "runs larger, than this tool can walk. Nothing was decided about "
+            "it either way; flattening the nesting is what gets it checked.")]
+    except Exception as exc:  # noqa: BLE001 - last-resort guard
+        return [_finding(
+            "document", "error", "",
+            f"checking the {entity} document could not finish "
+            f"({type(exc).__name__}: {exc}); this is a validator bug — please "
+            "report. Nothing was decided about the document either way.")]
 
 
 def _read_json(path: Path):

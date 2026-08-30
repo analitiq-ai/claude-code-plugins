@@ -12,6 +12,7 @@ failure can only ever mean the PUBLISHED wheel lags the prose, never that the
 prose itself is wrong.
 """
 import sys
+import venv
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -242,11 +243,22 @@ def test_the_import_reader_reads_the_forms_an_author_writes(guard, clause, expec
     ("from analitiq.validator import (\n"
      "    main,   # returns (findings, code)\n"
      "    check_coverage,\n)\n", ["check_coverage", "main"]),
-    # The shell one-liner the connector agent writes.
-    ('python3 -c "\nfrom analitiq.validator import main\n"\n', ["main"]),
-    # Quoted or listed by markdown.
+    # A heredoc body inside a fenced shell block — the form the connector
+    # agent actually writes, where the import starts its own line and the
+    # shell quoting is on other lines entirely.
+    ('python3 - <<\'PY\'\nfrom analitiq.validator import main\nPY\n', ["main"]),
+    # A statement ends at the `;` that separates it from the next one; without
+    # that, `main()` joined the name list and the clause read as unparseable.
+    ("from analitiq.validator import main; main()\n", ["main"]),
+    # ...but a `;` cannot appear inside a name list, so one there would be part
+    # of a clause this must refuse whole rather than a terminator.
+    ("from analitiq.validator import (\n    main,\n)  ; main()\n", ["main"]),
+    # Quoted or listed by markdown, and both markers of a fenced diff: locating
+    # only the removal locates the import being REPLACED and skips the one that
+    # ships.
     ("> from analitiq.validator import main\n", ["main"]),
     ("- from analitiq.validator import main\n", ["main"]),
+    ("+ from analitiq.validator import main\n", ["main"]),
 ])
 def test_the_import_reader_reads_a_whole_file(
     guard, monkeypatch, tmp_path, prose, expected,
@@ -303,6 +315,84 @@ def test_the_import_reader_refuses_a_source_it_cannot_parse(guard, monkeypatch, 
 
     with pytest.raises(guard.GuardError, match="does not parse"):
         guard.read_plugin_validator_imports()
+
+
+@pytest.fixture(scope="module")
+def probe_interpreter(tmp_path_factory):
+    """A real interpreter with a site-packages this file controls.
+
+    The export probe's whole subject is what an interpreter does when a module
+    or a name is not there, so it is graded by running it — the production
+    command, on modules built to fail the way a defective wheel fails. A venv
+    is how the probed names get somewhere the probe's isolated interpreter
+    will look; `-I` ignores `PYTHONPATH` by design.
+    """
+    root = tmp_path_factory.mktemp("probe-venv")
+    venv.create(root, with_pip=False)
+    py = root / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python3")
+    if not py.exists():  # pragma: no cover - platform layout
+        pytest.skip(f"no interpreter at {py}")
+    site = next(root.glob("lib/python*/site-packages"), None) or next(
+        root.glob("Lib/site-packages"))
+    return py, site
+
+
+@pytest.mark.parametrize("wanted, expected", [
+    # A name the module does not export.
+    ({("json", "no_such_name_here")}, ["json.no_such_name_here"]),
+    # A module the wheel does not carry at all. It reaches the plugin's author
+    # as the same ImportError an absent name does, so it is the same verdict —
+    # reported against the file that imports it, not raised as "the runner is
+    # broken", which loses both the file and the remedy.
+    ({("no_such_package_here", "thing")}, ["no_such_package_here.thing"]),
+])
+def test_the_export_probe_calls_an_absence_a_verdict(
+    guard, probe_interpreter, wanted, expected,
+):
+    py, _site = probe_interpreter
+    assert guard.probe_pinned_exports(py, {"plugins/p/scripts/x.py": wanted}) == {
+        "plugins/p/scripts/x.py": expected}
+
+
+@pytest.mark.parametrize("wanted", [
+    {("json", "dumps")},          # an attribute
+    {("email", "mime")},          # a submodule `import email` does not bind
+])
+def test_the_export_probe_accepts_what_the_import_would_bind(
+    guard, probe_interpreter, wanted,
+):
+    """`from X import Y` binds a submodule as readily as an attribute, so a
+    probe asking only `hasattr` would report every submodule import as a name
+    to publish."""
+    py, _site = probe_interpreter
+    assert guard.probe_pinned_exports(py, {"plugins/p/scripts/x.py": wanted}) == {}
+
+
+@pytest.mark.parametrize("layout, wanted", [
+    # The module itself will not import.
+    ({"broken_top/__init__.py": "import absent_dependency_xyz\n"},
+     {("broken_top", "thing")}),
+    # The module imports, and the submodule the name would bind will not.
+    ({"broken_sub/__init__.py": "",
+      "broken_sub/leaf.py": "import absent_dependency_xyz\n"},
+     {("broken_sub", "leaf")}),
+])
+def test_the_export_probe_refuses_to_call_a_defective_wheel_a_missing_name(
+    guard, probe_interpreter, layout, wanted,
+):
+    """A module that exists and will not import is a broken install, and
+    `ModuleNotFoundError` alone does not separate it from an absence — the
+    module it names is a dependency, not the one asked for. Reported as a
+    missing name, the remedy printed is "publish a release carrying them",
+    which fixes nothing and hides the real failure."""
+    py, site = probe_interpreter
+    for rel, text in layout.items():
+        path = site / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(guard.GuardError, match="export probe crashed"):
+        guard.probe_pinned_exports(py, {"plugins/p/scripts/x.py": wanted})
 
 
 def test_the_import_reader_refuses_an_empty_read(guard, monkeypatch, tmp_path):
