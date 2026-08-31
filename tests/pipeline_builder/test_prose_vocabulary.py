@@ -351,7 +351,7 @@ def _restatements():
         # reported line numbers aligned with the real file, and stops prose that
         # abuts a block from being merged into one section.
         outside = BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
-                                  path.read_text())
+                               path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()
         for start, section in _sections(outside):
             ticked = set(_TICKED.findall(section))
@@ -602,7 +602,7 @@ def test_shared_patterns_are_not_hand_typed_outside_generated_blocks():
     offenders = []
     for path in _authored_docs():
         outside = BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
-                                  path.read_text())
+                               path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()
         for lineno, line in enumerate(outside.splitlines(), 1):
             offenders += [f"  {rel}:{lineno}  [{constant}]"

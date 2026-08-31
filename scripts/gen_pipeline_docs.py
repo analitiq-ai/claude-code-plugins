@@ -58,7 +58,6 @@ DOCS_ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
 from _generated_blocks import render_text as _render_text  # noqa: E402
 
 
-
 # ---------------------------------------------------------------------------
 # Renderers (`render_*`) and their helpers. Every `render_*` takes no arguments
 # and returns the markdown body for its block, WITHOUT the surrounding markers
