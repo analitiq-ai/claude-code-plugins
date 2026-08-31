@@ -29,13 +29,22 @@ from typing import Callable, Mapping
 #: Both indents are captured, and each marker is re-emitted at an indent of
 #: its own: BEGIN keeps what it had, and END takes BEGIN's — including when
 #: BEGIN's is column 0, which is how an END that drifted out to an indent of
-#: its own is pulled back. A rendered body always ends on a non-blank line, so
-#: a drifted END is not read as a block-level HTML comment any more: it is
-#: swallowed by the paragraph above it as inline HTML, and the marker pair
-#: stops delimiting a block at container level. Normalising to BEGIN is what
-#: heals that, and healing is only possible because the render is idempotent —
-#: a marker pair the renderer leaves where it drifted stays drifted, and every
-#: gate stays green over it.
+#: its own is pulled back.
+#:
+#: What a drift costs depends on how wide it is and on what the body ends
+#: with, which is why normalising every width is simpler than reasoning about
+#: any of them. An HTML comment still starts a block at up to three spaces, so
+#: a narrow drift renders identically to none. At four or more the line is no
+#: longer a block start, and a rendered body always ends on a non-blank line,
+#: so what it becomes is decided by that line: after a paragraph the marker is
+#: a lazy continuation and is swallowed as inline HTML; after a fenced code
+#: close or a table it opens an indented code block and renders as literal
+#: text in a document that ships verbatim to users. Inside a list item the
+#: same four spaces are still the item's own content, so it survives there.
+#:
+#: Normalising to BEGIN is what heals that, and nothing else does: a pair the
+#: renderer leaves where it drifted stays drifted, idempotently, with every
+#: gate green over it.
 #:
 #: END keeps its own only where BEGIN has none TO give — a block opened after
 #: prose on the same line (a table cell, a sentence). Re-emitting END at

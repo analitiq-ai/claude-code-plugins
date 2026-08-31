@@ -69,10 +69,13 @@ def test_a_drifted_end_marker_is_pulled_back_to_its_begin():
     Told apart by emptiness rather than by participation, the two read alike
     and every top-level block took the "keep your own" branch — so an END that
     picked up stray whitespace by hand edit or merge kept it, idempotently,
-    with every gate green. A rendered body ends on a non-blank line, so that
-    END stops being a block-level HTML comment and is swallowed by the
-    paragraph above it: the pair no longer delimits a block at container
-    level, in a document that ships verbatim to users.
+    with every gate green.
+
+    Past three spaces that marker stops starting an HTML block, and what it
+    becomes depends on the line above it: swallowed into a paragraph as inline
+    HTML, or — after a fenced code close or a table, which is what most bodies
+    here end with — an indented code block, rendering the marker as literal
+    text in a document that ships verbatim to users.
     """
     text = ("<!-- BEGIN GENERATED: demo -->\n"
             "stale\n"
@@ -130,6 +133,41 @@ def test_an_unknown_block_id_raises_rather_than_skipping():
     with pytest.raises(UnknownBlock, match="no-such-block"):
         render_text("<!-- BEGIN GENERATED: no-such-block -->\nstale\n"
                     "<!-- END GENERATED: no-such-block -->\n", "<test>", RENDERERS)
+
+
+@pytest.mark.parametrize("module", ["gen_pipeline_docs", "render_validator_claims"])
+def test_every_rendered_body_ends_on_a_non_blank_line(module):
+    """The premise the indent normalisation is argued from, asserted.
+
+    What a drifted END marker costs is decided by the line above it, and every
+    reading of that in this module assumes the line is not blank. It happens
+    to be true of every renderer in both tables — and nothing said so, which
+    made it the kind of premise a reader checks, finds unstated, and treats as
+    an assumption rather than a property.
+
+    A renderer returning a trailing blank line would put an indented code
+    block one hand edit away on every document it feeds, with every gate
+    green: the generators compare their output against themselves, so a body
+    that ends differently is simply the new expected output.
+
+    Asserted over the renderers' OUTPUT SHAPE, never over what they say — the
+    text is the contract's to write and this has no opinion about it.
+    """
+    generator = importlib.import_module(module)
+    assert generator.RENDERERS, f"{module} renders nothing — this asserts nothing"
+
+    for block_id, renderer in sorted(generator.RENDERERS.items()):
+        body = renderer()
+        assert body.endswith("\n"), f"{module}:{block_id} body does not end in a newline"
+        # `splitlines` on the whole body, not on `body[:-1]`: a body ending
+        # "text\n\n" leaves "text" as the last line once the final newline is
+        # stripped, so stripping it first hides exactly the trailing blank
+        # line this exists to catch.
+        assert body.splitlines()[-1].strip(), (
+            f"{module}:{block_id} ends on a blank line, so its END marker "
+            "follows one — four spaces of drift there is an indented code "
+            "block, and the marker renders as literal text"
+        )
 
 
 @pytest.mark.parametrize("module", ["gen_pipeline_docs", "render_validator_claims"])
