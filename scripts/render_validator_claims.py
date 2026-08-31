@@ -1652,10 +1652,18 @@ def malformed_marker_docs() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Marker-block substitution (the pipeline plugin's grammar)
+# Marker-block substitution
 # ---------------------------------------------------------------------------
 
 def render_text(text: str, source: str) -> str:
+    """This generator's blocks, rewritten through the shared grammar.
+
+    The pattern and the rewrite are `scripts/_generated_blocks.py`, because
+    the other plugin's generator does the same job and the two copies drifted:
+    a rendering fix landed in one and the other went on shipping the defect,
+    with each tree's suite comparing it only against its own renderer. All
+    this file supplies now is which renderer answers which id.
+    """
     return _render_text(text, source, RENDERERS)
 
 

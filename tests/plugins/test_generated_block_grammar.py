@@ -13,6 +13,7 @@ so neither would notice the grammar losing a property both depend on.
 """
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 
@@ -49,9 +50,10 @@ def test_the_end_marker_keeps_its_begin_marker_indent(indent):
 
 
 def test_a_marker_with_text_before_it_is_left_where_it_was():
-    """`indent` is horizontal whitespace only, so a marker inside a table cell
-    or after prose captures none and is rewritten exactly as it was. Without
-    this the grammar would move markers it does not own."""
+    """Each capture is line-anchored, so a marker written after prose on the
+    same line captures no indent and is rewritten exactly as it was. Without
+    the anchor the space separating it from that prose reads as this block's
+    indent, and is inserted in front of the other marker."""
     text = ("prose <!-- BEGIN GENERATED: demo -->\n"
             "stale\n"
             "<!-- END GENERATED: demo -->\n")
@@ -61,11 +63,29 @@ def test_a_marker_with_text_before_it_is_left_where_it_was():
         "<!-- END GENERATED: demo -->\n")
 
 
-def test_rendering_is_idempotent_at_every_indent():
+def test_an_end_marker_keeps_its_own_indent_when_begin_has_none_to_give():
+    """The same CommonMark defect, arrived at from the other side.
+
+    A block opened after prose on the same line captures no indent, so there
+    is nothing to pass down — and re-emitting END at nothing moves it to
+    column 0, which ends the list item exactly as the unfixed grammar did.
+    Where BEGIN has no indent, END keeps the one it was written with."""
+    text = ("- prose <!-- BEGIN GENERATED: demo -->\n"
+            "  stale\n"
+            "  <!-- END GENERATED: demo -->\n")
+
+    assert render_text(text, "<test>", RENDERERS) == (
+        "- prose <!-- BEGIN GENERATED: demo -->\nrendered\n"
+        "  <!-- END GENERATED: demo -->\n")
+
+
+@pytest.mark.parametrize("indent", ["", "   ", "\t"])
+def test_rendering_is_idempotent_at_every_indent(indent):
     """The second render reads back what the first wrote. An END marker
     emitted at an indent the pattern cannot then match would grow the block
     on every run, or drop out of rendering entirely."""
-    text = "   <!-- BEGIN GENERATED: demo -->\n   stale\n<!-- END GENERATED: demo -->\n"
+    text = (f"{indent}<!-- BEGIN GENERATED: demo -->\n"
+            f"{indent}stale\n<!-- END GENERATED: demo -->\n")
     once = render_text(text, "<test>", RENDERERS)
     assert render_text(once, "<test>", RENDERERS) == once
     assert len(BLOCK_RE.findall(once)) == 1, once
@@ -92,11 +112,25 @@ def test_an_unknown_block_id_raises_rather_than_skipping():
                     "<!-- END GENERATED: no-such-block -->\n", "<test>", RENDERERS)
 
 
-def test_both_generators_read_the_one_grammar():
+@pytest.mark.parametrize("module", ["gen_pipeline_docs", "render_validator_claims"])
+def test_both_generators_rewrite_through_the_one_grammar(module, monkeypatch):
     """The property this file exists for: neither generator may re-grow its
-    own copy. Each imports the shared pattern, so a fix lands in both."""
-    import gen_pipeline_docs
-    import render_validator_claims
+    own copy of the substitution.
 
-    assert gen_pipeline_docs.BLOCK_RE is BLOCK_RE
-    assert render_validator_claims.BLOCK_RE is BLOCK_RE
+    Driven through each generator's own `render_text` rather than compared by
+    identity — re-exporting the shared pattern under the right name proves
+    nothing about what the rewrite uses, and a generator that kept the
+    re-export while growing a private pattern beside it would pass an
+    identity check. Neither tree's own suite would catch it either: each
+    compares its documents against its own renderer, so a grammar both agree
+    on is a grammar neither grades.
+    """
+    generator = importlib.import_module(module)
+    monkeypatch.setattr(generator, "RENDERERS", RENDERERS)
+
+    out = generator.render_text(
+        "   <!-- BEGIN GENERATED: demo -->\n   stale\n"
+        "   <!-- END GENERATED: demo -->\n", "<test>")
+
+    assert out == ("   <!-- BEGIN GENERATED: demo -->\nrendered\n"
+                   "   <!-- END GENERATED: demo -->\n"), repr(out)

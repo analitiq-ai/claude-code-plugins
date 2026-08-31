@@ -80,8 +80,11 @@ Rules when editing this plugin's prose:
 - A block id with no renderer is an error, not a no-op — `UnknownBlock` fails loud.
 - Bumping the contract pin means re-running the generator;
   `test_generated_blocks_in_sync` is the gate.
-- This file is excluded from the generator (`NOT_GENERATED` in the script)
-  because it *documents* the markers rather than carrying a real block.
+- This file is out of the generator's reach because it is not under the plugin
+  root the generator scans — the same reason `tests/` is not. It *documents*
+  the markers rather than carrying a real block, and the generator carries no
+  exemption list: anything still under the plugin root that spells a marker
+  means it.
 
 ## Validator-behavior claims — the repo-wide gate
 
@@ -99,8 +102,10 @@ Two things specific to this plugin:
 
 - The claims gate's `BEGIN GENERATED` blocks (`claim:*` and friends) are
   rendered **only into the connector plugin's tree**. Never author one here:
-  this plugin's generator cannot parse those ids, nothing would render it, and
-  the gate fails the build on the orphaned markers.
+  both generators read one grammar, so this one parses the id perfectly well
+  and then has no renderer for it — `UnknownBlock`, and `--check` fails. The
+  block is not orphaned; it is claimed by a generator that never walks this
+  tree.
 - `gen_pipeline_docs.py` blocks in this plugin's docs stay exempt from the
   scan — they are pinned by their own `--check`.
 
