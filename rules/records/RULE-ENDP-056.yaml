@@ -12,14 +12,13 @@ targets: [SingleCursorMapping]
 fields: [format, operator]
 mechanism: literal_enum
 rationale: >
-  The wire half of a cursor mapping — the spelling the stored cursor is sent
-  as, and the comparison the provider is expected to apply to it — is a fact
-  about the provider, so each member draws on a closed vocabulary: that is
-  what lets the declaration be graded at authoring time rather than trusted.
-  The pinned contract-consumption manifest claims no read of the wire half
-  of a cursor mapping, and a run today sends the stored value as-is; what
-  the closed sets buy now is agreement between author and validator, and a
-  declaration the engine can adopt without re-reading documents already
-  published against it.
+  The wire half of a cursor mapping — the spelling the document declares for
+  sending the stored cursor, and the comparison the provider is expected to
+  apply to it — is a fact about the provider, so each member draws on a
+  closed vocabulary: that is what lets the declaration be graded at
+  authoring time rather than trusted. The pinned contract-consumption
+  manifest claims no read of the wire half of a cursor mapping, and it has
+  no effect on a run today; the admissible values are the contract's to
+  settle, not whichever read the manifest claims.
 status: active
 superseded_by: null

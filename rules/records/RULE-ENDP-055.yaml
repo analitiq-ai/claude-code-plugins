@@ -11,12 +11,14 @@ targets: [Param]
 fields: [operators]
 mechanism: literal_enum
 rationale: >
-  This set is the endpoint's promise to every stream that binds it: a filter is
-  authored against these members and rendered onto this param, so the two
-  documents agree only while both read one vocabulary. An operator offered here
-  has to survive being serialised into a request the provider accepts, rather
-  than compiled into a predicate the way a database read's operator is, and
-  which ones do is a fact about the provider — so an endpoint declares what it
-  offers instead of inheriting a vocabulary whole.
+  This set is the endpoint's promise to every stream that binds it: a
+  filter is authored against these members (RULE-STRM-026 names that
+  obligation), so the documents agree only while each reads one vocabulary.
+  Which operators survive the trip to the provider — sent as request input
+  rather than compiled into a predicate the way a database read's operator
+  is — is a fact about the provider, so an endpoint declares what it offers
+  instead of inheriting a vocabulary whole. The pinned contract-consumption
+  manifest claims no read of the set, and it has no effect on a run today;
+  the promise does its work where the set is read, at authoring time.
 status: active
 superseded_by: null

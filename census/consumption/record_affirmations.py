@@ -1,13 +1,9 @@
 """The record affirmations — one per rule record governing an unread field.
 
-Each entry is a reader's judgment that the record's ``rationale`` is honest
-about fields the pinned consumption manifest claims no read of, pinned to
-the refs judged and the wording judged. What the judgment holds the
-rationale to is the record-affirmation section of
-``.claude/rules/reachability-dispositions.md``; the guard that summons it is
-``census.consumption.records.record_report``. Re-affirming means re-reading
-the rationale against the current unread set, then re-computing the entry —
-never re-computing alone.
+``census.consumption.records`` is the guard that consumes this registry and
+says what an entry is; what a reader holds an affirmed rationale to, and
+what re-affirming means, is the record-affirmation section of
+``.claude/rules/reachability-dispositions.md``.
 """
 from __future__ import annotations
 
@@ -26,21 +22,21 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         refs=(
             "endpoints.Replication.supported_methods",
         ),
-        rationale_sha256="354e92d5820ab78ceb7580c33599028ee0d10c17f03d6b71ccaf7185578d7d67",
+        rationale_sha256="7cb72bd0b143e50770dafa63a6f59de4ca18121f45ba7e8840647a57678cf2b5",
     ),
     RecordAffirmation(
         "RULE-ENDP-050",
         refs=(
             "endpoints.Param.location",
         ),
-        rationale_sha256="576e9b9677e1929063ea500b65d4fb1ec9e55bef4bbac020b1be348fd4a7125d",
+        rationale_sha256="165be1e23af73d5130007e72dd80466e4336a42dee14f0064a33c18b6921c2c9",
     ),
     RecordAffirmation(
         "RULE-ENDP-055",
         refs=(
             "endpoints.Param.operators",
         ),
-        rationale_sha256="03979511bfaaa39602c0c2db7cac2a54ee19cdae414425c2f68ff19db9d022a2",
+        rationale_sha256="9f43b803651c39df93e9e4b673b9c06dc3a33f860d382a7b2f7102f2c4dc375f",
     ),
     RecordAffirmation(
         "RULE-ENDP-056",
@@ -48,7 +44,7 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "endpoints.SingleCursorMapping.format",
             "endpoints.SingleCursorMapping.operator",
         ),
-        rationale_sha256="e13fc43a9a4338cad23b6d451b5d901ba3f9603631963da0236d29cd7c85cc00",
+        rationale_sha256="3478354df318863cb51b6b7799ab58770bffd35d038880884eb43a961e04a7f9",
     ),
     RecordAffirmation(
         "RULE-ENDP-057",
@@ -57,14 +53,14 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "endpoints.WindowCursorMapping.format",
             "endpoints.WindowCursorMapping.start_operator",
         ),
-        rationale_sha256="c1729f75bb64ad71d49f5765a18d8c5d5d987828aface7be32d8f624b2778976",
+        rationale_sha256="87b0a8102c46f31ac91c81235a1fa9a2c1d0b764034143e700631c45cb6b1c58",
     ),
     RecordAffirmation(
         "RULE-PIPE-017",
         refs=(
             "pipelines.config.Logging.log_level",
         ),
-        rationale_sha256="9a15344f2685796ed5f07952b0efe89dcad06a2074e6b5b06f5c99569d2d57ef",
+        rationale_sha256="820e6d3722e5404221e33aefb9ba51899789e22101ed5686f2a606d09fa52e67",
     ),
     RecordAffirmation(
         "RULE-STRM-040",

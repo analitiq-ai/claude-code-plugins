@@ -20,11 +20,8 @@ judged. A rationale edit, a pin bump that moves the unread set under a
 record, and a record newly governing an unread field each break the pin and
 fail the build until a reader re-affirms. What the reader holds the
 rationale to is the record-affirmation section of
-``.claude/rules/reachability-dispositions.md``.
-
-:func:`record_report` computes every finding; the census test suite and
-``scripts/render_contract_consumption.py check`` both assert on it, so the
-lint and the tool can never disagree.
+``.claude/rules/reachability-dispositions.md``; :func:`record_report`
+carries every finding the guard can reach.
 """
 from __future__ import annotations
 
@@ -57,7 +54,16 @@ def load_rules() -> tuple[dict[str, Any], ...]:
     from analitiq.contracts.shared.rule_record import RULES_PATH
 
     document = json.loads(RULES_PATH.read_text(encoding="utf-8"))
-    return tuple(document["rules"])
+    rules = tuple(document["rules"])
+    if not any(rule["status"] == "active" for rule in rules):
+        # The non-vacuity floor (`.claude/rules/guards.md`): a registry with
+        # nothing active means the extractor has stopped measuring, and must
+        # not report in the same voice as a census finding nothing wrong.
+        raise ValueError(
+            "compiled registry holds no active records — refusing a "
+            "vacuously clean record census"
+        )
+    return rules
 
 
 def rationale_sha256(rationale: str) -> str:
@@ -73,27 +79,47 @@ def governed_unread(
     trailing segment of every reachable model's qualified name, every match
     counting — a rule over a union governs each branch. A field expression's
     head (before any ``[]`` or ``.``) is the field name matched. Records
-    governing no unread field do not appear.
+    governing no unread field do not appear. A target no reachable model
+    carries is coverage, not silence — the field census walks only what the
+    manifest's roots reach — but a head that lands on NO matched model is a
+    name this census could not resolve, and :func:`record_report` reports
+    it rather than dropping it.
     """
+    governed, _ = _resolve(manifest, rules)
+    return governed
+
+
+def _resolve(
+    manifest: dict[str, Any], rules: tuple[dict[str, Any], ...]
+) -> tuple[dict[str, tuple[str, ...]], tuple[tuple[str, str], ...]]:
     unread = classify(manifest)["unread"]
+    models = reachable_models(manifest)
     by_class: dict[str, list[str]] = {}
-    for name in reachable_models(manifest):
+    for name in models:
         by_class.setdefault(name.rsplit(".", 1)[-1], []).append(name)
 
     governed: dict[str, tuple[str, ...]] = {}
+    unresolved: list[tuple[str, str]] = []
     for rule in rules:
         if rule["status"] != "active":
             continue
-        refs = {
-            f"{model.removeprefix(_PREFIX)}.{head}"
-            for target in rule["targets"]
-            for model in by_class.get(target, ())
-            for head in {f.split("[]")[0].split(".")[0] for f in rule["fields"]}
-            if (model, head) in unread
-        }
+        matched = [m for target in rule["targets"] for m in by_class.get(target, ())]
+        if not matched:
+            continue
+        refs = set()
+        for field in rule["fields"]:
+            head = field.split("[]")[0].split(".")[0]
+            if not any(head in models[m].model_fields for m in matched):
+                unresolved.append((rule["id"], field))
+                continue
+            refs |= {
+                f"{m.removeprefix(_PREFIX)}.{head}"
+                for m in matched
+                if (m, head) in unread
+            }
         if refs:
             governed[rule["id"]] = tuple(sorted(refs))
-    return governed
+    return governed, tuple(sorted(set(unresolved)))
 
 
 @dataclass(frozen=True)
@@ -138,6 +164,10 @@ class RecordReport:
     orphaned: tuple[str, ...]
     #: More than one affirmation for one record.
     duplicates: tuple[str, ...]
+    #: An active record whose target is reachable but whose field expression
+    #: names a field no matched model declares — a name this census could
+    #: not resolve, reported rather than silently exempted.
+    unresolved_fields: tuple[tuple[str, str], ...]
 
     @property
     def ok(self) -> bool:
@@ -147,6 +177,7 @@ class RecordReport:
             or self.stale_rationale
             or self.orphaned
             or self.duplicates
+            or self.unresolved_fields
         )
 
     def render(self) -> str:
@@ -190,6 +221,13 @@ class RecordReport:
             self.duplicates,
             lambda rule_id: rule_id,
         )
+        group(
+            "field expressions this census could not resolve on any matched "
+            "model — a renamed field, or a record naming one the model does "
+            "not declare",
+            self.unresolved_fields,
+            lambda item: f"{item[0]}: {item[1]!r}",
+        )
         if not lines:
             return "record affirmations are complete and current"
         return "\n".join(lines).rstrip()
@@ -200,7 +238,7 @@ def record_report(
     rules: tuple[dict[str, Any], ...],
     affirmations: tuple[RecordAffirmation, ...],
 ) -> RecordReport:
-    governed = governed_unread(manifest, rules)
+    governed, unresolved = _resolve(manifest, rules)
     rationales = {rule["id"]: rule["rationale"] for rule in rules}
 
     seen: dict[str, int] = {}
@@ -232,4 +270,5 @@ def record_report(
         stale_rationale=stale_rationale,
         orphaned=orphaned,
         duplicates=duplicates,
+        unresolved_fields=unresolved,
     )

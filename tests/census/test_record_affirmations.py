@@ -33,7 +33,17 @@ from census.consumption.records import (
 
 
 def test_every_record_governing_an_unread_field_is_affirmed_and_current():
-    report = record_report(pin.load_manifest(), load_rules(), AFFIRMATIONS)
+    manifest = pin.load_manifest()
+    rules = load_rules()
+    # The non-vacuity floor (`.claude/rules/guards.md`): a clean diff proves
+    # nothing if the extractor located nothing to diff. Should the unread set
+    # ever legitimately empty, this assertion and the affirmations registry
+    # empty together, under a reader's change — not silently.
+    assert governed_unread(manifest, rules), (
+        "the record census located no governing records — extractor "
+        "stopped measuring, not a clean census"
+    )
+    report = record_report(manifest, rules, AFFIRMATIONS)
     assert report.ok, report.render()
     assert "complete and current" in report.render()
 
@@ -100,11 +110,32 @@ def _affirmation(**overrides) -> RecordAffirmation:
 def test_governed_unread_intersects_targets_and_field_heads():
     governed = governed_unread(
         _manifest(),
-        (_rule(fields=["ignored[].x", "seen", "missing"]),),
+        (_rule(fields=["ignored[].x", "seen"]),),
     )
-    # `seen` is claimed and `missing` is not a field; only the head of the
-    # expression over the unread field survives.
+    # `seen` is claimed; only the head of the expression over the unread
+    # field survives.
     assert governed == {"RULE-TEST-001": (_REF,)}
+
+
+def test_a_field_no_matched_model_declares_is_a_finding_not_a_silence():
+    report = record_report(
+        _manifest(), (_rule(fields=["ignored", "missing"]),), (_affirmation(),)
+    )
+    assert report.unresolved_fields == (("RULE-TEST-001", "missing"),)
+    assert not report.ok
+    assert "could not resolve" in report.render()
+
+
+def test_an_empty_or_all_retired_registry_refuses_to_run(monkeypatch, tmp_path):
+    import json
+    import analitiq.contracts.shared.rule_record as rule_record
+
+    for rules in ([], [_rule(status="retired")]):
+        path = tmp_path / "rules.json"
+        path.write_text(json.dumps({"rules": rules}))
+        monkeypatch.setattr(rule_record, "RULES_PATH", path)
+        with pytest.raises(ValueError, match="no active records"):
+            load_rules()
 
 
 def test_a_record_governing_only_read_fields_is_not_governed():

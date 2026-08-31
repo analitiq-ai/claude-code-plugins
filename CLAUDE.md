@@ -151,9 +151,10 @@ fix. A model no root reaches is unknown, not unread. Guards:
 A rule record whose `targets`/`fields` govern an unread field carries a
 `RecordAffirmation` in `census/consumption/record_affirmations.py`, pinned to the
 refs located and the sha256 of the rationale wording a reader judged; membership is
-computed by `census/consumption/records.py` from the registry and the unread set,
-never chosen, and `tests/census/test_record_affirmations.py` is its guard. Judge one
-under the record-affirmation section of `.claude/rules/reachability-dispositions.md`.
+computed, never chosen, and `census/consumption/records.py` owns that mechanism.
+`tests/census/test_record_affirmations.py` gates the record half and the same script
+prints its report. Judge one under the record-affirmation section of
+`.claude/rules/reachability-dispositions.md`.
 
 **Where a new fact goes.** Something a document must satisfy is a model field, and a
 name for it is a record. Something an author must judge is plugin craft. Something a

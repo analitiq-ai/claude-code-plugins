@@ -3236,7 +3236,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "This list is the endpoint's capability claim — the syncs it declares a path for — and the set a stream's chosen method is graded against, so an invented name advertises a sync nothing implements to every stream that binds the endpoint (RULE-STRM-025 names that obligation on the stream). The pinned contract-consumption manifest claims no read of the set, and a stream's method runs today whether or not the endpoint declared it: the declaration does its work where it is read, at authoring time. There is no default-method key because which method to run is the stream's decision per run; an endpoint naming one would be settling a policy it does not own, and the stream that meant to override it would have no way to tell whether it had.\n",
+   "rationale": "This list is the endpoint's capability claim — the syncs it declares a path for — and the set RULE-STRM-025 obliges a stream's chosen method to come from, so an invented name advertises a sync nothing implements to every stream that binds the endpoint. The pinned contract-consumption manifest claims no read of the set, and it has no effect on a run today: the declaration does its work where it is read, at authoring time. There is no default-method key because which method to run is the stream's decision per run; an endpoint naming one would be settling a policy it does not own, and the stream that meant to override it would have no way to tell whether it had.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3521,7 +3521,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The placement is what every binding is matched against: a binding may only sit in the request slot its param's placement names, so the placement and the one legal binding site move together. The pinned contract-consumption manifest claims no read of the field — a run today routes the value by the slot the binding sits in — so the agreement the validator grades between the field and that slot is what the placement buys. Closing the set is what makes a wrong placement report as a wrong placement: RULE-ENDP-009 catches the same document one step later, as a param no binding references, and that diagnosis sends the author to delete the param rather than to correct where it is sent. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because one param can carry a value on both journeys. Each field's closed set also publishes the admissible values in the JSON Schema, so nothing has to restate them.\n",
+   "rationale": "The placement is what every binding is matched against: a binding may only sit in the request slot its param's placement names (RULE-ENDP-008 holds that agreement), so the placement and the one legal binding site move together. The pinned contract-consumption manifest claims no read of the field, and it directs no part of a run today; the agreement is what the placement buys. Closing the set is what makes a wrong placement report as a wrong placement: RULE-ENDP-009 catches the same document one step later, as a param no binding references, and that diagnosis sends the author to delete the param rather than to correct where it is sent. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because the same param can carry a value on the way up and on the way back.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3653,7 +3653,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members and rendered onto this param, so the two documents agree only while both read one vocabulary. An operator offered here has to survive being serialised into a request the provider accepts, rather than compiled into a predicate the way a database read's operator is, and which ones do is a fact about the provider — so an endpoint declares what it offers instead of inheriting a vocabulary whole.\n",
+   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members (RULE-STRM-026 names that obligation), so the documents agree only while each reads one vocabulary. Which operators survive the trip to the provider — sent as request input rather than compiled into a predicate the way a database read's operator is — is a fact about the provider, so an endpoint declares what it offers instead of inheriting a vocabulary whole. The pinned contract-consumption manifest claims no read of the set, and it has no effect on a run today; the promise does its work where the set is read, at authoring time.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3680,7 +3680,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The wire half of a cursor mapping — the spelling the stored cursor is sent as, and the comparison the provider is expected to apply to it — is a fact about the provider, so each member draws on a closed vocabulary: that is what lets the declaration be graded at authoring time rather than trusted. The pinned contract-consumption manifest claims no read of the wire half of a cursor mapping, and a run today sends the stored value as-is; what the closed sets buy now is agreement between author and validator, and a declaration the engine can adopt without re-reading documents already published against it.\n",
+   "rationale": "The wire half of a cursor mapping — the spelling the document declares for sending the stored cursor, and the comparison the provider is expected to apply to it — is a fact about the provider, so each member draws on a closed vocabulary: that is what lets the declaration be graded at authoring time rather than trusted. The pinned contract-consumption manifest claims no read of the wire half of a cursor mapping, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3708,7 +3708,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Each end of a window carries its own comparison because whether a bound is inclusive is a provider fact, and the ends of a provider's window are routinely spelled differently; the format is the spelling the bounds are sent as. A wrong end is the quiet kind of failure — records on a boundary dropped from every window, or carried in more than one, reading downstream as missing rows or duplicates rather than as a mapping to fix — which is why each member draws on a closed vocabulary the validator can grade instead of free text. The pinned contract-consumption manifest claims no read of any field of the windowed form: a run today proceeds as though no windowed mapping were declared, so the declaration is graded at authoring time only, and holding it to the closed sets is what keeps documents already published adoptable as written.\n",
+   "rationale": "Each end of a window carries its own comparison because whether a bound is inclusive is a provider fact, and the ends of a provider's window are routinely spelled differently; the format is the spelling the document declares for sending the bounds. A wrong end is the quiet kind of defect — a comparison the provider does not apply changes which records a boundary's window covers, a gap that reads as missing rows or duplicates rather than as a mapping to fix — which is why each member draws on a closed vocabulary instead of free text. The pinned contract-consumption manifest claims no read of any field of the windowed form, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4364,7 +4364,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A level is a threshold, ordered rather than merely named — the level chosen decides how much of a failed run there is to read afterwards — and an unrecognised value has no position in that ordering, so the vocabulary is closed where the document is graded. The pinned contract-consumption manifest claims no read of the logging block, and a run today logs at the engine's own defaults whatever the pipeline declares: the closed set is currently what keeps the declaration honest at authoring time, and what lets the engine adopt the block without re-grading documents already published against it.\n",
+   "rationale": "A level is a threshold, ordered rather than merely named — the level an author chooses states how much of a failed run they expect to have to read afterwards — and an unrecognised value has no position in that ordering, so the vocabulary is closed where the document is graded. The pinned contract-consumption manifest claims no read of the logging block, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },

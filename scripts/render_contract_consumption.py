@@ -7,10 +7,8 @@ census walks the live contract models from the manifest's roots and holds,
 for every reachable field the manifest does not claim, a
 ``FieldDisposition`` in ``census/consumption/dispositions.py`` saying what
 consumes it instead, or declaring the gap. The census also grades the rule
-records over that ground: every record whose ``targets``/``fields`` govern
-an unread field carries a reader-affirmed ``RecordAffirmation`` in
-``census/consumption/record_affirmations.py``, pinned to the refs and the
-rationale wording judged. Each report this script prints is computed once —
+records over that ground — ``census/consumption/records.py`` owns what that
+means. Each report this script prints is computed once —
 ``census.consumption.reachability.census_report`` and
 ``census.consumption.records.record_report`` — the same functions the
 census test suite asserts on, so the lint and this tool can never disagree.

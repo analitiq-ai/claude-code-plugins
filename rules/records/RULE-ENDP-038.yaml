@@ -13,15 +13,14 @@ fields: [supported_methods]
 mechanism: literal_enum
 rationale: >
   This list is the endpoint's capability claim — the syncs it declares a
-  path for — and the set a stream's chosen method is graded against, so an
-  invented name advertises a sync nothing implements to every stream that
-  binds the endpoint (RULE-STRM-025 names that obligation on the stream).
-  The pinned contract-consumption manifest claims no read of the set, and a
-  stream's method runs today whether or not the endpoint declared it: the
-  declaration does its work where it is read, at authoring time. There is no
-  default-method key because which method to run is the stream's decision
-  per run; an endpoint naming one would be settling a policy it does not
-  own, and the stream that meant to override it would have no way to tell
-  whether it had.
+  path for — and the set RULE-STRM-025 obliges a stream's chosen method to
+  come from, so an invented name advertises a sync nothing implements to
+  every stream that binds the endpoint. The pinned contract-consumption
+  manifest claims no read of the set, and it has no effect on a run today:
+  the declaration does its work where it is read, at authoring time. There
+  is no default-method key because which method to run is the stream's
+  decision per run; an endpoint naming one would be settling a policy it
+  does not own, and the stream that meant to override it would have no way
+  to tell whether it had.
 status: active
 superseded_by: null

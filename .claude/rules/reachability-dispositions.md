@@ -93,19 +93,16 @@ that restates it is a second copy of a fact the registry owns.
 
 A rule record's `rationale` ships to users inside the compiled registry and
 routinely explains the rule by what the engine does with the governed field.
-`census/consumption/records.py` locates every active record whose
-`targets`/`fields` intersect the unread set — a set comparison, never a
-reading of the rationale's English — and requires a `RecordAffirmation` in
-`census/consumption/record_affirmations.py`, pinned to the refs located and
-the sha256 of the rationale wording. The guard summons the reader; this
-section is what the reader applies before re-computing the entry:
+`census/consumption/records.py` owns the guard — how records are located
+against the unread set and what a `RecordAffirmation` in
+`census/consumption/record_affirmations.py` pins. The guard summons the
+reader; this section is what the reader applies before re-computing the
+entry:
 
 - The rationale carries no unpinned engine read of a field the manifest
   leaves unread. Its engine claims land on a rung of
-  `engine-behaviour-claims.md`: the manifest half pinned ("the pinned
-  contract-consumption manifest claims no read of …"), the consequence half
-  a reading of the run as it stands — the same two-halves rule a
-  disposition's reason follows, including staying inside the engine.
+  `engine-behaviour-claims.md`, following "The reason, and its halves"
+  above as if the rationale were a gap entry's reason.
 - The rule still earns its severity with the manifest fact in view: what the
   check grades must be defensible without the engine reading the field — a
   closed vocabulary, an agreement between documents — or the record says
