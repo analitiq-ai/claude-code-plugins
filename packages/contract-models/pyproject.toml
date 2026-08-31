@@ -9,6 +9,15 @@ name = "analitiq-contract-models"
 version = "1.0.0rc23"
 description = "Analitiq's public contract surface (Pydantic): the authored connector/connection/stream/pipeline/endpoint documents the published JSON Schemas and the validator both derive from, plus the public REST API request/response shapes. Import as `analitiq.contracts`."
 readme = "README.md"
+# The shipped source runs on 3.10 — nothing under `src` uses a 3.11 construct,
+# and the calendar reader was written off `datetime.fromisoformat` for exactly
+# that reason. The floor is 3.11 because the SUITE needs it: `tomllib` reads
+# the pyproject files these tests grade, and the regex sampler walks
+# `re._parser`, which 3.10 spells differently. Declaring a floor nothing runs
+# is what this repo did before, and it shipped a reader that refused every
+# zone-bearing sample on the version it claimed to support — so the declared
+# floor is a tested one (`tests/schemas/test_python_floor_is_tested.py` holds
+# it to the pytest matrix), and raising the matrix is what lowers this.
 requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Analitiq" }]

@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -21,6 +22,7 @@ from analitiq.validator import (
     GUARD_RESOURCE_BLAME,
     is_guard_finding,
 )
+from analitiq.validator import connectors
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 # Drive the CLI the way a consumer does: import the package and call main(). With
@@ -312,6 +314,18 @@ def test_a_sample_under_a_negation_is_not_graded_against_its_own_opposite(
     assert _example_errors(validator, ep) == []
 
 
+@pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+def test_a_counter_example_written_as_a_reference_is_exempt_too(validator, key):
+    """The exemption reaches a counter-example spelled as a `$ref`, which is
+    the ordinary way to write one without repeating the type. Its twin in the
+    contract models rejects at the MODEL, so the two have to agree here for
+    the document to reach this rule at all."""
+    ep = _sample_endpoint(
+        {key: {"$ref": "#/$defs/Flag", "examples": ["0"]}},
+        Flag={"type": "boolean"})
+    assert _example_errors(validator, ep) == []
+
+
 @pytest.mark.parametrize("name", ["not", "if", "propertyNames"])
 def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name):
     """A pointer segment is a property NAME as often as it is a keyword
@@ -377,6 +391,10 @@ def test_samples_are_graded_wherever_a_declaration_can_sit(validator):
     ep = _endpoint("STRING", "Utf8")
     schema = ep["operations"]["read"]["response"]["schema"]
     schema["items"]["prefixItems"] = [{"type": "string", "examples": [1]}]
+    # A boolean subschema is legal 2020-12 and reaches the same walk. It
+    # declares nothing and owes no finding — but the walk has to survive
+    # meeting one, and this document is where it would otherwise never see it.
+    schema["items"]["properties"]["b"] = True
     schema["examples"] = ["not an array"]
     paths = sorted(e["path"] for e in _example_errors(validator, ep))
     assert paths == [
@@ -547,6 +565,50 @@ def test_a_document_too_deep_to_walk_is_not_the_authors_bug_to_file(validator):
     # which is not the walk that filled the stack and reads to an author as
     # though it were.
     assert "RecursionError" in crashed[0]["message"], crashed[0]
+
+
+def test_a_schema_that_cannot_be_walked_costs_that_schema_only(validator):
+    """The per-schema guard's scope sentence says "every other schema on this
+    document was" checked. Nothing asserted the second half.
+
+    The scope one level in — per sample — has cases proving a crash costs one
+    sample. The scope OUT was added in the same change for the same reason and
+    had none, so the sentence it prints was an unverified claim about the run
+    it appears in. Here the read response's walk comes down before any sample
+    is reached, and the write input's sample still has to be graded."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["write"] = {"insert": {
+        "request": {"method": "POST", "path": "/widgets",
+                    "body": {"from_input": "record"}},
+        "params": {},
+        "input": {"schema": {"$schema": JS, "type": "object", "properties": {
+            "a": {"type": "string", "native_type": "STRING",
+                  "arrow_type": "Utf8", "examples": [7]}}}},
+    }}
+
+    read_pointer = "/operations/read/response/schema"
+    real = connectors.iter_schema_nodes
+
+    def crash_on_the_read_schema(schema, pointer="", negated=False):
+        if schema is ep["operations"]["read"]["response"]["schema"]:
+            raise TypeError("not a size problem")
+        return real(schema, pointer, negated)
+
+    with mock.patch.object(connectors, "iter_schema_nodes",
+                           crash_on_the_read_schema):
+        findings = validator.validate_document(ep, expect_crash=True)
+
+    crashed = [f for f in findings if is_guard_finding(f)]
+    assert len(crashed) == 1, findings
+    assert crashed[0]["validator"] == "embedded-json-schema", crashed[0]
+    assert crashed[0]["path"] == read_pointer, crashed[0]
+    # The half the scope sentence claims and nothing checked: the OTHER
+    # schema's verdict survives. Guarded any wider and this is absent.
+    survived = [f for f in findings
+                if f["validator"] == "embedded-schema-example"]
+    assert len(survived) == 1, findings
+    assert survived[0]["path"].startswith(
+        "/operations/write/insert/input/schema"), survived
 
 
 def test_a_document_that_only_the_fold_recurses_on_lands_on_the_guard(validator):

@@ -129,22 +129,19 @@ def _model_findings(entity: str, doc) -> list[dict]:
         return [
             _finding("contract-model", "error",
                      "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
-            for err in errors
-        ] if (errors := exc.errors()) else []
-    # Deliberately no crash handler. This is the one path here that reaches a
-    # contract model without `analitiq.validator`, which would make it the one
-    # place a crash escapes as a traceback — but none of these three models
-    # walks anything recursively (`analitiq.contracts` keeps its recursive
-    # walkers in `endpoints` and `value_expression`, and neither is reached
-    # from a connection, a stream or a pipeline), and every endpoint and type
-    # map goes through `validate_document`, which is guarded.
+            for err in exc.errors()
+        ]
+    # No crash handler here, and nothing in this file tests for one. This is
+    # the one path that reaches a contract model without `analitiq.validator`,
+    # so it is the one place a crash leaves as a traceback rather than as
+    # findings — which to the calling agent, reading stdout, is no answer at
+    # all under an exit code that reads like one.
     #
-    # It also cannot be written against the validator this plugin installs:
-    # the shape `is_guard_finding` recognises is produced by `guard_finding`,
-    # which is newer than `VALIDATOR_PIN`, and writing the wording by hand
-    # produces a finding that reads as a REJECTION to that predicate. If a
-    # recursive walker ever becomes reachable from these models, the pin moves
-    # first and the handler is one call.
+    # It cannot be written against the validator this plugin installs: the
+    # shape `is_guard_finding` recognises is produced by `guard_finding`,
+    # newer than `VALIDATOR_PIN`, and writing the wording by hand produces a
+    # finding that reads as a REJECTION to that predicate. Containing it needs
+    # a validator id of its own so a consumer separates the two by a field.
 
 
 def _endpoint_findings(doc, document_path: Path) -> list[dict]:

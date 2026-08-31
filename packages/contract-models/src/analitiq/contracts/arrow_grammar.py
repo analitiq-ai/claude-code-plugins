@@ -683,10 +683,11 @@ def _offset_is_real(zone: str | None) -> bool:
     """Whether a captured zone names an offset that exists.
 
     True for an absent zone and for `Z`, neither of which is an offset. The
-    profile admits `+HH`, `+HHMM` and `+HH:MM`, all with unbounded digits, so
-    the positions are read against the same RFC 3339 productions the clock
-    positions are, through the same two constants: the grammar spells the
-    hour and the minute once and both readings are of it.
+    profile admits `+HH`, `+HHMM` and `+HH:MM` — a fixed count of digits in
+    each position, and no bound on what they say, so `+25:99` is well-formed
+    and names nothing. The positions are read against the same RFC 3339
+    productions the clock positions are, through the same constants: the
+    grammar spells the hour and the minute once and both readings are of it.
     """
     if zone is None or zone in ("Z", "z"):
         return True

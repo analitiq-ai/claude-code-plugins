@@ -1,6 +1,6 @@
 """A rule statement that carves out the negating positions names all of them.
 
-Every rule in `CARVE_OUT_RULES` exempts a node reached through a position whose
+Every rule in `_CARVE_OUT_RULES` exempts a node reached through a position whose
 subschema does not describe the instance, and each names those positions rather
 than only the class — because naming only the class left an author with a
 sample under one of them concluding, correctly, that the exemption did not
@@ -24,22 +24,42 @@ from __future__ import annotations
 
 import pytest
 
-#: The phrase every carve-out statement is written around. Used to FIND the
-#: rules, not to grade them — a statement that stops carving out simply leaves
-#: the set, and one that starts carving out joins it without an edit here.
-#: A hand list would silently miss the third rule to grow the exemption.
-_CARVE_OUT_PHRASE = "does not describe the instance"
+#: Which rules are expected to carry the carve-out, pinned. A test's assertion
+#: target, which is the one copy `.claude/rules/no-drift-surfaces.md` permits —
+#: and the only thing that makes membership SHRINKING loud. Locating alone
+#: cannot: a statement reworded until it names none of the positions simply
+#: leaves the located set, and an assertion that the set is merely non-empty
+#: stays green on the rule that is left. A rule joining or leaving this list is
+#: a deliberate edit here, beside the reason.
+_CARVE_OUT_RULES = ("RULE-ENDP-063", "RULE-ENDP-064")
 
 
 def _carve_out_rules():
+    """The rules whose statements carve out the negating positions.
+
+    Located by a name the CONTRACT owns — a backticked member of
+    `JSON_SCHEMA_NEGATED_SCHEMA_KEYS` — never by an English phrase. A phrase
+    ("does not describe the instance", which is how this was written) decides
+    which sentence gets graded, so rewording it silently grades nothing while
+    the guard reports agreement; `.claude/rules/guards.md` names that shape.
+    The contract's own vocabulary cannot be reworded without the contract
+    moving, and when it does the comparison below is what fails.
+    """
+    from analitiq.contracts.endpoints import JSON_SCHEMA_NEGATED_SCHEMA_KEYS
     from analitiq.contracts.shared.rules import all_rules
 
-    found = sorted(r.id for r in all_rules()
-                   if _CARVE_OUT_PHRASE in (r.statement or ""))
-    assert found, (
-        f"no rule statement contains {_CARVE_OUT_PHRASE!r} — either the "
-        "carve-out was reworded, in which case this guard is reading nothing "
-        "and reporting agreement, or it was removed and this file goes"
+    found = sorted(
+        r.id for r in all_rules()
+        if any(f"`{key}`" in (r.statement or "")
+               for key in JSON_SCHEMA_NEGATED_SCHEMA_KEYS)
+    )
+    assert found == sorted(_CARVE_OUT_RULES), (
+        f"the rules whose statements name a negating position are {found}, and "
+        f"{sorted(_CARVE_OUT_RULES)} were expected. A rule that dropped out "
+        "still renders its statement into the wheel and into the plugin "
+        "reference, where an author reads it to decide whether the exemption "
+        "reaches their node — and the assertions below would no longer grade "
+        "it. Add or remove it here deliberately, with the reason."
     )
     return found
 

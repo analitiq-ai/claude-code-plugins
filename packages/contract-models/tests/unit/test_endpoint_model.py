@@ -3201,6 +3201,26 @@ class TestRecordedWireSampleZone:
         assert "names no moment that exists" in str(exc.value), exc.value
 
     @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+    def test_a_sample_under_a_negation_reached_by_a_fold_is_exempt_too(self, key):
+        """The exemption has to hold on the branch that follows a fold, not
+        only on the one where the type is spelled out inline.
+
+        The two branches are separate code, and only the inline one had a
+        case. An author who writes their counter-example as a reference to a
+        shared `$defs` stamp — the ordinary way to avoid repeating a type —
+        took the fold branch and had their right answer rejected at the model,
+        which is the harder rejection to read: the document does not parse, so
+        RULE-ENDP-064's exemption is never reached to disagree with it."""
+        payload = _api_payload_with_field_schema(
+            "updated_at",
+            {key: {"$ref": "#/$defs/Stamp",
+                   "examples": ["2024-01-02T03:04:05"]}})
+        schema = payload["operations"]["read"]["response"]["schema"]
+        schema["$defs"] = {"Stamp": self._temporal(
+            "Timestamp(MICROSECOND, UTC)", [])}
+        parse_endpoint(payload)
+
+    @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
     def test_a_sample_under_a_negation_is_not_graded_here_either(self, key):
         """The same reading RULE-ENDP-064 applies, applied by the rule that
         shares its subject. Under one of these positions the declaration says
@@ -3362,19 +3382,39 @@ class TestRecordedWireSampleZone:
                 "Timestamp(MICROSECOND, UTC)", [])},
         }))
 
-    def test_a_non_list_examples_value_is_left_to_the_meta_check(self):
+    @pytest.mark.parametrize("examples", [
+        # A string is iterable, so it reaches the loop and yields characters,
+        # none of which is date-time-shaped. It grades as silence either way,
+        # which is why it cannot on its own pin the isinstance check.
+        "2024-01-02T03:04:05",
+        # An int is not iterable at all. Without the check this raises
+        # `TypeError` out of a `@model_validator`, so `parse_endpoint` raises
+        # `TypeError` rather than `ValidationError` — and through the validator
+        # that is a tool-defect type, so the author is told to report a bug
+        # about a document they wrote.
+        7,
+        None,
+        # A mapping iterates its KEYS, so without the check this grades the
+        # author's key as a wire sample. The key is naive under a zoned type,
+        # so grading it rejects the declaration — a finding invented from a
+        # position that records no sample at all.
+        {"2024-01-02T03:04:05": 1},
+    ])
+    def test_a_non_list_examples_value_is_left_to_the_meta_check(self, examples):
         """`examples` must be an array; saying so is the JSON Schema draft's
         job, and reporting it here too would report it twice.
 
         The draft is run by `analitiq-validator`, not by these models — so a
         consumer holding only the contract package gets no finding for this,
-        the same boundary every other metaschema defect sits on.
+        the same boundary every other metaschema defect sits on. What the
+        models owe is to leave it alone without coming down, and each value
+        below fails differently if they do not.
         """
         parse_endpoint(_api_payload_with_field_schema(
             "updated_at",
             {"type": "string", "native_type": "date-time",
              "arrow_type": "Timestamp(MICROSECOND, UTC)",
-             "examples": "2024-01-02T03:04:05"}))
+             "examples": examples}))
 
 
 class TestColumnAuthoredShapeMarkers:

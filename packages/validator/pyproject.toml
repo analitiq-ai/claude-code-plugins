@@ -13,6 +13,15 @@ name = "analitiq-validator"
 version = "1.0.0rc23"
 description = "The Analitiq artifact validator: offline validation of Analitiq documents against the contract models (`analitiq-contract-models`) plus the cross-file and cross-document checks a single-document model cannot express. Today it validates connector-package documents (connector, endpoint, type-map files) and the referential integrity of an assembled pipeline bundle. Import as `analitiq.validator`; CLI `analitiq-validate`."
 readme = "README.md"
+# The shipped source runs on 3.10 — nothing under `src` uses a 3.11 construct,
+# and the calendar reader was written off `datetime.fromisoformat` for exactly
+# that reason. The floor is 3.11 because the SUITE needs it: `tomllib` reads
+# the pyproject files these tests grade, and the regex sampler walks
+# `re._parser`, which 3.10 spells differently. Declaring a floor nothing runs
+# is what this repo did before, and it shipped a reader that refused every
+# zone-bearing sample on the version it claimed to support — so the declared
+# floor is a tested one (`tests/schemas/test_python_floor_is_tested.py` holds
+# it to the pytest matrix), and raising the matrix is what lowers this.
 requires-python = ">=3.11"
 license = "Apache-2.0"
 authors = [{ name = "Analitiq" }]

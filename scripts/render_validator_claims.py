@@ -1648,9 +1648,17 @@ def malformed_marker_docs() -> list[str]:
 # Marker-block substitution (the pipeline plugin's grammar)
 # ---------------------------------------------------------------------------
 
+#: `indent` is whatever a marker is written after — spaces when the block sits
+#: inside a list item, nothing at top level. It is captured so the END marker
+#: can be re-emitted at the SAME indent as its BEGIN: an HTML comment at column
+#: 0 after a blank line ends the enclosing list under CommonMark, so a block
+#: opened at column 3 and closed at column 0 closes the list item too, and
+#: everything after it in that item renders as a top-level paragraph.
 _BLOCK_RE = re.compile(
+    r"(?P<indent>[^\S\n]*)"
     r"(?P<begin><!-- BEGIN GENERATED: (?P<id>[a-z0-9][a-z0-9:-]*) -->\n)"
     r"(?P<body>.*?)"
+    r"(?P<indent_end>[^\S\n]*)"
     r"(?P<end><!-- END GENERATED: (?P=id) -->)",
     re.DOTALL,
 )
@@ -1670,7 +1678,8 @@ def render_text(text: str, source: str) -> str:
                 f"{source}: no renderer for generated block {block_id!r}; "
                 f"known blocks: {', '.join(sorted(RENDERERS))}"
             ) from None
-        return match.group("begin") + renderer() + match.group("end")
+        return (match.group("indent") + match.group("begin") + renderer()
+                + match.group("indent") + match.group("end"))
 
     return _BLOCK_RE.sub(_sub, text)
 

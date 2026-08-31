@@ -617,6 +617,13 @@ class TestRecordedWireSamples:
         # reader calling it impossible refuses real wire evidence and tells the
         # author to drop it.
         ("2024-01-02T23:59:60Z", True),
+        # ...and only `:60`. The bound is pinned from both sides here, as
+        # every other position is: with only the accepting row, the seconds
+        # bound could be any value at all and this table stays green, so a
+        # mistranscribed `:61` reads as a real instant. The author is then
+        # told their DECLARATION disagrees about zones, and goes looking at
+        # the type instead of at the digit they mistyped.
+        ("2024-01-02T03:04:61Z", False),
         # The positions above the seconds have no leap case.
         ("2024-01-02T24:00:00Z", False),
         # The offset is a position too. `+25:99` is a `Z` on a moment that does

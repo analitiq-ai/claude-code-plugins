@@ -486,12 +486,18 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                 pointer, where,
                 vid="embedded-schema-example",
                 path=f"{pointer}{node_pointer}/examples/{index}",
+                # This wording covers running out of stack too, because a
+                # caller that supplies `blame` supplies it for every cause the
+                # guard consults it for. The leading clause is written to be
+                # true of both: a reference that leads back to itself is one
+                # more way the node takes the implementation somewhere it
+                # cannot come back from, and it arrives here rather than under
+                # the size default. The detail names which one it was.
                 blame=(
                     "something the node reaches takes the JSON Schema "
                     "implementation somewhere it cannot come back from — a "
-                    "value a keyword cannot compute against, say. (A "
-                    "reference that leads back to itself exhausts the stack "
-                    "instead, and reports as a size.)"
+                    "value a keyword cannot compute against, or a reference "
+                    "that leads back to itself. The detail above says which."
                 ),
                 scope=(
                     f"The recorded sample at {at} was not graded; every other "

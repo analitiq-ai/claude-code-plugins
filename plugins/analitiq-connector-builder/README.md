@@ -111,7 +111,7 @@ Schemas are generated from — so there is no schema fetch. It runs:
    - `the document nests deeper, or runs larger, than this tool can walk.` — the document's size.
    - anything else — the document's own content, described by the check
      that was reading it.
-<!-- END GENERATED: unfinished-check -->
+   <!-- END GENERATED: unfinished-check -->
 
    The validator checks JSON documents only; the database package files
    (`connector.py`, `pyproject.toml`, …) are enforced by registry CI.
