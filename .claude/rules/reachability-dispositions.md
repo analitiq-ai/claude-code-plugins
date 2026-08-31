@@ -18,9 +18,10 @@ is the same split on fields and on the records over them.
 shape (a `structural` entry must sit on a `Literal`) and holds a
 `derivation_input` entry's `derives` to a field the same model declares, the
 manifest claims, and a validator the model runs writes — the last taken from
-the model's own validator registry, which is what pydantic runs, and read off
-each validator's source as a call to the sanctioned derivation helper naming
-the field as a literal: a call site and a constant rather than a sentence; `ConsumptionReport` there carries every finding those can reach.
+the model's own validator registry, which is what pydantic runs, and read
+off each validator's source as a call to the sanctioned derivation helper
+naming the field as a literal: a call site and a constant rather than a
+sentence; `ConsumptionReport` there carries every finding those can reach.
 `tests/census/test_contract_consumption.py` and
 `scripts/render_contract_consumption.py check` fail on every finding that
 dataclass carries. **Neither decides whether a reason is honest, nor which

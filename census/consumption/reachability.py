@@ -186,7 +186,7 @@ def _writes_derived_field(cls: type[BaseModel], name: str) -> bool:
     with a call in a method nothing invokes, with a nested class's
     derivation, and with a base's derivation a subclass had replaced.
 
-    Two halves stay the reader's, under
+    What stays the reader's, under
     ``.claude/rules/reachability-dispositions.md``: that the field the entry
     sits on is an INPUT to the derivation rather than some other unread
     field of the same model, and that the call is on a branch the validator
@@ -290,8 +290,9 @@ class ConsumptionReport:
     #: model — either it is the wrong name, or nothing reads the product.
     derivation_product_unread: tuple[FieldDisposition, ...]
     #: ``derivation_input`` claims the contract computes ``derives`` at
-    #: parse time, and no validator the model runs writes it — the entry
-    #: names a derivation the contract does not perform.
+    #: parse time, and no validator the model runs declares a write of it —
+    #: the entry names a derivation the contract does not perform, or one
+    #: written where the census cannot read it.
     derivation_not_written: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
@@ -457,7 +458,7 @@ def census_report(
             product_unread.append(entry)
         # Only where the model declares the product: a `derives` naming no
         # field is already the finding above, and "nothing derives a field
-        # that does not exist" would print a second line about one defect.
+        # that does not exist" would print a duplicate line about one defect.
         if (
             entry.kind == "derivation_input"
             and entry.derives in cls.model_fields

@@ -345,10 +345,10 @@ class Root(BaseModel):
 
     @model_validator(mode="after")
     def _derive_direct(self) -> "Root":
-        # A real derivation, because the census reads this class's source for
-        # one: `Root.maybe` is dispositioned `derivation_input` deriving the
-        # claimed `direct`, and a fixture asserting that entry is accepted
-        # while nothing computes it would prove the check cannot fail.
+        # A real derivation: `Root.maybe` is dispositioned `derivation_input`
+        # deriving the claimed `direct`, and `_COMPLETE` is the accepted
+        # baseline every other test builds on, so it has to derive what it
+        # says it derives.
         if self.maybe is not None:
             set_derived_field(self, "direct", Leaf(value=1, label=self.maybe.op))
         return self
@@ -577,11 +577,6 @@ def shadowed(monkeypatch):
     import types
 
     shadow = types.ModuleType(_SHADOW)
-    # The re-homed classes are defined in THIS file, and `inspect.getsource`
-    # finds a class through its module's `__file__` — a shadow without one
-    # would make every synthetic derivation unreadable, so the check that
-    # reads them would pass by finding nothing to read.
-    shadow.__file__ = __file__
     for cls in _SYNTHETIC:
         setattr(shadow, cls.__name__, cls)
         monkeypatch.setattr(cls, "__module__", _SHADOW)
@@ -698,7 +693,7 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
     assert not report.ok, why
     assert report.derivation_product_unread == (wrong,)
     assert f"Root.annotated -> {derives}" in report.render()
-    # A declared product raises the derivation check too, and both facts are
+    # A declared product raises the derivation check too, and each fact is
     # true of it: nothing reads it and nothing computes it. Narrowing the
     # second to claimed products alone — the obvious way to stop printing two
     # lines — would silently stop grading every entry whose product is
@@ -714,9 +709,10 @@ def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
 # --- The derivation writer: what a `derivation_input` entry is held to -------
 #
 # A `derivation_input` says the contract computes another field from this one
-# at parse time. `set_derived_field` is the one sanctioned way a contract
-# model writes such a value, so the entry is held to a call naming the
-# product — a call site and a literal argument, never a sentence.
+# at parse time. `set_derived_field` is the sanctioned way a contract model
+# writes such a value, so the entry is held to a call naming the product
+# inside a validator the model's own registry carries — a call site and a
+# literal argument, never a sentence.
 
 
 class WritesDirectly(BaseModel):
@@ -749,8 +745,9 @@ class WritesQualified(BaseModel):
 
 
 class InheritsTheDerivation(WritesDirectly):
-    """A derivation declared once on a base and inherited — the shape
-    `RetryErrorHandlingBase` has, and the one a carrier-only scan misses."""
+    """A derivation declared on a base and inherited — the shape
+    `RetryErrorHandlingBase` has. The registry carries it for every variant
+    that inherits it, which reading this class's own body would not."""
 
     extra: str = ""
 
@@ -760,9 +757,8 @@ class WritesNothing(BaseModel):
 
 
 class WritesInAHelper(BaseModel):
-    """The call exists and no parse-time derivation runs it: nothing computes
-    `product` while pydantic builds the instance, which is exactly the state
-    the entry claims is impossible."""
+    """The call exists and no validator runs it, so nothing computes
+    `product` while pydantic builds the instance."""
 
     product: str = ""
 
@@ -819,11 +815,10 @@ def test_a_product_no_derivation_writes_is_not_found(cls, name):
     assert not _writes_derived_field(cls, name)
 
 
-def test_the_written_field_is_read_from_the_writer_s_own_signature():
-    """The scan reads the field argument by the name and position
-    `set_derived_field` declares, never a copy of them: a parameter inserted
-    ahead of it would otherwise leave the scan grading the wrong argument
-    while every test above still passed."""
+def test_both_call_shapes_the_scan_matches_are_shapes_the_writer_accepts():
+    """The scan grades the field argument as a keyword and as a positional.
+    Each must be a way `set_derived_field` can actually be called, or the
+    scan is matching a call the contract could never make."""
     import inspect as _inspect
 
     from census.consumption.reachability import (
@@ -831,16 +826,39 @@ def test_the_written_field_is_read_from_the_writer_s_own_signature():
         _WRITTEN_FIELD_POSITION,
     )
 
-    parameters = list(_inspect.signature(set_derived_field).parameters)
-    assert parameters[_WRITTEN_FIELD_POSITION] == _WRITTEN_FIELD_PARAMETER
+    signature = _inspect.signature(set_derived_field)
+    model, value = object(), object()
+    keyword = signature.bind(model, **{_WRITTEN_FIELD_PARAMETER: "x", "value": value})
+    positional = signature.bind(*([model] * _WRITTEN_FIELD_POSITION), "x", value)
+    assert keyword.arguments[_WRITTEN_FIELD_PARAMETER] == "x"
+    assert positional.arguments[_WRITTEN_FIELD_PARAMETER] == "x"
 
 
-def test_a_class_with_no_readable_source_reports_no_derivation():
-    """A dynamically built model has no source to scan. Reporting it as
-    underived summons a reader; reporting it as derived would be the check
-    passing on what it could not read."""
-    built = type("Built", (BaseModel,), {"__annotations__": {"product": str}})
-    assert not _writes_derived_field(built, "product")
+def test_a_validator_with_no_readable_source_reports_no_derivation():
+    """A validator compiled from a string has no file to read back, so the
+    write it performs cannot be seen. Reporting it as underived summons a
+    reader; reporting it as derived would be the check passing on what it
+    could not read."""
+    namespace: dict = {}
+    exec(  # noqa: S102 - a model whose source is deliberately not on disk
+        compile(
+            "from pydantic import BaseModel, model_validator\n"
+            "from analitiq.contracts.shared.common import set_derived_field\n"
+            "class Generated(BaseModel):\n"
+            "    product: str = ''\n"
+            "    @model_validator(mode='after')\n"
+            "    def _fill(self):\n"
+            "        set_derived_field(self, 'product', 'value')\n"
+            "        return self\n",
+            "<no-such-file>",
+            "exec",
+        ),
+        namespace,
+    )
+    generated = namespace["Generated"]
+    # The derivation is real — it runs — and the census still cannot read it.
+    assert generated().product == "value"
+    assert not _writes_derived_field(generated, "product")
 
 
 def test_derivation_input_whose_product_nothing_derives_is_a_finding(shadowed):
@@ -866,7 +884,7 @@ def test_derivation_input_whose_product_the_contract_derives_is_accepted(shadowe
 
 
 def test_a_derives_the_model_does_not_declare_raises_one_finding(shadowed):
-    """Two findings over one defect would print the same line twice: a field
+    """A duplicate finding over one defect prints the same line twice: a field
     that does not exist is named by the product-unread finding, and nothing
     deriving it is not a second fact about it."""
     wrong = _entry(
