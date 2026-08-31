@@ -40,7 +40,9 @@ from typing import Callable, Mapping
 #: it, and stops being one at four. Inside a list item that column is the
 #: item's own, so a block there breaks at the same width as a top-level one —
 #: from a deeper starting column, which is the only difference. Columns, not
-#: spaces: a tab is four of them, so a one-character drift is already past.
+#: spaces: a tab advances to the next four-column stop, so one character is
+#: worth anywhere from one column to four depending on where it starts — at
+#: the left margin it is already past on its own.
 #:
 #: Past the threshold a rendered body always ends on a non-blank line, so what
 #: the marker becomes is decided by that line. After a paragraph it continues
