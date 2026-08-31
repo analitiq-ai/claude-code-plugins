@@ -21,6 +21,14 @@ One disposition per kind of consumer an unread field may have:
 - ``structural`` — the model's own parsing consumes it: a discriminator the
   union dispatches on, a literal the schema pins. No attribute read exists
   because pydantic settled the value before the engine held the object.
+- ``derivation_input`` — the contract derives another field of the same
+  model from it at parse time, and that derived field is what the engine
+  reads. No attribute read of this field exists because its value reaches
+  the run transformed, under the derived field's name; a document whose
+  input does not produce the derived value is refused before the run sees
+  it. ``derives`` names the derived field, and the census holds that field
+  to being claimed: a derivation whose product nothing reads is a gap, not
+  a derivation.
 - ``engine_gap`` — the contract permits something the engine ignores and
   should honour: what the author declared has no effect on the run. The
   ``reason`` states what an author writing the field expects and what the
@@ -53,7 +61,12 @@ from dataclasses import dataclass
 from typing import Literal, get_args
 
 DispositionKind = Literal[
-    "authoring_only", "structural", "engine_gap", "contract_surplus", "manifest_gap"
+    "authoring_only",
+    "structural",
+    "derivation_input",
+    "engine_gap",
+    "contract_surplus",
+    "manifest_gap",
 ]
 
 # Named reasons, so the census is countable by category and one edit
@@ -90,18 +103,33 @@ class FieldDisposition:
     to judge it. A ``reason`` is required for every kind: an ``engine_gap``
     with no stated consequence is an alarm with no text, and an
     ``authoring_only`` with no named consumer is a waiver of nothing.
+    ``derives`` belongs to ``derivation_input`` and to no other kind: it
+    names the field on this model whose value the contract computes from
+    this one, which is what makes the disposition falsifiable — the census
+    fails the entry when the manifest stops claiming that field.
     """
 
     model: str
     field: str
     kind: DispositionKind
     reason: str
+    derives: str | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in get_args(DispositionKind):
             raise ValueError(f"{self.model}.{self.field}: unknown kind {self.kind!r}")
         if not self.reason.strip():
             raise ValueError(f"{self.model}.{self.field}: a reason is required")
+        if self.kind == "derivation_input" and not (self.derives or "").strip():
+            raise ValueError(
+                f"{self.model}.{self.field}: a derivation_input names the field "
+                "it derives"
+            )
+        if self.kind != "derivation_input" and self.derives is not None:
+            raise ValueError(
+                f"{self.model}.{self.field}: derives belongs to derivation_input, "
+                f"not to {self.kind}"
+            )
         if not self.model or "." not in self.model:
             raise ValueError(
                 f"{self.model!r}: model must be an analitiq.contracts-relative "

@@ -250,12 +250,15 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("stream.ArrowFieldSpec", "items", "authoring_only", NESTED_SHAPE_DECLARATION),
     # --- stream.ConnectionEndpointRef: the locator beside the derived handle
     FieldDisposition(
-        "stream.ConnectionEndpointRef", "database_object", "engine_gap",
-        "an author supplying the verbatim locator expects it to be the "
-        "identity the run resolves (RULE-DBEP-007 and RULE-STRM-003 name the "
-        "obligation); the pinned manifest claims no read "
-        "of database_object, so the run resolves the derived handle and the "
-        "locator the stream carries is never consulted",
+        "stream.ConnectionEndpointRef", "database_object", "derivation_input",
+        "the locator is the identity, and endpoint_id is what carries it to "
+        "the run: the contract derives the handle from the locator at parse "
+        "time and refuses a reference whose supplied handle is not the one "
+        "the locator produces (RULE-STRM-003 names that obligation, "
+        "RULE-DBEP-007 the ban on reading identity back out of the handle), "
+        "so a locator naming a different object resolves a different endpoint "
+        "rather than being silently ignored",
+        derives="endpoint_id",
     ),
     # --- stream.ConstantAssignmentValue: the AssignmentValue tag ------------
     FieldDisposition("stream.ConstantAssignmentValue", "kind", "structural", UNION_DISCRIMINATOR),

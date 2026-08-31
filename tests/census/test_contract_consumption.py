@@ -179,7 +179,10 @@ def test_accepted_kinds_are_exactly_the_literal():
     adding a kind is one edit — proven by every member being accepted and
     nothing else."""
     for kind in get_args(DispositionKind):
-        assert FieldDisposition("a.B", "x", kind, "reason").kind == kind
+        # `derives` is required by exactly one kind and refused by the rest,
+        # so the construction that proves acceptance carries it per kind.
+        derives = "y" if kind == "derivation_input" else None
+        assert FieldDisposition("a.B", "x", kind, "reason", derives).kind == kind
     with pytest.raises(ValueError, match="unknown kind"):
         FieldDisposition("a.B", "x", "documented", "reason")
 
@@ -226,6 +229,22 @@ def test_disposition_requires_a_reason(reason):
 def test_disposition_requires_a_dotted_model_path(model):
     with pytest.raises(ValueError, match="dotted path"):
         FieldDisposition(model, "x", "authoring_only", "reason")
+
+
+@pytest.mark.parametrize("derives", [None, "", "   "])
+def test_derivation_input_requires_the_field_it_derives(derives):
+    """``derives`` is what makes the kind falsifiable — without it the entry
+    claims a derivation whose product nothing can be held to."""
+    with pytest.raises(ValueError, match="names the field it derives"):
+        FieldDisposition("a.B", "x", "derivation_input", "reason", derives)
+
+
+@pytest.mark.parametrize(
+    "kind", [k for k in get_args(DispositionKind) if k != "derivation_input"]
+)
+def test_derives_belongs_to_derivation_input_alone(kind):
+    with pytest.raises(ValueError, match="derives belongs to derivation_input"):
+        FieldDisposition("a.B", "x", kind, "reason", "y")
 
 
 # ---------------------------------------------------------------------------
@@ -466,8 +485,16 @@ def test_a_claim_on_an_opaque_model_is_a_read_and_its_other_fields_stay_opaque()
 _LOCAL = "tests.census.test_contract_consumption"
 
 
-def _entry(model: str, field: str, kind="authoring_only", reason="read by a person"):
-    return FieldDisposition(model=model, field=field, kind=kind, reason=reason)
+def _entry(
+    model: str,
+    field: str,
+    kind="authoring_only",
+    reason="read by a person",
+    derives=None,
+):
+    return FieldDisposition(
+        model=model, field=field, kind=kind, reason=reason, derives=derives
+    )
 
 
 _SYNTHETIC = (Root, Leaf, Grammar, Tagged, ViaDict, DictOnly, Orphan, Unclaimed)
@@ -503,7 +530,13 @@ _M = _SHADOW.removeprefix("analitiq.contracts.")
 
 _COMPLETE = (
     _entry(f"{_M}.Root", "plain"),
-    _entry(f"{_M}.Root", "maybe"),
+    _entry(
+        f"{_M}.Root",
+        "maybe",
+        kind="derivation_input",
+        reason="the claimed `direct` is derived from it",
+        derives="direct",
+    ),
     _entry(f"{_M}.Root", "annotated"),
     _entry(f"{_M}.Root", "shape", kind="structural", reason="schema-pinned literal"),
     _entry(f"{_M}.Leaf", "label"),
@@ -573,6 +606,32 @@ def test_structural_disposition_on_a_non_literal_field_is_a_finding(shadowed):
 def test_structural_disposition_on_a_literal_field_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
     assert report.structural_not_literal == ()
+
+
+@pytest.mark.parametrize(
+    "derives,why",
+    [
+        ("plain", "the derived field is unread too"),
+        ("vanished", "the model declares no such field"),
+    ],
+)
+def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives, why):
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives=derives,
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert not report.ok, why
+    assert report.derivation_product_unread == (wrong,)
+    assert f"Root.annotated -> {derives}" in report.render()
+
+
+def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
+    report = census_report(shadowed, _COMPLETE)
+    assert report.derivation_product_unread == ()
 
 
 def test_claim_of_a_field_the_model_does_not_declare_is_a_finding(shadowed):
