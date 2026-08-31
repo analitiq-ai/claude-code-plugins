@@ -31,11 +31,15 @@ the lint and the tool can never disagree.
 """
 from __future__ import annotations
 
+import ast
 import importlib
+import inspect
+import textwrap
 import types
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
+from analitiq.contracts.shared.common import set_derived_field
 from pydantic import BaseModel
 
 from census.consumption.disposition import DispositionKind, FieldDisposition
@@ -111,6 +115,68 @@ def _is_literal(annotation: Any) -> bool:
     if origin is Union or origin is types.UnionType:
         members = [a for a in get_args(annotation) if a is not type(None)]
         return bool(members) and all(_is_literal(m) for m in members)
+    return False
+
+
+#: The one sanctioned way a contract model writes a derived value, named
+#: through the symbol itself: a rename fails this import rather than leaving
+#: the scan below matching nothing and reporting every derivation unwritten.
+_DERIVATION_WRITER = set_derived_field.__name__
+
+
+def _derivation_writes(source: str, name: str) -> bool:
+    """Whether ``source`` calls the derivation writer with ``name`` as the
+    field it writes — the second positional argument, or the ``field``
+    keyword. A literal argument, so the match is a call site and a constant,
+    never a sentence."""
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Name):
+            called = func.id
+        elif isinstance(func, ast.Attribute):
+            called = func.attr
+        else:
+            continue
+        if called != _DERIVATION_WRITER:
+            continue
+        written = next(
+            (kw.value for kw in node.keywords if kw.arg == "field"),
+            node.args[1] if len(node.args) > 1 else None,
+        )
+        if isinstance(written, ast.Constant) and written.value == name:
+            return True
+    return False
+
+
+def _writes_derived_field(cls: type[BaseModel], name: str) -> bool:
+    """Whether a parse-time derivation writes ``name`` on instances of
+    ``cls``.
+
+    The whole class hierarchy is read, not just the carrier: a derivation
+    declared once on a base and inherited by each variant is the shape
+    ``RetryErrorHandlingBase`` already has, and a scan of the carrier alone
+    would report it unwritten.
+
+    What this cannot decide is whether the field the entry sits on is an
+    INPUT to that derivation — only that the product is derived at parse
+    time. That half is the reader's, under
+    ``.claude/rules/reachability-dispositions.md``.
+    """
+    for base in cls.__mro__:
+        if base is BaseModel or not issubclass(base, BaseModel):
+            continue
+        try:
+            source = textwrap.dedent(inspect.getsource(base))
+        except (OSError, TypeError):
+            # A class with no readable source file cannot be scanned, and a
+            # derivation it carries would be missed; the finding then names
+            # it, which is the direction that summons a reader rather than
+            # passing silently.
+            continue
+        if _derivation_writes(source, name):
+            return True
     return False
 
 
@@ -197,6 +263,10 @@ class ConsumptionReport:
     #: it derives, and the manifest claims no read of that name on this
     #: model — either it is the wrong name, or nothing reads the product.
     derivation_product_unread: tuple[FieldDisposition, ...]
+    #: ``derivation_input`` claims the contract computes ``derives`` at
+    #: parse time, and no derivation in the carrier's class hierarchy writes
+    #: it — the entry names a derivation the contract does not perform.
+    derivation_not_written: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
     claim_of_unknown_field: tuple[FieldRef, ...]
@@ -213,6 +283,7 @@ class ConsumptionReport:
             or self.duplicate_dispositions
             or self.structural_not_literal
             or self.derivation_product_unread
+            or self.derivation_not_written
             or self.claim_of_unknown_field
             or self.manifest_names_unknown_model
         )
@@ -265,6 +336,14 @@ class ConsumptionReport:
             "the wrong field, or the product reaches no run-time read either "
             "and this is a gap, not a derivation",
             self.derivation_product_unread,
+            lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
+        )
+        group(
+            "derivation_input dispositions whose derived field no parse-time "
+            f"derivation writes — no {_DERIVATION_WRITER} call in the "
+            "carrier's class hierarchy names it, so the contract does not "
+            "compute what the entry says it computes",
+            self.derivation_not_written,
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
         group(
@@ -322,6 +401,7 @@ def census_report(
     unknown: list[FieldDisposition] = []
     not_literal: list[FieldDisposition] = []
     product_unread: list[FieldDisposition] = []
+    not_written: list[FieldDisposition] = []
     for entry in dispositions:
         ref = (entry.qualified_model, entry.field)
         cls = models.get(entry.qualified_model)
@@ -348,6 +428,15 @@ def census_report(
             and (entry.qualified_model, entry.derives) not in classes["read"]
         ):
             product_unread.append(entry)
+        # Only where the model declares the product: a `derives` naming no
+        # field is already the finding above, and "nothing derives a field
+        # that does not exist" would print a second line about one defect.
+        if (
+            entry.kind == "derivation_input"
+            and entry.derives in cls.model_fields
+            and not _writes_derived_field(cls, entry.derives)
+        ):
+            not_written.append(entry)
 
     return ConsumptionReport(
         unread_without_disposition=tuple(sorted(classes["unread"] - set(seen))),
@@ -356,6 +445,7 @@ def census_report(
         duplicate_dispositions=duplicates,
         structural_not_literal=tuple(not_literal),
         derivation_product_unread=tuple(product_unread),
+        derivation_not_written=tuple(not_written),
         claim_of_unknown_field=tuple(unknown_claims),
         manifest_names_unknown_model=tuple(unknown_models),
     )

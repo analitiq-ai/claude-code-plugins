@@ -36,13 +36,16 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union, get_args
 
 import pytest
-from pydantic import BaseModel, Field
+from analitiq.contracts.shared import common
+from analitiq.contracts.shared.common import set_derived_field
+from pydantic import BaseModel, Field, model_validator
 
 from census.consumption import pin
 from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
     ConsumptionReport,
     _is_literal,
+    _writes_derived_field,
     census_report,
     classify,
     qualified_name,
@@ -340,6 +343,16 @@ class Root(BaseModel):
     shape: Literal["root"] = "root"
     plain: str = ""
 
+    @model_validator(mode="after")
+    def _derive_direct(self) -> "Root":
+        # A real derivation, because the census reads this class's source for
+        # one: `Root.maybe` is dispositioned `derivation_input` deriving the
+        # claimed `direct`, and a fixture asserting that entry is accepted
+        # while nothing computes it would prove the check cannot fail.
+        if self.maybe is not None:
+            set_derived_field(self, "direct", Leaf(value=1, label=self.maybe.op))
+        return self
+
 
 class Orphan(BaseModel):
     lonely: int
@@ -564,6 +577,11 @@ def shadowed(monkeypatch):
     import types
 
     shadow = types.ModuleType(_SHADOW)
+    # The re-homed classes are defined in THIS file, and `inspect.getsource`
+    # finds a class through its module's `__file__` — a shadow without one
+    # would make every synthetic derivation unreadable, so the check that
+    # reads them would pass by finding nothing to read.
+    shadow.__file__ = __file__
     for cls in _SYNTHETIC:
         setattr(shadow, cls.__name__, cls)
         monkeypatch.setattr(cls, "__module__", _SHADOW)
@@ -685,6 +703,119 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
 def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
     assert report.derivation_product_unread == ()
+
+
+# --- The derivation writer: what a `derivation_input` entry is held to -------
+#
+# A `derivation_input` says the contract computes another field from this one
+# at parse time. `set_derived_field` is the one sanctioned way a contract
+# model writes such a value, so the entry is held to a call naming the
+# product — a call site and a literal argument, never a sentence.
+
+
+class WritesDirectly(BaseModel):
+    """The shape the contract's own derivation has: the carrier writes it."""
+
+    product: str = ""
+
+    @model_validator(mode="after")
+    def _fill(self) -> "WritesDirectly":
+        set_derived_field(self, "product", "value")
+        return self
+
+
+class WritesByKeyword(BaseModel):
+    product: str = ""
+
+    @model_validator(mode="after")
+    def _fill(self) -> "WritesByKeyword":
+        set_derived_field(self, field="product", value="value")
+        return self
+
+
+class WritesQualified(BaseModel):
+    product: str = ""
+
+    @model_validator(mode="after")
+    def _fill(self) -> "WritesQualified":
+        common.set_derived_field(self, "product", "value")
+        return self
+
+
+class InheritsTheDerivation(WritesDirectly):
+    """A derivation declared once on a base and inherited — the shape
+    `RetryErrorHandlingBase` has, and the one a carrier-only scan misses."""
+
+    extra: str = ""
+
+
+class WritesNothing(BaseModel):
+    product: str = ""
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [WritesDirectly, WritesByKeyword, WritesQualified, InheritsTheDerivation],
+)
+def test_a_parse_time_derivation_of_the_product_is_found(cls):
+    assert _writes_derived_field(cls, "product")
+
+
+@pytest.mark.parametrize(
+    "cls,name",
+    [
+        (WritesNothing, "product"),  # no derivation at all
+        (WritesDirectly, "other"),  # a derivation of a different field
+    ],
+)
+def test_a_product_no_derivation_writes_is_not_found(cls, name):
+    assert not _writes_derived_field(cls, name)
+
+
+def test_a_class_with_no_readable_source_reports_no_derivation():
+    """A dynamically built model has no source to scan. Reporting it as
+    underived summons a reader; reporting it as derived would be the check
+    passing on what it could not read."""
+    built = type("Built", (BaseModel,), {"__annotations__": {"product": str}})
+    assert not _writes_derived_field(built, "product")
+
+
+def test_derivation_input_whose_product_nothing_derives_is_a_finding(shadowed):
+    """`either` is claimed, so the product-unread check passes it — and
+    nothing on `Root` computes it, which is the claim this finding grades."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived, allegedly",
+        derives="either",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert not report.ok
+    assert report.derivation_product_unread == ()
+    assert report.derivation_not_written == (wrong,)
+    assert "Root.annotated -> either" in report.render()
+
+
+def test_derivation_input_whose_product_the_contract_derives_is_accepted(shadowed):
+    report = census_report(shadowed, _COMPLETE)
+    assert report.derivation_not_written == ()
+
+
+def test_a_derives_the_model_does_not_declare_raises_one_finding(shadowed):
+    """Two findings over one defect would print the same line twice: a field
+    that does not exist is named by the product-unread finding, and nothing
+    deriving it is not a second fact about it."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives="vanished",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_product_unread == (wrong,)
+    assert report.derivation_not_written == ()
 
 
 def test_every_finding_field_fails_the_report_and_is_rendered():
