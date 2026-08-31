@@ -31,7 +31,6 @@ from __future__ import annotations
 import argparse
 import difflib
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -56,11 +55,7 @@ os.environ.setdefault("DOMAIN", "analitiq.ai")
 # rendered identically.
 DOCS_ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
 
-from _generated_blocks import (  # noqa: E402
-    BLOCK_RE,
-    UnknownBlock,
-    render_text as _render_text,
-)
+from _generated_blocks import render_text as _render_text  # noqa: E402
 
 
 

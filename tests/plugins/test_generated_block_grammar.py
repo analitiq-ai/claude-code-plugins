@@ -134,6 +134,21 @@ def test_an_unknown_block_id_raises_rather_than_skipping():
                     "<!-- END GENERATED: no-such-block -->\n", "<test>", RENDERERS)
 
 
+def test_the_connector_generator_scans_with_the_shared_pattern():
+    """It reads `BLOCK_RE` on its own, outside `render_text` — its document
+    scan and its malformed-marker report both match with it.
+
+    Driving `render_text` grades the rewrite and nothing else, so a module
+    that delegated correctly while matching documents with a pattern of its
+    own would pass that and still answer a different question here. The other
+    generator gets no such assertion: it uses the shared module's
+    `render_text` and reads no pattern, so there is no second name to pin.
+    """
+    import render_validator_claims
+
+    assert render_validator_claims.BLOCK_RE is BLOCK_RE
+
+
 @pytest.mark.parametrize("module", ["gen_pipeline_docs", "render_validator_claims"])
 def test_every_rendered_body_ends_on_a_non_blank_line(module):
     """The premise the indent normalisation is argued from, asserted.
@@ -191,11 +206,3 @@ def test_both_generators_rewrite_through_the_one_grammar(module, monkeypatch):
 
     assert out == ("   <!-- BEGIN GENERATED: demo -->\nrendered\n"
                    "   <!-- END GENERATED: demo -->\n"), repr(out)
-    # Beside it, not instead of it. Driving one input grades the rewrite; a
-    # generator that grew a private but equivalent pattern would still pass.
-    # And the re-exported name is read on its own, outside `render_text`: the
-    # connector generator scans documents with it, and the pipeline plugin's
-    # suite reaches it through that module. So a generator that kept
-    # delegating while re-growing the name would leave those readers on a
-    # second pattern.
-    assert generator.BLOCK_RE is BLOCK_RE

@@ -105,6 +105,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
 import gen_pipeline_docs as G  # noqa: E402
+from _generated_blocks import BLOCK_RE  # noqa: E402
 
 from _rule_files import rule_reference_root  # noqa: E402
 
@@ -349,7 +350,7 @@ def _restatements():
         # Replace each block with its own newline count rather than "": keeps
         # reported line numbers aligned with the real file, and stops prose that
         # abuts a block from being merged into one section.
-        outside = G.BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
+        outside = BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
                                   path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()
         for start, section in _sections(outside):
@@ -369,7 +370,7 @@ def test_docs_carry_their_required_blocks():
     actual = {}
     for path in G.generated_docs():
         actual[path.relative_to(G.DOCS_ROOT).as_posix()] = {
-            m.group("id") for m in G.BLOCK_RE.finditer(path.read_text())
+            m.group("id") for m in BLOCK_RE.finditer(path.read_text())
         }
     missing = {
         doc: sorted(required - actual.get(doc, set()))
@@ -387,7 +388,7 @@ def test_required_blocks_manifest_is_current():
     actual = {}
     for path in G.generated_docs():
         actual[path.relative_to(G.DOCS_ROOT).as_posix()] = {
-            m.group("id") for m in G.BLOCK_RE.finditer(path.read_text())
+            m.group("id") for m in BLOCK_RE.finditer(path.read_text())
         }
     unlisted = {
         doc: sorted(ids - REQUIRED_BLOCKS.get(doc, set()))
@@ -405,7 +406,7 @@ def test_every_vocabulary_is_emitted_by_some_block():
     bodies = [
         match.group("body")
         for path in G.generated_docs()
-        for match in G.BLOCK_RE.finditer(path.read_text())
+        for match in BLOCK_RE.finditer(path.read_text())
     ]
     assert any(b.strip() for b in bodies), "no generated block content — vacuous pass"
     # Per block, not concatenated: a union would let a vocabulary's members be
@@ -492,7 +493,7 @@ def test_fenced_restatements_are_declared():
     vocabularies = _gated_vocabularies()
     found = set()
     for path in _authored_docs():
-        outside = G.BLOCK_RE.sub("", path.read_text())
+        outside = BLOCK_RE.sub("", path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()
         for fence in _FENCE.findall(outside):
             words = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", fence))
@@ -600,7 +601,7 @@ def test_shared_patterns_are_not_hand_typed_outside_generated_blocks():
         f"{missing}. A row names a non-string or renamed constant.")
     offenders = []
     for path in _authored_docs():
-        outside = G.BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
+        outside = BLOCK_RE.sub(lambda m: "\n" * m.group(0).count("\n"),
                                   path.read_text())
         rel = path.relative_to(G.DOCS_ROOT).as_posix()
         for lineno, line in enumerate(outside.splitlines(), 1):

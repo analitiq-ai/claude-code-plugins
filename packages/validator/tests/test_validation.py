@@ -733,8 +733,6 @@ def test_one_endpoint_that_cannot_be_checked_costs_only_that_endpoint(
     interpreter. What is under test is the containment, and the containment is
     the same whichever check it was.
     """
-    from analitiq.validator import connectors
-
     def _boom(*_args, **_kwargs):
         raise RuntimeError("brought down by this endpoint")
 

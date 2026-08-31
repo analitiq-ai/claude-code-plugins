@@ -24,6 +24,7 @@ from _rule_files import rule_reference_root
 ROOT = Path(__file__).resolve().parents[2] / "plugins" / "analitiq-pipeline-builder"
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 import gen_pipeline_docs as G  # noqa: E402
+from _generated_blocks import BLOCK_RE, UnknownBlock  # noqa: E402
 
 pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
@@ -50,7 +51,7 @@ def _referenced_block_ids():
     return {
         m.group("id")
         for p in G.generated_docs()
-        for m in G.BLOCK_RE.finditer(p.read_text())
+        for m in BLOCK_RE.finditer(p.read_text())
     }
 
 
@@ -103,7 +104,7 @@ def test_no_malformed_markers():
             continue
         text = path.read_text()
         markers = len(loose.findall(text))
-        parsed = len(G.BLOCK_RE.findall(text))
+        parsed = len(BLOCK_RE.findall(text))
         assert markers == 2 * parsed, (
             f"{path.relative_to(ROOT)}: {markers} GENERATED marker(s) but "
             f"{parsed} parsed block(s) — a marker is malformed and is being skipped"
@@ -141,7 +142,7 @@ def test_unknown_block_id_raises():
     text = ("<!-- BEGIN GENERATED: no-such-block -->\n"
             "stale\n"
             "<!-- END GENERATED: no-such-block -->")
-    with pytest.raises(G.UnknownBlock):
+    with pytest.raises(UnknownBlock):
         G.render_text(text, "<test>")
 
 
