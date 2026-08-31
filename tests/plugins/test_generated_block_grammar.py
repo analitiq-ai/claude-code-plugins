@@ -71,11 +71,11 @@ def test_a_drifted_end_marker_is_pulled_back_to_its_begin():
     picked up stray whitespace by hand edit or merge kept it, idempotently,
     with every gate green.
 
-    Past three spaces that marker stops starting an HTML block, and what it
-    becomes depends on the line above it: swallowed into a paragraph as inline
-    HTML, or — after a fenced code close or a table, which is what most bodies
-    here end with — an indented code block, rendering the marker as literal
-    text in a document that ships verbatim to users.
+    Four columns past its container's content column, that marker stops
+    starting an HTML block, and what it becomes depends on the line above it:
+    swallowed into a paragraph as inline HTML, or — after a fenced code close
+    or a table — an indented code block, rendering the marker as literal text
+    in a document that ships verbatim to users.
     """
     text = ("<!-- BEGIN GENERATED: demo -->\n"
             "stale\n"
@@ -139,11 +139,11 @@ def test_an_unknown_block_id_raises_rather_than_skipping():
 def test_every_rendered_body_ends_on_a_non_blank_line(module):
     """The premise the indent normalisation is argued from, asserted.
 
-    What a drifted END marker costs is decided by the line above it, and every
-    reading of that in this module assumes the line is not blank. It happens
-    to be true of every renderer in both tables — and nothing said so, which
-    made it the kind of premise a reader checks, finds unstated, and treats as
-    an assumption rather than a property.
+    What a drifted END marker costs is decided by the line above it, which the
+    reasoning in `scripts/_generated_blocks.py` takes for granted is not
+    blank. It happens to be true of every renderer in both tables — and
+    nothing said so, which made it the kind of premise a reader checks, finds
+    unstated, and treats as an assumption rather than a property.
 
     A renderer returning a trailing blank line would put an indented code
     block one hand edit away on every document it feeds, with every gate

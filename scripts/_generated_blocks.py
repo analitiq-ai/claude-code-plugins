@@ -33,14 +33,21 @@ from typing import Callable, Mapping
 #:
 #: What a drift costs depends on how wide it is and on what the body ends
 #: with, which is why normalising every width is simpler than reasoning about
-#: any of them. An HTML comment still starts a block at up to three spaces, so
-#: a narrow drift renders identically to none. At four or more the line is no
-#: longer a block start, and a rendered body always ends on a non-blank line,
-#: so what it becomes is decided by that line: after a paragraph the marker is
-#: a lazy continuation and is swallowed as inline HTML; after a fenced code
-#: close or a table it opens an indented code block and renders as literal
-#: text in a document that ships verbatim to users. Inside a list item the
-#: same four spaces are still the item's own content, so it survives there.
+#: any of them.
+#:
+#: Width is measured from the enclosing container's content column, not from
+#: the left margin: an HTML comment still starts a block three columns past
+#: it, and stops being one at four. Inside a list item that column is the
+#: item's own, so a block there breaks at the same width as a top-level one —
+#: from a deeper starting column, which is the only difference. Columns, not
+#: spaces: a tab is four of them, so a one-character drift is already past.
+#:
+#: Past the threshold a rendered body always ends on a non-blank line, so what
+#: the marker becomes is decided by that line. After a paragraph it continues
+#: it and is swallowed as inline HTML. After a fenced code close or a table it
+#: opens an indented code block — nothing is continuing, and an indented code
+#: block needs no blank line there — and renders as literal text in a document
+#: that ships verbatim to users.
 #:
 #: Normalising to BEGIN is what heals that, and nothing else does: a pair the
 #: renderer leaves where it drifted stays drifted, idempotently, with every
