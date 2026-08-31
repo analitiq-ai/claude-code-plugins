@@ -29,10 +29,11 @@ RENDERERS = {"demo": lambda: "rendered\n"}
 
 @pytest.mark.parametrize("indent", ["", "   ", "\t"])
 def test_the_end_marker_keeps_its_begin_marker_indent(indent):
-    """An HTML comment at column 0 after a blank line ends the enclosing list
-    under CommonMark. A block opened inside a list item and closed at column 0
-    therefore closes the ITEM, and everything after it in that item renders as
-    a top-level paragraph — which is what shipped in a plugin README.
+    """An HTML comment at column 0 ends the enclosing list under CommonMark,
+    whatever precedes it. A block opened inside a list item and closed at
+    column 0 therefore closes the ITEM, and everything after it in that item
+    renders as a top-level paragraph — which is what shipped in a plugin
+    README.
 
     Graded at the grammar rather than at either tree: a document with an
     indented marker exists under one plugin today and under neither tomorrow,
@@ -71,11 +72,9 @@ def test_a_drifted_end_marker_is_pulled_back_to_its_begin():
     picked up stray whitespace by hand edit or merge kept it, idempotently,
     with every gate green.
 
-    Four columns past its container's content column, that marker stops
-    starting an HTML block, and what it becomes depends on the line above it:
-    swallowed into a paragraph as inline HTML, or — after a fenced code close
-    or a table — an indented code block, rendering the marker as literal text
-    in a document that ships verbatim to users.
+    Far enough past its container's content column that marker stops starting
+    an HTML block, and becomes either part of the paragraph above it or
+    literal text in a document that ships verbatim to users.
     """
     text = ("<!-- BEGIN GENERATED: demo -->\n"
             "stale\n"

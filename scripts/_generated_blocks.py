@@ -22,8 +22,8 @@ from typing import Callable, Mapping
 #: `indent` is whatever a marker is written after — spaces when the block sits
 #: inside a list item, nothing at top level. It is captured so END can be
 #: re-emitted at the SAME indent as its BEGIN: under CommonMark an HTML comment
-#: at column 0 after a blank line ends the enclosing list, so a block opened at
-#: column 3 and closed at column 0 closes the list item too, and everything
+#: at column 0 ends the enclosing list, whatever precedes it, so a block opened
+#: at column 3 and closed at column 0 closes the list item too, and everything
 #: after it in that item renders as a top-level paragraph.
 #:
 #: Both indents are captured, and each marker is re-emitted at an indent of
@@ -31,29 +31,14 @@ from typing import Callable, Mapping
 #: BEGIN's is column 0, which is how an END that drifted out to an indent of
 #: its own is pulled back.
 #:
-#: What a drift costs depends on how wide it is and on what the body ends
-#: with, which is why normalising every width is simpler than reasoning about
-#: any of them.
-#:
-#: Width is measured from the enclosing container's content column, not from
-#: the left margin: an HTML comment still starts a block three columns past
-#: it, and stops being one at four. Inside a list item that column is the
-#: item's own, so a block there breaks at the same width as a top-level one —
-#: from a deeper starting column, which is the only difference. Columns, not
-#: spaces: a tab advances to the next four-column stop, so one character is
-#: worth anywhere from one column to four depending on where it starts — at
-#: the left margin it is already past on its own.
-#:
-#: Past the threshold a rendered body always ends on a non-blank line, so what
-#: the marker becomes is decided by that line. After a paragraph it continues
-#: it and is swallowed as inline HTML. After a fenced code close or a table it
-#: opens an indented code block — nothing is continuing, and an indented code
-#: block needs no blank line there — and renders as literal text in a document
-#: that ships verbatim to users.
-#:
-#: Normalising to BEGIN is what heals that, and nothing else does: a pair the
-#: renderer leaves where it drifted stays drifted, idempotently, with every
-#: gate green over it.
+#: A drift is normalised whatever its width, because what it costs varies with
+#: how wide it is and with what the body ends with: narrow, it renders as it
+#: always did; far enough past the enclosing container's content column, the
+#: marker stops starting an HTML block and becomes either part of the
+#: paragraph above it or literal text in a document that ships verbatim to
+#: users. Normalising every width is simpler than reasoning about any of them,
+#: and nothing else heals a drift — a pair the renderer leaves where it
+#: drifted stays drifted, idempotently, with every gate green over it.
 #:
 #: END keeps its own only where BEGIN has none TO give — a block opened after
 #: prose on the same line (a table cell, a sentence). Re-emitting END at
