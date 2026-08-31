@@ -29,9 +29,13 @@ from typing import Callable, Mapping
 #: Both indents are captured, and each marker is re-emitted at an indent of
 #: its own: BEGIN keeps what it had, and END takes BEGIN's — including when
 #: BEGIN's is column 0, which is how an END that drifted out to an indent of
-#: its own is pulled back. Four spaces after a blank line is an indented code
-#: block, so a drifted END renders as literal text in a document that ships
-#: verbatim; normalising it to BEGIN is what heals that.
+#: its own is pulled back. A rendered body always ends on a non-blank line, so
+#: a drifted END is not read as a block-level HTML comment any more: it is
+#: swallowed by the paragraph above it as inline HTML, and the marker pair
+#: stops delimiting a block at container level. Normalising to BEGIN is what
+#: heals that, and healing is only possible because the render is idempotent —
+#: a marker pair the renderer leaves where it drifted stays drifted, and every
+#: gate stays green over it.
 #:
 #: END keeps its own only where BEGIN has none TO give — a block opened after
 #: prose on the same line (a table cell, a sentence). Re-emitting END at

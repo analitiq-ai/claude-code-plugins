@@ -69,9 +69,10 @@ def test_a_drifted_end_marker_is_pulled_back_to_its_begin():
     Told apart by emptiness rather than by participation, the two read alike
     and every top-level block took the "keep your own" branch — so an END that
     picked up stray whitespace by hand edit or merge kept it, idempotently,
-    with every gate green. Four spaces after a blank line is an indented code
-    block, so that END renders as literal text in a document that ships
-    verbatim to users.
+    with every gate green. A rendered body ends on a non-blank line, so that
+    END stops being a block-level HTML comment and is swallowed by the
+    paragraph above it: the pair no longer delimits a block at container
+    level, in a document that ships verbatim to users.
     """
     text = ("<!-- BEGIN GENERATED: demo -->\n"
             "stale\n"
@@ -155,7 +156,9 @@ def test_both_generators_rewrite_through_the_one_grammar(module, monkeypatch):
                    "   <!-- END GENERATED: demo -->\n"), repr(out)
     # Beside it, not instead of it. Driving one input grades the rewrite; a
     # generator that grew a private but equivalent pattern would still pass.
-    # And `BLOCK_RE` is read outside `render_text` too — the connector
-    # generator scans documents with it — so the name being the shared object
-    # is its own property.
+    # And the re-exported name is read on its own, outside `render_text`: the
+    # connector generator scans documents with it, and the pipeline plugin's
+    # suite reaches it through that module. So a generator that kept
+    # delegating while re-growing the name would leave those readers on a
+    # second pattern.
     assert generator.BLOCK_RE is BLOCK_RE

@@ -1638,9 +1638,9 @@ def malformed_marker_docs() -> list[str]:
 
     Both generators read one grammar, so a `claim:*` id parses under either;
     what differs is which renderer table owns it, and no renderer under the
-    pipeline tree does. That generator raises `UnknownBlock` on it, and this
-    reports it by name — which is the half that survives a document nobody
-    runs that generator over.
+    pipeline tree does. Running that generator over such a document raises
+    `UnknownBlock`; this names the DOCUMENT instead, which is the half that
+    survives nobody running that generator at all.
     """
     broken: list[str] = []
     for path in sorted(PLUGINS_ROOT.rglob("*.md")):
