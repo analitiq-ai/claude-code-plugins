@@ -8,13 +8,16 @@ scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteResponse._reject_record_count"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]
+fields: [success_when]
 rationale: >
-  The record count is a read-path quantity, so on a write the ref resolves to
-  nothing rather than to zero — and a `success_when` predicate over a ref that
-  resolves to nothing holds unconditionally, so every write reports success
-  including the ones whose rejected rows the provider listed. The author is
-  usually adapting a read response block to the write side, where the scope
-  silently stops existing; refusing the ref at author time is what keeps that
-  from becoming partial data loss under a green run.
+  The record count is a read-path quantity — the write scope never declares
+  it — so a write-side reference to it names nothing, and a `success_when`
+  built over it is written against a scope the document does not have. The
+  author is usually adapting a read response block to the write side, where
+  the quantity silently stops existing; refusing the reference at authoring
+  time keeps the declaration honest about the scope it reads from. The
+  pinned contract-consumption manifest claims no read of the
+  write-response block, and it has no effect on a run today: the refusal
+  at authoring time is the whole of what the rule buys.
 status: active
 superseded_by: null

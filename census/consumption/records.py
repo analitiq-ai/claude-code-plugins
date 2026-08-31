@@ -93,13 +93,15 @@ def governed_unread(
     not resolve, and :func:`record_report` reports it rather than dropping
     it.
     """
-    governed, _ = _resolve(manifest, rules)
+    governed, _, _ = _resolve(manifest, rules)
     return governed
 
 
 def _resolve(
     manifest: dict[str, Any], rules: tuple[dict[str, Any], ...]
-) -> tuple[dict[str, tuple[str, ...]], tuple[tuple[str, str], ...]]:
+) -> tuple[
+    dict[str, tuple[str, ...]], tuple[tuple[str, str], ...], tuple[str, ...]
+]:
     unread = classify(manifest)["unread"]
     models = reachable_models(manifest)
     by_class: dict[str, list[str]] = {}
@@ -110,11 +112,16 @@ def _resolve(
 
     governed: dict[str, tuple[str, ...]] = {}
     unresolved: list[tuple[str, str]] = []
+    unlocated: list[str] = []
     for rule in rules:
         if rule["status"] != "active":
             continue
         matched = [m for target in rule["targets"] for m in by_class.get(target, ())]
         if not matched:
+            continue
+        if not rule["fields"]:
+            if any((m, f) in unread for m in matched for f in models[m].model_fields):
+                unlocated.append(rule["id"])
             continue
         refs = set()
         for field in rule["fields"]:
@@ -129,7 +136,7 @@ def _resolve(
             }
         if refs:
             governed[rule["id"]] = tuple(sorted(refs))
-    return governed, tuple(sorted(set(unresolved)))
+    return governed, tuple(sorted(set(unresolved))), tuple(sorted(unlocated))
 
 
 @dataclass(frozen=True)
@@ -178,6 +185,11 @@ class RecordReport:
     #: names a field no matched model declares — a name this census could
     #: not resolve, reported rather than silently exempted.
     unresolved_fields: tuple[tuple[str, str], ...]
+    #: Informational, never gating: active records whose matched carriers
+    #: hold unread fields but which name no ``fields:`` — outside the guard
+    #: by the fields-naming boundary, listed so the reviewer obligation in
+    #: ``.claude/rules/reachability-dispositions.md`` has something to read.
+    unlocated: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -238,9 +250,19 @@ class RecordReport:
             self.unresolved_fields,
             lambda item: f"{item[0]}: {item[1]!r}",
         )
-        if not lines:
-            return "record affirmations are complete and current"
-        return "\n".join(lines).rstrip()
+        verdict = (
+            "record affirmations are complete and current"
+            if not lines
+            else "\n".join(lines).rstrip()
+        )
+        if self.unlocated:
+            verdict += (
+                "\n\nnot gating — records over carriers with unread fields "
+                "that name no fields: (outside the guard by the "
+                f"fields-naming boundary) ({len(self.unlocated)}):\n    "
+                + ", ".join(self.unlocated)
+            )
+        return verdict
 
 
 def record_report(
@@ -248,7 +270,7 @@ def record_report(
     rules: tuple[dict[str, Any], ...],
     affirmations: tuple[RecordAffirmation, ...],
 ) -> RecordReport:
-    governed, unresolved = _resolve(manifest, rules)
+    governed, unresolved, unlocated = _resolve(manifest, rules)
     rationales = {rule["id"]: rule["rationale"] for rule in rules}
 
     seen: dict[str, int] = {}
@@ -281,4 +303,5 @@ def record_report(
         orphaned=orphaned,
         duplicates=duplicates,
         unresolved_fields=unresolved,
+        unlocated=unlocated,
     )

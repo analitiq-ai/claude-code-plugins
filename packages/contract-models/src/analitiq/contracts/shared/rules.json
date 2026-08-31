@@ -2998,11 +2998,13 @@
    "targets": [
     "WriteResponse"
    ],
-   "fields": [],
+   "fields": [
+    "metadata"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A metadata key becomes an addressable name in the response scope, so one that collides with a scope the engine already owns creates two meanings for the same reference and the author's extraction is shadowed by an engine-supplied value with no diagnostic anywhere. The pattern is what keeps those names addressable at all. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
+   "rationale": "A metadata key is declared as an addressable name in the response scope, and one that collides with a reserved response-scope name would give one reference two meanings — which is why the reserved set and the key pattern are graded where the document is read, at validation. The pinned contract-consumption manifest claims no read of the write-response block, and it has no effect on a run today; the pattern is what keeps the names addressable wherever the block is read. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3022,11 +3024,13 @@
    "targets": [
     "WriteResponse"
    ],
-   "fields": [],
+   "fields": [
+    "success_when"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The record count is a read-path quantity, so on a write the ref resolves to nothing rather than to zero — and a `success_when` predicate over a ref that resolves to nothing holds unconditionally, so every write reports success including the ones whose rejected rows the provider listed. The author is usually adapting a read response block to the write side, where the scope silently stops existing; refusing the ref at author time is what keeps that from becoming partial data loss under a green run.\n",
+   "rationale": "The record count is a read-path quantity — the write scope never declares it — so a write-side reference to it names nothing, and a `success_when` built over it is written against a scope the document does not have. The author is usually adapting a read response block to the write side, where the quantity silently stops existing; refusing the reference at authoring time keeps the declaration honest about the scope it reads from. The pinned contract-consumption manifest claims no read of the write-response block, and it has no effect on a run today: the refusal at authoring time is the whole of what the rule buys.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5511,11 +5515,15 @@
    "targets": [
     "ArrowFieldSpec"
    ],
-   "fields": [],
+   "fields": [
+    "arrow_type",
+    "properties",
+    "items"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents and an inner declaration beside a scalar describes nesting the type cannot hold — both produce a schema the engine cannot build a record from. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
+   "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents, and an inner declaration beside a scalar describes nesting the type cannot hold — a shape that contradicts itself before anything consumes it. The declared sub-tree reaches a run inside the assignment target it sits on, which the pinned contract-consumption manifest consumes whole rather than field by field, so the contradiction is caught where the shape is graded field by field: at validation. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
    "status": "active",
    "superseded_by": null
   },

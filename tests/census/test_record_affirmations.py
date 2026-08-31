@@ -218,6 +218,21 @@ def test_duplicate_affirmations_are_a_finding():
     assert not report.ok
 
 
+def test_a_record_naming_no_fields_is_listed_but_never_gates():
+    """The fields-naming boundary made visible: a record over a carrier
+    with unread fields that names no `fields:` is reported for the reviewer
+    and gates nothing."""
+    report = record_report(_manifest(), (_rule(fields=[]),), ())
+    assert report.unlocated == ("RULE-TEST-001",)
+    assert report.ok, report.render()
+    assert "not gating" in report.render()
+    # and with no unread field on the carrier, it is not even listed
+    quiet = record_report(
+        _manifest(), (_rule(targets=["Cousin"], fields=[]),), ()
+    )
+    assert quiet.unlocated == ()
+
+
 def test_an_affirmation_refuses_empty_or_unsorted_refs():
     with pytest.raises(ValueError):
         _affirmation(refs=())

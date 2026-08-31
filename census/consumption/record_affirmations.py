@@ -25,6 +25,20 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         rationale_sha256="427d440fff9b176002d40638791081fb36f91339093d1a7318e2d3d2cdfc70c1",
     ),
     RecordAffirmation(
+        "RULE-ENDP-029",
+        refs=(
+            "endpoints.WriteResponse.metadata",
+        ),
+        rationale_sha256="541dad335cc7e7b9afc96aa2e855176281d21a642e654fbef0a25ef128d5e4c3",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-030",
+        refs=(
+            "endpoints.WriteResponse.success_when",
+        ),
+        rationale_sha256="f6a37a14bf3bdf1a2922a538e854e19880c98d915b11165d260e081cf70dc93a",
+    ),
+    RecordAffirmation(
         "RULE-ENDP-038",
         refs=(
             "endpoints.Replication.supported_methods",
@@ -75,6 +89,15 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "stream.StreamValidationErrorHandling.strategy",
         ),
         rationale_sha256="2e8c8d3d1373f08e31aeb9cb6bf6dc56c90be98e9ae710577cc1eb8a3d803723",
+    ),
+    RecordAffirmation(
+        "RULE-STRM-006",
+        refs=(
+            "stream.ArrowFieldSpec.arrow_type",
+            "stream.ArrowFieldSpec.items",
+            "stream.ArrowFieldSpec.properties",
+        ),
+        rationale_sha256="cf4eb2bda49d5e35a31d4059b122a56e2272219bb3d37f0ff8b80c50a58d0a01",
     ),
     RecordAffirmation(
         "RULE-STRM-040",
