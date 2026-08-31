@@ -486,18 +486,22 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
                 pointer, where,
                 vid="embedded-schema-example",
                 path=f"{pointer}{node_pointer}/examples/{index}",
-                # This wording covers running out of stack too, because a
-                # caller that supplies `blame` supplies it for every cause the
-                # guard consults it for. The leading clause is written to be
-                # true of both: a reference that leads back to itself is one
-                # more way the node takes the implementation somewhere it
-                # cannot come back from, and it arrives here rather than under
-                # the size default. The detail names which one it was.
+                # A caller supplying `blame` supplies it for EVERY cause the
+                # guard consults it for — running out of stack, and the
+                # last-resort clause this check was written for. So the
+                # leading clause has to be true of all of them, and it is:
+                # each is a way the node takes the implementation somewhere it
+                # cannot come back from. What follows stays open. Naming a
+                # closed pair reads as exhaustive over a set that is not
+                # enumerable — an unresolvable `$ref` is neither member, and
+                # it is the commonest authoring mistake here, so a closed list
+                # sends that author looking for a cycle they do not have.
                 blame=(
                     "something the node reaches takes the JSON Schema "
                     "implementation somewhere it cannot come back from — a "
-                    "value a keyword cannot compute against, or a reference "
-                    "that leads back to itself. The detail above says which."
+                    "value a keyword cannot compute against, a reference that "
+                    "does not resolve, or one that leads back to itself, "
+                    "among others. The detail above is what came back."
                 ),
                 scope=(
                     f"The recorded sample at {at} was not graded; every other "

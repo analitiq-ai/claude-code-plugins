@@ -56,22 +56,18 @@ os.environ.setdefault("DOMAIN", "analitiq.ai")
 # rendered identically.
 DOCS_ROOT = REPO_ROOT / "plugins" / "analitiq-pipeline-builder"
 
-_BLOCK_RE = re.compile(
-    r"(?P<begin><!-- BEGIN GENERATED: (?P<id>[a-z0-9][a-z0-9-]*) -->\n)"
-    r"(?P<body>.*?)"
-    r"(?P<end><!-- END GENERATED: (?P=id) -->)",
-    re.DOTALL,
+from _generated_blocks import (  # noqa: E402
+    BLOCK_RE,
+    UnknownBlock,
+    render_text as _render_text,
 )
 
-
-class UnknownBlock(KeyError):
-    """A doc references a block id no renderer produces — fail loud, never skip."""
 
 
 # ---------------------------------------------------------------------------
 # Renderers (`render_*`) and their helpers. Every `render_*` takes no arguments
 # and returns the markdown body for its block, WITHOUT the surrounding markers
-# and ending in exactly one newline — `_BLOCK_RE` depends on that trailing newline.
+# and ending in exactly one newline — `BLOCK_RE` depends on that trailing newline.
 # ---------------------------------------------------------------------------
 
 def _md_escape(text: str) -> str:
@@ -800,19 +796,7 @@ RENDERERS = {
 
 def render_text(text: str, source: str) -> str:
     """Return `text` with every generated block re-rendered from the package."""
-
-    def _sub(match: re.Match) -> str:
-        block_id = match.group("id")
-        try:
-            renderer = RENDERERS[block_id]
-        except KeyError:
-            raise UnknownBlock(
-                f"{source}: no renderer for generated block {block_id!r}; "
-                f"known blocks: {', '.join(sorted(RENDERERS))}"
-            ) from None
-        return match.group("begin") + renderer() + match.group("end")
-
-    return _BLOCK_RE.sub(_sub, text)
+    return _render_text(text, source, RENDERERS)
 
 
 def generated_docs() -> list[Path]:

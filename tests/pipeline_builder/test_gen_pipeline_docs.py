@@ -50,7 +50,7 @@ def _referenced_block_ids():
     return {
         m.group("id")
         for p in G.generated_docs()
-        for m in G._BLOCK_RE.finditer(p.read_text())
+        for m in G.BLOCK_RE.finditer(p.read_text())
     }
 
 
@@ -103,7 +103,7 @@ def test_no_malformed_markers():
             continue
         text = path.read_text()
         markers = len(loose.findall(text))
-        parsed = len(G._BLOCK_RE.findall(text))
+        parsed = len(G.BLOCK_RE.findall(text))
         assert markers == 2 * parsed, (
             f"{path.relative_to(ROOT)}: {markers} GENERATED marker(s) but "
             f"{parsed} parsed block(s) — a marker is malformed and is being skipped"

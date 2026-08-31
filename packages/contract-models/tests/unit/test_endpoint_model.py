@@ -3383,21 +3383,22 @@ class TestRecordedWireSampleZone:
         }))
 
     @pytest.mark.parametrize("examples", [
-        # A string is iterable, so it reaches the loop and yields characters,
-        # none of which is date-time-shaped. It grades as silence either way,
-        # which is why it cannot on its own pin the isinstance check.
+        # Kept because it is the row that READ as coverage and was not: a
+        # string is iterable, so it reaches the loop and yields characters,
+        # none of them date-time-shaped. It grades as silence with or without
+        # the check, so it pins nothing on its own — which is exactly why the
+        # two below it are here.
         "2024-01-02T03:04:05",
-        # An int is not iterable at all. Without the check this raises
-        # `TypeError` out of a `@model_validator`, so `parse_endpoint` raises
-        # `TypeError` rather than `ValidationError` — and through the validator
-        # that is a tool-defect type, so the author is told to report a bug
-        # about a document they wrote.
+        # Not iterable. Without the check this raises `TypeError` out of a
+        # `@model_validator`, so `parse_endpoint` raises `TypeError` rather
+        # than `ValidationError` — and through the validator that is a
+        # tool-defect type, so the author is told to report a bug about a
+        # document they wrote.
         7,
-        None,
-        # A mapping iterates its KEYS, so without the check this grades the
-        # author's key as a wire sample. The key is naive under a zoned type,
-        # so grading it rejects the declaration — a finding invented from a
-        # position that records no sample at all.
+        # Iterable, and over its KEYS. Without the check this grades the
+        # author's key as a wire sample; the key is naive under a zoned type,
+        # so it rejects the declaration — a finding invented out of a position
+        # that records no sample at all.
         {"2024-01-02T03:04:05": 1},
     ])
     def test_a_non_list_examples_value_is_left_to_the_meta_check(self, examples):
@@ -3407,8 +3408,9 @@ class TestRecordedWireSampleZone:
         The draft is run by `analitiq-validator`, not by these models — so a
         consumer holding only the contract package gets no finding for this,
         the same boundary every other metaschema defect sits on. What the
-        models owe is to leave it alone without coming down, and each value
-        below fails differently if they do not.
+        models owe is to leave it alone without coming down. The two ways
+        that goes wrong are not iterable at all and iterable over the wrong
+        thing, and there is a row for each.
         """
         parse_endpoint(_api_payload_with_field_schema(
             "updated_at",

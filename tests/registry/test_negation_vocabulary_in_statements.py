@@ -55,11 +55,16 @@ def _carve_out_rules():
     )
     assert found == sorted(_CARVE_OUT_RULES), (
         f"the rules whose statements name a negating position are {found}, and "
-        f"{sorted(_CARVE_OUT_RULES)} were expected. A rule that dropped out "
-        "still renders its statement into the wheel and into the plugin "
-        "reference, where an author reads it to decide whether the exemption "
-        "reaches their node — and the assertions below would no longer grade "
-        "it. Add or remove it here deliberately, with the reason."
+        f"{sorted(_CARVE_OUT_RULES)} were expected.\n"
+        "A rule that DROPPED OUT still renders its statement into the wheel "
+        "and into the plugin reference, where an author reads it to decide "
+        "whether the exemption reaches their node — and the assertions below "
+        "would no longer grade it.\n"
+        "A rule that JOINED may be a third carve-out, in which case add it "
+        "here; or it may backtick one of these keys for an unrelated reason — "
+        "`if` and `not` are ordinary JSON Schema vocabulary — in which case "
+        "this locator has to separate the two roles rather than admit it, "
+        "because everything below would then demand it name all of them."
     )
     return found
 

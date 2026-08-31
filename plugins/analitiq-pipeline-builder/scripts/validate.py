@@ -131,7 +131,7 @@ def _model_findings(entity: str, doc) -> list[dict]:
                      "/" + "/".join(str(p) for p in err["loc"]), err["msg"])
             for err in exc.errors()
         ]
-    # No crash handler here, and nothing in this file tests for one. This is
+    # No crash handler here, and no test in this repo covers one. This is
     # the one path that reaches a contract model without `analitiq.validator`,
     # so it is the one place a crash leaves as a traceback rather than as
     # findings — which to the calling agent, reading stdout, is no answer at
