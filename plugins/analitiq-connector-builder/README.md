@@ -104,8 +104,11 @@ Schemas are generated from — so there is no schema fetch. It runs:
    <!-- BEGIN GENERATED: unfinished-check -->
    A finding whose message opens `check '<id>' could not finish` is a check that
    could not finish, not a verdict — nothing was decided about what it
-   points at, in either direction, and the run carried on past it. What
-   follows that opening says whose the cause is:
+   points at, in either direction. Whether anything else was decided
+   is what the rest of the message says: a check guarded per slot
+   names what it did not reach and what it still attempted, while one
+   guarding the whole document has nothing else to report. What
+   follows the opening says whose the cause is:
 
    - `this is a validator bug — please report.` — this tool's, and worth reporting.
    - `the document nests deeper, or runs larger, than this tool can walk.` — the document's size.

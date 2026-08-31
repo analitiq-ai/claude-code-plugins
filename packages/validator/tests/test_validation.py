@@ -793,6 +793,39 @@ def test_a_crash_the_document_did_not_cause_still_blames_this_tool(validator):
     assert GUARD_DEFAULT_BLAME in emitted["message"], emitted
 
 
+@pytest.mark.parametrize("bad_validator, bad_severity", [
+    ("no-such-id", "error"),
+    ("contract-model", "fatal"),
+])
+def test_a_finding_this_framework_does_not_define_blames_this_tool(
+    validator, bad_validator, bad_severity,
+):
+    """The one exception this framework raises to mean a check has a coding
+    defect in it, routed the way every other such exception is.
+
+    `finding()` refuses an unregistered validator id and an unknown severity —
+    both of which are a check's own literal being wrong, never anything an
+    author wrote. Raised as a bare `ValueError` it reached the last-resort
+    clause, which honours the caller's `blame`; under the per-sample guard,
+    whose blame names the document, an author was told their node took a JSON
+    Schema implementation somewhere it could not come back from, over a typo
+    in a check's own id.
+
+    Driven through a caller that SUPPLIES `blame`, because with none the
+    default is what both branches emit and this would pass either way.
+    """
+    from analitiq.validator._core import _run_guarded, finding
+
+    def _boom():
+        return [finding(bad_validator, bad_severity, "/", "x")]
+
+    emitted = _run_guarded(_boom, vid="contract-model",
+                           blame="something the node reaches did this.")[0]
+    assert is_guard_finding(emitted), emitted
+    assert GUARD_DEFAULT_BLAME in emitted["message"], emitted
+    assert "something the node reaches" not in emitted["message"], emitted
+
+
 def test_a_crash_finding_does_not_carry_a_whole_schema(validator):
     """`jsonschema`'s referencing errors put the entire schema root in their
     repr. Unbounded, one finding an agent has to read is kilobytes of JSON —

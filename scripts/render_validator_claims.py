@@ -1491,8 +1491,11 @@ def render_unfinished_check() -> str:
     return "\n".join([
         f"   A finding whose message opens `{opening}` is a check that",
         "   could not finish, not a verdict — nothing was decided about what it",
-        "   points at, in either direction, and the run carried on past it. What",
-        "   follows that opening says whose the cause is:",
+        "   points at, in either direction. Whether anything else was decided",
+        "   is what the rest of the message says: a check guarded per slot",
+        "   names what it did not reach and what it still attempted, while one",
+        "   guarding the whole document has nothing else to report. What",
+        "   follows the opening says whose the cause is:",
         "",
         f"   - `{GUARD_DEFAULT_BLAME}` — this tool's, and worth reporting.",
         f"   - `{GUARD_RESOURCE_CAUSE}.` — the document\'s size.",

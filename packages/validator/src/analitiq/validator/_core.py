@@ -97,11 +97,27 @@ def contract_model_domain() -> Iterator[None]:
             os.environ["DOMAIN"] = ambient
 
 
+class FindingContractError(ValueError):
+    """A check tried to emit a finding this framework does not define.
+
+    Its own type, and a member of `_TOOL_DEFECT_TYPES`, because it is the one
+    exception raised HERE to mean "a check has a coding defect in it" — a
+    validator id that was never registered, a severity that is not one of the
+    two. A plain `ValueError` falls to the last-resort clause, which honours
+    the caller's `blame`, so under a caller whose blame names the document an
+    author is told their node took a JSON Schema implementation somewhere it
+    could not come back from — over a typo in a check's own id literal.
+
+    Subclassed rather than routing bare `ValueError`, which a check meets
+    reading what an author WROTE and which the caller does know more about.
+    """
+
+
 def finding(validator: str, severity: str, path: str, message: str) -> dict:
     if validator not in VALIDATOR_IDS:
-        raise ValueError(f"unknown validator id: {validator!r}")
+        raise FindingContractError(f"unknown validator id: {validator!r}")
     if severity not in ("error", "warning"):
-        raise ValueError(f"unknown severity: {severity!r}")
+        raise FindingContractError(f"unknown severity: {severity!r}")
     return {"validator": validator, "severity": severity, "path": path, "message": message}
 
 
@@ -219,6 +235,7 @@ def _run_guarded(
 #: of its own failure modes applies — the author is told to report it.
 _TOOL_DEFECT_TYPES = (
     TypeError, AttributeError, KeyError, IndexError, NameError, ImportError,
+    FindingContractError,
 )
 
 
