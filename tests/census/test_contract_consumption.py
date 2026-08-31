@@ -279,6 +279,9 @@ def test_a_malformed_model_is_reported_before_any_other_defect():
 class Leaf(BaseModel):
     value: int
     label: str
+    # Shares a name with `Root.plain`, so a lookup that forgot to qualify by
+    # model would find this model's claim standing in for Root's.
+    plain: str = ""
 
 
 class Grammar(BaseModel):
@@ -543,7 +546,7 @@ def shadowed(monkeypatch):
         roots=[f"{_SHADOW}.Root"],
         claims={
             f"{_SHADOW}.Root": {"direct": ["s:1"], "either": ["s:2"]},
-            f"{_SHADOW}.Leaf": {"value": ["s:3"]},
+            f"{_SHADOW}.Leaf": {"value": ["s:3"], "plain": ["s:4"]},
         },
         opaque={f"{_SHADOW}.Grammar": {"consumer": "x", "dumps": [], "entries": []}},
         kit_reads={},
@@ -656,6 +659,36 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
 def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
     assert report.derivation_product_unread == ()
+
+
+def test_the_derived_field_is_looked_up_on_the_entry_s_own_model(shadowed):
+    """`plain` is claimed on Leaf and unread on Root. The product is a field
+    of the model carrying the entry, so a name another model reads does not
+    stand in for it — the half that makes the kind mean "derived here"."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives="plain",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_product_unread == (wrong,)
+
+
+def test_a_kit_read_of_the_derived_field_is_not_a_claim(shadowed):
+    """Only `claims` makes a field read, at the derivation site too: a
+    conformance-kit read of the product leaves the derivation unconsumed."""
+    shadowed["kit_reads"] = {f"{_SHADOW}.Root": {"plain": ["cdk.conformance:1"]}}
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives="plain",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_product_unread == (wrong,)
 
 
 def test_claim_of_a_field_the_model_does_not_declare_is_a_finding(shadowed):

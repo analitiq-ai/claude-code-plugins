@@ -337,12 +337,14 @@ def census_report(
             cls.model_fields[entry.field].annotation
         ):
             not_literal.append(entry)
-        # The declaration check stands on its own rather than leaning on
-        # `classify` only ever emitting refs for declared fields: the two
-        # halves are different defects, and the finding names both.
-        if entry.kind == "derivation_input" and (
-            entry.derives not in cls.model_fields
-            or (entry.qualified_model, entry.derives) not in classes["read"]
+        # One membership test covers both defects the finding names: a claim
+        # is only ever recorded against a field its model declares, so a
+        # `derives` the model does not declare cannot be in `read` either.
+        # The ref is model-qualified — the product is a field of THIS model,
+        # not a name some other model happens to have read.
+        if (
+            entry.kind == "derivation_input"
+            and (entry.qualified_model, entry.derives) not in classes["read"]
         ):
             product_unread.append(entry)
 
