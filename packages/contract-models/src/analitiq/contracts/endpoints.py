@@ -3182,9 +3182,10 @@ def _validate_param_wiring(
     # declarations rather than any one binding. A param's value reaches its
     # slot from the param's own `default`, from a stream filter — which
     # declaring `operators` is what opens — or from pagination or replication,
-    # which `controlled_by` hands it to. The last two are read-side, so on a
-    # write the `default` is the whole set, which is the same argument
-    # RULE-ENDP-028 makes about a write path_param one slot narrower.
+    # which `controlled_by` hands it to. `operators` and `controlled_by` are
+    # read-side, so on a write the `default` is the whole set, which is the
+    # same argument RULE-ENDP-028 makes about a write path_param one slot
+    # narrower.
     #
     # An authored `"default": null` is not a source: it is a value expression
     # that resolves to nothing on every run, so a param carrying one is as

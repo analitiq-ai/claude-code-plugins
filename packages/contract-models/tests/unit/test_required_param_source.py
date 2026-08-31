@@ -3,9 +3,10 @@
 `required` says the operation is wrong without the value. The document is what
 has to be able to supply it, and there is a closed set of ways it can: the
 param's own `default`, a stream filter — which declaring `operators` is what
-opens — or pagination/replication, which `controlled_by` hands it to. The last
-two are read-side, so a write param has only its `default`, which is the same
-argument RULE-ENDP-028 already makes one slot narrower.
+opens — or pagination/replication, which `controlled_by` hands it to.
+`operators` and `controlled_by` are read-side, so a write param has only its
+`default`, which is the same argument RULE-ENDP-028 already makes one slot
+narrower.
 
 A required param declaring none of them is empty on every request the operation
 sends, while the document says in the same breath that the operation is wrong
@@ -179,7 +180,7 @@ def test_an_optional_param_with_no_source_is_left_alone():
     )
 
 
-# --- Writes have one source ------------------------------------------------
+# --- On a write the `default` is the whole set ------------------------------
 
 
 def test_a_required_write_param_needs_a_default():

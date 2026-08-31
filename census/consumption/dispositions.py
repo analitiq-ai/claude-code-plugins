@@ -140,10 +140,8 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "required param resolves to nothing is refused rather than sent with "
         "the slot dropped. The pinned manifest claims no read of the flag, so "
         "setting it changes nothing about the request that goes out: the slot "
-        "is dropped either way. RULE-ENDP-066 is what the "
-        "contract settles alone — a required param the document gives no "
-        "source at all — and it grades the declaration, not the run, so it "
-        "needs no read of the flag to stay correct",
+        "is dropped either way. RULE-ENDP-066 names the obligation the same "
+        "flag places on the document that declares it",
     ),
     FieldDisposition("endpoints.Param", "description", "authoring_only", HUMAN_METADATA),
     FieldDisposition("endpoints.Param", "enum", "engine_gap", PARAM_VALUE_CONSTRAINT),

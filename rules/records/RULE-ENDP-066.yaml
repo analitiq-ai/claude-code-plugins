@@ -16,7 +16,8 @@ rationale: >
   one request binding, and the value that binding carries reaches it from the
   param's own `default`, from a stream filter — which declaring `operators` is
   what opens — or from pagination or replication, which `controlled_by` hands
-  it to; the last two are read-side, so a write param has only its `default`.
+  it to; `operators` and `controlled_by` are read-side, so a write param has
+  only its `default`.
   A required param declaring none of those has provably no source: the slot
   bound to it is empty on every request the operation ever sends, and the
   document says in the same breath that the operation is wrong that way. That
