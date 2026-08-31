@@ -1,0 +1,34 @@
+id: RULE-ENDP-067
+statement: >
+  `required` on a param declares that the operation MUST NOT be sent without
+  that param's value: where the value resolves to nothing the operation fails
+  rather than sending the request with the param's slot dropped. A param whose
+  absence the operation tolerates MUST be declared not required.
+tier: judgment
+severity: error
+scopes: [api-endpoint]
+validator: null
+owners: [connector-plugin, engine]
+targets: [Param]
+rationale: >
+  A value expression that resolves to nothing has its slot omitted, and that
+  standing rule is right for an optional param — an unsubmitted optional input
+  and a missing one read the same, and a request that leaves the slot out is
+  what the author meant. It is wrong for a param the operation cannot be
+  correct without, and the two cases are indistinguishable at the slot: one is
+  a request the author intended and the other is a request that asks a
+  different question than the stream did, and both go out. `required` is what
+  the author has to separate them with, which is why the flag is a decision
+  rather than documentation — declaring it where the operation tolerates the
+  absence turns a working read into a refusal, and omitting it where the
+  operation does not leaves the wrong request indistinguishable from the right
+  one. Nothing applies this rule: the pinned consumption manifest claims no
+  read of the flag, so a param declared required and one declared optional
+  reach the run as the same param, and the slot is dropped either way with a
+  warning on a run that reports success. Catching a violation means reading the
+  provider's own parameter reference beside the endpoint and deciding, per
+  param, whether a response built without it answers the question the read
+  asked — which is why RULE-ENDP-066 mechanises only the half one document
+  settles, that a required param with no source at all is empty on every run.
+status: active
+superseded_by: null

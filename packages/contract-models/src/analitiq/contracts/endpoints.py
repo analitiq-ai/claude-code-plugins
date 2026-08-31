@@ -3178,6 +3178,36 @@ def _validate_param_wiring(
                 f"resolution scope ({', '.join(RESOLUTION_SCOPES)}) (spec: §Value Expressions)"
             )
 
+    # RULE-ENDP-066, after the binding walks because it grades the param
+    # declarations rather than any one binding. A param's value reaches its
+    # slot from the param's own `default`, from a stream filter — which
+    # declaring `operators` is what opens — or from pagination or replication,
+    # which `controlled_by` hands it to. The last two are read-side, so on a
+    # write the `default` is the whole set, which is the same argument
+    # RULE-ENDP-028 makes about a write path_param one slot narrower.
+    #
+    # An authored `"default": null` is not a source: it is a value expression
+    # that resolves to nothing on every run, so a param carrying one is as
+    # empty as a param carrying none. `param.default is None` reads both the
+    # same, deliberately, and matches what RULE-ENDP-028 already tests.
+    for name, param in params.items():
+        if not param.required or param.default is not None:
+            continue
+        if not allow_from_input and (param.operators or param.controlled_by):
+            continue
+        read_ways_out = (
+            "give it a `default`, declare the `operators` a stream may filter "
+            "it with, or hand it to pagination or replication with "
+            "`controlled_by`"
+        )
+        ways_out = "give it a `default`" if allow_from_input else read_ways_out
+        raise violation(
+            "RULE-ENDP-066",
+            f"params[{name!r}] is required and declares no source, so the "
+            f"slot bound to it is empty on every request; {ways_out}, or "
+            "declare it not required",
+        )
+
 
 def _validate_pagination_wiring(pagination: Any, params: dict[str, Param]) -> None:
     """Validate pagination param references and ``controlled_by`` markers."""

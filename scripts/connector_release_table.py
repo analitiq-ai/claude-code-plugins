@@ -238,8 +238,9 @@ CATEGORIES: tuple[Category, ...] = (
         "Kept endpoint now demands something of an existing document",
         note=(
             "an addition an existing stream must satisfy rather than one it "
-            "may opt into: a read param declared `required` with no default, "
-            "so a stream supplying no value for it stops resolving, or a "
+            "may opt into: a read param that becomes `required`, so a stream "
+            "supplying no value for it no longer satisfies the endpoint "
+            "(RULE-ENDP-067), or a "
             "member added to a write mode's required input, so a stream whose "
             "mapping does not produce it sends a record the provider refuses. "
             "The additive categories are for what a stream MAY now use; an "

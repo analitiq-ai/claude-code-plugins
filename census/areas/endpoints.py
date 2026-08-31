@@ -11,8 +11,18 @@ from census.obligation import (
 PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === api-endpoint: params, request binding ===============================
     ProseObligation(
-        model="Param", field="required", waiver=ENGINE_CONDUCT,
+        model="Param", field="required",
         prose_hash="4ad7a10fde50",
+        rule_ids=("RULE-ENDP-066",),
+        waiver=(
+            "RULE-ENDP-066 rejects the half one document settles — a required "
+            "param the document gives no source at all, which resolves to "
+            "nothing on every run. The remainder is the "
+            + ENGINE_CONDUCT
+            + ": whether a value that had a source resolved on this run, and "
+            "so whether the request may go out without it, is settled where "
+            "the request is built. RULE-ENDP-067 names that half"
+        ),
     ),
     ProseObligation(
         model="endpoints.RefExpression", field="ref",

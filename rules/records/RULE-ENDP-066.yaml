@@ -1,0 +1,30 @@
+id: RULE-ENDP-066
+statement: >
+  A param declared `required` MUST declare a source its operation can supply
+  the value from: its own `default`, or — on a read — the `operators` that
+  make it stream-filterable or the `controlled_by` that hands it to pagination
+  or replication.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation, WriteOperation]
+rationale: >
+  `required` says the operation is wrong without the value, and the document is
+  what has to be able to supply it. Every declared param is bound by exactly
+  one request binding, and the value that binding carries reaches it from the
+  param's own `default`, from a stream filter — which declaring `operators` is
+  what opens — or from pagination or replication, which `controlled_by` hands
+  it to; the last two are read-side, so a write param has only its `default`.
+  A required param declaring none of those has provably no source: the slot
+  bound to it is empty on every request the operation ever sends, and the
+  document says in the same breath that the operation is wrong that way. That
+  contradiction is settled by reading one document, which is why it is refused
+  where it is written rather than left to a run to discover. The check does not
+  rest on what any consumer does with the flag — it compares the param's
+  declared requiredness against the sources the same document gives it — so it
+  stays correct however `required` comes to be honoured; RULE-ENDP-067 is what
+  names that half.
+status: active
+superseded_by: null

@@ -30,7 +30,8 @@ that input — and **referenced** from the request slot with a binding expressio
 ```json
 {
   "params": {
-    "account_id": { "in": "path", "type": "string", "required": true },
+    "account_id": { "in": "path", "type": "string", "required": true,
+                    "default": { "ref": "connection.parameters.account_id" } },
     "updated_since": { "in": "query", "type": "string", "format": "date-time",
                        "required": false, "controlled_by": "replication" }
   },
@@ -76,6 +77,11 @@ prohibitions below).
   `connector-builder/references/rules/api-endpoint.md`.
 - **RULE-ENDP-009** — a declared-but-unbound param is an error, not dead
   weight: if you don't need it, delete it.
+- **`required` is a decision, not documentation** (RULE-ENDP-067) — it says the
+  operation is wrong without the value, so a param declaring it must have
+  something that can fill it: its own `default`, the `operators` a stream
+  filters it with, or `controlled_by` (RULE-ENDP-066). A segment or filter the
+  connection supplies takes `"default": {"ref": "connection.parameters.<name>"}`.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
   only `x-*` siblings (RULE-ENDP-022).
