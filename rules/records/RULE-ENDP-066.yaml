@@ -2,8 +2,8 @@ id: RULE-ENDP-066
 statement: >
   A param declared `required` MUST declare a source its operation can supply
   the value from: its own `default`, or — on a read — the `operators` that
-  make it stream-filterable or the `controlled_by` that hands it to pagination
-  or replication.
+  make it stream-filterable or a pagination or replication block that names
+  it.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -14,18 +14,25 @@ rationale: >
   `required` says the operation is wrong without the value, and the document is
   what has to be able to supply it. Every declared param is bound by exactly
   one request binding, and the value that binding carries reaches it from the
-  param's own `default`, from a stream filter — which declaring `operators` is
-  what opens — or from pagination or replication, which `controlled_by` hands
-  it to; `operators` and `controlled_by` are read-side, so a write param has
-  only its `default`.
-  A required param declaring none of those has provably no source: the slot
-  bound to it is empty on every request the operation ever sends, and the
-  document says in the same breath that the operation is wrong that way. That
-  contradiction is settled by reading one document, which is why it is refused
-  where it is written rather than left to a run to discover. The check does not
-  rest on what any consumer does with the flag — it compares the param's
-  declared requiredness against the sources the same document gives it — so it
-  stays correct however `required` comes to be honoured; RULE-ENDP-067 is what
-  names that half.
+  param's own `default`, from a stream filter, or from the pagination or
+  replication block that drives the param. `operators` and those blocks are
+  read-side, so a write param has only its `default` — the argument
+  RULE-ENDP-028 also makes, about a write path_param whether or not it is
+  required, so neither rule contains the other. A required param with none of
+  them is empty on every request the operation sends, while the document says
+  in the same breath that the operation is wrong that way. That contradiction
+  is settled by reading one document, which is why it is refused where it is
+  written rather than left to a run to discover. `controlled_by` alone does not
+  settle it: the marker is self-declared and only the block-to-param direction
+  is checked anywhere, so a marker no block backs is a param nothing hands a
+  value to. What the refusal proves is that a source is DECLARED, never that it
+  resolves — a `default` reffing a connection parameter the connection leaves
+  unset, a cursor param before the first page, and a filterable param no stream
+  filters all pass here and still send the slot empty, and RULE-ENDP-067 is the
+  obligation over that remainder. Nothing in the check reads `required` back
+  out of any consumer, so it stays correct however the flag comes to be
+  honoured; what `operators` rests on is the registry service's comparison of a
+  stream's filter against the operators the param declares, the same consumer
+  RULE-STRM-026 names.
 status: active
 superseded_by: null

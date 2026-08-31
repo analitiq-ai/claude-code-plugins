@@ -109,7 +109,7 @@ single field looks wrong.
 | RULE-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
-| RULE-ENDP-066 | A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — the `operators` that make it stream-filterable or the `controlled_by` that hands it to pagination or replication. | `api-endpoint` | error | validator |
+| RULE-ENDP-066 | A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — the `operators` that make it stream-filterable or a pagination or replication block that names it. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential
@@ -154,6 +154,6 @@ not just the statement.
 |---|---|---|---|---|
 | RULE-ENDP-058 | An offset strategy's per-page step MUST advance by the same quantity the provider's offset counts — the records a page returned when the offset counts records, and the page size the request actually asked for when it counts the requested window. | `api-endpoint` | error | — |
 | RULE-ENDP-062 | Every node of a write mode's input schema that describes a provider field SHOULD declare that field's native type and canonical Arrow type, spelling the native token the way the connector's read map already spells it for that field. | `api-endpoint` | warning | — |
-| RULE-ENDP-067 | `required` on a param declares that the operation MUST NOT be sent without that param's value: where the value resolves to nothing the operation fails rather than sending the request with the param's slot dropped. A param whose absence the operation tolerates MUST be declared not required. | `api-endpoint` | error | — |
+| RULE-ENDP-067 | A param MUST be declared `required` only where its operation is wrong without the value: `required` is the contract's demand that such an operation fail rather than send the request with that param's slot dropped. | `api-endpoint` | error | — |
 | RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |
