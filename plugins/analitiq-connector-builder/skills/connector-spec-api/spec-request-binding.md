@@ -78,10 +78,10 @@ prohibitions below).
 - **RULE-ENDP-009** — a declared-but-unbound param is an error, not dead
   weight: if you don't need it, delete it.
 - **`required` is a decision, not documentation** (RULE-ENDP-067) — set it only
-  where the read is wrong without the value, and then give the param a source
-  the document can actually supply (RULE-ENDP-066). A segment or filter the
-  connection supplies takes `"default": {"ref": "connection.parameters.<name>"}`;
-  on a write the `default` is the only source there is.
+  where the operation is wrong without the value, and then give the param a
+  source the document can actually supply (RULE-ENDP-066). A segment or filter
+  the connection supplies takes
+  `"default": {"ref": "connection.parameters.<name>"}`.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
   only `x-*` siblings (RULE-ENDP-022).

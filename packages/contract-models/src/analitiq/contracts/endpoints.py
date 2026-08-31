@@ -3082,7 +3082,8 @@ def _validate_param_wiring(
             # it. Reads keep the old latitude: a read path param can be
             # supplied by a stream filter.
             if allow_from_input and param.default is None:
-                raise ValueError(
+                raise violation(
+                    "RULE-ENDP-028",
                     f"request.path_params[{placeholder!r}] binds to param {name!r}, "
                     "which declares no `default` — on a write operation a param "
                     "has no other source, so the placeholder can never be "
@@ -3193,23 +3194,41 @@ def _validate_pagination_wiring(
 ) -> frozenset[str]:
     """Validate pagination param references and ``controlled_by`` markers.
 
-    Returns the params the block names, which is what RULE-ENDP-066 reads to
-    tell a backed `controlled_by` marker from a stale one.
+    Returns the params this block declares a **starting value** for, which is
+    narrower than the params it names and is what RULE-ENDP-066 reads. Naming a
+    param says which slot the strategy drives; it does not say the document put
+    a value there for the first request, and a param the block never gives one
+    to is as empty as a param no block names at all — so counting a mention as
+    a source would let an author satisfy the rule by adding `limit: {"param":
+    <name>}` and change nothing about the request.
+
+    Which strategies give one is a property of their own shape: an offset and a
+    page cursor each require an `initial`, a keyset takes one only when
+    `initial` is authored, an opaque `Cursor` has no field for one because
+    there is no cursor before the first page, a `limit` gives one only when
+    `default` is authored, and a link strategy names no param but the `limit`.
     """
     referenced: list[str] = []
+    sourced: list[str] = []
     if isinstance(pagination, OffsetPagination):
         referenced.append(pagination.offset.param)
+        sourced.append(pagination.offset.param)
     elif isinstance(pagination, PagePagination):
         referenced.append(pagination.page.param)
+        sourced.append(pagination.page.param)
     elif isinstance(pagination, CursorPagination):
         referenced.append(pagination.cursor.param)
     elif isinstance(pagination, KeysetPagination):
         referenced.append(pagination.keyset.param)
+        if pagination.keyset.initial is not None:
+            sourced.append(pagination.keyset.param)
     # LinkPagination declares no cursor param (spec: §Pagination Strategies —
     # link replaces the entire URL, no params traverse to follow-up requests).
     # Every strategy carries an optional `limit`.
     if pagination.limit and pagination.limit.param:
         referenced.append(pagination.limit.param)
+        if pagination.limit.default is not None:
+            sourced.append(pagination.limit.param)
 
     for name in referenced:
         param = params.get(name)
@@ -3222,7 +3241,7 @@ def _validate_pagination_wiring(
                 f"param {name!r} is referenced by pagination but does not declare "
                 "controlled_by='pagination' (spec: §Cross-Field Validation)"
             )
-    return frozenset(referenced)
+    return frozenset(sourced)
 
 
 def _declares_a_type(node: Any) -> bool:
@@ -3335,8 +3354,10 @@ def _validate_replication_wiring(
 ) -> frozenset[str]:
     """Validate replication param references and ``controlled_by`` markers.
 
-    Returns the params the block names, for the same reason
-    `_validate_pagination_wiring` does.
+    Returns the params this block can carry a value into, for the same reason
+    `_validate_pagination_wiring` does: a cursor value comes from the state a
+    previous incremental run left, so a block whose `supported_methods` never
+    says `incremental` names its params and fills none of them.
     """
     referenced: list[str] = []
     for cm in replication.cursor_mappings:
@@ -3356,6 +3377,8 @@ def _validate_replication_wiring(
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
+    if "incremental" not in replication.supported_methods:
+        return frozenset()
     return frozenset(referenced)
 
 
@@ -3367,33 +3390,34 @@ def _validate_required_params_have_a_source(
 ) -> None:
     """RULE-ENDP-066 — a required param the document can never fill.
 
-    Runs from `_wiring`, last, and not from `_validate_param_wiring`: it needs
-    `controlled` — the params a pagination or replication block actually names,
-    which only the operation can see — and it must not preempt the binding
-    checks, whose diagnostics name the real defect when a param is unbound or
-    bound twice.
+    Runs from `_wiring` after the binding checks, whose diagnostics name the
+    real defect when a param is unbound or bound twice, and after the
+    pagination and replication wiring, which is what produces `controlled`;
+    before the response-side resolution checks, which grade a different half of
+    the document. Not from `_validate_param_wiring`, which sees neither.
 
-    A param's value reaches its slot from the param's own `default`, from a
-    stream filter (declaring `operators` is what opens that), or from a
-    pagination or replication block that names it. `operators` and the blocks
-    are read-side, so on a write the `default` is the whole set — the argument
-    RULE-ENDP-028 also makes, about a write path_param whether or not it is
-    required, so neither rule contains the other.
+    The sources are the ones RULE-ENDP-066 names. `operators` — non-empty, an
+    empty list opens nothing — and the blocks behind `controlled` are
+    read-side, so on a write the `default` is the whole set. RULE-ENDP-028
+    makes that argument about a write path_param whether or not it is required,
+    so neither rule contains the other.
 
-    `controlled_by` is read through `controlled` rather than off the param: the
-    marker is self-declared, and the block→param direction is the only one
-    anything checks, so a param carrying a marker no block backs is a param
-    nothing hands a value to.
+    `controlled` is read instead of `param.controlled_by` because the marker is
+    self-declared and only the block-to-param direction is checked anywhere: a
+    marker no block backs, and a block that names a param without declaring a
+    value it starts from, both leave the param with nothing behind it.
 
-    An authored `"default": null` is not a source — a value expression that
-    resolves to nothing on every run — and `Param.default` collapses it into an
-    absent key, so `param.default is None` reads both the same, deliberately.
+    An authored `"default": null` is a value expression that resolves to
+    nothing on every run, so it is not a source. The two spellings stay
+    distinguishable in `model_fields_set`, and reading them alike through
+    `param.default is None` is the deliberate choice — keying on the set
+    instead would let the rule be walked around by typing four characters.
 
-    What this proves is that a source is DECLARED, never that it resolves: a
-    `default` reffing a connection parameter the connection leaves unset, a
-    cursor param before the first page, and a filterable param no stream
-    filters all pass here and still send the slot empty. RULE-ENDP-067 is the
-    obligation over that remainder.
+    What this proves is that a source is DECLARED, never that it resolves. A
+    `default` reffing a connection parameter the connection leaves unset, and a
+    filterable param no stream filters, both pass here; what the request path
+    then does with the empty value depends on the slot, and RULE-ENDP-067 is
+    the obligation over that remainder.
     """
     findings: list[tuple[str, str]] = []
     for name, param in params.items():
@@ -3401,10 +3425,13 @@ def _validate_required_params_have_a_source(
             continue
         if not allow_from_input and (param.operators or name in controlled):
             continue
-        if allow_from_input and param.location in ("body", "path"):
-            # The value a write puts here comes from the record, and the param
-            # is what stands between them: RULE-ENDP-024 binds the slot to
-            # `record.<field>` directly, with no param declared at all.
+        if allow_from_input and param.location == "body":
+            # The value a write puts in the body comes from the record, and the
+            # param is what stands between them: a body slot takes
+            # `{"from_input": "record.<field>"}` with no param declared at all.
+            # `path` is not offered the same way out because it never reaches
+            # here — RULE-ENDP-028 refuses a write path_param with no `default`
+            # first, and names the record binding itself.
             ways_out = (
                 "give it a `default`, or delete the param and bind the slot to "
                 'the record with `{"from_input": "record.<field>"}`'
@@ -3414,16 +3441,24 @@ def _validate_required_params_have_a_source(
         else:
             ways_out = (
                 "give it a `default`, declare the `operators` a stream may "
-                "filter it with, or name it from a pagination or replication "
-                "block"
+                "filter it with, or have a pagination or replication block "
+                "declare a value it starts from"
+            )
+        if param.controlled_by is not None:
+            # The author already reached for a block. Saying only what to
+            # declare would read as advice they had taken.
+            ways_out = (
+                f"its `controlled_by: {param.controlled_by}` marker is backed "
+                "by no block that declares a value it starts from, so "
+                + ways_out
             )
         findings.append((name, ways_out))
 
     if findings:
         raise violation(
             "RULE-ENDP-066",
-            "required and given no source, so the slot bound to each is empty "
-            "on every request the operation sends — "
+            "required and given no source, so the value each binds resolves "
+            "to nothing on every run — "
             + "; ".join(f"params[{n!r}]: {w}" for n, w in findings)
             + ". Or declare the param not required, where the operation is "
             "correct without the value",

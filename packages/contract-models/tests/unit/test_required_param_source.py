@@ -6,13 +6,19 @@ runs and what it does not prove. What is here is the behaviour: which documents
 the refusal takes, which it leaves alone, and which of the neighbouring checks
 speaks first when more than one has something to say.
 
-RULE-ENDP-067 names what the flag commits the run to. Nothing applies it and
+RULE-ENDP-067 names what the flag asks of the author. Nothing applies it and
 nothing here tests it, which is why it is a separate record.
 """
 import pytest
 from pydantic import ValidationError
+from typing import get_args
 
-from analitiq.contracts.endpoints import ApiEndpointDoc, Param
+from analitiq.contracts.endpoints import (
+    ApiEndpointDoc,
+    CursorMapping,
+    Pagination,
+    Param,
+)
 from analitiq.contracts.shared.rules import all_rules
 
 
@@ -98,11 +104,17 @@ def _message(payload):
 
 
 def _detail(payload):
-    """The finding's own words, with the quoted rule statement stripped."""
+    """The finding's own words, with the quoted rule statement stripped.
+
+    Stops at the finding's closing paren: pydantic's `input_value=` footer
+    echoes a truncated repr of the document, so a `in detail` assertion run
+    over the whole message could be satisfied by the payload rather than by
+    the diagnostic.
+    """
     message = _message(payload)
     _, sep, detail = message.partition(f"[RULE-ENDP-066] {_STATEMENT} (")
     assert sep, message
-    return detail
+    return detail.partition(") [type=")[0]
 
 
 # --- The refusal ------------------------------------------------------------
@@ -211,6 +223,42 @@ def test_an_empty_operator_list_opens_nothing():
     }))
 
 
+def _replicated(params, cursor_mappings, methods=("incremental",)):
+    payload = _read_payload(params)
+    read = payload["operations"]["read"]
+    read["replication"] = {
+        "supported_methods": list(methods),
+        "cursor_mappings": cursor_mappings,
+    }
+    read["response"]["schema"]["items"]["properties"] = {
+        "updated_at": {"type": "string"},
+    }
+    return payload
+
+
+_CURSOR_PARAM = {"in": "query", "type": "string", "required": True,
+                 "controlled_by": "replication"}
+
+
+def test_a_window_cursor_mapping_fills_both_ends():
+    ApiEndpointDoc.model_validate(_replicated(
+        {"since": dict(_CURSOR_PARAM), "until": dict(_CURSOR_PARAM)},
+        [{"cursor_field": "updated_at", "start_param": "since",
+          "start_operator": "gte", "end_param": "until", "end_operator": "lt"}],
+    ))
+
+
+def test_a_block_that_supports_only_full_refresh_fills_nothing():
+    """A cursor value comes from the state a previous incremental run left, so
+    a block that never runs incrementally names its params and fills none."""
+    detail = _detail(_replicated(
+        {"since": dict(_CURSOR_PARAM)},
+        [{"cursor_field": "updated_at", "param": "since", "operator": "gte"}],
+        methods=("full_refresh",),
+    ))
+    assert "params['since']" in detail
+
+
 def test_a_replication_block_naming_the_param_is_a_source():
     payload = _one_read_param({
         "in": "query", "type": "string", "required": True,
@@ -229,21 +277,92 @@ def test_a_replication_block_naming_the_param_is_a_source():
     ApiEndpointDoc.model_validate(payload)
 
 
-def test_a_pagination_block_naming_the_param_is_a_source():
-    payload = _one_read_param({
-        "in": "query", "type": "integer", "required": True,
-        "controlled_by": "pagination",
-    })
-    payload["operations"]["read"]["pagination"] = {
-        "type": "offset",
-        "offset": {
-            "param": "since",
-            "initial": 0,
-            "increment_by": {"ref": "response.record_count"},
+def _paginated(param, block):
+    payload = _one_read_param(param)
+    block.setdefault("stop_when", {"empty": {"ref": "response.body.rows"}})
+    read = payload["operations"]["read"]
+    read["pagination"] = block
+    read["response"]["records"] = {"ref": "response.body.rows"}
+    read["response"]["schema"] = {
+        "$schema": JSON_SCHEMA,
+        "type": "object",
+        "properties": {
+            "next": {"type": "string"},
+            "rows": {
+                "type": "array",
+                "items": {"type": "object",
+                          "properties": {"id": {"type": "string"}}},
+            },
         },
-        "stop_when": {"empty": {"ref": "response.body"}},
     }
+    return payload
+
+
+_CONTROLLED = {"in": "query", "type": "integer", "required": True,
+               "controlled_by": "pagination"}
+_INCREMENT = {"ref": "response.record_count"}
+
+
+@pytest.mark.parametrize("block", [
+    {"type": "offset",
+     "offset": {"param": "since", "initial": 0, "increment_by": _INCREMENT}},
+    {"type": "page",
+     "page": {"param": "since", "initial": 1, "increment_by": 1}},
+    {"type": "keyset",
+     "keyset": {"param": "since", "order_by_field": "id", "initial": 0}},
+    {"type": "link", "link": {"next_url": {"ref": "response.body.next"}},
+     "limit": {"param": "since", "default": 50}},
+    {"type": "cursor", "cursor": {"param": "page_token",
+                                  "next_cursor": {"ref": "response.body.next"}},
+     "limit": {"param": "since", "default": 50}},
+], ids=["offset", "page", "keyset-with-initial", "link-limit", "cursor-limit"])
+def test_a_block_that_declares_a_starting_value_is_a_source(block):
+    """Each strategy reaches the returned set by its own branch, and the branch
+    is now what decides acceptance rather than only triggering a check — so a
+    branch left out refuses a working document instead of missing one."""
+    payload = _paginated(dict(_CONTROLLED), block)
+    if block["type"] == "cursor":
+        payload["operations"]["read"]["params"]["page_token"] = {
+            "in": "query", "type": "string", "required": False,
+            "controlled_by": "pagination",
+        }
+        payload["operations"]["read"]["request"]["query"]["page_token"] = {
+            "from_param": "page_token"}
     ApiEndpointDoc.model_validate(payload)
+
+
+@pytest.mark.parametrize("block", [
+    {"type": "offset",
+     "offset": {"param": "page", "initial": 0, "increment_by": _INCREMENT},
+     "limit": {"param": "since"}},
+    {"type": "keyset", "keyset": {"param": "since", "order_by_field": "id"}},
+    {"type": "cursor",
+     "cursor": {"param": "since", "next_cursor": {"ref": "response.body.next"}}},
+], ids=["limit-without-default", "keyset-without-initial", "opaque-cursor"])
+def test_a_block_that_names_the_param_and_gives_it_nothing_is_not_a_source(block):
+    """Naming a param says which slot the strategy drives, not that the
+    document put a value there. Counting a mention would be worse than not
+    checking at all: the finding names the blocks as a way out, so an author
+    would add `limit: {"param": <name>}`, go green, and change nothing.
+    """
+    payload = _paginated(dict(_CONTROLLED), block)
+    if block["type"] == "offset":
+        payload["operations"]["read"]["params"]["page"] = {
+            "in": "query", "type": "integer", "required": False,
+            "controlled_by": "pagination",
+        }
+        payload["operations"]["read"]["request"]["query"]["page"] = {
+            "from_param": "page"}
+    assert "params['since']" in _detail(payload)
+
+
+def test_the_detail_names_a_marker_no_block_stands_behind():
+    """An author who reached for a block and got no value is not helped by
+    being told to reach for one."""
+    detail = _detail(_paginated(dict(_CONTROLLED), {
+        "type": "keyset", "keyset": {"param": "since", "order_by_field": "id"},
+    }))
+    assert "`controlled_by: pagination`" in detail
 
 
 # --- The latitude an optional param keeps -----------------------------------
@@ -317,6 +436,18 @@ def test_an_unbound_param_is_reported_as_unbound():
     assert "RULE-ENDP-066" not in message
 
 
+def test_a_param_bound_twice_is_reported_as_bound_twice():
+    """The other half of the ordering the check moved for: a param with two
+    slots has a binding defect, and its own diagnostic names it."""
+    payload = _read_payload(
+        {"since": {"in": "query", "type": "string", "required": True}},
+        query={"a": {"from_param": "since"}, "b": {"from_param": "since"}},
+    )
+    message = _message(payload)
+    assert "referenced by 2 request bindings" in message
+    assert "RULE-ENDP-066" not in message
+
+
 def test_a_write_path_param_is_reported_by_the_rule_that_names_the_record():
     """RULE-ENDP-028 grades a write path_param whether or not it is required,
     and its diagnostic names the `from_input` binding. It runs inside the
@@ -327,20 +458,20 @@ def test_a_write_path_param_is_reported_by_the_rule_that_names_the_record():
     insert["request"]["path_params"] = {"since": {"from_param": "since"}}
     insert["request"].pop("query")
     message = _message(payload)
-    assert "declares no `default`" in message
+    assert "RULE-ENDP-028" in message
     assert "RULE-ENDP-066" not in message
 
 
-# --- The set the rule closes ------------------------------------------------
+# --- The sets the rule closes ----------------------------------------------
 
 
 def test_a_field_added_to_param_puts_this_rule_in_front_of_a_reader():
-    """The check, the record, the rendered reference and this module all say
-    which fields a param's value can arrive through. A field landing on `Param`
-    is either a fourth source — in which case the refusal starts rejecting
-    documents that now work, and every one of those sentences is false with no
-    word changed — or it is not, and nothing else here can tell the two apart.
-    Pinning the members is what makes the addition ask.
+    """The check, the record and the rendered reference each say which fields a
+    param's value can arrive through. A field landing on `Param` either makes
+    something else a source — in which case the refusal starts rejecting
+    documents that now work, and those sentences are false with no word changed
+    — or it does not, and nothing else here can tell the two apart. Pinning the
+    members is what makes the addition ask.
     """
     assert set(Param.model_fields) == {
         "location", "type", "required", "description", "default", "enum",
@@ -348,3 +479,19 @@ def test_a_field_added_to_param_puts_this_rule_in_front_of_a_reader():
         "min_items", "max_items", "operators", "controlled_by", "style",
         "explode",
     }
+
+
+@pytest.mark.parametrize("union, members", [
+    (Pagination, {"OffsetPagination", "PagePagination", "CursorPagination",
+                  "LinkPagination", "KeysetPagination"}),
+    (CursorMapping, {"SingleCursorMapping", "WindowCursorMapping"}),
+], ids=["pagination", "cursor-mapping"])
+def test_a_new_strategy_puts_the_controlled_set_in_front_of_a_reader(union, members):
+    """The wiring helpers walk these unions with an `isinstance` chain and no
+    `else`, and what they return now decides whether a param has a source. A
+    member added without a branch is not a missed check — it is a working
+    document refused, with no branch left to fail. Only reading the new member
+    can say whether it declares a value a param starts from.
+    """
+    branches = get_args(get_args(union)[0])
+    assert {get_args(b)[0].__name__ for b in branches} == members

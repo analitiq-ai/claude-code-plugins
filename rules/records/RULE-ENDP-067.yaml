@@ -10,8 +10,8 @@ validator: null
 owners: [connector-plugin, engine]
 targets: [Param]
 rationale: >
-  A value expression that resolves to nothing has its slot omitted, and for an
-  optional param that is right — an unsubmitted optional input and a missing
+  A request slot whose value expression resolves to nothing is dropped, and for
+  an optional param that is right — an unsubmitted optional input and a missing
   one read the same, and a request that leaves the slot out is what the author
   meant. It is wrong for a param the operation cannot be correct without, and
   the two are indistinguishable at the slot: one is the request the author
@@ -21,17 +21,16 @@ rationale: >
   whose absence the operation tolerates is as much a defect as omitting it on
   one whose absence it does not — the first refuses a read that works, once
   anything honours the flag, and the second leaves the wrong request
-  indistinguishable from the right one. Nothing honours it today: the pinned
+  indistinguishable from the right one. Nothing honours it: the pinned
   consumption manifest claims no read of the flag, so it reaches the run as
   nothing at all. What the run does then is a reading of the request path as it
-  stands, and it is not uniform — a query or header slot whose value resolves
-  to nothing is dropped with a warning on a run that reports success, while a
-  path segment or a body that resolves to nothing already refuses the request.
-  So the gap this rule would close is the dropped slot, not every placement.
-  Catching a violation means reading the provider's own parameter reference
-  beside the endpoint and deciding, per param, whether a response built without
-  it answers the question the read asked; RULE-ENDP-066 mechanises only the
-  half one document settles, that a required param the document gives no source
-  is empty on every run.
+  stands — the slot is dropped and the run reports success, except where the
+  request cannot be built at all without the value, as an unresolved path
+  segment cannot, and that refusal does not read the flag either. Catching a
+  violation means reading the provider's own parameter reference beside the
+  endpoint and deciding, per param, whether a response built without it answers
+  the question the read asked; RULE-ENDP-066 mechanises only the half one
+  document settles, that a required param the document gives no source resolves
+  to nothing on every run.
 status: active
 superseded_by: null
