@@ -12,11 +12,17 @@ targets: [WindowCursorMapping]
 fields: [format, start_operator, end_operator]
 mechanism: literal_enum
 rationale: >
-  A window is sent as a pair of params, and each end carries its own
-  comparison because whether a bound is inclusive is a provider fact and the
-  two ends are routinely spelled differently. Getting one end wrong is the
-  quiet failure: the run succeeds, and the records on that boundary are either
-  dropped from every window or carried in two of them, which reads downstream
-  as missing rows or as duplicates rather than as a mapping to fix.
+  Each end of a window carries its own comparison because whether a bound is
+  inclusive is a provider fact, and the ends of a provider's window are
+  routinely spelled differently; the format is the spelling the bounds are
+  sent as. A wrong end is the quiet kind of failure — records on a boundary
+  dropped from every window, or carried in more than one, reading downstream
+  as missing rows or duplicates rather than as a mapping to fix — which is
+  why each member draws on a closed vocabulary the validator can grade
+  instead of free text. The pinned contract-consumption manifest claims no
+  read of any field of the windowed form: a run today proceeds as though no
+  windowed mapping were declared, so the declaration is graded at authoring
+  time only, and holding it to the closed sets is what keeps documents
+  already published adoptable as written.
 status: active
 superseded_by: null

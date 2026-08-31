@@ -11,11 +11,14 @@ targets: [Logging]
 fields: [log_level]
 mechanism: literal_enum
 rationale: >
-  The member is handed to the engine's logging configuration as a threshold, so
-  it is ordered rather than merely named — the level chosen decides how much of
-  a failed run there is to read afterwards. An unrecognised value has no
-  position in that ordering, and the resolutions available to a runtime that
-  cannot place it are to log everything or to log nothing, on a run nobody is
-  watching.
+  A level is a threshold, ordered rather than merely named — the level
+  chosen decides how much of a failed run there is to read afterwards — and
+  an unrecognised value has no position in that ordering, so the vocabulary
+  is closed where the document is graded. The pinned contract-consumption
+  manifest claims no read of the logging block, and a run today logs at the
+  engine's own defaults whatever the pipeline declares: the closed set is
+  currently what keeps the declaration honest at authoring time, and what
+  lets the engine adopt the block without re-grading documents already
+  published against it.
 status: active
 superseded_by: null

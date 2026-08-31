@@ -12,12 +12,16 @@ targets: [Replication]
 fields: [supported_methods]
 mechanism: literal_enum
 rationale: >
-  This list is a capability claim the engine acts on: it says which syncs the
-  runtime actually has a path for on this endpoint. An invented name advertises
-  a sync nothing implements, and the stream that selects it fails during a run
-  rather than while it is being authored. There is no default-method key because
-  which method to run is the stream's decision per run; an endpoint naming one
-  would be settling a policy it does not own, and the stream that meant to
-  override it would have no way to tell whether it had.
+  This list is the endpoint's capability claim — the syncs it declares a
+  path for — and the set a stream's chosen method is graded against, so an
+  invented name advertises a sync nothing implements to every stream that
+  binds the endpoint (RULE-STRM-025 names that obligation on the stream).
+  The pinned contract-consumption manifest claims no read of the set, and a
+  stream's method runs today whether or not the endpoint declared it: the
+  declaration does its work where it is read, at authoring time. There is no
+  default-method key because which method to run is the stream's decision
+  per run; an endpoint naming one would be settling a policy it does not
+  own, and the stream that meant to override it would have no way to tell
+  whether it had.
 status: active
 superseded_by: null

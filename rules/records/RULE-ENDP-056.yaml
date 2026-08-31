@@ -12,12 +12,14 @@ targets: [SingleCursorMapping]
 fields: [format, operator]
 mechanism: literal_enum
 rationale: >
-  The format member decides how the engine renders the stored cursor onto the
-  request, and the comparison member decides which records the provider is
-  expected to return for it. Both are read at every incremental run and neither
-  is discoverable from the response: a format the engine cannot render sends a
-  value the provider parses as something else, and a comparison the provider
-  does not apply silently changes what the window covers — either way the run
-  succeeds and the rows it should have carried are gone.
+  The wire half of a cursor mapping — the spelling the stored cursor is sent
+  as, and the comparison the provider is expected to apply to it — is a fact
+  about the provider, so each member draws on a closed vocabulary: that is
+  what lets the declaration be graded at authoring time rather than trusted.
+  The pinned contract-consumption manifest claims no read of the wire half
+  of a cursor mapping, and a run today sends the stored value as-is; what
+  the closed sets buy now is agreement between author and validator, and a
+  declaration the engine can adopt without re-reading documents already
+  published against it.
 status: active
 superseded_by: null

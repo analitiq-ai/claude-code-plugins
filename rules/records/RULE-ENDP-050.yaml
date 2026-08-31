@@ -12,17 +12,20 @@ targets: [Param]
 fields: [location, type]
 mechanism: literal_enum
 rationale: >
-  The placement decides which part of the request the engine builds the value
-  into, and it is also what every binding is matched against: a binding may
-  only sit in the request slot its param's placement names, so the placement
-  and the one legal binding site move together. Closing the set is what makes a
-  wrong placement report as a wrong placement: RULE-ENDP-009 catches the same
-  document one step later, as a param no binding references, and that diagnosis
-  sends the author to delete the param rather than to correct where it is sent.
-  The type vocabulary is the request-input one, describing what the connector
-  sends up, and it is separate from the Arrow vocabulary describing what comes
-  back; they are easy to confuse precisely because one param can carry a value
-  on both journeys. Each field's closed set also publishes the admissible values
-  in the JSON Schema, so nothing has to restate them.
+  The placement is what every binding is matched against: a binding may only
+  sit in the request slot its param's placement names, so the placement and
+  the one legal binding site move together. The pinned contract-consumption
+  manifest claims no read of the field — a run today routes the value by the
+  slot the binding sits in — so the agreement the validator grades between
+  the field and that slot is what the placement buys. Closing the set is
+  what makes a wrong placement report as a wrong placement: RULE-ENDP-009
+  catches the same document one step later, as a param no binding
+  references, and that diagnosis sends the author to delete the param rather
+  than to correct where it is sent. The type vocabulary is the request-input
+  one, describing what the connector sends up, and it is separate from the
+  Arrow vocabulary describing what comes back; they are easy to confuse
+  precisely because one param can carry a value on both journeys. Each
+  field's closed set also publishes the admissible values in the JSON
+  Schema, so nothing has to restate them.
 status: active
 superseded_by: null
