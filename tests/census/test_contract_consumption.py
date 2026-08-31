@@ -252,10 +252,10 @@ def test_derives_belongs_to_derivation_input_alone(kind):
 
 @pytest.mark.parametrize("derives", ["x", "  x  "])
 def test_a_field_does_not_derive_itself(derives):
-    """Caught here, not downstream: the census would report a self-derivation
-    as a field the manifest does not claim, sending the reader to the
-    manifest instead of to the entry. The padded form is what pins the check
-    to running after the name is normalised."""
+    """Caught here, not downstream: the census reports a self-derivation as
+    a product nothing reads, leaving the reader to notice that the two names
+    are one. The padded form is what pins the check to running after the
+    name is normalised."""
     with pytest.raises(ValueError, match="does not derive itself"):
         FieldDisposition("a.B", "x", "derivation_input", "reason", derives=derives)
 
@@ -279,19 +279,22 @@ def test_derives_is_named_never_positional():
 
 
 @pytest.mark.parametrize(
-    "kind,reason",
+    "kind,reason,derives",
     [
-        ("derivation_input", "reason"),  # the derives requirement
-        ("documented", "reason"),  # an unknown kind
-        ("authoring_only", ""),  # a blank reason
+        ("documented", "reason", None),  # an unknown kind
+        ("authoring_only", "", None),  # a blank reason
+        ("authoring_only", "reason", "y"),  # derives on the wrong kind
+        ("derivation_input", "reason", None),  # the derives requirement
+        ("derivation_input", "reason", "x"),  # a field deriving itself
     ],
 )
-def test_a_malformed_model_is_reported_before_any_other_defect(kind, reason):
+def test_a_malformed_model_is_reported_before_any_other_defect(kind, reason, derives):
     """Every other message names the entry by `model.field`, so the model is
-    what must be trustworthy first — proven against each defect that would
-    otherwise print a qualifier the reader cannot place."""
+    what must be trustworthy first — proven against every other defect
+    `__post_init__` raises, each of which would otherwise print a qualifier
+    the reader cannot place."""
     with pytest.raises(ValueError, match="dotted path"):
-        FieldDisposition("B", "x", kind, reason)
+        FieldDisposition("B", "x", kind, reason, derives=derives)
 
 
 # ---------------------------------------------------------------------------
@@ -694,9 +697,9 @@ def test_every_finding_field_fails_the_report_and_is_rendered():
     names = [f.name for f in dataclasses.fields(ConsumptionReport)]
     empty = ConsumptionReport(**{name: () for name in names})
     assert empty.ok and "complete and current" in empty.render()
-    # One sample per finding-element shape the groups render; the first that
-    # renders is this field's, and a field no shape renders fails loudly
-    # rather than being skipped.
+    # A sample stands in for a finding when the group's own lambda accepts
+    # it; the first accepted one is used, and a field no sample renders
+    # fails loudly rather than being skipped.
     samples = (
         FieldDisposition("a.B", "x", "authoring_only", "reason"),
         ("analitiq.contracts.a.B", "x"),

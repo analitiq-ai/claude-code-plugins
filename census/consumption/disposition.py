@@ -23,8 +23,8 @@ One disposition per kind of consumer an unread field may have:
   because pydantic settled the value before the engine held the object.
 - ``derivation_input`` — the contract computes another field of the same
   model from it at parse time, and that derived field is what the engine
-  reads. No attribute read of this field exists because its value reaches
-  the run under the derived field's name, not its own. ``derives`` names
+  reads. No attribute read of this field exists because the run reads the
+  derived field, whose value this one settles. ``derives`` names
   that field, and the census holds it to being one the model declares and
   the manifest claims: a derivation whose product nothing reads is a gap,
   not a derivation. Which field is computed from which, and why the input
@@ -118,11 +118,11 @@ class FieldDisposition:
     derives: str | None = dataclass_field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
-        # `model`, `field` and `derives` are lookup keys — into the reachable
-        # models, into `model_fields`, into `model_fields` again — not prose,
-        # so each is stored as the name it must match. A padded one matches
-        # nothing and is reported as a field or model the tree does not hold,
-        # which sends the reader to the manifest instead of to the entry.
+        # `model`, `field` and `derives` are names the census matches against
+        # the live tree, not prose, so each is stored as the name it must
+        # match. A padded one matches nothing, and the finding it raises
+        # reports the entry as naming something the tree does not hold rather
+        # than as the padding it is.
         object.__setattr__(self, "model", self.model.strip())
         object.__setattr__(self, "field", self.field.strip())
         # The model check runs first: every message below names the entry by

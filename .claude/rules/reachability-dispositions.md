@@ -20,8 +20,8 @@ can reach.
 `tests/census/test_contract_consumption.py` and
 `scripts/render_contract_consumption.py check` fail on every finding that
 dataclass carries. **Neither decides whether a reason is honest, nor which
-of the kinds pydantic does not settle is right.** That is a reader's,
-and this file is what the reader applies.
+kind is right.** That is a reader's, and this file is what the reader
+applies.
 
 ## The unit
 
