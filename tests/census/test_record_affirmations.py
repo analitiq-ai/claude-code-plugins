@@ -74,8 +74,6 @@ class Cousin(Base):
     pass
 
 
-
-
 _WIDGET = f"{_LOCAL}.Widget"
 
 
