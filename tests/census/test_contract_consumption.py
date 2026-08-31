@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 from census.consumption import pin
 from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
+    ConsumptionReport,
     _is_literal,
     census_report,
     classify,
@@ -179,7 +180,12 @@ def test_accepted_kinds_are_exactly_the_literal():
     adding a kind is one edit — proven by every member being accepted and
     nothing else."""
     for kind in get_args(DispositionKind):
-        assert FieldDisposition("a.B", "x", kind, "reason").kind == kind
+        # `derives` belongs to `derivation_input` and to no other kind, so
+        # the construction that proves acceptance carries it per kind.
+        derives = "y" if kind == "derivation_input" else None
+        assert (
+            FieldDisposition("a.B", "x", kind, "reason", derives=derives).kind == kind
+        )
     with pytest.raises(ValueError, match="unknown kind"):
         FieldDisposition("a.B", "x", "documented", "reason")
 
@@ -228,6 +234,69 @@ def test_disposition_requires_a_dotted_model_path(model):
         FieldDisposition(model, "x", "authoring_only", "reason")
 
 
+@pytest.mark.parametrize("derives", [None, "", "   "])
+def test_derivation_input_requires_the_field_it_derives(derives):
+    """``derives`` is what makes the kind falsifiable — without it the entry
+    claims a derivation whose product nothing can be held to."""
+    with pytest.raises(ValueError, match="names the field it derives"):
+        FieldDisposition("a.B", "x", "derivation_input", "reason", derives=derives)
+
+
+@pytest.mark.parametrize(
+    "kind", [k for k in get_args(DispositionKind) if k != "derivation_input"]
+)
+def test_derives_belongs_to_derivation_input_alone(kind):
+    with pytest.raises(ValueError, match="derives belongs to derivation_input"):
+        FieldDisposition("a.B", "x", kind, "reason", derives="y")
+
+
+@pytest.mark.parametrize("derives", ["x", "  x  "])
+def test_a_field_does_not_derive_itself(derives):
+    """Caught here, not downstream: the census reports a self-derivation as
+    a product nothing reads, leaving the reader to notice that the two names
+    are one. The padded form is what pins the check to running after the
+    name is normalised."""
+    with pytest.raises(ValueError, match="does not derive itself"):
+        FieldDisposition("a.B", "x", "derivation_input", "reason", derives=derives)
+
+
+def test_every_lookup_key_is_stored_as_the_name_it_must_match():
+    """`model`, `field` and `derives` are keys into the live tree, not prose,
+    so padding is stripped rather than carried into a finding that claims the
+    tree does not hold what the entry names."""
+    entry = FieldDisposition(
+        "  a.B  ", "  x  ", "derivation_input", "reason", derives="  y  "
+    )
+    assert (entry.model, entry.field, entry.derives) == ("a.B", "x", "y")
+
+
+def test_derives_is_named_never_positional():
+    """The entries pass model, field, kind and reason positionally, so a
+    fifth positional would bind silently to the one argument only one kind
+    accepts."""
+    with pytest.raises(TypeError):
+        FieldDisposition("a.B", "x", "derivation_input", "reason", "y")
+
+
+@pytest.mark.parametrize(
+    "kind,reason,derives",
+    [
+        ("documented", "reason", None),  # an unknown kind
+        ("authoring_only", "", None),  # a blank reason
+        ("authoring_only", "reason", "y"),  # derives on the wrong kind
+        ("derivation_input", "reason", None),  # the derives requirement
+        ("derivation_input", "reason", "x"),  # a field deriving itself
+    ],
+)
+def test_a_malformed_model_is_reported_before_any_other_defect(kind, reason, derives):
+    """Every other message names the entry by `model.field`, so the model is
+    what must be trustworthy first — proven against every other defect
+    `__post_init__` raises, each of which would otherwise print a qualifier
+    the reader cannot place."""
+    with pytest.raises(ValueError, match="dotted path"):
+        FieldDisposition("B", "x", kind, reason, derives=derives)
+
+
 # ---------------------------------------------------------------------------
 # 3. The walk — synthetic models
 # ---------------------------------------------------------------------------
@@ -236,6 +305,9 @@ def test_disposition_requires_a_dotted_model_path(model):
 class Leaf(BaseModel):
     value: int
     label: str
+    # Shares a name with `Root.plain`, so a lookup that forgot to qualify by
+    # model would find this model's claim standing in for Root's.
+    plain: str = ""
 
 
 class Grammar(BaseModel):
@@ -466,8 +538,16 @@ def test_a_claim_on_an_opaque_model_is_a_read_and_its_other_fields_stay_opaque()
 _LOCAL = "tests.census.test_contract_consumption"
 
 
-def _entry(model: str, field: str, kind="authoring_only", reason="read by a person"):
-    return FieldDisposition(model=model, field=field, kind=kind, reason=reason)
+def _entry(
+    model: str,
+    field: str,
+    kind="authoring_only",
+    reason="read by a person",
+    derives=None,
+):
+    return FieldDisposition(
+        model=model, field=field, kind=kind, reason=reason, derives=derives
+    )
 
 
 _SYNTHETIC = (Root, Leaf, Grammar, Tagged, ViaDict, DictOnly, Orphan, Unclaimed)
@@ -492,7 +572,7 @@ def shadowed(monkeypatch):
         roots=[f"{_SHADOW}.Root"],
         claims={
             f"{_SHADOW}.Root": {"direct": ["s:1"], "either": ["s:2"]},
-            f"{_SHADOW}.Leaf": {"value": ["s:3"]},
+            f"{_SHADOW}.Leaf": {"value": ["s:3"], "plain": ["s:4"]},
         },
         opaque={f"{_SHADOW}.Grammar": {"consumer": "x", "dumps": [], "entries": []}},
         kit_reads={},
@@ -503,7 +583,13 @@ _M = _SHADOW.removeprefix("analitiq.contracts.")
 
 _COMPLETE = (
     _entry(f"{_M}.Root", "plain"),
-    _entry(f"{_M}.Root", "maybe"),
+    _entry(
+        f"{_M}.Root",
+        "maybe",
+        kind="derivation_input",
+        reason="the claimed `direct` is derived from it",
+        derives="direct",
+    ),
     _entry(f"{_M}.Root", "annotated"),
     _entry(f"{_M}.Root", "shape", kind="structural", reason="schema-pinned literal"),
     _entry(f"{_M}.Leaf", "label"),
@@ -573,6 +659,94 @@ def test_structural_disposition_on_a_non_literal_field_is_a_finding(shadowed):
 def test_structural_disposition_on_a_literal_field_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
     assert report.structural_not_literal == ()
+
+
+@pytest.mark.parametrize(
+    "derives,why",
+    [
+        ("plain", "the derived field is unread too"),
+        ("vanished", "the model declares no such field"),
+    ],
+)
+def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives, why):
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives=derives,
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert not report.ok, why
+    assert report.derivation_product_unread == (wrong,)
+    assert f"Root.annotated -> {derives}" in report.render()
+
+
+def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
+    report = census_report(shadowed, _COMPLETE)
+    assert report.derivation_product_unread == ()
+
+
+def test_every_finding_field_fails_the_report_and_is_rendered():
+    """`ok` and `render` are written out over the dataclass's finding fields,
+    and the dataclass owns that set: a field added to it and missed in either
+    leaves a report that carries a finding, passes the gate, and prints
+    nothing. Each field is proven to reach both rather than trusted to."""
+    import dataclasses
+
+    names = [f.name for f in dataclasses.fields(ConsumptionReport)]
+    empty = ConsumptionReport(**{name: () for name in names})
+    assert empty.ok and "complete and current" in empty.render()
+    # A sample stands in for a finding when the group's own lambda accepts
+    # it; the first accepted one is used, and a field no sample renders
+    # fails loudly rather than being skipped.
+    samples = (
+        FieldDisposition("a.B", "x", "authoring_only", "reason"),
+        ("analitiq.contracts.a.B", "x"),
+        "analitiq.contracts.a.B",
+    )
+    for name in names:
+        for sample in samples:
+            report = dataclasses.replace(empty, **{name: (sample,)})
+            try:
+                rendered = report.render()
+            except (AttributeError, IndexError, TypeError):
+                continue
+            assert not report.ok, f"{name} does not fail the report"
+            assert "a.B" in rendered, f"{name} is not rendered"
+            break
+        else:
+            raise AssertionError(f"no sample renders {name}")
+
+
+def test_the_derived_field_is_looked_up_on_the_entry_s_own_model(shadowed):
+    """`plain` is claimed on Leaf and unread on Root. The product is a field
+    of the model carrying the entry, so a name another model reads does not
+    stand in for it — the half that makes the kind mean "derived here"."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives="plain",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_product_unread == (wrong,)
+
+
+def test_a_kit_read_of_the_derived_field_is_not_a_claim(shadowed):
+    """Only `claims` makes a field read, at the derivation site too: a
+    conformance-kit read of the product leaves the derivation unconsumed."""
+    shadowed["kit_reads"] = {f"{_SHADOW}.Root": {"plain": ["cdk.conformance:1"]}}
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives="plain",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_product_unread == (wrong,)
 
 
 def test_claim_of_a_field_the_model_does_not_declare_is_a_finding(shadowed):

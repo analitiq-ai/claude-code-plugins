@@ -193,6 +193,10 @@ class ConsumptionReport:
     #: ``structural`` claims pydantic settles the value at parse time, and
     #: the field's annotation is not the ``Literal`` shape that would.
     structural_not_literal: tuple[FieldDisposition, ...]
+    #: ``derivation_input`` claims the field reaches the run under the name
+    #: it derives, and the manifest claims no read of that name on this
+    #: model — either it is the wrong name, or nothing reads the product.
+    derivation_product_unread: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
     claim_of_unknown_field: tuple[FieldRef, ...]
@@ -208,6 +212,7 @@ class ConsumptionReport:
             or self.disposition_of_unknown_field
             or self.duplicate_dispositions
             or self.structural_not_literal
+            or self.derivation_product_unread
             or self.claim_of_unknown_field
             or self.manifest_names_unknown_model
         )
@@ -248,10 +253,19 @@ class ConsumptionReport:
         )
         group(
             "structural dispositions on fields that are not Literal-typed — "
-            "pydantic settles nothing here; use a kind pydantic does not settle: "
+            "the annotation is not the shape pydantic settles at parse time; "
+            "use another kind: "
             f"{', '.join(_NON_STRUCTURAL_KINDS)}",
             self.structural_not_literal,
             lambda d: f"{d.qualified_model}.{d.field}",
+        )
+        group(
+            "derivation_input dispositions whose derived field the model does "
+            "not declare or the manifest does not claim — either derives names "
+            "the wrong field, or the product reaches no run-time read either "
+            "and this is a gap, not a derivation",
+            self.derivation_product_unread,
+            lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
         group(
             "claims of fields the live model does not declare — the manifest "
@@ -307,6 +321,7 @@ def census_report(
     now_claimed: list[FieldDisposition] = []
     unknown: list[FieldDisposition] = []
     not_literal: list[FieldDisposition] = []
+    product_unread: list[FieldDisposition] = []
     for entry in dispositions:
         ref = (entry.qualified_model, entry.field)
         cls = models.get(entry.qualified_model)
@@ -323,6 +338,16 @@ def census_report(
             cls.model_fields[entry.field].annotation
         ):
             not_literal.append(entry)
+        # One membership test covers both defects the finding names: a claim
+        # is only ever recorded against a field its model declares, so a
+        # `derives` the model does not declare cannot be in `read` either.
+        # The ref is model-qualified — the product is a field of THIS model,
+        # not a name some other model happens to have read.
+        if (
+            entry.kind == "derivation_input"
+            and (entry.qualified_model, entry.derives) not in classes["read"]
+        ):
+            product_unread.append(entry)
 
     return ConsumptionReport(
         unread_without_disposition=tuple(sorted(classes["unread"] - set(seen))),
@@ -330,6 +355,7 @@ def census_report(
         disposition_of_unknown_field=tuple(unknown),
         duplicate_dispositions=duplicates,
         structural_not_literal=tuple(not_literal),
+        derivation_product_unread=tuple(product_unread),
         claim_of_unknown_field=tuple(unknown_claims),
         manifest_names_unknown_model=tuple(unknown_models),
     )

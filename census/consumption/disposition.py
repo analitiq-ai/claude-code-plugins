@@ -21,6 +21,14 @@ One disposition per kind of consumer an unread field may have:
 - ``structural`` — the model's own parsing consumes it: a discriminator the
   union dispatches on, a literal the schema pins. No attribute read exists
   because pydantic settled the value before the engine held the object.
+- ``derivation_input`` — the contract computes another field of the same
+  model from it at parse time, and that derived field is what the engine
+  reads. No attribute read of this field exists because the run reads the
+  derived field, whose value this one settles. ``derives`` names
+  that field, and the census holds it to being one the model declares and
+  the manifest claims: a derivation whose product nothing reads is a gap,
+  not a derivation. Which field is computed from which, and why the input
+  is therefore not free, is the entry's ``reason``.
 - ``engine_gap`` — the contract permits something the engine ignores and
   should honour: what the author declared has no effect on the run. The
   ``reason`` states what an author writing the field expects and what the
@@ -49,11 +57,16 @@ name, so the guard can be read without pydantic.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from typing import Literal, get_args
 
 DispositionKind = Literal[
-    "authoring_only", "structural", "engine_gap", "contract_surplus", "manifest_gap"
+    "authoring_only",
+    "structural",
+    "derivation_input",
+    "engine_gap",
+    "contract_surplus",
+    "manifest_gap",
 ]
 
 # Named reasons, so the census is countable by category and one edit
@@ -90,22 +103,56 @@ class FieldDisposition:
     to judge it. A ``reason`` is required for every kind: an ``engine_gap``
     with no stated consequence is an alarm with no text, and an
     ``authoring_only`` with no named consumer is a waiver of nothing.
+    ``derives`` belongs to ``derivation_input`` and to no other kind: it
+    names the field on this model whose value the contract computes from
+    this one, and it is what the census can hold the entry to — the entry
+    fails when the model stops declaring that field or the manifest stops
+    claiming it. That a derivation exists at all is the reader's, under
+    ``.claude/rules/reachability-dispositions.md``.
     """
 
     model: str
     field: str
     kind: DispositionKind
     reason: str
+    derives: str | None = dataclass_field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
-        if self.kind not in get_args(DispositionKind):
-            raise ValueError(f"{self.model}.{self.field}: unknown kind {self.kind!r}")
-        if not self.reason.strip():
-            raise ValueError(f"{self.model}.{self.field}: a reason is required")
+        # `model`, `field` and `derives` are names the census matches against
+        # the live tree, not prose, so each is stored as the name it must
+        # match. A padded one matches nothing, and the finding it raises
+        # reports the entry as naming something the tree does not hold rather
+        # than as the padding it is.
+        object.__setattr__(self, "model", self.model.strip())
+        object.__setattr__(self, "field", self.field.strip())
+        # The model check runs first: every message below names the entry by
+        # `model.field`, so a malformed model would print a qualifier the
+        # reader cannot place beside a defect that is not the first one.
         if not self.model or "." not in self.model:
             raise ValueError(
                 f"{self.model!r}: model must be an analitiq.contracts-relative "
                 "dotted path such as 'endpoints.Param'"
+            )
+        if self.kind not in get_args(DispositionKind):
+            raise ValueError(f"{self.model}.{self.field}: unknown kind {self.kind!r}")
+        if not self.reason.strip():
+            raise ValueError(f"{self.model}.{self.field}: a reason is required")
+        if self.kind != "derivation_input":
+            if self.derives is not None:
+                raise ValueError(
+                    f"{self.model}.{self.field}: derives belongs to "
+                    f"derivation_input, not to {self.kind}"
+                )
+            return
+        if not (self.derives or "").strip():
+            raise ValueError(
+                f"{self.model}.{self.field}: a derivation_input names the field "
+                "it derives"
+            )
+        object.__setattr__(self, "derives", self.derives.strip())
+        if self.derives == self.field:
+            raise ValueError(
+                f"{self.model}.{self.field}: a field does not derive itself"
             )
 
     @property

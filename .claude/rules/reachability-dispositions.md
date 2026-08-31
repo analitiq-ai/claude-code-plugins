@@ -12,14 +12,16 @@ same split on fields.
 
 ## What the guard decides, and what a reader decides
 
-`census/consumption/reachability.py` compares sets and checks one
-annotation shape (a `structural` entry must sit on a `Literal`), and
-`ConsumptionReport` there carries every finding those can reach.
+`census/consumption/reachability.py` compares sets, checks an annotation
+shape (a `structural` entry must sit on a `Literal`) and holds a
+`derivation_input` entry's `derives` to a field the same model declares and
+the manifest claims; `ConsumptionReport` there carries every finding those
+can reach.
 `tests/census/test_contract_consumption.py` and
 `scripts/render_contract_consumption.py check` fail on every finding that
 dataclass carries. **Neither decides whether a reason is honest, nor which
-of the kinds pydantic does not settle is right.** That is a reader's,
-and this file is what the reader applies.
+kind is right.** That is a reader's, and this file is what the reader
+applies.
 
 ## The unit
 
@@ -48,6 +50,15 @@ means. What a reader settles is which one applies:
   the reason then names each check and what it re-keys onto.
 - Pydantic settles the value before the engine holds the object →
   `structural`.
+- The contract computes another field of the same model from it, and the
+  engine reads that one → `derivation_input`, and `derives` names it. The
+  reason says which field is computed from which and why the input is
+  therefore not free — a value reaching the run under another name is not
+  an ignored value. It does not say that the contract rejects a document
+  contradicting the derivation; whether a rule is applied is the record's
+  `validator:`, and the reason cites the id instead. Where the derived
+  field is itself unread, nothing on the run-time path consumes either end,
+  and the question is again what consumes them or who owes the fix.
 - Nothing consumes it, and the question is **who owes the fix**:
   - the engine → `engine_gap`;
   - the contract → `contract_surplus`, and the reason says why removal
