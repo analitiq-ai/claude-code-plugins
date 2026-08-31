@@ -249,12 +249,14 @@ def test_derives_belongs_to_derivation_input_alone(kind):
         FieldDisposition("a.B", "x", kind, "reason", derives="y")
 
 
-def test_a_field_does_not_derive_itself():
+@pytest.mark.parametrize("derives", ["x", "  x  "])
+def test_a_field_does_not_derive_itself(derives):
     """Caught here, not downstream: the census would report a self-derivation
     as a field the manifest does not claim, sending the reader to the
-    manifest instead of to the entry."""
+    manifest instead of to the entry. The padded form is what pins the check
+    to running after the name is normalised."""
     with pytest.raises(ValueError, match="does not derive itself"):
-        FieldDisposition("a.B", "x", "derivation_input", "reason", derives="x")
+        FieldDisposition("a.B", "x", "derivation_input", "reason", derives=derives)
 
 
 def test_derives_is_stored_as_the_name_it_must_match():
@@ -264,11 +266,28 @@ def test_derives_is_stored_as_the_name_it_must_match():
     assert entry.derives == "y"
 
 
-def test_a_malformed_model_is_reported_before_any_other_defect():
+def test_derives_is_named_never_positional():
+    """The entries pass model, field, kind and reason positionally, so a
+    fifth positional would bind silently to the one argument only one kind
+    accepts."""
+    with pytest.raises(TypeError):
+        FieldDisposition("a.B", "x", "derivation_input", "reason", "y")
+
+
+@pytest.mark.parametrize(
+    "kind,reason",
+    [
+        ("derivation_input", "reason"),  # the derives requirement
+        ("documented", "reason"),  # an unknown kind
+        ("authoring_only", ""),  # a blank reason
+    ],
+)
+def test_a_malformed_model_is_reported_before_any_other_defect(kind, reason):
     """Every other message names the entry by `model.field`, so the model is
-    what must be trustworthy first."""
+    what must be trustworthy first — proven against each defect that would
+    otherwise print a qualifier the reader cannot place."""
     with pytest.raises(ValueError, match="dotted path"):
-        FieldDisposition("B", "x", "derivation_input", "reason")
+        FieldDisposition("B", "x", kind, reason)
 
 
 # ---------------------------------------------------------------------------

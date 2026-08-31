@@ -27,8 +27,8 @@ One disposition per kind of consumer an unread field may have:
   the run under the derived field's name, not its own. ``derives`` names
   that field, and the census holds it to being one the model declares and
   the manifest claims: a derivation whose product nothing reads is a gap,
-  not a derivation. What the input buys, and what a document contradicting
-  it gets, is the entry's ``reason``.
+  not a derivation. Which field is computed from which, and why the input
+  is therefore not free, is the entry's ``reason``.
 - ``engine_gap`` — the contract permits something the engine ignores and
   should honour: what the author declared has no effect on the run. The
   ``reason`` states what an author writing the field expects and what the

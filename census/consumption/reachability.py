@@ -194,8 +194,8 @@ class ConsumptionReport:
     #: the field's annotation is not the ``Literal`` shape that would.
     structural_not_literal: tuple[FieldDisposition, ...]
     #: ``derivation_input`` claims the field reaches the run under the name
-    #: it derives, and that field is not one the model declares and the
-    #: manifest claims — so nothing reads the product either.
+    #: it derives, and the manifest claims no read of that name on this
+    #: model — either it is the wrong name, or nothing reads the product.
     derivation_product_unread: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
@@ -253,7 +253,8 @@ class ConsumptionReport:
         )
         group(
             "structural dispositions on fields that are not Literal-typed — "
-            "pydantic settles no value on this field; use another kind: "
+            "the annotation is not the shape pydantic settles at parse time; "
+            "use another kind: "
             f"{', '.join(_NON_STRUCTURAL_KINDS)}",
             self.structural_not_literal,
             lambda d: f"{d.qualified_model}.{d.field}",
