@@ -102,8 +102,8 @@ class FindingContractError(ValueError):
 
     Its own type, and a member of `_TOOL_DEFECT_TYPES`, because it is the one
     exception raised HERE to mean "a check has a coding defect in it" — a
-    validator id that was never registered, a severity that is not one of the
-    two. A plain `ValueError` falls to the last-resort clause, which honours
+    validator id that was never registered, a severity this framework does not
+    define. A plain `ValueError` falls to the last-resort clause, which honours
     the caller's `blame`, so under a caller whose blame names the document an
     author is told their node took a JSON Schema implementation somewhere it
     could not come back from — over a typo in a check's own id literal.

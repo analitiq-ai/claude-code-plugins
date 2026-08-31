@@ -835,8 +835,9 @@ def test_version_key_orders_pre_releases_before_finals(older, newer):
 
 
 def test_a_manifest_generated_against_a_newer_tree_fails(monkeypatch):
-    """The live pair is equal today, so the direction of the comparison is
-    otherwise unexercised: a manifest ahead of the tree must be refused."""
+    """The live pair is only ever at-or-behind — that is what the guard beside
+    this one asserts — so the refusing direction is otherwise unexercised: a
+    manifest ahead of the tree must be refused."""
     ahead = dict(pin.load_manifest())
     ahead[pin.CONTRACT_MODELS_VERSION_KEY] = "999.0.0"
     monkeypatch.setattr(pin, "load_manifest", lambda: ahead)
