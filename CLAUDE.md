@@ -113,6 +113,7 @@ store that could only hold it by taking a second kind of unit is the wrong one.
 | `rules/records/*.yaml` | an **obligation with an immutable id** | an artifact author can violate it, and something needs to cite it by name |
 | `census/areas/*.py` | a **prose site** — one field description or docstring | it exists under `analitiq.contracts`; membership is exhaustive, not chosen |
 | `census/consumption/dispositions.py` | an **unread contract field** | the pinned consumption manifest claims no read of it |
+| `census/consumption/record_affirmations.py` | a **reader-affirmed record rationale** | a rule record's `targets`/`fields` govern an unread field; membership is computed, never chosen |
 | `scripts/render_validator_claims.py` | a **measured outcome** | prose asserts what the validator does or does not check |
 | `packages/contract-models/tests/fixtures/rules/` | a **document** | a record names a `fixture_model` |
 | `plugins/**/*.md` | a **paragraph of craft** | the contract cannot express it — judgment, order, what to ask, provider gotchas |
@@ -146,6 +147,13 @@ fix. A model no root reaches is unknown, not unread. Guards:
 `scripts/render_contract_consumption.py check`, and the
 `contract-consumption-pin-guard` CI job. Adopting a newer publication is a pin bump
 — see `.claude/rules/reachability-dispositions.md` — never an edit to the manifest.
+
+A rule record whose `targets`/`fields` govern an unread field carries a
+`RecordAffirmation` in `census/consumption/record_affirmations.py`, pinned to the
+refs located and the sha256 of the rationale wording a reader judged; membership is
+computed by `census/consumption/records.py` from the registry and the unread set,
+never chosen, and `tests/census/test_record_affirmations.py` is its guard. Judge one
+under the record-affirmation section of `.claude/rules/reachability-dispositions.md`.
 
 **Where a new fact goes.** Something a document must satisfy is a model field, and a
 name for it is a record. Something an author must judge is plugin craft. Something a
