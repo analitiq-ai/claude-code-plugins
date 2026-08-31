@@ -34,7 +34,6 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
-import textwrap
 import types
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
@@ -123,14 +122,15 @@ def _is_literal(annotation: Any) -> bool:
 #: the scan below matching nothing and reporting every derivation unwritten.
 _DERIVATION_WRITER = set_derived_field.__name__
 
-#: The writer's parameter naming the field written, and the position it sits
-#: at — the index read off the live signature, so a parameter inserted ahead
-#: of it cannot leave the scan reading the wrong argument, and the lookup
-#: fails this import if the parameter is renamed.
+#: The writer's parameters — the object written and the field named on it —
+#: and the positions they sit at, the indices read off the live signature so
+#: a parameter inserted ahead of either cannot leave the scan reading the
+#: wrong argument. Each lookup fails this import if its parameter is renamed.
+_RECEIVER_PARAMETER = "model"
 _WRITTEN_FIELD_PARAMETER = "field"
-_WRITTEN_FIELD_POSITION = list(
-    inspect.signature(set_derived_field).parameters
-).index(_WRITTEN_FIELD_PARAMETER)
+_WRITER_PARAMETERS = list(inspect.signature(set_derived_field).parameters)
+_RECEIVER_POSITION = _WRITER_PARAMETERS.index(_RECEIVER_PARAMETER)
+_WRITTEN_FIELD_POSITION = _WRITER_PARAMETERS.index(_WRITTEN_FIELD_PARAMETER)
 
 
 def _called_name(node: ast.Call) -> str | None:
@@ -149,28 +149,72 @@ def _called_name(node: ast.Call) -> str | None:
     return None
 
 
+def _argument(node: ast.Call, parameter: str, position: int) -> ast.expr | None:
+    """The expression a call passes for one of the writer's parameters,
+    whether by keyword or by position."""
+    for keyword in node.keywords:
+        if keyword.arg == parameter:
+            return keyword.value
+    return node.args[position] if len(node.args) > position else None
+
+
+def _unindent(source: str) -> str:
+    """Strip a definition's own indentation, and only that.
+
+    ``textwrap.dedent`` removes the prefix common to every line, so a single
+    line flush against column zero — inside a multi-line string literal —
+    leaves it removing nothing and the source unparseable. A line not
+    carrying the definition's prefix is inside such a literal and keeps the
+    columns it has.
+    """
+    lines = source.splitlines()
+    if not lines:
+        return source
+    prefix = lines[0][: len(lines[0]) - len(lines[0].lstrip())]
+    if not prefix:
+        return source
+    return "\n".join(
+        line[len(prefix) :] if line.startswith(prefix) else line for line in lines
+    )
+
+
 def _writes(source: str, name: str) -> bool:
-    """Whether ``source`` calls the derivation writer with ``name`` as the
-    field written — that argument by the parameter name and position the
-    writer itself declares, and as a literal. A call site and a constant:
-    located structurally, never read as a sentence."""
+    """Whether the validator ``source`` defines writes ``name`` on its own
+    instance through the derivation writer.
+
+    The receiver is graded as well as the field: a validator filling a
+    nested model's field of the same name writes somebody else's value, and
+    crediting the enclosing model with it would accept an entry whose
+    product nothing computes. Both arguments are taken by the parameter name
+    and position the writer declares, and the field must be a literal — a
+    call site and a constant, located structurally rather than read as a
+    sentence.
+    """
     try:
-        tree = ast.parse(source)
+        tree = ast.parse(_unindent(source))
     except SyntaxError:
         # Source that will not parse establishes nothing, so it contributes
         # no derivation; the report says so in the same words as source that
         # could not be read at all.
         return False
-    for node in ast.walk(tree):
+    definition = tree.body[0] if tree.body else None
+    if not isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return False
+    bound = definition.args.posonlyargs + definition.args.args
+    if not bound:
+        return False
+    receiver = bound[0].arg
+    for node in ast.walk(definition):
         if not (isinstance(node, ast.Call) and _called_name(node) == _DERIVATION_WRITER):
             continue
-        written = next(
-            (kw.value for kw in node.keywords if kw.arg == _WRITTEN_FIELD_PARAMETER),
-            node.args[_WRITTEN_FIELD_POSITION]
-            if len(node.args) > _WRITTEN_FIELD_POSITION
-            else None,
-        )
-        if isinstance(written, ast.Constant) and written.value == name:
+        written = _argument(node, _WRITTEN_FIELD_PARAMETER, _WRITTEN_FIELD_POSITION)
+        target = _argument(node, _RECEIVER_PARAMETER, _RECEIVER_POSITION)
+        if (
+            isinstance(written, ast.Constant)
+            and written.value == name
+            and isinstance(target, ast.Name)
+            and target.id == receiver
+        ):
             return True
     return False
 
@@ -195,7 +239,7 @@ def _writes_derived_field(cls: type[BaseModel], name: str) -> bool:
     """
     for decorator in cls.__pydantic_decorators__.model_validators.values():
         try:
-            source = textwrap.dedent(inspect.getsource(decorator.func))
+            source = inspect.getsource(decorator.func)
         except (OSError, TypeError):
             # A validator with no readable source establishes no derivation.
             # The report's wording carries that case rather than concluding

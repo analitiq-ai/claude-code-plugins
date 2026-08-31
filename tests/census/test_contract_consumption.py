@@ -776,6 +776,35 @@ class OverridesTheDerivationAway(WritesDirectly):
         return self
 
 
+class WritesSomebodyElsesField(BaseModel):
+    """The validator fills a nested model's field of the same name. Grading
+    the field alone would credit this model with a value it never carries."""
+
+    product: str = ""
+    inner: WritesNothing = WritesNothing()
+
+    @model_validator(mode="after")
+    def _fill(self) -> "WritesSomebodyElsesField":
+        set_derived_field(self.inner, "product", "value")
+        return self
+
+
+class WritesPastAFlushLeftLine(BaseModel):
+    """A line at column zero inside a string literal leaves the prefix
+    common to every line empty, so a common-prefix dedent removes nothing
+    and the source will not parse — reporting a real derivation absent."""
+
+    product: str = ""
+
+    @model_validator(mode="after")
+    def _fill(self) -> "WritesPastAFlushLeftLine":
+        message = """
+flush against column zero
+"""
+        set_derived_field(self, "product", message)
+        return self
+
+
 class WritesInANestedClass(BaseModel):
     """A class's source carries the classes defined inside it, so a scan of
     the text alone would credit the outer class with the inner one's
@@ -794,7 +823,13 @@ class WritesInANestedClass(BaseModel):
 
 @pytest.mark.parametrize(
     "cls",
-    [WritesDirectly, WritesByKeyword, WritesQualified, InheritsTheDerivation],
+    [
+        WritesDirectly,
+        WritesByKeyword,
+        WritesQualified,
+        InheritsTheDerivation,
+        WritesPastAFlushLeftLine,
+    ],
 )
 def test_a_parse_time_derivation_of_the_product_is_found(cls):
     assert _writes_derived_field(cls, "product")
@@ -809,6 +844,7 @@ def test_a_parse_time_derivation_of_the_product_is_found(cls):
         (WritesInANestedClass, "product"),  # a nested class's derivation
         (WritesDirectly, "value"),  # the value argument, not the field
         (OverridesTheDerivationAway, "product"),  # the base's call, replaced
+        (WritesSomebodyElsesField, "product"),  # a nested model's field
     ],
 )
 def test_a_product_no_derivation_writes_is_not_found(cls, name):
@@ -834,30 +870,39 @@ def test_both_call_shapes_the_scan_matches_are_shapes_the_writer_accepts():
     assert positional.arguments[_WRITTEN_FIELD_PARAMETER] == "x"
 
 
-def test_a_validator_with_no_readable_source_reports_no_derivation():
-    """A validator compiled from a string has no file to read back, so the
-    write it performs cannot be seen. Reporting it as underived summons a
-    reader; reporting it as derived would be the check passing on what it
-    could not read."""
-    namespace: dict = {}
-    exec(  # noqa: S102 - a model whose source is deliberately not on disk
-        compile(
-            "from pydantic import BaseModel, model_validator\n"
-            "from analitiq.contracts.shared.common import set_derived_field\n"
-            "class Generated(BaseModel):\n"
-            "    product: str = ''\n"
-            "    @model_validator(mode='after')\n"
-            "    def _fill(self):\n"
-            "        set_derived_field(self, 'product', 'value')\n"
-            "        return self\n",
-            "<no-such-file>",
-            "exec",
-        ),
-        namespace,
+def test_a_validator_with_no_readable_source_reports_no_derivation(tmp_path):
+    """A validator whose file is gone cannot be read back, so the write it
+    performs cannot be seen. Reporting it as underived summons a reader;
+    reporting it as derived would be the check passing on what it could not
+    read."""
+    import importlib.util
+    import linecache
+
+    module_path = tmp_path / "vanishing_contract_model.py"
+    module_path.write_text(
+        "from pydantic import BaseModel, model_validator\n"
+        "from analitiq.contracts.shared.common import set_derived_field\n"
+        "\n"
+        "class Generated(BaseModel):\n"
+        "    product: str = ''\n"
+        "\n"
+        "    @model_validator(mode='after')\n"
+        "    def _fill(self):\n"
+        "        set_derived_field(self, 'product', 'value')\n"
+        "        return self\n"
     )
-    generated = namespace["Generated"]
-    # The derivation is real — it runs — and the census still cannot read it.
+    spec = importlib.util.spec_from_file_location("vanishing", module_path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    generated = module.Generated
+    # The derivation is real — it runs — and once the file is gone the census
+    # cannot read it. linecache holds the lines it already read, so a stale
+    # cache would keep answering after the file is unlinked.
     assert generated().product == "value"
+    assert _writes_derived_field(generated, "product")
+    module_path.unlink()
+    linecache.clearcache()
     assert not _writes_derived_field(generated, "product")
 
 
