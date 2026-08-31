@@ -118,6 +118,13 @@ class FieldDisposition:
     derives: str | None = dataclass_field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
+        # `model`, `field` and `derives` are lookup keys — into the reachable
+        # models, into `model_fields`, into `model_fields` again — not prose,
+        # so each is stored as the name it must match. A padded one matches
+        # nothing and is reported as a field or model the tree does not hold,
+        # which sends the reader to the manifest instead of to the entry.
+        object.__setattr__(self, "model", self.model.strip())
+        object.__setattr__(self, "field", self.field.strip())
         # The model check runs first: every message below names the entry by
         # `model.field`, so a malformed model would print a qualifier the
         # reader cannot place beside a defect that is not the first one.
@@ -142,9 +149,6 @@ class FieldDisposition:
                 f"{self.model}.{self.field}: a derivation_input names the field "
                 "it derives"
             )
-        # `derives` is a lookup key on `model_fields`, not prose, so it is
-        # stored as the name it must match — a padded one would be reported
-        # as a field the model does not declare.
         object.__setattr__(self, "derives", self.derives.strip())
         if self.derives == self.field:
             raise ValueError(

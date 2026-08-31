@@ -41,6 +41,7 @@ from pydantic import BaseModel, Field
 from census.consumption import pin
 from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
+    ConsumptionReport,
     _is_literal,
     census_report,
     classify,
@@ -259,11 +260,14 @@ def test_a_field_does_not_derive_itself(derives):
         FieldDisposition("a.B", "x", "derivation_input", "reason", derives=derives)
 
 
-def test_derives_is_stored_as_the_name_it_must_match():
-    """It is a `model_fields` lookup key, not prose, so padding is stripped
-    rather than carried into a finding that claims the field is undeclared."""
-    entry = FieldDisposition("a.B", "x", "derivation_input", "reason", derives="  y  ")
-    assert entry.derives == "y"
+def test_every_lookup_key_is_stored_as_the_name_it_must_match():
+    """`model`, `field` and `derives` are keys into the live tree, not prose,
+    so padding is stripped rather than carried into a finding that claims the
+    tree does not hold what the entry names."""
+    entry = FieldDisposition(
+        "  a.B  ", "  x  ", "derivation_input", "reason", derives="  y  "
+    )
+    assert (entry.model, entry.field, entry.derives) == ("a.B", "x", "y")
 
 
 def test_derives_is_named_never_positional():
@@ -678,6 +682,38 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
 def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
     assert report.derivation_product_unread == ()
+
+
+def test_every_finding_field_fails_the_report_and_is_rendered():
+    """`ok` and `render` are written out over the dataclass's finding fields,
+    and the dataclass owns that set: a field added to it and missed in either
+    leaves a report that carries a finding, passes the gate, and prints
+    nothing. Each field is proven to reach both rather than trusted to."""
+    import dataclasses
+
+    names = [f.name for f in dataclasses.fields(ConsumptionReport)]
+    empty = ConsumptionReport(**{name: () for name in names})
+    assert empty.ok and "complete and current" in empty.render()
+    # One sample per finding-element shape the groups render; the first that
+    # renders is this field's, and a field no shape renders fails loudly
+    # rather than being skipped.
+    samples = (
+        FieldDisposition("a.B", "x", "authoring_only", "reason"),
+        ("analitiq.contracts.a.B", "x"),
+        "analitiq.contracts.a.B",
+    )
+    for name in names:
+        for sample in samples:
+            report = dataclasses.replace(empty, **{name: (sample,)})
+            try:
+                rendered = report.render()
+            except (AttributeError, IndexError, TypeError):
+                continue
+            assert not report.ok, f"{name} does not fail the report"
+            assert "a.B" in rendered, f"{name} is not rendered"
+            break
+        else:
+            raise AssertionError(f"no sample renders {name}")
 
 
 def test_the_derived_field_is_looked_up_on_the_entry_s_own_model(shadowed):
