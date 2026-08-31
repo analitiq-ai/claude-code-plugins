@@ -1051,10 +1051,28 @@ def test_the_live_census_grades_at_least_one_derivation():
         "no derivation_input disposition in the live census — the derivation "
         "check now grades nothing while reporting success"
     )
+    # Through the report, not the helper: the guard is `census_report`, and a
+    # helper answering correctly proves nothing about a report that stopped
+    # calling it. Each live entry is then re-keyed onto a product the model
+    # declares and no validator writes, and the report must name it — the
+    # live sites are proven gradeable, not merely present.
+    manifest = pin.load_manifest()
+    assert census_report(manifest, DISPOSITIONS).derivation_not_written == ()
     for entry in graded:
-        assert _writes_derived_field(
-            resolve_model(entry.qualified_model), entry.derives
-        ), f"{entry.qualified_model}.{entry.field} -> {entry.derives}"
+        model = resolve_model(entry.qualified_model)
+        undevised = [
+            name
+            for name in model.model_fields
+            if name != entry.field and not _writes_derived_field(model, name)
+        ]
+        assert undevised, f"{entry.qualified_model} derives every other field"
+        broken = FieldDisposition(
+            entry.model, entry.field, entry.kind, entry.reason, derives=undevised[0]
+        )
+        report = census_report(
+            manifest, tuple(d for d in DISPOSITIONS if d is not entry) + (broken,)
+        )
+        assert broken in report.derivation_not_written
 
 
 def test_every_unread_contract_field_carries_a_disposition():
