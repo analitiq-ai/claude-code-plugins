@@ -1634,9 +1634,13 @@ def malformed_marker_docs() -> list[str]:
 
     Covers two silent degradations: an unpaired or typo'd marker (`render_text`
     leaves the region untouched and the sync test sees no diff), and — in
-    either plugin — a marker pair whose id no renderer owns. The pipeline
-    generator's grammar rejects e.g. `claim:*` ids without raising, so such a
-    pair would otherwise be checked by nobody.
+    either plugin — a marker pair whose id no renderer owns.
+
+    Both generators read one grammar, so a `claim:*` id parses under either;
+    what differs is which renderer table owns it, and no renderer under the
+    pipeline tree does. That generator raises `UnknownBlock` on it, and this
+    reports it by name — which is the half that survives a document nobody
+    runs that generator over.
     """
     broken: list[str] = []
     for path in sorted(PLUGINS_ROOT.rglob("*.md")):

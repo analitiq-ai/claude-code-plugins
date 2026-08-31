@@ -27,11 +27,23 @@ from typing import Callable, Mapping
 #: after it in that item renders as a top-level paragraph.
 #:
 #: Both indents are captured, and each marker is re-emitted at an indent of
-#: its own: BEGIN keeps what it had, and END keeps BEGIN's — or its own, where
-#: BEGIN has none to give. A block opened after prose on the same line (a
-#: table cell, a sentence) has no indent to pass down, and re-emitting END at
+#: its own: BEGIN keeps what it had, and END takes BEGIN's — including when
+#: BEGIN's is column 0, which is how an END that drifted out to an indent of
+#: its own is pulled back. Four spaces after a blank line is an indented code
+#: block, so a drifted END renders as literal text in a document that ships
+#: verbatim; normalising it to BEGIN is what heals that.
+#:
+#: END keeps its own only where BEGIN has none TO give — a block opened after
+#: prose on the same line (a table cell, a sentence). Re-emitting END at
 #: nothing there would move it to column 0 and close the list anyway, which is
 #: the defect this exists to prevent, arrived at from the other side.
+#:
+#: Those two cases are told apart by whether the group PARTICIPATED, not by
+#: whether it is empty: `(?:^…)?` participates exactly at a line start, so
+#: `None` means "not at a line start" and `""` means "at one, with no
+#: whitespace". Written as an alternation with an empty branch, both read as
+#: `""` and every column-0 block took the fallback — freezing a drifted END
+#: instead of healing it, idempotently, with every gate green.
 #:
 #: Both captures are line-anchored, so each is the marker's OWN indent and
 #: never whatever whitespace happens to precede it. Without the anchor the
@@ -43,10 +55,10 @@ from typing import Callable, Mapping
 #: and the other does not; one pattern that admits both is what lets there be
 #: one pattern.
 BLOCK_RE = re.compile(
-    r"(?P<indent>^[^\S\n]*|)"
+    r"(?:^(?P<indent>[^\S\n]*))?"
     r"(?P<begin><!-- BEGIN GENERATED: (?P<id>[a-z0-9][a-z0-9:-]*) -->\n)"
     r"(?P<body>.*?)"
-    r"(?P<indent_end>^[^\S\n]*|)"
+    r"(?:^(?P<indent_end>[^\S\n]*))?"
     r"(?P<end><!-- END GENERATED: (?P=id) -->)",
     re.DOTALL | re.MULTILINE,
 )
@@ -62,9 +74,10 @@ def render_text(text: str, source: str,
 
     A body is rendered without its markers and ends in exactly one newline.
     Each marker is re-emitted at an indent: BEGIN keeps its own, and END takes
-    BEGIN's so the pair cannot straddle a list boundary — falling back to its
-    own where BEGIN has none, since dropping it there would close the list
-    this exists to keep open.
+    BEGIN's so the pair cannot straddle a list boundary — column 0 included,
+    which is what pulls a drifted END back. END keeps its own only where BEGIN
+    starts no line of its own and so has none to give, since dropping it there
+    would close the list this exists to keep open.
     """
     def _sub(match: re.Match) -> str:
         block_id = match.group("id")
@@ -76,7 +89,9 @@ def render_text(text: str, source: str,
                 f"known blocks: {', '.join(sorted(renderers))}"
             ) from None
         indent = match.group("indent")
-        return (indent + match.group("begin") + renderer()
-                + (indent or match.group("indent_end")) + match.group("end"))
+        end_indent = (match.group("indent_end") or ""
+                      if indent is None else indent)
+        return ((indent or "") + match.group("begin") + renderer()
+                + end_indent + match.group("end"))
 
     return BLOCK_RE.sub(_sub, text)

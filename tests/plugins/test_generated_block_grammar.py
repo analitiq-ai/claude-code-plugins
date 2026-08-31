@@ -63,6 +63,25 @@ def test_a_marker_with_text_before_it_is_left_where_it_was():
         "<!-- END GENERATED: demo -->\n")
 
 
+def test_a_drifted_end_marker_is_pulled_back_to_its_begin():
+    """Column 0 is an indent BEGIN has, not an absence of one.
+
+    Told apart by emptiness rather than by participation, the two read alike
+    and every top-level block took the "keep your own" branch — so an END that
+    picked up stray whitespace by hand edit or merge kept it, idempotently,
+    with every gate green. Four spaces after a blank line is an indented code
+    block, so that END renders as literal text in a document that ships
+    verbatim to users.
+    """
+    text = ("<!-- BEGIN GENERATED: demo -->\n"
+            "stale\n"
+            "    <!-- END GENERATED: demo -->\n")
+
+    assert render_text(text, "<test>", RENDERERS) == (
+        "<!-- BEGIN GENERATED: demo -->\nrendered\n"
+        "<!-- END GENERATED: demo -->\n")
+
+
 def test_an_end_marker_keeps_its_own_indent_when_begin_has_none_to_give():
     """The same CommonMark defect, arrived at from the other side.
 
@@ -134,3 +153,9 @@ def test_both_generators_rewrite_through_the_one_grammar(module, monkeypatch):
 
     assert out == ("   <!-- BEGIN GENERATED: demo -->\nrendered\n"
                    "   <!-- END GENERATED: demo -->\n"), repr(out)
+    # Beside it, not instead of it. Driving one input grades the rewrite; a
+    # generator that grew a private but equivalent pattern would still pass.
+    # And `BLOCK_RE` is read outside `render_text` too — the connector
+    # generator scans documents with it — so the name being the shared object
+    # is its own property.
+    assert generator.BLOCK_RE is BLOCK_RE
