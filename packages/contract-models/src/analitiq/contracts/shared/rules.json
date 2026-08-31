@@ -3025,7 +3025,11 @@
     "WriteResponse"
    ],
    "fields": [
-    "success_when"
+    "success_when",
+    "error",
+    "affected_records",
+    "generated_keys",
+    "metadata"
    ],
    "mechanism": null,
    "pattern_symbol": null,

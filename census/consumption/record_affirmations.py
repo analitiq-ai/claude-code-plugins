@@ -34,6 +34,10 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
     RecordAffirmation(
         "RULE-ENDP-030",
         refs=(
+            "endpoints.WriteResponse.affected_records",
+            "endpoints.WriteResponse.error",
+            "endpoints.WriteResponse.generated_keys",
+            "endpoints.WriteResponse.metadata",
             "endpoints.WriteResponse.success_when",
         ),
         rationale_sha256="f6a37a14bf3bdf1a2922a538e854e19880c98d915b11165d260e081cf70dc93a",

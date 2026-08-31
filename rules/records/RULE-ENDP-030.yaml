@@ -8,7 +8,7 @@ scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteResponse._reject_record_count"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]
-fields: [success_when]
+fields: [success_when, error, affected_records, generated_keys, metadata]
 rationale: >
   The record count is a read-path quantity — the write scope never declares
   it — so a write-side reference to it names nothing, and a `success_when`
