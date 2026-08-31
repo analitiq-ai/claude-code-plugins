@@ -17,10 +17,10 @@ is the same split on fields and on the records over them.
 `census/consumption/reachability.py` compares sets, checks an annotation
 shape (a `structural` entry must sit on a `Literal`) and holds a
 `derivation_input` entry's `derives` to a field the same model declares, the
-manifest claims, and a parse-time derivation in that model's class hierarchy
-writes — the last read off the source as a call to the sanctioned derivation
-helper naming the field, a call site and a literal argument rather than a
-sentence; `ConsumptionReport` there carries every finding those can reach.
+manifest claims, and a validator the model runs writes — the last taken from
+the model's own validator registry, which is what pydantic runs, and read off
+each validator's source as a call to the sanctioned derivation helper naming
+the field as a literal: a call site and a constant rather than a sentence; `ConsumptionReport` there carries every finding those can reach.
 `tests/census/test_contract_consumption.py` and
 `scripts/render_contract_consumption.py check` fail on every finding that
 dataclass carries. **Neither decides whether a reason is honest, nor which
@@ -56,10 +56,11 @@ means. What a reader settles is which one applies:
   `structural`.
 - The contract computes another field of the same model from it, and the
   engine reads that one → `derivation_input`, and `derives` names it. The
-  guard reads the source for a derivation writing that product; what it
+  guard reads the model's validators for one writing that product; what it
   cannot decide, and you must, is that the field the entry sits on is an
   **input** to that derivation — a model with one derivation and several
-  unread fields would accept any of them. The
+  unread fields would accept any of them — and that the write is on a branch
+  a document reaches. The
   reason says which field is computed from which and why the input is
   therefore not free — a value reaching the run under another name is not
   an ignored value. It does not say that the contract rejects a document

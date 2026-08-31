@@ -123,27 +123,52 @@ def _is_literal(annotation: Any) -> bool:
 #: the scan below matching nothing and reporting every derivation unwritten.
 _DERIVATION_WRITER = set_derived_field.__name__
 
+#: The writer's parameter naming the field written, and the position it sits
+#: at — the index read off the live signature, so a parameter inserted ahead
+#: of it cannot leave the scan reading the wrong argument, and the lookup
+#: fails this import if the parameter is renamed.
+_WRITTEN_FIELD_PARAMETER = "field"
+_WRITTEN_FIELD_POSITION = list(
+    inspect.signature(set_derived_field).parameters
+).index(_WRITTEN_FIELD_PARAMETER)
 
-def _derivation_writes(source: str, name: str) -> bool:
+
+def _called_name(node: ast.Call) -> str | None:
+    """The name a call invokes, whether bare or attribute-qualified.
+
+    A qualified call matches on the attribute alone: what is being called
+    ``set_derived_field`` on is not resolvable from the source, and a
+    contract model reaching the writer through anything but the shared
+    helper is a defect the reader catches, not a second name to grade.
+    """
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+def _writes(source: str, name: str) -> bool:
     """Whether ``source`` calls the derivation writer with ``name`` as the
-    field it writes — the second positional argument, or the ``field``
-    keyword. A literal argument, so the match is a call site and a constant,
-    never a sentence."""
-    for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Name):
-            called = func.id
-        elif isinstance(func, ast.Attribute):
-            called = func.attr
-        else:
-            continue
-        if called != _DERIVATION_WRITER:
+    field written — that argument by the parameter name and position the
+    writer itself declares, and as a literal. A call site and a constant:
+    located structurally, never read as a sentence."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # Source that will not parse establishes nothing, so it contributes
+        # no derivation; the report says so in the same words as source that
+        # could not be read at all.
+        return False
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and _called_name(node) == _DERIVATION_WRITER):
             continue
         written = next(
-            (kw.value for kw in node.keywords if kw.arg == "field"),
-            node.args[1] if len(node.args) > 1 else None,
+            (kw.value for kw in node.keywords if kw.arg == _WRITTEN_FIELD_PARAMETER),
+            node.args[_WRITTEN_FIELD_POSITION]
+            if len(node.args) > _WRITTEN_FIELD_POSITION
+            else None,
         )
         if isinstance(written, ast.Constant) and written.value == name:
             return True
@@ -151,31 +176,32 @@ def _derivation_writes(source: str, name: str) -> bool:
 
 
 def _writes_derived_field(cls: type[BaseModel], name: str) -> bool:
-    """Whether a parse-time derivation writes ``name`` on instances of
-    ``cls``.
+    """Whether a validator pydantic runs while building ``cls`` writes
+    ``name`` through the sanctioned derivation helper.
 
-    The whole class hierarchy is read, not just the carrier: a derivation
-    declared once on a base and inherited by each variant is the shape
-    ``RetryErrorHandlingBase`` already has, and a scan of the carrier alone
-    would report it unwritten.
+    The validators come from the model's own decorator registry, which is
+    what pydantic will actually run: one declared on a base and inherited
+    is there, and one a subclass overrides is there as the override rather
+    than beside it. Reading the class body instead would credit a model
+    with a call in a method nothing invokes, with a nested class's
+    derivation, and with a base's derivation a subclass had replaced.
 
-    What this cannot decide is whether the field the entry sits on is an
-    INPUT to that derivation — only that the product is derived at parse
-    time. That half is the reader's, under
-    ``.claude/rules/reachability-dispositions.md``.
+    Two halves stay the reader's, under
+    ``.claude/rules/reachability-dispositions.md``: that the field the entry
+    sits on is an INPUT to the derivation rather than some other unread
+    field of the same model, and that the call is on a branch the validator
+    reaches. A validator that never writes the field is what this decides;
+    one that writes it only under a condition no document meets is not.
     """
-    for base in cls.__mro__:
-        if base is BaseModel or not issubclass(base, BaseModel):
-            continue
+    for decorator in cls.__pydantic_decorators__.model_validators.values():
         try:
-            source = textwrap.dedent(inspect.getsource(base))
+            source = textwrap.dedent(inspect.getsource(decorator.func))
         except (OSError, TypeError):
-            # A class with no readable source file cannot be scanned, and a
-            # derivation it carries would be missed; the finding then names
-            # it, which is the direction that summons a reader rather than
-            # passing silently.
+            # A validator with no readable source establishes no derivation.
+            # The report's wording carries that case rather than concluding
+            # the contract computes nothing.
             continue
-        if _derivation_writes(source, name):
+        if _writes(source, name):
             return True
     return False
 
@@ -264,8 +290,8 @@ class ConsumptionReport:
     #: model — either it is the wrong name, or nothing reads the product.
     derivation_product_unread: tuple[FieldDisposition, ...]
     #: ``derivation_input`` claims the contract computes ``derives`` at
-    #: parse time, and no derivation in the carrier's class hierarchy writes
-    #: it — the entry names a derivation the contract does not perform.
+    #: parse time, and no validator the model runs writes it — the entry
+    #: names a derivation the contract does not perform.
     derivation_not_written: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
@@ -339,10 +365,11 @@ class ConsumptionReport:
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
         group(
-            "derivation_input dispositions whose derived field no parse-time "
-            f"derivation writes — no {_DERIVATION_WRITER} call in the "
-            "carrier's class hierarchy names it, so the contract does not "
-            "compute what the entry says it computes",
+            "derivation_input dispositions whose derived field no validator "
+            f"writes — no {_DERIVATION_WRITER} call naming it in any "
+            "validator the model runs, so either the contract does not "
+            "compute what the entry says it computes, or it computes it "
+            "somewhere the census cannot read",
             self.derivation_not_written,
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )

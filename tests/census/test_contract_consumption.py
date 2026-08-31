@@ -698,6 +698,12 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
     assert not report.ok, why
     assert report.derivation_product_unread == (wrong,)
     assert f"Root.annotated -> {derives}" in report.render()
+    # A declared product raises the derivation check too, and both facts are
+    # true of it: nothing reads it and nothing computes it. Narrowing the
+    # second to claimed products alone — the obvious way to stop printing two
+    # lines — would silently stop grading every entry whose product is
+    # unread, and would pass every other test here.
+    assert report.derivation_not_written == (() if derives == "vanished" else (wrong,))
 
 
 def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
@@ -753,6 +759,43 @@ class WritesNothing(BaseModel):
     product: str = ""
 
 
+class WritesInAHelper(BaseModel):
+    """The call exists and no parse-time derivation runs it: nothing computes
+    `product` while pydantic builds the instance, which is exactly the state
+    the entry claims is impossible."""
+
+    product: str = ""
+
+    def rehydrate(self) -> None:
+        set_derived_field(self, "product", "value")
+
+
+class OverridesTheDerivationAway(WritesDirectly):
+    """The base declares the derivation and this class replaces it with one
+    that computes nothing. Reading the class hierarchy's source would find
+    the base's call and credit the override with it."""
+
+    @model_validator(mode="after")
+    def _fill(self) -> "OverridesTheDerivationAway":
+        return self
+
+
+class WritesInANestedClass(BaseModel):
+    """A class's source carries the classes defined inside it, so a scan of
+    the text alone would credit the outer class with the inner one's
+    derivation."""
+
+    product: str = ""
+
+    class Inner(BaseModel):
+        product: str = ""
+
+        @model_validator(mode="after")
+        def _fill(self) -> "WritesInANestedClass.Inner":
+            set_derived_field(self, "product", "value")
+            return self
+
+
 @pytest.mark.parametrize(
     "cls",
     [WritesDirectly, WritesByKeyword, WritesQualified, InheritsTheDerivation],
@@ -766,10 +809,30 @@ def test_a_parse_time_derivation_of_the_product_is_found(cls):
     [
         (WritesNothing, "product"),  # no derivation at all
         (WritesDirectly, "other"),  # a derivation of a different field
+        (WritesInAHelper, "product"),  # a call no validator runs
+        (WritesInANestedClass, "product"),  # a nested class's derivation
+        (WritesDirectly, "value"),  # the value argument, not the field
+        (OverridesTheDerivationAway, "product"),  # the base's call, replaced
     ],
 )
 def test_a_product_no_derivation_writes_is_not_found(cls, name):
     assert not _writes_derived_field(cls, name)
+
+
+def test_the_written_field_is_read_from_the_writer_s_own_signature():
+    """The scan reads the field argument by the name and position
+    `set_derived_field` declares, never a copy of them: a parameter inserted
+    ahead of it would otherwise leave the scan grading the wrong argument
+    while every test above still passed."""
+    import inspect as _inspect
+
+    from census.consumption.reachability import (
+        _WRITTEN_FIELD_PARAMETER,
+        _WRITTEN_FIELD_POSITION,
+    )
+
+    parameters = list(_inspect.signature(set_derived_field).parameters)
+    assert parameters[_WRITTEN_FIELD_POSITION] == _WRITTEN_FIELD_PARAMETER
 
 
 def test_a_class_with_no_readable_source_reports_no_derivation():
@@ -973,6 +1036,25 @@ def test_a_manifest_generated_against_a_newer_tree_fails(monkeypatch):
     monkeypatch.setattr(pin, "load_manifest", lambda: ahead)
     with pytest.raises(AssertionError, match="ahead of this tree"):
         test_manifest_was_generated_against_this_tree_or_an_older_one()
+
+
+def test_the_live_census_grades_at_least_one_derivation():
+    """Non-vacuity, per `.claude/rules/guards.md`: the derivation check runs
+    only over `derivation_input` entries, so a registry holding none leaves
+    it never entered — and a report that graded nothing reads exactly like
+    one that found nothing wrong. Retiring the last such entry must fail
+    here and be a decision, not a silent exemption."""
+    from census.consumption.dispositions import DISPOSITIONS
+
+    graded = [d for d in DISPOSITIONS if d.kind == "derivation_input"]
+    assert graded, (
+        "no derivation_input disposition in the live census — the derivation "
+        "check now grades nothing while reporting success"
+    )
+    for entry in graded:
+        assert _writes_derived_field(
+            resolve_model(entry.qualified_model), entry.derives
+        ), f"{entry.qualified_model}.{entry.field} -> {entry.derives}"
 
 
 def test_every_unread_contract_field_carries_a_disposition():
