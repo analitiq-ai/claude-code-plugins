@@ -90,19 +90,31 @@ _TYPE_MAP_FILENAMES = {"type_map_read": "type-map-read.json",
 # for connections, where the published bundle validator cannot see files.
 _LEGACY_TYPE_MAP_FILENAME = "type-map.json"
 
+#: The validator id every finding that is NOT a verdict carries. Its own id, so
+#: a consumer separates "the document is wrong" from "a check came down and
+#: decided nothing" by reading a field rather than the message prose.
+_GUARD_VALIDATOR_ID = "guard"
 
-# What a best-effort identity read may skip a file over. These are ways ONE
-# document is unusable — unreadable, not JSON, too deep to parse, or JSON that
-# is not an object — and the caller has a defensible answer for each: the
-# directory slug still names the connector, and an endpoint id still comes from
-# the filename. `MemoryError` is deliberately absent: it says the PROCESS ran
-# out, which the next read has no reason to survive, and swallowing it yields a
-# bundle quietly missing ids and a run of warnings about refs that do resolve.
-# It leaves here and lands on the guard, which reports that nothing was decided.
-_BEST_EFFORT_READ_ERRORS = (
-    OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError,
-    AttributeError,
-)
+
+# The ways ONE document is unusable: unreadable, not JSON, or nested deeper
+# than the parser walks. Each is answerable — the caller reports it against
+# that file and carries on, and a best-effort identity read skips it entirely
+# because the directory slug still names the connector.
+#
+# `MemoryError` is deliberately in neither tuple. It says the PROCESS ran out,
+# which the next read has no reason to survive, so answering it per file
+# reports a document as unreadable when what failed was the run: a bundle comes
+# back quietly missing ids, and the sibling checks then emit a cascade of
+# errors about refs that resolve on disk, with the one honest finding buried
+# among them. It carries no message of its own either, so that finding reads
+# `Cannot read x.json: ` — a dangling colon. It leaves here and lands on the
+# guard, which says nothing was decided.
+_DOCUMENT_READ_ERRORS = (OSError, json.JSONDecodeError, UnicodeDecodeError,
+                         RecursionError)
+#: The same, plus the way a JSON payload of the wrong shape fails an identity
+#: read: `.get` on a list or a string. A best-effort read has an answer for
+#: that too — skip the file, keep the slug.
+_BEST_EFFORT_READ_ERRORS = _DOCUMENT_READ_ERRORS + (AttributeError,)
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +264,7 @@ def _connection_type_map_findings(conn_dir: Path) -> list[dict]:
             continue
         try:
             doc = _read_json(path)
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError) as exc:
+        except _DOCUMENT_READ_ERRORS as exc:
             findings.append(_finding("connection-type-map", "error", f"{site}/{fname}",
                                      f"Cannot read {fname}: {exc}"))
             continue
@@ -268,7 +280,7 @@ def _read_bundle_member(path: Path, findings: list[dict]) -> dict | None:
     silently dropped document."""
     try:
         doc = _read_json(path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError) as exc:
+    except _DOCUMENT_READ_ERRORS as exc:
         findings.append(_finding("document", "error", "", f"Cannot read {path.name}: {exc}"))
         return None
     if not isinstance(doc, dict):
@@ -440,7 +452,6 @@ def _check_connector_endpoint_refs(streams, connections,
 
 
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
-    from analitiq.validator import validate_pipeline_bundle
     bundle, findings = _assemble_bundle(pipeline_doc, document_path, root)
     # This plugin authors draft bundles by design: a draft pipeline is not yet
     # runnable, so its runnability verdicts are an author-time expectation, not a
@@ -448,36 +459,75 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # (require_runnable=False) while the pipeline is a draft, and enforce runnability
     # once it is authored 'active'. Every referential finding stays blocking either way.
     require_runnable = pipeline_doc.get("status") == "active"
-    findings = findings + validate_pipeline_bundle(bundle, require_runnable=require_runnable)
+    # Each stage is contained on its own, because each one has already decided
+    # something by the time the next runs. `_assemble_bundle` accumulates real
+    # rejections — an unreadable sibling, a dead `type-map.json` filename, a
+    # misnamed endpoint file — and one guard around the whole walk would return
+    # a single "nothing was decided" finding in place of all of them. Neither
+    # stage below is contained by anything else: the published bundle validator
+    # does not guard its own entry point, and the ref check reaches for private
+    # names from the pinned wheel, which are the ones most likely to move.
+    findings += _guarded(
+        _referential_findings, bundle, require_runnable, entity="pipeline")
     # Plugin-local aid the published bundle can't make: it receives connector identity
     # only, so scope='connector' endpoint refs go unresolved. The plugin has the
     # downloaded connector endpoint files, so verify those refs here and warn (with an
     # alignment suggestion) rather than error — connectors are trusted, pinned at runtime.
-    findings += _check_connector_endpoint_refs(
-        bundle["streams"], bundle["connections"], _connector_endpoint_sets(root))
+    findings += _guarded(_connector_ref_findings, bundle, root, entity="pipeline")
     return findings
 
 
+def _referential_findings(bundle: dict, require_runnable: bool) -> list[dict]:
+    from analitiq.validator import validate_pipeline_bundle
+    return validate_pipeline_bundle(bundle, require_runnable=require_runnable)
+
+
+def _connector_ref_findings(bundle: dict, root: Path) -> list[dict]:
+    return _check_connector_endpoint_refs(
+        bundle["streams"], bundle["connections"], _connector_endpoint_sets(root))
+
+
 def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None = None) -> dict:
-    """Validate one document and return the Diagnostics envelope. Raises nothing
-    for validation failures — those become findings; only a genuinely unreadable
-    document short-circuits."""
+    """Validate one document and return the Diagnostics envelope.
+
+    Raises nothing for anything the document is or does — an unreadable file,
+    a rejection, or a check that comes down all leave as findings. A caller
+    naming an entity this tool has no route for is the one error left: that is
+    a usage mistake with no document in it, and reporting it as a finding tells
+    the author their document is wrong.
+    """
+    if entity not in ENTITIES:
+        raise ValueError(f"unknown entity {entity!r}; expected one of {', '.join(ENTITIES)}")
+    return _diagnostics(
+        _guarded(_route_findings, entity, document_path, bundle_root, entity=entity))
+
+
+def _route_findings(entity: str, document_path: Path,
+                    bundle_root: Path | None) -> list[dict]:
+    """Read the document and hand it to the route for its entity.
+
+    Every route is contained, including the endpoint one. That route reaches
+    the published validator, which guards its own dispatch — but the import
+    that gets there and the path resolution before it are outside that guard,
+    and a venv the bootstrap believes it wrote leaves them raising `ImportError`
+    at the one place the tool has nothing to say. Containing it twice costs
+    nothing: a guard finding the published validator already made passes
+    through untouched.
+    """
     try:
         doc = _read_json(document_path)
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError, RecursionError, MemoryError) as exc:
-        return _diagnostics([_finding("document", "error", "", f"Cannot read document: {exc}")])
+    except _DOCUMENT_READ_ERRORS as exc:
+        return [_finding("document", "error", "", f"Cannot read document: {exc}")]
 
     if entity == "database_endpoint":
-        findings = _endpoint_findings(doc, document_path)
-    elif entity in _TYPE_MAP_FILENAMES:
-        findings = _guarded(_type_map_findings, entity, doc, document_path,
-                            entity=entity)
-    else:
-        findings = _guarded(_model_findings, entity, doc, entity=entity)
-        if entity == "pipeline" and bundle_root is not None:
-            findings = findings + _guarded(
-                _bundle_findings, doc, document_path, bundle_root, entity=entity)
-    return _diagnostics(findings)
+        return _guarded(_endpoint_findings, doc, document_path, entity=entity)
+    if entity in _TYPE_MAP_FILENAMES:
+        return _guarded(_type_map_findings, entity, doc, document_path, entity=entity)
+    findings = _guarded(_model_findings, entity, doc, entity=entity)
+    if entity == "pipeline" and bundle_root is not None:
+        findings = findings + _guarded(
+            _bundle_findings, doc, document_path, bundle_root, entity=entity)
+    return findings
 
 
 def _guarded(fn, *args, entity: str) -> list[dict]:
@@ -496,10 +546,16 @@ def _guarded(fn, *args, entity: str) -> list[dict]:
     document. Running out of stack or memory is the document's doing; every
     other way a check goes down is this tool's, and the reader is told which.
 
-    `guard_finding` in the published validator states this shape once, and this
-    cannot call it: it is newer than the `VALIDATOR_PIN` this plugin installs,
-    so importing it would be an ImportError on every user's first run. When the
-    pin moves past that release, this becomes one call to it.
+    It carries its own validator id. An orchestrating agent in a fix-validate
+    loop reads `passed: false` and a finding and edits the document; telling it
+    apart from a rejection has to be a FIELD it can key off, because the only
+    other difference is English in the message, and an agent asked to grade
+    English grades it wrong. The published validator solves the same problem
+    with `guard_finding` / `is_guard_finding`, which state the wording once so
+    recognition cannot drift from emission — and this cannot call either: both
+    are newer than the `VALIDATOR_PIN` this plugin installs, so importing them
+    would be an ImportError on every user's first run. When the pin moves past
+    that release this becomes one call to `guard_finding`, and the id stays.
     """
     try:
         return fn(*args)
@@ -508,13 +564,13 @@ def _guarded(fn, *args, entity: str) -> list[dict]:
         # unwinding names whichever frame was innermost, which is not the walk
         # that filled the stack and reads to an author as though it were.
         return [_finding(
-            "document", "error", "",
+            _GUARD_VALIDATOR_ID, "error", "",
             f"the {entity} document could not be checked: it nests deeper, or "
             "runs larger, than this tool can walk. Nothing was decided about "
             "it either way; flattening the nesting is what gets it checked.")]
     except Exception as exc:  # noqa: BLE001 - last-resort guard
         return [_finding(
-            "document", "error", "",
+            _GUARD_VALIDATOR_ID, "error", "",
             f"checking the {entity} document could not finish "
             f"({type(exc).__name__}: {exc}); this is a validator bug — please "
             "report. Nothing was decided about the document either way.")]

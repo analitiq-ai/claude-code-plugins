@@ -64,6 +64,12 @@ published contract structurally cannot make (see its module docstring).
 - If the command prints valid `Diagnostics` JSON on stdout, return it as-is even
   when it exits non-zero (`passed: false`). The orchestrator interprets the
   verdict.
+- A finding whose `validator` is `guard` is not a verdict. A check came down
+  and decided nothing about what it points at, in either direction; the rest of
+  the run carried on past it. Return it with the others and say so — the
+  document it names has not been graded, so the absence of any other finding
+  about it proves nothing, and editing the document in response to one is a fix
+  for a problem nobody found.
 - If the command prints no JSON on stdout (the adapter crashed before it could
   emit diagnostics), return the stderr excerpt as a single error finding; never
   forward partial or non-JSON stdout:

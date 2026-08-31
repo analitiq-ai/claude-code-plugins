@@ -130,24 +130,52 @@ def test_a_document_too_deep_to_walk_is_not_reported_as_a_cycle():
     (MemoryError, "nests deeper, or runs larger"),
     (TypeError, "this is a validator bug"),
 ])
+@pytest.mark.parametrize("entity, doc, route", [
+    ("stream", STREAM, "_model_findings"),
+    ("type_map_read", [], "_type_map_findings"),
+    # The endpoint route reaches the published validator, which guards its own
+    # dispatch — but the import that gets there and the path resolution before
+    # it are outside that guard, so the containment is this module's to make.
+    ("database_endpoint", DB_ENDPOINT, "_endpoint_findings"),
+])
 def test_a_route_that_crashes_answers_in_diagnostics(
-    tmp_path, monkeypatch, boom, expected,
+    tmp_path, monkeypatch, boom, expected, entity, doc, route,
 ):
-    """The routes this adapter owns reach a contract model directly, without
-    the published validator's dispatch guard. Uncontained, a crash in one left
-    the CLI as a traceback on stderr and an empty stdout — which to the calling
-    agent is not a failing verdict but no answer at all, under a non-zero exit
-    that reads like one."""
+    """Uncontained, a crash in a route left the CLI as a traceback on stderr
+    and an empty stdout — which to the calling agent is not a failing verdict
+    but no answer at all, under a non-zero exit that reads like one."""
     def crash(*_args, **_kwargs):
         raise boom("boom")
-    monkeypatch.setattr(V, "_model_findings", crash)
+    monkeypatch.setattr(V, route, crash)
 
-    diagnostics = V.diagnostics_for("stream", _write(tmp_path, "s.json", STREAM))
+    diagnostics = V.diagnostics_for(entity, _write(tmp_path, "d.json", doc))
 
     assert diagnostics["passed"] is False
+    assert [f["validator"] for f in diagnostics["findings"]] == ["guard"], (
+        "a check that decided nothing must be separable from a rejection by a "
+        "FIELD; the message prose is not something an agent can grade")
     message = " ".join(f["message"] for f in diagnostics["findings"])
     assert expected in message, diagnostics
     assert "Nothing was decided" in message, diagnostics
+
+
+def test_the_agent_is_told_what_the_guard_id_means(guard_id=None):
+    """The orchestrator reads `passed: false` plus a finding and hands the
+    document back to a creator to fix. A finding that decided nothing has to
+    be recognisable to it, which means the prose it runs on has to name the
+    id the adapter emits."""
+    prose = (ROOT / "agents" / "pipeline-schema-validator.md").read_text()
+    assert f"`{V._GUARD_VALIDATOR_ID}`" in prose, (
+        "the adapter emits an id the agent prose does not name")
+
+
+def test_an_entity_with_no_route_is_a_usage_error_not_a_finding(tmp_path):
+    """A caller naming an entity this tool has no route for made a usage
+    mistake with no document in it. Reported as a finding it becomes
+    `passed: false` plus "this is a validator bug", which sends the author to
+    file a report about their own call."""
+    with pytest.raises(ValueError, match="unknown entity"):
+        V.diagnostics_for("connexion", _write(tmp_path, "c.json", CONN_PG))
 
 
 def test_a_bundle_crash_keeps_the_verdict_the_document_already_earned(
@@ -166,8 +194,35 @@ def test_a_bundle_crash_keeps_the_verdict_the_document_already_earned(
 
     assert any(f["validator"] == "contract-model"
                for f in diagnostics["findings"]), diagnostics
-    assert any("could not finish" in f["message"]
+    assert any(f["validator"] == "guard"
                for f in diagnostics["findings"]), diagnostics
+
+
+@pytest.mark.parametrize("stage", ["_referential_findings", "_connector_ref_findings"])
+def test_a_crash_inside_the_bundle_walk_costs_that_stage_only(
+    tmp_path, monkeypatch, stage,
+):
+    """The walk decides things as it goes: an unreadable sibling, a dead
+    `type-map.json` filename, a misnamed endpoint file. One guard around the
+    whole of it returns a single "nothing was decided" finding in place of all
+    of them — rejections that WERE decided, thrown away by a crash that
+    happened after them."""
+    root = tmp_path
+    slug = root / "connections" / "wise" / "definition"
+    slug.mkdir(parents=True)
+    (slug / "connection.json").write_text(json.dumps(CONN_WISE))
+    # A dead pre-split filename: a rejection the walk decides before either
+    # stage below runs.
+    (slug / "type-map.json").write_text("[]")
+
+    def crash(*_args, **_kwargs):
+        raise TypeError("boom")
+    monkeypatch.setattr(V, stage, crash)
+
+    findings = V._bundle_findings(PIPELINE, _write(root, "p.json", PIPELINE), root)
+
+    assert any(f["validator"] == "connection-type-map" for f in findings), findings
+    assert any(f["validator"] == "guard" for f in findings), findings
 
 
 def test_running_out_of_memory_is_not_a_file_the_walk_skips(tmp_path, monkeypatch):
