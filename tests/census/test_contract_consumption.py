@@ -179,10 +179,12 @@ def test_accepted_kinds_are_exactly_the_literal():
     adding a kind is one edit — proven by every member being accepted and
     nothing else."""
     for kind in get_args(DispositionKind):
-        # `derives` is required by exactly one kind and refused by the rest,
-        # so the construction that proves acceptance carries it per kind.
+        # `derives` belongs to `derivation_input` and to no other kind, so
+        # the construction that proves acceptance carries it per kind.
         derives = "y" if kind == "derivation_input" else None
-        assert FieldDisposition("a.B", "x", kind, "reason", derives).kind == kind
+        assert (
+            FieldDisposition("a.B", "x", kind, "reason", derives=derives).kind == kind
+        )
     with pytest.raises(ValueError, match="unknown kind"):
         FieldDisposition("a.B", "x", "documented", "reason")
 
@@ -236,7 +238,7 @@ def test_derivation_input_requires_the_field_it_derives(derives):
     """``derives`` is what makes the kind falsifiable — without it the entry
     claims a derivation whose product nothing can be held to."""
     with pytest.raises(ValueError, match="names the field it derives"):
-        FieldDisposition("a.B", "x", "derivation_input", "reason", derives)
+        FieldDisposition("a.B", "x", "derivation_input", "reason", derives=derives)
 
 
 @pytest.mark.parametrize(
@@ -244,7 +246,29 @@ def test_derivation_input_requires_the_field_it_derives(derives):
 )
 def test_derives_belongs_to_derivation_input_alone(kind):
     with pytest.raises(ValueError, match="derives belongs to derivation_input"):
-        FieldDisposition("a.B", "x", kind, "reason", "y")
+        FieldDisposition("a.B", "x", kind, "reason", derives="y")
+
+
+def test_a_field_does_not_derive_itself():
+    """Caught here, not downstream: the census would report a self-derivation
+    as a field the manifest does not claim, sending the reader to the
+    manifest instead of to the entry."""
+    with pytest.raises(ValueError, match="does not derive itself"):
+        FieldDisposition("a.B", "x", "derivation_input", "reason", derives="x")
+
+
+def test_derives_is_stored_as_the_name_it_must_match():
+    """It is a `model_fields` lookup key, not prose, so padding is stripped
+    rather than carried into a finding that claims the field is undeclared."""
+    entry = FieldDisposition("a.B", "x", "derivation_input", "reason", derives="  y  ")
+    assert entry.derives == "y"
+
+
+def test_a_malformed_model_is_reported_before_any_other_defect():
+    """Every other message names the entry by `model.field`, so the model is
+    what must be trustworthy first."""
+    with pytest.raises(ValueError, match="dotted path"):
+        FieldDisposition("B", "x", "derivation_input", "reason")
 
 
 # ---------------------------------------------------------------------------

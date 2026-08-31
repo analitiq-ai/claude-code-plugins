@@ -251,13 +251,13 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     # --- stream.ConnectionEndpointRef: the locator beside the derived handle
     FieldDisposition(
         "stream.ConnectionEndpointRef", "database_object", "derivation_input",
-        "the locator is the identity, and endpoint_id is what carries it to "
-        "the run: the contract derives the handle from the locator at parse "
-        "time and refuses a reference whose supplied handle is not the one "
-        "the locator produces (RULE-STRM-003 names that obligation, "
-        "RULE-DBEP-007 the ban on reading identity back out of the handle), "
-        "so a locator naming a different object resolves a different endpoint "
-        "rather than being silently ignored",
+        "the locator is the identity and endpoint_id the handle that names "
+        "it: the contract computes the handle from the locator at parse time "
+        "and the manifest claims the handle, so the locator reaches the run "
+        "under that name — a locator naming a different object is a different "
+        "handle, not an ignored value. RULE-STRM-003 names the obligation "
+        "binding a supplied handle to its locator, RULE-DBEP-007 the ban on "
+        "reading identity back out of the handle",
         derives="endpoint_id",
     ),
     # --- stream.ConstantAssignmentValue: the AssignmentValue tag ------------

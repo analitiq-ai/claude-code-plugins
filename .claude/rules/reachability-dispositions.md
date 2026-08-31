@@ -52,10 +52,13 @@ means. What a reader settles is which one applies:
   `structural`.
 - The contract computes another field of the same model from it, and the
   engine reads that one → `derivation_input`, and `derives` names it. The
-  reason says what the derivation produces and what a document whose input
-  contradicts it gets — a value reaching the run under another name is not
-  an ignored value. Where the derived field is itself unread, nothing
-  consumes either end and the question is again who owes the fix.
+  reason says which field is computed from which and why the input is
+  therefore not free — a value reaching the run under another name is not
+  an ignored value. It does not say that the contract rejects a document
+  contradicting the derivation; whether a rule is applied is the record's
+  `validator:`, and the reason cites the id instead. Where the derived
+  field is itself unread, nothing on the run-time path consumes either end,
+  and the question is again what consumes them or who owes the fix.
 - Nothing consumes it, and the question is **who owes the fix**:
   - the engine → `engine_gap`;
   - the contract → `contract_surplus`, and the reason says why removal

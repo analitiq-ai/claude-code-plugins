@@ -253,15 +253,16 @@ class ConsumptionReport:
         )
         group(
             "structural dispositions on fields that are not Literal-typed — "
-            "pydantic settles nothing here; use a kind pydantic does not settle: "
+            "pydantic settles no value on this field; use another kind: "
             f"{', '.join(_NON_STRUCTURAL_KINDS)}",
             self.structural_not_literal,
             lambda d: f"{d.qualified_model}.{d.field}",
         )
         group(
-            "derivation_input dispositions whose derived field the manifest "
-            "does not claim — the product reaches no run-time read either, so "
-            "this is a gap, not a derivation",
+            "derivation_input dispositions whose derived field the model does "
+            "not declare or the manifest does not claim — either derives names "
+            "the wrong field, or the product reaches no run-time read either "
+            "and this is a gap, not a derivation",
             self.derivation_product_unread,
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
@@ -336,6 +337,9 @@ def census_report(
             cls.model_fields[entry.field].annotation
         ):
             not_literal.append(entry)
+        # The declaration check stands on its own rather than leaning on
+        # `classify` only ever emitting refs for declared fields: the two
+        # halves are different defects, and the finding names both.
         if entry.kind == "derivation_input" and (
             entry.derives not in cls.model_fields
             or (entry.qualified_model, entry.derives) not in classes["read"]
