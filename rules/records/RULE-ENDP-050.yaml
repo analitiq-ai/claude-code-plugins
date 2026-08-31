@@ -16,8 +16,8 @@ rationale: >
   sit in the request slot its param's placement names (RULE-ENDP-008 holds
   that agreement), so the placement and the one legal binding site move
   together. The pinned contract-consumption manifest claims no read of the
-  field, and it directs no part of a run today; the agreement is what the
-  placement buys. Closing the set is what makes a wrong placement report as
+  placement, and it directs no part of a run today; the agreement is what
+  the placement buys. Closing the set is what makes a wrong placement report as
   a wrong placement: RULE-ENDP-009 catches the same document one step later,
   as a param no binding references, and that diagnosis sends the author to
   delete the param rather than to correct where it is sent. The type

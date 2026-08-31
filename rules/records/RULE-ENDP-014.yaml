@@ -8,12 +8,17 @@ scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteOperation._wiring"
 owners: [connector-plugin]
 targets: [WriteOperation]
+fields: [conflict_keys]
 rationale: >
-  Conflict keys are the provider-defined natural key an upsert matches existing
-  rows on, and the provider can only match on values the request actually
-  carries. A key naming a field the input schema never declares matches nothing,
-  so every upsert inserts and the destination accumulates duplicates without a
-  single failed run. Membership is resolved through composition, so a record
-  assembled from shared definitions still enumerates the fields it declares.
+  Conflict keys are the provider-defined natural key an upsert is declared
+  to match existing rows on, and a provider can only match on values the
+  request actually carries — a key naming a field the input schema never
+  declares is one no request could let it match on. That is why the
+  declaration is graded against the input schema at authoring time.
+  The pinned contract-consumption manifest claims no read of the list, and
+  it has no effect on a run today: the check keeps the declaration honest
+  about the schema it rides on, where it is read. Membership is resolved
+  through composition, so a record assembled from shared definitions still
+  enumerates the fields it declares.
 status: active
 superseded_by: null

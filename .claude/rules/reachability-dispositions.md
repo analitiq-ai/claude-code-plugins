@@ -95,9 +95,13 @@ A rule record's `rationale` ships to users inside the compiled registry and
 routinely explains the rule by what the engine does with the governed field.
 `census/consumption/records.py` owns the guard — how records are located
 against the unread set and what a `RecordAffirmation` in
-`census/consumption/record_affirmations.py` pins. The guard summons the
-reader; this section is what the reader applies before re-computing the
-entry:
+`census/consumption/record_affirmations.py` pins. The link is the fields a
+record names: a record naming no `fields:` is outside the guard — unlocated,
+not affirmed, the record-side analogue of a model no root reaches — so a
+record whose rationale leans on a field owes that field to its `fields:`
+list, and a reviewer of a record that names none asks whether it should.
+The guard summons the reader; this section is what the reader applies
+before re-computing the entry:
 
 - The rationale carries no unpinned engine read of a field the manifest
   leaves unread. Its engine claims land on a rung of

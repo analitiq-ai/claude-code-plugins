@@ -61,21 +61,36 @@ def test_affirmations_are_ordered_by_rule_id():
 _LOCAL = "tests.census.test_record_affirmations"
 
 
-class Widget(BaseModel):
-    seen: str
+class Base(BaseModel):
     ignored: str
+
+
+class Widget(Base):
+    seen: str
     also_ignored: str
 
 
+class Cousin(Base):
+    pass
+
+
+
+
 _WIDGET = f"{_LOCAL}.Widget"
+
+
+_COUSIN = f"{_LOCAL}.Cousin"
 
 
 def _manifest() -> dict:
     return {
         "version": "0.0.0",
         "contract_models_version": "0.0.0",
-        "roots": [_WIDGET],
-        "claims": {_WIDGET: {"seen": ["src.a:1"]}},
+        "roots": [_WIDGET, _COUSIN],
+        "claims": {
+            _WIDGET: {"seen": ["src.a:1"]},
+            _COUSIN: {"ignored": ["src.a:2"]},
+        },
         "opaque": {},
         "kit_reads": {},
         "transport": [],
@@ -136,6 +151,21 @@ def test_an_empty_or_all_retired_registry_refuses_to_run(monkeypatch, tmp_path):
         monkeypatch.setattr(rule_record, "RULES_PATH", path)
         with pytest.raises(ValueError, match="no active records"):
             load_rules()
+
+
+def test_a_base_class_target_binds_through_the_mro_of_each_carrier():
+    """`targets` binds through the MRO the way the registry defines it: a
+    rule on the shared base governs each reachable subclass, and only the
+    carriers on which the field is unread contribute refs — `Cousin`
+    inherits the same field, claimed there."""
+    governed = governed_unread(_manifest(), (_rule(targets=["Base"]),))
+    assert governed == {"RULE-TEST-001": (_REF,)}
+
+
+def test_a_target_no_reachable_mro_carries_is_coverage_not_a_finding():
+    report = record_report(_manifest(), (_rule(targets=["Nowhere"]),), ())
+    assert report.ok, report.render()
+    assert governed_unread(_manifest(), (_rule(targets=["Nowhere"]),)) == {}
 
 
 def test_a_record_governing_only_read_fields_is_not_governed():

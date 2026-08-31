@@ -12,11 +12,14 @@ fields: [strategy]
 mechanism: literal_enum
 rationale: >
   Each member is a different disposition for data the run could not deliver —
-  stop, park it where someone can retrieve it, or drop it and continue — so the
-  choice decides whether records that failed are recoverable at all. It is
-  declared once on the shared base because every block that inherits it is
-  answering the same question about a different stage, and an author who learns
-  the vocabulary at one of them carries it to the rest. `RULE-RETRY-001` reads
-  the sibling retry fields on the same base.
+  stop, park it where someone can retrieve it, or drop it and continue — so
+  where an error-handling block is read, the choice decides whether records
+  that failed are recoverable at all. It is declared once on the shared base
+  because every block that inherits it is answering the same question about
+  a different stage, and an author who learns the vocabulary at one of them
+  carries it to the rest. Not every stage is read: the per-assignment
+  validation override is the block RULE-STRM-040 governs, and the pinned
+  contract-consumption manifest claims no read of it. `RULE-RETRY-001`
+  reads the sibling retry fields on the same base.
 status: active
 superseded_by: null

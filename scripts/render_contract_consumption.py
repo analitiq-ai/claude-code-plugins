@@ -20,7 +20,8 @@ Exit codes: 0 when the census is complete and current, 1 on any finding, 2
 when the check could not run — a usage error, a vendored manifest the
 envelope check refuses, a manifest ROOT the live tree does not hold (a
 ``claims`` or ``opaque`` key naming an unknown model is an exit-1 finding),
-or a contract tree that does not import. A check that cannot run
+a compiled registry the record census refuses as vacuous, or a contract
+tree that does not import. A check that cannot run
 prints a "could not run" line and never reads as a finding: the exit-1
 remediation is "write or retire a disposition" or "re-affirm a record",
 which fixes none of those.

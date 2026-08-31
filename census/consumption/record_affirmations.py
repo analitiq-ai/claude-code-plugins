@@ -18,6 +18,13 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         rationale_sha256="d0b1bea51d12dd2bb4d4226920d1a3acf2d41f42d986adb527bc0a3ae58e466f",
     ),
     RecordAffirmation(
+        "RULE-ENDP-014",
+        refs=(
+            "endpoints.WriteOperation.conflict_keys",
+        ),
+        rationale_sha256="427d440fff9b176002d40638791081fb36f91339093d1a7318e2d3d2cdfc70c1",
+    ),
+    RecordAffirmation(
         "RULE-ENDP-038",
         refs=(
             "endpoints.Replication.supported_methods",
@@ -29,7 +36,7 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         refs=(
             "endpoints.Param.location",
         ),
-        rationale_sha256="165be1e23af73d5130007e72dd80466e4336a42dee14f0064a33c18b6921c2c9",
+        rationale_sha256="47efc4946c6c3515e30d130a6d511586858caeb523a8cdbcd515a687f4088eb4",
     ),
     RecordAffirmation(
         "RULE-ENDP-055",
@@ -61,6 +68,13 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "pipelines.config.Logging.log_level",
         ),
         rationale_sha256="820e6d3722e5404221e33aefb9ba51899789e22101ed5686f2a606d09fa52e67",
+    ),
+    RecordAffirmation(
+        "RULE-SHRD-013",
+        refs=(
+            "stream.StreamValidationErrorHandling.strategy",
+        ),
+        rationale_sha256="2e8c8d3d1373f08e31aeb9cb6bf6dc56c90be98e9ae710577cc1eb8a3d803723",
     ),
     RecordAffirmation(
         "RULE-STRM-040",

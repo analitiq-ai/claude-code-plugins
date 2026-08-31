@@ -30,6 +30,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
+
 from census.consumption.reachability import classify, reachable_models
 
 __all__ = [
@@ -75,15 +77,21 @@ def governed_unread(
 ) -> dict[str, tuple[str, ...]]:
     """Per active record, the unread fields its ``targets``/``fields`` govern.
 
-    A target names a model class bare (``Param``); it is matched against the
-    trailing segment of every reachable model's qualified name, every match
-    counting — a rule over a union governs each branch. A field expression's
-    head (before any ``[]`` or ``.``) is the field name matched. Records
-    governing no unread field do not appear. A target no reachable model
-    carries is coverage, not silence — the field census walks only what the
-    manifest's roots reach — but a head that lands on NO matched model is a
-    name this census could not resolve, and :func:`record_report` reports
-    it rather than dropping it.
+    A target names a model class bare (``Param``), and binds through the
+    MRO the way the registry defines ``targets``: it is matched against the
+    pydantic class names in every reachable model's ``__mro__``, every
+    match counting — a rule over a union governs each branch, and a rule
+    binding a shared base governs each reachable subclass inheriting its
+    fields. A field expression's head (before any ``[]`` or ``.``) is the
+    field name matched; a tail names structure inside another model, which
+    this census covers as that model's own fields, never through the
+    expression. Records governing no unread field do not appear, and a
+    record naming no ``fields:`` is outside the guard — unlocated, not
+    affirmed. A target no reachable model's MRO carries is coverage, not
+    silence — the field census walks only what the manifest's roots reach —
+    but a head that lands on NO matched model is a name this census could
+    not resolve, and :func:`record_report` reports it rather than dropping
+    it.
     """
     governed, _ = _resolve(manifest, rules)
     return governed
@@ -95,8 +103,10 @@ def _resolve(
     unread = classify(manifest)["unread"]
     models = reachable_models(manifest)
     by_class: dict[str, list[str]] = {}
-    for name in models:
-        by_class.setdefault(name.rsplit(".", 1)[-1], []).append(name)
+    for name, cls in models.items():
+        for base in cls.__mro__:
+            if issubclass(base, BaseModel) and base is not BaseModel:
+                by_class.setdefault(base.__name__, []).append(name)
 
     governed: dict[str, tuple[str, ...]] = {}
     unresolved: list[tuple[str, str]] = []
@@ -203,7 +213,7 @@ class RecordReport:
             "re-affirm against the current refs",
             self.stale_refs,
             lambda item: f"{item[0]}: affirmed {', '.join(item[1])}; "
-            f"current {', '.join(item[2]) or '(none)'}",
+            f"current {', '.join(item[2])}",
         )
         group(
             "affirmations whose rationale hash no longer matches — the "
