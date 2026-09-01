@@ -36,8 +36,12 @@ rationale: >
   mention would be worse than not checking, because the refusal names the
   blocks as a way out and an author would take it. What the refusal proves is that a source
   is DECLARED, never that it resolves: a `default` reffing a connection
-  parameter the connection leaves unset, and a filterable param no stream
-  filters, both pass, and RULE-ENDP-067 is the obligation over that remainder.
+  parameter the connection leaves unset, a filterable param no stream filters,
+  and a cursor param on a run that is not incremental or on a mapping the
+  stream did not select, all pass, because which run and which stream is not
+  something one document settles. RULE-ENDP-067 is the obligation over that
+  remainder, and it is what says a param whose absence a legitimate run
+  tolerates is not required in the first place.
   Nothing in the check reads `required` back out of any consumer, so it stays
   correct however the flag comes to be honoured; what `operators` rests on is
   the registry service's comparison of a stream's filter against the operators
