@@ -958,8 +958,9 @@ def test_the_live_census_grades_at_least_one_derivation():
     # Through the report, not the helper: the guard is `census_report`, and a
     # helper answering correctly proves nothing about a report that stopped
     # calling it. Each live entry is then re-keyed onto a product the model
-    # declares and no validator writes, and the report must name it — the
-    # live sites are proven gradeable, not merely present.
+    # declares and no DerivedFrom names this field as the input to, and the
+    # report must name it — the live sites are proven gradeable, not merely
+    # present.
     manifest = pin.load_manifest()
     assert census_report(manifest, DISPOSITIONS).derivation_not_declared == ()
     for entry in graded:

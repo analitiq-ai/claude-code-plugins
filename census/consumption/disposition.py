@@ -26,11 +26,11 @@ One disposition per kind of consumer an unread field may have:
   reads. No attribute read of this field exists because the run reads the
   derived field, whose value this one settles. ``derives`` names
   that field, and the census holds it to being one the model declares, one
-  the manifest claims, and one a validator the model runs declares a write
-  of: a derivation whose product nothing reads is a gap, not a derivation,
-  and one no code performs is not a derivation at all. Which field is
-  computed from which, and why the input is therefore not free, is the
-  entry's ``reason``.
+  the manifest claims, and one naming this field as the input it is computed
+  from — a ``DerivedFrom`` annotation the contract carries on it: a
+  derivation whose product nothing reads is a gap, not a derivation, and a
+  computation the contract never states is not one at all. Why the input is
+  therefore not free is the entry's ``reason``.
 - ``engine_gap`` — the contract permits something the engine ignores and
   should honour: what the author declared has no effect on the run. The
   ``reason`` states what an author writing the field expects and what the
