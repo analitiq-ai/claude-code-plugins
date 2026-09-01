@@ -31,14 +31,12 @@ the lint and the tool can never disagree.
 """
 from __future__ import annotations
 
-import ast
 import importlib
-import inspect
 import types
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
-from analitiq.contracts.shared.common import set_derived_field
+from analitiq.contracts.shared.common import DerivedFrom
 from pydantic import BaseModel
 
 from census.consumption.disposition import DispositionKind, FieldDisposition
@@ -117,137 +115,18 @@ def _is_literal(annotation: Any) -> bool:
     return False
 
 
-#: The one sanctioned way a contract model writes a derived value, named
-#: through the symbol itself: a rename fails this import rather than leaving
-#: the scan below matching nothing and reporting every derivation unwritten.
-_DERIVATION_WRITER = set_derived_field.__name__
+def _declares_derivation(cls: type[BaseModel], product: str, source: str) -> bool:
+    """Whether ``cls`` declares ``product`` as computed from ``source``.
 
-#: The writer's parameters — the object written and the field named on it —
-#: and the positions they sit at, the indices read off the live signature so
-#: a parameter inserted ahead of either cannot leave the scan reading the
-#: wrong argument. Each lookup fails this import if its parameter is renamed.
-_RECEIVER_PARAMETER = "model"
-_WRITTEN_FIELD_PARAMETER = "field"
-_WRITER_PARAMETERS = list(inspect.signature(set_derived_field).parameters)
-_RECEIVER_POSITION = _WRITER_PARAMETERS.index(_RECEIVER_PARAMETER)
-_WRITTEN_FIELD_POSITION = _WRITER_PARAMETERS.index(_WRITTEN_FIELD_PARAMETER)
-
-
-def _called_name(node: ast.Call) -> str | None:
-    """The name a call invokes, whether bare or attribute-qualified.
-
-    A qualified call matches on the attribute alone: what is being called
-    ``set_derived_field`` on is not resolvable from the source, and a
-    contract model reaching the writer through anything but the shared
-    helper is a defect the reader catches, not a second name to grade.
+    The contract states the relation on the derived field itself, as a
+    :class:`DerivedFrom` annotation, so this is a lookup rather than a
+    reading of the validator that performs the computation. That the
+    validator honours the declaration is the reader's, under
+    ``.claude/rules/reachability-dispositions.md``; that it exists at all is
+    the rule record's ``validator:``, resolved against the live models when
+    the registry compiles.
     """
-    func = node.func
-    if isinstance(func, ast.Name):
-        return func.id
-    if isinstance(func, ast.Attribute):
-        return func.attr
-    return None
-
-
-def _argument(node: ast.Call, parameter: str, position: int) -> ast.expr | None:
-    """The expression a call passes for one of the writer's parameters,
-    whether by keyword or by position."""
-    for keyword in node.keywords:
-        if keyword.arg == parameter:
-            return keyword.value
-    return node.args[position] if len(node.args) > position else None
-
-
-def _unindent(source: str) -> str:
-    """Strip a definition's own indentation, and only that.
-
-    ``textwrap.dedent`` removes the prefix common to every line, so a single
-    line flush against column zero — inside a multi-line string literal —
-    leaves it removing nothing and the source unparseable. A line not
-    carrying the definition's prefix is inside such a literal and keeps the
-    columns it has.
-    """
-    lines = source.splitlines()
-    if not lines:
-        return source
-    prefix = lines[0][: len(lines[0]) - len(lines[0].lstrip())]
-    if not prefix:
-        return source
-    return "\n".join(
-        line[len(prefix) :] if line.startswith(prefix) else line for line in lines
-    )
-
-
-def _writes(source: str, name: str) -> bool:
-    """Whether the validator ``source`` defines writes ``name`` on its own
-    instance through the derivation writer.
-
-    The receiver is graded as well as the field: a validator filling a
-    nested model's field of the same name writes somebody else's value, and
-    crediting the enclosing model with it would accept an entry whose
-    product nothing computes. Both arguments are taken by the parameter name
-    and position the writer declares, and the field must be a literal — a
-    call site and a constant, located structurally rather than read as a
-    sentence.
-    """
-    try:
-        tree = ast.parse(_unindent(source))
-    except SyntaxError:
-        # Source that will not parse establishes nothing, so it contributes
-        # no derivation; the report says so in the same words as source that
-        # could not be read at all.
-        return False
-    definition = tree.body[0] if tree.body else None
-    if not isinstance(definition, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        return False
-    bound = definition.args.posonlyargs + definition.args.args
-    if not bound:
-        return False
-    receiver = bound[0].arg
-    for node in ast.walk(definition):
-        if not (isinstance(node, ast.Call) and _called_name(node) == _DERIVATION_WRITER):
-            continue
-        written = _argument(node, _WRITTEN_FIELD_PARAMETER, _WRITTEN_FIELD_POSITION)
-        target = _argument(node, _RECEIVER_PARAMETER, _RECEIVER_POSITION)
-        if (
-            isinstance(written, ast.Constant)
-            and written.value == name
-            and isinstance(target, ast.Name)
-            and target.id == receiver
-        ):
-            return True
-    return False
-
-
-def _writes_derived_field(cls: type[BaseModel], name: str) -> bool:
-    """Whether a validator pydantic runs while building ``cls`` writes
-    ``name`` through the sanctioned derivation helper.
-
-    The validators come from the model's own decorator registry, which is
-    what pydantic will actually run: one declared on a base and inherited
-    is there, and one a subclass overrides is there as the override rather
-    than beside it. Reading the class body instead would credit a model
-    with a call in a method nothing invokes, with a nested class's
-    derivation, and with a base's derivation a subclass had replaced.
-
-    What stays the reader's, under
-    ``.claude/rules/reachability-dispositions.md``: that the field the entry
-    sits on is an INPUT to the derivation rather than some other unread
-    field of the same model, and that the call is on a branch the validator
-    reaches. A validator that never writes the field is what this decides;
-    one that writes it only under a condition no document meets is not.
-    """
-    for decorator in cls.__pydantic_decorators__.model_validators.values():
-        try:
-            source = inspect.getsource(decorator.func)
-        except (OSError, TypeError):
-            # A validator with no readable source establishes no derivation.
-            # The report's wording carries that case rather than concluding
-            # the contract computes nothing.
-            continue
-        if _writes(source, name):
-            return True
-    return False
+    return DerivedFrom(source) in cls.model_fields[product].metadata
 
 
 def reachable_models(manifest: dict[str, Any]) -> dict[str, type[BaseModel]]:
@@ -333,11 +212,11 @@ class ConsumptionReport:
     #: it derives, and the manifest claims no read of that name on this
     #: model — either it is the wrong name, or nothing reads the product.
     derivation_product_unread: tuple[FieldDisposition, ...]
-    #: ``derivation_input`` claims the contract computes ``derives`` at
-    #: parse time, and no validator the model runs declares a write of it —
-    #: the entry names a derivation the contract does not perform, or one
-    #: written where the census cannot read it.
-    derivation_not_written: tuple[FieldDisposition, ...]
+    #: ``derivation_input`` claims the contract computes ``derives`` from
+    #: this field, and the model declares no such derivation — the entry
+    #: names a computation the contract does not state, or states over a
+    #: different input.
+    derivation_not_declared: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
     claim_of_unknown_field: tuple[FieldRef, ...]
@@ -354,7 +233,7 @@ class ConsumptionReport:
             or self.duplicate_dispositions
             or self.structural_not_literal
             or self.derivation_product_unread
-            or self.derivation_not_written
+            or self.derivation_not_declared
             or self.claim_of_unknown_field
             or self.manifest_names_unknown_model
         )
@@ -410,12 +289,11 @@ class ConsumptionReport:
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
         group(
-            "derivation_input dispositions whose derived field no validator "
-            f"writes — no {_DERIVATION_WRITER} call naming it in any "
-            "validator the model runs, so either the contract does not "
-            "compute what the entry says it computes, or it computes it "
-            "somewhere the census cannot read",
-            self.derivation_not_written,
+            "derivation_input dispositions the contract does not declare — "
+            f"the derived field carries no {DerivedFrom.__name__} naming "
+            "this one as its input, so the entry states a computation the "
+            "model does not, or states it over a different field",
+            self.derivation_not_declared,
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
         group(
@@ -473,7 +351,7 @@ def census_report(
     unknown: list[FieldDisposition] = []
     not_literal: list[FieldDisposition] = []
     product_unread: list[FieldDisposition] = []
-    not_written: list[FieldDisposition] = []
+    not_declared: list[FieldDisposition] = []
     for entry in dispositions:
         ref = (entry.qualified_model, entry.field)
         cls = models.get(entry.qualified_model)
@@ -506,9 +384,9 @@ def census_report(
         if (
             entry.kind == "derivation_input"
             and entry.derives in cls.model_fields
-            and not _writes_derived_field(cls, entry.derives)
+            and not _declares_derivation(cls, entry.derives, entry.field)
         ):
-            not_written.append(entry)
+            not_declared.append(entry)
 
     return ConsumptionReport(
         unread_without_disposition=tuple(sorted(classes["unread"] - set(seen))),
@@ -517,7 +395,7 @@ def census_report(
         duplicate_dispositions=duplicates,
         structural_not_literal=tuple(not_literal),
         derivation_product_unread=tuple(product_unread),
-        derivation_not_written=tuple(not_written),
+        derivation_not_declared=tuple(not_declared),
         claim_of_unknown_field=tuple(unknown_claims),
         manifest_names_unknown_model=tuple(unknown_models),
     )

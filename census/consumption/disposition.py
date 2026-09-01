@@ -109,9 +109,9 @@ class FieldDisposition:
     names the field on this model whose value the contract computes from
     this one, and it is what the census can hold the entry to — the entry
     fails when the model stops declaring that field, when the manifest stops
-    claiming it, or when no validator the model runs writes it. That the
-    derivation reads THIS field rather than another unread one, and that it
-    writes on a branch a document reaches, are the reader's, under
+    claiming it, or when that field stops naming this one as the input it is
+    computed from. That the validator performing the computation honours
+    that declaration is the reader's, under
     ``.claude/rules/reachability-dispositions.md``.
     """
 

@@ -36,8 +36,7 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union, get_args
 
 import pytest
-from analitiq.contracts.shared import common
-from analitiq.contracts.shared.common import set_derived_field
+from analitiq.contracts.shared.common import DerivedFrom
 from pydantic import BaseModel, Field, model_validator
 
 from census.consumption import pin
@@ -45,7 +44,7 @@ from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
     ConsumptionReport,
     _is_literal,
-    _writes_derived_field,
+    _declares_derivation,
     census_report,
     classify,
     qualified_name,
@@ -336,22 +335,15 @@ class ViaDict(BaseModel):
 
 
 class Root(BaseModel):
-    direct: Leaf
+    # `maybe` is dispositioned `derivation_input` deriving the claimed
+    # `direct`, and `_COMPLETE` is the accepted baseline every other test
+    # builds on, so the model has to declare what that entry says it does.
+    direct: Annotated[Leaf, DerivedFrom("maybe")]
     maybe: Optional[Grammar] = None
     either: Union[Tagged, int]
     annotated: Optional[Annotated[list[ViaDict], Field(min_length=0)]] = None
     shape: Literal["root"] = "root"
     plain: str = ""
-
-    @model_validator(mode="after")
-    def _derive_direct(self) -> "Root":
-        # A real derivation: `Root.maybe` is dispositioned `derivation_input`
-        # deriving the claimed `direct`, and `_COMPLETE` is the accepted
-        # baseline every other test builds on, so it has to derive what it
-        # says it derives.
-        if self.maybe is not None:
-            set_derived_field(self, "direct", Leaf(value=1, label=self.maybe.op))
-        return self
 
 
 class Orphan(BaseModel):
@@ -698,7 +690,7 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
     # second to claimed products alone — the obvious way to stop printing two
     # lines — would silently stop grading every entry whose product is
     # unread, and would pass every other test here.
-    assert report.derivation_not_written == (() if derives == "vanished" else (wrong,))
+    assert report.derivation_not_declared == (() if derives == "vanished" else (wrong,))
 
 
 def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
@@ -706,209 +698,43 @@ def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
     assert report.derivation_product_unread == ()
 
 
-# --- The derivation writer: what a `derivation_input` entry is held to -------
+# --- The declaration a `derivation_input` entry is held to -------------------
 #
 # A `derivation_input` says the contract computes another field from this one
-# at parse time. `set_derived_field` is the sanctioned way a contract model
-# writes such a value, so the entry is held to a call naming the product
-# inside a validator the model's own registry carries — a call site and a
-# literal argument, never a sentence.
+# at parse time. The contract states that on the derived field, as a
+# `DerivedFrom` annotation, so the entry is held to a declaration the model
+# carries — a lookup, never a reading of the validator that performs it.
 
 
-class WritesDirectly(BaseModel):
-    """The shape the contract's own derivation has: the carrier writes it."""
-
-    product: str = ""
-
-    @model_validator(mode="after")
-    def _fill(self) -> "WritesDirectly":
-        set_derived_field(self, "product", "value")
-        return self
-
-
-class WritesByKeyword(BaseModel):
-    product: str = ""
-
-    @model_validator(mode="after")
-    def _fill(self) -> "WritesByKeyword":
-        set_derived_field(self, field="product", value="value")
-        return self
-
-
-class WritesQualified(BaseModel):
-    product: str = ""
-
-    @model_validator(mode="after")
-    def _fill(self) -> "WritesQualified":
-        common.set_derived_field(self, "product", "value")
-        return self
-
-
-class InheritsTheDerivation(WritesDirectly):
-    """A derivation declared on a base and inherited — the shape
-    `RetryErrorHandlingBase` has. The registry carries it for every variant
-    that inherits it, which reading this class's own body would not."""
-
-    extra: str = ""
-
-
-class WritesNothing(BaseModel):
-    product: str = ""
-
-
-class WritesInAHelper(BaseModel):
-    """The call exists and no validator runs it, so nothing computes
-    `product` while pydantic builds the instance."""
-
-    product: str = ""
-
-    def rehydrate(self) -> None:
-        set_derived_field(self, "product", "value")
-
-
-class OverridesTheDerivationAway(WritesDirectly):
-    """The base declares the derivation and this class replaces it with one
-    that computes nothing. Reading the class hierarchy's source would find
-    the base's call and credit the override with it."""
-
-    @model_validator(mode="after")
-    def _fill(self) -> "OverridesTheDerivationAway":
-        return self
-
-
-class WritesSomebodyElsesField(BaseModel):
-    """The validator fills a nested model's field of the same name. Grading
-    the field alone would credit this model with a value it never carries."""
-
-    product: str = ""
-    inner: WritesNothing = WritesNothing()
-
-    @model_validator(mode="after")
-    def _fill(self) -> "WritesSomebodyElsesField":
-        set_derived_field(self.inner, "product", "value")
-        return self
-
-
-class WritesPastAFlushLeftLine(BaseModel):
-    """A line at column zero inside a string literal leaves the prefix
-    common to every line empty, so a common-prefix dedent removes nothing
-    and the source will not parse — reporting a real derivation absent."""
-
-    product: str = ""
-
-    @model_validator(mode="after")
-    def _fill(self) -> "WritesPastAFlushLeftLine":
-        message = """
-flush against column zero
-"""
-        set_derived_field(self, "product", message)
-        return self
-
-
-class WritesInANestedClass(BaseModel):
-    """A class's source carries the classes defined inside it, so a scan of
-    the text alone would credit the outer class with the inner one's
-    derivation."""
-
-    product: str = ""
-
-    class Inner(BaseModel):
-        product: str = ""
-
-        @model_validator(mode="after")
-        def _fill(self) -> "WritesInANestedClass.Inner":
-            set_derived_field(self, "product", "value")
-            return self
+class Derives(BaseModel):
+    source: str = ""
+    product: Annotated[str, DerivedFrom("source")] = ""
+    unrelated: Annotated[str, DerivedFrom("elsewhere")] = ""
+    bare: str = ""
 
 
 @pytest.mark.parametrize(
-    "cls",
+    "product,source,declared",
     [
-        WritesDirectly,
-        WritesByKeyword,
-        WritesQualified,
-        InheritsTheDerivation,
-        WritesPastAFlushLeftLine,
+        ("product", "source", True),
+        ("unrelated", "source", False),  # declared, over another input
+        ("bare", "source", False),  # no declaration at all
     ],
 )
-def test_a_parse_time_derivation_of_the_product_is_found(cls):
-    assert _writes_derived_field(cls, "product")
+def test_a_declared_derivation_names_its_own_input(product, source, declared):
+    assert _declares_derivation(Derives, product, source) is declared
 
 
-@pytest.mark.parametrize(
-    "cls,name",
-    [
-        (WritesNothing, "product"),  # no derivation at all
-        (WritesDirectly, "other"),  # a derivation of a different field
-        (WritesInAHelper, "product"),  # a call no validator runs
-        (WritesInANestedClass, "product"),  # a nested class's derivation
-        (WritesDirectly, "value"),  # the value argument, not the field
-        (OverridesTheDerivationAway, "product"),  # the base's call, replaced
-        (WritesSomebodyElsesField, "product"),  # a nested model's field
-    ],
-)
-def test_a_product_no_derivation_writes_is_not_found(cls, name):
-    assert not _writes_derived_field(cls, name)
+def test_a_derivation_declaration_names_the_field_it_derives_from():
+    """An empty name would bind a derived field to nothing while still
+    reading as a declaration."""
+    with pytest.raises(ValueError, match="names the field derived from"):
+        DerivedFrom("   ")
 
 
-def test_both_call_shapes_the_scan_matches_are_shapes_the_writer_accepts():
-    """The scan grades the field argument as a keyword and as a positional.
-    Each must be a way `set_derived_field` can actually be called, or the
-    scan is matching a call the contract could never make."""
-    import inspect as _inspect
-
-    from census.consumption.reachability import (
-        _WRITTEN_FIELD_PARAMETER,
-        _WRITTEN_FIELD_POSITION,
-    )
-
-    signature = _inspect.signature(set_derived_field)
-    model, value = object(), object()
-    keyword = signature.bind(model, **{_WRITTEN_FIELD_PARAMETER: "x", "value": value})
-    positional = signature.bind(*([model] * _WRITTEN_FIELD_POSITION), "x", value)
-    assert keyword.arguments[_WRITTEN_FIELD_PARAMETER] == "x"
-    assert positional.arguments[_WRITTEN_FIELD_PARAMETER] == "x"
-
-
-def test_a_validator_with_no_readable_source_reports_no_derivation(tmp_path):
-    """A validator whose file is gone cannot be read back, so the write it
-    performs cannot be seen. Reporting it as underived summons a reader;
-    reporting it as derived would be the check passing on what it could not
-    read."""
-    import importlib.util
-    import linecache
-
-    module_path = tmp_path / "vanishing_contract_model.py"
-    module_path.write_text(
-        "from pydantic import BaseModel, model_validator\n"
-        "from analitiq.contracts.shared.common import set_derived_field\n"
-        "\n"
-        "class Generated(BaseModel):\n"
-        "    product: str = ''\n"
-        "\n"
-        "    @model_validator(mode='after')\n"
-        "    def _fill(self):\n"
-        "        set_derived_field(self, 'product', 'value')\n"
-        "        return self\n"
-    )
-    spec = importlib.util.spec_from_file_location("vanishing", module_path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    generated = module.Generated
-    # The derivation is real — it runs — and once the file is gone the census
-    # cannot read it. linecache holds the lines it already read, so a stale
-    # cache would keep answering after the file is unlinked.
-    assert generated().product == "value"
-    assert _writes_derived_field(generated, "product")
-    module_path.unlink()
-    linecache.clearcache()
-    assert not _writes_derived_field(generated, "product")
-
-
-def test_derivation_input_whose_product_nothing_derives_is_a_finding(shadowed):
+def test_derivation_input_the_contract_does_not_declare_is_a_finding(shadowed):
     """`either` is claimed, so the product-unread check passes it — and
-    nothing on `Root` computes it, which is the claim this finding grades."""
+    `Root` declares no derivation of it, which is the claim this grades."""
     wrong = _entry(
         f"{_M}.Root",
         "annotated",
@@ -919,19 +745,34 @@ def test_derivation_input_whose_product_nothing_derives_is_a_finding(shadowed):
     report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
     assert not report.ok
     assert report.derivation_product_unread == ()
-    assert report.derivation_not_written == (wrong,)
+    assert report.derivation_not_declared == (wrong,)
     assert "Root.annotated -> either" in report.render()
 
 
-def test_derivation_input_whose_product_the_contract_derives_is_accepted(shadowed):
+def test_derivation_input_naming_the_declared_input_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
-    assert report.derivation_not_written == ()
+    assert report.derivation_not_declared == ()
+
+
+def test_a_declaration_over_another_input_does_not_accept_this_entry(shadowed):
+    """`Root.direct` is declared derived from `maybe`. An entry keying it to
+    a different unread field of the same model is what a check reading only
+    "is this field derived at all" would accept."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived from something else",
+        derives="direct",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_not_declared == (wrong,)
 
 
 def test_a_derives_the_model_does_not_declare_raises_one_finding(shadowed):
     """A duplicate finding over one defect prints the same line twice: a field
     that does not exist is named by the product-unread finding, and nothing
-    deriving it is not a second fact about it."""
+    declaring a derivation of it is not a second fact about it."""
     wrong = _entry(
         f"{_M}.Root",
         "annotated",
@@ -941,7 +782,7 @@ def test_a_derives_the_model_does_not_declare_raises_one_finding(shadowed):
     )
     report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
     assert report.derivation_product_unread == (wrong,)
-    assert report.derivation_not_written == ()
+    assert report.derivation_not_declared == ()
 
 
 def test_every_finding_field_fails_the_report_and_is_rendered():
@@ -1120,22 +961,22 @@ def test_the_live_census_grades_at_least_one_derivation():
     # declares and no validator writes, and the report must name it — the
     # live sites are proven gradeable, not merely present.
     manifest = pin.load_manifest()
-    assert census_report(manifest, DISPOSITIONS).derivation_not_written == ()
+    assert census_report(manifest, DISPOSITIONS).derivation_not_declared == ()
     for entry in graded:
         model = resolve_model(entry.qualified_model)
-        undevised = [
+        undeclared = [
             name
             for name in model.model_fields
-            if name != entry.field and not _writes_derived_field(model, name)
+            if name != entry.field and not _declares_derivation(model, name, entry.field)
         ]
-        assert undevised, f"{entry.qualified_model} derives every other field"
+        assert undeclared, f"{entry.qualified_model} derives every other field"
         broken = FieldDisposition(
-            entry.model, entry.field, entry.kind, entry.reason, derives=undevised[0]
+            entry.model, entry.field, entry.kind, entry.reason, derives=undeclared[0]
         )
         report = census_report(
             manifest, tuple(d for d in DISPOSITIONS if d is not entry) + (broken,)
         )
-        assert broken in report.derivation_not_written
+        assert broken in report.derivation_not_declared
 
 
 def test_every_unread_contract_field_carries_a_disposition():
