@@ -109,7 +109,7 @@ single field looks wrong.
 | RULE-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
-| RULE-ENDP-066 | A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — the `operators` that make it stream-filterable or a pagination or replication block that declares a value it starts from. | `api-endpoint` | error | validator |
+| RULE-ENDP-066 | A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — the `operators` that make it stream-filterable, a pagination block that gives it a starting value, or a replication block that supports `incremental`. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential

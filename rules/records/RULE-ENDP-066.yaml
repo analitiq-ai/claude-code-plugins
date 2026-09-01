@@ -2,8 +2,8 @@ id: RULE-ENDP-066
 statement: >
   A param declared `required` MUST declare a source its operation can supply
   the value from: its own `default`, or — on a read — the `operators` that
-  make it stream-filterable or a pagination or replication block that declares
-  a value it starts from.
+  make it stream-filterable, a pagination block that gives it a starting
+  value, or a replication block that supports `incremental`.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -23,13 +23,18 @@ rationale: >
   that way. That contradiction is settled by reading one document, which is why
   it is refused where it is written rather than left to a run to discover.
   Being driven by a block is not the same as being given a value by one: a
-  `controlled_by` marker is self-declared and only the block-to-param direction
-  is checked anywhere, and a block naming a param it declares no starting value
-  for — a page size with no `default`, a keyset with no `initial`, an opaque
-  cursor, which has no field for one because there is no cursor before the
-  first page — leaves the param as empty as no block at all. Counting a mention
-  would be worse than not checking, because the refusal names the blocks as a
-  way out and an author would take it. What the refusal proves is that a source
+  `controlled_by` marker is self-declared, only the block-to-param direction is
+  checked anywhere, and a block can name a param and leave it with nothing.
+  What that looks like differs by block, which is why the two are stated apart.
+  A pagination strategy declares the first request's value, so a page size with
+  no `default`, a keyset or an offset or page cursor whose `initial` carries no
+  value, and an opaque cursor, which has no field for one because there is no
+  cursor before the first page, each name a param and fill it never. A
+  replication block declares no such value anywhere: its cursor comes from the
+  state a run stores, so what decides is `supported_methods`, and one that
+  never says `incremental` says no run will leave a cursor behind. Counting a
+  mention would be worse than not checking, because the refusal names the
+  blocks as a way out and an author would take it. What the refusal proves is that a source
   is DECLARED, never that it resolves: a `default` reffing a connection
   parameter the connection leaves unset, and a filterable param no stream
   filters, both pass, and RULE-ENDP-067 is the obligation over that remainder.

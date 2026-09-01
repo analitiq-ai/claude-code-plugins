@@ -26,7 +26,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from collections.abc import Iterator, Sequence
-from typing import Annotated, Any, Literal, Union, get_args
+from typing import Annotated, Any, Literal, NamedTuple, Union, get_args
 from urllib.parse import unquote
 
 from pydantic import (
@@ -2023,14 +2023,19 @@ class ReadOperation(_EndpointModel):
                         f"(found {name!r}; spec: §Request Bodies)"
                     )
 
+        named: frozenset[str] = frozenset()
         controlled: frozenset[str] = frozenset()
         if self.pagination is not None:
-            controlled |= _validate_pagination_wiring(self.pagination, self.params)
+            block = _validate_pagination_wiring(self.pagination, self.params)
+            named |= block.named
+            controlled |= block.filled
 
         if self.replication is not None:
-            controlled |= _validate_replication_wiring(self.replication, self.params)
+            block = _validate_replication_wiring(self.replication, self.params)
+            named |= block.named
+            controlled |= block.filled
         _validate_required_params_have_a_source(
-            self.params, allow_from_input=False, controlled=controlled
+            self.params, allow_from_input=False, controlled=controlled, named=named
         )
 
         # response.records → response.schema traversal raises directly.
@@ -2245,7 +2250,8 @@ class WriteOperation(_EndpointModel):
         # A write declares no pagination or replication block, so nothing can
         # back a `controlled_by` marker and the `default` is the whole set.
         _validate_required_params_have_a_source(
-            self.params, allow_from_input=True, controlled=frozenset()
+            self.params, allow_from_input=True,
+            controlled=frozenset(), named=frozenset(),
         )
 
         # RULE-ENDP-025. Held here rather than in `_validate_param_wiring`
@@ -3189,46 +3195,62 @@ def _validate_param_wiring(
             )
 
 
+class _BlockParams(NamedTuple):
+    """What a pagination or replication block names, and what it fills.
+
+    The two differ, and RULE-ENDP-066 needs both: `filled` is what counts as a
+    source, and `named` is what lets the finding tell a param no block mentions
+    from one a block mentions and gives nothing to. Those are different author
+    mistakes with different fixes.
+    """
+
+    named: frozenset[str]
+    filled: frozenset[str]
+
+
 def _validate_pagination_wiring(
     pagination: Any, params: dict[str, Param]
-) -> frozenset[str]:
+) -> _BlockParams:
     """Validate pagination param references and ``controlled_by`` markers.
 
-    Returns the params this block declares a **starting value** for, which is
-    narrower than the params it names and is what RULE-ENDP-066 reads. Naming a
-    param says which slot the strategy drives; it does not say the document put
-    a value there for the first request, and a param the block never gives one
-    to is as empty as a param no block names at all — so counting a mention as
-    a source would let an author satisfy the rule by adding `limit: {"param":
-    <name>}` and change nothing about the request.
+    Naming a param says which slot the strategy drives; it does not say the
+    document put a value there for the first request, and a param the block
+    never gives one to is as empty as a param no block names at all — so
+    counting a mention as a source would let an author satisfy RULE-ENDP-066 by
+    adding `limit: {"param": <name>}` and change nothing about the request.
 
-    Which strategies give one is a property of their own shape: an offset and a
-    page cursor each require an `initial`, a keyset takes one only when
-    `initial` is authored, an opaque `Cursor` has no field for one because
-    there is no cursor before the first page, a `limit` gives one only when
-    `default` is authored, and a link strategy names no param but the `limit`.
+    Which params a strategy fills is a property of its own shape, and the test
+    is the value rather than the key everywhere: an offset, a page cursor and a
+    keyset each fill their param when `initial` resolves to something (the
+    first two require the key and still admit a `null` under it, which is the
+    same nothing `"default": null` is), a `limit` fills its param when
+    `default` does, an opaque `Cursor` has no field for one because there is no
+    cursor before the first page, and a link strategy names no param but the
+    `limit`.
     """
     referenced: list[str] = []
-    sourced: list[str] = []
+    filled: list[str] = []
     if isinstance(pagination, OffsetPagination):
         referenced.append(pagination.offset.param)
-        sourced.append(pagination.offset.param)
+        if pagination.offset.initial is not None:
+            filled.append(pagination.offset.param)
     elif isinstance(pagination, PagePagination):
         referenced.append(pagination.page.param)
-        sourced.append(pagination.page.param)
+        if pagination.page.initial is not None:
+            filled.append(pagination.page.param)
     elif isinstance(pagination, CursorPagination):
         referenced.append(pagination.cursor.param)
     elif isinstance(pagination, KeysetPagination):
         referenced.append(pagination.keyset.param)
         if pagination.keyset.initial is not None:
-            sourced.append(pagination.keyset.param)
+            filled.append(pagination.keyset.param)
     # LinkPagination declares no cursor param (spec: §Pagination Strategies —
     # link replaces the entire URL, no params traverse to follow-up requests).
     # Every strategy carries an optional `limit`.
     if pagination.limit and pagination.limit.param:
         referenced.append(pagination.limit.param)
         if pagination.limit.default is not None:
-            sourced.append(pagination.limit.param)
+            filled.append(pagination.limit.param)
 
     for name in referenced:
         param = params.get(name)
@@ -3241,7 +3263,7 @@ def _validate_pagination_wiring(
                 f"param {name!r} is referenced by pagination but does not declare "
                 "controlled_by='pagination' (spec: §Cross-Field Validation)"
             )
-    return frozenset(sourced)
+    return _BlockParams(frozenset(referenced), frozenset(filled))
 
 
 def _declares_a_type(node: Any) -> bool:
@@ -3351,13 +3373,16 @@ def _validate_response_body_paths(
 
 def _validate_replication_wiring(
     replication: Replication, params: dict[str, Param]
-) -> frozenset[str]:
+) -> _BlockParams:
     """Validate replication param references and ``controlled_by`` markers.
 
-    Returns the params this block can carry a value into, for the same reason
-    `_validate_pagination_wiring` does: a cursor value comes from the state a
-    previous incremental run left, so a block whose `supported_methods` never
-    says `incremental` names its params and fills none of them.
+    Splits the same two sets `_validate_pagination_wiring` does, on a different
+    test — replication declares no starting value anywhere, so what decides
+    whether it fills a param is `supported_methods`. A block that never runs
+    incrementally names its cursor params and leaves them with nothing, which
+    is a fact the document settles; a block that does leaves them empty only
+    until a run has stored a cursor, which is run state and belongs to the
+    residue RULE-ENDP-067 covers rather than to a refusal here.
     """
     referenced: list[str] = []
     for cm in replication.cursor_mappings:
@@ -3377,9 +3402,10 @@ def _validate_replication_wiring(
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
+    named = frozenset(referenced)
     if "incremental" not in replication.supported_methods:
-        return frozenset()
-    return frozenset(referenced)
+        return _BlockParams(named, frozenset())
+    return _BlockParams(named, named)
 
 
 def _validate_required_params_have_a_source(
@@ -3387,6 +3413,7 @@ def _validate_required_params_have_a_source(
     *,
     allow_from_input: bool,
     controlled: frozenset[str],
+    named: frozenset[str],
 ) -> None:
     """RULE-ENDP-066 — a required param the document can never fill.
 
@@ -3404,8 +3431,10 @@ def _validate_required_params_have_a_source(
 
     `controlled` is read instead of `param.controlled_by` because the marker is
     self-declared and only the block-to-param direction is checked anywhere: a
-    marker no block backs, and a block that names a param without declaring a
-    value it starts from, both leave the param with nothing behind it.
+    marker no block backs, and a block that names a param and fills nothing,
+    both leave the param with nothing behind it. `named` separates those two,
+    so the finding can name which one the author is looking at — the fixes are
+    different, and neither is the one a param with no marker at all needs.
 
     An authored `"default": null` is a value expression that resolves to
     nothing on every run, so it is not a source. The two spellings stay
@@ -3438,19 +3467,31 @@ def _validate_required_params_have_a_source(
             )
         elif allow_from_input:
             ways_out = "give it a `default`"
-        else:
+        elif param.controlled_by is None:
             ways_out = (
                 "give it a `default`, declare the `operators` a stream may "
-                "filter it with, or have a pagination or replication block "
-                "declare a value it starts from"
+                "filter it with, or have a pagination block give it a starting "
+                "value or a replication block support `incremental`"
             )
-        if param.controlled_by is not None:
-            # The author already reached for a block. Saying only what to
-            # declare would read as advice they had taken.
+        else:
+            # The author already reached for a block, so the fix is on that
+            # side. `operators` is not offered here: a param may not carry it
+            # beside `controlled_by`, so taking that advice would cost a round
+            # trip to a different refusal.
+            if name not in named:
+                cause = "no block names it"
+            elif param.controlled_by == "replication":
+                cause = (
+                    "the replication block naming it does not support "
+                    "`incremental`, so no run leaves it a cursor"
+                )
+            else:
+                cause = (
+                    "the pagination block naming it gives it no starting value"
+                )
             ways_out = (
-                f"its `controlled_by: {param.controlled_by}` marker is backed "
-                "by no block that declares a value it starts from, so "
-                + ways_out
+                f"it declares `controlled_by: {param.controlled_by}` and "
+                f"{cause} — fix that, or give it a `default`"
             )
         findings.append((name, ways_out))
 

@@ -15,6 +15,7 @@ from typing import get_args
 
 from analitiq.contracts.endpoints import (
     ApiEndpointDoc,
+    Cursor,
     CursorMapping,
     Pagination,
     Param,
@@ -114,7 +115,9 @@ def _detail(payload):
     message = _message(payload)
     _, sep, detail = message.partition(f"[RULE-ENDP-066] {_STATEMENT} (")
     assert sep, message
-    return detail.partition(") [type=")[0]
+    finding, footer, _ = detail.partition(") [type=")
+    assert footer, message
+    return finding
 
 
 # --- The refusal ------------------------------------------------------------
@@ -128,7 +131,8 @@ def test_a_required_read_param_with_no_source_is_refused():
 
 def test_the_detail_names_every_way_out_a_read_has():
     detail = _detail(_one_read_param({"in": "query", "type": "string", "required": True}))
-    for way_out in ("`default`", "`operators`", "pagination or replication", "not required"):
+    for way_out in ("`default`", "`operators`", "pagination block",
+                    "`incremental`", "not required"):
         assert way_out in detail
 
 
@@ -259,6 +263,48 @@ def test_a_block_that_supports_only_full_refresh_fills_nothing():
     assert "params['since']" in detail
 
 
+def test_a_block_supporting_both_methods_still_fills_its_cursor():
+    """`full_refresh` beside `incremental` is the ordinary shape the spec
+    teaches; the gate asks whether any run leaves a cursor, not whether every
+    one does."""
+    ApiEndpointDoc.model_validate(_replicated(
+        {"since": dict(_CURSOR_PARAM)},
+        [{"cursor_field": "updated_at", "param": "since", "operator": "gte"}],
+        methods=("full_refresh", "incremental"),
+    ))
+
+
+def test_pagination_and_replication_fill_their_own_params_in_one_document():
+    """A paginated incremental read is as ordinary as this contract gets, and
+    each param is sourced by a different block — so the two sets have to be
+    unioned, not replaced."""
+    payload = _replicated(
+        {"since": dict(_CURSOR_PARAM),
+         "per_page": {"in": "query", "type": "integer", "required": True,
+                      "controlled_by": "pagination"}},
+        [{"cursor_field": "updated_at", "param": "since", "operator": "gte"}],
+    )
+    read = payload["operations"]["read"]
+    read["pagination"] = {
+        "type": "link",
+        "link": {"next_url": {"ref": "response.body.next"}},
+        "limit": {"param": "per_page", "default": 50},
+        "stop_when": {"empty": {"ref": "response.body.rows"}},
+    }
+    read["response"]["records"] = {"ref": "response.body.rows"}
+    read["response"]["schema"] = {
+        "$schema": JSON_SCHEMA,
+        "type": "object",
+        "properties": {
+            "next": {"type": "string"},
+            "rows": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"updated_at": {"type": "string"}}}},
+        },
+    }
+    ApiEndpointDoc.model_validate(payload)
+
+
 def test_a_replication_block_naming_the_param_is_a_source():
     payload = _one_read_param({
         "in": "query", "type": "string", "required": True,
@@ -312,10 +358,13 @@ _INCREMENT = {"ref": "response.record_count"}
      "keyset": {"param": "since", "order_by_field": "id", "initial": 0}},
     {"type": "link", "link": {"next_url": {"ref": "response.body.next"}},
      "limit": {"param": "since", "default": 50}},
+    {"type": "link", "link": {"next_url": {"ref": "response.body.next"}},
+     "limit": {"param": "since", "default": {"ref": "runtime.batch_size"}}},
     {"type": "cursor", "cursor": {"param": "page_token",
                                   "next_cursor": {"ref": "response.body.next"}},
      "limit": {"param": "since", "default": 50}},
-], ids=["offset", "page", "keyset-with-initial", "link-limit", "cursor-limit"])
+], ids=["offset", "page", "keyset-with-initial", "link-limit",
+        "link-limit-expression", "cursor-limit"])
 def test_a_block_that_declares_a_starting_value_is_a_source(block):
     """Each strategy reaches the returned set by its own branch, and the branch
     is now what decides acceptance rather than only triggering a check — so a
@@ -338,7 +387,12 @@ def test_a_block_that_declares_a_starting_value_is_a_source(block):
     {"type": "keyset", "keyset": {"param": "since", "order_by_field": "id"}},
     {"type": "cursor",
      "cursor": {"param": "since", "next_cursor": {"ref": "response.body.next"}}},
-], ids=["limit-without-default", "keyset-without-initial", "opaque-cursor"])
+    {"type": "offset",
+     "offset": {"param": "since", "initial": None, "increment_by": _INCREMENT}},
+    {"type": "page",
+     "page": {"param": "since", "initial": None, "increment_by": 1}},
+], ids=["limit-without-default", "keyset-without-initial", "opaque-cursor",
+        "offset-initial-null", "page-initial-null"])
 def test_a_block_that_names_the_param_and_gives_it_nothing_is_not_a_source(block):
     """Naming a param says which slot the strategy drives, not that the
     document put a value there. Counting a mention would be worse than not
@@ -356,13 +410,44 @@ def test_a_block_that_names_the_param_and_gives_it_nothing_is_not_a_source(block
     assert "params['since']" in _detail(payload)
 
 
-def test_the_detail_names_a_marker_no_block_stands_behind():
+def test_the_detail_says_the_pagination_block_gives_the_param_nothing():
     """An author who reached for a block and got no value is not helped by
     being told to reach for one."""
     detail = _detail(_paginated(dict(_CONTROLLED), {
         "type": "keyset", "keyset": {"param": "since", "order_by_field": "id"},
     }))
-    assert "`controlled_by: pagination`" in detail
+    assert "controlled_by: pagination" in detail
+    assert "gives it no starting value" in detail
+
+
+def test_the_detail_says_a_marker_no_block_names_is_backed_by_nothing():
+    detail = _detail(_one_read_param({
+        "in": "query", "type": "string", "required": True,
+        "controlled_by": "pagination",
+    }))
+    assert "no block names it" in detail
+
+
+def test_the_detail_sends_a_replication_author_to_supported_methods():
+    """`Replication` declares no starting value anywhere, so telling this
+    author to declare one names a key the contract does not have."""
+    detail = _detail(_replicated(
+        {"since": dict(_CURSOR_PARAM)},
+        [{"cursor_field": "updated_at", "param": "since", "operator": "gte"}],
+        methods=("full_refresh",),
+    ))
+    assert "`incremental`" in detail
+    assert "starting value" not in detail
+
+
+def test_a_marker_carrying_param_is_not_told_to_declare_operators():
+    """`Param` forbids `operators` beside `controlled_by`, so offering it here
+    would cost the author a round trip to a different refusal."""
+    detail = _detail(_one_read_param({
+        "in": "query", "type": "string", "required": True,
+        "controlled_by": "replication",
+    }))
+    assert "`operators`" not in detail
 
 
 # --- The latitude an optional param keeps -----------------------------------
@@ -414,6 +499,21 @@ def test_operators_do_not_fill_a_write_param():
     assert "params['since']" in _detail(_write_payload({
         "in": "query", "type": "string", "required": True, "operators": ["gte"],
     }))
+
+
+def test_a_write_marker_does_not_divert_the_author_to_the_block():
+    """A marker on a write param is backed by nothing and can never be — a
+    write declares no block. But the fix RULE-ENDP-066 wants is still the
+    `default`, so the write branch answers first and does not send the author
+    off to a block that cannot exist. That the marker is illegal there at all
+    is a different obligation than this one.
+    """
+    detail = _detail(_write_payload({
+        "in": "query", "type": "string", "required": True,
+        "controlled_by": "pagination",
+    }))
+    assert "give it a `default`" in detail
+    assert "block" not in detail
 
 
 def test_a_write_default_is_a_source():
@@ -479,6 +579,15 @@ def test_a_field_added_to_param_puts_this_rule_in_front_of_a_reader():
         "min_items", "max_items", "operators", "controlled_by", "style",
         "explode",
     }
+
+
+def test_an_opaque_cursor_still_has_no_field_for_a_starting_value():
+    """`CursorPagination` is the one strategy that fills nothing, and the
+    reason is that `Cursor` has no field to declare a first-page value in. A
+    field added there makes it a source, and the branch that skips it becomes a
+    refusal of a working document with nothing red.
+    """
+    assert set(Cursor.model_fields) == {"param", "next_cursor"}
 
 
 @pytest.mark.parametrize("union, members", [

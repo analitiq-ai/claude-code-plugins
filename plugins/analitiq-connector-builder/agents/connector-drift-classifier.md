@@ -152,8 +152,8 @@ rules for every document" says which file carries which artifact.
   downstream consumers), endpoint-obligation-added (an addition an existing
   stream must satisfy rather than one it may opt into: a read param the
   stream is the source for that becomes `required`, so a stream supplying no
-  value for it no longer satisfies the endpoint (RULE-ENDP-067) — a param
-  that becomes required and gains a `default` in the same release asks
+  value for it now asks a different question than it did (RULE-ENDP-067) — a
+  param that becomes required and gains a `default` in the same release asks
   nothing of any stream and is not this. Or a member added to a write mode's
   required input, so a stream whose mapping does not produce it sends a
   record the provider refuses. The additive categories are for what a stream
