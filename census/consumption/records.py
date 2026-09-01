@@ -280,13 +280,15 @@ def record_report(
     affirmations: tuple[RecordAffirmation, ...],
 ) -> RecordReport:
     governed, unresolved, unlocated = _resolve(manifest, rules)
-    if not governed and not affirmations:
-        # The other non-vacuity floor: located nothing and holds nothing to
-        # diff against, so a clean report would mean the extractor stopped
-        # measuring, not a clean census. (Located nothing while affirmations
-        # exist reports as orphans instead.) Should coverage genuinely
-        # empty — every governed field claimed — this floor is retired in
-        # the same reviewed change that empties the registry.
+    if not governed and not affirmations and not unresolved:
+        # The other non-vacuity floor: located nothing, resolved nothing to
+        # complain about, and holds nothing to diff against, so a clean
+        # report would mean the extractor stopped measuring, not a clean
+        # census. (Located nothing while affirmations exist reports as
+        # orphans; unresolved field names report as their own finding, which
+        # this floor must not mask behind a refusal.) Should coverage
+        # genuinely empty — every governed field claimed — this floor is
+        # retired in the same reviewed change that empties the registry.
         raise ValueError(
             "record census located no governing records and holds no "
             "affirmations — refusing a vacuously clean record census"

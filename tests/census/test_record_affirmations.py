@@ -159,6 +159,15 @@ def test_empty_coverage_with_no_affirmations_refuses_to_run():
         record_report(_manifest(), (_rule(fields=["seen"]),), ())
 
 
+def test_unresolved_only_coverage_is_a_finding_not_a_refusal():
+    """A census whose whole coverage is misspelled field names must surface
+    the actionable unresolved finding (exit 1 at the script), not be masked
+    behind the vacuity refusal (exit 2)."""
+    report = record_report(_manifest(), (_rule(fields=["missing"]),), ())
+    assert report.unresolved_fields == (("RULE-TEST-001", "missing"),)
+    assert not report.ok
+
+
 def test_a_base_class_target_binds_through_the_mro_of_each_carrier():
     """`targets` binds through the MRO the way the registry defines it: a
     rule on the shared base governs each reachable subclass, and only the
