@@ -147,8 +147,16 @@ def test_an_empty_or_all_retired_registry_refuses_to_run(monkeypatch, tmp_path):
         path = tmp_path / "rules.json"
         path.write_text(json.dumps({"rules": rules}))
         monkeypatch.setattr(rule_record, "RULES_PATH", path)
-        with pytest.raises(ValueError, match="no active records"):
+        with pytest.raises(ValueError, match="no binding records"):
             load_rules()
+
+
+def test_empty_coverage_with_no_affirmations_refuses_to_run():
+    """The script gate holds the same floor the live pytest gate asserts:
+    located nothing and holding nothing to diff is a refusal, never a clean
+    census. Located nothing while affirmations exist reports as orphans."""
+    with pytest.raises(ValueError, match="no governing records"):
+        record_report(_manifest(), (_rule(fields=["seen"]),), ())
 
 
 def test_a_base_class_target_binds_through_the_mro_of_each_carrier():
@@ -161,17 +169,26 @@ def test_a_base_class_target_binds_through_the_mro_of_each_carrier():
 
 
 def test_a_target_no_reachable_mro_carries_is_coverage_not_a_finding():
-    report = record_report(_manifest(), (_rule(targets=["Nowhere"]),), ())
+    rules = (_rule(id="RULE-TEST-000", targets=["Nowhere"]), _rule())
+    report = record_report(_manifest(), rules, (_affirmation(),))
     assert report.ok, report.render()
-    assert governed_unread(_manifest(), (_rule(targets=["Nowhere"]),)) == {}
+    assert governed_unread(_manifest(), rules) == {"RULE-TEST-001": (_REF,)}
 
 
 def test_a_record_governing_only_read_fields_is_not_governed():
     assert governed_unread(_manifest(), (_rule(fields=["seen"]),)) == {}
 
 
-def test_an_inactive_record_is_not_governed():
-    assert governed_unread(_manifest(), (_rule(status="retired"),)) == {}
+def test_a_deprecated_record_still_binds_and_is_governed():
+    """A deprecated rule still binds while authors are moved off it, per the
+    lifecycle the registry schema defines, so its rationale is still graded."""
+    governed = governed_unread(_manifest(), (_rule(status="deprecated"),))
+    assert governed == {"RULE-TEST-001": (_REF,)}
+
+
+def test_a_non_binding_record_is_not_governed():
+    for status in ("draft", "retired"):
+        assert governed_unread(_manifest(), (_rule(status=status),)) == {}
 
 
 def test_a_complete_affirmation_set_is_ok():
@@ -202,7 +219,10 @@ def test_an_edited_rationale_is_a_finding():
 
 
 def test_an_affirmation_of_a_non_governing_record_is_orphaned():
-    for rules in ((), (_rule(status="retired"),), (_rule(fields=["seen"]),)):
+    for rules in (
+        (_rule(status="retired"),),
+        (_rule(fields=["seen"]),),
+    ):
         report = record_report(_manifest(), rules, (_affirmation(),))
         assert report.orphaned == ("RULE-TEST-001",)
         assert not report.ok
@@ -220,13 +240,16 @@ def test_a_record_naming_no_fields_is_listed_but_never_gates():
     """The fields-naming boundary made visible: a record over a carrier
     with unread fields that names no `fields:` is reported for the reviewer
     and gates nothing."""
-    report = record_report(_manifest(), (_rule(fields=[]),), ())
-    assert report.unlocated == ("RULE-TEST-001",)
+    probe = _rule(id="RULE-TEST-000", fields=[])
+    report = record_report(_manifest(), (probe, _rule()), (_affirmation(),))
+    assert report.unlocated == ("RULE-TEST-000",)
     assert report.ok, report.render()
     assert "not gating" in report.render()
     # and with no unread field on the carrier, it is not even listed
     quiet = record_report(
-        _manifest(), (_rule(targets=["Cousin"], fields=[]),), ()
+        _manifest(),
+        (_rule(id="RULE-TEST-000", targets=["Cousin"], fields=[]), _rule()),
+        (_affirmation(),),
     )
     assert quiet.unlocated == ()
 

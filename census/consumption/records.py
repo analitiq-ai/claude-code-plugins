@@ -45,6 +45,12 @@ __all__ = [
 
 _PREFIX = "analitiq.contracts."
 
+#: The statuses under which a record binds authors, per the lifecycle
+#: `rules/SCHEMA.md` defines: a deprecated rule still binds while authors
+#: are moved off it, so its rationale is still graded here; a draft is not
+#: yet in force and a retired record no longer states an obligation.
+_BINDING_STATUSES = frozenset({"active", "deprecated"})
+
 
 def load_rules() -> tuple[dict[str, Any], ...]:
     """The compiled registry, as the wheel ships it.
@@ -57,12 +63,12 @@ def load_rules() -> tuple[dict[str, Any], ...]:
 
     document = json.loads(RULES_PATH.read_text(encoding="utf-8"))
     rules = tuple(document["rules"])
-    if not any(rule["status"] == "active" for rule in rules):
+    if not any(rule["status"] in _BINDING_STATUSES for rule in rules):
         # The non-vacuity floor (`.claude/rules/guards.md`): a registry with
-        # nothing active means the extractor has stopped measuring, and must
+        # nothing binding means the extractor has stopped measuring, and must
         # not report in the same voice as a census finding nothing wrong.
         raise ValueError(
-            "compiled registry holds no active records — refusing a "
+            "compiled registry holds no binding records — refusing a "
             "vacuously clean record census"
         )
     return rules
@@ -75,7 +81,7 @@ def rationale_sha256(rationale: str) -> str:
 def governed_unread(
     manifest: dict[str, Any], rules: tuple[dict[str, Any], ...]
 ) -> dict[str, tuple[str, ...]]:
-    """Per active record, the unread fields its ``targets``/``fields`` govern.
+    """Per binding record (active or deprecated), the unread fields its ``targets``/``fields`` govern.
 
     A target names a model class bare (``Param``), and binds through the
     MRO the way the registry defines ``targets``: it is matched against the
@@ -114,7 +120,7 @@ def _resolve(
     unresolved: list[tuple[str, str]] = []
     unlocated: list[str] = []
     for rule in rules:
-        if rule["status"] != "active":
+        if rule["status"] not in _BINDING_STATUSES:
             continue
         matched = [m for target in rule["targets"] for m in by_class.get(target, ())]
         if not matched:
@@ -181,11 +187,11 @@ class RecordReport:
     orphaned: tuple[str, ...]
     #: More than one affirmation for one record.
     duplicates: tuple[str, ...]
-    #: An active record whose target is reachable but whose field expression
+    #: A binding record whose target is reachable but whose field expression
     #: names a field no matched model declares — a name this census could
     #: not resolve, reported rather than silently exempted.
     unresolved_fields: tuple[tuple[str, str], ...]
-    #: Informational, never gating: active records whose matched carriers
+    #: Informational, never gating: binding records whose matched carriers
     #: hold unread fields but which name no ``fields:`` — outside the guard
     #: by the fields-naming boundary, listed so the reviewer obligation in
     #: ``.claude/rules/reachability-dispositions.md`` has something to read.
@@ -234,7 +240,10 @@ class RecordReport:
             lambda rule_id: rule_id,
         )
         group(
-            "affirmations of records that govern no unread field — remove",
+            "affirmations of records that govern no unread field — the "
+            "record retired, or a pin bump claimed its fields; re-read the "
+            "rationale first (its manifest half may now be false) and "
+            "rewrite it before removing the entry",
             self.orphaned,
             lambda rule_id: rule_id,
         )
@@ -271,6 +280,17 @@ def record_report(
     affirmations: tuple[RecordAffirmation, ...],
 ) -> RecordReport:
     governed, unresolved, unlocated = _resolve(manifest, rules)
+    if not governed and not affirmations:
+        # The other non-vacuity floor: located nothing and holds nothing to
+        # diff against, so a clean report would mean the extractor stopped
+        # measuring, not a clean census. (Located nothing while affirmations
+        # exist reports as orphans instead.) Should coverage genuinely
+        # empty — every governed field claimed — this floor is retired in
+        # the same reviewed change that empties the registry.
+        raise ValueError(
+            "record census located no governing records and holds no "
+            "affirmations — refusing a vacuously clean record census"
+        )
     rationales = {rule["id"]: rule["rationale"] for rule in rules}
 
     seen: dict[str, int] = {}
