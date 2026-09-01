@@ -573,11 +573,13 @@ class TestRecordedWireSamples:
         # and the comma fraction separator.
         ("2024-01-02T03:04:05+02", True),
         ("2024-01-02T03:04:05,123Z", True),
-        # Whitespace around a sample is how a copy out of provider docs
-        # arrives, not a different kind of value — the wire value is the same
-        # one, and reading it otherwise exempts the field from grading.
-        ("2024-01-02T03:04:05Z\n", True),
-        ("  2024-01-02T03:04:05  ", False),
+        # Whitespace is part of the recorded string, and the recorded string
+        # is what the authoring rule says is copied verbatim. Normalised away,
+        # a value outside the profile decided a declaration — and RULE-ENDP-064
+        # grades the same entry as the literal string, so the two rules read
+        # one sample differently.
+        ("2024-01-02T03:04:05Z\n", None),
+        ("  2024-01-02T03:04:05  ", None),
         # Still anchored under the whitespace: a date-time with words around
         # it is not a date-time sample.
         ("seen at 2024-01-02T03:04:05Z", None),
@@ -613,10 +615,26 @@ class TestRecordedWireSamples:
         ("2024-01-02t03:04:05,123z", True),
         ("2024-01-02 03:04", True),
         ("2024-02-29T00:00:00+05:30", True),
-        # A leap second: RFC 3339 admits `:60` and providers emit it, so a
-        # reader calling it impossible refuses real wire evidence and tells the
-        # author to drop it.
-        ("2024-01-02T23:59:60Z", True),
+        # A leap second is real on the wire and unverifiable here: RFC 3339
+        # admits `:60` and providers emit it, so refusing it tells an author to
+        # drop valid evidence — but WHICH instants had one is an IANA table
+        # this repo vendors nothing of, so accepting it reads a mistyped
+        # `23:59:60` on an ordinary day as a real instant. Neither answer is
+        # available, so it answers nothing.
+        ("2024-01-02T23:59:60Z", None),
+        # An offset of negative zero is RFC 3339 §4.3's "UTC known, local
+        # offset not". The instant is real, and the one thing the spelling
+        # declines to say is the thing this reader is asked for.
+        ("2024-01-02T03:04:05-00:00", None),
+        ("2024-01-02T03:04:05-0000", None),
+        ("2024-01-02T03:04:05-00", None),
+        # ...and positive zero says it plainly, so it still answers.
+        ("2024-01-02T03:04:05+00:00", True),
+        # `\d` is Unicode-aware and `int()` accepts what it matches, so
+        # without ASCII semantics a value in another numeral system reads as a
+        # real zoned timestamp and decides a declaration.
+        ("\u0662\u0660\u0662\u0664-\u0660\u0661-\u0660\u0662"
+         "T\u0660\u0663:\u0660\u0664:\u0660\u0665Z", None),
         # ...and only `:60`. The bound is pinned from both sides here, as
         # every other position is: with only the accepting row, the seconds
         # bound could be any value at all and this table stays green, so a

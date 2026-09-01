@@ -3200,7 +3200,24 @@ class TestRecordedWireSampleZone:
                                ["2024-13-45T99:99:99Z"])))
         assert "names no moment that exists" in str(exc.value), exc.value
 
-    @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+    def test_a_sample_under_property_names_is_graded_here_too(self):
+        """`propertyNames` constrains each property NAME with an ordinary
+        positive subschema, so a sample recorded there is graded — by this
+        rule as by RULE-ENDP-064, which is the agreement between them the
+        exemption exists to keep.
+
+        A name is a string, so a zone-carrying Arrow type declared over one is
+        a declaration this rule can read; exempting the position left it
+        unread, and a sample disagreeing with it reported clean.
+        """
+        with pytest.raises(ValidationError) as exc:
+            parse_endpoint(_api_payload_with_field_schema(
+                "updated_at",
+                {"propertyNames": self._temporal(
+                    "Timestamp(MICROSECOND, UTC)", ["2024-01-02T03:04:05"])}))
+        assert "RULE-ENDP-063" in str(exc.value), exc.value
+
+    @pytest.mark.parametrize("key", ["not", "if"])
     def test_a_sample_under_a_negation_reached_by_a_fold_is_exempt_too(self, key):
         """The exemption has to hold on the branch that follows a fold, not
         only on the one where the type is spelled out inline.
@@ -3220,7 +3237,7 @@ class TestRecordedWireSampleZone:
             "Timestamp(MICROSECOND, UTC)", [])}
         parse_endpoint(payload)
 
-    @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+    @pytest.mark.parametrize("key", ["not", "if"])
     def test_a_sample_under_a_negation_is_not_graded_here_either(self, key):
         """The same reading RULE-ENDP-064 applies, applied by the rule that
         shares its subject. Under one of these positions the declaration says
@@ -3236,7 +3253,7 @@ class TestRecordedWireSampleZone:
             {key: self._temporal("Timestamp(MICROSECOND, UTC)",
                                  ["2024-01-02T03:04:05"])}))
 
-    @pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+    @pytest.mark.parametrize("key", ["not", "if"])
     @pytest.mark.parametrize(
         "descent", ["properties", "anyOf", "items", "items[]"])
     def test_the_exemption_reaches_below_the_negating_position(self, key, descent):

@@ -454,7 +454,7 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     `jsonschema` is imported HERE for the reason the caller states: only
     endpoint meta-validation needs it.
     """
-    from jsonschema import Draft202012Validator
+    from jsonschema import Draft202012Validator, FormatChecker
 
     nodes = [
         (node_pointer, node)
@@ -463,7 +463,25 @@ def _schema_example_findings(schema: dict, pointer: str, where: str) -> list[dic
     ]
     if not nodes:
         return []
-    root = Draft202012Validator(schema)
+    # A `format` is part of the declaration a sample sits on, and the draft
+    # leaves it an annotation unless a checker is supplied — so without one a
+    # node declaring `format: uuid` beside `examples: ["not-a-uuid"]` reported
+    # clean, while the rule promises the sample is graded against what it sits
+    # on. Which formats a checker can decide is the installed `jsonschema`'s
+    # answer, and this package declares none of its format extras: the ones
+    # needing a third-party parser are not graded at all. That is silence, the
+    # same silence every other undecidable reading here produces, and never a
+    # pass this rule claims to have checked.
+    #
+    # No registry argument, and that IS the offline guarantee: from 4.18 —
+    # this package's declared floor — `jsonschema` resolves through
+    # `referencing` with no retrieve function, so a non-local `$ref` raises
+    # `Unresolvable` instead of opening the URL an authored document names.
+    # (The pre-4.18 resolver did fetch, which is why the floor is where it
+    # is.) A test drives a remote reference with the socket layer booby-
+    # trapped, so a release that restored retrieval would fail here rather
+    # than in a run that quietly reached the network.
+    root = Draft202012Validator(schema, format_checker=FormatChecker())
     findings: list[dict] = []
     for node_pointer, node in nodes:
         validator = root.evolve(schema=node)
@@ -1037,30 +1055,61 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # nobody has written yet. Guarding one of them and not the rest reads
         # as covered and is not — unguarded, a raise escapes to the dispatch,
         # which discards every finding on every OTHER endpoint too.
+        # Identity is settled out here, ahead of the guard. It is decided by
+        # reading one key, it cannot crash, and it is a property of the SET —
+        # so a duplicate is a verdict about two files that a crash in either
+        # one has no bearing on. Inside the guarded unit the finding was
+        # appended to a list the guard then replaced wholesale, so a second
+        # endpoint that both duplicated an id and crashed lost the duplicate
+        # report, and the author met it only after fixing the unrelated crash.
+        findings.extend(_endpoint_identity_findings(ep_doc, ep_path, seen_ids))
         findings.extend(_run_guarded(
-            _one_endpoint_findings, ep_doc, ep_path, doc, read_doc, seen_ids,
-            vid="type-map-coverage",
+            _one_endpoint_findings, ep_doc, ep_path, doc, read_doc,
+            # `document`, not any one check's id: this guard wraps the whole
+            # endpoint, so whichever walk gave out, the id it reported under
+            # named a check that may never have run — and consumers route
+            # diagnostics by that id. Naming the document says what is true,
+            # which is that nothing about this one was decided.
+            vid="document",
             path="/",
             scope=(
                 f"Endpoint {ep_path.name} was not checked to the end; every "
-                "other endpoint in this connector was."
+                "other endpoint in this connector was, and its endpoint_id "
+                "was still registered against the rest."
             )))
     return findings
 
 
-def _one_endpoint_findings(
-    ep_doc: Any, ep_path: Path, connector_doc: dict, read_doc: Any,
-    seen_ids: dict[str, str],
+def _endpoint_identity_findings(
+    ep_doc: Any, ep_path: Path, seen_ids: dict[str, str],
 ) -> list[dict]:
-    """Everything checkable about one sibling endpoint of a connector.
+    """Register this endpoint's id, and report it if the set already had it.
 
     `seen_ids` is carried across endpoints and mutated here, because
     `endpoint-id-unique` is a property of the set rather than of any one
-    document. It is registered as soon as the id is read, before the walks
-    below — so an endpoint whose later checks crash has still claimed its id,
-    and a duplicate in a subsequent file is still reported. That is the right
-    way round: the id WAS established, and only what the document declares
-    underneath it was not.
+    document.
+    """
+    ep_id = ep_doc.get("endpoint_id") if isinstance(ep_doc, dict) else None
+    if not isinstance(ep_id, str) or not ep_id:
+        return []
+    if ep_id not in seen_ids:
+        seen_ids[ep_id] = ep_path.name
+        return []
+    return [finding(
+        "endpoint-id-unique", "error", "/endpoint_id",
+        f"duplicate endpoint_id {ep_id!r}: declared by both "
+        f"'endpoints/{seen_ids[ep_id]}' and 'endpoints/{ep_path.name}'; "
+        "endpoint_id must be unique within the connector release.")]
+
+
+def _one_endpoint_findings(
+    ep_doc: Any, ep_path: Path, connector_doc: dict, read_doc: Any,
+) -> list[dict]:
+    """Everything checkable about one sibling endpoint of a connector.
+
+    Identity is not here: it is settled by the caller, outside the guard that
+    wraps this, because it cannot crash and a duplicate is a verdict about two
+    files rather than about the walks below.
     """
     findings: list[dict] = []
     # Each sibling endpoint is a full api-endpoint document — validate it
@@ -1068,16 +1117,6 @@ def _one_endpoint_findings(
     findings.extend(_model_findings(ep_doc, _API_ENDPOINT_ADAPTER))
     findings.extend(endpoint_filename_findings(ep_doc, ep_path.name))
     findings.extend(_endpoint_locator_findings(ep_doc))
-    ep_id = ep_doc.get("endpoint_id") if isinstance(ep_doc, dict) else None
-    if isinstance(ep_id, str) and ep_id:
-        if ep_id in seen_ids:
-            findings.append(finding(
-                "endpoint-id-unique", "error", "/endpoint_id",
-                f"duplicate endpoint_id {ep_id!r}: declared by both "
-                f"'endpoints/{seen_ids[ep_id]}' and 'endpoints/{ep_path.name}'; "
-                "endpoint_id must be unique within the connector release."))
-        else:
-            seen_ids[ep_id] = ep_path.name
     if not isinstance(ep_doc, dict):
         # A JSON array/string endpoint file is already a recorded model error;
         # the walks below call `.get()` and would crash, replacing the

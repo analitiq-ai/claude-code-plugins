@@ -222,7 +222,12 @@ _WIRE_DATETIME_PATTERN = (
     r"(?P<hour>\d{2}):(?P<minute>\d{2})(?::(?P<second>\d{2})(?:[.,]\d+)?)?"
     r"(?P<zone>[Zz]|[+-]\d{2}(?::?\d{2})?)?"
 )
-_WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$")
+#: ASCII, because `\d` is Unicode-aware and `int()` accepts what it matches:
+#: without this, a value spelled in Arabic-Indic numerals reads as a real
+#: zoned wire timestamp and decides a declaration. RFC 3339 spells its
+#: productions in ASCII digits, and a value outside that grammar is one this
+#: profile has no answer about rather than one it grades.
+_WIRE_DATETIME_RE = re.compile(f"^{_WIRE_DATETIME_PATTERN}$", re.ASCII)
 #: The largest seconds value the profile reads as a real one. 60 is a
 #: leap second (RFC 3339 §5.6), which a wire value can carry and no
 #: `datetime` can hold.
@@ -667,16 +672,24 @@ def _read_wire_datetime(sample: Any) -> re.Match[str] | None:
     """
     if not isinstance(sample, str):
         return None
-    # Stripped first. A sample is copied out of provider documentation, and a
-    # copy carries the whitespace around what was selected; `"…05Z\n"` is the
-    # same wire value as `"…05Z"` and reading it as a different KIND of value
-    # would quietly exempt the field from grading — the shape it takes is what
-    # decides whether it is graded at all, so whitespace would decide that too.
-    # `fullmatch` then, not `match`: the pattern is anchored and `$` matches
-    # before a trailing newline, so `match` would read anything appended to a
+    # The recorded string, as recorded. Stripping first read `" …05Z "` as the
+    # same wire value as `"…05Z"`, on the reading that a copy carries the
+    # whitespace around what was selected — but the authoring rule is that a
+    # sample is copied verbatim, so that whitespace is either the provider's,
+    # in which case the value is not an RFC 3339 date-time and this profile
+    # has no answer about it, or the author's, in which case silence is what a
+    # sloppy sample costs and never a wrong verdict.
+    #
+    # RULE-ENDP-064 settles it: that rule grades the same entry against the
+    # node's own schema as the literal string it is. Two rules reading one
+    # sample differently is the disagreement the negating-position exemption
+    # exists to prevent, and normalising here re-created it one layer down.
+    #
+    # `fullmatch`, not `match`: the pattern is anchored and `$` matches before
+    # a trailing newline, so `match` would read anything appended to a
     # date-time as a date-time. Same trap `_validate_arrow_type_in_json_schema`
     # names, in the direction it applies here.
-    return _WIRE_DATETIME_RE.fullmatch(sample.strip())
+    return _WIRE_DATETIME_RE.fullmatch(sample)
 
 
 def _offset_is_real(zone: str | None) -> bool:
@@ -724,11 +737,12 @@ def sample_names_an_instant(sample: Any) -> bool | None:
     this function was written to stop.
 
     Three answers, like its neighbours: True for a real instant, False for a
-    value written as a date-time that names no such moment, and None for a
-    value with no date-time shape at all. None rather than True for that last
-    case — an epoch or a provider spelling has not been verified, and answering
-    True would let a caller read "this is a real instant" out of a value
-    nothing read.
+    value written as a date-time that names no such moment, and None for one
+    this reader cannot verify — a value with no date-time shape at all, and
+    the two spellings below that are well-formed and unanswerable. None rather
+    than True in every such case: an epoch, a provider spelling or a leap
+    second has not been verified, and answering True would let a caller read
+    "this is a real instant" out of a value nothing read.
     """
     match = _read_wire_datetime(sample)
     if match is None:
@@ -736,11 +750,28 @@ def sample_names_an_instant(sample: Any) -> bool | None:
     if (int(match.group("hour")) > _MAX_WIRE_HOUR
             or int(match.group("minute")) > _MAX_WIRE_MINUTE):
         return False
-    # The seconds position is optional in the profile.
+    # A leap second is real on the wire and unverifiable here. RFC 3339 admits
+    # `:60` and providers emit it, but WHICH instants had one is a table the
+    # IANA database owns and this repo vendors nothing of — so `:60` is
+    # accepted on every date by anything that only range-checks it, which
+    # reads a mistyped `23:59:60` on an ordinary day as a real instant and
+    # decides a declaration from it. Refusing it instead would tell an author
+    # to drop evidence that is genuinely valid. Neither, then: no answer.
     second = match.group("second")
+    if second is not None and int(second) == _MAX_WIRE_SECOND:
+        return None
     if second is not None and int(second) > _MAX_WIRE_SECOND:
         return False
-    if not _offset_is_real(match.group("zone")):
+    # `-00:00` is RFC 3339 §4.3's "the UTC time is known, the local offset is
+    # not". Numerically it is `+00:00`; as a statement it is the one offset
+    # spelling that declines to name a zone, so reading it as ordinary zone
+    # evidence asserts more than the value does — and refusing it would be
+    # worse, since the instant it names is perfectly real.
+    zone = match.group("zone")
+    if (zone is not None and zone[0] == "-"
+            and not int(zone[1:].replace(":", "").ljust(4, "0"))):
+        return None
+    if not _offset_is_real(zone):
         return False
     try:
         date(int(match.group("year")), int(match.group("month")),
@@ -761,7 +792,11 @@ def sample_carries_zone(sample: Any) -> bool | None:
     — a `Z` on an impossible date is not a report about zones.
     """
     match = _read_wire_datetime(sample)
-    if match is None or sample_names_an_instant(sample) is False:
+    # `is not True`, not `is False`: an unverifiable instant — a leap second,
+    # an unknown local offset — is exactly as mute about zones as an
+    # impossible one. Testing only for the refusal let those read as zone
+    # evidence, which is the one answer neither of them carries.
+    if match is None or sample_names_an_instant(sample) is not True:
         return None
     return match.group("zone") is not None
 

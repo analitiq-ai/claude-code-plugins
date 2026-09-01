@@ -1630,12 +1630,21 @@ def _validate_arrow_type_in_json_schema(
 #: know the difference — RULE-ENDP-063 and RULE-ENDP-064 both grade a recorded
 #: sample against the declaration it sits on, and under one of these positions
 #: that declaration describes the value's opposite, so the correct
-#: counter-example reads as a contradiction. Owned here because it is a fact
-#: about the draft's applicators, the same as the sets above, and because the
-#: walks that need it are here: both read it, and neither restates which
-#: keywords it holds.
+#: counter-example reads as a contradiction.
+#:
+#: `propertyNames` is deliberately absent, having been a member: it constrains
+#: each property NAME, and a subschema every name must satisfy is an ordinary
+#: positive one. A sample recorded there is an example of a name and is graded
+#: against the constraint on names — exempting it let a node contradict its own
+#: declaration and report clean. What the position changes is what the sample
+#: is evidence ABOUT, which is a question for whoever reads it, not a reason
+#: not to check it.
+#:
+#: Owned here because it is a fact about the draft's applicators, the same as
+#: the sets above, and because the walks that need it are here: both read it,
+#: and neither restates which keywords it holds.
 JSON_SCHEMA_NEGATED_SCHEMA_KEYS: frozenset[str] = frozenset({
-    "not", "if", "propertyNames",
+    "not", "if",
 })
 
 #: The inventories above in a fixed order, and what every walk over them

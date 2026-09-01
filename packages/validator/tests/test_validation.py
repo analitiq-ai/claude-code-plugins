@@ -298,7 +298,7 @@ def test_a_sample_is_graded_against_its_own_node_not_the_composition(validator):
     ], errors
 
 
-@pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+@pytest.mark.parametrize("key", ["not", "if"])
 def test_a_sample_under_a_negation_is_not_graded_against_its_own_opposite(
     validator, key,
 ):
@@ -314,7 +314,7 @@ def test_a_sample_under_a_negation_is_not_graded_against_its_own_opposite(
     assert _example_errors(validator, ep) == []
 
 
-@pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+@pytest.mark.parametrize("key", ["not", "if"])
 def test_a_counter_example_written_as_a_reference_is_exempt_too(validator, key):
     """The exemption reaches a counter-example spelled as a `$ref`, which is
     the ordinary way to write one without repeating the type. Its twin in the
@@ -324,6 +324,112 @@ def test_a_counter_example_written_as_a_reference_is_exempt_too(validator, key):
         {key: {"$ref": "#/$defs/Flag", "examples": ["0"]}},
         Flag={"type": "boolean"})
     assert _example_errors(validator, ep) == []
+
+
+@pytest.mark.parametrize("fmt, bad", [
+    ("uuid", "not-a-uuid"),
+    ("email", "nope"),
+    ("ipv4", "999.1.1.1"),
+    ("date", "2024-13-45"),
+])
+def test_a_declared_format_is_part_of_the_declaration(validator, fmt, bad):
+    """The draft leaves `format` an annotation unless a checker is supplied,
+    so a node declaring one graded its sample against everything except the
+    keyword the author wrote to describe it — and reported clean.
+
+    Which formats a checker can decide belongs to the installed `jsonschema`;
+    these are the ones it settles with no format extra, and this package
+    declares none. A format needing a third-party parser is not graded, which
+    is silence rather than a pass this rule claims to have checked.
+    """
+    ep = _sample_endpoint({"type": "string", "native_type": "STRING",
+                           "arrow_type": "Utf8", "format": fmt,
+                           "examples": [bad]})
+    paths = [e["path"] for e in _example_errors(validator, ep)]
+    assert paths == [
+        "/operations/read/response/schema/items/properties/a/examples/0"], paths
+
+
+def test_a_valid_sample_under_a_declared_format_still_passes(validator):
+    """The other direction, so the case above cannot pass by the checker
+    rejecting everything it is handed."""
+    ep = _sample_endpoint({"type": "string", "native_type": "STRING",
+                           "arrow_type": "Utf8", "format": "uuid",
+                           "examples": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"]})
+    assert _example_errors(validator, ep) == []
+
+
+def test_grading_a_sample_never_reaches_the_network(validator, monkeypatch):
+    """Validation here is offline, and a `$ref` in an authored document is the
+    one place that could stop being true.
+
+    From 4.18 — this package's declared floor — `jsonschema` resolves through
+    `referencing` with no retrieve function, so a non-local reference raises
+    rather than opening the URL. That is a property of the dependency, not of
+    this code, which is exactly why it is pinned here: a release restoring
+    retrieval would otherwise turn an authored document into an outbound
+    request, and the guard would report the wait as a crash long after it had
+    already been made.
+    """
+    import socket
+
+    class Reached(Exception):
+        pass
+
+    def _boom(*_args, **_kwargs):
+        raise Reached("the validator opened a socket")
+
+    monkeypatch.setattr(socket, "socket", _boom)
+    monkeypatch.setattr(socket, "create_connection", _boom)
+
+    ep = _sample_endpoint({"$ref": "https://example.invalid/thing.json",
+                           "examples": ["x"]})
+    findings = validator.validate_document(ep, expect_crash=True)
+
+    assert not any(isinstance(f, Reached) for f in findings)
+    assert any(f["validator"] == "embedded-schema-example" and is_guard_finding(f)
+               for f in findings), findings
+
+
+def test_a_duplicate_id_survives_a_crash_in_the_endpoint_that_duplicates_it(
+    validator, tmp_path, monkeypatch, connector_base,
+):
+    """Identity is decided by reading one key, and a duplicate is a verdict
+    about two files. Inside the guarded unit that verdict went into a list the
+    guard replaced wholesale, so an endpoint that both duplicated an id and
+    crashed reported only the crash — and the author met the duplicate on the
+    next run, after fixing something unrelated to it.
+    """
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("brought down by this endpoint")
+
+    monkeypatch.setattr(connectors, "_embedded_schema_findings", _boom)
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                {"a.json": _endpoint("STRING", "Utf8", endpoint_id="a"),
+                 "b.json": _endpoint("STRING", "Utf8", endpoint_id="a")})
+
+    findings = validator.check_coverage(
+        connector_base, tmp_path / "connector.json", expect_crash=True)
+
+    assert any(f["validator"] == "endpoint-id-unique" for f in findings), findings
+    assert any(is_guard_finding(f) for f in findings), findings
+
+
+def test_a_sample_under_property_names_is_graded_against_the_name_rule(validator):
+    """`propertyNames` constrains each property NAME, and a subschema every
+    name must satisfy is an ordinary positive one — so a sample recorded there
+    is an example of a name, and it is graded.
+
+    It was exempt, on the reading that a sample is never a key. That let a node
+    contradict its own declaration and report clean: the position changes what
+    the sample is evidence ABOUT, which is a question for whoever reads it, not
+    a reason to leave the contradiction unchecked.
+    """
+    ep = _sample_endpoint({"propertyNames": {"pattern": "^x_",
+                                             "examples": ["bad"]}})
+    paths = [e["path"] for e in _example_errors(validator, ep)]
+    assert any("/propertyNames/examples/0" in p for p in paths), paths
 
 
 @pytest.mark.parametrize("name", ["not", "if", "propertyNames"])
@@ -343,7 +449,7 @@ def test_a_field_named_after_a_negating_keyword_is_still_graded(validator, name)
     assert any(f"/properties/{name}/examples/0" in p for p in paths), paths
 
 
-@pytest.mark.parametrize("key", ["not", "if", "propertyNames"])
+@pytest.mark.parametrize("key", ["not", "if"])
 @pytest.mark.parametrize("descent", ["properties", "anyOf", "items"])
 def test_a_typed_sample_under_a_negation_parses_and_is_exempt(
     validator, key, descent,

@@ -7,10 +7,9 @@ statement: >
   samples bear out, and each such sample written as a date-time MUST name a
   moment that exists. A node reached through a position whose subschema does
   not describe the instance is exempt — `not`, which says what the instance
-  must not be; `if`, which selects a branch rather than constraining; and
-  `propertyNames`, which constrains the KEYS. A sample recorded at one of
-  those is not a value the declaration beside it claims to describe, so
-  agreement between them says nothing either way. Recording a sample never obliges a node to declare a type it
+  must not be, and `if`, which selects a branch rather than constraining. A
+  sample recorded at one of those is not a value the declaration beside it
+  claims to describe, so agreement between them says nothing either way. Recording a sample never obliges a node to declare a type it
   has no evidence for.
 tier: advisory
 severity: error

@@ -5,7 +5,7 @@ statement: >
 tier: referential
 severity: error
 scopes: [connector-package]
-validator: "analitiq.validator.connectors::_one_endpoint_findings"
+validator: "analitiq.validator.connectors::_endpoint_identity_findings"
 owners: [connector-plugin, engine]
 rationale: >
   The id is what a stream pins, and a release resolves it to one document, so
