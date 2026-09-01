@@ -3195,6 +3195,31 @@ def _validate_param_wiring(
             )
 
 
+def _declares_a_value(value: Any) -> bool:
+    """Whether an authored slot carries something that can resolve to a value.
+
+    A source is only a source if what the document put there can arrive. Three
+    shapes cannot, and all three are non-`None` so a bare null check reads them
+    as present: an authored `null`; `{"literal": null}`, which the resolver
+    unwraps back to nothing; and an object that is not a value expression at
+    all — `{}`, or a binding form like `{"from_param": ...}`, which the
+    resolver does not implement and returns nothing for.
+
+    Used for a param's `default` and for a pagination strategy's starting
+    value, which are the same question asked in two places.
+    """
+    if value is None:
+        return False
+    if not isinstance(value, dict):
+        return True
+    keys = set(_RESOLVER_EXPRESSION_KEYS) & set(value)
+    if len(keys) != 1:
+        return False
+    if "literal" in keys:
+        return value["literal"] is not None
+    return True
+
+
 class _BlockParams(NamedTuple):
     """What a pagination or replication block names, and what it fills.
 
@@ -3220,36 +3245,35 @@ def _validate_pagination_wiring(
     adding `limit: {"param": <name>}` and change nothing about the request.
 
     Which params a strategy fills is a property of its own shape, and the test
-    is the value rather than the key everywhere: an offset, a page cursor and a
-    keyset each fill their param when `initial` resolves to something (the
-    first two require the key and still admit a `null` under it, which is the
-    same nothing `"default": null` is), a `limit` fills its param when
-    `default` does, an opaque `Cursor` has no field for one because there is no
-    cursor before the first page, and a link strategy names no param but the
-    `limit`.
+    is `_declares_a_value` rather than the key's presence everywhere: an
+    offset, a page cursor and a keyset each fill their param when `initial`
+    carries something that can arrive (the first two require the key and still
+    admit a nothing under it), a `limit` fills its param when `default` does,
+    an opaque `Cursor` has no field for one because there is no cursor before
+    the first page, and a link strategy names no param but the `limit`.
     """
     referenced: list[str] = []
     filled: list[str] = []
     if isinstance(pagination, OffsetPagination):
         referenced.append(pagination.offset.param)
-        if pagination.offset.initial is not None:
+        if _declares_a_value(pagination.offset.initial):
             filled.append(pagination.offset.param)
     elif isinstance(pagination, PagePagination):
         referenced.append(pagination.page.param)
-        if pagination.page.initial is not None:
+        if _declares_a_value(pagination.page.initial):
             filled.append(pagination.page.param)
     elif isinstance(pagination, CursorPagination):
         referenced.append(pagination.cursor.param)
     elif isinstance(pagination, KeysetPagination):
         referenced.append(pagination.keyset.param)
-        if pagination.keyset.initial is not None:
+        if _declares_a_value(pagination.keyset.initial):
             filled.append(pagination.keyset.param)
     # LinkPagination declares no cursor param (spec: §Pagination Strategies —
     # link replaces the entire URL, no params traverse to follow-up requests).
     # Every strategy carries an optional `limit`.
     if pagination.limit and pagination.limit.param:
         referenced.append(pagination.limit.param)
-        if pagination.limit.default is not None:
+        if _declares_a_value(pagination.limit.default):
             filled.append(pagination.limit.param)
 
     for name in referenced:
@@ -3436,11 +3460,14 @@ def _validate_required_params_have_a_source(
     so the finding can name which one the author is looking at — the fixes are
     different, and neither is the one a param with no marker at all needs.
 
-    An authored `"default": null` is a value expression that resolves to
-    nothing on every run, so it is not a source. The two spellings stay
-    distinguishable in `model_fields_set`, and reading them alike through
-    `param.default is None` is the deliberate choice — keying on the set
-    instead would let the rule be walked around by typing four characters.
+    Whether a `default` is a source is `_declares_a_value`, which is also what
+    grades a strategy's starting value: an authored `null`, a
+    `{"literal": null}` the resolver unwraps back to nothing, and an object
+    that is no value expression at all each leave the slot as empty as no
+    `default` at all. An authored `null` and an absent key stay distinguishable
+    in `model_fields_set`; reading them alike is the deliberate choice, since
+    keying on the set would let the rule be walked around by typing four
+    characters.
 
     What this proves is that a source is DECLARED, never that it resolves. A
     `default` reffing a connection parameter the connection leaves unset, and a
@@ -3450,7 +3477,7 @@ def _validate_required_params_have_a_source(
     """
     findings: list[tuple[str, str]] = []
     for name, param in params.items():
-        if not param.required or param.default is not None:
+        if not param.required or _declares_a_value(param.default):
             continue
         if not allow_from_input and (param.operators or name in controlled):
             continue

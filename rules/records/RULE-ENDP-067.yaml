@@ -1,8 +1,10 @@
 id: RULE-ENDP-067
 statement: >
-  A param MUST be declared `required` only where its operation is wrong
+  A param MUST be declared `required` if and only if its operation is wrong
   without the value: `required` is the contract's demand that such an
-  operation fail rather than send the request with that param's slot dropped.
+  operation fail rather than send the request with that param's slot dropped,
+  so leaving the flag off a param the operation cannot be correct without is
+  the same defect as setting it on one whose absence the operation tolerates.
 tier: judgment
 severity: error
 scopes: [api-endpoint]

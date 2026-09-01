@@ -80,10 +80,15 @@ prohibitions below).
 - **`required` is a decision, not documentation** (RULE-ENDP-067) — set it only
   where the operation is wrong without the value, and then give the param a
   source the document can actually supply (RULE-ENDP-066). Which source is the
-  craft: a value the connection holds takes
-  `"default": {"ref": "connection.parameters.<name>"}`, while a param a stream
-  narrows on is sourced by the `operators` it declares — and a param may not
-  carry those beside `controlled_by`.
+  craft: a value the connection holds takes a `default` reffing it under the
+  scope that connection value is actually stored in — a contract input under
+  `connection.parameters`, a post-auth selection under `connection.selections`,
+  an auto-discovered value under `connection.discovered` (see
+  `connector-builder/references/lifecycle-phases.md`). Endpoint validation
+  grades the leading `connection` token only, so the wrong sub-scope validates
+  and resolves to nothing. A param a stream narrows on is sourced by the
+  `operators` it declares instead — and a param may not carry those beside
+  `controlled_by`.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
   only `x-*` siblings (RULE-ENDP-022).

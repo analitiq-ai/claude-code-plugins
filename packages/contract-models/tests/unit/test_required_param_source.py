@@ -205,15 +205,28 @@ def test_a_literal_default_is_a_source():
     }))
 
 
-@pytest.mark.parametrize("falsy", [False, 0, "", [], {}])
+@pytest.mark.parametrize("falsy", [False, 0, "", []])
 def test_a_falsy_default_is_a_source(falsy):
-    """A declared `false`, `0` or empty string is a value the author chose.
-
-    The check tests `default is None`, not truthiness — swapping the two keeps
+    """A declared `false`, `0`, empty string or empty list is a value the
+    author chose. The check does not test truthiness — doing so would keep
     every other case here green while newly refusing ordinary documents.
     """
     ApiEndpointDoc.model_validate(_one_read_param({
         "in": "query", "type": "boolean", "required": True, "default": falsy,
+    }))
+
+
+@pytest.mark.parametrize("default", [
+    {"literal": None}, {}, {"from_param": "other"},
+], ids=["literal-null", "empty-object", "binding-form"])
+def test_a_default_the_resolver_cannot_turn_into_a_value_is_not_a_source(default):
+    """Three shapes are non-null and still arrive as nothing: the resolver
+    unwraps `{"literal": null}` back to null, and it implements neither the
+    empty object nor a binding form, so both return nothing. Reading them as
+    present is the same walkaround an authored `null` would be, spelled longer.
+    """
+    assert "params['since']" in _detail(_one_read_param({
+        "in": "query", "type": "string", "required": True, "default": default,
     }))
 
 
@@ -395,8 +408,15 @@ def test_a_block_that_declares_a_starting_value_is_a_source(block):
      "offset": {"param": "since", "initial": None, "increment_by": _INCREMENT}},
     {"type": "page",
      "page": {"param": "since", "initial": None, "increment_by": 1}},
+    {"type": "offset",
+     "offset": {"param": "since", "initial": {"literal": None},
+                "increment_by": _INCREMENT}},
+    {"type": "keyset",
+     "keyset": {"param": "since", "order_by_field": "id",
+                "initial": {"literal": None}}},
 ], ids=["limit-without-default", "keyset-without-initial", "opaque-cursor",
-        "offset-initial-null", "page-initial-null"])
+        "offset-initial-null", "page-initial-null",
+        "offset-initial-literal-null", "keyset-initial-literal-null"])
 def test_a_block_that_names_the_param_and_gives_it_nothing_is_not_a_source(block):
     """Naming a param says which slot the strategy drives, not that the
     document put a value there. Counting a mention would be worse than not
