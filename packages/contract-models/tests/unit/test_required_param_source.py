@@ -29,16 +29,20 @@ JSON_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 # `violation` prefixes the record's statement, which for this rule already
 # names every source a read has. Asserting on the whole message would pass on
 # the statement alone, so the detail is split off and pinned on its own.
-_STATEMENT = " ".join(
-    next(r for r in all_rules() if r.id == "RULE-ENDP-066").statement.split()
-)
+# Keyed rather than searched: a registry that has lost the record should fail
+# as a missing key, not as an exhausted generator.
+_RECORDS = {record.id: record for record in all_rules()}
+_STATEMENT = " ".join(_RECORDS["RULE-ENDP-066"].statement.split())
 
 
 def _read_payload(params, *, query=None, path="/v1/records", path_params=None):
     """A minimal read binding each declared param into the request."""
-    request = {"method": "GET", "path": path}
-    request["query"] = query if query is not None else {
-        name: {"from_param": name} for name in params
+    request = {
+        "method": "GET",
+        "path": path,
+        "query": query if query is not None else {
+            name: {"from_param": name} for name in params
+        },
     }
     if path_params is not None:
         request["path_params"] = path_params
