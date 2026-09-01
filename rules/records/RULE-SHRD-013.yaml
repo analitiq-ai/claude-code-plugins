@@ -19,7 +19,8 @@ rationale: >
   a different stage, and an author who learns the vocabulary at one of them
   carries it to the rest. Not every stage is read: the per-assignment
   validation override is the block RULE-STRM-040 governs, and the pinned
-  contract-consumption manifest claims no read of it. `RULE-RETRY-001`
+  contract-consumption manifest claims no read of the strategy it
+  declares. `RULE-RETRY-001`
   reads the sibling retry fields on the same base.
 status: active
 superseded_by: null

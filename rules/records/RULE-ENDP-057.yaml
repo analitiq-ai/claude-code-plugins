@@ -20,8 +20,9 @@ rationale: >
   boundary's window covers, a gap that reads as missing rows or duplicates
   rather than as a mapping to fix — which is why each member draws on a
   closed vocabulary instead of free text. The pinned contract-consumption
-  manifest claims no read of any field of the windowed form, and it has no
-  effect on a run today; the admissible values are the contract's to settle,
+  manifest claims no read of the wire half of the windowed form — the
+  format, and the comparison at each end — and it has no effect on a run
+  today; the admissible values are the contract's to settle,
   not whichever read the manifest claims.
 status: active
 superseded_by: null

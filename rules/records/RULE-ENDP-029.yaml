@@ -14,9 +14,9 @@ rationale: >
   and one that collides with a reserved response-scope name would give one
   reference two meanings — which is why the reserved set and the key
   pattern are graded where the document is read, at validation. The pinned
-  contract-consumption manifest claims no read of the write-response
-  block, and it has no effect on a run today; the pattern is what keeps
-  the names addressable wherever the block is read. The write side follows
+  contract-consumption manifest claims no read of the metadata, and it has
+  no effect on a run today; the pattern is what keeps the names
+  addressable wherever the block is read. The write side follows
   the read side's key rules deliberately rather than inventing its own: an
   author who learned the shape on a read would otherwise meet a different,
   silent contract on a write.

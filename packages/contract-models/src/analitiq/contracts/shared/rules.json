@@ -3004,7 +3004,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A metadata key is declared as an addressable name in the response scope, and one that collides with a reserved response-scope name would give one reference two meanings — which is why the reserved set and the key pattern are graded where the document is read, at validation. The pinned contract-consumption manifest claims no read of the write-response block, and it has no effect on a run today; the pattern is what keeps the names addressable wherever the block is read. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
+   "rationale": "A metadata key is declared as an addressable name in the response scope, and one that collides with a reserved response-scope name would give one reference two meanings — which is why the reserved set and the key pattern are graded where the document is read, at validation. The pinned contract-consumption manifest claims no read of the metadata, and it has no effect on a run today; the pattern is what keeps the names addressable wherever the block is read. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3718,7 +3718,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Each end of a window carries its own comparison because whether a bound is inclusive is a provider fact, and the ends of a provider's window are routinely spelled differently; the format is the spelling the document declares for sending the bounds. A wrong end is the quiet kind of defect — a comparison the provider does not apply changes which records a boundary's window covers, a gap that reads as missing rows or duplicates rather than as a mapping to fix — which is why each member draws on a closed vocabulary instead of free text. The pinned contract-consumption manifest claims no read of any field of the windowed form, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
+   "rationale": "Each end of a window carries its own comparison because whether a bound is inclusive is a provider fact, and the ends of a provider's window are routinely spelled differently; the format is the spelling the document declares for sending the bounds. A wrong end is the quiet kind of defect — a comparison the provider does not apply changes which records a boundary's window covers, a gap that reads as missing rows or duplicates rather than as a mapping to fix — which is why each member draws on a closed vocabulary instead of free text. The pinned contract-consumption manifest claims no read of the wire half of the windowed form — the format, and the comparison at each end — and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4374,7 +4374,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A level is a threshold, ordered rather than merely named — the level an author chooses states how much of a failed run they expect to have to read afterwards — and an unrecognised value has no position in that ordering, so the vocabulary is closed where the document is graded. The pinned contract-consumption manifest claims no read of the logging block, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
+   "rationale": "A level is a threshold, ordered rather than merely named — the level an author chooses states how much of a failed run they expect to have to read afterwards — and an unrecognised value has no position in that ordering, so the vocabulary is closed where the document is graded. The pinned contract-consumption manifest claims no read of the level, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5351,7 +5351,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Each member is a different disposition for data the run could not deliver — stop, park it where someone can retrieve it, or drop it and continue — so where an error-handling block is read, the choice decides whether records that failed are recoverable at all. It is declared once on the shared base because every block that inherits it is answering the same question about a different stage, and an author who learns the vocabulary at one of them carries it to the rest. Not every stage is read: the per-assignment validation override is the block RULE-STRM-040 governs, and the pinned contract-consumption manifest claims no read of it. `RULE-RETRY-001` reads the sibling retry fields on the same base.\n",
+   "rationale": "Each member is a different disposition for data the run could not deliver — stop, park it where someone can retrieve it, or drop it and continue — so where an error-handling block is read, the choice decides whether records that failed are recoverable at all. It is declared once on the shared base because every block that inherits it is answering the same question about a different stage, and an author who learns the vocabulary at one of them carries it to the rest. Not every stage is read: the per-assignment validation override is the block RULE-STRM-040 governs, and the pinned contract-consumption manifest claims no read of the strategy it declares. `RULE-RETRY-001` reads the sibling retry fields on the same base.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5527,7 +5527,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents, and an inner declaration beside a scalar describes nesting the type cannot hold — a shape that contradicts itself before anything consumes it. The declared sub-tree reaches a run inside the assignment target it sits on, which the pinned contract-consumption manifest consumes whole rather than field by field, so the contradiction is caught where the shape is graded field by field: at validation. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
+   "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents, and an inner declaration beside a scalar describes nesting the type cannot hold — a shape that contradicts itself before anything consumes it. The declared sub-tree reaches a run inside the assignment target it sits on, and the pinned contract-consumption manifest claims no field-level read of the shape members declared here, so the contradiction is caught where the shape is graded field by field: at validation. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
    "status": "active",
    "superseded_by": null
   },
