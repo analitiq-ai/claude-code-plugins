@@ -62,8 +62,7 @@ means. What a reader settles is which one applies:
   record's `validator:` holds that symbol to existing, and nothing here
   reads its body, so a validator refactored to stop deriving — or to derive
   from something else — leaves both the declaration and this census green.
-  The
-  reason says which field is computed from which and why the input is
+  The reason says which field is computed from which and why the input is
   therefore not free — a value reaching the run under another name is not
   an ignored value. It does not say that the contract rejects a document
   contradicting the derivation; whether a rule is applied is the record's

@@ -43,8 +43,8 @@ from census.consumption import pin
 from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
     ConsumptionReport,
-    _is_literal,
     _declares_derivation,
+    _is_literal,
     census_report,
     classify,
     qualified_name,
