@@ -37,7 +37,7 @@ from typing import Annotated, Literal, Optional, Union, get_args
 
 import pytest
 from analitiq.contracts.shared.common import DerivedFrom
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from census.consumption import pin
 from census.consumption.disposition import DispositionKind, FieldDisposition
