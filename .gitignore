@@ -41,6 +41,15 @@ dist/
 # Design docs kept local — not published to the public repo for now
 docs/
 
+# One spec per issue, written into the worktree the issue is implemented in. It
+# is the authority while the work is open and goes with the worktree when the
+# work merges; the decisions survive as a comment on the issue.
+specs/
+
+# Personal instructions to Claude Code, the prose counterpart of
+# settings.local.json. Shared project instruction lives in CLAUDE.md.
+CLAUDE.local.md
+
 # Local env / direnv — may hold secrets (GitHub PATs, etc.), never commit
 .envrc
 .env
