@@ -17,19 +17,22 @@ JS = "https://json-schema.org/draft/2020-12/schema"
 CORPUS_CONNECTOR = "valid_connector.json"
 
 
-def _read_endpoint(properties, endpoint_id="widgets", defs=None):
-    """A model-valid read endpoint whose response items carry `properties`."""
-    items = {"type": "object", "properties": properties}
+def _read_endpoint(properties, endpoint_id="widgets", defs=None, dialect=JS):
+    """A model-valid read endpoint whose response items carry `properties`.
+
+    `defs` lands at the root of the embedded schema, because that is what a
+    `$ref` of `#/$defs/<name>` names — the reference is rooted at the embedded
+    document, not at the node carrying it."""
+    schema = {"$schema": dialect, "type": "array",
+              "items": {"type": "object", "properties": properties}}
     if defs is not None:
-        items["$defs"] = defs
+        schema["$defs"] = defs
     return {
         "$schema": API, "endpoint_id": endpoint_id,
         "operations": {"read": {
             "request": {"method": "GET", "path": "/widgets"}, "params": {},
-            "response": {
-                "records": {"ref": "response.body"},
-                "schema": {"$schema": JS, "type": "array", "items": items},
-            }}}}
+            "response": {"records": {"ref": "response.body"}, "schema": schema},
+            }}}
 
 
 def _write_endpoint(properties, modes=("insert",), endpoint_id="widgets"):
@@ -92,7 +95,9 @@ def test_every_write_mode_of_one_endpoint_is_graded(validator):
 
 def test_a_satisfied_sample_produces_nothing(validator):
     doc = _read_endpoint({"paid": {"type": ["boolean", "null"], "examples": [True, None]}})
-    assert not _sample_findings(validator.validate_document(doc))
+    findings = validator.validate_document(doc)
+    assert not _errors(findings), findings   # clean for the right reason
+    assert not _sample_findings(findings)
 
 
 def test_a_node_with_no_samples_is_graded_on_nothing(validator):
@@ -101,12 +106,16 @@ def test_a_node_with_no_samples_is_graded_on_nothing(validator):
         "paid": {"type": "boolean"},
         "nested": {"type": "object", "properties": {"deep": {"type": "integer"}}},
     })
-    assert not _sample_findings(validator.validate_document(doc))
+    findings = validator.validate_document(doc)
+    assert not _errors(findings), findings
+    assert not _sample_findings(findings)
 
 
 def test_an_empty_samples_list_produces_nothing(validator):
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": []}})
-    assert not _sample_findings(validator.validate_document(doc))
+    findings = validator.validate_document(doc)
+    assert not _errors(findings), findings
+    assert not _sample_findings(findings)
 
 
 def test_each_entry_is_graded_and_located_separately(validator):
@@ -127,7 +136,7 @@ def test_a_node_reached_through_defs_and_composition_is_graded(validator):
     )
     paths = {e["path"] for e in _sample_findings(validator.validate_document(doc))}
     assert paths == {
-        "/operations/read/response/schema/items/$defs/flag/examples/0",
+        "/operations/read/response/schema/$defs/flag/examples/0",
         "/operations/read/response/schema/items/properties/meta/allOf/0/properties/n/examples/0",
     }
 
@@ -143,6 +152,11 @@ def test_a_ref_node_is_graded_against_what_it_points_at(validator):
     assert len(errors) == 1, errors
     assert errors[0]["path"] == (
         "/operations/read/response/schema/items/properties/paid/examples/0")
+    # The keyword verdict, not merely a finding: an unresolved reference also
+    # produces exactly one finding at this path, and asserting the path alone
+    # cannot tell the two apart.
+    assert "is not of type 'boolean'" in errors[0]["message"]
+    assert "could not grade" not in errors[0]["message"]
 
 
 def test_data_shaped_like_a_schema_is_not_walked(validator):
@@ -155,7 +169,9 @@ def test_data_shaped_like_a_schema_is_not_walked(validator):
         "c": {"type": "object", "enum": [{"properties": {"x": contradicted}}]},
         "d": {"type": "object", "examples": [{"properties": {"x": contradicted}}]},
     })
-    assert not _sample_findings(validator.validate_document(doc))
+    findings = validator.validate_document(doc)
+    assert not _errors(findings), findings
+    assert not _sample_findings(findings)
 
 
 def test_a_schema_the_meta_check_rejects_is_not_graded(validator):
@@ -181,7 +197,8 @@ def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
     by_path = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_path) == {"big/examples/0", "gone/examples/0", "paid/examples/0"}
     assert "OverflowError" in by_path["big/examples/0"]
-    assert "could not be graded" in by_path["gone/examples/0"]
+    assert "could not grade" in by_path["gone/examples/0"]
+    assert "$ref" in by_path["gone/examples/0"]
 
 
 def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
@@ -194,12 +211,84 @@ def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
 
     monkeypatch.setattr(connectors, "_walk_schema_nodes", boom)
     doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
-    doc["operations"]["read"]["response"]["schema"]["$schema"] = \
-        "http://json-schema.org/draft-07/schema#"
+    # An unrelated defect on a schema this check never reaches: a readable read
+    # schema is what makes the walk run at all, so the defect goes on a write
+    # input instead.
+    doc["operations"]["write"] = {"insert": {
+        "request": {"method": "POST", "path": "/widgets",
+                    "body": {"r": {"from_input": "record"}}},
+        "params": {},
+        "input": {"schema": {"$schema": JS, "type": "object", "required": "paid"}},
+    }}
     findings = validator.validate_document(doc)
     assert "embedded-json-schema" in {f["validator"] for f in findings}
     crashes = _sample_findings(findings)
     assert len(crashes) == 1 and "crashed unexpectedly" in crashes[0]["message"]
+
+
+def test_a_node_stating_no_json_schema_type_is_not_graded(validator):
+    """The boundary of what a sample settles, made executable.
+
+    Grading is against the node's JSON Schema statement. A node carrying only
+    the contract's `native_type`/`arrow_type` pair states nothing a value can
+    contradict, so the sample is graded against nothing and the check is silent.
+    Deciding it would take a JSON-kind to Arrow-family table — cast semantics
+    this repo does not own and could not pin.
+    """
+    doc = _read_endpoint({"paid": {
+        "native_type": "BOOLEAN", "arrow_type": "Boolean", "examples": ["0"]}})
+    assert not _sample_findings(validator.validate_document(doc))
+
+
+def test_a_schema_declaring_another_draft_is_not_graded(validator):
+    """A document declaring a draft the contract does not read is reported by
+    the meta-check and skipped here. Grading it under 2020-12 would report
+    keywords that were never going to apply to it."""
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}},
+                         dialect="http://json-schema.org/draft-07/schema#")
+    findings = validator.validate_document(doc)
+    assert not _sample_findings(findings)
+    assert [f["validator"] for f in _errors(findings)] == ["embedded-json-schema"]
+
+
+def test_grading_is_never_invoked_without_the_check_that_reports_its_skips(validator):
+    """The skip is safe only because the meta-check runs beside it.
+
+    `_embedded_schema_example_findings` silently passes over any document
+    `_unreadable_as_2020_12` rejects, on the understanding that
+    `_embedded_schema_findings` reports that document as an error. Nothing in
+    either function enforces the pairing — it is a property of the call sites,
+    so it is asserted here. Located lexically: a call by name inside the
+    function that encloses it.
+    """
+    import ast
+    from pathlib import Path as _Path
+
+    from analitiq.validator import connectors
+
+    tree = ast.parse(_Path(connectors.__file__).read_text(encoding="utf-8"))
+
+    def called_names(node):
+        return {getattr(c.func, "id", None) for c in ast.walk(node)
+                if isinstance(c, ast.Call)} | {
+            a.id for c in ast.walk(node) if isinstance(c, ast.Call)
+            for a in c.args if isinstance(a, ast.Name)}
+
+    callers = [fn for fn in ast.walk(tree)
+               if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and "_embedded_schema_example_findings" in called_names(fn)]
+    assert callers, (
+        "no function calls `_embedded_schema_example_findings` — the check was "
+        "removed or renamed, and this assertion stopped matching rather than "
+        "the pairing stopping to hold"
+    )
+    unpaired = [fn.name for fn in callers
+                if "_embedded_schema_findings" not in called_names(fn)]
+    assert not unpaired, (
+        "sample grading is invoked without `_embedded_schema_findings` in: "
+        f"{unpaired}. Grading skips every schema the meta-check rejects, so "
+        "without it a document that is not a valid JSON Schema passes clean."
+    )
 
 
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):

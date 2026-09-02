@@ -150,12 +150,11 @@ was raised.
        has a `sample_value`, put it verbatim into that node's `examples`, in
        the JSON kind the provider sends — the string `"0"` stays a string. It
        is the only value in the endpoint that came off the wire, so it is the
-       only thing the declared shape can be graded against (`RULE-ENDP-063`):
-       a provider that documents a field as boolean and sends `"0"` gives a
-       connector that validates and dies on its first batch. Never compose a
-       sample to satisfy a node, and never drop one that contradicts it —
-       a contradiction means the declaration is wrong, and it is the
-       declaration you fix.
+       only thing the node's own `type` can be graded against
+       (`RULE-ENDP-063`). Never compose a sample to satisfy a node, and never
+       drop one that contradicts it: a provider that types a field boolean and
+       sends `"0"` has told you the declaration is wrong, and the declaration
+       is what you fix.
 4. Author `operations.write` when the resource is writable
    (`endpoint_facts.writable`). `write` is a mode-keyed map (`RULE-ENDP-053`,
    `RULE-ENDP-018`). Key **only `insert` and `upsert`** here,

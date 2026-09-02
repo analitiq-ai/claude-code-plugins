@@ -290,16 +290,20 @@ def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
 _DRAFT_2020_12_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
 
-def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
-    """Each embedded input/response schema must be a valid JSON Schema
-    Draft 2020-12 document. The contract model checks the arrow_type/native_type
-    pairing but not meta-schema validity, so this is the validator's job. A
-    non-dict schema is already a recorded model error and is skipped here.
+def _unreadable_as_2020_12(schema: dict) -> str | None:
+    """Why this embedded document cannot be read as JSON Schema Draft 2020-12,
+    phrased to follow "embedded schema at <site> " — or `None` when it can be.
+
+    One verdict, because two checks turn on it: the meta-check below reports the
+    reason, and sample grading skips exactly what the meta-check reported. Asked
+    separately they could disagree about which documents are readable, and the
+    document a grader read under semantics it does not declare gets findings
+    about keywords that were never going to apply to it.
 
     `check_schema` validates keyword-validity against the 2020-12 meta-schema but
     does NOT verify the document's own `$schema` dialect, so a schema DECLARING
-    another draft (e.g. Draft-07) could otherwise slip through — reject a
-    non-2020-12 `$schema` explicitly. An absent `$schema` is allowed (the engine
+    another draft (e.g. Draft-07) could otherwise slip through — a non-2020-12
+    `$schema` is refused explicitly. An absent `$schema` is allowed (the engine
     reads these as 2020-12; a valid authored write `input.schema` may omit it).
 
     `jsonschema` is imported lazily HERE, not at module load: some callers import
@@ -310,26 +314,32 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
 
+    declared = schema.get("$schema")
+    if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        return (f"declares $schema {declared!r}; the contract requires JSON Schema "
+                f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError as exc:
+        return (f"is not a valid JSON Schema Draft 2020-12 document: {exc.message}")
+    return None
+
+
+def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
+    """Each embedded input/response schema must be a valid JSON Schema
+    Draft 2020-12 document. The contract model checks the arrow_type/native_type
+    pairing but not meta-schema validity, so this is the validator's job. A
+    non-dict schema is already a recorded model error and is skipped here."""
     findings: list[dict] = []
     for pointer, schema in _embedded_json_schemas(ep_doc):
         if not isinstance(schema, dict):
             continue
-        where = f"{label}{pointer}" if label else pointer
-        declared = schema.get("$schema")
-        if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        reason = _unreadable_as_2020_12(schema)
+        if reason is not None:
+            where = f"{label}{pointer}" if label else pointer
             findings.append(finding(
                 "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} declares $schema {declared!r}; the "
-                f"contract requires JSON Schema Draft 2020-12 "
-                f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
-            continue
-        try:
-            Draft202012Validator.check_schema(schema)
-        except SchemaError as exc:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} is not a valid JSON Schema Draft "
-                f"2020-12 document: {exc.message}"))
+                f"embedded schema at {where} {reason}"))
     return findings
 
 
@@ -356,9 +366,12 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
     Samples stay optional. A node with no `examples` is graded on nothing, and
     silence is never read as agreement.
 
-    A schema the sibling meta-check rejects is skipped rather than graded: in a
-    document that is not a valid schema, a misspelled keyword is simply not
-    applied, so grading would blame the sample for the author's typo.
+    A document `_unreadable_as_2020_12` rejects is skipped rather than graded,
+    and `_embedded_schema_findings` is what reports it — every call site runs the
+    two together, which is what keeps the skip from being a silent pass. Grading
+    it anyway would report keywords that were never going to apply: in a document
+    that is not a valid schema a misspelled keyword is simply inert, so the
+    verdict would blame the sample for the author's typo.
 
     Grading runs keyword logic over an author-supplied value with no total gate
     ahead of it, so each entry is graded under its own guard — `multipleOf`
@@ -366,15 +379,13 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
     nothing raises before any keyword runs. Both are defects worth reporting, and
     neither may cost the remaining entries their verdict."""
     from jsonschema import Draft202012Validator
-    from jsonschema.exceptions import SchemaError, best_match
+    from jsonschema.exceptions import best_match
 
     findings: list[dict] = []
     for pointer, schema in _embedded_json_schemas(ep_doc):
         if not isinstance(schema, dict):
             continue
-        try:
-            Draft202012Validator.check_schema(schema)
-        except SchemaError:
+        if _unreadable_as_2020_12(schema) is not None:
             continue
         document = Draft202012Validator(schema)
         for node_ptr, node in _walk_schema_nodes(schema, pointer):
@@ -391,10 +402,19 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                 try:
                     error = best_match(node_validator.iter_errors(sample))
                 except Exception as exc:  # noqa: BLE001 - author input, no total gate
+                    # The exception text is what separates the two causes — a
+                    # reference naming nothing this document defines reports the
+                    # pointer it could not find, a keyword that could not evaluate
+                    # the value reports the value. Discriminating on the class
+                    # instead would mean importing a private one or a package the
+                    # wheel does not declare, for a distinction the text carries.
                     findings.append(finding(
                         "embedded-schema-example", "error", entry,
-                        f"the sample at {where} could not be graded against the node "
-                        f"declaring it ({type(exc).__name__}: {exc})."))
+                        f"the sample at {where} is {_short_repr(sample)}, which the node "
+                        f"declaring it could not grade ({type(exc).__name__}: {exc}). "
+                        f"Either that node does not resolve — a `$ref` naming nothing "
+                        f"this schema defines — or the recorded value is outside what a "
+                        f"keyword on the node can evaluate."))
                     continue
                 if error is None:
                     continue
@@ -928,7 +948,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # skip the coverage walk (it calls `.get()` and would crash, replacing
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
-        findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+        findings.extend(_run_guarded(_embedded_schema_findings, ep_doc,
+                                     ep_path.name, vid="embedded-json-schema"))
         findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
                                      ep_path.name, vid="embedded-schema-example"))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
@@ -975,7 +996,8 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings = _model_findings(doc, _API_ENDPOINT_ADAPTER)
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
-        findings += _embedded_schema_findings(doc)
+        findings += _run_guarded(_embedded_schema_findings, doc,
+                                 vid="embedded-json-schema")
         findings += _run_guarded(_embedded_schema_example_findings, doc,
                                  vid="embedded-schema-example")
         # `endpoint-transport-ref` is cross-document: it needs the sibling
