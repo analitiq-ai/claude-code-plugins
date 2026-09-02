@@ -314,17 +314,22 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     """Why this embedded document cannot be read as JSON Schema Draft 2020-12,
     phrased to follow "embedded schema at <site> " — or `None` when it can be.
 
-    One verdict, because two checks turn on it: the meta-check below reports the
-    reason, and sample grading skips exactly what the meta-check reported. Asked
-    separately they could disagree about which documents are readable, and the
-    document a grader read under semantics it does not declare gets findings
-    about keywords that were never going to apply to it.
+    One verdict, because two checks turn on it: `_embedded_schema_findings`
+    reports the reason and sample grading skips exactly what it reported. Asked
+    separately the two could disagree about which documents are readable, and a
+    document graded under semantics it does not declare earns findings about
+    keywords that were never going to apply to it.
 
-    `check_schema` validates keyword-validity against the 2020-12 meta-schema but
-    does NOT verify the document's own `$schema` dialect, so a schema DECLARING
-    another draft (e.g. Draft-07) could otherwise slip through — a non-2020-12
-    `$schema` is refused explicitly. An absent `$schema` is allowed (the engine
-    reads these as 2020-12; a valid authored write `input.schema` may omit it).
+    Two ways to be unreadable, and `check_schema` sees only the second:
+
+    - **It claims another draft.** At any node, not only the root — a reader
+      grading a node honours what that node claims to be, so a subschema naming
+      Draft-07 takes its whole subtree with it. `check_schema` grades keywords
+      against the 2020-12 meta-schema and has no opinion on what a node claims,
+      so this half is refused here or nowhere. An absent `$schema` is fine: the
+      engine reads an undeclared schema as 2020-12, and a valid authored write
+      `input.schema` may omit it.
+    - **Its keywords are not legal 2020-12**, which is what `check_schema` is.
 
     `jsonschema` is imported lazily HERE, not at module load: some callers import
     `analitiq.validator` only to run `validate_pipeline_bundle` and never reach
@@ -334,18 +339,15 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
 
-    # Every node, not only the root: a subschema declaring another draft is a
-    # document that means one thing to the contract and another to a reader that
-    # honours the declaration — `Draft202012Validator.evolve` honours it, and
-    # grades the node under the draft the author named. `check_schema` sees none
-    # of this; it grades keywords against the 2020-12 meta-schema and has no
-    # opinion on what a node claims to be.
     for node_ptr, node in _walk_schema_nodes(schema, ""):
         declared = node.get("$schema")
         # An empty fragment is not a different document: every resolver here
         # normalises `…/schema#` to `…/schema`, so refusing that spelling would
         # reject a document declaring exactly the draft the contract requires.
-        if declared is not None and declared.rstrip("#") != _DRAFT_2020_12_SCHEMA:
+        # A non-string is not a declaration this can read, and `check_schema`
+        # rejects it against the meta-schema — so it falls through rather than
+        # being normalised, which would raise and cost both checks their verdict.
+        if isinstance(declared, str) and declared.rstrip("#") != _DRAFT_2020_12_SCHEMA:
             at = f" at {node_ptr}" if node_ptr else ""
             return (f"declares $schema {declared!r}{at}; the contract requires JSON Schema "
                     f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
@@ -374,6 +376,20 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     return findings
 
 
+def _bounded(text: str, limit: int = 200) -> str:
+    """A diagnostic sentence borrowed from another library, bounded.
+
+    `jsonschema` renders the failing instance AND the failing keyword's own value
+    into `ValidationError.message`, so an oversized sample or a long `enum` comes
+    back whole — and it is emitted once per recorded entry. Bounding the sample
+    alone leaves the same unbounded text arriving by the other route.
+
+    Plain slicing rather than `textwrap.shorten`, which drops the text entirely
+    when it holds no whitespace to break on — a provider record is exactly that
+    shape."""
+    return text if len(text) <= limit else f"{text[:limit]}…"
+
+
 def _offline_registry():
     """An empty reference registry — one with no way to retrieve anything.
 
@@ -384,10 +400,12 @@ def _offline_registry():
     or does not, so an empty one refuses instead, and the per-entry guard turns
     the refusal into a finding.
 
-    Empty is all it has to be. Registering the document here would be redundant,
-    not load-bearing: the validator roots its own schema as a resource, which is
-    what every in-document reference — a pointer, an `$anchor`, a nested `$id` —
-    resolves against.
+    Empty is all it has to be, and this is the fact that makes the whole scheme
+    work: a validator roots its OWN schema as a resource, and that root is what
+    every in-document reference resolves against — a pointer, an `$anchor`, a
+    nested `$id`. So the document needs no registry entry, and a registry with
+    nothing in it can still resolve every reference the contract allows while
+    refusing every one it does not.
 
     That the contract models separately refuse a non-local `$ref` does not cover
     this: grading runs on documents the models have already rejected, and an
@@ -414,18 +432,25 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
     Samples stay optional. A node with no `examples` is graded on nothing, and
     silence is never read as agreement.
 
-    A document `_unreadable_as_2020_12` rejects is skipped rather than graded,
-    and `_embedded_schema_findings` is what reports it — every call site runs the
-    two together, which is what keeps the skip from being a silent pass. Grading
-    it anyway would report keywords that were never going to apply: in a document
-    that is not a valid schema a misspelled keyword is simply inert, so the
-    verdict would blame the sample for the author's typo.
+    Two things are skipped rather than graded, each because a check running
+    beside this one reports it: a schema that is not a dict (the contract model
+    rejects it) and one `_unreadable_as_2020_12` refuses (`_embedded_schema_findings`
+    reports it). Every call site runs those together with this, which is what
+    keeps a skip from being a silent pass. Grading either anyway would report
+    keywords that were never going to apply, blaming the sample for the author's
+    typo.
 
-    Grading runs keyword logic over an author-supplied value with no total gate
-    ahead of it, so each entry is graded under its own guard — `multipleOf`
-    against an oversized number raises `OverflowError`, and a `$ref` resolving to
-    nothing raises before any keyword runs. Both are defects worth reporting, and
-    neither may cost the remaining entries their verdict."""
+    Past that, grading runs keyword logic over an author-supplied value with no
+    total gate ahead of it, so each entry is guarded on its own and the guard
+    answers whose defect it is:
+
+    - **the node's** — a reference naming nothing, or one leading back to itself;
+    - **the sample's** — a value no keyword on the node can evaluate, such as a
+      number too large for `multipleOf`;
+    - **neither**, which is the contradiction this check exists to report.
+
+    The three have different fixes, so they are worth telling apart, and none of
+    them may cost the remaining entries their verdict."""
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import best_match
     from referencing.exceptions import Unresolvable
@@ -441,9 +466,9 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
             examples = node.get("examples")
             if not isinstance(examples, list):
                 continue
-            # `evolve` keeps the resolver rooted at the whole embedded document,
-            # so a node written as `{"$ref": "#/$defs/..."}` is graded against
-            # what it points at rather than against an empty schema.
+            # `evolve` swaps the schema and keeps the resolver, so a node written
+            # as `{"$ref": "#/$defs/..."}` is graded against what it points at
+            # rather than against a node with no assertions in it.
             node_validator = document.evolve(schema=node)
             for index, sample in enumerate(examples):
                 entry = f"{node_ptr}/examples/{index}"
@@ -451,17 +476,10 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                 try:
                     error = best_match(node_validator.iter_errors(sample))
                 except (Unresolvable, RecursionError) as exc:
-                    # Both are the node's own structure rather than the value: a
-                    # reference naming nothing this schema defines, or one that
-                    # leads back to itself. Said separately because the two have
-                    # opposite fixes, and an author told only that grading failed
-                    # does not know which half of the document to touch — the
-                    # sample is innocent here.
-                    #
-                    # Never `{exc}`: an unresolved-reference error renders the
-                    # whole resource it searched, so the embedded schema would be
-                    # pasted into the message once per recorded sample. `ref` is
-                    # the part that names the defect.
+                    # Never interpolate `exc`: an unresolved-reference error
+                    # renders the whole resource it searched, so the embedded
+                    # schema would land in the message once per recorded sample.
+                    # `ref` is the part of it that names the defect.
                     ref = getattr(exc, "ref", None)
                     why = (f"the reference {ref!r} names nothing this schema defines"
                            if ref is not None else
@@ -477,7 +495,8 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                     findings.append(finding(
                         "embedded-schema-example", "error", entry,
                         f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
-                        f"node declaring it could not grade ({type(exc).__name__}: {exc}). "
+                        f"node declaring it could not grade ({type(exc).__name__}: "
+                        f"{_bounded(str(exc))}). "
                         f"The recorded value is outside what a keyword on this node can "
                         f"evaluate."))
                     continue
@@ -487,9 +506,9 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                 findings.append(finding(
                     "embedded-schema-example", "error", entry,
                     f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
-                    f"declaring it rejects{inside}: {error.message}. A sample is a value the "
-                    f"provider sends, so either the declared shape is wrong for this field "
-                    f"or the recorded sample never came off the wire."))
+                    f"declaring it rejects{inside}: {_bounded(error.message)}. A sample is a "
+                    f"value the provider sends, so either the declared shape is wrong for "
+                    f"this field or the recorded sample never came off the wire."))
     return findings
 
 
@@ -933,17 +952,27 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                     findings.extend(_type_map_findings(doc_, direction))
         return findings
 
+    # A read-map problem is reported here and carried, not returned on: it stops
+    # what needs the map to render a canonical, and nothing else. An api
+    # connector's endpoint documents are graded on their own terms — shape,
+    # identity, embedded schemas, recorded samples — none of which the map
+    # touches, and leaving them ungraded until an unrelated file is fixed hides
+    # every defect in them behind one.
+    read_doc = None
     if not read_path.is_file():
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"connector requires sibling {_READ_MAP_FILENAME} (native → Arrow); missing."))
-        return findings
-    read_doc, load = _load_type_map(read_path)
-    findings.extend(load)
-    if read_doc is None:
-        return findings
-    findings.extend(_type_map_findings(read_doc, "read"))
+    else:
+        read_doc, load = _load_type_map(read_path)
+        findings.extend(load)
+        if read_doc is not None:
+            findings.extend(_type_map_findings(read_doc, "read"))
 
     if kind in _DATABASE_KINDS:
+        # A database connector has no endpoint documents, so the map IS the
+        # whole subject here and there is nothing left to grade without it.
+        if read_doc is None:
+            return findings
         if not write_path.is_file():
             findings.append(finding("type-map-coverage", "error", "/",
                                     f"{kind} connector requires sibling {_WRITE_MAP_FILENAME}; missing."))
@@ -973,9 +1002,6 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         findings.append(finding("type-map-coverage", "error", "/",
                                 "api connector's 'endpoints/' directory has no *.json files."))
         return findings
-    if not isinstance(read_doc, list):
-        return findings  # model error already recorded; can't render coverage
-
     # Cross-endpoint identity: `endpoint_id` is unique within the connector
     # release (the contract's shared-metadata rules). The
     # filename==id rule only makes IDENTICAL ids collide on the filesystem (and
@@ -1022,6 +1048,11 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # are in hand.
         findings.extend(_endpoint_transport_ref_findings(
             ep_doc, doc.get("transports"), label=ep_path.name))
+        if not isinstance(read_doc, list):
+            # No usable read map: its own defect is already reported, and a
+            # canonical cannot be rendered without it. Everything above this
+            # line has already graded the endpoint on what it does not need.
+            continue
         for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
             rendered = _render_canonical(native, read_doc)
             site = f"{ep_path.name}{pointer}"

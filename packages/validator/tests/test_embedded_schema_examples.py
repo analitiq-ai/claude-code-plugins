@@ -242,24 +242,6 @@ def test_a_name_carrying_pointer_syntax_is_escaped(validator):
         assert node == "nope", err["path"]
 
 
-def test_a_ref_node_is_graded_against_what_it_points_at(validator):
-    """The sample sits on the referring node, so grading it means resolving the
-    reference against the whole embedded document rather than the node alone."""
-    doc = _read_endpoint(
-        {"paid": {"$ref": "#/$defs/flag", "examples": ["0"]}},
-        defs={"flag": {"type": "boolean"}},
-    )
-    errors = _sample_findings(validator.validate_document(doc))
-    assert len(errors) == 1, errors
-    assert errors[0]["path"] == (
-        "/operations/read/response/schema/items/properties/paid/examples/0")
-    # The keyword verdict, not merely a finding: an unresolved reference also
-    # produces exactly one finding at this path, and asserting the path alone
-    # cannot tell the two apart.
-    assert "is not of type 'boolean'" in errors[0]["message"]
-    assert "could not be resolved" not in errors[0]["message"]
-
-
 def test_data_shaped_like_a_schema_is_not_walked(validator):
     """A payload under `default`, `const`, `enum` or another `examples` is data.
     Each carries an object that would be a contradicting node if walked."""
@@ -501,7 +483,13 @@ def test_an_in_document_ref_still_resolves_under_the_offline_registry(shape, val
     doc["operations"]["read"]["response"]["schema"].update(extra)
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 1, errors
+    assert errors[0]["path"] == (
+        "/operations/read/response/schema/items/properties/paid/examples/0")
+    # The keyword verdict, not merely a finding: an UNresolved reference also
+    # produces exactly one finding at this path, so asserting the path alone
+    # cannot tell a resolved reference from a broken one.
     assert "is not of type 'boolean'" in errors[0]["message"]
+    assert "could not be resolved" not in errors[0]["message"]
 
 
 def test_an_unresolved_reference_does_not_paste_the_schema_into_the_finding(validator):
@@ -542,6 +530,70 @@ def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
     assert "could not be resolved" in by_field["ring/examples/0"]
     assert "did not terminate" in by_field["ring/examples/0"]
     assert "is not of type 'boolean'" in by_field["after/examples/0"]
+
+
+def test_a_malformed_schema_declaration_is_reported_not_crashed_on(validator):
+    """`$schema` is a keyword an author can get wrong like any other.
+
+    A non-string is not a declaration this can read, and normalising it would
+    raise — costing BOTH embedded-schema checks their verdict and replacing an
+    actionable finding with a generic validator-bug notice. The meta-schema
+    rejects it, so it is left to do that.
+    """
+    doc = _read_endpoint({"paid": {"type": "boolean"}})
+    doc["operations"]["read"]["response"]["schema"]["$schema"] = 1
+    findings = validator.validate_document(doc)
+    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
+    dialect = [f for f in findings if f["validator"] == "embedded-json-schema"]
+    assert len(dialect) == 1 and "not a valid JSON Schema" in dialect[0]["message"]
+
+
+@pytest.mark.parametrize("node,label", [
+    ({"type": "integer", "examples": ["x" * 10_000]}, "an oversized instance"),
+    ({"enum": [f"value_{i}" for i in range(300)], "examples": ["nope"]}, "a long enum"),
+])
+def test_a_finding_does_not_grow_with_what_the_keyword_echoes(node, label, validator):
+    """Bounding the sample is half of it.
+
+    `jsonschema` renders the failing instance AND the failing keyword's own value
+    into its message, so the same unbounded text arrives by the other route — and
+    once per recorded entry. Both routes are bounded, so a finding stays a
+    finding rather than a copy of the document that produced it.
+    """
+    doc = _read_endpoint({"p": node})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 1, errors
+    assert len(errors[0]["message"]) < 1000, f"{label}: {len(errors[0]['message'])} chars"
+
+
+@pytest.mark.parametrize("read_map", [None, '{"not": "a list"}', "{ not json at all"],
+                         ids=["missing", "not-a-list", "unparseable"])
+def test_samples_are_graded_when_the_sibling_read_map_is_unusable(read_map, tmp_path, validator):
+    """Grading needs no type map, so a broken one must not withhold it.
+
+    The connector-anchored walk resolves each endpoint's native tokens through
+    the sibling read map, and every per-endpoint check used to sit behind that
+    resolution — so a connector whose map was missing reported the map and
+    nothing else, and every defect in every endpoint stayed hidden behind one
+    unrelated file until it was fixed.
+    """
+    from pathlib import Path as _Path
+
+    corpus = _Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
+    connector = json.loads(corpus.read_text())
+    (tmp_path / "endpoints").mkdir(parents=True)
+    (tmp_path / "connector.json").write_text(json.dumps(connector))
+    if read_map is not None:
+        (tmp_path / "type-map-read.json").write_text(read_map)
+    (tmp_path / "endpoints" / "widgets.json").write_text(
+        json.dumps(_read_endpoint({"paid": STRING_FLAG})))
+
+    findings = validator.validate_document(
+        connector, doc_path=tmp_path / "connector.json")
+    assert len(_sample_findings(findings)) == 2, findings
+    # ...and the map's own defect is still reported, not traded away for them.
+    assert [f for f in findings
+            if f["validator"] in ("type-map-coverage", "contract-model")], findings
 
 
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
