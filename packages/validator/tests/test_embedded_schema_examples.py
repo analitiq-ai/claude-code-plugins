@@ -1,0 +1,223 @@
+"""`embedded-schema-example` — a recorded sample must satisfy the node declaring it.
+
+Every other check over an endpoint compares one declaration with another, so a
+node whose declared type contradicts what the provider actually sends passes all
+of them. A value under `examples` is copied off the wire, which makes it the one
+thing in the document those checks can be graded against; these tests drive that
+grading through both entry points — a single endpoint document, and the
+connector-anchored walk that labels findings with the endpoint's filename.
+"""
+import json
+
+import pytest
+
+API = "https://schemas.analitiq.ai/api-endpoint/latest.json"
+JS = "https://json-schema.org/draft/2020-12/schema"
+
+CORPUS_CONNECTOR = "valid_connector.json"
+
+
+def _read_endpoint(properties, endpoint_id="widgets", defs=None):
+    """A model-valid read endpoint whose response items carry `properties`."""
+    items = {"type": "object", "properties": properties}
+    if defs is not None:
+        items["$defs"] = defs
+    return {
+        "$schema": API, "endpoint_id": endpoint_id,
+        "operations": {"read": {
+            "request": {"method": "GET", "path": "/widgets"}, "params": {},
+            "response": {
+                "records": {"ref": "response.body"},
+                "schema": {"$schema": JS, "type": "array", "items": items},
+            }}}}
+
+
+def _write_endpoint(properties, modes=("insert",), endpoint_id="widgets"):
+    return {
+        "$schema": API, "endpoint_id": endpoint_id,
+        "operations": {"write": {
+            mode: {
+                "request": {"method": "POST", "path": "/widgets",
+                            "body": {"r": {"from_input": "record"}}},
+                "params": {},
+                "input": {"schema": {"$schema": JS, "type": "object",
+                                     "properties": properties}},
+            } for mode in modes
+        }}}
+
+
+def _sample_findings(findings):
+    return [f for f in findings if f["validator"] == "embedded-schema-example"]
+
+
+def _errors(findings):
+    return [f for f in findings if f["severity"] == "error"]
+
+
+# The declaration/wire disagreement the check exists to catch: a provider that
+# sends its flags as the strings "0" and "1" under a node declaring boolean.
+STRING_FLAG = {"type": ["boolean", "null"], "native_type": "BOOLEAN",
+               "arrow_type": "Boolean", "examples": ["0", "1"]}
+
+
+def test_string_flag_under_a_boolean_node_errors(validator):
+    doc = _read_endpoint({"paid": STRING_FLAG})
+    findings = validator.validate_document(doc)
+    errors = _sample_findings(findings)
+    assert len(errors) == 2, findings
+    assert all(e["severity"] == "error" for e in errors)
+    assert [e["path"] for e in errors] == [
+        "/operations/read/response/schema/items/properties/paid/examples/0",
+        "/operations/read/response/schema/items/properties/paid/examples/1",
+    ]
+    assert "'0'" in errors[0]["message"]
+    assert "is not of type" in errors[0]["message"]
+
+
+@pytest.mark.parametrize("mode", ["insert", "upsert", "truncate_insert"])
+def test_a_write_input_node_is_graded_in_every_mode(mode, validator):
+    doc = _write_endpoint({"paid": STRING_FLAG}, modes=(mode,))
+    if mode == "upsert":
+        doc["operations"]["write"][mode]["conflict_keys"] = ["paid"]
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 2, errors
+    assert all(e["path"].startswith(f"/operations/write/{mode}/input/schema") for e in errors)
+
+
+def test_every_write_mode_of_one_endpoint_is_graded(validator):
+    doc = _write_endpoint({"paid": STRING_FLAG}, modes=("insert", "truncate_insert"))
+    errors = _sample_findings(validator.validate_document(doc))
+    assert {e["path"].split("/")[3] for e in errors} == {"insert", "truncate_insert"}
+
+
+def test_a_satisfied_sample_produces_nothing(validator):
+    doc = _read_endpoint({"paid": {"type": ["boolean", "null"], "examples": [True, None]}})
+    assert not _sample_findings(validator.validate_document(doc))
+
+
+def test_a_node_with_no_samples_is_graded_on_nothing(validator):
+    """Samples stay optional at every depth — silence is never disagreement."""
+    doc = _read_endpoint({
+        "paid": {"type": "boolean"},
+        "nested": {"type": "object", "properties": {"deep": {"type": "integer"}}},
+    })
+    assert not _sample_findings(validator.validate_document(doc))
+
+
+def test_an_empty_samples_list_produces_nothing(validator):
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": []}})
+    assert not _sample_findings(validator.validate_document(doc))
+
+
+def test_each_entry_is_graded_and_located_separately(validator):
+    """The satisfied entries are silent and each contradicting one is reported
+    at its own index — a finding naming only the node would not say which."""
+    doc = _read_endpoint({"n": {"type": "integer", "examples": [1, "two", 3, "four"]}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert [e["path"].rsplit("/", 1)[-1] for e in errors] == ["1", "3"]
+
+
+def test_a_node_reached_through_defs_and_composition_is_graded(validator):
+    """Grading descends where the contract's own walkers descend."""
+    doc = _read_endpoint(
+        {"paid": {"$ref": "#/$defs/flag"},
+         "meta": {"allOf": [{"type": "object", "properties": {
+             "n": {"type": "integer", "examples": ["nope"]}}}]}},
+        defs={"flag": {"type": "boolean", "examples": ["0"]}},
+    )
+    paths = {e["path"] for e in _sample_findings(validator.validate_document(doc))}
+    assert paths == {
+        "/operations/read/response/schema/items/$defs/flag/examples/0",
+        "/operations/read/response/schema/items/properties/meta/allOf/0/properties/n/examples/0",
+    }
+
+
+def test_a_ref_node_is_graded_against_what_it_points_at(validator):
+    """The sample sits on the referring node, so grading it means resolving the
+    reference against the whole embedded document rather than the node alone."""
+    doc = _read_endpoint(
+        {"paid": {"$ref": "#/$defs/flag", "examples": ["0"]}},
+        defs={"flag": {"type": "boolean"}},
+    )
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 1, errors
+    assert errors[0]["path"] == (
+        "/operations/read/response/schema/items/properties/paid/examples/0")
+
+
+def test_data_shaped_like_a_schema_is_not_walked(validator):
+    """A payload under `default`, `const`, `enum` or another `examples` is data.
+    Each carries an object that would be a contradicting node if walked."""
+    contradicted = {"type": "integer", "examples": ["not an integer"]}
+    doc = _read_endpoint({
+        "a": {"type": "object", "default": {"properties": {"x": contradicted}}},
+        "b": {"type": "object", "const": {"properties": {"x": contradicted}}},
+        "c": {"type": "object", "enum": [{"properties": {"x": contradicted}}]},
+        "d": {"type": "object", "examples": [{"properties": {"x": contradicted}}]},
+    })
+    assert not _sample_findings(validator.validate_document(doc))
+
+
+def test_a_schema_the_meta_check_rejects_is_not_graded(validator):
+    """In a document that is not a valid schema, a misspelled keyword is simply
+    not applied — grading would report the sample for the author's typo."""
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
+    doc["operations"]["read"]["response"]["schema"]["items"]["required"] = "paid"
+    findings = validator.validate_document(doc)
+    assert not _sample_findings(findings)
+    assert [f["validator"] for f in _errors(findings)] == ["embedded-json-schema"]
+
+
+def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
+    """`multipleOf` against an oversized number raises out of the keyword, and a
+    `$ref` resolving to nothing raises before any keyword runs. Both are
+    reported, and neither costs the remaining entries their verdict."""
+    doc = _read_endpoint({
+        "big": {"type": "number", "multipleOf": 0.5, "examples": [int("1" + "0" * 400)]},
+        "gone": {"$ref": "#/$defs/missing", "examples": [1]},
+        "paid": {"type": "boolean", "examples": ["0"]},
+    })
+    errors = _sample_findings(validator.validate_document(doc))
+    by_path = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
+    assert set(by_path) == {"big/examples/0", "gone/examples/0", "paid/examples/0"}
+    assert "OverflowError" in by_path["big/examples/0"]
+    assert "could not be graded" in by_path["gone/examples/0"]
+
+
+def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
+    """The check-level guard. Any failure the per-entry guard does not reach —
+    the walk itself — must not take the endpoint's other findings with it."""
+    from analitiq.validator import connectors
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("walk exploded")
+
+    monkeypatch.setattr(connectors, "_walk_schema_nodes", boom)
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}})
+    doc["operations"]["read"]["response"]["schema"]["$schema"] = \
+        "http://json-schema.org/draft-07/schema#"
+    findings = validator.validate_document(doc)
+    assert "embedded-json-schema" in {f["validator"] for f in findings}
+    crashes = _sample_findings(findings)
+    assert len(crashes) == 1 and "crashed unexpectedly" in crashes[0]["message"]
+
+
+def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
+    """The other entry point: a connector package, where a finding must name the
+    endpoint file it came from."""
+    from pathlib import Path
+
+    corpus = Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
+    connector = json.loads(corpus.read_text())
+    (tmp_path / "endpoints").mkdir(parents=True)
+    (tmp_path / "connector.json").write_text(json.dumps(connector))
+    (tmp_path / "type-map-read.json").write_text(json.dumps(
+        [{"match": "exact", "native": "BOOLEAN", "canonical": "Boolean"}]))
+    (tmp_path / "endpoints" / "widgets.json").write_text(
+        json.dumps(_read_endpoint({"paid": STRING_FLAG})))
+
+    findings = validator.validate_document(
+        connector, doc_path=tmp_path / "connector.json")
+    errors = _sample_findings(findings)
+    assert len(errors) == 2, findings
+    assert all("widgets.json/operations/read/" in e["message"] for e in errors)

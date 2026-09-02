@@ -35,9 +35,9 @@ not the plugin's.
 
 - `endpoint_facts` — the `EndpointFacts` object for this resource, from this
   run's per-endpoint research pass. Shape and field meanings:
-  `connector-builder/references/io-contracts.md` § EndpointFacts. Temporal
-  fields carry a real `sample_value` and its `tz_aware` flag — step 3 depends
-  on them.
+  `connector-builder/references/io-contracts.md` § EndpointFacts. A field the
+  provider's payloads show a value for carries a real `sample_value`; a
+  temporal also carries its `tz_aware` flag — step 3 depends on both.
 - `connector` — the assembled connector document (for `transports`, `auth`,
   and `connection_contract` reference paths).
 
@@ -146,6 +146,16 @@ was raised.
        token but differ in zone-awareness, give them **distinct** native
        tokens so each resolves to the right canonical under the read map's
        first-match-wins rules.
+     - **Carry each sample onto the node it grounds.** Where a facts entry
+       has a `sample_value`, put it verbatim into that node's `examples`, in
+       the JSON kind the provider sends — the string `"0"` stays a string. It
+       is the only value in the endpoint that came off the wire, so it is the
+       only thing the declared shape can be graded against (`RULE-ENDP-063`):
+       a provider that documents a field as boolean and sends `"0"` gives a
+       connector that validates and dies on its first batch. Never compose a
+       sample to satisfy a node, and never drop one that contradicts it —
+       a contradiction means the declaration is wrong, and it is the
+       declaration you fix.
 4. Author `operations.write` when the resource is writable
    (`endpoint_facts.writable`). `write` is a mode-keyed map (`RULE-ENDP-053`,
    `RULE-ENDP-018`). Key **only `insert` and `upsert`** here,

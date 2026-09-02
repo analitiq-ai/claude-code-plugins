@@ -38,9 +38,10 @@ You run at one of two scopes per invocation:
   schema; research the fields that resource exposes — those a read returns and
   those a write accepts — and return an `EndpointFacts`
   object whose shape `io-contracts.md` §EndpointFacts states: per field, which
-  directions carry it, its type pair where the provider documents one, and —
-  for temporal fields — a **real sample value** and its zone-awareness. This is
-  the field-level category `ProviderFacts` deliberately omits.
+  directions carry it, its type pair where the provider documents one, a
+  **real sample value** wherever a payload shows one, and — for temporal
+  fields — that sample's zone-awareness. This is the field-level category
+  `ProviderFacts` deliberately omits.
 
 **Read:** `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/io-contracts.md`
 — before researching. Its `ProviderFacts` and `EndpointFacts` fragments state
@@ -89,7 +90,12 @@ carry. Where it leaves the call to you: a native the domain pass never reported
 goes into `notes` as a domain type-map addition, never an endpoint-local one;
 and a temporal field whose docs show no sample value is a gap you report, never
 a zone you assume (`RULE-SHRD-002`) — a date-only wire value (`2024-01-02`) is
-`Date32`, never a `Timestamp`.
+`Date32`, never a `Timestamp`. A sample is copied out of a payload the provider
+publishes, in the kind that payload uses; a value you composed to match the
+documented type, or one a documentation renderer filled a template with, is not
+evidence and belongs in `notes` as a gap instead. Where the documented type and
+the published sample disagree, record both and say so — that disagreement is
+the fact the creator needs.
 
 ## Hard rules
 

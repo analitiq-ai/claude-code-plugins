@@ -182,6 +182,7 @@ EXPECTED_VALIDATOR_IDS = {
     "endpoint-id-locator",
     "endpoint-transport-ref",
     "embedded-json-schema",
+    "embedded-schema-example",
 }
 # Resolution scopes a `ref` / `${...}` placeholder may lead with — restated as the
 # scope table in references/value-expressions.md.
