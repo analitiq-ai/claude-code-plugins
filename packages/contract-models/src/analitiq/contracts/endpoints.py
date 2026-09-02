@@ -1482,7 +1482,8 @@ def _validate_schema_refs(
     schema: Any, path: str, errors: list[str], root: Any = None
 ) -> None:
     """Every reference in an embedded schema must be IN-DOCUMENT, must resolve,
-    and must land on a schema.
+    and must land on a schema; and the schema declares its dialect at its root
+    or nowhere.
 
     RULE-ENDP-026. `$ref` is authorable — `JsonSchemaPropertyNode` enumerates
     `$defs` as a recursive position and the arrow_type walker below descends
@@ -1515,6 +1516,13 @@ def _validate_schema_refs(
     walkers visited — so following one cannot land the resolver on a type
     nothing verified.
 
+    RULE-ENDP-064 rides this walk too, because it reaches the same positions:
+    `$schema` names the dialect a schema RESOURCE is written in, an embedded
+    schema is one resource, and so the keyword is authorable at this document's
+    root and refused at every node the walk reaches below it. Its verdict turns
+    on WHERE the keyword sits rather than only on its presence, which is why the
+    walk carries a root marker.
+
     Walks the same structural positions as
     :func:`_validate_arrow_type_in_json_schema` — the shared
     ``_JSON_SCHEMA_*_KEYS`` sets, so the two cannot disagree about what counts
@@ -1524,10 +1532,27 @@ def _validate_schema_refs(
     # `root` is threaded down so a ref deep in the tree still resolves against
     # the WHOLE embedded schema — `$defs` lives at the top, and resolving
     # against the current subtree would call every legitimate ref dangling.
-    root = schema if root is None else root
+    # Its absence also marks the entry call: every recursive one passes on the
+    # root it was given, so no root in hand means this node IS the root — the
+    # one position a dialect declaration belongs in.
+    is_root = root is None
+    root = schema if is_root else root
     # `true` / `false` are legal whole-schema short-forms carrying no `$ref`.
     if isinstance(schema, bool) or not isinstance(schema, dict):
         return
+
+    if not is_root and "$schema" in schema:
+        errors.append(
+            f"{path}.$schema is not authorable below the root of an embedded "
+            "response/input schema: `$schema` declares the dialect a schema "
+            "resource is written in, and this document is one resource. A "
+            "reader grading a subschema honours the declaration that subschema "
+            "carries, so a node naming another draft takes its whole subtree "
+            "out of the dialect the rest of the document is read in, and the "
+            "keywords underneath keep their spelling while losing their "
+            "meaning. Declare the dialect on the schema itself, or omit it "
+            "(spec: §API Response Extraction — embedded schema references)"
+        )
 
     for keyword, why in _REFUSED_REFERENCE_KEYWORDS.items():
         if keyword in schema:
@@ -1800,10 +1825,10 @@ class WriteInput(_EndpointModel):
         description="JSON Schema Draft 2020-12 for one provider-facing destination record.",
     )
 
-    # Named `_validate` (not `_validate_arrow_types`) because it now enforces two
-    # rules — RULE-ENDP-006's arrow_type walk and RULE-ENDP-026's `$ref` walk — and
-    # the rule registry needs ONE enforcer name that exists on both this model
-    # and `ResponseExtraction` for the pair of rules they share.
+    # Named `_validate` (not `_validate_arrow_types`) because it enforces every
+    # rule one document settles alone over an embedded schema, whichever walk
+    # reaches it, and the rule registry needs ONE enforcer name that exists on
+    # this model and on `ResponseExtraction` for the rules they share.
     @model_validator(mode="after")
     def _validate(self) -> "WriteInput":
         errors: list[str] = []

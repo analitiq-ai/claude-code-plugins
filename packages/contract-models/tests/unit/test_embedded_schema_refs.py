@@ -64,6 +64,7 @@ MUST_BE_STRING = r"\$ref must be a string"
 IS_AN_ANCHOR = "is a plain-name fragment"
 NON_SCHEMA_POSITION = "points into a non-schema position"
 NOT_AUTHORABLE = "is not authorable in an embedded response/input schema"
+NOT_BELOW_ROOT = "is not authorable below the root of an embedded"
 
 
 def _response(schema, records="response.body"):
@@ -1041,6 +1042,78 @@ class TestRefusedReferenceKeywords:
         # Both targets of RULE-ENDP-026, not just the response side.
         with pytest.raises(ValidationError, match=NOT_AUTHORABLE):
             WriteInput.model_validate({"schema": {"type": "object", "$id": "https://evil.example/x"}})
+
+
+# ---------------------------------------------------------------------------
+# `$schema` below the root — the dialect declaration
+# ---------------------------------------------------------------------------
+
+
+def _nested_dialect_cases():
+    """One case per structural position the guard's walk descends into, built
+    from the keyword sets themselves so a keyword joining one of them is
+    covered without an edit here."""
+    node = {"type": "string", "$schema": JSON_SCHEMA}
+    for keyword in sorted(JSON_SCHEMA_SUBSCHEMA_KEYS):
+        yield pytest.param({keyword: {"x": node}}, id=keyword)
+    for keyword in sorted(JSON_SCHEMA_LIST_OF_SCHEMA_KEYS):
+        yield pytest.param({keyword: [node]}, id=keyword)
+    for keyword in sorted(JSON_SCHEMA_SINGLE_SCHEMA_KEYS):
+        yield pytest.param({keyword: node}, id=keyword)
+
+
+class TestNestedDialectDeclarationRefused:
+    """RULE-ENDP-064. `$schema` declares the dialect a schema RESOURCE is
+    written in, and an embedded schema is one resource: its root. A reader
+    grading a subschema honours the declaration that subschema carries, so a
+    node naming another draft takes its whole subtree out of the dialect the
+    rest of the document is read in — and the keywords underneath stop meaning
+    what the author wrote, without anything failing. The root declaration stays
+    authorable; it is the one that says what the document is.
+    """
+
+    @pytest.mark.parametrize("schema", list(_nested_dialect_cases()))
+    def test_a_nested_declaration_is_refused_in_every_walked_position(self, schema):
+        with pytest.raises(ValidationError, match=NOT_BELOW_ROOT) as excinfo:
+            WriteInput.model_validate({"schema": dict(schema, type="object")})
+        assert "$schema" in str(excinfo.value)
+
+    def test_the_refusal_names_the_position(self):
+        schema = {"type": "object", "properties": {"x": {"items": {"$schema": JSON_SCHEMA}}}}
+        with pytest.raises(
+            ValidationError, match=r"input\.schema\.properties\.x\.items\.\$schema"
+        ):
+            WriteInput.model_validate({"schema": schema})
+
+    def test_a_response_refusal_is_anchored_at_response_schema(self):
+        schema = {"type": "array", "items": {"$schema": JSON_SCHEMA}}
+        with pytest.raises(ValidationError, match=r"response\.schema\.items\.\$schema"):
+            ResponseExtraction.model_validate(_response(schema))
+
+    def test_a_root_declaration_stays_authorable(self):
+        schema = {
+            "$schema": JSON_SCHEMA,
+            "type": "array",
+            "items": {"type": "object", "properties": {"id": {"type": "string"}}},
+        }
+        assert isinstance(parse_endpoint(_read_doc(schema)), ApiEndpointDoc)
+
+    def test_a_nested_non_string_declaration_is_refused_by_the_same_branch(self):
+        # The refusal turns on the KEY, so a value nothing could read as a
+        # dialect is refused here rather than reaching something that grades it.
+        with pytest.raises(ValidationError, match=NOT_BELOW_ROOT):
+            WriteInput.model_validate(
+                {"schema": {"type": "object", "properties": {"x": {"$schema": 5}}}}
+            )
+
+    def test_rule_endp_064_is_registered_against_every_embedded_schema_class(self):
+        rules = {rule.id: rule for rule in all_rules()}
+        assert "RULE-ENDP-064" in rules, "RULE-ENDP-064 is not registered"
+        rule = rules["RULE-ENDP-064"]
+        assert set(rule.targets) == {"ResponseExtraction", "WriteInput"}
+        enforcer = rule.validator_symbol.split(".")[-1]
+        assert hasattr(ResponseExtraction, enforcer)
+        assert hasattr(WriteInput, enforcer)
 
 
 # ---------------------------------------------------------------------------

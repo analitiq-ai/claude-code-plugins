@@ -323,16 +323,23 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     document graded under semantics it does not declare earns findings about
     keywords that were never going to apply to it.
 
-    Two ways to be unreadable, and `check_schema` sees only the second:
+    Two ways to be unreadable, asked in the order that keeps the second one safe:
 
-    - **It claims another draft.** At any node, not only the root — a reader
-      grading a node honours what that node claims to be, so a subschema naming
-      Draft-07 takes its whole subtree with it. `check_schema` grades keywords
-      against the 2020-12 meta-schema and has no opinion on what a node claims,
-      so this half is refused here or nowhere. An absent `$schema` is fine: the
-      engine reads an undeclared schema as 2020-12, and a valid authored write
-      `input.schema` may omit it.
     - **Its keywords are not legal 2020-12**, which is what `check_schema` is.
+      It also types `$schema`: the 2020-12 meta-schema declares the keyword a
+      string, at the root and at every node alike, so a value the comparison
+      below could not read is already a reason before that comparison runs.
+    - **It claims another draft.** `check_schema` grades keywords against the
+      2020-12 meta-schema and has no opinion on what a document claims to be,
+      so this half is refused here or nowhere. The declaration is read at the
+      root, which is the only place an embedded schema may carry one — the
+      contract models refuse `$schema` on every subschema (RULE-ENDP-064).
+      `…/2020-12/schema#` names the same resource as `…/2020-12/schema` under
+      RFC 3986, so a single trailing empty fragment is stripped before the
+      comparison — a single one, since `##` is not a spelling of this URI and
+      naming another dialect is exactly what this half exists to catch. An
+      absent `$schema` is fine: the engine reads an undeclared schema as
+      2020-12, and a valid authored write `input.schema` may omit it.
 
     `jsonschema` is imported lazily HERE, not at module load: some callers import
     `analitiq.validator` only to run `validate_pipeline_bundle` and never reach
@@ -342,14 +349,14 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
 
-    declared = schema.get("$schema")
-    if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
-        return (f"declares $schema {declared!r}; the contract requires JSON Schema "
-                f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
         return (f"is not a valid JSON Schema Draft 2020-12 document: {exc.message}")
+    declared = schema.get("$schema")
+    if declared is not None and declared.removesuffix("#") != _DRAFT_2020_12_SCHEMA:
+        return (f"declares $schema {declared!r}; the contract requires JSON Schema "
+                f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
     return None
 
 
