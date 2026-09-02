@@ -18,6 +18,11 @@ tzdata
 
 # analitiq-validator runtime deps
 jsonschema>=4.18,<5
+# Imported directly, to build a reference registry that refuses retrieval —
+# jsonschema's default one FETCHES an `http(s)` `$ref`, which an offline
+# validator must never do. It arrives transitively too; declared so the day
+# that stops being true fails at resolution rather than at import.
+referencing>=0.30
 
 # Reads the authored rule registry (`rules/records/*.yaml`). Deliberately NOT a
 # runtime dependency of analitiq-contract-models: the wheel ships the compiled

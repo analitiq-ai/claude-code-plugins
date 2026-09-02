@@ -41,10 +41,13 @@ LICENSE = VALIDATOR_DIR / "LICENSE"
 # models, imported from the public `analitiq.contracts` namespace (its
 # `analitiq-contract-models` dependency) — so `pydantic` and `analitiq` — plus
 # `jsonschema`, a declared dependency used to meta-validate the JSON-Schema
-# documents embedded in api-endpoints (Draft 2020-12). All are public, portable
+# documents embedded in api-endpoints (Draft 2020-12), and `referencing`, which
+# `jsonschema` resolves references through — imported directly to build a
+# registry that refuses retrieval, because the default one fetches an `http(s)`
+# `$ref` and this validator is offline by contract. All are public, portable
 # packages; anything heavier would leak private code or make the package
 # non-portable.
-ALLOWED_THIRD_PARTY = {"pydantic", "analitiq", "jsonschema"}
+ALLOWED_THIRD_PARTY = {"pydantic", "analitiq", "jsonschema", "referencing"}
 
 
 def _top_level_imports(source: str) -> set[str]:

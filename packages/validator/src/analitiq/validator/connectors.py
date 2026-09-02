@@ -39,9 +39,10 @@ from __future__ import annotations
 
 import json
 import re
+import reprlib
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from ._core import (
     contract_model_domain,
@@ -49,6 +50,7 @@ from ._core import (
     register_kind,
     register_validator_ids,
     _model_findings,
+    _run_guarded,
 )
 
 # The contract models resolve from the `analitiq-contract-models` dependency —
@@ -105,6 +107,7 @@ register_validator_ids({
     "endpoint-id-locator",
     "endpoint-transport-ref",
     "embedded-json-schema",
+    "embedded-schema-example",
 })
 
 
@@ -210,66 +213,18 @@ def _canonical_eq(a: str, b: str) -> bool:
 # The JSON-Schema keyword vocabulary is OWNED by the contract package and
 # imported, not restated. It used to be a third hand-maintained copy: adding
 # `contentSchema` meant editing three, and the one that was missed left the
-# rendered schema's prose contradicting its own constraints. `_walk_schema_pairs`
-# must descend exactly where the contract's walkers do, or a `native_type`
-# declared in a position only one of them visits escapes type-map coverage.
+# rendered schema's prose contradicting its own constraints. `_walk_schema_nodes`
+# must descend exactly where the contract's walkers do; what a position it misses
+# costs is stated on that function, which is where both of its consumers meet.
 _SUBSCHEMA_MAP_KEYS = JSON_SCHEMA_SUBSCHEMA_KEYS
 _SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
 _SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
 
-def _walk_schema_pairs(schema: Any, pointer: str, out: list[tuple[str, str, str]]) -> None:
-    """Collect `(native_type, arrow_type)` pairs from a JSON Schema, recursing
-    only through structural sub-schema positions."""
-    if not isinstance(schema, dict):
-        return
-    nt, at = schema.get("native_type"), schema.get("arrow_type")
-    if isinstance(nt, str) and isinstance(at, str):
-        out.append((nt, at, pointer))
-    for key in _SUBSCHEMA_MAP_KEYS:
-        sub = schema.get(key)
-        if isinstance(sub, dict):
-            for name, child in sub.items():
-                _walk_schema_pairs(child, f"{pointer}/{key}/{name}", out)
-    for key in _SUBSCHEMA_LIST_KEYS:
-        sub = schema.get(key)
-        if isinstance(sub, list):
-            for i, child in enumerate(sub):
-                _walk_schema_pairs(child, f"{pointer}/{key}/{i}", out)
-    for key in _SUBSCHEMA_SINGLE_KEYS:
-        if key not in schema:
-            continue
-        child = schema[key]
-        # `items` may be tuple-form (a list of schemas, Draft 2019-09) — iterate
-        # it, matching the model's walk. Draft 2020-12 uses `prefixItems` (handled
-        # above) but the catalog still carries the tuple form.
-        if isinstance(child, list):
-            for i, sub in enumerate(child):
-                _walk_schema_pairs(sub, f"{pointer}/{key}/{i}", out)
-        else:
-            _walk_schema_pairs(child, f"{pointer}/{key}", out)
-
-
-def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
-    """Every `(native_type, arrow_type)` pair on the endpoint's typed field
-    schemas — `operations.read.response.schema` and each
-    `operations.write.<mode>.input.schema`. Walks the schemas structurally so a
-    field named `default`/`const` is covered but a literal-data value is not."""
-    out: list[tuple[str, str, str]] = []
-    ops = ep_doc.get("operations")
-    if not isinstance(ops, dict):
-        return out
-    read = ops.get("read")
-    if isinstance(read, dict) and isinstance(read.get("response"), dict):
-        _walk_schema_pairs(read["response"].get("schema"),
-                           "/operations/read/response/schema", out)
-    write = ops.get("write")
-    if isinstance(write, dict):
-        for mode, block in write.items():
-            if isinstance(block, dict) and isinstance(block.get("input"), dict):
-                _walk_schema_pairs(block["input"].get("schema"),
-                                   f"/operations/write/{mode}/input/schema", out)
-    return out
+def _escape_pointer_token(name: str) -> str:
+    """One object key as an RFC 6901 pointer segment. `~` before `/`: the other
+    order re-encodes the `~` it just wrote, turning `a/b` into `a~01b`."""
+    return name.replace("~", "~0").replace("/", "~1")
 
 
 def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
@@ -287,24 +242,97 @@ def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     if isinstance(write, dict):
         for mode, block in write.items():
             if isinstance(block, dict) and isinstance(block.get("input"), dict):
-                out.append((f"/operations/write/{mode}/input/schema", block["input"].get("schema")))
+                out.append((f"/operations/write/{_escape_pointer_token(mode)}/input/schema",
+                            block["input"].get("schema")))
     return out
+
+
+def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
+    """Every structural sub-schema node of a JSON Schema document, as
+    `(pointer, node)`, recursing only through sub-schema positions. The document
+    itself is a node and is yielded first.
+
+    One walk serves every check that has to reach a node: the `native_type` /
+    `arrow_type` pairing and the grading of recorded samples must descend
+    identically, or a node one of them cannot see is a node the other grades
+    alone."""
+    if not isinstance(schema, dict):
+        return
+    yield pointer, schema
+    for key in _SUBSCHEMA_MAP_KEYS:
+        sub = schema.get(key)
+        if isinstance(sub, dict):
+            for name, child in sub.items():
+                # Only the keys an AUTHOR chooses are encoded — a property name,
+                # a `$defs` name, a `patternProperties` regex. Keyword names and
+                # list indices are fixed vocabulary and can carry neither
+                # character. A raw `a/b` reads as two segments and a raw `~`
+                # opens an escape, so an unencoded name points at the wrong node
+                # or at none, and this pointer is what a finding reports as its
+                # `path` for a consumer to resolve.
+                yield from _walk_schema_nodes(
+                    child, f"{pointer}/{key}/{_escape_pointer_token(name)}")
+    for key in _SUBSCHEMA_LIST_KEYS:
+        sub = schema.get(key)
+        if isinstance(sub, list):
+            for i, child in enumerate(sub):
+                yield from _walk_schema_nodes(child, f"{pointer}/{key}/{i}")
+    for key in _SUBSCHEMA_SINGLE_KEYS:
+        if key not in schema:
+            continue
+        child = schema[key]
+        # `items` may be tuple-form (a list of schemas, Draft 2019-09) — iterate
+        # it, matching the model's walk. Draft 2020-12 uses `prefixItems` (handled
+        # above) but the catalog still carries the tuple form.
+        if isinstance(child, list):
+            for i, sub in enumerate(child):
+                yield from _walk_schema_nodes(sub, f"{pointer}/{key}/{i}")
+        else:
+            yield from _walk_schema_nodes(child, f"{pointer}/{key}")
+
+
+def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
+    """Every `(native_type, arrow_type)` pair on the endpoint's typed field
+    schemas. Walks the schemas structurally so a field named `default`/`const`
+    is covered but a literal-data value is not."""
+    return [
+        (node["native_type"], node["arrow_type"], node_ptr)
+        for pointer, schema in _embedded_json_schemas(ep_doc)
+        for node_ptr, node in _walk_schema_nodes(schema, pointer)
+        if isinstance(node.get("native_type"), str) and isinstance(node.get("arrow_type"), str)
+    ]
 
 
 _DRAFT_2020_12_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
+#: Renders a recorded sample into a finding message. A sample may be a whole
+#: provider record and a finding is read in a terminal, so it is bounded — by
+#: `reprlib`, which bounds each component rather than the string as a whole, so
+#: a record with one oversized field still shows the fields around it.
+_SAMPLE_REPR = reprlib.Repr()
+_SAMPLE_REPR.maxstring = _SAMPLE_REPR.maxother = 80
 
-def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
-    """Each embedded input/response schema must be a valid JSON Schema
-    Draft 2020-12 document. The contract model checks the arrow_type/native_type
-    pairing but not meta-schema validity, so this is the validator's job. A
-    non-dict schema is already a recorded model error and is skipped here.
 
-    `check_schema` validates keyword-validity against the 2020-12 meta-schema but
-    does NOT verify the document's own `$schema` dialect, so a schema DECLARING
-    another draft (e.g. Draft-07) could otherwise slip through — reject a
-    non-2020-12 `$schema` explicitly. An absent `$schema` is allowed (the engine
-    reads these as 2020-12; a valid authored write `input.schema` may omit it).
+def _unreadable_as_2020_12(schema: dict) -> str | None:
+    """Why this embedded document cannot be read as JSON Schema Draft 2020-12,
+    phrased to follow "embedded schema at <site> " — or `None` when it can be.
+
+    One verdict, because two checks turn on it: `_embedded_schema_findings`
+    reports the reason and sample grading skips exactly what it reported. Asked
+    separately the two could disagree about which documents are readable, and a
+    document graded under semantics it does not declare earns findings about
+    keywords that were never going to apply to it.
+
+    Two ways to be unreadable, and `check_schema` sees only the second:
+
+    - **It claims another draft.** At any node, not only the root — a reader
+      grading a node honours what that node claims to be, so a subschema naming
+      Draft-07 takes its whole subtree with it. `check_schema` grades keywords
+      against the 2020-12 meta-schema and has no opinion on what a node claims,
+      so this half is refused here or nowhere. An absent `$schema` is fine: the
+      engine reads an undeclared schema as 2020-12, and a valid authored write
+      `input.schema` may omit it.
+    - **Its keywords are not legal 2020-12**, which is what `check_schema` is.
 
     `jsonschema` is imported lazily HERE, not at module load: some callers import
     `analitiq.validator` only to run `validate_pipeline_bundle` and never reach
@@ -314,26 +342,176 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
 
+    declared = schema.get("$schema")
+    if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        return (f"declares $schema {declared!r}; the contract requires JSON Schema "
+                f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
+    try:
+        Draft202012Validator.check_schema(schema)
+    except SchemaError as exc:
+        return (f"is not a valid JSON Schema Draft 2020-12 document: {exc.message}")
+    return None
+
+
+def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
+    """Each embedded input/response schema must be a valid JSON Schema
+    Draft 2020-12 document. The contract model checks the arrow_type/native_type
+    pairing but not meta-schema validity, so this is the validator's job. A
+    non-dict schema is already a recorded model error and is skipped here."""
     findings: list[dict] = []
     for pointer, schema in _embedded_json_schemas(ep_doc):
         if not isinstance(schema, dict):
             continue
-        where = f"{label}{pointer}" if label else pointer
-        declared = schema.get("$schema")
-        if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        reason = _unreadable_as_2020_12(schema)
+        if reason is not None:
+            where = f"{label}{pointer}" if label else pointer
             findings.append(finding(
                 "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} declares $schema {declared!r}; the "
-                f"contract requires JSON Schema Draft 2020-12 "
-                f"({_DRAFT_2020_12_SCHEMA!r}) or no $schema"))
+                f"embedded schema at {where} {reason}"))
+    return findings
+
+
+def _bounded(text: str, limit: int = 200) -> str:
+    """A diagnostic sentence borrowed from another library, bounded.
+
+    `jsonschema` renders the failing instance AND the failing keyword's own value
+    into `ValidationError.message`, so an oversized sample or a long `enum` comes
+    back whole — and it is emitted once per recorded entry. Bounding the sample
+    alone leaves the same unbounded text arriving by the other route.
+
+    Plain slicing rather than `textwrap.shorten`, which drops the text entirely
+    when it holds no whitespace to break on — a provider record is exactly that
+    shape."""
+    return text if len(text) <= limit else f"{text[:limit]}…"
+
+
+def _offline_registry():
+    """An empty reference registry — one with no way to retrieve anything.
+
+    Validation here is offline by contract, and `jsonschema`'s default registry
+    is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
+    could make the validator issue a request to any address its author chose and
+    block on the answer. Retrieval is a `retrieve` callable a registry either has
+    or does not, so an empty one refuses instead, and the per-entry guard turns
+    the refusal into a finding.
+
+    Empty is all it has to be, and this is the fact that makes the whole scheme
+    work: a validator roots its OWN schema as a resource, and that root is what
+    every in-document reference resolves against — a pointer, an `$anchor`, a
+    nested `$id`. So the document needs no registry entry, and a registry with
+    nothing in it can still resolve every reference the contract allows while
+    refusing every one it does not.
+
+    That the contract models separately refuse a non-local `$ref` does not cover
+    this: grading runs on documents the models have already rejected, and an
+    offline guarantee that holds only while another check keeps its rule is not
+    one."""
+    from referencing import Registry
+
+    return Registry()
+
+
+def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dict]:
+    """Every `examples` entry on an embedded schema node must satisfy the node
+    declaring it.
+
+    This is the only check over an endpoint that reads a value rather than
+    another declaration. Every other one compares `native_type` to `arrow_type`
+    to the sibling type map to the canonical vocabulary, and they agree because
+    each reads the same claim restated — so a field declared boolean whose
+    provider sends the strings `"0"` and `"1"` passes all of them and fails on
+    the first batch, where the cast is attempted for real. A recorded sample is
+    the one thing in the document that came off the wire, which makes it the one
+    thing a declaration can be checked against.
+
+    Samples stay optional. A node with no `examples` is graded on nothing, and
+    silence is never read as agreement.
+
+    Two things are skipped rather than graded, each because a check running
+    beside this one reports it: a schema that is not a dict (the contract model
+    rejects it) and one `_unreadable_as_2020_12` refuses (`_embedded_schema_findings`
+    reports it). Every call site runs those together with this, which is what
+    keeps a skip from being a silent pass. Grading either anyway would report
+    keywords that were never going to apply, blaming the sample for the author's
+    typo.
+
+    Past that, grading runs keyword logic over an author-supplied value with no
+    total gate ahead of it, so each entry is guarded on its own and the guard
+    answers whose defect it is:
+
+    - **the node's** — a reference naming nothing, or one leading back to itself;
+    - **the sample's** — a value no keyword on the node can evaluate, such as a
+      number too large for `multipleOf`;
+    - **neither**, which is the contradiction this check exists to report.
+
+    The three have different fixes, so they are worth telling apart, and none of
+    them may cost the remaining entries their verdict."""
+    from jsonschema import Draft202012Validator
+    from jsonschema.exceptions import best_match
+    from referencing.exceptions import Unresolvable
+
+    findings: list[dict] = []
+    for pointer, schema in _embedded_json_schemas(ep_doc):
+        if not isinstance(schema, dict):
             continue
-        try:
-            Draft202012Validator.check_schema(schema)
-        except SchemaError as exc:
-            findings.append(finding(
-                "embedded-json-schema", "error", pointer,
-                f"embedded schema at {where} is not a valid JSON Schema Draft "
-                f"2020-12 document: {exc.message}"))
+        if _unreadable_as_2020_12(schema) is not None:
+            continue
+        document = Draft202012Validator(schema, registry=_offline_registry())
+        for node_ptr, node in _walk_schema_nodes(schema, pointer):
+            examples = node.get("examples")
+            if not isinstance(examples, list):
+                continue
+            # `evolve` swaps the schema and keeps the resolver, so a node written
+            # as `{"$ref": "#/$defs/..."}` is graded against what it points at
+            # rather than against a node with no assertions in it.
+            node_validator = document.evolve(schema=node)
+            for index, sample in enumerate(examples):
+                entry = f"{node_ptr}/examples/{index}"
+                # `entry` is the finding's machine-readable `path` and stays
+                # exact. Everything the MESSAGE interpolates is bounded, pointers
+                # included: a property name is authored, so it can be as long as
+                # the author likes and it appears in the pointer twice.
+                where = _bounded(f"{label}{entry}" if label else entry)
+                at_node = _bounded(node_ptr)
+                try:
+                    error = best_match(node_validator.iter_errors(sample))
+                except (Unresolvable, RecursionError) as exc:
+                    # Never interpolate `exc`: an unresolved-reference error
+                    # renders the whole resource it searched, so the embedded
+                    # schema would land in the message once per recorded sample.
+                    # `ref` is the part of it that names the defect.
+                    ref = getattr(exc, "ref", None)
+                    why = (f"the reference {_bounded(repr(ref))} names nothing this "
+                           f"schema defines"
+                           if ref is not None else
+                           "resolving it ran out of stack — either a reference leading "
+                           "back to itself, or a sample nested deeper than the resolver "
+                           "follows")
+                    findings.append(finding(
+                        "embedded-schema-example", "error", entry,
+                        f"the node at {at_node} could not be resolved, so the sample "
+                        f"at {where} was not graded: {why}. The defect is in the "
+                        f"schema, not in the sample."))
+                    continue
+                except Exception as exc:  # noqa: BLE001 - author input, no total gate
+                    findings.append(finding(
+                        "embedded-schema-example", "error", entry,
+                        f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
+                        f"node declaring it could not grade ({type(exc).__name__}: "
+                        f"{_bounded(str(exc))}). "
+                        f"The recorded value is outside what a keyword on this node can "
+                        f"evaluate."))
+                    continue
+                if error is None:
+                    continue
+                inside = ("" if error.json_path == "$"
+                          else f" at {_bounded(error.json_path)} within the sample")
+                findings.append(finding(
+                    "embedded-schema-example", "error", entry,
+                    f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
+                    f"declaring it rejects{inside}: {_bounded(error.message)}. A sample is a "
+                    f"value the provider sends, so either the declared shape is wrong for "
+                    f"this field or the recorded sample never came off the wire."))
     return findings
 
 
@@ -817,14 +995,14 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         findings.append(finding("type-map-coverage", "error", "/",
                                 "api connector's 'endpoints/' directory has no *.json files."))
         return findings
-    if not isinstance(read_doc, list):
-        return findings  # model error already recorded; can't render coverage
-
     # Cross-endpoint identity: `endpoint_id` is unique within the connector
     # release (the contract's shared-metadata rules). The
     # filename==id rule only makes IDENTICAL ids collide on the filesystem (and
     # then surfaces obliquely as a filename mismatch); enforce the invariant
     # directly so a duplicate is reported as a duplicate.
+    if not isinstance(read_doc, list):
+        return findings  # model error already recorded; can't render coverage
+
     seen_ids: dict[str, str] = {}
     for ep_path in endpoint_files:
         rel = ep_path.relative_to(endpoint_dir).as_posix()
@@ -858,6 +1036,8 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
         findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
+        findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
+                                     ep_path.name, vid="embedded-schema-example"))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
         # connector's `transports` — checkable only here, where both documents
         # are in hand.
@@ -903,6 +1083,8 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
         findings += _embedded_schema_findings(doc)
+        findings += _run_guarded(_embedded_schema_example_findings, doc,
+                                 vid="embedded-schema-example")
         # `endpoint-transport-ref` is cross-document: it needs the sibling
         # connector.json's `transports`, which only `check_coverage` has. Say so
         # rather than returning a silent clean pass — an author validating a

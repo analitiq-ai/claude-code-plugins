@@ -283,7 +283,7 @@ access and may not guess field types).
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },
           "format": { "type": "string", "description": "Documented string format (e.g. `email`, `uri`, `uuid`, `date`)." },
-          "sample_value": { "type": "string", "description": "A real wire sample. REQUIRED for any temporal field so zone-awareness is decided on evidence, not guessed." },
+          "sample_value": { "description": "One value for this field copied verbatim out of a real request or response payload, recorded in the JSON kind the provider sends it as — the string `\"0\"` and the boolean `false` are different evidence. Never composed to match the declared type, and a placeholder a documentation renderer synthesized is not a wire value. Carry it for any field a payload shows one for; REQUIRED for a temporal, whose zone-awareness is decided on it rather than guessed." },
           "tz_aware": { "type": "boolean", "description": "For date-time fields: true iff the wire value carries a zone/offset." }
         }
       }
@@ -322,7 +322,8 @@ access and may not guess field types).
               "endpoint-id-unique",
               "endpoint-id-locator",
               "endpoint-transport-ref",
-              "embedded-json-schema"
+              "embedded-json-schema",
+              "embedded-schema-example"
             ]
           },
           "severity": { "type": "string", "enum": ["error", "warning"] },

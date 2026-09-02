@@ -35,6 +35,11 @@ dependencies = [
     # (input/response `schema`) as Draft 2020-12 — a check the dependency-light
     # contract-models package cannot host.
     "jsonschema>=4.18,<5",
+    # `jsonschema>=4.18` resolves references through this and installs it either
+    # way; it is declared because this package imports it, to build a registry
+    # that refuses retrieval. Left to its default, `jsonschema` FETCHES an
+    # `http(s)` `$ref`, which an offline validator must never do.
+    "referencing>=0.30",
 ]
 
 [project.scripts]

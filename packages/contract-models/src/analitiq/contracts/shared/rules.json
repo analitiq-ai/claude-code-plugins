@@ -3835,6 +3835,28 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-063",
+   "statement": "Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.validator.connectors::_embedded_schema_example_findings",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "pattern_symbol": null,
+   "fixture_model": null,
+   "rationale": "Every other check over an endpoint compares one declaration with another — a node's native token against its canonical Arrow type, that type against the sibling read map, the map against the canonical vocabulary — and they agree because each reads the same claim restated somewhere else. None of them can ask whether the claim is right about the provider, because nothing they read came from the provider. A recorded sample is the exception: it is copied off the wire, which makes it the one value in the document a declaration can be graded against. What is graded is the node's own JSON Schema statement: a flag the provider sends as the strings \"0\" and \"1\" under a node whose `type` says boolean satisfies every declaration-to-declaration check, and as the engine stands the disagreement surfaces when the first batch is cast rather than while the endpoint is being authored. The verdict itself needs none of that reading — a value contradicting the schema recording it is wrong on the document's own terms — so the check stays correct however the engine's casting changes. A node asserting nothing a value can fail — one carrying only the native and canonical type pair, say — is graded against nothing: deciding it would take a mapping from JSON kinds onto Arrow families, which is cast semantics this contract does not own and could not pin. An absent `type` is not that case, since a node constraining a value any other way is graded on what it constrains. Grading is otherwise left to a JSON Schema implementation reading the node, so nothing restates keyword semantics here, and a node carrying no sample is graded on nothing — the rule obliges nobody to record one, and an absent sample is never read as agreement.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
