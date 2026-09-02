@@ -11,6 +11,13 @@ import json
 
 import pytest
 
+from analitiq.contracts.endpoints import (
+    JSON_SCHEMA_LIST_OF_SCHEMA_KEYS,
+    JSON_SCHEMA_SINGLE_SCHEMA_KEYS,
+    JSON_SCHEMA_SUBSCHEMA_KEYS,
+    WRITE_MODES,
+)
+
 API = "https://schemas.analitiq.ai/api-endpoint/latest.json"
 JS = "https://json-schema.org/draft/2020-12/schema"
 
@@ -49,6 +56,11 @@ def _write_endpoint(properties, modes=("insert",), endpoint_id="widgets"):
         }}}
 
 
+def _model_errors(validator, doc):
+    return [f for f in validator.validate_document(doc)
+            if f["validator"] == "contract-model"]
+
+
 def _sample_findings(findings):
     return [f for f in findings if f["validator"] == "embedded-schema-example"]
 
@@ -77,11 +89,20 @@ def test_string_flag_under_a_boolean_node_errors(validator):
     assert "is not of type" in errors[0]["message"]
 
 
-@pytest.mark.parametrize("mode", ["insert", "upsert", "truncate_insert"])
+@pytest.mark.parametrize("mode", WRITE_MODES)
 def test_a_write_input_node_is_graded_in_every_mode(mode, validator):
+    """Driven from the contract's own mode vocabulary, so a mode it gains is
+    graded here or this test goes red.
+
+    A mode requiring a companion key says so by rejecting the document; which
+    mode that is belongs to the model, not to this file. The document must end
+    up model-clean, or the grading below would be reading a document the
+    contract already refused.
+    """
     doc = _write_endpoint({"paid": STRING_FLAG}, modes=(mode,))
-    if mode == "upsert":
+    if _model_errors(validator, doc):
         doc["operations"]["write"][mode]["conflict_keys"] = ["paid"]
+    assert not _model_errors(validator, doc), _model_errors(validator, doc)
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 2, errors
     assert all(e["path"].startswith(f"/operations/write/{mode}/input/schema") for e in errors)
@@ -141,6 +162,63 @@ def test_a_node_reached_through_defs_and_composition_is_graded(validator):
     }
 
 
+def _at_position(key, node):
+    """`node` placed at recursion position `key`, with the pointer segment that
+    position implies. Shaped by which bucket the contract puts the key in, never
+    by a list of key names written here."""
+    if key in JSON_SCHEMA_SUBSCHEMA_KEYS:
+        return {key: {"x": node}}, f"{key}/x"
+    if key in JSON_SCHEMA_LIST_OF_SCHEMA_KEYS:
+        return {key: [node]}, f"{key}/0"
+    return {key: node}, key
+
+
+@pytest.mark.parametrize("key", sorted(
+    JSON_SCHEMA_SUBSCHEMA_KEYS | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS | JSON_SCHEMA_SINGLE_SCHEMA_KEYS))
+def test_every_recursion_position_the_contract_declares_is_graded(key, validator):
+    """Acceptance 5, behaviourally.
+
+    The keyword inventory is the contract's and is pinned member-for-member
+    elsewhere, but a walker body reading a hardcoded subset of it satisfies that
+    pin and grades nothing at the positions it skipped. So the positions are
+    driven from the imported sets: a keyword the contract adds is graded here or
+    this test goes red.
+
+    `propertyNames` grades property names, which are strings — hence a
+    string-typed node, so every position carries a contradiction of its own kind
+    rather than one that only some positions could express.
+    """
+    node = ({"type": "string", "examples": [1]} if key == "propertyNames"
+            else {"type": "integer", "examples": ["nope"]})
+    placed, segment = _at_position(key, node)
+    doc = _read_endpoint({"f": {"type": "object", **placed}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert [e["path"] for e in errors] == [
+        f"/operations/read/response/schema/items/properties/f/{segment}/examples/0"
+    ], errors
+
+
+@pytest.mark.parametrize("key", sorted(
+    JSON_SCHEMA_SUBSCHEMA_KEYS | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS | JSON_SCHEMA_SINGLE_SCHEMA_KEYS))
+def test_the_type_pair_walk_reaches_the_same_positions(key, validator):
+    """The other consumer of the shared walk.
+
+    Sample grading and the `native_type`/`arrow_type` pair collection descend
+    through one generator, so a position one reaches is a position the other
+    reaches — and the pointer each reports is built once. Asserted from both
+    ends, because that shared generator is a choice a later change could undo
+    silently.
+    """
+    from analitiq.validator import connectors
+
+    placed, segment = _at_position(key, {"native_type": "STRING", "arrow_type": "Utf8"})
+    doc = _read_endpoint({"f": {"type": "object", **placed}})
+    assert connectors._collect_native_arrow_pairs(doc) == [
+        ("STRING", "Utf8",
+         f"/operations/read/response/schema/items/properties/f/{segment}")
+    ]
+
+
 def test_a_ref_node_is_graded_against_what_it_points_at(validator):
     """The sample sits on the referring node, so grading it means resolving the
     reference against the whole embedded document rather than the node alone."""
@@ -192,13 +270,20 @@ def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
         "big": {"type": "number", "multipleOf": 0.5, "examples": [int("1" + "0" * 400)]},
         "gone": {"$ref": "#/$defs/missing", "examples": [1]},
         "paid": {"type": "boolean", "examples": ["0"]},
+        # A defect this check does not own, to show the crash costs it nothing.
+        "other": {"native_type": "STRING", "arrow_type": "NotAnArrowType"},
     })
-    errors = _sample_findings(validator.validate_document(doc))
+    findings = validator.validate_document(doc)
+    errors = _sample_findings(findings)
     by_path = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_path) == {"big/examples/0", "gone/examples/0", "paid/examples/0"}
     assert "OverflowError" in by_path["big/examples/0"]
     assert "could not grade" in by_path["gone/examples/0"]
     assert "$ref" in by_path["gone/examples/0"]
+    # An oversized sample is truncated into the message rather than pasted whole.
+    assert "chars)" in by_path["big/examples/0"]
+    assert "0" * 200 not in by_path["big/examples/0"]
+    assert [f for f in findings if f["validator"] == "contract-model"], findings
 
 
 def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
