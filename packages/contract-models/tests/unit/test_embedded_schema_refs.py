@@ -1106,7 +1106,7 @@ class TestNestedDialectDeclarationRefused:
                 {"schema": {"type": "object", "properties": {"x": {"$schema": 5}}}}
             )
 
-    def test_rule_endp_064_is_registered_against_both_embedded_schema_classes(self):
+    def test_rule_endp_064_is_registered_against_every_embedded_schema_class(self):
         rules = {rule.id: rule for rule in all_rules()}
         assert "RULE-ENDP-064" in rules, "RULE-ENDP-064 is not registered"
         rule = rules["RULE-ENDP-064"]

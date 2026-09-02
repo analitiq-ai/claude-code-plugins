@@ -1519,9 +1519,9 @@ def _validate_schema_refs(
     RULE-ENDP-064 rides this walk too, because it reaches the same positions:
     `$schema` names the dialect a schema RESOURCE is written in, an embedded
     schema is one resource, and so the keyword is authorable at this document's
-    root and refused at every node the walk reaches below it. Its verdict is
-    the one thing here that reads WHERE a keyword sits rather than only that it
-    is there, which is why the walk carries a root marker.
+    root and refused at every node the walk reaches below it. Its verdict turns
+    on WHERE the keyword sits rather than only on its presence, which is why the
+    walk carries a root marker.
 
     Walks the same structural positions as
     :func:`_validate_arrow_type_in_json_schema` — the shared
