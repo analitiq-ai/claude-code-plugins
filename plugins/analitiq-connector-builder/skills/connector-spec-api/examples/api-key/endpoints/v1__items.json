@@ -36,9 +36,9 @@
                 "native_type": "object",
                 "arrow_type": "Object",
                 "properties": {
-                  "id": { "type": "string", "native_type": "string", "arrow_type": "Utf8" },
-                  "name": { "type": "string", "native_type": "string", "arrow_type": "Utf8" },
-                  "active": { "type": "boolean", "native_type": "boolean", "arrow_type": "Boolean" }
+                  "id": { "type": "string", "native_type": "string", "arrow_type": "Utf8", "examples": ["itm_8f21"] },
+                  "name": { "type": "string", "native_type": "string", "arrow_type": "Utf8", "examples": ["Widget"] },
+                  "active": { "type": "boolean", "native_type": "boolean", "arrow_type": "Boolean", "examples": [true] }
                 }
               }
             }
