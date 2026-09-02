@@ -738,6 +738,116 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
     assert not coverage, coverage
 
 
+# --- a broken sibling read map withholds coverage and nothing else -------------
+# Every per-endpoint check but the native→Arrow rendering reads only the endpoint
+# document and its sibling connector.json, so a read map that cannot be rendered
+# from must not withhold them. The map is broken in each of the states the walk
+# distinguishes, and every state is graded the same way.
+
+# Each broken state of the read map, with what still reports the map itself.
+_BROKEN_READ_MAPS = (
+    ("missing", None, "connector requires sibling type-map-read.json"),
+    ("not-a-list", "{}", "Input should be a valid list"),
+    ("unparseable", "{ not json", "could not be read or parsed"),
+)
+
+# The endpoint-anchored checks the walk runs before it renders coverage.
+_ENDPOINT_CHECK_IDS = frozenset({
+    "endpoint-filename", "endpoint-id-locator", "endpoint-transport-ref",
+    "embedded-json-schema", "embedded-schema-example",
+})
+
+
+def _write_defective_endpoints(root: Path, connector: dict, read_map_text: str | None):
+    """A connector tree carrying one defect per endpoint-anchored check, beside a
+    read map in the named broken state (or none at all)."""
+    (root / "endpoints").mkdir(parents=True)
+    (root / "connector.json").write_text(json.dumps(connector))
+    if read_map_text is not None:
+        (root / "type-map-read.json").write_text(read_map_text)
+    # filename ≠ endpoint_id; endpoint_id ≠ the handle its path derives;
+    # transport_ref names a transport the connector does not declare; a recorded
+    # sample contradicts the node declaring it.
+    ep = _endpoint("STRING", "Utf8", endpoint_id="widgets", path="/v1/widgets")
+    ep["operations"]["read"]["request"]["transport_ref"] = "undeclared"
+    ep["operations"]["read"]["response"]["schema"]["items"]["properties"]["a"]["examples"] = [123]
+    (root / "endpoints" / "misnamed.json").write_text(json.dumps(ep))
+    # Sample grading is skipped on a schema that is unreadable as Draft 2020-12,
+    # so the meta-schema defect rides its own endpoint.
+    meta = _endpoint("STRING", "Utf8", endpoint_id="meta", path="/meta")
+    meta["operations"]["read"]["response"]["schema"]["minItems"] = "notanumber"
+    (root / "endpoints" / "meta.json").write_text(json.dumps(meta))
+
+
+@pytest.mark.parametrize("state,text,reported", _BROKEN_READ_MAPS, ids=[s for s, _, _ in _BROKEN_READ_MAPS])
+def test_endpoint_checks_run_when_read_map_is_broken(tmp_path, connector_base, validator, state, text, reported):
+    _write_defective_endpoints(tmp_path, connector_base, text)
+    errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
+    assert any(reported in e["message"] for e in errors), (state, errors)
+    assert _ENDPOINT_CHECK_IDS <= {e["validator"] for e in errors}, (
+        state, sorted({e["validator"] for e in errors}), [e["message"] for e in errors])
+
+
+@pytest.mark.parametrize("text", [t for _, t, _ in _BROKEN_READ_MAPS], ids=[s for s, _, _ in _BROKEN_READ_MAPS])
+def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, validator, text):
+    # The endpoint documents come back graded, so a reader must be told that the
+    # one check the map feeds did not run — silence there reads as coverage passing.
+    _write_defective_endpoints(tmp_path, connector_base, text)
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert any(f["validator"] == "type-map-coverage" and f["severity"] == "warning"
+               and "not rendered" in f["message"] for f in findings), findings
+
+
+def test_database_missing_both_maps_reports_both(tmp_path, validator):
+    # The read map's absence must not hide the write map's: the same connector
+    # otherwise answers differently depending on how its read map is broken.
+    (tmp_path / "connector.json").write_text("{}")
+    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
+    messages = " ".join(e["message"] for e in errors)
+    assert "type-map-read.json" in messages and "type-map-write.json" in messages, errors
+
+
+def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validator):
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                {"widgets.json": _endpoint("STRING", "Utf8")})
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    assert [f for f in findings if f["validator"] == "type-map-coverage"] == [], findings
+
+
+def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector_base, validator):
+    # A readable map renders, so the uncovered native is the only thing coverage
+    # has to say — no warning about a rendering that did happen.
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                {"widgets.json": _endpoint("BIGINT", "Int64")})
+    findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
+    coverage = [f for f in findings if f["validator"] == "type-map-coverage"]
+    assert len(coverage) == 1 and coverage[0]["severity"] == "error", coverage
+    assert "no matching rule" in coverage[0]["message"], coverage
+
+
+@pytest.mark.parametrize("kind", ["database", "nosql", "document"])
+def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
+    # A database connector's release ships no endpoint documents, so the walk
+    # enumerates `endpoints/` for api connectors only — a broken read map does
+    # not change that, and coverage it never renders is not warned about.
+    (tmp_path / "type-map-read.json").write_text("{}")  # readable, not a list
+    (tmp_path / "type-map-write.json").write_text('[{"match":"exact","canonical":"Utf8","native":"TEXT"}]')
+    (tmp_path / "endpoints").mkdir()
+    (tmp_path / "endpoints" / "misnamed.json").write_text(
+        json.dumps(_endpoint("STRING", "Utf8", endpoint_id="widgets", path="/v1/widgets")))
+    (tmp_path / "connector.json").write_text("{}")
+    findings = validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json")
+    assert not [f for f in findings if f["validator"] in _ENDPOINT_CHECK_IDS], findings
+    assert not [f for f in findings if "not rendered" in f["message"]], findings
+
+
+@pytest.mark.parametrize("kind", ["file", "s3", "stdout"])
+def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
+    (tmp_path / "connector.json").write_text("{}")
+    assert validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json") == []
+
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
 
 def _run_cli(tmp_path, doc, filename="doc.json"):
