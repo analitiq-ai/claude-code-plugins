@@ -187,6 +187,21 @@ def test_a_nested_dialect_declaration_is_a_contract_model_error(validator):
     assert not [f for f in findings if "validator bug" in f["message"]], findings
 
 
+def test_a_root_non_string_dialect_declaration_is_a_document_error(validator):
+    """A root `$schema` is authorable at any value the contract model does not
+    read, so the dialect check is what meets a non-string one. `check_schema`
+    types the keyword against the meta-schema, and asking it before the string
+    comparison is what keeps the comparison holding a string — reverse the two
+    and this document raises inside the check and is reported as a defect in
+    the tool instead of in the document."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["$schema"] = 5
+    findings = validator.validate_document(ep)
+    errors = _errors(findings)
+    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+    assert not [f for f in findings if "validator bug" in f["message"]], findings
+
+
 @pytest.fixture
 def connector_base():
     # A real, model-valid api connector (hand-crafting the exact Connector

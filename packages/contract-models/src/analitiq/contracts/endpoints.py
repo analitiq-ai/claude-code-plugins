@@ -1825,10 +1825,10 @@ class WriteInput(_EndpointModel):
         description="JSON Schema Draft 2020-12 for one provider-facing destination record.",
     )
 
-    # Named `_validate` (not `_validate_arrow_types`) because it now enforces two
-    # rules — RULE-ENDP-006's arrow_type walk and RULE-ENDP-026's `$ref` walk — and
-    # the rule registry needs ONE enforcer name that exists on both this model
-    # and `ResponseExtraction` for the pair of rules they share.
+    # Named `_validate` (not `_validate_arrow_types`) because it enforces every
+    # rule one document settles alone over an embedded schema, whichever walk
+    # reaches it, and the rule registry needs ONE enforcer name that exists on
+    # this model and on `ResponseExtraction` for the rules they share.
     @model_validator(mode="after")
     def _validate(self) -> "WriteInput":
         errors: list[str] = []
