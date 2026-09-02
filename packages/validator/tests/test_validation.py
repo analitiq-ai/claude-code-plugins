@@ -751,16 +751,27 @@ _BROKEN_READ_MAPS = (
     ("unparseable", "{ not json", "could not be read or parsed"),
 )
 
-# The endpoint-anchored checks the walk runs before it renders coverage.
-_ENDPOINT_CHECK_IDS = frozenset({
-    "endpoint-filename", "endpoint-id-locator", "endpoint-transport-ref",
-    "embedded-json-schema", "embedded-schema-example",
-})
+# What the defective endpoint tree below provokes: a validator id, and a fragment
+# of the verdict that check writes. The fragment is what makes the assertion
+# grade the check instead of its id — a check that crashes is reported under its
+# own id too, and an id-only assertion would read that as the check having run.
+_ENDPOINT_DEFECTS = {
+    "endpoint-filename": "must be named 'widgets.json'",
+    "endpoint-id-locator": "must equal 'v1__widgets'",
+    "endpoint-transport-ref": "is not declared in the sibling connector.json",
+    "embedded-json-schema": "is not a valid JSON Schema Draft 2020-12",
+    "embedded-schema-example": "which the node declaring it rejects",
+}
+
+# The verdicts the native→Arrow rendering writes. A map that did not load feeds
+# no rendering, so a finding carrying either fragment contradicts the warning
+# that says coverage went unrendered.
+_RENDERED_COVERAGE = ("has no matching rule in", "resolves to")
 
 
 def _write_defective_endpoints(root: Path, connector: dict, read_map_text: str | None):
-    """A connector tree carrying one defect per endpoint-anchored check, beside a
-    read map in the named broken state (or none at all)."""
+    """A connector tree carrying every defect `_ENDPOINT_DEFECTS` names, beside a
+    read map in one of the broken states (or none at all)."""
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
     if read_map_text is not None:
@@ -779,13 +790,36 @@ def _write_defective_endpoints(root: Path, connector: dict, read_map_text: str |
     (root / "endpoints" / "meta.json").write_text(json.dumps(meta))
 
 
+def _defects_reported(findings) -> set[str]:
+    return {vid for vid, fragment in _ENDPOINT_DEFECTS.items()
+            if any(f["validator"] == vid and fragment in f["message"] for f in findings)}
+
+
+def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoints: bool) -> Path:
+    """A database-family connector tree, with the read map's text, the write map
+    and an `endpoints/` directory the kind has no business shipping each optional.
+    Returns the connector.json path."""
+    root.mkdir(parents=True)
+    (root / "connector.json").write_text("{}")
+    if read_map is not None:
+        (root / "type-map-read.json").write_text(read_map)
+    if write_map:
+        (root / "type-map-write.json").write_text(
+            '[{"match":"exact","canonical":"Utf8","native":"TEXT"}]')
+    if endpoints:
+        (root / "endpoints").mkdir()
+        (root / "endpoints" / "misnamed.json").write_text(
+            json.dumps(_endpoint("STRING", "Utf8", endpoint_id="widgets", path="/v1/widgets")))
+    return root / "connector.json"
+
+
 @pytest.mark.parametrize("state,text,reported", _BROKEN_READ_MAPS, ids=[s for s, _, _ in _BROKEN_READ_MAPS])
 def test_endpoint_checks_run_when_read_map_is_broken(tmp_path, connector_base, validator, state, text, reported):
     _write_defective_endpoints(tmp_path, connector_base, text)
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any(reported in e["message"] for e in errors), (state, errors)
-    assert _ENDPOINT_CHECK_IDS <= {e["validator"] for e in errors}, (
-        state, sorted({e["validator"] for e in errors}), [e["message"] for e in errors])
+    assert _defects_reported(errors) == set(_ENDPOINT_DEFECTS), (
+        state, sorted(_defects_reported(errors)), [e["message"] for e in errors])
 
 
 @pytest.mark.parametrize("text", [t for _, t, _ in _BROKEN_READ_MAPS], ids=[s for s, _, _ in _BROKEN_READ_MAPS])
@@ -796,15 +830,26 @@ def test_unrendered_coverage_is_reported_not_silent(tmp_path, connector_base, va
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
     assert any(f["validator"] == "type-map-coverage" and f["severity"] == "warning"
                and "not rendered" in f["message"] for f in findings), findings
+    # ... and the warning is the whole of what coverage says here: a rendering
+    # that never ran cannot also return per-endpoint verdicts.
+    assert not [f for f in findings
+                if any(fragment in f["message"] for fragment in _RENDERED_COVERAGE)], findings
 
 
 def test_database_missing_both_maps_reports_both(tmp_path, validator):
     # The read map's absence must not hide the write map's: the same connector
-    # otherwise answers differently depending on how its read map is broken.
-    (tmp_path / "connector.json").write_text("{}")
-    errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
-    messages = " ".join(e["message"] for e in errors)
-    assert "type-map-read.json" in messages and "type-map-write.json" in messages, errors
+    # otherwise answers differently depending on how its read map is broken. The
+    # branch stays terminal, so an `endpoints/` directory beside it is neither
+    # enumerated nor demanded.
+    doc = _min_connector("database")
+    with_dir = validator.check_coverage(doc, _database_tree(
+        tmp_path / "with", read_map=None, write_map=False, endpoints=True))
+    without_dir = validator.check_coverage(doc, _database_tree(
+        tmp_path / "without", read_map=None, write_map=False, endpoints=False))
+    assert with_dir == without_dir, (with_dir, without_dir)
+    messages = " ".join(e["message"] for e in _errors(with_dir))
+    assert "type-map-read.json" in messages and "type-map-write.json" in messages, with_dir
+    assert not [f for f in with_dir if "endpoints" in f["message"]], with_dir
 
 
 def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validator):
@@ -830,23 +875,25 @@ def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector
 @pytest.mark.parametrize("kind", ["database", "nosql", "document"])
 def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
     # A database connector's release ships no endpoint documents, so the walk
-    # enumerates `endpoints/` for api connectors only — a broken read map does
-    # not change that, and coverage it never renders is not warned about.
-    (tmp_path / "type-map-read.json").write_text("{}")  # readable, not a list
-    (tmp_path / "type-map-write.json").write_text('[{"match":"exact","canonical":"Utf8","native":"TEXT"}]')
-    (tmp_path / "endpoints").mkdir()
-    (tmp_path / "endpoints" / "misnamed.json").write_text(
-        json.dumps(_endpoint("STRING", "Utf8", endpoint_id="widgets", path="/v1/widgets")))
-    (tmp_path / "connector.json").write_text("{}")
-    findings = validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json")
-    assert not [f for f in findings if f["validator"] in _ENDPOINT_CHECK_IDS], findings
-    assert not [f for f in findings if "not rendered" in f["message"]], findings
+    # enumerates `endpoints/` for api connectors only — a broken read map does not
+    # change that. An `endpoints/` directory beside the connector therefore moves
+    # nothing in the verdict, and a rendering the kind never asks for is not
+    # warned about either.
+    doc = _min_connector(kind)
+    with_dir = validator.check_coverage(doc, _database_tree(
+        tmp_path / "with", read_map="{}", write_map=True, endpoints=True))
+    without_dir = validator.check_coverage(doc, _database_tree(
+        tmp_path / "without", read_map="{}", write_map=True, endpoints=False))
+    assert with_dir == without_dir, (with_dir, without_dir)
+    assert not [f for f in with_dir if "endpoints" in f["message"]], with_dir
+    assert not [f for f in with_dir if "not rendered" in f["message"]], with_dir
 
 
 @pytest.mark.parametrize("kind", ["file", "s3", "stdout"])
 def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
     (tmp_path / "connector.json").write_text("{}")
     assert validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json") == []
+
 
 # --- CLI / exit-code contract (the integration surface consumers depend on) ---
 
