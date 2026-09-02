@@ -155,6 +155,38 @@ def test_embedded_schema_rejects_other_dialect(validator):
     assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
 
 
+def test_embedded_schema_accepts_the_empty_fragment_spelling(validator):
+    """`…/2020-12/schema#` and `…/2020-12/schema` identify the same resource
+    under RFC 3986, and a JSON Schema implementation maps either spelling onto
+    the 2020-12 dialect. The contract accepts either."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["$schema"] = f"{JS}#"
+    errors = _errors(validator.validate_document(ep))
+    assert not any(e["validator"] == "embedded-json-schema" for e in errors), errors
+
+
+def test_embedded_schema_rejects_a_repeated_empty_fragment(validator):
+    """A single trailing `#` is the empty fragment. `##` is not a spelling of
+    this URI, so it names something other than the dialect the contract is
+    written in and is refused — stripping every trailing `#` would accept it."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["$schema"] = f"{JS}##"
+    errors = _errors(validator.validate_document(ep))
+    assert any(e["validator"] == "embedded-json-schema" for e in errors), errors
+
+
+def test_a_nested_dialect_declaration_is_a_contract_model_error(validator):
+    """`$schema` below the root of an embedded schema is refused by the
+    contract model, whatever its value, and nothing downstream of that model
+    crashes on it — a "validator bug" finding would hide the actionable one and
+    blame the tool for a defect in the document."""
+    ep = _endpoint("STRING", "Utf8")
+    ep["operations"]["read"]["response"]["schema"]["items"]["$schema"] = 5
+    findings = validator.validate_document(ep)
+    assert any(f["validator"] == "contract-model" for f in _errors(findings)), findings
+    assert not [f for f in findings if "validator bug" in f["message"]], findings
+
+
 @pytest.fixture
 def connector_base():
     # A real, model-valid api connector (hand-crafting the exact Connector

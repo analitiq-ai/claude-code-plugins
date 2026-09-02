@@ -3857,6 +3857,31 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-064",
+   "statement": "An embedded request or response schema MUST NOT declare `$schema` on a subschema; the dialect is declared on the schema itself, or not at all.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ResponseExtraction",
+    "WriteInput"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "pattern_symbol": null,
+   "fixture_model": null,
+   "rationale": "`$schema` belongs to a schema resource, and an embedded schema is one resource — the document under `response.schema` or `input.schema`. A JSON Schema implementation grading a node honours the declaration that node carries, so a subschema naming another draft is graded in that draft while everything around it is graded in the draft this contract is written in: the keywords beneath it keep their spelling and lose their meaning, a value that should fail passes, and nothing reports it. It is the harm a nested base-URI declaration does, arriving through a keyword that reads as documentation rather than as a reference. Refusing it on the document leaves every consumer a single declaration to read — the root one — which is what lets a dialect comparison be a comparison of one value rather than a walk of its own, and what makes the contract's own draft the one an offline reader of any subschema is entitled to assume. Declaring the dialect at the root stays authorable, and omitting it stays authorable too.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
