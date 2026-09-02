@@ -239,6 +239,18 @@ def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     return out
 
 
+def _pointer_segment(name: str) -> str:
+    """A schema-map key as one RFC 6901 pointer segment.
+
+    Only the keys an author chooses need this — a property name, a `$defs` name,
+    a `patternProperties` regex. Keyword names and list indices are fixed
+    vocabulary and cannot carry either character. A raw `a/b` reads as two
+    segments and a raw `~` opens an escape, so an unescaped name points at the
+    wrong node or at none: `embedded-schema-example` reports the pointer as the
+    finding's `path`, which a consumer resolves against the document."""
+    return name.replace("~", "~0").replace("/", "~1")
+
+
 def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
     """Every structural sub-schema node of a JSON Schema document, as
     `(pointer, node)`, recursing only through sub-schema positions. The document
@@ -255,7 +267,8 @@ def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
         sub = schema.get(key)
         if isinstance(sub, dict):
             for name, child in sub.items():
-                yield from _walk_schema_nodes(child, f"{pointer}/{key}/{name}")
+                yield from _walk_schema_nodes(
+                    child, f"{pointer}/{key}/{_pointer_segment(name)}")
     for key in _SUBSCHEMA_LIST_KEYS:
         sub = schema.get(key)
         if isinstance(sub, list):

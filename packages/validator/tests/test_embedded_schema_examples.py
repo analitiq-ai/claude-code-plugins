@@ -221,6 +221,27 @@ def test_the_type_pair_walk_reaches_the_same_positions(key, validator):
     ]
 
 
+def test_a_name_carrying_pointer_syntax_is_escaped(validator):
+    """The finding's `path` is a JSON Pointer a consumer resolves, and the names
+    in it are the provider's. A raw `/` reads as another segment and a raw `~`
+    opens an escape, so an unescaped name locates the wrong node or none.
+
+    Asserted by resolving the pointer back to the node it names, rather than by
+    comparing it to an escaped string written here — a wrong pointer written the
+    same way in both places would agree with itself.
+    """
+    doc = _read_endpoint({"a/b": {"type": "integer", "examples": ["nope"]},
+                          "c~d": {"type": "integer", "examples": ["nope"]}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 2, errors
+    for err in errors:
+        node = doc
+        for raw in err["path"].split("/")[1:]:
+            segment = raw.replace("~1", "/").replace("~0", "~")
+            node = node[int(segment)] if isinstance(node, list) else node[segment]
+        assert node == "nope", err["path"]
+
+
 def test_a_ref_node_is_graded_against_what_it_points_at(validator):
     """The sample sits on the referring node, so grading it means resolving the
     reference against the whole embedded document rather than the node alone."""
