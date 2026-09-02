@@ -334,18 +334,35 @@ def test_a_crash_in_the_check_costs_no_other_check(validator, monkeypatch):
     assert len(crashes) == 1 and "crashed unexpectedly" in crashes[0]["message"]
 
 
-def test_a_node_stating_no_json_schema_type_is_not_graded(validator):
+def test_a_node_asserting_nothing_is_graded_against_nothing(validator):
     """The boundary of what a sample settles, made executable.
 
-    Grading is against the node's JSON Schema statement. A node carrying only
-    the contract's `native_type`/`arrow_type` pair states nothing a value can
-    contradict, so the sample is graded against nothing and the check is silent.
-    Deciding it would take a JSON-kind to Arrow-family table — cast semantics
-    this repo does not own and could not pin.
+    Grading is against the node's JSON Schema assertions, and the contract's
+    `native_type`/`arrow_type` pair is not one of them — a node carrying only
+    that pair asserts nothing a value can fail, so the check is silent. Deciding
+    it would take a JSON-kind to Arrow-family table: cast semantics this repo
+    does not own and could not pin.
+
+    An absent `type` is not the boundary, though — the companion case below is
+    what keeps this test from being read as one.
     """
     doc = _read_endpoint({"paid": {
         "native_type": "BOOLEAN", "arrow_type": "Boolean", "examples": ["0"]}})
     assert not _sample_findings(validator.validate_document(doc))
+
+
+def test_a_node_asserting_without_a_type_is_still_graded(validator):
+    """`type` is one assertion among many. A node constraining a value by
+    `const`, `enum` or a bound states something a sample can contradict, and is
+    graded on it."""
+    doc = _read_endpoint({
+        "country": {"const": "US", "examples": ["CA"]},
+        "status": {"enum": ["open", "closed"], "examples": ["paid"]},
+        "size": {"maximum": 10, "examples": [11]},
+    })
+    errors = _sample_findings(validator.validate_document(doc))
+    assert {e["path"].split("/properties/")[1] for e in errors} == {
+        "country/examples/0", "status/examples/0", "size/examples/0"}
 
 
 def test_a_schema_declaring_another_draft_is_not_graded(validator):
@@ -397,6 +414,57 @@ def test_grading_is_never_invoked_without_the_check_that_reports_its_skips(valid
         f"{unpaired}. Grading skips every schema the meta-check rejects, so "
         "without it a document that is not a valid JSON Schema passes clean."
     )
+
+
+def test_a_nested_schema_declaring_another_draft_is_refused(validator):
+    """A draft declared below the root is a declared draft.
+
+    The dialect a node names is honoured when that node is graded, so a subschema
+    claiming an older draft is read under semantics the contract does not use —
+    a 2020-12 keyword is simply inert there, and the sample it should have failed
+    passes. `check_schema` has no opinion on what a node claims to be, so the
+    refusal belongs with the root's.
+    """
+    doc = _read_endpoint({"f": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "prefixItems": [{"type": "integer"}], "examples": [["x"]]}})
+    findings = validator.validate_document(doc)
+    assert not _sample_findings(findings)
+    dialect = [f for f in _errors(findings) if f["validator"] == "embedded-json-schema"]
+    assert len(dialect) == 1, findings
+    assert "draft-07" in dialect[0]["message"]
+    assert "/items/properties/f" in dialect[0]["message"]
+
+
+def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
+    """Validation is offline by contract, and grading must not be the exception.
+
+    Left to its default reference registry, the grader FETCHES an `http(s)`
+    `$ref` — an authored endpoint would make the validator issue a request to
+    an address its author chose and wait for the answer. The host here is
+    TEST-NET-1, which is unroutable: a fetch stalls until it times out, so the
+    elapsed time is the assertion. It is generous by orders of magnitude, since
+    what it must separate is a refusal from a network timeout.
+    """
+    import time
+
+    doc = _read_endpoint({"x": {"$ref": "http://192.0.2.1/nothing.json",
+                                "examples": [1]}})
+    started = time.monotonic()
+    errors = _sample_findings(validator.validate_document(doc))
+    assert time.monotonic() - started < 5.0, "grading attempted a network fetch"
+    assert len(errors) == 1, errors
+    assert "could not grade" in errors[0]["message"]
+
+
+def test_an_in_document_ref_still_resolves_under_the_offline_registry(validator):
+    """The other half: refusing retrieval must not refuse the references the
+    contract does allow."""
+    doc = _read_endpoint({"paid": {"$ref": "#/$defs/flag", "examples": ["0"]}},
+                         defs={"flag": {"type": "boolean"}})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 1, errors
+    assert "is not of type 'boolean'" in errors[0]["message"]
 
 
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):

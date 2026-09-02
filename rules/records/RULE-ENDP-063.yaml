@@ -22,10 +22,12 @@ rationale: >
   while the endpoint is being authored. The verdict itself needs none of that
   reading — a value contradicting the schema recording it is wrong on the
   document's own terms — so the check stays correct however the engine's casting
-  changes. A node that states no type states nothing a value can contradict, and
-  is graded against nothing: deciding one would take a mapping from JSON kinds
-  onto Arrow families, which is cast semantics this contract does not own and
-  could not pin. Grading is otherwise left to a JSON Schema implementation
+  changes. A node asserting nothing a value can fail — one carrying only the
+  native and canonical type pair, say — is graded against nothing: deciding it
+  would take a mapping from JSON kinds onto Arrow families, which is cast
+  semantics this contract does not own and could not pin. An absent `type` is
+  not that case, since a node constraining a value any other way is graded on
+  what it constrains. Grading is otherwise left to a JSON Schema implementation
   reading the node, so nothing restates keyword semantics here, and a node
   carrying no sample is graded on nothing — the rule obliges nobody to record
   one, and an absent sample is never read as agreement.

@@ -150,7 +150,7 @@ was raised.
        has a `sample_value`, put it verbatim into that node's `examples`, in
        the JSON kind the provider sends — the string `"0"` stays a string. It
        is the only value in the endpoint that came off the wire, so it is the
-       only thing the node's own `type` can be graded against
+       only thing the node's own assertions can be graded against
        (`RULE-ENDP-063`). Never compose a sample to satisfy a node, and never
        drop one that contradicts it: a provider that types a field boolean and
        sends `"0"` has told you the declaration is wrong, and the declaration

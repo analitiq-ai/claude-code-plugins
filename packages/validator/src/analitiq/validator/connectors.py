@@ -327,10 +327,18 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
 
-    declared = schema.get("$schema")
-    if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
-        return (f"declares $schema {declared!r}; the contract requires JSON Schema "
-                f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
+    # Every node, not only the root: a subschema declaring another draft is a
+    # document that means one thing to the contract and another to a reader that
+    # honours the declaration — `Draft202012Validator.evolve` honours it, and
+    # grades the node under the draft the author named. `check_schema` sees none
+    # of this; it grades keywords against the 2020-12 meta-schema and has no
+    # opinion on what a node claims to be.
+    for node_ptr, node in _walk_schema_nodes(schema, ""):
+        declared = node.get("$schema")
+        if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+            at = f" at {node_ptr}" if node_ptr else ""
+            return (f"declares $schema {declared!r}{at}; the contract requires JSON Schema "
+                    f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
@@ -361,6 +369,28 @@ def _short_repr(value: Any, limit: int = 120) -> str:
     be a whole provider record and a finding is read in a terminal."""
     text = repr(value)
     return text if len(text) <= limit else f"{text[:limit]}… ({len(text)} chars)"
+
+
+def _offline_registry(schema: dict):
+    """A reference registry holding this document and nothing else.
+
+    Validation here is offline by contract, and `jsonschema`'s default registry
+    is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
+    could make the validator issue a request to any address its author chose and
+    block on the answer. A registry with no retrieval refuses instead, and the
+    per-entry guard turns the refusal into a finding. In-document `#/...`
+    references still resolve — the document is registered under the empty URI,
+    which is the base every embedded schema resolves against.
+
+    That the contract models separately refuse a non-local `$ref` does not cover
+    this: grading runs on documents the models have already rejected, and an
+    offline guarantee that holds only while another check keeps its rule is not
+    one."""
+    from referencing import Registry, Resource
+    from referencing.jsonschema import DRAFT202012
+
+    resource = Resource.from_contents(schema, default_specification=DRAFT202012)
+    return Registry().with_resource(uri="", resource=resource)
 
 
 def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dict]:
@@ -400,7 +430,7 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
             continue
         if _unreadable_as_2020_12(schema) is not None:
             continue
-        document = Draft202012Validator(schema)
+        document = Draft202012Validator(schema, registry=_offline_registry(schema))
         for node_ptr, node in _walk_schema_nodes(schema, pointer):
             examples = node.get("examples")
             if not isinstance(examples, list):
