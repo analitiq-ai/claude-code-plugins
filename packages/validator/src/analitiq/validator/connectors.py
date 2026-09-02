@@ -242,7 +242,8 @@ def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     if isinstance(write, dict):
         for mode, block in write.items():
             if isinstance(block, dict) and isinstance(block.get("input"), dict):
-                out.append((f"/operations/write/{mode}/input/schema", block["input"].get("schema")))
+                out.append((f"/operations/write/{_escape_pointer_token(mode)}/input/schema",
+                            block["input"].get("schema")))
     return out
 
 
