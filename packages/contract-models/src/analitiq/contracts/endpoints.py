@@ -3460,22 +3460,6 @@ def _unescape_pointer_token(token: str) -> str:
     return unquote(token).replace("~1", "/").replace("~0", "~")
 
 
-def _escape_pointer_token(name: str) -> str:
-    """One object key, encoded as a JSON Pointer reference token.
-
-    RFC 6901 §3, and its ordering matters the opposite way round to
-    `_unescape_pointer_token`: `~` is encoded FIRST, because encoding `/` first
-    would put a `~` into the document that the `~` pass then encodes again,
-    turning `a/b` into `a~01b`.
-
-    Only §3 — no percent-encoding, which is the asymmetry with the decoder and
-    the reason this is not simply its inverse. §6 governs the URI-fragment form
-    a `$ref` is written in; a token built here goes into a plain JSON Pointer
-    (the `path` a finding reports), where a literal `%` is a literal `%`.
-    """
-    return name.replace("~", "~0").replace("/", "~1")
-
-
 def _pointer_array_index(token: str, array: list[Any]) -> int | None:
     """RFC 6901 §4 array index, or ``None`` when the token is not one.
 

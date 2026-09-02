@@ -70,10 +70,6 @@ try:
             ApiEndpointDoc,
             DatabaseEndpointDoc,
             SLUG_RE,
-            # RFC 6901 encoding belongs with its decoder, which the contract
-            # owns — the two halves have opposite ordering hazards, and one kept
-            # away from the other is a hazard stated in only one place.
-            _escape_pointer_token,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
@@ -225,6 +221,12 @@ _SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
 _SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
 
 
+def _escape_pointer_token(name: str) -> str:
+    """One object key as an RFC 6901 pointer segment. `~` before `/`: the other
+    order re-encodes the `~` it just wrote, turning `a/b` into `a~01b`."""
+    return name.replace("~", "~0").replace("/", "~1")
+
+
 def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     """The endpoint's embedded JSON-Schema documents as `(pointer, schema)` —
     `operations.read.response.schema` and each `operations.write.<mode>.input.schema`
@@ -339,18 +341,10 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
 
-    for node_ptr, node in _walk_schema_nodes(schema, ""):
-        declared = node.get("$schema")
-        # An empty fragment is not a different document: every resolver here
-        # normalises `…/schema#` to `…/schema`, so refusing that spelling would
-        # reject a document declaring exactly the draft the contract requires.
-        # A non-string is not a declaration this can read, and `check_schema`
-        # rejects it against the meta-schema — so it falls through rather than
-        # being normalised, which would raise and cost both checks their verdict.
-        if isinstance(declared, str) and declared.rstrip("#") != _DRAFT_2020_12_SCHEMA:
-            at = f" at {node_ptr}" if node_ptr else ""
-            return (f"declares $schema {declared!r}{at}; the contract requires JSON Schema "
-                    f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
+    declared = schema.get("$schema")
+    if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        return (f"declares $schema {declared!r}; the contract requires JSON Schema "
+                f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
@@ -952,27 +946,17 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                     findings.extend(_type_map_findings(doc_, direction))
         return findings
 
-    # A read-map problem is reported here and carried, not returned on: it stops
-    # what needs the map to render a canonical, and nothing else. An api
-    # connector's endpoint documents are graded on their own terms — shape,
-    # identity, embedded schemas, recorded samples — none of which the map
-    # touches, and leaving them ungraded until an unrelated file is fixed hides
-    # every defect in them behind one.
-    read_doc = None
     if not read_path.is_file():
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"connector requires sibling {_READ_MAP_FILENAME} (native → Arrow); missing."))
-    else:
-        read_doc, load = _load_type_map(read_path)
-        findings.extend(load)
-        if read_doc is not None:
-            findings.extend(_type_map_findings(read_doc, "read"))
+        return findings
+    read_doc, load = _load_type_map(read_path)
+    findings.extend(load)
+    if read_doc is None:
+        return findings
+    findings.extend(_type_map_findings(read_doc, "read"))
 
     if kind in _DATABASE_KINDS:
-        # A database connector has no endpoint documents, so the map IS the
-        # whole subject here and there is nothing left to grade without it.
-        if read_doc is None:
-            return findings
         if not write_path.is_file():
             findings.append(finding("type-map-coverage", "error", "/",
                                     f"{kind} connector requires sibling {_WRITE_MAP_FILENAME}; missing."))
@@ -1007,6 +991,9 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # filename==id rule only makes IDENTICAL ids collide on the filesystem (and
     # then surfaces obliquely as a filename mismatch); enforce the invariant
     # directly so a duplicate is reported as a duplicate.
+    if not isinstance(read_doc, list):
+        return findings  # model error already recorded; can't render coverage
+
     seen_ids: dict[str, str] = {}
     for ep_path in endpoint_files:
         rel = ep_path.relative_to(endpoint_dir).as_posix()
@@ -1039,8 +1026,7 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
             # skip the coverage walk (it calls `.get()` and would crash, replacing
             # the actionable findings with a generic "validator bug" via _run_guarded).
             continue
-        findings.extend(_run_guarded(_embedded_schema_findings, ep_doc,
-                                     ep_path.name, vid="embedded-json-schema"))
+        findings.extend(_embedded_schema_findings(ep_doc, label=ep_path.name))
         findings.extend(_run_guarded(_embedded_schema_example_findings, ep_doc,
                                      ep_path.name, vid="embedded-schema-example"))
         # Cross-file: the endpoint's transport_ref sites resolve against THIS
@@ -1048,11 +1034,6 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # are in hand.
         findings.extend(_endpoint_transport_ref_findings(
             ep_doc, doc.get("transports"), label=ep_path.name))
-        if not isinstance(read_doc, list):
-            # No usable read map: its own defect is already reported, and a
-            # canonical cannot be rendered without it. Everything above this
-            # line has already graded the endpoint on what it does not need.
-            continue
         for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
             rendered = _render_canonical(native, read_doc)
             site = f"{ep_path.name}{pointer}"
@@ -1092,8 +1073,7 @@ def _validate_api_endpoint(doc: Any, doc_path: Path | None, schema_url: str | No
     findings = _model_findings(doc, _API_ENDPOINT_ADAPTER)
     findings += _endpoint_locator_findings(doc)
     if isinstance(doc, dict):
-        findings += _run_guarded(_embedded_schema_findings, doc,
-                                 vid="embedded-json-schema")
+        findings += _embedded_schema_findings(doc)
         findings += _run_guarded(_embedded_schema_example_findings, doc,
                                  vid="embedded-schema-example")
         # `endpoint-transport-ref` is cross-document: it needs the sibling

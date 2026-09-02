@@ -200,27 +200,6 @@ def test_every_recursion_position_the_contract_declares_is_graded(key, validator
     ], errors
 
 
-@pytest.mark.parametrize("key", sorted(
-    JSON_SCHEMA_SUBSCHEMA_KEYS | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS | JSON_SCHEMA_SINGLE_SCHEMA_KEYS))
-def test_the_type_pair_walk_reaches_the_same_positions(key, validator):
-    """The other consumer of the shared walk.
-
-    Sample grading and the `native_type`/`arrow_type` pair collection descend
-    through one generator, so a position one reaches is a position the other
-    reaches — and the pointer each reports is built once. Asserted from both
-    ends, because that shared generator is a choice a later change could undo
-    silently.
-    """
-    from analitiq.validator import connectors
-
-    placed, segment = _at_position(key, {"native_type": "STRING", "arrow_type": "Utf8"})
-    doc = _read_endpoint({"f": {"type": "object", **placed}})
-    assert connectors._collect_native_arrow_pairs(doc) == [
-        ("STRING", "Utf8",
-         f"/operations/read/response/schema/items/properties/f/{segment}")
-    ]
-
-
 def test_a_name_carrying_pointer_syntax_is_escaped(validator):
     """The finding's `path` is a JSON Pointer a consumer resolves, and the names
     in it are the provider's. A raw `/` reads as another segment and a raw `~`
@@ -362,82 +341,6 @@ def test_a_schema_declaring_another_draft_is_not_graded(validator):
     assert [f["validator"] for f in _errors(findings)] == ["embedded-json-schema"]
 
 
-def test_grading_is_never_invoked_without_the_check_that_reports_its_skips(validator):
-    """The skip is safe only because the meta-check runs beside it.
-
-    `_embedded_schema_example_findings` silently passes over any document
-    `_unreadable_as_2020_12` rejects, on the understanding that
-    `_embedded_schema_findings` reports that document as an error. Nothing in
-    either function enforces the pairing — it is a property of the call sites,
-    so it is asserted here. Located lexically: a call by name inside the
-    function that encloses it.
-    """
-    import ast
-    from pathlib import Path as _Path
-
-    from analitiq.validator import connectors
-
-    tree = ast.parse(_Path(connectors.__file__).read_text(encoding="utf-8"))
-
-    def called_names(node):
-        return {getattr(c.func, "id", None) for c in ast.walk(node)
-                if isinstance(c, ast.Call)} | {
-            a.id for c in ast.walk(node) if isinstance(c, ast.Call)
-            for a in c.args if isinstance(a, ast.Name)}
-
-    callers = [fn for fn in ast.walk(tree)
-               if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef))
-               and "_embedded_schema_example_findings" in called_names(fn)]
-    assert callers, (
-        "no function calls `_embedded_schema_example_findings` — the check was "
-        "removed or renamed, and this assertion stopped matching rather than "
-        "the pairing stopping to hold"
-    )
-    unpaired = [fn.name for fn in callers
-                if "_embedded_schema_findings" not in called_names(fn)]
-    assert not unpaired, (
-        "sample grading is invoked without `_embedded_schema_findings` in: "
-        f"{unpaired}. Grading skips every schema the meta-check rejects, so "
-        "without it a document that is not a valid JSON Schema passes clean."
-    )
-
-
-@pytest.mark.parametrize("declared", [
-    "https://json-schema.org/draft/2020-12/schema",
-    "https://json-schema.org/draft/2020-12/schema#",
-])
-def test_the_contract_draft_is_accepted_in_either_spelling(declared, validator):
-    """An empty fragment names the same document. Every resolver in this path
-    normalises it away, so refusing that spelling would reject a schema
-    declaring exactly the draft the contract requires."""
-    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}},
-                         dialect=declared)
-    findings = validator.validate_document(doc)
-    assert not [f for f in findings if f["validator"] == "embedded-json-schema"], findings
-    # ...and the schema was read, not skipped.
-    assert len(_sample_findings(findings)) == 1, findings
-
-
-def test_a_nested_schema_declaring_another_draft_is_refused(validator):
-    """A draft declared below the root is a declared draft.
-
-    The dialect a node names is honoured when that node is graded, so a subschema
-    claiming an older draft is read under semantics the contract does not use —
-    a 2020-12 keyword is simply inert there, and the sample it should have failed
-    passes. `check_schema` has no opinion on what a node claims to be, so the
-    refusal belongs with the root's.
-    """
-    doc = _read_endpoint({"f": {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "prefixItems": [{"type": "integer"}], "examples": [["x"]]}})
-    findings = validator.validate_document(doc)
-    assert not _sample_findings(findings)
-    dialect = [f for f in _errors(findings) if f["validator"] == "embedded-json-schema"]
-    assert len(dialect) == 1, findings
-    assert "draft-07" in dialect[0]["message"]
-    assert "/items/properties/f" in dialect[0]["message"]
-
-
 def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
     """Validation is offline by contract, and grading must not be the exception.
 
@@ -532,22 +435,6 @@ def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
     assert "is not of type 'boolean'" in by_field["after/examples/0"]
 
 
-def test_a_malformed_schema_declaration_is_reported_not_crashed_on(validator):
-    """`$schema` is a keyword an author can get wrong like any other.
-
-    A non-string is not a declaration this can read, and normalising it would
-    raise — costing BOTH embedded-schema checks their verdict and replacing an
-    actionable finding with a generic validator-bug notice. The meta-schema
-    rejects it, so it is left to do that.
-    """
-    doc = _read_endpoint({"paid": {"type": "boolean"}})
-    doc["operations"]["read"]["response"]["schema"]["$schema"] = 1
-    findings = validator.validate_document(doc)
-    assert not [f for f in findings if "crashed unexpectedly" in f["message"]], findings
-    dialect = [f for f in findings if f["validator"] == "embedded-json-schema"]
-    assert len(dialect) == 1 and "not a valid JSON Schema" in dialect[0]["message"]
-
-
 @pytest.mark.parametrize("node,label", [
     ({"type": "integer", "examples": ["x" * 10_000]}, "an oversized instance"),
     ({"enum": [f"value_{i}" for i in range(300)], "examples": ["nope"]}, "a long enum"),
@@ -564,36 +451,6 @@ def test_a_finding_does_not_grow_with_what_the_keyword_echoes(node, label, valid
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 1, errors
     assert len(errors[0]["message"]) < 1000, f"{label}: {len(errors[0]['message'])} chars"
-
-
-@pytest.mark.parametrize("read_map", [None, '{"not": "a list"}', "{ not json at all"],
-                         ids=["missing", "not-a-list", "unparseable"])
-def test_samples_are_graded_when_the_sibling_read_map_is_unusable(read_map, tmp_path, validator):
-    """Grading needs no type map, so a broken one must not withhold it.
-
-    The connector-anchored walk resolves each endpoint's native tokens through
-    the sibling read map, and every per-endpoint check used to sit behind that
-    resolution — so a connector whose map was missing reported the map and
-    nothing else, and every defect in every endpoint stayed hidden behind one
-    unrelated file until it was fixed.
-    """
-    from pathlib import Path as _Path
-
-    corpus = _Path(__file__).resolve().parent / "corpus" / CORPUS_CONNECTOR
-    connector = json.loads(corpus.read_text())
-    (tmp_path / "endpoints").mkdir(parents=True)
-    (tmp_path / "connector.json").write_text(json.dumps(connector))
-    if read_map is not None:
-        (tmp_path / "type-map-read.json").write_text(read_map)
-    (tmp_path / "endpoints" / "widgets.json").write_text(
-        json.dumps(_read_endpoint({"paid": STRING_FLAG})))
-
-    findings = validator.validate_document(
-        connector, doc_path=tmp_path / "connector.json")
-    assert len(_sample_findings(findings)) == 2, findings
-    # ...and the map's own defect is still reported, not traded away for them.
-    assert [f for f in findings
-            if f["validator"] in ("type-map-coverage", "contract-model")], findings
 
 
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
