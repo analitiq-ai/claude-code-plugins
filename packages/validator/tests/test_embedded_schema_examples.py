@@ -457,14 +457,48 @@ def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
     assert "could not grade" in errors[0]["message"]
 
 
-def test_an_in_document_ref_still_resolves_under_the_offline_registry(validator):
-    """The other half: refusing retrieval must not refuse the references the
-    contract does allow."""
-    doc = _read_endpoint({"paid": {"$ref": "#/$defs/flag", "examples": ["0"]}},
-                         defs={"flag": {"type": "boolean"}})
+# Every way 2020-12 lets a reference name something inside its own document.
+# Refusing retrieval must refuse none of them — a registry holding the document
+# under one base could resolve the plain pointer and lose the rest, and the
+# symptom would be a finding blaming the author's sample for it.
+IN_DOCUMENT_REFS = {
+    "json pointer": ({"flag": {"type": "boolean"}}, "#/$defs/flag", {}),
+    "under a root $id": ({"flag": {"type": "boolean"}}, "#/$defs/flag",
+                         {"$id": "https://ref.example.test/schema"}),
+    "by a nested $id": ({"flag": {"$id": "https://ref.example.test/flag",
+                                  "type": "boolean"}},
+                        "https://ref.example.test/flag", {}),
+    "by $anchor": ({"flag": {"$anchor": "flag", "type": "boolean"}}, "#flag", {}),
+}
+
+
+@pytest.mark.parametrize("shape", sorted(IN_DOCUMENT_REFS), ids=list(sorted(IN_DOCUMENT_REFS)))
+def test_an_in_document_ref_still_resolves_under_the_offline_registry(shape, validator):
+    """The other half of refusing retrieval: the references the contract allows
+    must all still resolve, and be graded on what they point at."""
+    defs, ref, extra = IN_DOCUMENT_REFS[shape]
+    doc = _read_endpoint({"paid": {"$ref": ref, "examples": ["0"]}}, defs=defs)
+    doc["operations"]["read"]["response"]["schema"].update(extra)
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 1, errors
     assert "is not of type 'boolean'" in errors[0]["message"]
+
+
+def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
+    """Refusing a ring is a question about references, not about samples, and is
+    not this check's to answer. Surviving one is: grading is the first thing here
+    that resolves a reference, so a ring reaches it before anything else, and the
+    entries after it must still get their verdict."""
+    doc = _read_endpoint(
+        {"ring": {"$ref": "#/$defs/a", "examples": [1]},
+         "after": {"type": "boolean", "examples": ["0"]}},
+        defs={"a": {"$ref": "#/$defs/b"}, "b": {"$ref": "#/$defs/a"}},
+    )
+    errors = _sample_findings(validator.validate_document(doc))
+    by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
+    assert set(by_field) == {"ring/examples/0", "after/examples/0"}
+    assert "could not grade" in by_field["ring/examples/0"]
+    assert "is not of type 'boolean'" in by_field["after/examples/0"]
 
 
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
