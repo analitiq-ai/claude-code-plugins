@@ -475,10 +475,12 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                     # schema would land in the message once per recorded sample.
                     # `ref` is the part of it that names the defect.
                     ref = getattr(exc, "ref", None)
-                    why = (f"the reference {ref!r} names nothing this schema defines"
+                    why = (f"the reference {_bounded(repr(ref))} names nothing this "
+                           f"schema defines"
                            if ref is not None else
-                           "resolving it did not terminate, which is what a reference "
-                           "leading back to itself does")
+                           "resolving it ran out of stack — either a reference leading "
+                           "back to itself, or a sample nested deeper than the resolver "
+                           "follows")
                     findings.append(finding(
                         "embedded-schema-example", "error", entry,
                         f"the node at {node_ptr} could not be resolved, so the sample "
@@ -496,7 +498,8 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                     continue
                 if error is None:
                     continue
-                inside = "" if error.json_path == "$" else f" at {error.json_path} within the sample"
+                inside = ("" if error.json_path == "$"
+                          else f" at {_bounded(error.json_path)} within the sample")
                 findings.append(finding(
                     "embedded-schema-example", "error", entry,
                     f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "

@@ -431,7 +431,7 @@ def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_field) == {"ring/examples/0", "after/examples/0"}
     assert "could not be resolved" in by_field["ring/examples/0"]
-    assert "did not terminate" in by_field["ring/examples/0"]
+    assert "ran out of stack" in by_field["ring/examples/0"]
     assert "is not of type 'boolean'" in by_field["after/examples/0"]
 
 
@@ -451,6 +451,20 @@ def test_a_finding_does_not_grow_with_what_the_keyword_echoes(node, label, valid
     errors = _sample_findings(validator.validate_document(doc))
     assert len(errors) == 1, errors
     assert len(errors[0]["message"]) < 1000, f"{label}: {len(errors[0]['message'])} chars"
+
+
+@pytest.mark.parametrize("node", [
+    {"$ref": "#/" + "x" * 10_000, "examples": [1]},
+    {"additionalProperties": {"type": "integer"}, "examples": [{"k" * 10_000: "no"}]},
+], ids=["an unresolved reference", "a path inside the sample"])
+def test_no_authored_string_defeats_the_finding_size_bound(node, validator):
+    """Every route by which authored text reaches a message is bounded — the
+    sample, the keyword's echo, the reference, and the path within the sample.
+    An unbounded one is enough on its own to make a finding larger than the
+    document it was found in."""
+    errors = _sample_findings(validator.validate_document(_read_endpoint({"a": node})))
+    assert len(errors) == 1, errors
+    assert len(errors[0]["message"]) < 1000, len(errors[0]["message"])
 
 
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
