@@ -73,7 +73,7 @@ try:
             # RFC 6901 encoding belongs with its decoder, which the contract
             # owns — the two halves have opposite ordering hazards, and one kept
             # away from the other is a hazard stated in only one place.
-            escape_pointer_token,
+            _escape_pointer_token,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
@@ -268,7 +268,7 @@ def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
                 # or at none, and this pointer is what a finding reports as its
                 # `path` for a consumer to resolve.
                 yield from _walk_schema_nodes(
-                    child, f"{pointer}/{key}/{escape_pointer_token(name)}")
+                    child, f"{pointer}/{key}/{_escape_pointer_token(name)}")
     for key in _SUBSCHEMA_LIST_KEYS:
         sub = schema.get(key)
         if isinstance(sub, list):
@@ -342,7 +342,10 @@ def _unreadable_as_2020_12(schema: dict) -> str | None:
     # opinion on what a node claims to be.
     for node_ptr, node in _walk_schema_nodes(schema, ""):
         declared = node.get("$schema")
-        if declared is not None and declared != _DRAFT_2020_12_SCHEMA:
+        # An empty fragment is not a different document: every resolver here
+        # normalises `…/schema#` to `…/schema`, so refusing that spelling would
+        # reject a document declaring exactly the draft the contract requires.
+        if declared is not None and declared.rstrip("#") != _DRAFT_2020_12_SCHEMA:
             at = f" at {node_ptr}" if node_ptr else ""
             return (f"declares $schema {declared!r}{at}; the contract requires JSON Schema "
                     f"Draft 2020-12 ({_DRAFT_2020_12_SCHEMA!r}) or no $schema")
@@ -371,26 +374,28 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     return findings
 
 
-def _offline_registry(schema: dict):
-    """A reference registry holding this document and nothing else.
+def _offline_registry():
+    """An empty reference registry — one with no way to retrieve anything.
 
     Validation here is offline by contract, and `jsonschema`'s default registry
     is not: a `$ref` naming an `http(s)` URL is FETCHED, so an authored endpoint
     could make the validator issue a request to any address its author chose and
-    block on the answer. A registry with no retrieval refuses instead, and the
-    per-entry guard turns the refusal into a finding. In-document `#/...`
-    references still resolve — the document is registered under the empty URI,
-    which is the base every embedded schema resolves against.
+    block on the answer. Retrieval is a `retrieve` callable a registry either has
+    or does not, so an empty one refuses instead, and the per-entry guard turns
+    the refusal into a finding.
+
+    Empty is all it has to be. Registering the document here would be redundant,
+    not load-bearing: the validator roots its own schema as a resource, which is
+    what every in-document reference — a pointer, an `$anchor`, a nested `$id` —
+    resolves against.
 
     That the contract models separately refuse a non-local `$ref` does not cover
     this: grading runs on documents the models have already rejected, and an
     offline guarantee that holds only while another check keeps its rule is not
     one."""
-    from referencing import Registry, Resource
-    from referencing.jsonschema import DRAFT202012
+    from referencing import Registry
 
-    resource = Resource.from_contents(schema, default_specification=DRAFT202012)
-    return Registry().with_resource(uri="", resource=resource)
+    return Registry()
 
 
 def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dict]:
@@ -431,7 +436,7 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
             continue
         if _unreadable_as_2020_12(schema) is not None:
             continue
-        document = Draft202012Validator(schema, registry=_offline_registry(schema))
+        document = Draft202012Validator(schema, registry=_offline_registry())
         for node_ptr, node in _walk_schema_nodes(schema, pointer):
             examples = node.get("examples")
             if not isinstance(examples, list):
@@ -448,15 +453,25 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                 except (Unresolvable, RecursionError) as exc:
                     # Both are the node's own structure rather than the value: a
                     # reference naming nothing this schema defines, or one that
-                    # leads back to itself. Said separately because the two
-                    # failures have opposite fixes, and an author told only that
-                    # grading failed does not know which half of the document to
-                    # touch — the sample is innocent here.
+                    # leads back to itself. Said separately because the two have
+                    # opposite fixes, and an author told only that grading failed
+                    # does not know which half of the document to touch — the
+                    # sample is innocent here.
+                    #
+                    # Never `{exc}`: an unresolved-reference error renders the
+                    # whole resource it searched, so the embedded schema would be
+                    # pasted into the message once per recorded sample. `ref` is
+                    # the part that names the defect.
+                    ref = getattr(exc, "ref", None)
+                    why = (f"the reference {ref!r} names nothing this schema defines"
+                           if ref is not None else
+                           "resolving it did not terminate, which is what a reference "
+                           "leading back to itself does")
                     findings.append(finding(
                         "embedded-schema-example", "error", entry,
                         f"the node at {node_ptr} could not be resolved, so the sample "
-                        f"at {where} was not graded ({type(exc).__name__}: {exc}). The "
-                        f"defect is in the schema, not in the sample."))
+                        f"at {where} was not graded: {why}. The defect is in the "
+                        f"schema, not in the sample."))
                     continue
                 except Exception as exc:  # noqa: BLE001 - author input, no total gate
                     findings.append(finding(

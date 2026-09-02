@@ -3460,7 +3460,7 @@ def _unescape_pointer_token(token: str) -> str:
     return unquote(token).replace("~1", "/").replace("~0", "~")
 
 
-def escape_pointer_token(name: str) -> str:
+def _escape_pointer_token(name: str) -> str:
     """One object key, encoded as a JSON Pointer reference token.
 
     RFC 6901 §3, and its ordering matters the opposite way round to

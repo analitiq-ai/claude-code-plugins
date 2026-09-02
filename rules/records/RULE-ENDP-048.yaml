@@ -1,7 +1,8 @@
 id: RULE-ENDP-048
 statement: >
   An embedded request or response schema MUST be valid against the JSON Schema
-  draft this contract is written in, and MUST NOT declare a different draft.
+  draft this contract is written in, and neither it nor any node within it MAY
+  declare a different draft.
 tier: structural
 severity: error
 scopes: [api-endpoint]
@@ -15,7 +16,12 @@ rationale: >
   schemas to shape records. Declaring an older draft is the subtler half: such
   a document can be entirely valid in the draft it names and mean something
   else in the one the engine reads it as, so the keyword silently changes
-  behaviour rather than failing. Omitting the declaration is fine; the engine
-  reads an undeclared schema in the contract's own draft.
+  behaviour rather than failing. A node below the root declares a draft as
+  effectively as the root does — a reader grading that node honours what the
+  node claims to be — so a subschema naming an older draft has the same effect
+  over its own subtree, and validity against the meta-schema says nothing about
+  it either way: keywords are graded, and what a node claims to be is not one.
+  Omitting the declaration is fine; the engine reads an undeclared schema in
+  the contract's own draft.
 status: active
 superseded_by: null

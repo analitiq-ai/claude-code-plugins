@@ -303,9 +303,10 @@ def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
     assert "OverflowError" in by_path["big/examples/0"]
     assert "could not be resolved" in by_path["gone/examples/0"]
     assert "not in the sample" in by_path["gone/examples/0"]
+    # The reference itself, not the resource it was searched for in.
+    assert "'/$defs/missing'" in by_path["gone/examples/0"]
     # ...while the oversized sample is named as the sample's own defect.
     assert "could not grade" in by_path["big/examples/0"]
-    assert "$ref" in by_path["gone/examples/0"]
     # An oversized sample is bounded into the message rather than pasted whole.
     assert "0" * 200 not in by_path["big/examples/0"]
     assert "..." in by_path["big/examples/0"]
@@ -419,6 +420,22 @@ def test_grading_is_never_invoked_without_the_check_that_reports_its_skips(valid
     )
 
 
+@pytest.mark.parametrize("declared", [
+    "https://json-schema.org/draft/2020-12/schema",
+    "https://json-schema.org/draft/2020-12/schema#",
+])
+def test_the_contract_draft_is_accepted_in_either_spelling(declared, validator):
+    """An empty fragment names the same document. Every resolver in this path
+    normalises it away, so refusing that spelling would reject a schema
+    declaring exactly the draft the contract requires."""
+    doc = _read_endpoint({"paid": {"type": "boolean", "examples": ["0"]}},
+                         dialect=declared)
+    findings = validator.validate_document(doc)
+    assert not [f for f in findings if f["validator"] == "embedded-json-schema"], findings
+    # ...and the schema was read, not skipped.
+    assert len(_sample_findings(findings)) == 1, findings
+
+
 def test_a_nested_schema_declaring_another_draft_is_refused(validator):
     """A draft declared below the root is a declared draft.
 
@@ -487,6 +504,28 @@ def test_an_in_document_ref_still_resolves_under_the_offline_registry(shape, val
     assert "is not of type 'boolean'" in errors[0]["message"]
 
 
+def test_an_unresolved_reference_does_not_paste_the_schema_into_the_finding(validator):
+    """An unresolved-reference error renders the whole resource it searched, so
+    interpolating it would put the embedded schema into the message once per
+    recorded sample.
+
+    A length bound would be a number to keep updating; that the message does not
+    GROW with the document is the property, so the same defect is reported in a
+    small schema and a large one and the two messages are compared.
+    """
+    def message(field_count):
+        fields = {f"filler_{i}": {"type": "string"} for i in range(field_count)}
+        fields["gone"] = {"$ref": "#/$defs/missing", "examples": [1]}
+        doc = _read_endpoint(fields)
+        errors = _sample_findings(validator.validate_document(doc))
+        assert len(errors) == 1, errors
+        return errors[0]["message"]
+
+    small, large = message(1), message(60)
+    assert small == large, "the finding grew with the document it was found in"
+    assert "filler_" not in large
+
+
 def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
     """Refusing a ring is a question about references, not about samples, and is
     not this check's to answer. Surviving one is: grading is the first thing here
@@ -501,7 +540,7 @@ def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_field) == {"ring/examples/0", "after/examples/0"}
     assert "could not be resolved" in by_field["ring/examples/0"]
-    assert "RecursionError" in by_field["ring/examples/0"]
+    assert "did not terminate" in by_field["ring/examples/0"]
     assert "is not of type 'boolean'" in by_field["after/examples/0"]
 
 

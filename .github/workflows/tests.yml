@@ -83,7 +83,8 @@ jobs:
         run: python3 scripts/render_all.py check
       - name: Package build guards
         # These are what keep the private runtime out of the public wheels:
-        # build.py AST-scans for imports outside (stdlib + pydantic/jsonschema),
+        # build.py AST-scans for imports outside the set `ALLOWED_THIRD_PARTY`
+        # names (it owns that list; restating it here is what goes stale),
         # runs the staged package with `alq` and boto3 absent, and asserts the
         # generated __init__ / PEP 420 layout. The release workflows run them
         # too, but only at tag time - by then a leak is already merged. This is
