@@ -955,15 +955,22 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                     findings.extend(_type_map_findings(doc_, direction))
         return findings
 
+    # A read map that cannot be rendered from is carried forward rather than
+    # returned on: the rendering is what needs it, and returning here would
+    # withhold every endpoint-anchored check as well, hiding every defect in
+    # every endpoint document behind one broken file. What is carried is
+    # whatever loaded — `None` when the file is absent or unreadable, the parsed
+    # value when it is readable but not a list of rules — so the readers below
+    # ask whether it is a list rather than whether it is set.
+    read_doc: Any = None
     if not read_path.is_file():
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"connector requires sibling {_READ_MAP_FILENAME} (native → Arrow); missing."))
-        return findings
-    read_doc, load = _load_type_map(read_path)
-    findings.extend(load)
-    if read_doc is None:
-        return findings
-    findings.extend(_type_map_findings(read_doc, "read"))
+    else:
+        read_doc, load = _load_type_map(read_path)
+        findings.extend(load)
+        if read_doc is not None:
+            findings.extend(_type_map_findings(read_doc, "read"))
 
     if kind in _DATABASE_KINDS:
         if not write_path.is_file():
@@ -981,6 +988,14 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         findings.append(finding("type-map-coverage", "error", "/",
                                 f"api connector must not ship {_WRITE_MAP_FILENAME}; the write direction "
                                 "is database-only."))
+    if not isinstance(read_doc, list):
+        # The endpoint documents below are still graded, so say that coverage was
+        # not among the checks that ran — an author reading them clean would
+        # otherwise take the native_type declarations for verified.
+        findings.append(finding("type-map-coverage", "warning", "/",
+                                f"native_type coverage against sibling {_READ_MAP_FILENAME} was not "
+                                "rendered: the map is missing, unreadable, or not a list of rules. "
+                                "Endpoint native_type/arrow_type agreement is unverified until it is fixed."))
     endpoint_dir = parent / "endpoints"
     if not endpoint_dir.is_dir():
         findings.append(finding("type-map-coverage", "error", "/",
@@ -1000,9 +1015,6 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
     # filename==id rule only makes IDENTICAL ids collide on the filesystem (and
     # then surfaces obliquely as a filename mismatch); enforce the invariant
     # directly so a duplicate is reported as a duplicate.
-    if not isinstance(read_doc, list):
-        return findings  # model error already recorded; can't render coverage
-
     seen_ids: dict[str, str] = {}
     for ep_path in endpoint_files:
         rel = ep_path.relative_to(endpoint_dir).as_posix()
@@ -1043,17 +1055,20 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # are in hand.
         findings.extend(_endpoint_transport_ref_findings(
             ep_doc, doc.get("transports"), label=ep_path.name))
-        for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-            rendered = _render_canonical(native, read_doc)
-            site = f"{ep_path.name}{pointer}"
-            if rendered is None:
-                findings.append(finding("type-map-coverage", "error", "/",
-                                        f"native_type {native!r} at {site} has no matching rule in "
-                                        f"sibling {_READ_MAP_FILENAME}."))
-            elif not _canonical_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
-                findings.append(finding("type-map-coverage", "error", "/",
-                                        f"native_type {native!r} at {site} resolves to {rendered!r} via "
-                                        f"{_READ_MAP_FILENAME} but the endpoint declares arrow_type={arrow!r}."))
+        # The rendering is the one check here that needs the sibling map; a map
+        # that did not load skips it, and the connector-level warning says so.
+        if isinstance(read_doc, list):
+            for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
+                rendered = _render_canonical(native, read_doc)
+                site = f"{ep_path.name}{pointer}"
+                if rendered is None:
+                    findings.append(finding("type-map-coverage", "error", "/",
+                                            f"native_type {native!r} at {site} has no matching rule in "
+                                            f"sibling {_READ_MAP_FILENAME}."))
+                elif not _canonical_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
+                    findings.append(finding("type-map-coverage", "error", "/",
+                                            f"native_type {native!r} at {site} resolves to {rendered!r} via "
+                                            f"{_READ_MAP_FILENAME} but the endpoint declares arrow_type={arrow!r}."))
     return findings
 
 
