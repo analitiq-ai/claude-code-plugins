@@ -16,6 +16,12 @@ from pathlib import Path
 import pytest
 
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id, slug
+from analitiq.validator.connectors import (
+    _DATABASE_KINDS,
+    _READ_MAP_FILENAME,
+    _STORAGE_KINDS,
+    _WRITE_MAP_FILENAME,
+)
 
 CORPUS = Path(__file__).resolve().parent / "corpus"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -739,10 +745,10 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
 
 
 # --- a broken sibling read map withholds coverage and nothing else -------------
-# Every per-endpoint check but the native→Arrow rendering reads only the endpoint
-# document and its sibling connector.json, so a read map that cannot be rendered
-# from must not withhold them. The map is broken in each of the states the walk
-# distinguishes, and every state is graded the same way.
+# No per-endpoint check but the native→Arrow rendering reads the sibling read map,
+# so a map that cannot be rendered from must not withhold them. The map is broken
+# in each of the states the walk distinguishes, and every state is graded the
+# same way.
 
 # Each broken state of the read map, with what still reports the map itself.
 _BROKEN_READ_MAPS = (
@@ -764,8 +770,8 @@ _ENDPOINT_DEFECTS = {
 }
 
 # The verdicts the native→Arrow rendering writes. A map that did not load feeds
-# no rendering, so a finding carrying either fragment contradicts the warning
-# that says coverage went unrendered.
+# no rendering, so a finding carrying any of these fragments contradicts the
+# warning that says coverage went unrendered.
 _RENDERED_COVERAGE = ("has no matching rule in", "resolves to")
 
 
@@ -802,9 +808,9 @@ def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoin
     root.mkdir(parents=True)
     (root / "connector.json").write_text("{}")
     if read_map is not None:
-        (root / "type-map-read.json").write_text(read_map)
+        (root / _READ_MAP_FILENAME).write_text(read_map)
     if write_map:
-        (root / "type-map-write.json").write_text(
+        (root / _WRITE_MAP_FILENAME).write_text(
             '[{"match":"exact","canonical":"Utf8","native":"TEXT"}]')
     if endpoints:
         (root / "endpoints").mkdir()
@@ -872,7 +878,7 @@ def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector
     assert "no matching rule" in coverage[0]["message"], coverage
 
 
-@pytest.mark.parametrize("kind", ["database", "nosql", "document"])
+@pytest.mark.parametrize("kind", _DATABASE_KINDS)
 def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
     # A database connector's release ships no endpoint documents, so the walk
     # enumerates `endpoints/` for api connectors only — a broken read map does not
@@ -889,7 +895,7 @@ def test_database_family_never_enumerates_endpoints(tmp_path, kind, validator):
     assert not [f for f in with_dir if "not rendered" in f["message"]], with_dir
 
 
-@pytest.mark.parametrize("kind", ["file", "s3", "stdout"])
+@pytest.mark.parametrize("kind", _STORAGE_KINDS)
 def test_storage_kinds_need_no_read_map(tmp_path, kind, validator):
     (tmp_path / "connector.json").write_text("{}")
     assert validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json") == []

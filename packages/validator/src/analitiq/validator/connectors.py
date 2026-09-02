@@ -955,10 +955,13 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
                     findings.extend(_type_map_findings(doc_, direction))
         return findings
 
-    # A read map that cannot be rendered from is carried as `None`, not returned
-    # on: the only thing downstream that reads it is the native→Arrow rendering,
-    # so returning here would withhold every endpoint-anchored check as well and
-    # hide every defect in every endpoint document behind one broken file.
+    # A read map that cannot be rendered from is carried forward rather than
+    # returned on: the rendering is what needs it, and returning here would
+    # withhold every endpoint-anchored check as well, hiding every defect in
+    # every endpoint document behind one broken file. What is carried is
+    # whatever loaded — `None` when the file is absent or unreadable, the parsed
+    # value when it is readable but not a list of rules — so the readers below
+    # ask whether it is a list rather than whether it is set.
     read_doc: Any = None
     if not read_path.is_file():
         findings.append(finding("type-map-coverage", "error", "/",
