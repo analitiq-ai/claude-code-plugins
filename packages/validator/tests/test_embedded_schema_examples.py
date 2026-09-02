@@ -257,7 +257,7 @@ def test_a_ref_node_is_graded_against_what_it_points_at(validator):
     # produces exactly one finding at this path, and asserting the path alone
     # cannot tell the two apart.
     assert "is not of type 'boolean'" in errors[0]["message"]
-    assert "could not grade" not in errors[0]["message"]
+    assert "could not be resolved" not in errors[0]["message"]
 
 
 def test_data_shaped_like_a_schema_is_not_walked(validator):
@@ -301,11 +301,14 @@ def test_an_ungradeable_sample_is_reported_and_costs_only_itself(validator):
     by_path = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_path) == {"big/examples/0", "gone/examples/0", "paid/examples/0"}
     assert "OverflowError" in by_path["big/examples/0"]
-    assert "could not grade" in by_path["gone/examples/0"]
+    assert "could not be resolved" in by_path["gone/examples/0"]
+    assert "not in the sample" in by_path["gone/examples/0"]
+    # ...while the oversized sample is named as the sample's own defect.
+    assert "could not grade" in by_path["big/examples/0"]
     assert "$ref" in by_path["gone/examples/0"]
-    # An oversized sample is truncated into the message rather than pasted whole.
-    assert "chars)" in by_path["big/examples/0"]
+    # An oversized sample is bounded into the message rather than pasted whole.
     assert "0" * 200 not in by_path["big/examples/0"]
+    assert "..." in by_path["big/examples/0"]
     assert [f for f in findings if f["validator"] == "contract-model"], findings
 
 
@@ -454,7 +457,7 @@ def test_a_remote_ref_is_refused_without_reaching_the_network(validator):
     errors = _sample_findings(validator.validate_document(doc))
     assert time.monotonic() - started < 5.0, "grading attempted a network fetch"
     assert len(errors) == 1, errors
-    assert "could not grade" in errors[0]["message"]
+    assert "could not be resolved" in errors[0]["message"]
 
 
 # Every way 2020-12 lets a reference name something inside its own document.
@@ -497,7 +500,8 @@ def test_a_reference_ring_costs_only_the_entry_that_walks_into_it(validator):
     errors = _sample_findings(validator.validate_document(doc))
     by_field = {e["path"].split("/properties/")[1]: e["message"] for e in errors}
     assert set(by_field) == {"ring/examples/0", "after/examples/0"}
-    assert "could not grade" in by_field["ring/examples/0"]
+    assert "could not be resolved" in by_field["ring/examples/0"]
+    assert "RecursionError" in by_field["ring/examples/0"]
     assert "is not of type 'boolean'" in by_field["after/examples/0"]
 
 

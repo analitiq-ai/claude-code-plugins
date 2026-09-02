@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import json
 import re
+import reprlib
 import sys
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -69,6 +70,10 @@ try:
             ApiEndpointDoc,
             DatabaseEndpointDoc,
             SLUG_RE,
+            # RFC 6901 encoding belongs with its decoder, which the contract
+            # owns — the two halves have opposite ordering hazards, and one kept
+            # away from the other is a hazard stated in only one place.
+            escape_pointer_token,
         )
         from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
         from analitiq.contracts.type_map import TypeMapReadDoc, TypeMapWriteDoc
@@ -239,18 +244,6 @@ def _embedded_json_schemas(ep_doc: dict) -> list[tuple[str, Any]]:
     return out
 
 
-def _pointer_segment(name: str) -> str:
-    """A schema-map key as one RFC 6901 pointer segment.
-
-    Only the keys an author chooses need this — a property name, a `$defs` name,
-    a `patternProperties` regex. Keyword names and list indices are fixed
-    vocabulary and cannot carry either character. A raw `a/b` reads as two
-    segments and a raw `~` opens an escape, so an unescaped name points at the
-    wrong node or at none: `embedded-schema-example` reports the pointer as the
-    finding's `path`, which a consumer resolves against the document."""
-    return name.replace("~", "~0").replace("/", "~1")
-
-
 def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
     """Every structural sub-schema node of a JSON Schema document, as
     `(pointer, node)`, recursing only through sub-schema positions. The document
@@ -267,8 +260,15 @@ def _walk_schema_nodes(schema: Any, pointer: str) -> Iterator[tuple[str, dict]]:
         sub = schema.get(key)
         if isinstance(sub, dict):
             for name, child in sub.items():
+                # Only the keys an AUTHOR chooses are encoded — a property name,
+                # a `$defs` name, a `patternProperties` regex. Keyword names and
+                # list indices are fixed vocabulary and can carry neither
+                # character. A raw `a/b` reads as two segments and a raw `~`
+                # opens an escape, so an unencoded name points at the wrong node
+                # or at none, and this pointer is what a finding reports as its
+                # `path` for a consumer to resolve.
                 yield from _walk_schema_nodes(
-                    child, f"{pointer}/{key}/{_pointer_segment(name)}")
+                    child, f"{pointer}/{key}/{escape_pointer_token(name)}")
     for key in _SUBSCHEMA_LIST_KEYS:
         sub = schema.get(key)
         if isinstance(sub, list):
@@ -301,6 +301,13 @@ def _collect_native_arrow_pairs(ep_doc: dict) -> list[tuple[str, str, str]]:
 
 
 _DRAFT_2020_12_SCHEMA = "https://json-schema.org/draft/2020-12/schema"
+
+#: Renders a recorded sample into a finding message. A sample may be a whole
+#: provider record and a finding is read in a terminal, so it is bounded — by
+#: `reprlib`, which bounds each component rather than the string as a whole, so
+#: a record with one oversized field still shows the fields around it.
+_SAMPLE_REPR = reprlib.Repr()
+_SAMPLE_REPR.maxstring = _SAMPLE_REPR.maxother = 80
 
 
 def _unreadable_as_2020_12(schema: dict) -> str | None:
@@ -364,13 +371,6 @@ def _embedded_schema_findings(ep_doc: dict, label: str = "") -> list[dict]:
     return findings
 
 
-def _short_repr(value: Any, limit: int = 120) -> str:
-    """A value rendered into a finding message, truncated. A recorded sample may
-    be a whole provider record and a finding is read in a terminal."""
-    text = repr(value)
-    return text if len(text) <= limit else f"{text[:limit]}… ({len(text)} chars)"
-
-
 def _offline_registry(schema: dict):
     """A reference registry holding this document and nothing else.
 
@@ -423,6 +423,7 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
     neither may cost the remaining entries their verdict."""
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import best_match
+    from referencing.exceptions import Unresolvable
 
     findings: list[dict] = []
     for pointer, schema in _embedded_json_schemas(ep_doc):
@@ -444,27 +445,33 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                 where = f"{label}{entry}" if label else entry
                 try:
                     error = best_match(node_validator.iter_errors(sample))
-                except Exception as exc:  # noqa: BLE001 - author input, no total gate
-                    # The exception text is what separates the two causes — a
-                    # reference naming nothing this document defines reports the
-                    # pointer it could not find, a keyword that could not evaluate
-                    # the value reports the value. Discriminating on the class
-                    # instead would mean importing a private one or a package the
-                    # wheel does not declare, for a distinction the text carries.
+                except (Unresolvable, RecursionError) as exc:
+                    # Both are the node's own structure rather than the value: a
+                    # reference naming nothing this schema defines, or one that
+                    # leads back to itself. Said separately because the two
+                    # failures have opposite fixes, and an author told only that
+                    # grading failed does not know which half of the document to
+                    # touch — the sample is innocent here.
                     findings.append(finding(
                         "embedded-schema-example", "error", entry,
-                        f"the sample at {where} is {_short_repr(sample)}, which the node "
-                        f"declaring it could not grade ({type(exc).__name__}: {exc}). "
-                        f"Either that node does not resolve — a `$ref` naming nothing "
-                        f"this schema defines — or the recorded value is outside what a "
-                        f"keyword on the node can evaluate."))
+                        f"the node at {node_ptr} could not be resolved, so the sample "
+                        f"at {where} was not graded ({type(exc).__name__}: {exc}). The "
+                        f"defect is in the schema, not in the sample."))
+                    continue
+                except Exception as exc:  # noqa: BLE001 - author input, no total gate
+                    findings.append(finding(
+                        "embedded-schema-example", "error", entry,
+                        f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the "
+                        f"node declaring it could not grade ({type(exc).__name__}: {exc}). "
+                        f"The recorded value is outside what a keyword on this node can "
+                        f"evaluate."))
                     continue
                 if error is None:
                     continue
                 inside = "" if error.json_path == "$" else f" at {error.json_path} within the sample"
                 findings.append(finding(
                     "embedded-schema-example", "error", entry,
-                    f"the sample at {where} is {_short_repr(sample)}, which the node "
+                    f"the sample at {where} is {_SAMPLE_REPR.repr(sample)}, which the node "
                     f"declaring it rejects{inside}: {error.message}. A sample is a value the "
                     f"provider sends, so either the declared shape is wrong for this field "
                     f"or the recorded sample never came off the wire."))
