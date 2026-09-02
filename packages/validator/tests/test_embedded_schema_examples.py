@@ -176,13 +176,15 @@ def _at_position(key, node):
 @pytest.mark.parametrize("key", sorted(
     JSON_SCHEMA_SUBSCHEMA_KEYS | JSON_SCHEMA_LIST_OF_SCHEMA_KEYS | JSON_SCHEMA_SINGLE_SCHEMA_KEYS))
 def test_every_recursion_position_the_contract_declares_is_graded(key, validator):
-    """Acceptance 5, behaviourally.
+    """Every position the contract can hold a sub-schema in, graded.
 
-    The keyword inventory is the contract's and is pinned member-for-member
-    elsewhere, but a walker body reading a hardcoded subset of it satisfies that
-    pin and grades nothing at the positions it skipped. So the positions are
-    driven from the imported sets: a keyword the contract adds is graded here or
-    this test goes red.
+    The keyword inventory is the contract's, and
+    `packages/contract-models/tests/unit/test_embedded_schema_refs.py` pins the
+    validator's aliases to it member-for-member. That pin catches a redeclared
+    inventory; it cannot catch a walker body iterating a hardcoded subset of the
+    sets it names, which satisfies the pin and grades nothing at the positions it
+    skipped. So the positions are driven from the imported sets: a keyword the
+    contract adds is graded here or this test goes red.
 
     `propertyNames` grades property names, which are strings — hence a
     string-typed node, so every position carries a contradiction of its own kind

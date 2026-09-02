@@ -212,9 +212,9 @@ def _canonical_eq(a: str, b: str) -> bool:
 # The JSON-Schema keyword vocabulary is OWNED by the contract package and
 # imported, not restated. It used to be a third hand-maintained copy: adding
 # `contentSchema` meant editing three, and the one that was missed left the
-# rendered schema's prose contradicting its own constraints. `_walk_schema_pairs`
-# must descend exactly where the contract's walkers do, or a `native_type`
-# declared in a position only one of them visits escapes type-map coverage.
+# rendered schema's prose contradicting its own constraints. `_walk_schema_nodes`
+# must descend exactly where the contract's walkers do; what a position it misses
+# costs is stated on that function, which is where both of its consumers meet.
 _SUBSCHEMA_MAP_KEYS = JSON_SCHEMA_SUBSCHEMA_KEYS
 _SUBSCHEMA_LIST_KEYS = JSON_SCHEMA_LIST_OF_SCHEMA_KEYS
 _SUBSCHEMA_SINGLE_KEYS = JSON_SCHEMA_SINGLE_SCHEMA_KEYS
