@@ -466,7 +466,12 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
             node_validator = document.evolve(schema=node)
             for index, sample in enumerate(examples):
                 entry = f"{node_ptr}/examples/{index}"
-                where = f"{label}{entry}" if label else entry
+                # `entry` is the finding's machine-readable `path` and stays
+                # exact. Everything the MESSAGE interpolates is bounded, pointers
+                # included: a property name is authored, so it can be as long as
+                # the author likes and it appears in the pointer twice.
+                where = _bounded(f"{label}{entry}" if label else entry)
+                at_node = _bounded(node_ptr)
                 try:
                     error = best_match(node_validator.iter_errors(sample))
                 except (Unresolvable, RecursionError) as exc:
@@ -483,7 +488,7 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
                            "follows")
                     findings.append(finding(
                         "embedded-schema-example", "error", entry,
-                        f"the node at {node_ptr} could not be resolved, so the sample "
+                        f"the node at {at_node} could not be resolved, so the sample "
                         f"at {where} was not graded: {why}. The defect is in the "
                         f"schema, not in the sample."))
                     continue

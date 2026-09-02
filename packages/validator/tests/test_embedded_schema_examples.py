@@ -467,6 +467,22 @@ def test_no_authored_string_defeats_the_finding_size_bound(node, validator):
     assert len(errors[0]["message"]) < 1000, len(errors[0]["message"])
 
 
+@pytest.mark.parametrize("node", [
+    {"type": "integer", "examples": ["no"]},
+    {"$ref": "#/$defs/missing", "examples": [1]},
+], ids=["a rejected sample", "an unresolved reference"])
+def test_an_oversized_property_name_does_not_defeat_the_bound(node, validator):
+    """A property name is authored too, and the pointer carrying it appears in
+    the message twice. The finding's `path` keeps the exact pointer, because a
+    consumer resolves it; the message does not."""
+    doc = _read_endpoint({"k" * 10_000: node})
+    errors = _sample_findings(validator.validate_document(doc))
+    assert len(errors) == 1, errors
+    assert len(errors[0]["message"]) < 1000, len(errors[0]["message"])
+    # ...and `path` is still the exact pointer a consumer can resolve.
+    assert errors[0]["path"].count("k" * 10_000) == 1
+
+
 def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path, validator):
     """The other entry point: a connector package, where a finding must name the
     endpoint file it came from."""
