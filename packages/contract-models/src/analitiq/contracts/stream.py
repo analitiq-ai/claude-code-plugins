@@ -15,6 +15,8 @@ from pydantic import (
 from analitiq.contracts.endpoints import (
     API_FILTER_OPERATORS,
     ARROW_TYPE_PATTERN,
+    RECORD_FIELD_PATH_PATTERN,
+    RECORD_FIELD_PATH_RE,
     WRITE_MODES,
     DatabaseObject,
     WriteMode,
@@ -473,6 +475,20 @@ class StreamSource(StrictModel):
                     f"{self.endpoint_ref.scope} source "
                     f"(allowed: {sorted(allowed)})",
                 )
+        if self.endpoint_ref.scope != SCOPE_CONNECTION:
+            # An api-endpoint keys its filter map by record field path, so a
+            # spelling that pattern refuses is one no endpoint can offer — the
+            # filter is unsatisfiable however the referenced document is
+            # written. The database branch keeps every spelling: a column is
+            # whatever the provider named it, and nothing narrows that.
+            for filt in self.filters:
+                if not RECORD_FIELD_PATH_RE.match(filt.field):
+                    raise violation(
+                        "RULE-STRM-022",
+                        f"filters[].field {filt.field!r} is not a record field "
+                        f"path ({RECORD_FIELD_PATH_PATTERN}), so no api-endpoint "
+                        "can offer filtering on it",
+                    )
         return self
 
     @model_validator(mode="after")

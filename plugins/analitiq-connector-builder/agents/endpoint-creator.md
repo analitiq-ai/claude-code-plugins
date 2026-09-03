@@ -99,13 +99,13 @@ was raised.
      site (`RULE-ENDP-002`).
    - `filters` — which record fields a stream may filter this read on, and
      which param each operator lands in. Authored ONLY from the read fields'
-     `filterable` facts: each entry there names an operator and the parameter
-     that carries it — its provider name, where the provider takes it, and its
-     request-input type — so declare that param with the stated `in` and
-     `type`, bind it in the request slot its `in` names, and name it under the
-     field's operator. A search that filters through its POST body takes a
-     `body` param; binding one as a query parameter builds a request the
-     provider ignores. A field with no
+     `filterable` facts: each entry names an operator and a key of
+     `request_params`, which carries everything that param declaration needs —
+     `in`, `type`, and for a container-typed query param the `style`/`explode`
+     `RULE-ENDP-003` requires. Declare the param from those facts, bind it in
+     the slot its `in` names, and name it under the field's operator. A search
+     that filters through its POST body takes a `body` param; binding one as a
+     query parameter builds a request the provider ignores. A field with no
      `filterable` fact offers no filtering — omit it rather than guessing which
      comparisons the provider takes, the same refusal as an untyped field. See
      `spec-filters.md`.

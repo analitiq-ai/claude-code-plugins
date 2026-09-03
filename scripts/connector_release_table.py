@@ -154,12 +154,15 @@ CATEGORIES: tuple[Category, ...] = (
         "major",
         "Filter binding rerouted on a kept operator",
         note=(
-            "a field and operator both releases offer now name a different "
-            "param, so the same stream filter reaches the provider as a "
-            "different request and may read different rows. The advertised "
-            "surface is unchanged, which is what makes it worth its own "
-            "category: nothing a stream declares has to change, and nothing "
-            "about the operator set moved, so a diff that compares only which "
+            "a field and operator both releases offer now reach the provider "
+            "as a different request — a different slot, or a different wire "
+            "key — so the same stream filter may read different rows. Judged "
+            "on the resolved binding, never on the param name: a param renamed "
+            "consistently across the declaration, its binding and the filter "
+            "map is an endpoint-local handle moving and is not this. The "
+            "advertised surface is unchanged either way, which is what makes "
+            "it worth its own category: nothing a stream declares has to "
+            "change and no operator moved, so a diff comparing only which "
             "operators are offered reports no drift at all"
         ),
     ),

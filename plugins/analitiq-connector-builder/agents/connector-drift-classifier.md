@@ -57,12 +57,14 @@ rules for every document" says which file carries which artifact.
      it before comparing: an in-document `$ref` is followed and an `allOf`
      composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
      branch is not read as removed, and one that changed there is not missed.
-   - `operations.read.filters` — one offer per field and operator, and the
-     param each names (`RULE-ENDP-055`). All three parts are the unit: an offer
-     withdrawn or added is a vocabulary change, and an offer that survives while
-     the param under it changes is a reroute — the same filter reaching the
-     provider as a different request. Compare the param, not only the operator
-     keys. Reads only: a write mode declares no filters.
+   - `operations.read.filters` — one offer per field and operator, and where
+     each lands (`RULE-ENDP-055`). An offer withdrawn or added is a vocabulary
+     change. An offer that survives is a reroute when what reaches the provider
+     changed — so resolve the param each names through `params` and its request
+     binding, and compare THAT: the slot it sits in and the wire key it binds.
+     A param renamed consistently across `params`, its binding and this map is
+     an endpoint-local handle changing and no drift at all. Reads only: a write
+     mode declares no filters.
 
    Those are the interior sites with a category of their own. The interior is
    larger than they are, so compare the rest of it too — the read operation's
@@ -131,19 +133,22 @@ rules for every document" says which file carries which artifact.
   no longer offered, whether the operator entry went, the field's whole
   entry went, or the param it bound is gone. A stream filters on what the
   endpoint offered, so its filter stops being expressible),
-  filter-binding-rerouted (a field and operator both releases offer now name
-  a different param, so the same stream filter reaches the provider as a
-  different request and may read different rows. The advertised surface is
-  unchanged, which is what makes it worth its own category: nothing a stream
-  declares has to change, and nothing about the operator set moved, so a
-  diff that compares only which operators are offered reports no drift at
-  all), conflict-keys-changed (the `conflict_keys` an upsert mode both
-  releases ship matches on are not the same set. The key is endpoint-owned —
-  a stream declares none — so a change re-keys every existing stream's
-  upsert silently: rows that matched an existing row now insert, and rows
-  that did not now overwrite one), endpoint-capability-narrowed (an endpoint
-  both releases ship no longer offers something an existing stream depends
-  on — whether the stream names it or reads it through the endpoint's own
+  filter-binding-rerouted (a field and operator both releases offer now
+  reach the provider as a different request — a different slot, or a
+  different wire key — so the same stream filter may read different rows.
+  Judged on the resolved binding, never on the param name: a param renamed
+  consistently across the declaration, its binding and the filter map is an
+  endpoint-local handle moving and is not this. The advertised surface is
+  unchanged either way, which is what makes it worth its own category:
+  nothing a stream declares has to change and no operator moved, so a diff
+  comparing only which operators are offered reports no drift at all),
+  conflict-keys-changed (the `conflict_keys` an upsert mode both releases
+  ship matches on are not the same set. The key is endpoint-owned — a stream
+  declares none — so a change re-keys every existing stream's upsert
+  silently: rows that matched an existing row now insert, and rows that did
+  not now overwrite one), endpoint-capability-narrowed (an endpoint both
+  releases ship no longer offers something an existing stream depends on —
+  whether the stream names it or reads it through the endpoint's own
   behaviour — and no category above says which. The endpoint's interior is
   wider than the categories that enumerate it — a read operation dropped
   from a write-bearing endpoint, a replication method or a cursor mapping

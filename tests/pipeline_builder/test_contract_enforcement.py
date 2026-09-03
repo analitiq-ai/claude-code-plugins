@@ -92,6 +92,30 @@ def test_api_operators_rejected_on_a_database_source(tmp_path, operator):
     assert not _diagnose(tmp_path, doc)["passed"]
 
 
+@pytest.mark.parametrize("field", ["amount-due", " amount", "24h_volume"])
+def test_api_filter_fields_the_endpoint_map_cannot_key_on_are_rejected(tmp_path, field):
+    """An api-endpoint keys its filter map by record field path, so a spelling
+    that pattern refuses can never be offered — the stream is unsatisfiable and
+    is refused where the scope is known, not on a later cross-document pass."""
+    doc = _stream(source_ref=_connector_ref(),
+                  filters=[{"field": field, "operator": "eq", "value": "y"}])
+    diagnostics = _diagnose(tmp_path, doc)
+    assert not diagnostics["passed"], f"{field!r} must not validate on an API source"
+    # Reported at `/source`, like the sibling operator-scope check: both need
+    # the binding's scope, which only the source knows, so neither can be a
+    # field-level validator. The message carries the offending spelling so the
+    # orchestrator's fix still names it.
+    assert "/source" in _paths(diagnostics)
+    assert any(repr(field) in f["message"] for f in diagnostics["findings"])
+
+
+def test_a_database_filter_field_keeps_provider_native_spelling(tmp_path):
+    """The narrowing is the API branch's alone: a database column is whatever
+    the provider named it."""
+    doc = _stream(filters=[{"field": "amount-due", "operator": "eq", "value": "y"}])
+    assert _diagnose(tmp_path, doc)["passed"]
+
+
 @pytest.mark.parametrize("operator", ["like", "ilike", "is_null", "is_not_null"])
 def test_database_operators_rejected_on_an_api_source(tmp_path, operator):
     probe = {"field": "x", "operator": operator}
