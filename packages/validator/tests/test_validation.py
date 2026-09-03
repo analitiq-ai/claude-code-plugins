@@ -234,6 +234,55 @@ def test_coverage_passes_with_lowercase_exact_matcher(tmp_path, connector_base, 
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
 
 
+# --- one field, two directional entries, one shared read map ------------------
+# A field sampled on both sides is an entry per side, each declaring its own pair.
+# The read map renders one canonical per native token and a connector has one map,
+# so these pin what two entries can and cannot declare under one token.
+_UTC, _NAIVE = "Timestamp(MICROSECOND, UTC)", "Timestamp(MICROSECOND)"
+
+
+def _read_and_write(read_native, read_arrow, write_native, write_arrow):
+    """The corpus-valid endpoint, plus a write mode whose input declares its own pair."""
+    ep = _endpoint(read_native, read_arrow)
+    node = {"type": "string"}
+    if write_native:
+        node |= {"native_type": write_native, "arrow_type": write_arrow}
+    ep["operations"]["write"] = {"insert": {
+        "request": {"method": "POST", "path": "/widgets", "body": {"from_input": "record"}},
+        "input": {"schema": {"$schema": JS, "type": "object", "properties": {"a": node}}},
+    }}
+    return ep
+
+
+@pytest.mark.parametrize("rules,read_pair,write_pair", [
+    ([("date-time", _UTC)], ("date-time", _UTC), ("date-time", _UTC)),
+    ([("date-time", _UTC), ("date-time-naive", _NAIVE)],
+     ("date-time", _UTC), ("date-time-naive", _NAIVE)),
+    ([("date-time", _UTC)], ("date-time", _UTC), (None, None)),
+], ids=["one-token-agreeing", "distinct-tokens-per-zone", "write-undeclared"])
+def test_directional_pairs_the_read_map_can_render(
+        tmp_path, connector_base, validator, rules, read_pair, write_pair):
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": n, "canonical": c} for n, c in rules],
+                {"widgets.json": _read_and_write(*read_pair, *write_pair)})
+    errors = _errors(validator.validate_document(
+        connector_base, doc_path=tmp_path / "connector.json"))
+    assert not errors, [e["message"] for e in errors]
+
+
+def test_one_token_cannot_carry_two_canonicals(tmp_path, connector_base, validator):
+    # The write entry declaring the naive spelling under the read entry's token is
+    # rejected: that token already resolves to the zoned canonical. Two entries that
+    # resolve differently need two tokens, which the domain type map then spells.
+    _write_tree(tmp_path, connector_base,
+                [{"match": "exact", "native": "date-time", "canonical": _UTC}],
+                {"widgets.json": _read_and_write("date-time", _UTC, "date-time", _NAIVE)})
+    errors = _errors(validator.validate_document(
+        connector_base, doc_path=tmp_path / "connector.json"))
+    assert any("resolves to" in e["message"] and _NAIVE in e["message"] for e in errors), \
+        [e["message"] for e in errors]
+
+
 def test_coverage_flags_uncovered_native(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
                 [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
