@@ -88,10 +88,14 @@ was raised.
 3. Author `operations.read` when the resource is readable — `request` and
    `response` are its minimal completion, and `response` is complete only with
    both `records` and `schema`.
-   - `request.method` and `request.path` — from `endpoint_facts.method` /
-     `endpoint_facts.path`. The methods a read may declare are `RULE-ENDP-051`.
-     A body-bearing method is there for providers whose search read takes its
-     query in the body; reach for one only when the provider documents that.
+   - `request` — copy `endpoint_facts.read_request`. It IS an
+     `operations.read.request` object: method, path, and every binding the
+     provider documents, in their documented positions. Copy it rather than
+     rebuilding it from parts — a body value's position, a search body's
+     content type and a path placeholder's binding all live in it, and none of
+     them survives being reconstructed. The methods a read may declare are
+     `RULE-ENDP-051`; a body-bearing one is for providers whose search read
+     takes its query in the body.
    - `request.transport_ref` — only if not the default transport.
    - `params` — declared operation inputs. `in` and `type` (the
      *request-input* type, not an Arrow type) each come from the vocabularies
@@ -103,12 +107,11 @@ was raised.
      `filterable` facts: each entry names an operator and a key of
      `request_params`, whose value IS a `params.<name>` object — copy it in
      rather than rebuilding it, so every fact the researcher grounded survives.
-     Then bind it where the facts put it: a `query` or `header` param under
-     that request slot keyed by its own name, and a `body` param at the
-     position `endpoint_facts.request_body` shows — copy that object into
-     `request.body` rather than reconstructing it, since `in: "body"` names a
-     body and not a place in one, and binding at the top level instead builds
-     a request the provider ignores. A field with no
+     Its binding is already in `read_request`, at the position the provider
+     documents — so declaring the param is all this step adds. Do not re-derive
+     the binding from the param's `in`: that names a slot and not a place in
+     one, and a body value rebuilt at the top level is a request the provider
+     ignores. A field with no
      `filterable` fact offers no filtering — omit it rather than guessing which
      comparisons the provider takes, the same refusal as an untyped field. See
      `spec-filters.md`.

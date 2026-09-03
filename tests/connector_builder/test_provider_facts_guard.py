@@ -214,14 +214,26 @@ def test_request_params_defers_to_the_contract_param_shape():
     an enumeration fails on the missing `$ref`; renaming the definition the
     pointer names fails on resolution.
     """
-    entry = _endpoint_facts_schema()["properties"]["request_params"]
+    props = _endpoint_facts_schema()["properties"]
+    assert "$ref" in props["read_request"], (
+        "EndpointFacts.read_request must reference the api-endpoint read-request "
+        "shape rather than describe one — method, path, a body value's position, "
+        "a search body's content type and a path placeholder's binding are all "
+        f"fields of it, and an account of them is always short. Got: {props['read_request']!r}")
+    _resolves(props["read_request"]["$ref"])
+
+    entry = props["request_params"]
     value = entry.get("additionalProperties")
     assert isinstance(value, dict) and "$ref" in value, (
         "EndpointFacts.request_params must reference the api-endpoint param "
         "definition rather than enumerate a param's keys — a curated copy of "
         f"`Param` goes stale the moment the contract gains a field. Got: {value!r}"
     )
-    ref = value["$ref"]
+    _resolves(value["$ref"])
+
+
+def _resolves(ref: str) -> None:
+    """The pointer names the published api-endpoint schema and resolves in it."""
     url, _, pointer = ref.partition("#")
     assert url == "https://schemas.analitiq.ai/api-endpoint/latest.json", (
         f"the reference must name the published api-endpoint schema; got {url!r}")
@@ -233,5 +245,5 @@ def test_request_params_defers_to_the_contract_param_shape():
             f"{token!r} is not there. The definition was renamed, so the "
             "fragment points at nothing and the researcher has no shape to fill.")
         node = node[token]
-    assert node.get("type") == "object" and "properties" in node, (
-        f"{ref} resolves to something that is not a param object: {node!r}")
+    assert isinstance(node, dict) and node, (
+        f"{ref} resolves to nothing usable: {node!r}")
