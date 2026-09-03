@@ -91,7 +91,7 @@ agent runs, so it cannot import the constant), pinned by
 
 The pin must be **at or behind** `packages/validator/pyproject.toml`. Equal is the
 steady state; behind is tolerated for merging because the publish is a hand-pushed
-tag firing after the version bump merges — the `contracts-version-guard` job reds
+tag firing before the version bump merges — the `contracts-version-guard` job reds
 its strict runs while the pin lags, as the reminder to finish the release. A pin
 **ahead** of what this repo ships is the dangerous direction: marketplace installs
 track main HEAD, so every user's `pip install` fails and the plugin cannot run.
