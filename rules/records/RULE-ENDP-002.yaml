@@ -1,21 +1,19 @@
 id: RULE-ENDP-002
 statement: >
-  An operator MUST NOT name as its landing site a parameter declared as
-  controlled by pagination or replication.
-tier: advisory
+  A parameter declared as controlled by pagination or replication MUST NOT also
+  declare the operator set that makes it stream-filterable.
+tier: structural
 severity: error
 scopes: [api-endpoint]
-validator: "analitiq.contracts.endpoints::_validate_filters_wiring"
+validator: null
 owners: [connector-plugin, engine]
-targets: [ReadOperation]
-fields: [filters]
+targets: [Param]
 rationale: >
-  A landing site is where the stream's value is written on the way to the wire;
-  marking the param controlled hands that same slot to the paging or incremental
-  machinery, which sets it on every request. Naming one as an operator's landing
-  site advertises a filter the runtime overwrites, so the stream's predicate
-  vanishes from the request and the run reports success over unfiltered data.
-  Both halves are in view on the read operation, which is why the check sits
-  there rather than on the param.
-status: active
-superseded_by: null
+  Taken when a parameter carried its own operator set, and retired with that
+  set: filterability is no longer a parameter's to declare, so there is no
+  longer a shape on one parameter object for this rule to be a conditional over.
+  The obligation it stood for — one value with two authorities, a stream's
+  predicate and a runtime control writing the same slot — survives against the
+  read operation's filter map instead, where both halves are in view.
+status: retired
+superseded_by: RULE-ENDP-067

@@ -189,7 +189,11 @@ def render_secret_ref_grammar() -> str:
     return "\n".join(out) + "\n"
 
 
-_UNARY_OPERATORS = ("is_null", "is_not_null")
+#: Read from the owner: this renders the published unary sentence, so a
+#: hand-copy here would teach a set the contract had moved on from.
+from analitiq.contracts.shared.filter_operators import (  # noqa: E402
+    UNARY_FILTER_OPERATORS as _UNARY_OPERATORS,
+)
 
 _PROBE_UUID = "11111111-1111-4111-8111-111111111111"
 

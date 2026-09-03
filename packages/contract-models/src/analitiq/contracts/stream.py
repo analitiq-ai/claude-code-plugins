@@ -209,8 +209,8 @@ def validate_endpoint_ref(data: Any) -> ConnectorEndpointRef | ConnectionEndpoin
 
 # The filter-operator vocabulary is owned by `shared.filter_operators` — an
 # api-endpoint names a landing site for the same members, and `endpoints` cannot
-# import this module. `StreamSource` narrows the structural floor below to the
-# subset the source's scope can carry.
+# import this module. `StreamSource` narrows `FilterOperator` to the subset the
+# source's scope can carry.
 
 
 _FILTER_CONDITIONAL_RULES: dict[str, Any] = {
@@ -248,7 +248,10 @@ class Filter(StrictModel):
             "Record field the predicate narrows on. A database source names a "
             "column of the source endpoint's schema; an API source names a "
             "field the endpoint's read `filters` map offers, and that map is "
-            "what turns the comparison into a request."
+            "what turns the comparison into a request. Nothing here resolves "
+            "the name: the endpoint document that declares it is not part of "
+            "the stream, so a name that matches nothing is caught where the "
+            "two documents are held together, not by this document alone."
         ),
     )
     operator: FilterOperator = Field(

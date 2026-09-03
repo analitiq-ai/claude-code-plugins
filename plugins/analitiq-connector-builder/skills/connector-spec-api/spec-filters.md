@@ -1,32 +1,30 @@
-# Filters: where each operator reaches the wire
+# Filters: which fields a stream may filter on
 
-A read operation's `filters` map is the endpoint's answer to one question a
-stream cannot answer for itself: *this provider can be asked to compare this
-field this way, and here is how the comparison is spelled.*
+A read operation's `filters` map answers a question a stream cannot answer for
+itself: *this provider can be asked to compare this field this way, and here is
+the param that carries the comparison.*
 
 It is keyed by **record field** — the name the stream writes in
-`source.filters[].field` — and each field names the operators it offers. Each
-operator names its **landing site**: the one place the comparison is expressed.
+`source.filters[].field`, and one the response schema declares. Each field names
+the operators it offers, and each operator names the param its comparison is
+written to (`RULE-ENDP-065`).
 
 <!-- validate: api-endpoint#/operations/read/filters -->
 ```jsonc
 {
   "amount": {
     "gt": {"from_param": "minAmount"},
-    "lt": {"from_param": "maxAmount"}
+    "lt": {"from_param": "maxAmount"},
+    "neq": {"from_param": "amount", "template": "<>${stream.filter.value}"}
   }
 }
 ```
 
-## The two landing sites
+## The param is the site
 
-A provider spells a comparison in one of two places, and the map has a form for
-each. Which one you reach for is a fact about the provider's documentation, never
-a preference.
-
-**In a parameter of its own** — `{"from_param": "<name>"}`. The operator routes
-the stream's value to that param, and the param's `request` binding already says
-how it is spelled. This covers every provider that gives each bound its own key:
+A request binding maps a wire name to one value, so the param is what makes two
+comparisons distinguishable. Its own `request` binding already says how it
+reaches the wire, which is all most providers need:
 
 | Provider writes | Author as |
 |---|---|
@@ -34,55 +32,55 @@ how it is spelled. This covers every provider that gives each bound its own key:
 | `?amount__gt=100` | a param bound to the query key `amount__gt` |
 | `?created[gte]=…` | a param bound to the query key `created[gte]` |
 
-**In the value** — `{"template": "…"}`. Some providers write the comparison
-inside the value, so the rendered string is the whole predicate. Interpolate the
-filter's value with `${stream.filter.value}`:
+**No param carries two comparisons**, anywhere in the operation — not two
+operators on one field, and not two fields reaching for the same param. Two
+would describe one request, and neither document would record which comparison
+was meant.
 
-| Provider writes | Author as |
-|---|---|
-| `?amount=<>0` | `{"template": "<>${stream.filter.value}"}` |
-| `?q=created>2020-01-01` | `{"template": "created>${stream.filter.value}"}` |
-| `?$filter=amount gt 100` | `{"template": "amount gt ${stream.filter.value}"}` |
+So when a provider's documentation reads as though one key carries several
+comparisons, read it again: usually what looked like one key is a family
+(`startDate` / `endDate`). Where a key genuinely serves a set and a single value
+alike — a comma-joined `?type=INVOICE,CREDIT` — declare the set operator (`in`)
+and let a one-element list carry the single case; the param's own serialization
+declaration owns how a list is spelled (`RULE-ENDP-003`).
 
-A template that never interpolates the value is refused (`RULE-ENDP-066`): it
+## When the comparison goes inside the value
+
+Some providers write the comparison in the value rather than the key, so the
+param alone cannot express it. Add a `template` — the param still names the
+slot, the template names the spelling:
+
+| Provider writes | `from_param` | `template` prefixes the value with |
+|---|---|---|
+| `?amount=<>0` | `amount` | `<>` |
+| `?q=created>2020-01-01` | `q` | `created>` |
+| `?$filter=amount gt 100` | `$filter` | `amount gt ` |
+
+A template carries the filter's value — the fenced example above shows the
+placeholder — and one that never does is refused (`RULE-ENDP-066`), since it
 would send the same comparison whatever the stream asked for.
-
-## Two operators never share a landing site
-
-This is the rule the map exists for (`RULE-ENDP-065`). If `gt` and `lt` both
-routed to one param, both would build the identical request — the provider would
-apply whichever comparison that param means, and the read would come back with
-the wrong rows, green, with nothing raised on either side. A distinct landing
-site per operator is what makes the two distinguishable on the wire.
-
-So when a provider's own documentation says one key carries several comparisons,
-read it again before authoring: usually it does not, and what looked like one key
-is a family (`startDate` / `endDate`). Where a key genuinely serves a set and a
-single value alike — a comma-joined `?type=INVOICE,CREDIT` — declare the set
-operator (`in`) and let a one-element list carry the single case; `style` and
-`explode` on the param own how the list is serialised.
 
 ## What not to put here
 
-- **A param the runtime owns.** A param carrying `controlled_by` is set on every
-  request by pagination or replication, so routing a filter onto it advertises a
-  predicate the runtime overwrites (`RULE-ENDP-002`).
-- **A field the provider cannot filter on.** Absence is the correct declaration:
-  a field with no key in the map is not filterable, and a stream asking for one
-  fails at authoring time rather than reading unfiltered data.
-- **An operator you cannot point at a spelling.** There is no client-side
-  fallback — an operator with no landing site is a comparison the request cannot
-  carry. Leave it out.
+- **A param the runtime owns.** A param carrying `controlled_by` belongs to
+  pagination or replication, and naming it declares two authorities over one
+  slot (`RULE-ENDP-067`).
+- **A field the records do not carry.** Keys resolve against the response
+  schema, so a field the record shape never declares is refused here rather
+  than at the first read.
+- **A field the provider cannot filter on.** Absence is the correct
+  declaration. Whether a stream respects it is settled where the stream and the
+  endpoint are resolved together, not by this document.
+- **An operator you cannot point at a param.** An operator with no landing site
+  is a comparison this contract gives the request no way to carry. Leave it out.
 
 ## Reading the provider
 
-The map is only as good as the provider's filtering documentation, and that is
-the part most often skimmed. Before authoring a field's entry, find the
-provider's own statement of what the parameter does — an inclusive bound written
-as exclusive is the failure that reads downstream as missing rows on the
-boundary, not as a mapping to fix.
+The map is only as good as the provider's filtering documentation. Before
+authoring a field's entry, find the provider's own statement of what the
+parameter does — an inclusive bound authored as exclusive shifts every window by
+one boundary value.
 
-Where the documentation is ambiguous about inclusivity, say so to the user and
-ask rather than guessing: the operator carries inclusivity in this contract
-(`gte` / `lte` inclusive, `gt` / `lt` exclusive), so the guess is not recoverable
-later from the document.
+Where the documentation is ambiguous about inclusivity, ask rather than guess.
+Inclusivity is carried by the operator itself, with no separate flag to correct
+it afterwards, so the guess is not recoverable later from the document.

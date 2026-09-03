@@ -46,7 +46,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ReadOperation", field="filters",
         rule_ids=("RULE-ENDP-002", "RULE-ENDP-055", "RULE-ENDP-065", "RULE-ENDP-066"),
-        prose_hash="874761ff793a",
+        prose_hash="1fab6519c7e7",
         structural=(
             "the operator keys are `Literal` members — the vocabulary is the "
             "type; the landing-site shape and its distinctness are checked by "
@@ -56,6 +56,21 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "cross-document: whether a stream's filter names a field this map "
             "offers is resolved against the stream document, not here"
         ),
+    ),
+    ProseObligation(
+        model="FilterLanding",
+        rule_ids=("RULE-ENDP-065",),
+        prose_hash="6775aa983c42",
+    ),
+    ProseObligation(
+        model="FilterLanding", field="from_param",
+        rule_ids=("RULE-ENDP-065", "RULE-ENDP-067"),
+        prose_hash="6903e77373b8",
+    ),
+    ProseObligation(
+        model="FilterLanding", field="template",
+        rule_ids=("RULE-ENDP-066",),
+        prose_hash="2340f702fb25",
     ),
     # === api-endpoint: pagination ============================================
     ProseObligation(

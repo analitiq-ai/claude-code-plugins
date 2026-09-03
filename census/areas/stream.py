@@ -187,7 +187,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="Filter", field="field", rule_ids=("RULE-STRM-022", "RULE-STRM-026"),
-        prose_hash="82c56f1963f2",
+        prose_hash="26125df78d34",
         waiver=(
             "cross-document: whether the name resolves — to a column on a "
             "database source, or to a field the endpoint's read `filters` map "

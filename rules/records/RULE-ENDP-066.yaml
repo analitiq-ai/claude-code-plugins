@@ -1,8 +1,8 @@
 id: RULE-ENDP-066
 statement: >
-  A landing site that renders the comparison into the value MUST interpolate the
-  filter's value, through a placeholder whose leading token is a known resolution
-  scope.
+  A landing site that spells the comparison into the value MUST carry the
+  filter's value, through a placeholder whose leading token is a known
+  resolution scope.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -11,12 +11,15 @@ owners: [connector-plugin, engine]
 targets: [ReadOperation]
 fields: [filters]
 rationale: >
-  A value-carried spelling exists because some providers write the comparison
-  inside the value rather than the key, so the rendered string is the whole
-  predicate. One that never interpolates the filter's value is therefore a
-  constant: it sends the same comparison whatever the stream asked for, narrowing
-  on a bound the author did not write, and the run reports success over the wrong
-  rows. Holding the placeholder to the resolution-scope vocabulary is what keeps
-  a typo from resolving to nothing and silently rendering empty.
+  A template exists because some providers write the comparison inside the value
+  rather than in the key, so the rendered string is the whole predicate. One
+  that never carries the filter's value is a constant: it describes the same
+  comparison whatever the stream asked for, which makes the operator it sits
+  under a label rather than a choice. Holding the placeholder to the
+  resolution-scope vocabulary is the same argument one step down — a token
+  outside that vocabulary names nothing any resolver could supply. Both halves
+  are checkable here, against the contract's own scope list; a change in how a
+  run renders a template would make this rule stricter than it needs to be,
+  never wrong about a document.
 status: active
 superseded_by: null

@@ -15,6 +15,12 @@ rationale: >
   vocabulary at all. Two failures hide here and look alike: a field the endpoint
   offers but not with this operator, and a field it does not offer at all. Either
   one is a filter with no landing site, which is a predicate the request cannot
-  express — catching it means reading the endpoint's map beside the filter.
+  express — catching it means reading the endpoint's map beside the filter. No
+  validator does, and the reason is structural rather than pending: the assembled
+  bundle a cross-document check runs over carries connection-scoped endpoint
+  documents, and an API filter's endpoint is connector-scoped — resolved from the
+  connector's own set, which the bundle does not materialize. So the two
+  documents are never in hand together offline, and the comparison happens where
+  they are, when the stream is saved.
 status: active
 superseded_by: null

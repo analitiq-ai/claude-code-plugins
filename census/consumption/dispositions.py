@@ -47,6 +47,21 @@ PARAM_VALUE_CONSTRAINT = (
     "binding resolved"
 )
 
+#: The map saying which fields a stream may filter on and which param carries
+#: each comparison, and the landing sites it is built from.
+FILTER_LANDING = (
+    "an author declaring where a filter's comparison is written expects the read "
+    "to send that comparison; the pinned manifest claims no read of the map, so "
+    "no landing site it names reaches the request — the run treats a filter's "
+    "`field` as a param name, which under a map keyed by record field writes the "
+    "value to a param of that name if one exists and refuses the read if none "
+    "does. `engine_gap` rather than `authoring_only`: the off-run-time reader "
+    "the map also has — the save-time comparison of a stream's filter against "
+    "what the endpoint offers, which RULE-STRM-026 describes — settles which "
+    "filters may be written, never how one is sent, and the sending half is the "
+    "engine's. Adopting it is writing the value to the param the operator names"
+)
+
 #: The wire half of a cursor mapping.
 CURSOR_MAPPING_WIRE = (
     "an author declaring how the watermark is compared and formatted expects "
@@ -116,6 +131,12 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "RULE-DBEP-013 forbids execution from branching on it, so the absence "
         "of a read is the rule being kept",
     ),
+    FieldDisposition(
+        "endpoints.FilterLanding", "from_param", "engine_gap", FILTER_LANDING,
+    ),
+    FieldDisposition(
+        "endpoints.FilterLanding", "template", "engine_gap", FILTER_LANDING,
+    ),
     # --- endpoints.Param: placement is graded at validation, the label is
     # for people, and the value constraints reach nobody.
     FieldDisposition(
@@ -150,17 +171,10 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "max_length", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "min_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
-    # --- endpoints.ReadOperation: where each filter operator reaches the wire -
+    # --- the filter map, and the landing sites it is made of -----------------
     FieldDisposition(
-        "endpoints.ReadOperation", "filters", "engine_gap",
-        "an author declaring which fields a stream may filter on, and where each "
-        "operator lands, expects the read to send the comparison the filter asked "
-        "for; the pinned manifest claims no read of the map, so the request binds "
-        "the filter's value under the param named by its field and every operator "
-        "goes out as the same request. Adopting it is selecting the binding the "
-        "operator names, which the map is shaped to make mechanical",
+        "endpoints.ReadOperation", "filters", "engine_gap", FILTER_LANDING,
     ),
-
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
         "endpoints.Replication", "supported_methods", "engine_gap",

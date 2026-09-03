@@ -2333,29 +2333,27 @@
   },
   {
    "id": "RULE-ENDP-002",
-   "statement": "An operator MUST NOT name as its landing site a parameter declared as controlled by pagination or replication.\n",
-   "tier": "advisory",
+   "statement": "A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable.\n",
+   "tier": "structural",
    "severity": "error",
    "scopes": [
     "api-endpoint"
    ],
-   "validator": "analitiq.contracts.endpoints::_validate_filters_wiring",
+   "validator": null,
    "owners": [
     "engine",
     "connector-plugin"
    ],
    "targets": [
-    "ReadOperation"
+    "Param"
    ],
-   "fields": [
-    "filters"
-   ],
+   "fields": [],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A landing site is where the stream's value is written on the way to the wire; marking the param controlled hands that same slot to the paging or incremental machinery, which sets it on every request. Naming one as an operator's landing site advertises a filter the runtime overwrites, so the stream's predicate vanishes from the request and the run reports success over unfiltered data. Both halves are in view on the read operation, which is why the check sits there rather than on the param.\n",
-   "status": "active",
-   "superseded_by": null
+   "rationale": "Taken when a parameter carried its own operator set, and retired with that set: filterability is no longer a parameter's to declare, so there is no longer a shape on one parameter object for this rule to be a conditional over. The obligation it stood for — one value with two authorities, a stream's predicate and a runtime control writing the same slot — survives against the read operation's filter map instead, where both halves are in view.\n",
+   "status": "retired",
+   "superseded_by": "RULE-ENDP-067"
   },
   {
    "id": "RULE-ENDP-003",
@@ -2495,7 +2493,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, the operators a stream may filter it with — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
+   "rationale": "A param declaration is the typed contract for one request input — its type and its requiredness — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2978,7 +2976,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The other things that fill a param are read-side: operators make it filterable from a stream, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
+   "rationale": "The other things that fill a param are read-side: a read operation's filter map names it as the site a stream's comparison is written to, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3077,7 +3075,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type, requiredness and operator set get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether it may filter on that value or with which operators, and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
+   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type and requiredness get declared, and the only thing a filter map can name as the site a comparison is written to. A direct ref delivers the value and declares nothing, so no downstream stream can be offered a filter on it at all, and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3634,7 +3632,7 @@
   },
   {
    "id": "RULE-ENDP-055",
-   "statement": "A filterable field MUST name its operators from the operator vocabulary the read operation's `filters` map declares.\n",
+   "statement": "A filterable field MUST name its operators from the operator vocabulary the contract declares for an API read.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -3655,7 +3653,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "This map is the endpoint's promise to every stream that binds it: a filter is authored against these members and rendered onto the landing site each one names, so the two documents agree only while both read one vocabulary. The members are the comparisons a provider can be asked for, which is a narrower set than the ones a dialect can compile — an operator offered here has to survive being serialised into a request the provider accepts, rather than becoming a predicate the way a database read's operator does.\n",
+   "rationale": "The map is the endpoint's promise to every stream that binds it: a filter is authored against these members and written to the parameter each one names, so the two documents agree only while both read one vocabulary. The members are the comparisons a provider can be asked for, which is a narrower set than the ones a dialect can compile — the dialect-only spellings have no general form a provider accepts, so offering one here would promise a comparison no request could carry.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3885,7 +3883,7 @@
   },
   {
    "id": "RULE-ENDP-065",
-   "statement": "Every operator a filterable field offers MUST name exactly one landing site — a declared parameter, or a template that renders the comparison into the value — and no two operators on that field may name the same one.\n",
+   "statement": "Every operator a filterable field offers MUST name the declared parameter its comparison is written to, and no parameter may be named by more than one operator in the operation.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3906,13 +3904,13 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A request binding maps a wire name to a value, so an operator that names no landing site of its own has nowhere to be expressed and is dropped between the filter and the request. That is the failure this rule exists for: the read succeeds, the provider applies whatever comparison the bare parameter means, and the rows returned are not the rows asked for, with nothing raised on either side. Two operators sharing one site fail the same way and are harder to see, because each is individually well-formed — it is only together that they build one identical request. Requiring the site to be distinct is what makes the two comparisons distinguishable on the wire.\n",
+   "rationale": "A request binding maps a wire name to one value. So a parameter named by two operators describes one request for two different comparisons, and the document stops recording which one was asked for — individually each entry is well-formed, which is why the collision is only visible from the operation and not from either entry. The same holds across fields, not merely within one: two fields reaching for one parameter collide exactly as two operators on one field do. An operator naming no parameter has nowhere in the request to be written at all. Both halves are defensible from the contract alone — they ask only that the document say where each comparison goes, which nothing downstream can reconstruct if it does not. Read as a statement about a run, it is a reading of the engine as it stands: if the engine ever gained a way to carry a comparison the document does not place, this rule would refuse documents that engine could run, so it fails as a refusal at authoring time and never as a bad read.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-ENDP-066",
-   "statement": "A landing site that renders the comparison into the value MUST interpolate the filter's value, through a placeholder whose leading token is a known resolution scope.\n",
+   "statement": "A landing site that spells the comparison into the value MUST carry the filter's value, through a placeholder whose leading token is a known resolution scope.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3932,7 +3930,33 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A value-carried spelling exists because some providers write the comparison inside the value rather than the key, so the rendered string is the whole predicate. One that never interpolates the filter's value is therefore a constant: it sends the same comparison whatever the stream asked for, narrowing on a bound the author did not write, and the run reports success over the wrong rows. Holding the placeholder to the resolution-scope vocabulary is what keeps a typo from resolving to nothing and silently rendering empty.\n",
+   "rationale": "A template exists because some providers write the comparison inside the value rather than in the key, so the rendered string is the whole predicate. One that never carries the filter's value is a constant: it describes the same comparison whatever the stream asked for, which makes the operator it sits under a label rather than a choice. Holding the placeholder to the resolution-scope vocabulary is the same argument one step down — a token outside that vocabulary names nothing any resolver could supply. Both halves are checkable here, against the contract's own scope list; a change in how a run renders a template would make this rule stricter than it needs to be, never wrong about a document.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-067",
+   "statement": "An operator MUST NOT name as its landing site a parameter declared as controlled by pagination or replication.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_validate_filters_wiring",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "pattern_symbol": null,
+   "fixture_model": null,
+   "rationale": "A landing site is the parameter a stream's comparison is written to, and `controlled_by` declares that same parameter as owned by pagination or replication. Naming a controlled parameter therefore puts two authorities over one value into one document, and the document says nothing about which wins — that is the defect, and it is legible without knowing what any runtime does with the parameter. As a reading of the engine as it stands, the pinned consumption manifest claims `controlled_by`, so the runtime is the authority that sets such a parameter; were that to change, this rule would still be refusing a document that states two owners for one slot. Both halves are in view on the read operation, which is why the check sits there rather than on the parameter.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5661,7 +5685,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per parameter.\n",
+   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per filterable field.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5975,7 +5999,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Which fields an API endpoint offers, and where each operator on them reaches the wire, is declared in the api-endpoint document; the stream carries no view of it, so the local check can prove only that an operator is in the API vocabulary at all. Two failures hide here and look alike: a field the endpoint offers but not with this operator, and a field it does not offer at all. Either one is a filter with no landing site, which is a predicate the request cannot express — catching it means reading the endpoint's map beside the filter.\n",
+   "rationale": "Which fields an API endpoint offers, and where each operator on them reaches the wire, is declared in the api-endpoint document; the stream carries no view of it, so the local check can prove only that an operator is in the API vocabulary at all. Two failures hide here and look alike: a field the endpoint offers but not with this operator, and a field it does not offer at all. Either one is a filter with no landing site, which is a predicate the request cannot express — catching it means reading the endpoint's map beside the filter. No validator does, and the reason is structural rather than pending: the assembled bundle a cross-document check runs over carries connection-scoped endpoint documents, and an API filter's endpoint is connector-scoped — resolved from the connector's own set, which the bundle does not materialize. So the two documents are never in hand together offline, and the comparison happens where they are, when the stream is saved.\n",
    "status": "active",
    "superseded_by": null
   },

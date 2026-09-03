@@ -286,7 +286,7 @@ def test_every_block_is_annotated():
 # Coverage is a conscious number: adding a block (or changing a disposition)
 # must move this constant in the same change, so the validated surface never
 # shrinks silently.
-EXPECTED_DISPOSITIONS = {"validate": 9, "invalid": 0, "illustrative": 18}
+EXPECTED_DISPOSITIONS = {"validate": 9, "invalid": 0, "illustrative": 19}
 
 
 def test_disposition_counts_are_conscious():

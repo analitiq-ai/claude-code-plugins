@@ -99,7 +99,7 @@ was raised.
    - `filters` — which record fields a stream may filter on, and where each
      operator reaches the wire (`RULE-ENDP-055`, `RULE-ENDP-065`,
      `RULE-ENDP-066`). A param the runtime owns is never a landing site
-     (`RULE-ENDP-002`). See `skills/connector-spec-api/spec-filters.md`.
+     (`RULE-ENDP-067`). See `skills/connector-spec-api/spec-filters.md`.
    - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
      `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are

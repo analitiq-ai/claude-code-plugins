@@ -102,9 +102,8 @@ simpler and spares the runtime from computing an upper bound.
 Each param a cursor mapping names is an ordinary declared param: give it
 `controlled_by: "replication"` (`RULE-ENDP-011`), bind it with
 `{"from_param": …}` (`RULE-ENDP-009`), and never name it as a filter operator's
-landing site (`RULE-ENDP-002`) — replication owns its value, so a filter routed
-onto it is one the runtime overwrites, and the run reports success over
-unfiltered data.
+landing site (`RULE-ENDP-067`) — replication owns the slot, so declaring a
+filter onto it declares two authorities for one value.
 A window mapping wires `start_param` and `end_param` each that way.
 
 A cursor on `updated_at` requires `updated_at` to be a declared field of the

@@ -73,6 +73,23 @@ A filter may reference a database column that is **not** in
 the filter controls which rows are read. Filtering on `updated_at` while
 projecting only `id` and `amount` is legitimate and common.
 
+On an API source a filter reads the same, because `field` names a record field
+on both scopes — the endpoint's own map is what carries the comparison to a
+provider parameter, and the stream never names one:
+
+<!-- illustrative -->
+```jsonc
+{
+  "filters": [
+    {"field": "amount", "operator": "gt", "value": 100}
+  ]
+}
+```
+
+What differs is which filters are available: the endpoint offers a set of
+filterable fields and, per field, a set of operators. Read them off the endpoint
+document before offering a filter (`RULE-STRM-026`).
+
 ## `replication`
 
 `method` selects the variant, and the variant decides the rest of the block

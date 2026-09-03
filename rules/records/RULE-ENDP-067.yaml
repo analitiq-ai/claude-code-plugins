@@ -1,0 +1,25 @@
+id: RULE-ENDP-067
+statement: >
+  An operator MUST NOT name as its landing site a parameter declared as
+  controlled by pagination or replication.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_validate_filters_wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+fields: [filters]
+rationale: >
+  A landing site is the parameter a stream's comparison is written to, and
+  `controlled_by` declares that same parameter as owned by pagination or
+  replication. Naming a controlled parameter therefore puts two authorities over
+  one value into one document, and the document says nothing about which wins —
+  that is the defect, and it is legible without knowing what any runtime does
+  with the parameter. As a reading of the engine as it stands, the pinned
+  consumption manifest claims `controlled_by`, so the runtime is the authority
+  that sets such a parameter; were that to change, this rule would still be
+  refusing a document that states two owners for one slot. Both halves are in
+  view on the read operation, which is why the check sits there rather than on
+  the parameter.
+status: active
+superseded_by: null

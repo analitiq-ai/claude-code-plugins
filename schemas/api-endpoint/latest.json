@@ -128,6 +128,36 @@
       "title": "CursorPagination",
       "type": "object"
     },
+    "FilterLanding": {
+      "additionalProperties": false,
+      "description": "Where one operator's comparison is written on the way to the wire.\n\nThe param is the site. Naming it is what makes two comparisons\ndistinguishable: a request binding maps a wire name to a value, so two\noperators writing one param describe one request, and neither document then\nrecords which comparison was meant.\n\n`template` is how the value is spelled into that param, for providers that\nwrite the comparison inside the value rather than in the key. Without one the\nparam carries the filter's value as-is.",
+      "properties": {
+        "from_param": {
+          "description": "Declared param this operator's comparison is written to. Its own `request` binding says how the param reaches the wire, so a provider spelling the comparison in the key (`minAmount`, `amount__gt`, `created[gte]`) needs nothing but this. A param the runtime owns is never a landing site.",
+          "minLength": 1,
+          "title": "From Param",
+          "type": "string"
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "How the value is spelled into `from_param`, for a provider that writes the comparison inside the value (`amount=<>0`, `$filter=amount gt 100`). It carries the filter's value through `${stream.filter.value}`; omit it and the param carries that value unchanged.",
+          "title": "Template"
+        }
+      },
+      "required": [
+        "from_param"
+      ],
+      "title": "FilterLanding",
+      "type": "object"
+    },
     "FunctionExpression": {
       "additionalProperties": false,
       "description": "``{\"function\": <name>, ...}`` registered-function value expression.",
@@ -1924,7 +1954,9 @@
           "anyOf": [
             {
               "additionalProperties": {
-                "additionalProperties": true,
+                "additionalProperties": {
+                  "$ref": "#/$defs/FilterLanding"
+                },
                 "propertyNames": {
                   "enum": [
                     "eq",
@@ -1949,7 +1981,7 @@
             }
           ],
           "default": null,
-          "description": "Which record fields a stream may filter on, and where each operator reaches the wire. Keys are record field paths; each names the operators it offers, and each operator names its landing site: `{from_param: <name>}` routes it to a declared param, whose `request` binding already says how that param is spelled (`minAmount`/`maxAmount`, `amount__gt`); `{template: ...}` renders the comparison into the value itself (`amount=<>0`, `$filter=amount gt 100`), interpolating the filter's value through `${stream.filter.value}`. A field absent here is not filterable, and an operator absent from a field cannot be asked for. Two operators may not share a landing site \u2014 the wire could not tell them apart, and the read would return the wrong rows in silence. Spec: \u00a7Filters.",
+          "description": "Which record fields a stream may filter on, and where each operator is to be written. Keys are record field paths the response schema declares; each names the operators it offers, and each operator names the param carrying its comparison. A param carries at most one comparison across the whole operation \u2014 two naming it would describe one request, and the read could not tell which comparison was asked for. That much IS checked here. Whether a stream's filter names a field this map offers is not: that is settled against the stream document, which this document does not carry. Spec: \u00a7Filters.",
           "title": "Filters"
         },
         "pagination": {

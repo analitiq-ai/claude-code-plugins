@@ -38,7 +38,7 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
-| RULE-ENDP-055 | A filterable field MUST name its operators from the operator vocabulary the read operation's `filters` map declares. | `api-endpoint` | error | validator | `filters`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
+| RULE-ENDP-055 | A filterable field MUST name its operators from the operator vocabulary the contract declares for an API read. | `api-endpoint` | error | validator | `filters`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
@@ -57,7 +57,7 @@ single field looks wrong.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-ENDP-065 | Every operator a filterable field offers MUST name exactly one landing site — a declared parameter, or a template that renders the comparison into the value — and no two operators on that field may name the same one. | `api-endpoint` | error | validator |
+| RULE-ENDP-065 | Every operator a filterable field offers MUST name the declared parameter its comparison is written to, and no parameter may be named by more than one operator in the operation. | `api-endpoint` | error | validator |
 | RULE-RETRY-001 | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. | `any` | error | validator |
 
 ## Referential

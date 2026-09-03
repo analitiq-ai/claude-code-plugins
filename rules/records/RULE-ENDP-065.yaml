@@ -1,8 +1,8 @@
 id: RULE-ENDP-065
 statement: >
-  Every operator a filterable field offers MUST name exactly one landing site —
-  a declared parameter, or a template that renders the comparison into the value
-  — and no two operators on that field may name the same one.
+  Every operator a filterable field offers MUST name the declared parameter its
+  comparison is written to, and no parameter may be named by more than one
+  operator in the operation.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -11,14 +11,19 @@ owners: [connector-plugin, pipeline-plugin, engine]
 targets: [ReadOperation]
 fields: [filters]
 rationale: >
-  A request binding maps a wire name to a value, so an operator that names no
-  landing site of its own has nowhere to be expressed and is dropped between the
-  filter and the request. That is the failure this rule exists for: the read
-  succeeds, the provider applies whatever comparison the bare parameter means,
-  and the rows returned are not the rows asked for, with nothing raised on
-  either side. Two operators sharing one site fail the same way and are harder
-  to see, because each is individually well-formed — it is only together that
-  they build one identical request. Requiring the site to be distinct is what
-  makes the two comparisons distinguishable on the wire.
+  A request binding maps a wire name to one value. So a parameter named by two
+  operators describes one request for two different comparisons, and the
+  document stops recording which one was asked for — individually each entry is
+  well-formed, which is why the collision is only visible from the operation and
+  not from either entry. The same holds across fields, not merely within one:
+  two fields reaching for one parameter collide exactly as two operators on one
+  field do. An operator naming no parameter has nowhere in the request to be
+  written at all. Both halves are defensible from the contract alone — they ask
+  only that the document say where each comparison goes, which nothing
+  downstream can reconstruct if it does not. Read as a statement about a run, it
+  is a reading of the engine as it stands: if the engine ever gained a way to
+  carry a comparison the document does not place, this rule would refuse
+  documents that engine could run, so it fails as a refusal at authoring time
+  and never as a bad read.
 status: active
 superseded_by: null

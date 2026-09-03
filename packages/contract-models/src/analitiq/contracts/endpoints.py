@@ -1933,6 +1933,47 @@ class WriteResponse(_EndpointModel):
         return self
 
 
+#: The placeholder a `FilterLanding.template` carries the filter's value through.
+#: `stream` is already a resolution scope, so this needs no addition to
+#: `RESOLUTION_SCOPES`.
+FILTER_VALUE_PLACEHOLDER = "stream.filter.value"
+
+
+class FilterLanding(_EndpointModel):
+    """Where one operator's comparison is written on the way to the wire.
+
+    The param is the site. Naming it is what makes two comparisons
+    distinguishable: a request binding maps a wire name to a value, so two
+    operators writing one param describe one request, and neither document then
+    records which comparison was meant.
+
+    `template` is how the value is spelled into that param, for providers that
+    write the comparison inside the value rather than in the key. Without one the
+    param carries the filter's value as-is.
+    """
+
+    from_param: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Declared param this operator's comparison is written to. Its own "
+            "`request` binding says how the param reaches the wire, so a "
+            "provider spelling the comparison in the key (`minAmount`, "
+            "`amount__gt`, `created[gte]`) needs nothing but this. A param the "
+            "runtime owns is never a landing site."
+        ),
+    )
+    template: str | None = Field(
+        default=None,
+        description=(
+            "How the value is spelled into `from_param`, for a provider that "
+            "writes the comparison inside the value (`amount=<>0`, "
+            "`$filter=amount gt 100`). It carries the filter's value through "
+            "`${" + FILTER_VALUE_PLACEHOLDER + "}`; omit it and the param "
+            "carries that value unchanged."
+        ),
+    )
+
 class ReadOperation(_EndpointModel):
     """Read operation block."""
 
@@ -1984,21 +2025,18 @@ class ReadOperation(_EndpointModel):
         ),
     )
     replication: Replication | None = Field(default=None)
-    filters: dict[str, dict[ApiFilterOperator, Any]] | None = Field(
+    filters: dict[str, dict[ApiFilterOperator, FilterLanding]] | None = Field(
         default=None,
         description=(
             "Which record fields a stream may filter on, and where each operator "
-            "reaches the wire. Keys are record field paths; each names the "
-            "operators it offers, and each operator names its landing site: "
-            "`{from_param: <name>}` routes it to a declared param, whose "
-            "`request` binding already says how that param is spelled "
-            "(`minAmount`/`maxAmount`, `amount__gt`); `{template: ...}` renders "
-            "the comparison into the value itself (`amount=<>0`, "
-            "`$filter=amount gt 100`), interpolating the filter's value through "
-            "`${stream.filter.value}`. A field absent here is not filterable, "
-            "and an operator absent from a field cannot be asked for. Two "
-            "operators may not share a landing site — the wire could not tell "
-            "them apart, and the read would return the wrong rows in silence. "
+            "is to be written. Keys are record field paths the response schema "
+            "declares; each names the operators it offers, and each operator "
+            "names the param carrying its comparison. A param carries at most "
+            "one comparison across the whole operation — two naming it would "
+            "describe one request, and the read could not tell which comparison "
+            "was asked for. That much IS checked here. Whether a stream's filter "
+            "names a field this map offers is not: that is settled against the "
+            "stream document, which this document does not carry. "
             "Spec: §Filters."
         ),
     )
@@ -2007,9 +2045,6 @@ class ReadOperation(_EndpointModel):
     def _wiring(self) -> "ReadOperation":
         _validate_param_wiring(self.request, self.params, allow_from_input=False)
         _validate_param_binding_uniqueness(self.request, self.params)
-
-        if self.filters is not None:
-            _validate_filters_wiring(self.filters, self.params)
 
         if self.request.method == "GET":
             for name, param in self.params.items():
@@ -2029,6 +2064,12 @@ class ReadOperation(_EndpointModel):
         # When replication is declared, the same traversal feeds cursor-field
         # validation (avoiding a second walk of the same JSON Schema).
         records_array_node = _validate_records_in_response_schema(self.response)
+
+        if self.filters is not None:
+            _validate_filters_wiring(
+                self.filters, self.params, records_array_node, self.response.schema_
+            )
+
         if self.replication is not None:
             _validate_cursor_fields_in_record_shape(
                 self.replication, records_array_node, self.response.schema_
@@ -3339,95 +3380,72 @@ def _validate_replication_wiring(replication: Replication, params: dict[str, Par
 # ---------------------------------------------------------------------------
 
 
-#: The placeholder a value-carried spelling interpolates the filter's value
-#: through. `stream` is already a resolution scope, so the value-carried form
-#: needs no addition to `RESOLUTION_SCOPES`.
-FILTER_VALUE_PLACEHOLDER = "stream.filter.value"
-
-#: How an operator may reach the wire. `from_param` routes it to a param of its
-#: own, whose `request` binding already says how that param is spelled;
-#: `template` renders the comparison into the value the bound param carries.
-_FILTER_LANDING_KEYS: frozenset[str] = frozenset({"from_param", "template"})
-
-
 def _validate_filters_wiring(
-    filters: dict[str, dict[str, Any]], params: dict[str, Param]
+    filters: dict[str, dict[str, FilterLanding]],
+    params: dict[str, Param],
+    records_array_node: dict[str, Any],
+    response_schema: Any,
 ) -> None:
-    """Every operator a field offers must reach the wire somewhere of its own.
+    """Each operator a field offers is written to a param nothing else writes.
 
-    The defect this closes: a param used to declare a list of operators, which
-    said which comparisons a stream could ask for and nothing about how any of
-    them was spelled. Two operators then built one byte-identical request and the
-    read returned the wrong rows in silence. A landing site is what makes them
-    distinguishable, so two operators sharing one is refused here.
+    Three things have to hold for a declared comparison to be expressible, and
+    each fails silently on its own: the field has to be one the records actually
+    carry, the param has to be one the stream may drive, and no two comparisons
+    may share a param — a request binding maps a wire name to one value, so a
+    shared param describes one request for two different predicates and the
+    document no longer says which was meant.
     """
+    claimed: dict[str, tuple[str, str]] = {}
     for field, landings in filters.items():
         if not landings:
             raise violation(
                 "RULE-ENDP-065",
-                f"filters[{field!r}] declares no operator; omit the field instead",
+                f"filters[{field!r}] offers no operator; omit the field instead",
             )
-        seen: dict[tuple[str, str], str] = {}
+        _validate_record_field_path(
+            field,
+            records_array_node,
+            response_schema,
+            where=f"filters[{field!r}]",
+        )
         for operator, landing in landings.items():
             where = f"filters[{field!r}][{operator!r}]"
-            if not isinstance(landing, dict):
+            param = params.get(landing.from_param)
+            if param is None:
                 raise violation(
                     "RULE-ENDP-065",
-                    f"{where} must be a `{{from_param: <name>}}` or "
-                    "`{template: ...}` expression",
+                    f"{where} names unknown param {landing.from_param!r}",
                 )
-            declared = _FILTER_LANDING_KEYS & set(landing)
-            if len(declared) != 1:
+            if param.controlled_by is not None:
                 raise violation(
-                    "RULE-ENDP-065",
-                    f"{where} must declare exactly one of `from_param` or "
-                    f"`template`; got {sorted(declared) or 'neither'}",
+                    "RULE-ENDP-067",
+                    f"{where} names param {landing.from_param!r}, which declares "
+                    f"controlled_by={param.controlled_by!r} — a param the runtime "
+                    "owns is never written by a stream filter",
                 )
-            key = next(iter(declared))
-            target = landing[key]
-            if not isinstance(target, str) or not target:
-                raise violation(
-                    "RULE-ENDP-065", f"{where}.{key} must be a non-empty string"
-                )
-
-            if key == "from_param":
-                param = params.get(target)
-                if param is None:
-                    raise violation(
-                        "RULE-ENDP-065", f"{where} references unknown param {target!r}"
-                    )
-                if param.controlled_by is not None:
-                    raise violation(
-                        "RULE-ENDP-002",
-                        f"{where} names param {target!r}, which declares "
-                        f"controlled_by={param.controlled_by!r} — a param the "
-                        "runtime owns is never driven by a stream filter",
-                    )
-            else:
-                unscoped = _first_unscoped_expression({"template": target})
+            if landing.template is not None:
+                unscoped = _first_unscoped_expression({"template": landing.template})
                 if unscoped is not None:
                     raise violation(
                         "RULE-ENDP-066",
                         f"{where}.template placeholder {unscoped!r} does not begin "
                         "with a known resolution scope",
                     )
-                if "${" + FILTER_VALUE_PLACEHOLDER + "}" not in target:
+                if "${" + FILTER_VALUE_PLACEHOLDER + "}" not in landing.template:
                     raise violation(
                         "RULE-ENDP-066",
-                        f"{where}.template never interpolates "
-                        f"`${{{FILTER_VALUE_PLACEHOLDER}}}`, so the comparison "
-                        "would be sent without the value the filter narrows on",
+                        f"{where}.template never carries "
+                        f"`${{{FILTER_VALUE_PLACEHOLDER}}}`, so the param would be "
+                        "sent without the value the filter narrows on",
                     )
-
-            site = (key, target)
-            if site in seen:
+            prior = claimed.get(landing.from_param)
+            if prior is not None:
                 raise violation(
                     "RULE-ENDP-065",
-                    f"{where} and filters[{field!r}][{seen[site]!r}] resolve to the "
-                    f"same landing site ({key}={target!r}) — two operators the wire "
-                    "cannot tell apart build one identical request",
+                    f"{where} and filters[{prior[0]!r}][{prior[1]!r}] both write "
+                    f"param {landing.from_param!r}; a param carries one comparison",
                 )
-            seen[site] = operator
+            claimed[landing.from_param] = (field, operator)
 
 
 def _validate_param_binding_uniqueness(

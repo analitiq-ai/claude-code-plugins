@@ -13,6 +13,11 @@
           "in": "query",
           "type": "number",
           "required": false
+        },
+        "amount": {
+          "in": "query",
+          "type": "number",
+          "required": false
         }
       },
       "request": {
@@ -24,6 +29,9 @@
           },
           "maxAmount": {
             "from_param": "maxAmount"
+          },
+          "amount": {
+            "from_param": "amount"
           }
         },
         "headers": {
@@ -62,6 +70,11 @@
                     "arrow_type": "Utf8"
                   },
                   "next_cursor": {
+                    "type": "string",
+                    "native_type": "string",
+                    "arrow_type": "Utf8"
+                  },
+                  "amount": {
                     "type": "string",
                     "native_type": "string",
                     "arrow_type": "Utf8"

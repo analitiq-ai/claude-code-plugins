@@ -37,7 +37,7 @@ downstream, or ask the connector to expose a suitable parameter.
 - `field` names a **record field** on either scope (`RULE-STRM-022`): a column of
   the source endpoint's schema on a database source, a field the endpoint's read
   `filters` map offers on an API source. It is never a provider parameter name —
-  the endpoint's map is what routes the comparison to a parameter.
+  the endpoint's map is what carries the comparison to one.
 
 ## What the local validator still cannot check
 
@@ -56,13 +56,11 @@ For an API source, the endpoint document narrows the vocabulary further
 (`RULE-STRM-026`). Read `operations.read.filters` on the endpoint:
 
 - a key for the field, carrying the operator → filterable with that operator.
-- a key for the field, without that operator → the provider offers no way to
-  send this comparison on this field. Pick an operator the field does offer, or
-  say so; there is no client-side fallback.
+- a key for the field, without that operator → the endpoint declares no spelling
+  for this comparison on this field. Pick an operator the field does offer, or
+  say so.
 - no key for the field → not filterable, whatever parameters the endpoint
   declares.
 
-Each operator the map carries names where it reaches the wire — a parameter of
-its own, or a template rendering the comparison into the value. That is the
-endpoint author's concern, not the stream's; what matters here is that an
-operator with no entry cannot be asked for.
+Where each operator reaches the wire is the endpoint author's concern
+(`RULE-ENDP-065`); a stream never names a landing site.
