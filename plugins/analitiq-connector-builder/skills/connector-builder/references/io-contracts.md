@@ -258,16 +258,8 @@ access and may not guess field types).
     "record_path": { "type": "string", "description": "Path to the iterable record collection in the response body (informs response.records, e.g. `response.body.data`)." },
     "writable": { "type": "boolean" },
     "conflict_keys": { "type": "array", "items": { "type": "string" }, "description": "Provider-documented natural key for upsert, when the resource is upsertable." },
-    "idempotency": {
-      "type": "object",
-      "required": ["in", "name"],
-      "description": "Provider-documented idempotency-key placement for this resource's write operation, when the provider exposes one. Placement only — the key value is engine-owned. endpoint-creator carries `in`/`name` into the write mode's `idempotency` block; `required` informs whether to declare it on `upsert`.",
-      "properties": {
-        "in": { "type": "string", "description": "Where the provider accepts the key, from the placement vocabulary `RULE-ENDP-039` renders — a body placement means a top-level JSON body field, never a nested one." },
-        "name": { "type": "string", "minLength": 1, "description": "The documented header name (e.g. `Idempotency-Key`) or top-level body field name (e.g. `idempotency_key`), verbatim." },
-        "required": { "type": "boolean", "description": "true when the provider mandates the key on this operation (e.g. Square UpsertCatalogObject)." }
-      }
-    },
+    "idempotency": { "$ref": "https://schemas.analitiq.ai/api-endpoint/latest.json#/$defs/Idempotency", "description": "The provider's documented idempotency-key placement for this resource's write, as the write mode's `idempotency` block declares it, when the provider exposes one. The creator copies it. Deliberately the contract's own block: it is closed, so a described copy of it is one an author can fill with a key the block refuses. Placement only — the key value is engine-owned (`RULE-ENDP-040`); whether the provider MANDATES the key is `idempotency_required`, which the block has no field for."},
+    "idempotency_required": { "type": "boolean", "description": "true when the provider mandates the idempotency key on this operation (e.g. Square UpsertCatalogObject). A provider fact with no counterpart in the `idempotency` block — the block says where the key goes and the contract has nowhere to record that it is compulsory — so it decides whether the creator declares the block on `upsert` as well as `insert`, and is recorded beside the block rather than inside it."},
     "fields": {
       "type": "array",
       "minItems": 1,

@@ -245,9 +245,11 @@ was raised.
      body field (Square's `idempotency_key`, which requires a JSON-object
      request body).
      Placement only — the key value is engine-owned (`RULE-ENDP-040`).
-     Populate from `endpoint_facts.idempotency`; never
-     invent the name. Declare on `insert` whenever the provider
-     documents a key; on `upsert` only when the provider requires it.
+     Copy `endpoint_facts.idempotency`: it IS the block, so this is a copy and
+     never a name you invent. Declare it on `insert` whenever the provider
+     documents a key; on `upsert` only when
+     `endpoint_facts.idempotency_required` is true — the block itself has no
+     field for that, which is why the fact sits beside it.
      When the provider documents both a key and a batch cap, prefer
      `idempotency` unless the user asks for throughput.
    - `params` (optional) — same shape as read params.

@@ -34,6 +34,8 @@ from pathlib import Path
 
 import pytest
 
+from analitiq.contracts import endpoints
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "analitiq-connector-builder"
 IO_CONTRACTS = PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "io-contracts.md"
@@ -215,6 +217,12 @@ def test_request_params_defers_to_the_contract_param_shape():
     pointer names fails on resolution.
     """
     props = _endpoint_facts_schema()["properties"]
+    assert "$ref" in props["idempotency"], (
+        "EndpointFacts.idempotency must reference the api-endpoint idempotency "
+        "block rather than describe one — the block is closed, so a described "
+        f"copy is one an author can fill with a key it refuses. Got: {props['idempotency']!r}")
+    _resolves(props["idempotency"]["$ref"])
+
     assert "$ref" in props["read_filters"], (
         "EndpointFacts.read_filters must reference the api-endpoint filter map "
         "rather than describe one — the operator vocabulary and the "
@@ -241,17 +249,24 @@ def test_request_params_defers_to_the_contract_param_shape():
 
 
 def _resolves(ref: str) -> None:
-    """The pointer names the published api-endpoint schema and resolves in it."""
-    url, _, pointer = ref.partition("#")
+    """The pointer names the published api-endpoint schema and resolves in it.
+
+    Resolution is the contract's own `resolve_local_pointer`, not a walk written
+    here: it is the RFC 6901 reading this repo already settled — tokens
+    percent-decoded then pointer-unescaped, array indices per §4 — and its
+    docstring exists to say a re-implementation gets those wrong. A hand walk
+    would red on a pointer through an array or one carrying an escaped `/`,
+    which is a guard failing on a correct reference.
+    """
+    url, _, fragment = ref.partition("#")
     assert url == "https://schemas.analitiq.ai/api-endpoint/latest.json", (
         f"the reference must name the published api-endpoint schema; got {url!r}")
 
-    node = json.loads(API_ENDPOINT_LATEST.read_text(encoding="utf-8"))
-    for token in [t for t in pointer.split("/") if t]:
-        assert token in node, (
-            f"{ref} does not resolve in the rendered api-endpoint schema: "
-            f"{token!r} is not there. The definition was renamed, so the "
-            "fragment points at nothing and the researcher has no shape to fill.")
-        node = node[token]
+    root = json.loads(API_ENDPOINT_LATEST.read_text(encoding="utf-8"))
+    node = endpoints.resolve_local_pointer(root, f"#{fragment}")
+    assert node is not endpoints._MISSING, (
+        f"{ref} does not resolve in the rendered api-endpoint schema. The "
+        "definition was renamed or moved, so the fragment points at nothing "
+        "and the researcher has no shape to fill.")
     assert isinstance(node, dict) and node, (
         f"{ref} resolves to nothing usable: {node!r}")

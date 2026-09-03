@@ -131,10 +131,12 @@ PATH_PLACEHOLDER_REPEATED_PATTERN = (
 RECORD_FIELD_PATH_PATTERN = (
     r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$"
 )
-#: A record field path where one is a MAP KEY rather than a field value. A
-#: `Field(pattern=...)` reaches a value and never a key, so a map keyed by
-#: record field needs the constraint in the key's own type or the models accept
-#: what the published schema refuses.
+#: A record field path, wherever the contract takes one. Carried as a type
+#: rather than a `Field(pattern=...)` because a map KEY has no Field to carry
+#: it — pydantic applies a field pattern to the value and never to the key, so
+#: a map keyed by record field constrained that way accepts what the published
+#: schema refuses. One spelling for every site, so a new one cannot pick the
+#: half that does not reach it.
 RecordFieldPath = Annotated[str, StringConstraints(pattern=RECORD_FIELD_PATH_PATTERN)]
 METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
@@ -586,9 +588,8 @@ class Link(_EndpointModel):
 
 class Keyset(_EndpointModel):
     param: str = Field(..., min_length=1, description="Param that receives the last seen key value.")
-    order_by_field: str = Field(
+    order_by_field: RecordFieldPath = Field(  # type: ignore[valid-type]
         ...,
-        pattern=RECORD_FIELD_PATH_PATTERN,
         description=(
             "Dotted record field path used for page ordering. Spec §Cross-Field "
             "Validation requires the dotted-path regex."
@@ -874,9 +875,8 @@ KeysetPagination.model_rebuild()
 class SingleCursorMapping(_EndpointModel):
     """Single-param cursor mapping. Spec: §Replication."""
 
-    cursor_field: str = Field(
+    cursor_field: RecordFieldPath = Field(  # type: ignore[valid-type]
         ...,
-        pattern=RECORD_FIELD_PATH_PATTERN,
         description="Dotted record field path used as the incremental watermark.",
     )
     param: str = Field(..., min_length=1)
@@ -887,9 +887,8 @@ class SingleCursorMapping(_EndpointModel):
 class WindowCursorMapping(_EndpointModel):
     """Bounded-window cursor mapping (start/end provider params). Spec: §Replication."""
 
-    cursor_field: str = Field(
+    cursor_field: RecordFieldPath = Field(  # type: ignore[valid-type]
         ...,
-        pattern=RECORD_FIELD_PATH_PATTERN,
         description="Dotted record field path used as the incremental watermark.",
     )
     start_param: str = Field(..., min_length=1)
