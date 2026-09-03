@@ -227,7 +227,9 @@ orchestrator injects the connector-level `pagination` (echoed from
 the field-level truths about one resource's fields — those a read returns and
 those a write accepts — including whether each
 datetime field is zone-aware, which decides `Timestamp(MICROSECOND, UTC)`
-versus the naive `Timestamp(MICROSECOND)`. Every field fact is grounded on
+versus the naive `Timestamp(MICROSECOND)`, and which comparisons a read accepts
+on the field and through which request parameter, which is what the endpoint's
+`filters` map is authored from. Every field fact is grounded on
 the resource's own documentation / a real sample; an
 `endpoint-creator` dispatched without `EndpointFacts` refuses (it has no web
 access and may not guess field types).
@@ -283,6 +285,7 @@ access and may not guess field types).
           "nullable": { "type": "boolean" },
           "enum": { "type": "array", "items": { "type": "string" }, "description": "Closed value domain, when the field is enumerated in the docs." },
           "format": { "type": "string", "description": "Documented string format (e.g. `email`, `uri`, `uuid`, `date`)." },
+          "filterable": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Which comparisons the provider accepts on this field when reading it, and the request parameter each one is sent as: one entry per operator, keyed by the operator from the vocabulary `RULE-ENDP-055` prints, valued by the provider's own parameter name verbatim (`{\"gt\": \"amount_from\", \"lt\": \"amount_to\"}`). A provider that accepts a comparison through a parameter it also uses for another comparison offers only one of them — a parameter carries one value, so the second has nowhere to go — and the researcher records the one the docs make useful. Omitted means the resource documents no filtering on this field, which is different from documenting that it refuses it: `notes` says which. Only meaningful on an entry whose `directions` include `read`."},
           "sample_value": { "description": "One value for this field copied verbatim out of a real payload, recorded in the JSON kind the provider sends it as — the string `\"0\"` and the boolean `false` are different evidence. Never composed to match the declared type, and a placeholder a documentation renderer synthesized is not a wire value. Carry it for any field a payload shows one for; REQUIRED for a temporal, whose zone-awareness is decided on it rather than guessed. It is evidence only for the direction whose payload carried it: the read operation's record payload for `read`, a write mode's input payload for `write`. A value returned is no evidence of what is accepted, and a body a read sends to filter its search is evidence for neither." },
           "tz_aware": { "type": "boolean", "description": "For date-time fields: true iff the wire value carries a zone/offset." }
         }
@@ -365,15 +368,15 @@ access and may not guess field types).
               "discovery-shape-changed", "sql-capabilities-changed",
               "endpoint-removed", "write-mode-removed",
               "record-field-removed", "record-field-type-changed",
-              "filter-operators-narrowed", "conflict-keys-changed",
-              "endpoint-capability-narrowed", "type-map-rule-removed",
-              "type-map-canonical-changed", "optional-input-added",
-              "optional-output-added", "optional-endpoint-added",
-              "write-mode-added", "record-field-added",
-              "filter-operators-widened", "endpoint-obligation-added",
-              "endpoint-capability-added", "type-map-rule-added", "bug-fix",
-              "doc-fix", "tuning", "capability-block-added",
-              "type-map-rule-reordered"
+              "filter-operators-narrowed", "filter-binding-rerouted",
+              "conflict-keys-changed", "endpoint-capability-narrowed",
+              "type-map-rule-removed", "type-map-canonical-changed",
+              "optional-input-added", "optional-output-added",
+              "optional-endpoint-added", "write-mode-added",
+              "record-field-added", "filter-operators-widened",
+              "endpoint-obligation-added", "endpoint-capability-added",
+              "type-map-rule-added", "bug-fix", "doc-fix", "tuning",
+              "capability-block-added", "type-map-rule-reordered"
             ]
           },
           "note": { "type": "string" }

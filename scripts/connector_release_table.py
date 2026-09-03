@@ -150,6 +150,20 @@ CATEGORIES: tuple[Category, ...] = (
         ),
     ),
     Category(
+        "filter-binding-rerouted",
+        "major",
+        "Filter binding rerouted on a kept operator",
+        note=(
+            "a field and operator both releases offer now name a different "
+            "param, so the same stream filter reaches the provider as a "
+            "different request and may read different rows. The advertised "
+            "surface is unchanged, which is what makes it worth its own "
+            "category: nothing a stream declares has to change, and nothing "
+            "about the operator set moved, so a diff that compares only which "
+            "operators are offered reports no drift at all"
+        ),
+    ),
+    Category(
         "conflict-keys-changed",
         "major",
         "Conflict keys changed on a kept write mode",

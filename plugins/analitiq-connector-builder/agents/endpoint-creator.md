@@ -98,7 +98,13 @@ was raised.
      pagination or replication, and such a param is never a filter's landing
      site (`RULE-ENDP-002`).
    - `filters` — which record fields a stream may filter this read on, and
-     which param each operator lands in. See `spec-filters.md`.
+     which param each operator lands in. Authored ONLY from the read fields'
+     `filterable` facts: each entry there names an operator and the provider's
+     own request parameter, so declare that parameter, bind it in
+     `request.query`, and name it under the field's operator. A field with no
+     `filterable` fact offers no filtering — omit it rather than guessing which
+     comparisons the provider takes, the same refusal as an untyped field. See
+     `spec-filters.md`.
    - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
      `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are
