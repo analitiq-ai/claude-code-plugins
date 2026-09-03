@@ -14,7 +14,7 @@ param still reaches the wire the ordinary way.
 
 - The three places, again
 - Keys are record fields, not param names
-- When the provider spells the comparison in the value
+- What a filter entry is not
 - What you cannot author, and why
 - Which operators exist
 
@@ -26,6 +26,8 @@ request binding on its own — the param it names must be:
 1. **declared** in `params`,
 2. **named** by an operator under `filters.<record field>`, and
 3. **bound** into the request with `{"from_param": …}`.
+
+The entry itself is just the param's name.
 
 The param must not carry `controlled_by`: pagination and replication set their
 params on every request, so a filter routed to one is overwritten
@@ -49,13 +51,8 @@ params on every request, so a filter routed to one is overwritten
     }
   },
   "filters": {
-    "amount": {
-      "gt": { "param": "min_amount" },
-      "lt": { "param": "max_amount" }
-    },
-    "status": {
-      "eq": { "param": "status" }
-    }
+    "amount": { "gt": "min_amount", "lt": "max_amount" },
+    "status": { "eq": "status" }
   },
   "response": {
     "records": { "ref": "response.body.data" },
@@ -94,40 +91,21 @@ replication `cursor_field` gets. A stream's `field` names the record field it
 narrows on, and the map is what turns that into a request. The param name is an
 implementation detail of this endpoint and never leaves it.
 
-## When the provider spells the comparison in the value
+## What a filter entry is not
 
-Some providers put the operator inside the value rather than in the key —
-`amount=<>0`, `q=created>2020-01-01`, `$filter=amount gt 100`. Render it with
-the binding's `value`, which is an ordinary value expression reading the
-filter's own value:
+An entry is a param name. It does not render anything: `request.query` /
+`headers` / `path_params` already own how a param's value reaches the wire, and
+a second shaping slot here would be a second binding grammar for the same job.
 
-<!-- validate: api-endpoint#/operations/read/filters -->
-```json
-{
-  "created": {
-    "gt": {
-      "param": "q",
-      "value": { "template": "created>${stream.filter.value}" }
-    }
-  }
-}
-```
-
-`${stream.filter.value}` is the only thing a binding reads from the stream scope
-— the field and the operator are the keys it already sits under. A rendered
-value must interpolate it and must not restate it unchanged (`RULE-ENDP-067`):
-one that drops it carries a predicate the stream did not ask for, and a bare
-`{"ref": "stream.filter.value"}` is what omitting `value` already spells.
-
-A template of only that placeholder is a different thing and is allowed —
-resolution stringifies what it substitutes, so `{"template": "${stream.filter.value}"}`
-is how you ask for a numeric or boolean filter value in its string form.
-
-`value` is a `ref` or a `template`, and nothing else. A `literal` is opaque to
-the resolver, so it could never carry the filter's value. A `function` is
-excluded because what it returns cannot be known from the document — and what
-you would reach for one to do is wire encoding, which the engine owns: encoding
-here sends the value double-escaped and the provider matches nothing.
+That has a consequence worth knowing before you pick a provider shape. A
+provider that spells the comparison **inside** the value — `amount=<>0`,
+`q=created>2020-01-01`, `$filter=amount gt 100` — cannot be expressed: nothing
+in the document can put a fixed prefix around a per-run value, and no resolution
+scope carries a stream's filter value for a template to read. Offer the
+operators the provider takes as its own parameters, and raise the gap for the
+rest rather than smuggling the comparison through as part of the value — a
+filter authored as `eq` with `">100"` as its value bypasses the operator
+vocabulary entirely and reads as an exact match to every check that looks.
 
 ## What you cannot author, and why
 
@@ -135,8 +113,7 @@ Two entries binding one param are refused (`RULE-ENDP-066`). A param is one slot
 holding one value, so nothing in the request would say which of the two
 comparisons was meant, and one of them reads the wrong rows. That is the failure
 this map exists to make unrepresentable, and it is why each operator needs its
-own param — a rendered value of its own is not an escape, because the two would
-still contend for the one slot:
+own param:
 
 <!-- invalid: RULE-ENDP-066 -->
 ```json
@@ -152,10 +129,7 @@ still contend for the one slot:
         "query": { "amount": { "from_param": "amount" } }
       },
       "filters": {
-        "amount": {
-          "gt": { "param": "amount" },
-          "lt": { "param": "amount" }
-        }
+        "amount": { "gt": "amount", "lt": "amount" }
       },
       "response": {
         "records": { "ref": "response.body.data" },
@@ -183,9 +157,9 @@ still contend for the one slot:
 }
 ```
 
-If the provider takes both bounds through one parameter — an OData-style
-`$filter`, say — it accepts one comparison per request, so offer the operator it
-is most useful for and leave the rest unoffered. An operator the endpoint cannot
+If the provider takes every comparison through one parameter — an OData-style
+`$filter`, say — that shape is not authorable at all, for the reason above.
+Offer nothing on that field and raise the gap. An operator the endpoint cannot
 express is one no stream should be told it may use.
 
 ## Which operators exist

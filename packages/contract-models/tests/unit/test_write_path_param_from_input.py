@@ -644,7 +644,7 @@ class TestAWritePathParamMustBeAbleToResolve:
                 "params": {"id": {
                     "in": "path", "type": "string", "required": True,
                 }},
-                "filters": {"id": {"eq": {"param": "id"}}},
+                "filters": {"id": {"eq": "id"}},
                 "response": {
                     "records": {"ref": "response.body.objects"},
                     "schema": {

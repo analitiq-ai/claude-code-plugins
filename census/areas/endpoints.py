@@ -273,29 +273,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="Param", field="default", prose_hash="95b46ea4340e", descriptive=True),
     ProseObligation(model="Param", field="location", prose_hash="4ad56f39fa37", descriptive=True),
     ProseObligation(model="Param", field="style", prose_hash="491d84aaf9f9", descriptive=True),
-    ProseObligation(model="FilterBinding", prose_hash="11f431352d9a", descriptive=True),
-    ProseObligation(
-        model="FilterBinding", field="param",
-        prose_hash="c5fdea96d9a9",
-        rule_ids=("RULE-ENDP-002", "RULE-ENDP-065", "RULE-ENDP-066"),
-    ),
-    ProseObligation(
-        model="FilterBinding", field="value",
-        prose_hash="3c96b0da7d6a",
-        rule_ids=("RULE-ENDP-067",),
-        structural=(
-            "`FilterValueExpression` — the expression union minus its literal "
-            "and function branches, so the forms the rule could say nothing "
-            "about are unrepresentable rather than rejected"
-        ),
-    ),
     ProseObligation(
         model="ReadOperation", field="filters",
-        prose_hash="8a1ca4b8b473",
+        prose_hash="2285a7543c6d",
         rule_ids=("RULE-ENDP-055", "RULE-ENDP-066", "RULE-ENDP-068"),
         structural=(
-            "the operator keys are a `Literal`, and the field keys carry "
-            "RECORD_FIELD_PATH_PATTERN through the key type itself"
+            "the operator keys are a `Literal`, the field keys carry "
+            "RECORD_FIELD_PATH_PATTERN through the key type itself, and an "
+            "entry is a param name — a string, with no shape to render"
         ),
         waiver=(
             "the sentence about what a STREAM may then declare binds the stream "

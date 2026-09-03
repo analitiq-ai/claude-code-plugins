@@ -127,9 +127,6 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "RULE-DBEP-013 forbids execution from branching on it, so the absence "
         "of a read is the rule being kept",
     ),
-    # --- endpoints.FilterBinding: no field of a binding is read -------------
-    FieldDisposition("endpoints.FilterBinding", "param", "engine_gap", FILTER_BINDING),
-    FieldDisposition("endpoints.FilterBinding", "value", "engine_gap", FILTER_BINDING),
     # --- endpoints.Param: placement is graded at validation, the label is
     # for people, and the value constraints reach nobody.
     FieldDisposition(

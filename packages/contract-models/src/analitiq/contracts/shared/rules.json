@@ -3901,7 +3901,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A request binding maps a wire name to a value, so a declared param is the only thing a value can be routed to; an operator naming no param names no route, and the comparison it stands for cannot be sent. The offer is still made — a stream reads the map to decide which operators it may filter with — so the author of the stream picks an operator the endpoint advertises and the read goes out without the predicate. This is the walk BACK the other wiring checks do not make: they start from a block and confirm the param it names exists, which leaves a declaration whose backing cannot exist accepted.\n",
+   "rationale": "A filter's value arrives per run, and a per-run value reaches the request only through a declared param (RULE-ENDP-032), so a param is the only thing an operator can be routed to; one naming no param names no route, and the comparison it stands for cannot be sent. The offer is still made — a stream reads the map to decide which operators it may filter with — so the author of the stream picks an operator the endpoint advertises and the read goes out without the predicate. This is the walk BACK the other wiring checks do not make: they start from a block and confirm the param it names exists, which leaves a declaration whose backing cannot exist accepted.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3926,30 +3926,6 @@
    "pattern_symbol": null,
    "fixture_model": null,
    "rationale": "A parameter is one slot holding one value, so two entries binding it are two comparisons the request has no way to distinguish: the operator an author wrote is not the one the provider performs, and the stream reads the rows of whichever comparison the parameter means. That is the failure the map exists to make unrepresentable, and the reason the operator is a key rather than a flag. The parameter alone decides it, and deliberately: keyed on the parameter and its rendered value instead, the rule would be defeatable by re-spelling one side of a pair — a ref to the filter's value, a template interpolating it and nothing else, and an omitted value are one wire value under three spellings. It is checked across the whole map rather than per field because two fields binding one parameter collide for the same reason two operators do.\n",
-   "status": "active",
-   "superseded_by": null
-  },
-  {
-   "id": "RULE-ENDP-067",
-   "statement": "A filter binding that renders its own value MUST interpolate the filter's value, MUST NOT restate it unchanged, and MUST read nothing else from the stream scope.\n",
-   "tier": "advisory",
-   "severity": "error",
-   "scopes": [
-    "api-endpoint"
-   ],
-   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
-   "owners": [
-    "engine",
-    "connector-plugin"
-   ],
-   "targets": [
-    "ReadOperation"
-   ],
-   "fields": [],
-   "mechanism": null,
-   "pattern_symbol": null,
-   "fixture_model": null,
-   "rationale": "A rendered value exists for the providers that spell a comparison inside the value rather than in the key, so what it renders around is the filter's own value; one that never interpolates it carries a predicate the stream did not ask for, which is the same wrong-rows-on-a-green-run failure the map exists to prevent, re-entering through the door the map opened. Restating the value unchanged is the opposite failure: it is the verbatim binding written the long way, and omitting the value already spells it. That half reaches a ref naming the path and nothing else — a template of only that placeholder is not a restatement, because resolution stringifies what it substitutes, so it is how a typed slot asks for the value's string form. Nothing else about the filter is addressable because nothing else is unambiguous: a binding is already scoped to one field and one operator by the keys it sits under, so a path naming either could disagree with the key above it. Every clause here is decidable because the field admits a ref and a template only, both of which put every token they carry where the resolver reads it — the excluded forms would each require this contract to model how resolution descends, or what a function returns, to say anything at all about what reaches the wire.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -9,9 +9,10 @@ validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation]
 rationale: >
-  A request binding maps a wire name to a value, so a declared param is the only
-  thing a value can be routed to; an operator naming no param names no route,
-  and the comparison it stands for cannot be sent. The offer is still made — a
+  A filter's value arrives per run, and a per-run value reaches the request only
+  through a declared param (RULE-ENDP-032), so a param is the only thing an
+  operator can be routed to; one naming no param names no route, and the
+  comparison it stands for cannot be sent. The offer is still made — a
   stream reads the map to decide which operators it may filter with — so the
   author of the stream picks an operator the endpoint advertises and the read
   goes out without the predicate. This is the walk BACK the other wiring checks

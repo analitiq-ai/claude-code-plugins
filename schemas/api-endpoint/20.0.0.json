@@ -128,43 +128,6 @@
       "title": "CursorPagination",
       "type": "object"
     },
-    "FilterBinding": {
-      "additionalProperties": false,
-      "description": "How one operator on one filterable record field reaches the wire.\n\nA filter's value arrives per run, and a per-run value reaches the request\nonly through a declared param (RULE-ENDP-032) \u2014 so a binding has one handle\non the request, and the operator selects which param carries the comparison.\nProviders that spell the comparison inside the value instead (`amount=<>0`,\n`$filter=amount gt 100`) render it with `value`.",
-      "properties": {
-        "param": {
-          "description": "Declared param that carries this comparison. `request.query` / `headers` / `path_params` already say how that param reaches the wire, so the operator selects a binding rather than introducing a second spelling grammar. The param must not be `controlled_by`: pagination and replication set those on every request, so a filter routed to one is overwritten. No other entry in the map may name it either \u2014 a param is one slot holding one value, so a second entry into it has nowhere to go.",
-          "minLength": 1,
-          "title": "Param",
-          "type": "string"
-        },
-        "value": {
-          "anyOf": [
-            {
-              "oneOf": [
-                {
-                  "$ref": "#/$defs/RefExpression"
-                },
-                {
-                  "$ref": "#/$defs/TemplateExpression"
-                }
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it renders around `${stream.filter.value}`, which it must interpolate at least once and must read nothing else from the stream scope \u2014 a value that drops the filter's own value carries a predicate the stream never asked for. A `ref` naming that path is refused: it resolves to the filter's value unchanged, which omitting this field already spells. A template of only that placeholder is NOT that \u2014 resolution stringifies what it substitutes, so it is how a typed slot asks for the value's string form.",
-          "title": "Value"
-        }
-      },
-      "required": [
-        "param"
-      ],
-      "title": "FilterBinding",
-      "type": "object"
-    },
     "FunctionExpression": {
       "additionalProperties": false,
       "description": "``{\"function\": <name>, ...}`` registered-function value expression.",
@@ -1958,11 +1921,11 @@
       "description": "Read operation block.",
       "properties": {
         "filters": {
-          "description": "Which record fields a stream may filter this read on, and how each operator reaches the wire. Keys are dotted record field paths, resolved against the record shape `response.records` selects \u2014 the same declared-path resolution a replication `cursor_field` gets. Under each field, one entry per operator the endpoint offers; a field with no entries offers no filtering and is omitted. An operator with no entry is one this endpoint does not offer, so a stream must not declare it (RULE-STRM-026). No param is named twice across the whole map: a param is one slot holding one value, so two entries in it are two comparisons the request cannot tell apart, and a stream would read the rows of whichever one the param means.",
+          "description": "Which record fields a stream may filter this read on, and how each operator reaches the wire. Keys are dotted record field paths, resolved against the record shape `response.records` selects \u2014 the same declared-path resolution a replication `cursor_field` gets. Under each field, one entry per operator the endpoint offers; a field with no entries offers no filtering and is omitted. An operator with no entry is one this endpoint does not offer, so a stream must not declare it (RULE-STRM-026). Each entry names the declared param that carries that comparison, and `request.query` / `headers` / `path_params` already say how that param reaches the wire \u2014 so the operator selects a binding rather than introducing a second way to shape a request. No param is named twice across the whole map: a param is one slot holding one value, so two entries in it are two comparisons the request cannot tell apart, and a stream would read the rows of whichever one the param means.",
           "patternProperties": {
             "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$": {
               "additionalProperties": {
-                "$ref": "#/$defs/FilterBinding"
+                "type": "string"
               },
               "minProperties": 1,
               "propertyNames": {
