@@ -58,7 +58,14 @@ rules for every document" says which file carries which artifact.
      composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
      branch is not read as removed, and one that changed there is not missed.
    - `operations.read.filters` — one offer per field and operator, and where
-     each lands (`RULE-ENDP-055`). An offer withdrawn or added is a vocabulary
+     each lands (`RULE-ENDP-055`). A release whose PREVIOUS side has no such
+     map declared its filter offers on `params.<name>.operators` instead, and a
+     stream's filter `field` named that param; both moved, so the migration is
+     **major** on its own — every existing stream names a param key where a
+     record field now belongs and stops resolving. Classify it that way rather
+     than reading the new map as an additive widening, which is what comparing
+     only the new representation yields: the old offers are invisible to it and
+     every entry looks new. An offer withdrawn or added is a vocabulary
      change. An offer that survives is a reroute when the request changes, and
      that is the whole test — not a list of attributes to check. Resolve each
      side to the request it would build for one filter value: follow the param
@@ -133,51 +140,55 @@ rules for every document" says which file carries which artifact.
   not soften it: widening and narrowing alike re-type the column a
   destination already created from that `arrow_type`, and a JSON `type` that
   held still while the pair moved is the case a shape diff misses),
-  filter-operators-narrowed (an operator a read operation offered on a field
-  under `filters` — the stream-filterability contract (`RULE-ENDP-055`) — is
-  no longer offered, whether the operator entry went, the field's whole
-  entry went, or the param it bound is gone. A stream filters on what the
-  endpoint offered, so its filter stops being expressible),
-  filter-binding-rerouted (a field and operator both releases offer would
-  build a different request for the same filter value, so the same stream
-  filter may read different rows. Any difference counts and the test is the
-  request, never a list of attributes: a body binding moved to another
-  position, a container serialized as a joined value where it was repeated
-  keys, a different slot or wire key. Judged on the resolved binding, never
-  on the param name: a param renamed consistently across the declaration,
-  its binding and the filter map is an endpoint-local handle moving and is
-  not this. The advertised surface is unchanged either way, which is what
-  makes it worth its own category: nothing a stream declares has to change
-  and no operator moved, so a diff comparing only which operators are
-  offered reports no drift at all), conflict-keys-changed (the
-  `conflict_keys` an upsert mode both releases ship matches on are not the
-  same set. The key is endpoint-owned — a stream declares none — so a change
-  re-keys every existing stream's upsert silently: rows that matched an
-  existing row now insert, and rows that did not now overwrite one),
-  endpoint-capability-narrowed (an endpoint both releases ship no longer
-  offers something an existing stream depends on — whether the stream names
-  it or reads it through the endpoint's own behaviour — and no category
-  above says which. The endpoint's interior is wider than the categories
-  that enumerate it — a read operation dropped from a write-bearing
-  endpoint, a replication method or a cursor mapping withdrawn, a
-  `pagination` block removed so a stream silently reads one page, a param a
-  filter binds whose request-value contract tightened anywhere — a bound, a
-  pattern, a length, not only its type — an idempotency block removed, a
-  write input field removed or retyped, a nested record field changed under
-  an unchanged parent. Reach for this when the diff withdraws something and
-  nothing more specific fits, and say in the `note` what was withdrawn. A
-  release is never patch because the vocabulary had no word for what it took
-  away), type-map-rule-removed, type-map-canonical-changed (an existing
-  matcher now resolves to a different render — read map: an existing
-  `native` resolves to a different canonical; write map: an existing
-  `canonical` renders a different native DDL — either invalidates downstream
-  consumers), endpoint-obligation-added (an addition an existing stream must
-  satisfy rather than one it may opt into: a read param declared `required`
-  with no default, so a stream supplying no value for it stops resolving, or
-  a member added to a write mode's required input, so a stream whose mapping
-  does not produce it sends a record the provider refuses. The additive
-  categories are for what a stream MAY now use; an addition it MUST now
-  satisfy is drift wearing the other sign).
+  filter-operators-narrowed (a release whose previous side declared its
+  offers on a param's `operators` and whose draft declares a `filters` map
+  is this, whatever else moved: a stream's filter field named the param and
+  now names a record field, so every existing stream stops resolving.
+  Otherwise: an operator a read operation offered on a field under `filters`
+  — the stream-filterability contract (`RULE-ENDP-055`) — is no longer
+  offered, whether the operator entry went, the field's whole entry went, or
+  the param it bound is gone. A stream filters on what the endpoint offered,
+  so its filter stops being expressible), filter-binding-rerouted (a field
+  and operator both releases offer would build a different request for the
+  same filter value, so the same stream filter may read different rows. Any
+  difference counts and the test is the request, never a list of attributes:
+  a body binding moved to another position, a container serialized as a
+  joined value where it was repeated keys, a different slot or wire key.
+  Judged on the resolved binding, never on the param name: a param renamed
+  consistently across the declaration, its binding and the filter map is an
+  endpoint-local handle moving and is not this. The advertised surface is
+  unchanged either way, which is what makes it worth its own category:
+  nothing a stream declares has to change and no operator moved, so a diff
+  comparing only which operators are offered reports no drift at all),
+  conflict-keys-changed (the `conflict_keys` an upsert mode both releases
+  ship matches on are not the same set. The key is endpoint-owned — a stream
+  declares none — so a change re-keys every existing stream's upsert
+  silently: rows that matched an existing row now insert, and rows that did
+  not now overwrite one), endpoint-capability-narrowed (an endpoint both
+  releases ship no longer offers something an existing stream depends on —
+  whether the stream names it or reads it through the endpoint's own
+  behaviour — and no category above says which. The endpoint's interior is
+  wider than the categories that enumerate it — a read operation dropped
+  from a write-bearing endpoint, a replication method or a cursor mapping
+  withdrawn, a `pagination` block removed so a stream silently reads one
+  page, a param a filter binds whose request-value contract tightened
+  anywhere — a bound, a pattern, a length, not only its type — an
+  idempotency block removed, a write input field removed or retyped, a
+  nested record field changed under an unchanged parent. Reach for this when
+  the diff withdraws something and nothing more specific fits, and say in
+  the `note` what was withdrawn. A release is never patch because the
+  vocabulary had no word for what it took away), type-map-rule-removed,
+  type-map-canonical-changed (an existing matcher now resolves to a
+  different render — read map: an existing `native` resolves to a different
+  canonical; write map: an existing `canonical` renders a different native
+  DDL — either invalidates downstream consumers), endpoint-obligation-added
+  (an addition an existing stream must satisfy rather than one it may opt
+  into: a read param declared `required` with no default, so a stream
+  supplying no value for it stops resolving, or a member added to a write
+  mode's required input, so a stream whose mapping does not produce it sends
+  a record the provider refuses. The additive categories are for what a
+  stream MAY now use; an addition it MUST now satisfy is drift wearing the
+  other sign).
 - **minor**: optional-input-added, optional-output-added,
   optional-endpoint-added, write-mode-added (a mode key under
   `operations.write` that endpoint did not declare before; a whole new

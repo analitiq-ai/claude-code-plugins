@@ -109,6 +109,40 @@ def test_api_filter_fields_the_endpoint_map_cannot_key_on_are_rejected(tmp_path,
     assert any(repr(field) in f["message"] for f in diagnostics["findings"])
 
 
+def test_two_api_filters_on_one_field_and_operator_are_rejected(tmp_path):
+    """The endpoint offers one param per (field, operator), and that param holds
+    one value — so a second filter on the same pair has nowhere to go while
+    `filters[]` promises both are ANDed. One value is discarded and the read
+    returns rows that violate the predicate the author wrote."""
+    doc = _stream(source_ref=_connector_ref(), filters=[
+        {"field": "amount", "operator": "gt", "value": 100},
+        {"field": "amount", "operator": "gt", "value": 200},
+    ])
+    diagnostics = _diagnose(tmp_path, doc)
+    assert not diagnostics["passed"], "two filters on one (field, operator) must not validate"
+    assert any("gt" in f["message"] and "amount" in f["message"]
+               for f in diagnostics["findings"])
+
+
+def test_two_api_filters_on_one_field_with_different_operators_are_accepted(tmp_path):
+    """Different operators are different params: a bounded range is the shape
+    the map exists to make expressible."""
+    doc = _stream(source_ref=_connector_ref(), filters=[
+        {"field": "amount", "operator": "gt", "value": 100},
+        {"field": "amount", "operator": "lt", "value": 200},
+    ])
+    assert _diagnose(tmp_path, doc)["passed"]
+
+
+def test_a_database_source_may_repeat_a_field_and_operator(tmp_path):
+    """A dialect compiles two predicates; nothing is overwritten."""
+    doc = _stream(filters=[
+        {"field": "amount", "operator": "gt", "value": 100},
+        {"field": "amount", "operator": "gt", "value": 200},
+    ])
+    assert _diagnose(tmp_path, doc)["passed"]
+
+
 def test_a_database_filter_field_keeps_provider_native_spelling(tmp_path):
     """The narrowing is the API branch's alone: a database column is whatever
     the provider named it."""

@@ -489,6 +489,22 @@ class StreamSource(StrictModel):
                         f"path ({RECORD_FIELD_PATH_PATTERN}), so no api-endpoint "
                         "can offer filtering on it",
                     )
+            # An api endpoint offers one param per (field, operator) and a param
+            # holds one value, so a repeated pair has one slot for two values
+            # while `filters` promises both are applied. One value is discarded
+            # and the read returns rows the discarded predicate excluded. A
+            # database source may repeat a pair freely: the dialect compiles a
+            # predicate per filter and overwrites nothing.
+            repeated = find_duplicates([(f.field, f.operator) for f in self.filters])
+            if repeated:
+                pairs = ", ".join(f"{field!r} {operator}" for field, operator in repeated)
+                raise violation(
+                    "RULE-STRM-026",
+                    f"filters[] repeats {pairs} on an api source, where each "
+                    "field and operator reaches one request parameter carrying "
+                    "one value — the second value would replace the first "
+                    "instead of narrowing further",
+                )
         return self
 
     @model_validator(mode="after")

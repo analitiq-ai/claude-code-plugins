@@ -141,7 +141,12 @@ CATEGORIES: tuple[Category, ...] = (
         "major",
         "Filter operators narrowed",
         note=(
-            "an operator a read operation offered on a field under `filters` "
+            "a release whose previous side declared its offers on a param's "
+            "`operators` and whose draft declares a `filters` map is this, "
+            "whatever else moved: a stream's filter field named the param and "
+            "now names a record field, so every existing stream stops "
+            "resolving. Otherwise: an operator a read operation offered on a "
+            "field under `filters` "
             "— the stream-filterability contract (`RULE-ENDP-055`) — is no "
             "longer offered, whether the operator entry went, the field's "
             "whole entry went, or the param it bound is gone. A stream filters "
