@@ -50,11 +50,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install pinned contract packages
+      - name: Install dev/test dependencies
         id: install
-        # The pin lives in requirements-dev.txt only - see CLAUDE.md
-        # "The contract pin". Never inline a version here; that would be a
-        # second copy of a fact one file already owns.
+        # requirements-dev.txt deliberately excludes analitiq-contract-models
+        # and analitiq-validator — this suite exercises packages/*/src via
+        # the root conftest.py, never an installed version of either. Never
+        # inline one here; that would let a wheel shadow the source under
+        # test (requirements-dev.txt's own header owns this).
         run: pip install -r requirements-dev.txt
       - name: Run the suites
         id: tests

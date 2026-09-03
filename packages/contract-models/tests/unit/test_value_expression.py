@@ -86,8 +86,8 @@ class TestResolveValueExpressionUnrecognisedForm:
 class TestEncodeFunctionsUnresolvedInput:
     """base64_encode / url_encode must return None (drop the field) when their
     input is absent or unresolvable, instead of silently encoding "".
-    Mirrors the basic_auth behaviour pinned in
-    test_connections_auth_request_headers.py.
+    Mirrors the basic_auth behaviour pinned below by
+    test_basic_auth_returns_none_when_template_input_unresolved.
     """
 
     def test_base64_encode_resolves_input(self):

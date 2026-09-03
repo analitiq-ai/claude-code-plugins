@@ -80,8 +80,10 @@ Rules when editing this plugin's prose:
 - A block id with no renderer is an error, not a no-op — `UnknownBlock` fails loud.
 - Bumping the contract pin means re-running the generator;
   `test_generated_blocks_in_sync` is the gate.
-- This file is excluded from the generator (`NOT_GENERATED` in the script)
-  because it *documents* the markers rather than carrying a real block.
+- This file is never touched by the generator: `scripts/gen_pipeline_docs.py`
+  scans only `plugins/analitiq-pipeline-builder`, so `contributing/` is outside
+  its scan path entirely — this is not an exclusion, it *documents* the markers
+  rather than carrying a real block.
 
 ## Validator-behavior claims — the repo-wide gate
 

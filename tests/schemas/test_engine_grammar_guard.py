@@ -159,11 +159,13 @@ def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
     2-3 of the SAME run already fetched the pinned immutable objects
     successfully (a genuinely unpublished pin raises GuardError at that fetch,
     exit 2, and never reaches step 4). The truthful reading is a mutable
-    pointer lagging a published object — a stale latest.json (the pointers
-    rely on a 5-minute TTL, not invalidation) or a half-completed publish.
-    Still exit 1: a red state a human must look at, with a remediation of
-    re-checking after the TTL and repairing the pointer if it persists —
-    scoped to the pointer, since re-vendoring cannot fix it."""
+    pointer lagging a published object — a stale latest.json (these pointers
+    are served `cache-control: no-cache`, so a lag is a publish not yet
+    visible or one that failed, not a caching delay) or a half-completed
+    publish. Still exit 1: a red state a human must look at, with a
+    remediation of re-checking after a short wait and treating persistence
+    as a real divergence — scoped to the pointer, since re-vendoring cannot
+    fix it."""
     _stub_fetch(
         guard,
         monkeypatch,
@@ -176,11 +178,11 @@ def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
     # The truthful diagnosis: the pointer lags a published, just-fetched object.
     assert "lags" in err
     assert "stale latest.json" in err
-    # The truthful remediation: wait out the TTL, repair the pointer, and
-    # explicitly NOT the exit-1 default of re-vendoring — scoped to the
-    # pointer, so it cannot read as a global ban when printed beside a
-    # genuine divergence whose remediation IS re-vendoring.
-    assert "Re-check after the TTL" in err
+    # The truthful remediation: re-check after a short wait, repair the
+    # pointer, and explicitly NOT the exit-1 default of re-vendoring —
+    # scoped to the pointer, so it cannot read as a global ban when printed
+    # beside a genuine divergence whose remediation IS re-vendoring.
+    assert "Re-check after a short wait" in err
     assert "re-vendoring does not fix the pointer" in err
     # The disproven diagnosis must be gone.
     assert "has not published" not in err

@@ -42,9 +42,11 @@ ties the vendored file to the engine's published truth:
      runs only after steps 2-3 fetched the pinned immutable objects (a
      genuinely unpublished pin dies there as a GuardError, exit 2), so the
      mutable pointer is lagging a published object — a stale latest.json
-     (the pointers rely on a 5-minute TTL, not invalidation) or a
-     half-completed publish. Remediation: re-check after the TTL and repair
-     the pointer if it persists — re-vendoring does not fix the pointer.
+     (the engine serves these pointers `cache-control: no-cache`, so a lag
+     is a publish that has not gone visible yet, or one that failed, not a
+     caching delay) or a half-completed publish. Remediation: re-check
+     after a short wait and repair the pointer if it persists —
+     re-vendoring does not fix the pointer.
 
 Exit codes: 0 ok (including the newer-version notice), 1 divergence, 2
 GuardError. Every infrastructure failure — missing vendored file, fetch
@@ -409,10 +411,11 @@ def check_published(failures: list[str]) -> list[str]:
                 f"{resource}: latest.json says v{latest}, but the pinned "
                 f"v{pinned} object is published — this same run just fetched "
                 "it. The mutable pointer lags a published pinned object: a "
-                "stale latest.json (the pointers rely on a 5-minute TTL, not "
-                "invalidation) or a half-completed publish. Re-check after "
-                "the TTL and repair the pointer if it persists — "
-                "re-vendoring does not fix the pointer"
+                "stale latest.json (these pointers are served no-cache, so "
+                "a lag is a publish not yet visible or one that failed, not "
+                "a caching delay) or a half-completed publish. Re-check "
+                "after a short wait and repair the pointer if it persists "
+                "— re-vendoring does not fix the pointer"
             )
     return notices
 

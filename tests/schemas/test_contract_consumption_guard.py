@@ -163,7 +163,7 @@ def test_lagging_latest_pointer_is_diagnosed_as_stale_not_unpublished(
     err = capsys.readouterr().err
     assert "lags" in err
     assert "stale latest.json" in err
-    assert "Re-check after the TTL" in err
+    assert "Re-check after a short wait" in err
     assert "re-vendoring does not fix the pointer" in err
 
 

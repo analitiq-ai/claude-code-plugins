@@ -119,7 +119,7 @@ class ProseObligation:
     module-qualified, e.g. ``endpoints.RefExpression``); ``field`` is the
     model field name whose description carries it, or ``None`` for the class
     docstring. ``prose_hash`` pins the exact wording
-    (``introspect.prose_fingerprint``).
+    (``census.sites.prose_fingerprint``).
 
     Disposition: either ``descriptive=True`` alone (the prose states no
     obligation an instance could violate), or at least one of ``rule_ids`` /

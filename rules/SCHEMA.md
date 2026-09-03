@@ -51,7 +51,7 @@ Recorded so nobody re-adds them thinking they were forgotten:
   read by nothing.
 - **`since`**, **`references`** — both derivable. Git owns when a rule
   appeared; a citation *is* the id appearing in prose, and
-  `tests/connector_builder/test_rule_reachability.py` derives that mapping in
+  `tests/registry/test_rule_reachability.py` derives that mapping in
   the direction that matters (every cited id is readable where it is cited).
 - **`examples`** — an example nothing validates is exactly the rot
   `.claude/rules/plugin-prose.md` warns about: a "don't do this" sample that
@@ -139,5 +139,5 @@ nothing" is a verdict someone writes down rather than a silence nobody reviews;
   `analitiq.validator` registers is emitted by a function some record binds, or
   carries a written exemption. The census above walks contract classes, so it
   cannot see a cross-document check.
-- `tests/connector_builder/test_rule_reachability.py` — every id a plugin's
+- `tests/registry/test_rule_reachability.py` — every id a plugin's
   prose cites is readable inside that plugin.

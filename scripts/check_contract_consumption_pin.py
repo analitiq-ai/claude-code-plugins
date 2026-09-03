@@ -30,10 +30,11 @@ published truth:
      pin fails, as a POINTER problem, not an unpublished pin: this step runs only after step 2
      fetched the pinned immutable object (a genuinely unpublished pin dies
      there as a GuardError, exit 2), so the mutable pointer is lagging a
-     published object — a stale latest.json (the engine's publish relies on
-     the short TTL its cache-control states, not invalidation) or a
+     published object — a stale latest.json (the engine serves these
+     pointers `cache-control: no-cache`, so a lag is a publish not yet
+     visible or one that failed, not a caching delay) or a
      half-completed publish.
-     Remediation: re-check after the TTL and repair the pointer if it
+     Remediation: re-check after a short wait and repair the pointer if it
      persists — re-vendoring does not fix the pointer.
 
 Exit codes: 0 ok (including the newer-version notice), 1 divergence, 2
@@ -231,11 +232,11 @@ def check_published(failures: list[str]) -> tuple[list[str], bool]:
             f"{pin.CONSUMPTION_RESOURCE}: latest.json says v{latest}, but the "
             f"pinned v{pin.CONSUMPTION_VERSION} object is published — this "
             "same run just fetched it. The mutable pointer lags a published "
-            "pinned object: a stale latest.json (the engine's publish relies "
-            "on the short TTL its cache-control states, not invalidation) or "
-            "a half-completed publish. "
-            "Re-check after the TTL and repair the pointer if it persists — "
-            "re-vendoring does not fix the pointer"
+            "pinned object: a stale latest.json (these pointers are served "
+            "no-cache, so a lag is a publish not yet visible or one that "
+            "failed, not a caching delay) or a half-completed publish. "
+            "Re-check after a short wait and repair the pointer if it "
+            "persists — re-vendoring does not fix the pointer"
         )
     return notices, pointer_sha_compared
 
