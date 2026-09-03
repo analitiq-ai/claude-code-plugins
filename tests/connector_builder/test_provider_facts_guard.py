@@ -215,6 +215,14 @@ def test_request_params_defers_to_the_contract_param_shape():
     pointer names fails on resolution.
     """
     props = _endpoint_facts_schema()["properties"]
+    assert "$ref" in props["read_filters"], (
+        "EndpointFacts.read_filters must reference the api-endpoint filter map "
+        "rather than describe one — the operator vocabulary and the "
+        "record-field key shape are constraints the contract declares, and a "
+        "copy of them accepts a typo here that the endpoint then fails on. "
+        f"Got: {props['read_filters']!r}")
+    _resolves(props["read_filters"]["$ref"])
+
     assert "$ref" in props["read_request"], (
         "EndpointFacts.read_request must reference the api-endpoint read-request "
         "shape rather than describe one — method, path, a body value's position, "

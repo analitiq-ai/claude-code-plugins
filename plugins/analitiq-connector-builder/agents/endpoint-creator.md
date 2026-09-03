@@ -97,21 +97,21 @@ was raised.
      `RULE-ENDP-051`; a body-bearing one is for providers whose search read
      takes its query in the body.
    - `request.transport_ref` — only if not the default transport.
-   - `params` — declared operation inputs. `in` and `type` (the
-     *request-input* type, not an Arrow type) each come from the vocabularies
-     `RULE-ENDP-050` prints; `controlled_by` (`RULE-ENDP-054`) hands a param to
-     pagination or replication, and such a param is never a filter's landing
-     site (`RULE-ENDP-002`).
-   - `filters` — which record fields a stream may filter this read on, and
-     which param each operator lands in. Authored ONLY from the read fields'
-     `filterable` facts: each entry names an operator and a key of
-     `request_params`, whose value IS a `params.<name>` object — copy it in
-     rather than rebuilding it, so every fact the researcher grounded survives.
-     Its binding is already in `read_request`, at the position the provider
-     documents — so declaring the param is all this step adds. Do not re-derive
-     the binding from the param's `in`: that names a slot and not a place in
-     one, and a body value rebuilt at the top level is a request the provider
-     ignores. A field with no
+   - `params` — copy EVERY `endpoint_facts.request_params` entry. Each value IS
+     a `params.<name>` object, so this is a copy and not a translation, and it
+     is the whole map rather than the filterable subset: `read_request` binds
+     non-filter params too — a tenant path segment, an api version — and a
+     binding whose param is missing is refused as an unknown reference. What a
+     param declaration adds on top of the facts is `controlled_by`
+     (`RULE-ENDP-054`), which hands a param to pagination or replication and is
+     the creator's marker, never a provider fact; such a param is never a
+     filter's landing site (`RULE-ENDP-002`).
+   - `filters` — copy `endpoint_facts.read_filters`. It IS an
+     `operations.read.filters` map: record field, then operator, then the
+     `request_params` entry that carries it. Absent means the resource
+     documents no filtering — omit the block rather than guessing which
+     comparisons the provider takes, the same refusal as an untyped field. See
+     `spec-filters.md`. A field with no
      `filterable` fact offers no filtering — omit it rather than guessing which
      comparisons the provider takes, the same refusal as an untyped field. See
      `spec-filters.md`.
