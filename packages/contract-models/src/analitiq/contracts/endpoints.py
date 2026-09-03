@@ -498,6 +498,30 @@ API_FILTER_OPERATORS: tuple[str, ...] = get_args(ApiFilterOperator)
 FILTER_VALUE_REF = "stream.filter.value"
 
 
+# The expression forms a filter binding's rendered value may take, and the
+# exclusions are the point.
+#
+# `literal` is opaque to the resolver by definition, so it can never carry the
+# filter's value — every spelling of it is refused, and dropping the branch
+# makes that unrepresentable rather than merely rejected.
+#
+# `function` is excluded for two reasons that compound. Its result is unknowable
+# here, so nothing about what reaches the wire can be checked. And its `input`
+# is handed to the resolver whole, so the filter's value has to sit at the one
+# position the resolver reads — a fact about the resolver that this contract
+# would have to track to grade. What a function would be reached for is wire
+# encoding, and encoding is engine-owned: the same argument that refuses
+# `url_encode` in `path_params` refuses it here, because a value encoded twice
+# arrives double-escaped and the provider matches nothing.
+FilterValueExpression = Annotated[
+    Union[
+        Annotated[RefExpression, UnionTag("ref")],
+        Annotated[TemplateExpression, UnionTag("template")],
+    ],
+    Discriminator(_expression_discriminator),
+]
+
+
 class FilterBinding(_EndpointModel):
     """How one operator on one filterable record field reaches the wire.
 
@@ -522,7 +546,7 @@ class FilterBinding(_EndpointModel):
             "entry into it has nowhere to go."
         ),
     )
-    value: Expression | None = Field(  # type: ignore[valid-type]
+    value: FilterValueExpression | None = Field(  # type: ignore[valid-type]
         default=None,
         description=(
             "What the param receives. Omitted, it receives the filter's value "
@@ -533,12 +557,8 @@ class FilterBinding(_EndpointModel):
             "naming that path is refused: it resolves to the filter's value "
             "unchanged, which omitting this field already spells. A template "
             "of only that placeholder is NOT that — resolution stringifies "
-            "what it substitutes, so it is the way to ask for the value's "
-            "string form. **A function is not decided here** — what it returns "
-            "is the function's business, so one that returns its input "
-            "unchanged is accepted and the author owns it; its `input` must "
-            "address the value directly, since resolution does not reach into "
-            "a plain object."
+            "what it substitutes, so it is how a typed slot asks for the "
+            "value's string form."
         ),
     )
 
@@ -3505,12 +3525,16 @@ def _validate_rendered_filter_value(value: Any, where: str) -> None:
     the verbatim binding written the long way, which an omitted `value` already
     spells.
 
+    Each is decidable from the document because the field admits only a `ref`
+    and a `template`. Both put every token they carry where the resolver reads
+    it, so a token walk answers "does the filter's value reach the wire" without
+    this contract modelling how resolution descends.
+
     The stray check runs FIRST because a stray token is usually a sub-path of
     the filter value itself (`stream.filter.value.sub`), which does interpolate
     it — reporting that as a value that never does sends the author to fix the
     half of their template that was right.
     """
-    _reject_unreachable_function_input(value.model_dump(), where)
     tokens = list(_expression_tokens(value.model_dump()))
     stray = sorted(
         token for token in tokens
@@ -3538,56 +3562,14 @@ def _validate_rendered_filter_value(value: Any, where: str) -> None:
         )
 
 
-def _reject_unreachable_function_input(node: Any, where: str) -> None:
-    """Refuse a function whose `input` is a structural container.
-
-    The interpolation check below asks whether the filter's value appears
-    anywhere in the expression, and it walks structural containers to find it.
-    Resolution does not: a function's `input` is handed to the value-expression
-    resolver whole, which recognises the four expression forms and answers
-    `None` for a dict that is none of them — so the function receives nothing,
-    drops its field, and the param disappears from the request. The filter is
-    then satisfied on paper and absent from the wire, which is the unfiltered
-    read this map exists to prevent.
-
-    Rather than teach this check where each function looks — per-function
-    knowledge the contract would have to keep in step with the resolver — the
-    shape the two disagree about is made unrepresentable. What remains is
-    reachable by construction, so the interpolation check is sound on every
-    value that survives.
-    """
-    if not isinstance(node, dict):
-        return
-    if "function" in node:
-        inner = node.get("input")
-        if isinstance(inner, (dict, list)) and not (
-            isinstance(inner, dict) and set(_EXPRESSION_KEYS) & set(inner)
-        ):
-            raise ValueError(
-                f"{where}.value declares a function whose `input` is a plain "
-                "object, which resolution cannot reach into: it hands `input` "
-                "to the value-expression resolver whole, gets nothing back for "
-                "a shape that is not itself an expression, and drops the "
-                "field — so the filter's value never reaches the provider. "
-                "Address the value directly as the `input` "
-                "(spec: §Value Expressions)"
-            )
-        _reject_unreachable_function_input(inner, where)
-        return
-    for child in node.values():
-        _reject_unreachable_function_input(child, where)
-
-
 def _restates_the_filter_value(value: Any) -> bool:
     """True when a rendered `value` provably resolves to the filter's value unchanged.
 
-    Only a `{ref}` naming the path does. A template does NOT, even when its
-    whole body is that one placeholder: template resolution stringifies what it
-    substitutes, so `"${...}"` puts `"5"` on the wire where the unrendered
-    binding puts `5` — a coercion a typed request slot may be the only way to
-    ask for. And a `{function}` cannot be settled at all: what it returns is the
-    function's business, and one that returns its input unchanged is
-    indistinguishable from one that transforms it.
+    Only a `{ref}` naming the path does, and it is the whole of the rule because
+    the field admits one other form. A template does NOT, even when its whole
+    body is that one placeholder: resolution stringifies what it substitutes, so
+    `"${...}"` puts `"5"` on the wire where the unrendered binding puts `5` — a
+    coercion a typed request slot may be the only way to ask for.
     """
     return isinstance(value, RefExpression) and value.ref.strip() == FILTER_VALUE_REF
 

@@ -639,9 +639,8 @@ class TestFilterBindings:
                      id="respaced-same-render"),
         pytest.param({"param": "q", "value": {"template": "<${stream.filter.value}"}},
                      id="different-render"),
-        pytest.param({"param": "q", "value": {"function": "url_encode",
-                                              "input": {"ref": "stream.filter.value"}}},
-                     id="function"),
+        pytest.param({"param": "q", "value": {"template": "[${stream.filter.value}]"}},
+                     id="bracketed-render"),
     ])
     def test_one_param_takes_one_entry_however_the_value_is_spelled(self, second):
         """A param is one wire slot carrying one value, so a second entry into it
@@ -761,23 +760,6 @@ class TestFilterBindings:
         doc = parse_endpoint(payload)
         assert doc.operations.read.filters["amount"]["gt"].param == "q"
 
-    def test_a_function_input_the_resolver_cannot_reach_is_refused(self):
-        """The filter value buried in a structural object under `input` is found
-        by a token walk and never by the resolver, which hands the whole object
-        to the function and gets nothing back — so the param drops and the read
-        goes out unfiltered, with the interpolation check satisfied."""
-        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
-            params={"q": {"in": "query", "type": "string", "required": False}},
-            filters={"amount": {"gt": {
-                "param": "q",
-                "value": {"function": "url_encode",
-                          "input": {"nested": {"ref": "stream.filter.value"}}},
-            }}},
-            query={"q": {"from_param": "q"}},
-        )})
-        with pytest.raises(ValidationError, match="cannot reach"):
-            parse_endpoint(payload)
-
     def test_literal_whitespace_around_the_placeholder_is_content(self):
         """A template renders its literal text, whitespace included, so
         `" ${…} "` puts a padded value on the wire — different from the bare
@@ -838,28 +820,29 @@ class TestFilterBindings:
         with pytest.raises(ValidationError, match="must begin with a known resolution scope"):
             parse_endpoint(payload)
 
-    def test_a_literal_value_is_refused_and_a_function_value_is_not(self):
-        """`value` is the whole expression union, and the two branches an author
-        reaches for behave oppositely.
+    @pytest.mark.parametrize("value,why", [
+        pytest.param({"literal": ">${stream.filter.value}"},
+                     "a literal is opaque to the resolver, so it can never "
+                     "carry the filter's value", id="literal"),
+        pytest.param({"function": "url_encode",
+                      "input": {"ref": "stream.filter.value"}},
+                     "a function's result is unknowable here, and encoding is "
+                     "engine-owned", id="function"),
+    ])
+    def test_the_value_admits_only_the_forms_it_can_reason_about(self, value, why):
+        """`value` is a ref or a template and nothing else.
 
-        A `literal` payload is opaque to the resolver, so it can never
-        interpolate the filter's value. A `function` is opaque the other way:
-        what it returns is the function's business, so one that returns its
-        input unchanged cannot be told from one that transforms it, and the
-        contract does not pretend to."""
-        def _payload(value):
-            return _minimal_api_payload(operations={"read": _read_op_with_filters(
-                params={"q": {"in": "query", "type": "string", "required": False}},
-                filters={"created": {"gt": {"param": "q", "value": value}}},
-                query={"q": {"from_param": "q"}},
-            )})
-
-        with pytest.raises(ValidationError, match="never interpolates"):
-            parse_endpoint(_payload({"literal": ">${stream.filter.value}"}))
-
-        doc = parse_endpoint(_payload(
-            {"function": "url_encode", "input": {"ref": "stream.filter.value"}}))
-        assert doc.operations.read.filters["created"]["gt"].param == "q"
+        Both put every token they carry where the resolver reads it, so a token
+        walk settles whether the filter's value reaches the wire. The excluded
+        forms cannot be settled that way, and each is refused by the type rather
+        than by a check that would have to model resolution."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {"param": "q", "value": value}}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError):
+            parse_endpoint(payload)
 
     def test_a_dotted_key_resolves_through_the_record_shape(self):
         response = {

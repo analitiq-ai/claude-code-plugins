@@ -123,11 +123,11 @@ A template of only that placeholder is a different thing and is allowed —
 resolution stringifies what it substitutes, so `{"template": "${stream.filter.value}"}`
 is how you ask for a numeric or boolean filter value in its string form.
 
-A `{"function": …}` wrapping the filter value is accepted whatever it returns:
-what a function renders is not knowable from the document, so the contract does
-not judge it. Its `input` must address the value directly, though —
-`{"input": {"ref": "stream.filter.value"}}`, never nested inside a plain object,
-which resolution hands to the function whole and cannot read.
+`value` is a `ref` or a `template`, and nothing else. A `literal` is opaque to
+the resolver, so it could never carry the filter's value. A `function` is
+excluded because what it returns cannot be known from the document — and what
+you would reach for one to do is wire encoding, which the engine owns: encoding
+here sends the value double-escaped and the provider matches nothing.
 
 ## What you cannot author, and why
 

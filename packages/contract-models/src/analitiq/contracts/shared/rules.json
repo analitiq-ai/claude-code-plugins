@@ -3931,7 +3931,7 @@
   },
   {
    "id": "RULE-ENDP-067",
-   "statement": "A filter binding that renders its own value MUST interpolate the filter's value where resolution will reach it, MUST NOT restate it unchanged, and MUST read nothing else from the stream scope.\n",
+   "statement": "A filter binding that renders its own value MUST interpolate the filter's value, MUST NOT restate it unchanged, and MUST read nothing else from the stream scope.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3949,7 +3949,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A rendered value exists for the providers that spell a comparison inside the value rather than in the key, so what it renders around is the filter's own value; one that never interpolates it carries a predicate the stream did not ask for, which is the same wrong-rows-on-a-green-run failure the map exists to prevent, re-entering through the door the map opened. Where resolution will reach it is the other half of that: a function's input is handed to the resolver whole, and a plain object is none of the expression forms, so the function receives nothing and drops its field — the filter satisfied on paper and absent from the wire. That shape is refused rather than taught, which keeps this rule from needing to know where each function looks. Restating the value unchanged is the opposite failure: it is the verbatim binding written the long way, and omitting the value already spells it. That half reaches only a ref naming the path, which is the one form a document settles on its own. A template of only that placeholder is not a restatement — resolution stringifies what it substitutes, so it is how a typed slot asks for the value's string form — and a function is not settled at all, since one that returns its input unchanged cannot be told from one that transforms it. Nothing else about the filter is addressable because nothing else is unambiguous: a binding is already scoped to one field and one operator by the keys it sits under, so a path naming either could disagree with the key above it.\n",
+   "rationale": "A rendered value exists for the providers that spell a comparison inside the value rather than in the key, so what it renders around is the filter's own value; one that never interpolates it carries a predicate the stream did not ask for, which is the same wrong-rows-on-a-green-run failure the map exists to prevent, re-entering through the door the map opened. Restating the value unchanged is the opposite failure: it is the verbatim binding written the long way, and omitting the value already spells it. That half reaches a ref naming the path and nothing else — a template of only that placeholder is not a restatement, because resolution stringifies what it substitutes, so it is how a typed slot asks for the value's string form. Nothing else about the filter is addressable because nothing else is unambiguous: a binding is already scoped to one field and one operator by the keys it sits under, so a path naming either could disagree with the key above it. Every clause here is decidable because the field admits a ref and a template only, both of which put every token they carry where the resolver reads it — the excluded forms would each require this contract to model how resolution descends, or what a function returns, to say anything at all about what reaches the wire.\n",
    "status": "active",
    "superseded_by": null
   },
