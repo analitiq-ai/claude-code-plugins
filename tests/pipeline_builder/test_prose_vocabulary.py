@@ -49,8 +49,9 @@ Detection limits of the heuristic, stated so nobody over-trusts it:
     which are generated whole and byte-pinned by their own sync test —
     `_authored_docs` carries the argument.
   * `_sections()` does not track fenced blocks, so a column-0 `#` inside a fence
-    would split a section early. Zero occurrences across the 26 fenced blocks in `src/`
-    today; the failure mode is a missed detection, never a false one.
+    would split a section early. Zero occurrences across the fenced blocks this
+    plugin's markdown carries today; the failure mode is a missed detection,
+    never a false one.
 
 What each check does and does not cover, measured:
 
@@ -82,8 +83,10 @@ member set to the contract; it never reads the document. Adding `hourly` beside
 superset and the occurrence count at 1, so it passes. Closing it would mean
 anchoring each entry to a hash of its section's backticked tokens, which trips on
 every unrelated wording edit in that section — churn that would train people to
-re-baseline the hash without reading, which is worse than the hole. Eight
-sections are exposed; they are the eight in ALLOWED_RESTATEMENTS.
+re-baseline the hash without reading, which is worse than the hole.
+ALLOWED_RESTATEMENTS scopes each exemption by document, vocabulary and
+occurrence count — not by section identity, so a restatement moved to a
+different section of the same document is still exposed under the same entry.
 
 A third gate, separate from the two above, covers PATTERNS rather than
 vocabularies — see

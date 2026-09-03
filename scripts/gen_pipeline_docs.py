@@ -458,8 +458,9 @@ def _type_summary(schema: dict) -> str:
 
 
 # A pattern longer than this is a vocabulary, not a constraint, and inlining it
-# makes the row unreadable. The Arrow type pattern is ~900 chars and already has
-# its own generated block, so the cell points there instead of repeating it.
+# makes the row unreadable. The Arrow type pattern is far longer than the inline
+# threshold below and already has its own generated block, so the cell points
+# there instead of repeating it.
 _MAX_INLINE_PATTERN = 80
 
 
