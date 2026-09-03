@@ -103,10 +103,12 @@ was raised.
      `filterable` facts: each entry names an operator and a key of
      `request_params`, whose value IS a `params.<name>` object — copy it in
      rather than rebuilding it, so every fact the researcher grounded survives.
-     Bind it in the slot its own `in` names, and name it under the field's
-     operator. A search that filters through its POST body takes a `body`
-     param; binding one as a query parameter builds a request the provider
-     ignores. A field with no
+     Then bind it where the facts put it: a `query` or `header` param under
+     that request slot keyed by its own name, and a `body` param at the
+     position `endpoint_facts.request_body` shows — copy that object into
+     `request.body` rather than reconstructing it, since `in: "body"` names a
+     body and not a place in one, and binding at the top level instead builds
+     a request the provider ignores. A field with no
      `filterable` fact offers no filtering — omit it rather than guessing which
      comparisons the provider takes, the same refusal as an untyped field. See
      `spec-filters.md`.
