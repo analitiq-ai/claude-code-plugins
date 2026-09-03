@@ -89,9 +89,8 @@ prohibitions below).
   **No direct `stream.*`, `state.*`, or `runtime.*` ref** in `headers`,
   `query`, or `body` (RULE-ENDP-032). These are the per-run values (filters,
   cursors, batch sizing), and routing them through a param is what gives them a
-  declared type, requiredness, and operator set. Without that, nothing
-  downstream knows whether a stream may filter on the value or what it may
-  filter with.
+  declared type and requiredness — and what gives a filter somewhere to land,
+  since a `filters` entry names a param and a direct ref declares none.
 
   <!-- PROBE: request-slot-template-smuggle -->
   The check catches `{"ref": …}` specifically; smuggling the same value in as
