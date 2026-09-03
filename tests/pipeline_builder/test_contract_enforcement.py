@@ -215,7 +215,7 @@ def test_validator_pin_matches_the_package_this_repo_ships():
 
     # `<=`, not `==`: equal is the steady state, behind is tolerated while a
     # release is in flight (the pin can only name a version already on PyPI, and
-    # the publish tag fires after the bump merges). Ahead is the failure — main
+    # the publish tag fires before the bump merges). Ahead is the failure — main
     # HEAD is what users install, so an unpublished pin breaks `pip install`
     # outright. Root CLAUDE.md explains the window.
     assert Version(pin_version) <= Version(shipped.group(1)), (
