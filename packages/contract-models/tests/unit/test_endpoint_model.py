@@ -206,7 +206,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"unused": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"unused": {"in": "query", "type": "string", "required": False}},
             )},
         )
         with pytest.raises(ValidationError, match="not referenced"):
@@ -216,7 +216,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"status": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"status": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"status": {"from_param": "status"}}},
             )},
         )
@@ -226,7 +226,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"a": {"from_param": "p"}, "b": {"from_param": "p"}}},
             )},
         )
@@ -239,8 +239,8 @@ class TestParamBindingUniqueness:
             endpoint_id="x",
             operations={"read": _read_op_with(
                 params={
-                    "qa": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
-                    "qb": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
+                    "qa": {"in": "query", "type": "string", "required": False},
+                    "qb": {"in": "query", "type": "string", "required": False},
                 },
                 request_extras={"query": {"a": {"from_param": "qa"}, "b": {"from_param": "qb"}}},
             )},
@@ -545,13 +545,6 @@ class TestCursorMapping:
 
 
 class TestParamValidate:
-    def test_controlled_by_and_operators_mutex(self):
-        with pytest.raises(ValidationError, match="must not declare `operators`"):
-            Param(**{
-                "in": "query", "type": "string", "required": False,
-                "controlled_by": "pagination", "operators": ["eq"],
-            })
-
     def test_query_array_requires_style_and_explode(self):
         with pytest.raises(ValidationError, match="`style` and `explode`"):
             Param(**{"in": "query", "type": "array", "required": False})
@@ -1991,7 +1984,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "rogue": 1}}},
             )},
         )
@@ -2002,7 +1995,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "secrets.api_key", "rogue": 1}}},
             )},
         )
@@ -2013,7 +2006,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "x", "template": "y"}}},
             )},
         )
@@ -2025,7 +2018,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "x-vendor": "wise"}}},
             )},
         )
@@ -2042,7 +2035,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "stream.api_key"}}},
             )},
         )
@@ -2053,7 +2046,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "state.last_run"}}},
             )},
         )
@@ -2420,7 +2413,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"region": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"region": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {
                     "region": {"from_param": "region"},
                     "lookup": {
@@ -2469,7 +2462,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"r": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"r": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"q": {
                     "function": "lookup",
                     "input": {"from_param": "r", "rogue": 1},

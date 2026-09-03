@@ -150,16 +150,17 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "max_length", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "min_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
+    # --- endpoints.ReadOperation: where each filter operator reaches the wire -
     FieldDisposition(
-        "endpoints.Param", "operators", "authoring_only",
-        "read by the registry service's on-save comparison — the consumer "
-        "RULE-STRM-026's rationale describes — of a stream's filter against "
-        "the operators this param declares. RULE-STRM-026 names the "
-        "obligation on the filter; RULE-ENDP-002 and RULE-ENDP-055 name the "
-        "obligations on the set. The pinned manifest claims no read of the "
-        "set, so the run sends the filter with whatever operator the stream "
-        "declares",
+        "endpoints.ReadOperation", "filters", "engine_gap",
+        "an author declaring which fields a stream may filter on, and where each "
+        "operator lands, expects the read to send the comparison the filter asked "
+        "for; the pinned manifest claims no read of the map, so the request binds "
+        "the filter's value under the param named by its field and every operator "
+        "goes out as the same request. Adopting it is selecting the binding the "
+        "operator names, which the map is shaped to make mechanical",
     ),
+
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
         "endpoints.Replication", "supported_methods", "engine_gap",

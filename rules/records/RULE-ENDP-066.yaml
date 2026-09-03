@@ -1,0 +1,22 @@
+id: RULE-ENDP-066
+statement: >
+  A landing site that renders the comparison into the value MUST interpolate the
+  filter's value, through a placeholder whose leading token is a known resolution
+  scope.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_validate_filters_wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+fields: [filters]
+rationale: >
+  A value-carried spelling exists because some providers write the comparison
+  inside the value rather than the key, so the rendered string is the whole
+  predicate. One that never interpolates the filter's value is therefore a
+  constant: it sends the same comparison whatever the stream asked for, narrowing
+  on a bound the author did not write, and the run reports success over the wrong
+  rows. Holding the placeholder to the resolution-scope vocabulary is what keeps
+  a typo from resolving to nothing and silently rendering empty.
+status: active
+superseded_by: null

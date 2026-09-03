@@ -643,8 +643,8 @@ class TestAWritePathParamMustBeAbleToResolve:
                 },
                 "params": {"id": {
                     "in": "path", "type": "string", "required": True,
-                    "operators": ["eq"],
                 }},
+                "filters": {"id": {"eq": {"from_param": "id"}}},
                 "response": {
                     "records": {"ref": "response.body.objects"},
                     "schema": {

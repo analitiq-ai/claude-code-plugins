@@ -75,6 +75,7 @@ from analitiq.contracts.shared.types import (
     StrictNonNegativeInt,
     StrictPositiveInt,
 )
+from analitiq.contracts.shared.filter_operators import ApiFilterOperator
 from analitiq.contracts.value_expression import (
     RESOLUTION_SCOPE_PATTERN,
     RESOLUTION_SCOPES,
@@ -389,8 +390,7 @@ _UNBOUNDABLE_EXPRESSION_KEY = "literal"
 
 # Declarative mirror of `Param._validate`'s cross-field rules for the published
 # schema: a `query` param of `array`/`object` type must declare `style` and
-# `explode` (non-null); a `controlled_by` param must not declare `operators`.
-# Keyed on the wire name `in` (the `location` alias). `then` pins the required
+# `explode` (non-null). Keyed on the wire name `in` (the `location` alias). `then` pins the required
 # fields to non-null types because they render nullable and the runtime demands
 # a value.
 _PARAM_SCHEMA_RULES: dict[str, Any] = {
@@ -410,13 +410,6 @@ _PARAM_SCHEMA_RULES: dict[str, Any] = {
                     "explode": {"type": "boolean"},
                 },
             },
-        },
-        {
-            "if": {
-                "required": ["controlled_by"],
-                "properties": {"controlled_by": {"not": {"type": "null"}}},
-            },
-            "then": {"properties": {"operators": {"type": "null"}}},
         },
     ],
 }
@@ -445,16 +438,6 @@ class Param(_EndpointModel):
     max_length: StrictNonNegativeInt | None = Field(default=None, alias="maxLength")
     min_items: StrictNonNegativeInt | None = Field(default=None, alias="minItems")
     max_items: StrictNonNegativeInt | None = Field(default=None, alias="maxItems")
-    operators: list[Literal[
-        "eq", "neq", "gt", "gte", "lt", "lte",
-        "in", "not_in", "contains", "starts_with", "ends_with",
-    ]] | None = Field(
-        default=None,
-        description=(
-            "Subset of the Analitiq operator vocabulary stream filters may use. "
-            "Absence means the param is not stream-filterable."
-        ),
-    )
     controlled_by: Literal["pagination", "replication"] | None = Field(
         default=None,
         description="Marks the param as owned by pagination or replication.",
@@ -473,11 +456,6 @@ class Param(_EndpointModel):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
                 "(spec: §Cross-Field Validation)"
-            )
-        if self.controlled_by is not None and self.operators is not None:
-            raise ValueError(
-                "params with `controlled_by` must not declare `operators` "
-                "(spec: §Parameter Validation and Operators)"
             )
         if (self.location == "query" and self.type in ("array", "object")
                 and (self.style is None or self.explode is None)):
@@ -2006,11 +1984,32 @@ class ReadOperation(_EndpointModel):
         ),
     )
     replication: Replication | None = Field(default=None)
+    filters: dict[str, dict[ApiFilterOperator, Any]] | None = Field(
+        default=None,
+        description=(
+            "Which record fields a stream may filter on, and where each operator "
+            "reaches the wire. Keys are record field paths; each names the "
+            "operators it offers, and each operator names its landing site: "
+            "`{from_param: <name>}` routes it to a declared param, whose "
+            "`request` binding already says how that param is spelled "
+            "(`minAmount`/`maxAmount`, `amount__gt`); `{template: ...}` renders "
+            "the comparison into the value itself (`amount=<>0`, "
+            "`$filter=amount gt 100`), interpolating the filter's value through "
+            "`${stream.filter.value}`. A field absent here is not filterable, "
+            "and an operator absent from a field cannot be asked for. Two "
+            "operators may not share a landing site — the wire could not tell "
+            "them apart, and the read would return the wrong rows in silence. "
+            "Spec: §Filters."
+        ),
+    )
 
     @model_validator(mode="after")
     def _wiring(self) -> "ReadOperation":
         _validate_param_wiring(self.request, self.params, allow_from_input=False)
         _validate_param_binding_uniqueness(self.request, self.params)
+
+        if self.filters is not None:
+            _validate_filters_wiring(self.filters, self.params)
 
         if self.request.method == "GET":
             for name, param in self.params.items():
@@ -3060,11 +3059,12 @@ def _validate_param_wiring(
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
             # RULE-ENDP-028, on WRITES only. A write param has exactly one
-            # source: its own `default`. `operators` makes a param
-            # stream-filterable and `controlled_by` hands it to
-            # pagination/replication — both read-side, neither reachable from a
-            # write. So a write path param with no `default` provably cannot
-            # resolve, and the placeholder it fills can never be substituted.
+            # source: its own `default`. A read operation's `filters` map can
+            # name a param as an operator's landing site and `controlled_by`
+            # hands one to pagination/replication — both read-side, neither
+            # reachable from a write. So a write path param with no `default`
+            # provably cannot resolve, and the placeholder it fills can never be
+            # substituted.
             # Such a document is contract-valid and dead at the engine
             # handshake. It is refused here, naming the binding that replaces
             # it. Reads keep the old latitude: a read path param can be
@@ -3331,6 +3331,93 @@ def _validate_replication_wiring(replication: Replication, params: dict[str, Par
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
+
+
+
+# ---------------------------------------------------------------------------
+# Filter landing sites (spec: §Filters)
+# ---------------------------------------------------------------------------
+
+
+#: The placeholder a value-carried spelling interpolates the filter's value
+#: through. `stream` is already a resolution scope, so the value-carried form
+#: needs no addition to `RESOLUTION_SCOPES`.
+FILTER_VALUE_PLACEHOLDER = "stream.filter.value"
+
+#: How an operator may reach the wire. `from_param` routes it to a param of its
+#: own, whose `request` binding already says how that param is spelled;
+#: `template` renders the comparison into the value the bound param carries.
+_FILTER_LANDING_KEYS: frozenset[str] = frozenset({"from_param", "template"})
+
+
+def _validate_filters_wiring(
+    filters: dict[str, dict[str, Any]], params: dict[str, Param]
+) -> None:
+    """Every operator a field offers must reach the wire somewhere of its own.
+
+    The defect this closes: a param used to declare a list of operators, which
+    said which comparisons a stream could ask for and nothing about how any of
+    them was spelled. Two operators then built one byte-identical request and the
+    read returned the wrong rows in silence. A landing site is what makes them
+    distinguishable, so two operators sharing one is refused here.
+    """
+    for field, landings in filters.items():
+        if not landings:
+            raise ValueError(
+                f"filters[{field!r}] declares no operator; omit the field instead "
+                "(spec: §Filters)"
+            )
+        seen: dict[tuple[str, str], str] = {}
+        for operator, landing in landings.items():
+            where = f"filters[{field!r}][{operator!r}]"
+            if not isinstance(landing, dict):
+                raise ValueError(
+                    f"{where} must be a `{{from_param: <name>}}` or `{{template: ...}}` "
+                    "expression (spec: §Filters)"
+                )
+            declared = _FILTER_LANDING_KEYS & set(landing)
+            if len(declared) != 1:
+                raise ValueError(
+                    f"{where} must declare exactly one of `from_param` or `template`; "
+                    f"got {sorted(declared) or 'neither'} (spec: §Filters)"
+                )
+            key = next(iter(declared))
+            target = landing[key]
+            if not isinstance(target, str) or not target:
+                raise ValueError(f"{where}.{key} must be a non-empty string (spec: §Filters)")
+
+            if key == "from_param":
+                param = params.get(target)
+                if param is None:
+                    raise ValueError(f"{where} references unknown param {target!r} (spec: §Filters)")
+                if param.controlled_by is not None:
+                    raise ValueError(
+                        f"{where} names param {target!r}, which declares "
+                        f"controlled_by={param.controlled_by!r} — a param the runtime owns "
+                        "is never driven by a stream filter (spec: §Filters)"
+                    )
+            else:
+                unscoped = _first_unscoped_expression({"template": target})
+                if unscoped is not None:
+                    raise ValueError(
+                        f"{where}.template placeholder {unscoped!r} does not begin with a "
+                        "known resolution scope (spec: §Value Expressions)"
+                    )
+                if "${" + FILTER_VALUE_PLACEHOLDER + "}" not in target:
+                    raise ValueError(
+                        f"{where}.template never interpolates "
+                        f"`${{{FILTER_VALUE_PLACEHOLDER}}}`, so the comparison would be sent "
+                        "without the value the filter is narrowing on (spec: §Filters)"
+                    )
+
+            site = (key, target)
+            if site in seen:
+                raise ValueError(
+                    f"{where} and filters[{field!r}][{seen[site]!r}] resolve to the same "
+                    f"landing site ({key}={target!r}) — two operators the wire cannot tell "
+                    "apart build one identical request (spec: §Filters)"
+                )
+            seen[site] = operator
 
 
 def _validate_param_binding_uniqueness(

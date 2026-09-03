@@ -1,0 +1,24 @@
+id: RULE-ENDP-065
+statement: >
+  Every operator a filterable field offers MUST name exactly one landing site —
+  a declared parameter, or a template that renders the comparison into the value
+  — and no two operators on that field may name the same one.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::_validate_filters_wiring"
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [ReadOperation]
+fields: [filters]
+rationale: >
+  A request binding maps a wire name to a value, so an operator that names no
+  landing site of its own has nowhere to be expressed and is dropped between the
+  filter and the request. That is the failure this rule exists for: the read
+  succeeds, the provider applies whatever comparison the bare parameter means,
+  and the rows returned are not the rows asked for, with nothing raised on
+  either side. Two operators sharing one site fail the same way and are harder
+  to see, because each is individually well-formed — it is only together that
+  they build one identical request. Requiring the site to be distinct is what
+  makes the two comparisons distinguishable on the wire.
+status: active
+superseded_by: null

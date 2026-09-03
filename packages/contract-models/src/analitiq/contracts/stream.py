@@ -19,6 +19,12 @@ from analitiq.contracts.endpoints import (
     WriteMode,
 )
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
+from analitiq.contracts.shared.filter_operators import (
+    API_FILTER_OPERATORS,
+    DB_FILTER_OPERATORS,
+    UNARY_FILTER_OPERATORS,
+    FilterOperator,
+)
 from analitiq.contracts.shared.rules import find_duplicates, violation
 from analitiq.contracts.shared.arrow_shape import (
     ARROW_CONTAINER_SCHEMA_RULES,
@@ -201,40 +207,17 @@ def validate_endpoint_ref(data: Any) -> ConnectorEndpointRef | ConnectionEndpoin
 # ---------------------------------------------------------------------------
 
 
-# Filter-operator vocabulary (spec §Filter Operators). The `Filter.operator`
-# Literal is the structural floor — the union of both scope vocabularies — and
-# `StreamSource` narrows it to the scope-appropriate subset (database operators
-# for a connection source, API operators for a connector source). The API set
-# mirrors `endpoints.Param.operators`; the finer per-endpoint subset an API
-# source may use is endpoint-owned and resolved at runtime.
-_COMMON_FILTER_OPERATORS = ("eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in")
-_DB_ONLY_FILTER_OPERATORS = ("is_null", "is_not_null", "like", "ilike")
-_API_ONLY_FILTER_OPERATORS = ("contains", "starts_with", "ends_with")
-_DB_FILTER_OPERATORS: frozenset[str] = frozenset(
-    _COMMON_FILTER_OPERATORS + _DB_ONLY_FILTER_OPERATORS
-)
-_API_FILTER_OPERATORS: frozenset[str] = frozenset(
-    _COMMON_FILTER_OPERATORS + _API_ONLY_FILTER_OPERATORS
-)
-FilterOperator = Literal[
-    "eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in",  # common
-    "is_null", "is_not_null", "like", "ilike",              # database-only
-    "contains", "starts_with", "ends_with",                 # api-only
-]
-
-# Single-source guard: the field Literal must be exactly the union of the two
-# scope vocabularies the StreamSource validator narrows to. Adding an operator to
-# one place but not the other then fails loudly at import, not silently at runtime.
-if set(get_args(FilterOperator)) != _DB_FILTER_OPERATORS | _API_FILTER_OPERATORS:
-    raise AssertionError(
-        "FilterOperator Literal must equal the union of the DB and API operator vocabularies")
+# The filter-operator vocabulary is owned by `shared.filter_operators` — an
+# api-endpoint names a landing site for the same members, and `endpoints` cannot
+# import this module. `StreamSource` narrows the structural floor below to the
+# subset the source's scope can carry.
 
 
 _FILTER_CONDITIONAL_RULES: dict[str, Any] = {
     "allOf": [
         {
             "if": {
-                "properties": {"operator": {"enum": ["is_null", "is_not_null"]}},
+                "properties": {"operator": {"enum": list(UNARY_FILTER_OPERATORS)}},
                 "required": ["operator"],
             },
             "then": {"not": {"required": ["value"]}},
@@ -274,8 +257,7 @@ class Filter(StrictModel):
 
     @model_validator(mode="after")
     def _validate_value_presence(self) -> "Filter":
-        unary = {"is_null", "is_not_null"}
-        if self.operator in unary and self.value is not None:
+        if self.operator in UNARY_FILTER_OPERATORS and self.value is not None:
             raise ValueError(
                 f"filters[].value must be omitted for unary operator {self.operator!r}"
             )
@@ -451,9 +433,9 @@ class StreamSource(StrictModel):
         if not self.filters:
             return self
         allowed = (
-            _DB_FILTER_OPERATORS
+            DB_FILTER_OPERATORS
             if self.endpoint_ref.scope == SCOPE_CONNECTION
-            else _API_FILTER_OPERATORS
+            else API_FILTER_OPERATORS
         )
         for filt in self.filters:
             if filt.operator not in allowed:

@@ -2333,25 +2333,27 @@
   },
   {
    "id": "RULE-ENDP-002",
-   "statement": "A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable.\n",
-   "tier": "structural",
+   "statement": "An operator MUST NOT name as its landing site a parameter declared as controlled by pagination or replication.\n",
+   "tier": "advisory",
    "severity": "error",
    "scopes": [
     "api-endpoint"
    ],
-   "validator": "analitiq.contracts.endpoints::Param._validate",
+   "validator": "analitiq.contracts.endpoints::_validate_filters_wiring",
    "owners": [
     "engine",
     "connector-plugin"
    ],
    "targets": [
-    "Param"
+    "ReadOperation"
    ],
-   "fields": [],
+   "fields": [
+    "filters"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The operator set is the endpoint's promise that a downstream stream may filter on that param; marking the param controlled hands its value to the paging or incremental machinery, which sets it on every request. Declaring both advertises a filter the runtime overwrites, so the stream's predicate vanishes from the request and the run reports success over unfiltered data. It is a conditional on the shape of one param object, mirrored declaratively into the published schema, not an instance-relative comparison.\n",
+   "rationale": "A landing site is where the stream's value is written on the way to the wire; marking the param controlled hands that same slot to the paging or incremental machinery, which sets it on every request. Naming one as an operator's landing site advertises a filter the runtime overwrites, so the stream's predicate vanishes from the request and the run reports success over unfiltered data. Both halves are in view on the read operation, which is why the check sits there rather than on the param.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3632,28 +3634,28 @@
   },
   {
    "id": "RULE-ENDP-055",
-   "statement": "The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares.\n",
+   "statement": "A filterable field MUST name its operators from the operator vocabulary the read operation's `filters` map declares.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
     "api-endpoint"
    ],
-   "validator": "analitiq.contracts.endpoints::Param.operators",
+   "validator": "analitiq.contracts.endpoints::ReadOperation.filters",
    "owners": [
     "engine",
     "connector-plugin",
     "pipeline-plugin"
    ],
    "targets": [
-    "Param"
+    "ReadOperation"
    ],
    "fields": [
-    "operators"
+    "filters"
    ],
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members and rendered onto this param, so the two documents agree only while both read one vocabulary. An operator offered here has to survive being serialised into a request the provider accepts, rather than compiled into a predicate the way a database read's operator is, and which ones do is a fact about the provider — so an endpoint declares what it offers instead of inheriting a vocabulary whole.\n",
+   "rationale": "This map is the endpoint's promise to every stream that binds it: a filter is authored against these members and rendered onto the landing site each one names, so the two documents agree only while both read one vocabulary. The members are the comparisons a provider can be asked for, which is a narrower set than the ones a dialect can compile — an operator offered here has to survive being serialised into a request the provider accepts, rather than becoming a predicate the way a database read's operator does.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3878,6 +3880,59 @@
    "pattern_symbol": null,
    "fixture_model": null,
    "rationale": "`$schema` belongs to a schema resource, and an embedded schema is one resource — the document under `response.schema` or `input.schema`. A JSON Schema implementation grading a node honours the declaration that node carries, so a subschema naming another draft is graded in that draft while everything around it is graded in the draft this contract is written in: the keywords beneath it keep their spelling and lose their meaning, a value that should fail passes, and nothing reports it. It is the harm a nested base-URI declaration does, arriving through a keyword that reads as documentation rather than as a reference. Refusing it on the document leaves every consumer a single declaration to read — the root one — which is what lets a dialect comparison be a comparison of one value rather than a walk of its own, and what makes the contract's own draft the one an offline reader of any subschema is entitled to assume. Declaring the dialect at the root stays authorable, and omitting it stays authorable too.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-065",
+   "statement": "Every operator a filterable field offers MUST name exactly one landing site — a declared parameter, or a template that renders the comparison into the value — and no two operators on that field may name the same one.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_validate_filters_wiring",
+   "owners": [
+    "engine",
+    "connector-plugin",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "pattern_symbol": null,
+   "fixture_model": null,
+   "rationale": "A request binding maps a wire name to a value, so an operator that names no landing site of its own has nowhere to be expressed and is dropped between the filter and the request. That is the failure this rule exists for: the read succeeds, the provider applies whatever comparison the bare parameter means, and the rows returned are not the rows asked for, with nothing raised on either side. Two operators sharing one site fail the same way and are harder to see, because each is individually well-formed — it is only together that they build one identical request. Requiring the site to be distinct is what makes the two comparisons distinguishable on the wire.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-066",
+   "statement": "A landing site that renders the comparison into the value MUST interpolate the filter's value, through a placeholder whose leading token is a known resolution scope.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::_validate_filters_wiring",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "pattern_symbol": null,
+   "fixture_model": null,
+   "rationale": "A value-carried spelling exists because some providers write the comparison inside the value rather than the key, so the rendered string is the whole predicate. One that never interpolates the filter's value is therefore a constant: it sends the same comparison whatever the stream asked for, narrowing on a bound the author did not write, and the run reports success over the wrong rows. Holding the placeholder to the resolution-scope vocabulary is what keeps a typo from resolving to nothing and silently rendering empty.\n",
    "status": "active",
    "superseded_by": null
   },

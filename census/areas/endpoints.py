@@ -43,6 +43,20 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         rule_ids=("RULE-ENDP-024", "RULE-ENDP-025", "RULE-ENDP-027", "RULE-ENDP-028"),
         waiver=UNKNOWABLE_SKIP,
     ),
+    ProseObligation(
+        model="ReadOperation", field="filters",
+        rule_ids=("RULE-ENDP-002", "RULE-ENDP-055", "RULE-ENDP-065", "RULE-ENDP-066"),
+        prose_hash="874761ff793a",
+        structural=(
+            "the operator keys are `Literal` members — the vocabulary is the "
+            "type; the landing-site shape and its distinctness are checked by "
+            "`_validate_filters_wiring`"
+        ),
+        waiver=(
+            "cross-document: whether a stream's filter names a field this map "
+            "offers is resolved against the stream document, not here"
+        ),
+    ),
     # === api-endpoint: pagination ============================================
     ProseObligation(
         model="ReadOperation", field="pagination", rule_ids=("RULE-ENDP-023",),
@@ -272,15 +286,6 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="Param", field="controlled_by", prose_hash="d826ba713998", descriptive=True),
     ProseObligation(model="Param", field="default", prose_hash="95b46ea4340e", descriptive=True),
     ProseObligation(model="Param", field="location", prose_hash="4ad56f39fa37", descriptive=True),
-    ProseObligation(
-        model="Param", field="operators",
-        prose_hash="c3ef12030ac5",
-        structural="typed as a list of `Literal` members — the operator vocabulary is the type",
-        waiver=(
-            "the consequence of absence binds the stream document that "
-            "filters on this param, not a checkable shape of this endpoint"
-        ),
-    ),
     ProseObligation(model="Param", field="style", prose_hash="491d84aaf9f9", descriptive=True),
     ProseObligation(model="Param", field="type", prose_hash="e716f55ea092", descriptive=True),
     ProseObligation(model="PostReadRequest", prose_hash="ec73f959a39b", descriptive=True),
