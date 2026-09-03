@@ -176,10 +176,10 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="Filter", rule_ids=("RULE-STRM-004",),
-        prose_hash="60735ecfb653",
+        prose_hash="2bbbed4bc783",
         waiver=(
-            "cross-document: which fields/params are filterable and which "
-            "operators each allows is endpoint-owned; and the requires-half "
+            "cross-document: which record fields are filterable and which "
+            "operators each offers is endpoint-owned; and the requires-half "
             "admits an explicit null with a binary operator — the validator "
             "cannot tell omitted from null, so that residue is deferred to "
             "endpoint resolution"
@@ -187,7 +187,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="Filter", field="field",
-        prose_hash="18bb7a6c2763",
+        prose_hash="281df2bc1bfc",
         rule_ids=("RULE-STRM-022",),
         waiver=(
             "cross-document: the endpoint document declaring the field is not "
@@ -202,7 +202,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         structural="the `FilterOperator` `Literal` is the structural floor",
         waiver=(
             "cross-document: the finer per-endpoint operator subset an API "
-            "source may use is endpoint-owned and resolved at runtime"
+            "source may use is endpoint-owned, stated in that endpoint's read "
+            "`filters` map, and compared where both documents are in hand"
         ),
     ),
     ProseObligation(

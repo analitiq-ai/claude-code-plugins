@@ -252,8 +252,8 @@ _FILTER_CONDITIONAL_RULES: dict[str, Any] = {
 class Filter(StrictModel):
     """Stream-owned read predicate.
 
-    Endpoint contracts own which fields/params are filterable and which
-    operators are allowed. Per spec §Filters, `value` is required except
+    Endpoint contracts own which record fields are filterable and which
+    operators each offers. Per spec §Filters, `value` is required except
     when `operator` is a unary operator (`is_null` / `is_not_null`).
     """
 
@@ -267,10 +267,10 @@ class Filter(StrictModel):
         min_length=1,
         description=(
             "Record field this predicate narrows on, named as the endpoint "
-            "document on this side of the transfer declares it (RULE-STRM-022). "
-            "A database source resolves it to a column; an API source resolves "
-            "it in the endpoint's read `filters` map, which says which operators "
-            "it offers on that field and how each reaches the wire."
+            "document on this side of the transfer declares it (RULE-STRM-022) "
+            "— a column on a database source, a key of the read `filters` map "
+            "on an API source, where the endpoint says which operators it "
+            "offers on that field and how each reaches the wire."
         ),
     )
     operator: FilterOperator = Field(

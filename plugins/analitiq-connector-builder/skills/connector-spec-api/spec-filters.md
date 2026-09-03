@@ -2,9 +2,10 @@
 
 A read operation's `filters` map is what makes a stream able to narrow the read.
 It says which record fields are filterable, and — per operator — which declared
-param carries the comparison. Every operator offered has to bind a param
-(`RULE-ENDP-065`), because a param is the only route from this document to the
-wire; an operator with no entry is one no stream is told it may use.
+param carries the comparison. A filter's value arrives per run, and a per-run
+value reaches the request only through a declared param (`RULE-ENDP-032`), so
+every operator offered has to bind one (`RULE-ENDP-065`); an operator with no
+entry is one no stream is told it may use.
 
 Read `spec-request-binding.md` first: a filter binding names a param, and the
 param still reaches the wire the ordinary way.
@@ -81,9 +82,9 @@ params on every request, so a filter routed to one is overwritten
 }
 ```
 
-A stream filtering `amount gt 100` now sends `?amount_from=100`; one filtering
-`amount lt 500` sends `?amount_to=500`. Two operators, two requests — which is
-the whole point of the map.
+The map is what tells a stream it may narrow `amount` with `gt` and with `lt`,
+and it gives each its own param, so each comparison has somewhere of its own to
+go. That is the whole point of it.
 
 ## Keys are record fields, not param names
 
@@ -113,17 +114,19 @@ filter's own value:
 ```
 
 `${stream.filter.value}` is the only thing a binding reads from the stream scope
-— the field and the operator are the keys it already sits under — and a rendered
-value that never interpolates it is refused, because it would send a predicate
-the stream did not ask for (`RULE-ENDP-067`).
+— the field and the operator are the keys it already sits under. A rendered
+value must interpolate it, and must render something around it (`RULE-ENDP-067`):
+one that drops it carries a predicate the stream did not ask for, and one that
+restates it alone is what omitting `value` already spells.
 
 ## What you cannot author, and why
 
-Two entries that send one param the same value are refused (`RULE-ENDP-066`):
-they build the identical request, so the provider cannot tell the comparisons
-apart and one of them reads the wrong rows. That is the failure this map exists
-to make unrepresentable, and it is why each operator needs its own param or its
-own rendered value:
+Two entries binding one param are refused (`RULE-ENDP-066`). A param is one slot
+holding one value, so nothing in the request would say which of the two
+comparisons was meant, and one of them reads the wrong rows. That is the failure
+this map exists to make unrepresentable, and it is why each operator needs its
+own param — a rendered value of its own is not an escape, because the two would
+still contend for the one slot:
 
 <!-- invalid: RULE-ENDP-066 -->
 ```json
@@ -170,16 +173,15 @@ own rendered value:
 }
 ```
 
-If the provider genuinely accepts only one bound on a field, offer only the
-operator it accepts. An operator the endpoint cannot express is one no stream
-should be told it may use.
+If the provider takes both bounds through one parameter — an OData-style
+`$filter`, say — it accepts one comparison per request, so offer the operator it
+is most useful for and leave the rest unoffered. An operator the endpoint cannot
+express is one no stream should be told it may use.
 
 ## Which operators exist
 
 The vocabulary is `RULE-ENDP-055`, printed off the live model in
-`connector-builder/references/rules/api-endpoint.md`. It excludes the operators
-only a SQL dialect can express: those compile into a predicate, and an HTTP
-provider has no equivalent to serialise them into.
+`connector-builder/references/rules/api-endpoint.md`.
 
 Offer only what the provider documents. Every entry is a promise a stream will
 hold you to.

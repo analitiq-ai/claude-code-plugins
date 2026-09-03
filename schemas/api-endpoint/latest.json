@@ -130,10 +130,10 @@
     },
     "FilterBinding": {
       "additionalProperties": false,
-      "description": "How one operator on one filterable record field reaches the wire.\n\nA request binding maps a wire name to a value, so a **param** is the only\nthing a value can be routed to; the operator therefore selects which param\ncarries the comparison. Providers that spell the comparison inside the value\ninstead (`amount=<>0`, `$filter=amount gt 100`) render it with `value`.",
+      "description": "How one operator on one filterable record field reaches the wire.\n\nA filter's value arrives per run, and a per-run value reaches the request\nonly through a declared param (RULE-ENDP-032) \u2014 so a binding has one handle\non the request, and the operator selects which param carries the comparison.\nProviders that spell the comparison inside the value instead (`amount=<>0`,\n`$filter=amount gt 100`) render it with `value`.",
       "properties": {
         "param": {
-          "description": "Declared param that carries this comparison. `request.query` / `headers` / `path_params` already say how that param reaches the wire, so the operator selects a binding rather than introducing a second spelling grammar. The param must not be `controlled_by`: pagination and replication set those on every request, so a filter routed to one is overwritten.",
+          "description": "Declared param that carries this comparison. `request.query` / `headers` / `path_params` already say how that param reaches the wire, so the operator selects a binding rather than introducing a second spelling grammar. The param must not be `controlled_by`: pagination and replication set those on every request, so a filter routed to one is overwritten. No other entry in the map may name it either \u2014 a param is one slot holding one value, so a second entry into it has nowhere to go.",
           "minLength": 1,
           "title": "Param",
           "type": "string"
@@ -161,7 +161,7 @@
             }
           ],
           "default": null,
-          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it must interpolate `${stream.filter.value}` at least once \u2014 a rendered value that drops the filter's own value sends a predicate the stream never asked for.",
+          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it renders around `${stream.filter.value}`, which it must interpolate at least once and must render something around \u2014 a value that drops the filter's own value carries a predicate the stream never asked for, and one that restates it alone is what omitting this field already spells.",
           "title": "Value"
         }
       },
@@ -1964,29 +1964,31 @@
       "description": "Read operation block.",
       "properties": {
         "filters": {
-          "additionalProperties": {
-            "additionalProperties": {
-              "$ref": "#/$defs/FilterBinding"
-            },
-            "minProperties": 1,
-            "propertyNames": {
-              "enum": [
-                "eq",
-                "neq",
-                "gt",
-                "gte",
-                "lt",
-                "lte",
-                "in",
-                "not_in",
-                "contains",
-                "starts_with",
-                "ends_with"
-              ]
-            },
-            "type": "object"
+          "description": "Which record fields a stream may filter this read on, and how each operator reaches the wire. Keys are dotted record field paths, resolved against the record shape `response.records` selects \u2014 the same declared-path resolution a replication `cursor_field` gets. Under each field, one entry per operator the endpoint offers; a field with no entries offers no filtering and is omitted. An operator with no entry is one this endpoint does not offer, so a stream must not declare it (RULE-STRM-026). No param is named twice across the whole map: a param is one slot holding one value, so two entries in it are two comparisons the request cannot tell apart, and a stream would read the rows of whichever one the param means.",
+          "patternProperties": {
+            "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$": {
+              "additionalProperties": {
+                "$ref": "#/$defs/FilterBinding"
+              },
+              "minProperties": 1,
+              "propertyNames": {
+                "enum": [
+                  "eq",
+                  "neq",
+                  "gt",
+                  "gte",
+                  "lt",
+                  "lte",
+                  "in",
+                  "not_in",
+                  "contains",
+                  "starts_with",
+                  "ends_with"
+                ]
+              },
+              "type": "object"
+            }
           },
-          "description": "Which record fields a stream may filter this read on, and how each operator reaches the wire. Keys are dotted record field paths, resolved against the record shape `response.records` selects \u2014 the same declared-path resolution a replication `cursor_field` gets. Under each field, one entry per operator the endpoint offers; a field with no entries offers no filtering and is omitted. An operator with no entry cannot be sent, so a stream must not declare it (RULE-STRM-026), and no two entries in the whole map may resolve to the same param and rendered value \u2014 that is exactly the pair of filters that would build one request and return the rows of only one of them.",
           "propertyNames": {
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*$"
           },

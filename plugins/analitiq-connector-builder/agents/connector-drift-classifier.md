@@ -139,23 +139,24 @@ rules for every document" says which file carries which artifact.
   wider than the categories that enumerate it — a read operation dropped
   from a write-bearing endpoint, a replication method or a cursor mapping
   withdrawn, a `pagination` block removed so a stream silently reads one
-  page, a filterable param whose request-value contract tightened anywhere —
-  a bound, a pattern, a length, not only its type — an idempotency block
-  removed, a write input field removed or retyped, a nested record field
-  changed under an unchanged parent. Reach for this when the diff withdraws
-  something and nothing more specific fits, and say in the `note` what was
-  withdrawn. A release is never patch because the vocabulary had no word for
-  what it took away), type-map-rule-removed, type-map-canonical-changed (an
-  existing matcher now resolves to a different render — read map: an
-  existing `native` resolves to a different canonical; write map: an
-  existing `canonical` renders a different native DDL — either invalidates
-  downstream consumers), endpoint-obligation-added (an addition an existing
-  stream must satisfy rather than one it may opt into: a read param declared
-  `required` with no default, so a stream supplying no value for it stops
-  resolving, or a member added to a write mode's required input, so a stream
-  whose mapping does not produce it sends a record the provider refuses. The
-  additive categories are for what a stream MAY now use; an addition it MUST
-  now satisfy is drift wearing the other sign).
+  page, a param a filter binds whose request-value contract tightened
+  anywhere — a bound, a pattern, a length, not only its type — an
+  idempotency block removed, a write input field removed or retyped, a
+  nested record field changed under an unchanged parent. Reach for this when
+  the diff withdraws something and nothing more specific fits, and say in
+  the `note` what was withdrawn. A release is never patch because the
+  vocabulary had no word for what it took away), type-map-rule-removed,
+  type-map-canonical-changed (an existing matcher now resolves to a
+  different render — read map: an existing `native` resolves to a different
+  canonical; write map: an existing `canonical` renders a different native
+  DDL — either invalidates downstream consumers), endpoint-obligation-added
+  (an addition an existing stream must satisfy rather than one it may opt
+  into: a read param declared `required` with no default, so a stream
+  supplying no value for it stops resolving, or a member added to a write
+  mode's required input, so a stream whose mapping does not produce it sends
+  a record the provider refuses. The additive categories are for what a
+  stream MAY now use; an addition it MUST now satisfy is drift wearing the
+  other sign).
 - **minor**: optional-input-added, optional-output-added,
   optional-endpoint-added, write-mode-added (a mode key under
   `operations.write` that endpoint did not declare before; a whole new

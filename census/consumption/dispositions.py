@@ -52,9 +52,10 @@ FILTER_BINDING = (
     "an author declaring how an operator reaches the wire expects the run to "
     "select that binding for a stream filter carrying it — RULE-ENDP-055 names "
     "the vocabulary it is drawn from and RULE-ENDP-065 the binding it must "
-    "name; the pinned manifest claims no read of the map, so the run matches a "
-    "filter's field against the declared param names instead and sets that "
-    "param's value, and the operator selects nothing"
+    "name; the pinned manifest claims no read of the map, so the run resolves a "
+    "filter's field against the declared param names instead, failing the "
+    "stream with a read error when it names none and, when it names one, "
+    "sending that param the filter's value with the operator selecting nothing"
 )
 
 #: The wire half of a cursor mapping.
@@ -126,7 +127,7 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "RULE-DBEP-013 forbids execution from branching on it, so the absence "
         "of a read is the rule being kept",
     ),
-    # --- endpoints.FilterBinding: neither half of a binding is read ---------
+    # --- endpoints.FilterBinding: no field of a binding is read -------------
     FieldDisposition("endpoints.FilterBinding", "param", "engine_gap", FILTER_BINDING),
     FieldDisposition("endpoints.FilterBinding", "value", "engine_gap", FILTER_BINDING),
     # --- endpoints.Param: placement is graded at validation, the label is

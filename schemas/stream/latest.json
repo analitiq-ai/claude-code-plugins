@@ -941,10 +941,10 @@
           }
         }
       ],
-      "description": "Stream-owned read predicate.\n\nEndpoint contracts own which fields/params are filterable and which\noperators are allowed. Per spec \u00a7Filters, `value` is required except\nwhen `operator` is a unary operator (`is_null` / `is_not_null`).",
+      "description": "Stream-owned read predicate.\n\nEndpoint contracts own which record fields are filterable and which\noperators each offers. Per spec \u00a7Filters, `value` is required except\nwhen `operator` is a unary operator (`is_null` / `is_not_null`).",
       "properties": {
         "field": {
-          "description": "Record field this predicate narrows on, named as the endpoint document on this side of the transfer declares it (RULE-STRM-022). A database source resolves it to a column; an API source resolves it in the endpoint's read `filters` map, which says which operators it offers on that field and how each reaches the wire.",
+          "description": "Record field this predicate narrows on, named as the endpoint document on this side of the transfer declares it (RULE-STRM-022) \u2014 a column on a database source, a key of the read `filters` map on an API source, where the endpoint says which operators it offers on that field and how each reaches the wire.",
           "minLength": 1,
           "title": "Field",
           "type": "string"

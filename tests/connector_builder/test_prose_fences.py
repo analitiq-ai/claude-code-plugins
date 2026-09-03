@@ -762,8 +762,9 @@ def test_block_upholds_its_marker(key, marker, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# The `invalid:` disposition, exercised synthetically — no prose block uses it
-# (EXPECTED_DISPOSITIONS pins that), so the machinery is proven here.
+# The `invalid:` disposition, exercised synthetically as well as by the prose
+# that uses it, so a tree whose only negative example is deleted still proves
+# the machinery grades one.
 # ---------------------------------------------------------------------------
 
 _TYPE_MAP_HOST = HOSTS[("skills/connector-spec-db/spec-type-maps.md",

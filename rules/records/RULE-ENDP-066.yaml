@@ -1,7 +1,6 @@
 id: RULE-ENDP-066
 statement: >
-  Two entries in a read operation's filter map MUST NOT send one parameter the
-  same value.
+  Two entries in a read operation's filter map MUST NOT bind the same parameter.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -9,13 +8,17 @@ validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
 targets: [ReadOperation]
 rationale: >
-  Two entries routing to one param with one rendered value build the
-  byte-identical request, so the provider cannot tell the comparisons apart and
-  answers both with the rows of whichever one its own parameter means. The
-  stream that asked for the other gets wrong rows under a successful run — the
-  failure this map exists to make unrepresentable, and the reason the operator
-  is a key rather than a flag. It is checked across the whole map rather than
-  per field because two fields writing one param verbatim collide for the same
-  reason two operators do.
+  A parameter is one slot holding one value, so two entries binding it are two
+  comparisons the request has no way to distinguish: the operator an author
+  wrote is not the one the provider performs, and the stream reads the rows of
+  whichever comparison the parameter means. That is the failure the map exists
+  to make unrepresentable, and the reason the operator is a key rather than a
+  flag. The parameter alone decides it, and deliberately: keyed on the
+  parameter and its rendered value instead, the rule would be defeatable by
+  re-spelling one side of a pair — a ref to the filter's value, a template
+  interpolating it and nothing else, and an omitted value are one wire value
+  under three spellings. It is checked across the whole map rather than per
+  field because two fields binding one parameter collide for the same reason
+  two operators do.
 status: active
 superseded_by: null

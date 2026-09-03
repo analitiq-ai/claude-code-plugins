@@ -582,16 +582,16 @@ def _read_op_with_filters(params, filters, query, record_fields=("amount", "crea
 
 
 class TestFilterBindings:
-    """An operator a stream may filter with names exactly one landing site.
+    """An operator a stream may filter with binds exactly one parameter.
 
-    The defect being closed: an endpoint declared WHICH operators a param
-    accepted and nothing said how each was spelled on the wire, so every
-    operator on one param built the byte-identical request and the read
-    succeeded with the wrong rows.
+    The shape this refuses: an endpoint declaring WHICH operators a parameter
+    accepts and nothing saying how each is spelled on the wire, so every
+    operator on that parameter produces one request and the read succeeds with
+    the rows of whichever comparison the parameter means.
     """
 
     def test_a_param_cannot_declare_an_operator_set(self):
-        """The shape that made three operators build one request is gone."""
+        """A parameter carries no operator set; the read operation carries the map."""
         payload = _minimal_api_payload(operations={"read": _read_op_with(
             {"name": {
                 "in": "query", "type": "string", "required": False,
@@ -599,7 +599,7 @@ class TestFilterBindings:
             }},
             request_extras={"query": {"name": {"from_param": "name"}}},
         )})
-        with pytest.raises(ValidationError, match="operators"):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             parse_endpoint(payload)
 
     def test_each_operator_names_its_own_landing_site(self):
@@ -620,8 +620,8 @@ class TestFilterBindings:
         doc = parse_endpoint(payload)
         assert set(doc.operations.read.filters["amount"]) == {"gt", "lt"}
 
-    def test_two_operators_sharing_one_landing_site_are_refused(self):
-        """`gt` and `lt` into one param is the wrong-rows shape, respelled."""
+    def test_two_operators_sharing_one_param_are_refused(self):
+        """`gt` and `lt` into one param is the shape the map exists to refuse."""
         payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
             params={"amount": {"in": "query", "type": "number", "required": False}},
             filters={"amount": {
@@ -630,7 +630,49 @@ class TestFilterBindings:
             }},
             query={"amount": {"from_param": "amount"}},
         )})
-        with pytest.raises(ValidationError, match="build the identical request"):
+        with pytest.raises(ValidationError, match="both bind param 'amount'"):
+            parse_endpoint(payload)
+
+    @pytest.mark.parametrize("second", [
+        pytest.param({"param": "q"}, id="verbatim"),
+        pytest.param({"param": "q", "value": {"template": ">${ stream.filter.value }"}},
+                     id="respaced-same-render"),
+        pytest.param({"param": "q", "value": {"template": "<${stream.filter.value}"}},
+                     id="different-render"),
+        pytest.param({"param": "q", "value": {"function": "url_encode",
+                                              "input": {"ref": "stream.filter.value"}}},
+                     id="function"),
+    ])
+    def test_one_param_takes_one_entry_however_the_value_is_spelled(self, second):
+        """A param is one wire slot carrying one value, so a second entry into it
+        has nowhere to go — whatever the second entry renders.
+
+        Keying on the rendered value instead would make this defeatable by
+        re-spelling one side: `respaced-same-render` renders identically to the
+        first entry and dumps differently, and `different-render` renders
+        differently while still contending for the one slot."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": {
+                "gt": {"param": "q", "value": {"template": ">${stream.filter.value}"}},
+                "lt": second,
+            }},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="both bind param 'q'"):
+            parse_endpoint(payload)
+
+    def test_a_value_that_only_restates_the_filter_value_is_refused(self):
+        """Omitting `value` is what "the filter's value verbatim" spells; a
+        second spelling reads as though it rendered something and does not."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": {"gt": {
+                "param": "q", "value": {"ref": "stream.filter.value"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="renders nothing around"):
             parse_endpoint(payload)
 
     def test_an_operator_naming_an_undeclared_param_is_refused(self):
@@ -677,7 +719,7 @@ class TestFilterBindings:
             },
             query={"q": {"from_param": "q"}},
         )})
-        with pytest.raises(ValidationError, match="build the identical request"):
+        with pytest.raises(ValidationError, match="both bind param 'q'"):
             parse_endpoint(payload)
 
     def test_a_value_reading_another_stream_path_is_refused(self):
@@ -703,6 +745,103 @@ class TestFilterBindings:
         )})
         doc = parse_endpoint(payload)
         assert doc.operations.read.filters["created"]["gt"].param == "q"
+
+    def test_a_value_reading_the_response_is_refused(self):
+        """A filter shapes the request, which is built before the response
+        exists — so a `response.*` ref here interpolates nothing and the
+        provider is called with a hole where the predicate should be."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": "${response.body.x}${stream.filter.value}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="before the response exists"):
+            parse_endpoint(payload)
+
+    def test_a_value_with_an_unknown_leading_scope_is_refused(self):
+        """Caught by the typed expression itself, before the operation's sweep —
+        `response.*` is what only the sweep can refuse, since it names a real
+        scope that simply does not exist yet when the request is built."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": "${conection.parameters.x}${stream.filter.value}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="must begin with a known resolution scope"):
+            parse_endpoint(payload)
+
+    def test_a_literal_value_is_refused_and_a_function_value_is_not(self):
+        """`value` is the whole expression union, and the two branches an author
+        reaches for behave oppositely: a `literal` payload is opaque to the
+        resolver, so it can never interpolate the filter's value."""
+        def _payload(value):
+            return _minimal_api_payload(operations={"read": _read_op_with_filters(
+                params={"q": {"in": "query", "type": "string", "required": False}},
+                filters={"created": {"gt": {"param": "q", "value": value}}},
+                query={"q": {"from_param": "q"}},
+            )})
+
+        with pytest.raises(ValidationError, match="never interpolates"):
+            parse_endpoint(_payload({"literal": ">${stream.filter.value}"}))
+
+        doc = parse_endpoint(_payload(
+            {"function": "url_encode", "input": {"ref": "stream.filter.value"}}))
+        assert doc.operations.read.filters["created"]["gt"].param == "q"
+
+    def test_a_dotted_key_resolves_through_the_record_shape(self):
+        response = {
+            "records": {"ref": "response.body"},
+            "schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"meta": {
+                        "type": "object",
+                        "properties": {"amount": {"type": "number"}},
+                    }},
+                },
+            },
+        }
+        op = _read_op_with(
+            {"q": {"in": "query", "type": "string", "required": False}},
+            request_extras={"query": {"q": {"from_param": "q"}}},
+            response=response,
+        )
+        op["filters"] = {"meta.amount": {"gt": {"param": "q"}}}
+        assert parse_endpoint(_minimal_api_payload(operations={"read": op}))
+
+        op = dict(op, filters={"meta.nope": {"gt": {"param": "q"}}})
+        with pytest.raises(ValidationError, match="filters key 'meta.nope'"):
+            parse_endpoint(_minimal_api_payload(operations={"read": op}))
+
+    def test_a_key_that_is_not_a_record_field_path_is_refused(self):
+        """The pattern rides the KEY's own type: a `Field(pattern=...)` reaches
+        a value and never a key, so without it the models accept a document the
+        published schema refuses."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount-due": {"gt": {"param": "q"}}},
+            query={"q": {"from_param": "q"}},
+            record_fields=("amount-due",),
+        )})
+        with pytest.raises(ValidationError, match="should match pattern"):
+            parse_endpoint(payload)
+
+    def test_a_field_offering_no_operator_is_refused(self):
+        """An entry with no operators offers filtering on nothing; omit it."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": {}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="at least 1 item"):
+            parse_endpoint(payload)
 
     def test_the_published_schema_carries_the_map_shape(self):
         """The models are one half of the contract; the rendered JSON Schema is

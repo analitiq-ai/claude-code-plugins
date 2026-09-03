@@ -62,9 +62,8 @@ field, and under each field one entry per operator it can actually send:
   one; do not substitute a neighbouring operator, which reads different rows.
 - the field has no entry → not filterable at all.
 
-An operator absent from the map cannot reach the wire, which is why the map
-exists: before it, an endpoint could advertise an operator with nowhere to send
-it, and three operators built one identical request.
+An operator absent from the map is one the endpoint bound to no request
+parameter, so it is not one this source offers; do not declare it.
 
 ### Worked: a filter against an API source
 

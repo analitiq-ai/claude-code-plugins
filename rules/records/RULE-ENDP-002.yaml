@@ -14,8 +14,11 @@ rationale: >
   paging or incremental machinery, which sets it on every request. Declaring
   both advertises a filter that is overwritten before the request goes out, so
   the stream's predicate vanishes and the run reports success over unfiltered
-  data. The two halves sit in different blocks of the operation — the binding in
-  `filters`, the marker on the param — so no shape check on either alone can see
-  the conflict.
+  data. The binding and the marker sit in different blocks of the operation —
+  the binding in `filters`, the marker on the param — so no shape check on
+  either alone can see the conflict, and the published JSON Schema carries no
+  mirror of this rule: relating a binding to the param it names is
+  instance-relative set logic, which stock JSON Schema cannot express. The model
+  validator is the whole gate.
 status: active
 superseded_by: null

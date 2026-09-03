@@ -234,6 +234,21 @@ def template_placeholders(template: str) -> list[str]:
     return [match.strip() for match in _TEMPLATE_RE.findall(template)]
 
 
+def template_renders_only(template: str, token: str) -> bool:
+    """True when the whole of `template` is one placeholder naming `token`.
+
+    Such a template resolves to exactly the value `token` addresses, so it is a
+    second spelling of a bare `{ref: token}` and of whatever binding form means
+    "this value, unchanged". Deciding that needs the placeholder grammar, which
+    is why it lives beside the pattern rather than at the caller: the caller
+    would need the regex to know where a placeholder ends.
+    """
+    placeholders = template_placeholders(template)
+    if len(placeholders) != 1 or placeholders[0] != token.strip():
+        return False
+    return not _TEMPLATE_RE.sub("", template).strip()
+
+
 def unqualified_tokens(node: Any) -> list[str]:
     """Every ref/placeholder token in `node` whose leading scope is unknown.
 

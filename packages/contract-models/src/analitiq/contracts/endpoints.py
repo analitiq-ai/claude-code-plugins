@@ -84,6 +84,7 @@ from analitiq.contracts.value_expression import (
     has_known_scope,
     iter_expression_strings,
     template_placeholders,
+    template_renders_only,
     validate_expression_shapes,
 )
 
@@ -124,6 +125,11 @@ PATH_PLACEHOLDER_REPEATED_PATTERN = (
 RECORD_FIELD_PATH_PATTERN = (
     r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$"
 )
+#: A record field path where one is a MAP KEY rather than a field value. A
+#: `Field(pattern=...)` reaches a value and never a key, so a map keyed by
+#: record field needs the constraint in the key's own type or the models accept
+#: what the published schema refuses.
+RecordFieldPath = Annotated[str, StringConstraints(pattern=RECORD_FIELD_PATH_PATTERN)]
 METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
 # Canonical Apache Arrow type vocabulary. `ARROW_TYPE_PATTERN` is GENERATED
@@ -471,11 +477,14 @@ class Param(_EndpointModel):
 # ---------------------------------------------------------------------------
 
 
-# The operator vocabulary a stream may filter an API read with. Deliberately
-# excludes the SQL-only operators: those compile into a predicate a dialect
-# expresses, and an HTTP provider has no equivalent to serialise them into.
+# The operator vocabulary a stream may filter an API read with. It is narrower
+# than the database one: an operator here has to be serialised into a request
+# the provider accepts, rather than compiled into a predicate a dialect
+# expresses, so the members are the comparisons an endpoint can bind to a param.
 #
-# `stream.py` derives its API half from this Literal and pins the two at import.
+# `stream.py` derives its API half from this Literal, and asserts at import that
+# its `FilterOperator` union is exactly the database and API vocabularies
+# together.
 ApiFilterOperator = Literal[
     "eq", "neq", "gt", "gte", "lt", "lte",
     "in", "not_in", "contains", "starts_with", "ends_with",
@@ -483,21 +492,22 @@ ApiFilterOperator = Literal[
 API_FILTER_OPERATORS: tuple[str, ...] = get_args(ApiFilterOperator)
 
 
-#: The one resolution path a filter binding's rendered `value` reads: the value
-#: the stream's own filter carries. A binding is already scoped to one field and
-#: one operator by the keys it sits under, so nothing else about the filter is
-#: addressable — and a path repeating the field key could disagree with the key
-#: above it.
+#: The one path a filter binding's rendered `value` reads from the stream scope:
+#: the value the stream's own filter carries. A binding is already scoped to one
+#: field and one operator by the keys it sits under, so nothing else about the
+#: filter is addressable — and a path repeating the field key could disagree
+#: with the key above it.
 FILTER_VALUE_REF = "stream.filter.value"
 
 
 class FilterBinding(_EndpointModel):
     """How one operator on one filterable record field reaches the wire.
 
-    A request binding maps a wire name to a value, so a **param** is the only
-    thing a value can be routed to; the operator therefore selects which param
-    carries the comparison. Providers that spell the comparison inside the value
-    instead (`amount=<>0`, `$filter=amount gt 100`) render it with `value`.
+    A filter's value arrives per run, and a per-run value reaches the request
+    only through a declared param (RULE-ENDP-032) — so a binding has one handle
+    on the request, and the operator selects which param carries the comparison.
+    Providers that spell the comparison inside the value instead (`amount=<>0`,
+    `$filter=amount gt 100`) render it with `value`.
     """
 
     param: str = Field(
@@ -509,16 +519,20 @@ class FilterBinding(_EndpointModel):
             "wire, so the operator selects a binding rather than introducing a "
             "second spelling grammar. The param must not be `controlled_by`: "
             "pagination and replication set those on every request, so a filter "
-            "routed to one is overwritten."
+            "routed to one is overwritten. No other entry in the map may name "
+            "it either — a param is one slot holding one value, so a second "
+            "entry into it has nowhere to go."
         ),
     )
     value: Expression | None = Field(  # type: ignore[valid-type]
         default=None,
         description=(
             "What the param receives. Omitted, it receives the filter's value "
-            f"verbatim; present, it must interpolate `${{{FILTER_VALUE_REF}}}` "
-            "at least once — a rendered value that drops the filter's own value "
-            "sends a predicate the stream never asked for."
+            f"verbatim; present, it renders around `${{{FILTER_VALUE_REF}}}`, "
+            "which it must interpolate at least once and must render something "
+            "around — a value that drops the filter's own value carries a "
+            "predicate the stream never asked for, and one that restates it "
+            "alone is what omitting this field already spells."
         ),
     )
 
@@ -2041,7 +2055,10 @@ class ReadOperation(_EndpointModel):
         ),
     )
     replication: Replication | None = Field(default=None)
-    filters: dict[str, Annotated[dict[ApiFilterOperator, FilterBinding], Field(min_length=1)]] = Field(
+    filters: dict[
+        RecordFieldPath,  # type: ignore[valid-type]
+        Annotated[dict[ApiFilterOperator, FilterBinding], Field(min_length=1)],
+    ] = Field(
         default_factory=dict,
         description=(
             "Which record fields a stream may filter this read on, and how each "
@@ -2050,16 +2067,19 @@ class ReadOperation(_EndpointModel):
             "same declared-path resolution a replication `cursor_field` gets. "
             "Under each field, one entry per operator the endpoint offers; a "
             "field with no entries offers no filtering and is omitted. An "
-            "operator with no entry cannot be sent, so a stream must not "
-            "declare it (RULE-STRM-026), and no two entries in the whole map "
-            "may resolve to the same param and rendered value — that is exactly "
-            "the pair of filters that would build one request and return the "
-            "rows of only one of them."
+            "operator with no entry is one this endpoint does not offer, so a "
+            "stream must not declare it (RULE-STRM-026). No param is named "
+            "twice across the whole map: a param is one slot holding one value, "
+            "so two entries in it are two comparisons the request cannot tell "
+            "apart, and a stream would read the rows of whichever one the "
+            "param means."
         ),
-        # `propertyNames` only — `additionalProperties` is where pydantic renders
-        # the per-field operator map, and stating it here would REPLACE that,
-        # leaving every non-Python consumer a schema that accepts any value
-        # under a field key while the models still reject it.
+        # A constrained key type renders `patternProperties`, which supplies the
+        # value schema for a matching key and says nothing about the rest, so
+        # `propertyNames` is what closes the map to keys of this shape. Stating
+        # `additionalProperties` here instead would REPLACE the keyword pydantic
+        # renders the operator map under, leaving every non-Python consumer a
+        # schema that accepts any value under a field key.
         json_schema_extra={"propertyNames": {"pattern": RECORD_FIELD_PATH_PATTERN}},
     )
 
@@ -3120,8 +3140,8 @@ def _validate_param_wiring(
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
             # RULE-ENDP-028, on WRITES only. A write param has exactly one
-            # source: its own `default`. `operators` makes a param
-            # stream-filterable and `controlled_by` hands it to
+            # source: its own `default`. A read operation's `filters` map routes
+            # a stream's predicate into a param and `controlled_by` hands it to
             # pagination/replication — both read-side, neither reachable from a
             # write. So a write path param with no `default` provably cannot
             # resolve, and the placeholder it fills can never be substituted.
@@ -3412,7 +3432,7 @@ def _validate_filter_bindings(
     records_array_node: dict[str, Any],
     response_schema: Any,
 ) -> None:
-    """Every offered operator names one landing site, and no two share one.
+    """Every offered operator names one param, and no param is named twice.
 
     This is the walk BACK that the other wiring checks do not make: they start
     from a block and confirm the param it names exists, so a declaration whose
@@ -3420,15 +3440,19 @@ def _validate_filter_bindings(
     surface, and an operator that reaches no param would be offered to every
     stream and sent by none.
 
-    The uniqueness clause is what the whole block exists for. A landing site is
-    the pair (param, rendered value): two entries sharing one build the
-    byte-identical request, so the operator an author wrote is not the
-    comparison the provider performs and the read succeeds with the wrong rows.
-    It is checked across the WHOLE map, not per field — `amount gt` and
-    `created gt` both writing the raw value into one param is the same request
-    twice for the same reason.
+    The uniqueness clause is what the whole block exists for, and the param
+    alone decides it. A param is one slot carrying one value, so two entries
+    naming it are two comparisons the request has no way to distinguish — the
+    operator an author wrote is then not the comparison the provider performs,
+    and the read succeeds with the wrong rows. Keying on the param and its
+    rendered value instead would make the rule defeatable by re-spelling one
+    side of the pair: `{"ref": <the filter value>}`, a template that
+    interpolates it and nothing else, and an omitted `value` are one wire value
+    under three spellings. It is checked across the whole map rather than per
+    field because two fields naming one param collide for the same reason two
+    operators do.
     """
-    seen: dict[tuple[str, str], tuple[str, str]] = {}
+    bound: dict[str, tuple[str, str]] = {}
     for field_path, bindings in filters.items():
         _validate_record_field_path(
             field_path, records_array_node, response_schema,
@@ -3451,48 +3475,67 @@ def _validate_filter_bindings(
                     "param for the filter (spec: §Parameter Validation and Operators)"
                 )
             if binding.value is not None:
-                if FILTER_VALUE_REF not in set(_expression_tokens(binding.value.model_dump())):
-                    raise ValueError(
-                        f"{where}.value never interpolates "
-                        f"${{{FILTER_VALUE_REF}}}, so the filter's own value "
-                        "does not reach the provider and the request carries a "
-                        "predicate the stream did not ask for "
-                        "(spec: §Request Parameter Binding)"
-                    )
-                stray = sorted(
-                    token for token in _expression_tokens(binding.value.model_dump())
-                    if token.split(".")[0] == "stream" and token != FILTER_VALUE_REF
-                )
-                if stray:
-                    raise ValueError(
-                        f"{where}.value references {stray!r}; a filter binding "
-                        f"reads only ${{{FILTER_VALUE_REF}}} from the stream "
-                        "scope — its field and operator are the keys it sits "
-                        "under (spec: §Value Expressions)"
-                    )
-            site = (binding.param, _rendered_value_key(binding.value))
-            clash = seen.get(site)
+                _validate_rendered_filter_value(binding.value, where)
+            clash = bound.get(binding.param)
             if clash is not None:
                 raise ValueError(
-                    f"{where} and filters[{clash[0]!r}][{clash[1]!r}] both send "
-                    f"param {binding.param!r} the same value, so they build the "
-                    "identical request: the provider cannot tell the two "
-                    "comparisons apart and one of them reads the wrong rows. "
-                    "Give each its own param, or render its own value "
+                    f"{where} and filters[{clash[0]!r}][{clash[1]!r}] both bind "
+                    f"param {binding.param!r}, which is one slot holding one "
+                    "value: nothing in the request would say which of the two "
+                    "comparisons was meant, so one of them reads the wrong "
+                    "rows. Give each its own param "
                     "(spec: §Cross-Field Validation)"
                 )
-            seen[site] = (field_path, operator)
+            bound[binding.param] = (field_path, operator)
 
 
-def _rendered_value_key(value: Any) -> str:
-    """A stable key for what a binding puts on the wire.
+def _validate_rendered_filter_value(value: Any, where: str) -> None:
+    """A rendered `value` renders the filter's own value, and renders something.
 
-    `None` (the filter's value verbatim) and each distinct rendered expression
-    are different wire values; two spellings of one expression are not.
+    Two ways to write one that cannot work, and they fail differently: a value
+    that never interpolates the filter's value sends a predicate the stream did
+    not ask for, and one that interpolates it and nothing else is the verbatim
+    binding written the long way — which an omitted `value` already spells, so
+    admitting it would be a second spelling of one wire value.
     """
-    if value is None:
-        return ""
-    return json.dumps(value.model_dump(), sort_keys=True, default=str)
+    tokens = list(_expression_tokens(value.model_dump()))
+    if FILTER_VALUE_REF not in tokens:
+        raise ValueError(
+            f"{where}.value never interpolates ${{{FILTER_VALUE_REF}}}, so the "
+            "filter's own value does not reach the provider and the request "
+            "carries a predicate the stream did not ask for "
+            "(spec: §Request Parameter Binding)"
+        )
+    stray = sorted(
+        token for token in tokens
+        if token.split(".")[0] == "stream" and token != FILTER_VALUE_REF
+    )
+    if stray:
+        raise ValueError(
+            f"{where}.value references {stray!r}; a filter binding reads only "
+            f"${{{FILTER_VALUE_REF}}} from the stream scope — its field and "
+            "operator are the keys it sits under (spec: §Value Expressions)"
+        )
+    if _renders_only_the_filter_value(value):
+        raise ValueError(
+            f"{where}.value renders nothing around ${{{FILTER_VALUE_REF}}}, so "
+            "the param receives the filter's value exactly as it would with no "
+            "`value` at all. Omit `value` (spec: §Request Parameter Binding)"
+        )
+
+
+def _renders_only_the_filter_value(value: Any) -> bool:
+    """True when a rendered `value` resolves to the filter's value and nothing more.
+
+    The two spellings that reach it: a `{ref}` naming the path, and a template
+    whose whole body is that one placeholder — whitespace inside the braces
+    included, since the resolver strips a placeholder before looking it up.
+    """
+    if isinstance(value, RefExpression):
+        return value.ref.strip() == FILTER_VALUE_REF
+    if isinstance(value, TemplateExpression):
+        return template_renders_only(value.template, FILTER_VALUE_REF)
+    return False
 
 
 def _validate_param_binding_uniqueness(
@@ -4913,12 +4956,14 @@ def _validate_record_field_path(
     """A dotted RECORD field path must resolve under the records array's ``items``.
 
     The generic form of the `cursor_field` check, for any site that names a
-    field the engine reads off a record rather than off the response body.
-    `pagination.keyset.order_by_field` is the other one: the seek order is
-    defined over it, so a path the record shape does not declare means pages
-    advance from a value the engine cannot read — silently truncating or
-    repeating, which is the same wrong-data-on-a-green-run failure
-    RULE-ENDP-023 catches on the response-body side, with a different cause.
+    field read off a record rather than off the response body:
+    `pagination.keyset.order_by_field`, whose seek order is defined over it, and
+    every key of the read's `filters` map, which is what a stream's filter field
+    resolves against. A path the record shape does not declare means the site
+    names a field nothing returns — for the seek order, pages advancing from a
+    value that is never there, silently truncating or repeating, the same
+    wrong-data-on-a-green-run failure RULE-ENDP-023 catches on the response-body
+    side with a different cause.
 
     Unknowable shapes are reported, not skipped: this is `response.schema`,
     which the contract holds to the strict standard (see

@@ -16,9 +16,8 @@ rationale: >
   the two documents agree only while both read one vocabulary. An operator
   offered here has to survive being serialised into a request the provider
   accepts, rather than compiled into a predicate the way a database read's
-  operator is — which is why the vocabulary excludes the operators only a SQL
-  dialect can express, and why WHICH of the rest an endpoint offers is a fact
-  about the provider that the endpoint states per field instead of inheriting
-  whole.
+  operator is — which is why this vocabulary is narrower than the database one,
+  and why WHICH of its members an endpoint offers is a fact about the provider
+  that the endpoint states per field instead of inheriting the set whole.
 status: active
 superseded_by: null
