@@ -242,11 +242,18 @@ def template_renders_only(template: str, token: str) -> bool:
     "this value, unchanged". Deciding that needs the placeholder grammar, which
     is why it lives beside the pattern rather than at the caller: the caller
     would need the regex to know where a placeholder ends.
+
+    The remainder must be EXACTLY empty, not empty once stripped: resolution
+    substitutes the placeholder and copies every other character through, so
+    `" ${x} "` renders a padded value and is not the value unchanged. Stripping
+    it here would refuse the one spelling a provider wanting a delimiter around
+    the value has. The placeholder KEY is compared stripped, because the
+    resolver strips it before lookup.
     """
     placeholders = template_placeholders(template)
     if len(placeholders) != 1 or placeholders[0] != token.strip():
         return False
-    return not _TEMPLATE_RE.sub("", template).strip()
+    return not _TEMPLATE_RE.sub("", template)
 
 
 def unqualified_tokens(node: Any) -> list[str]:

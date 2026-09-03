@@ -746,6 +746,21 @@ class TestFilterBindings:
         doc = parse_endpoint(payload)
         assert doc.operations.read.filters["created"]["gt"].param == "q"
 
+    def test_literal_whitespace_around_the_placeholder_is_content(self):
+        """A template renders its literal text, whitespace included, so
+        `" ${…} "` puts a padded value on the wire — different from the bare
+        value, and the shape a provider wanting a delimiter needs."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": " ${stream.filter.value} "},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        doc = parse_endpoint(payload)
+        assert doc.operations.read.filters["created"]["gt"].param == "q"
+
     def test_a_sub_path_of_the_filter_value_is_named_as_the_stray_it_is(self):
         """`stream.filter.value.sub` DOES interpolate the filter's value, so
         reporting it as a value that never does sends the author to fix the
