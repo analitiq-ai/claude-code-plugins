@@ -2056,10 +2056,11 @@ class ReadOperation(_EndpointModel):
             "the pair of filters that would build one request and return the "
             "rows of only one of them."
         ),
-        json_schema_extra={
-            "propertyNames": {"pattern": RECORD_FIELD_PATH_PATTERN},
-            "additionalProperties": {"minProperties": 1},
-        },
+        # `propertyNames` only — `additionalProperties` is where pydantic renders
+        # the per-field operator map, and stating it here would REPLACE that,
+        # leaving every non-Python consumer a schema that accepts any value
+        # under a field key while the models still reject it.
+        json_schema_extra={"propertyNames": {"pattern": RECORD_FIELD_PATH_PATTERN}},
     )
 
     @model_validator(mode="after")

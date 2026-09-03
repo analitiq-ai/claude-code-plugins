@@ -704,6 +704,30 @@ class TestFilterBindings:
         doc = parse_endpoint(payload)
         assert doc.operations.read.filters["created"]["gt"].param == "q"
 
+    def test_the_published_schema_carries_the_map_shape(self):
+        """The models are one half of the contract; the rendered JSON Schema is
+        the half every non-Python consumer reads. A `filters` value that is not
+        an operator-keyed map of bindings must be refused there too — stating
+        `additionalProperties` in the field's schema extras replaces the very
+        keyword pydantic renders that shape under, leaving the published half
+        accepting anything under a field key."""
+        schema = json.loads(LATEST_API_ENDPOINT_SCHEMA_PATH.read_text())
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": "not a map"},
+            query={"q": {"from_param": "q"}},
+        )})
+        errors = list(Draft202012Validator(schema).iter_errors(payload))
+        assert errors, "the published schema accepts a filters value of any shape"
+
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": {"resembles": {"param": "q"}}},
+            query={"q": {"from_param": "q"}},
+        )})
+        errors = list(Draft202012Validator(schema).iter_errors(payload))
+        assert errors, "the published schema accepts an operator it does not name"
+
     def test_a_value_that_drops_the_filter_value_is_refused(self):
         """A rendered value that never interpolates the filter sends a predicate
         the stream did not ask for — the wrong-rows failure through a new door."""

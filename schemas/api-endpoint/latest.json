@@ -128,6 +128,49 @@
       "title": "CursorPagination",
       "type": "object"
     },
+    "FilterBinding": {
+      "additionalProperties": false,
+      "description": "How one operator on one filterable record field reaches the wire.\n\nA request binding maps a wire name to a value, so a **param** is the only\nthing a value can be routed to; the operator therefore selects which param\ncarries the comparison. Providers that spell the comparison inside the value\ninstead (`amount=<>0`, `$filter=amount gt 100`) render it with `value`.",
+      "properties": {
+        "param": {
+          "description": "Declared param that carries this comparison. `request.query` / `headers` / `path_params` already say how that param reaches the wire, so the operator selects a binding rather than introducing a second spelling grammar. The param must not be `controlled_by`: pagination and replication set those on every request, so a filter routed to one is overwritten.",
+          "minLength": 1,
+          "title": "Param",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/RefExpression"
+                },
+                {
+                  "$ref": "#/$defs/TemplateExpression"
+                },
+                {
+                  "$ref": "#/$defs/LiteralExpression"
+                },
+                {
+                  "$ref": "#/$defs/FunctionExpression"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it must interpolate `${stream.filter.value}` at least once \u2014 a rendered value that drops the filter's own value sends a predicate the stream never asked for.",
+          "title": "Value"
+        }
+      },
+      "required": [
+        "param"
+      ],
+      "title": "FilterBinding",
+      "type": "object"
+    },
     "FunctionExpression": {
       "additionalProperties": false,
       "description": "``{\"function\": <name>, ...}`` registered-function value expression.",
@@ -1922,7 +1965,26 @@
       "properties": {
         "filters": {
           "additionalProperties": {
-            "minProperties": 1
+            "additionalProperties": {
+              "$ref": "#/$defs/FilterBinding"
+            },
+            "minProperties": 1,
+            "propertyNames": {
+              "enum": [
+                "eq",
+                "neq",
+                "gt",
+                "gte",
+                "lt",
+                "lte",
+                "in",
+                "not_in",
+                "contains",
+                "starts_with",
+                "ends_with"
+              ]
+            },
+            "type": "object"
           },
           "description": "Which record fields a stream may filter this read on, and how each operator reaches the wire. Keys are dotted record field paths, resolved against the record shape `response.records` selects \u2014 the same declared-path resolution a replication `cursor_field` gets. Under each field, one entry per operator the endpoint offers; a field with no entries offers no filtering and is omitted. An operator with no entry cannot be sent, so a stream must not declare it (RULE-STRM-026), and no two entries in the whole map may resolve to the same param and rendered value \u2014 that is exactly the pair of filters that would build one request and return the rows of only one of them.",
           "propertyNames": {

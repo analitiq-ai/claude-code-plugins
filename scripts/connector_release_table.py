@@ -141,11 +141,11 @@ CATEGORIES: tuple[Category, ...] = (
         "major",
         "Filter operators narrowed",
         note=(
-            "an operator a param offered under `operators` — the "
-            "stream-filterability contract (`RULE-ENDP-055`) — is no longer "
-            "offered, whether the member left the list, the `operators` key "
-            "was dropped, or the param carrying it is gone. A stream filters "
-            "on the members the endpoint offered, so its filter stops being "
+            "an operator a read operation offered on a field under `filters` "
+            "— the stream-filterability contract (`RULE-ENDP-055`) — is no "
+            "longer offered, whether the operator entry went, the field's "
+            "whole entry went, or the param it bound is gone. A stream filters "
+            "on what the endpoint offered, so its filter stops being "
             "expressible"
         ),
     ),
@@ -227,9 +227,10 @@ CATEGORIES: tuple[Category, ...] = (
         "minor",
         "Filter operators widened",
         note=(
-            "a param offers an operator it did not offer before, including a "
-            "param newly declared with `operators`. These are endpoint params, "
-            "not the connection inputs `optional-input-added` names"
+            "a read operation offers an operator on a field it did not offer "
+            "before, including a field newly entered in `filters`. These are "
+            "read operations, not the connection inputs "
+            "`optional-input-added` names"
         ),
     ),
     Category(

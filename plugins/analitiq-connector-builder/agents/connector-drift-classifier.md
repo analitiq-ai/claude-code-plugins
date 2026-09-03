@@ -57,14 +57,14 @@ rules for every document" says which file carries which artifact.
      it before comparing: an in-document `$ref` is followed and an `allOf`
      composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
      branch is not read as removed, and one that changed there is not missed.
-   - `operations.read.params.<name>.operators` — the operator members each
-     read param offers (`RULE-ENDP-055`). Read params only: a write mode
-     declares params through the same model, and a filter never names one.
+   - `operations.read.filters` — which record fields a read offers filtering
+     on, and which operators it binds on each (`RULE-ENDP-055`). Reads only: a
+     write mode declares no filters.
 
    Those are the interior sites with a category of their own. The interior is
    larger than they are, so compare the rest of it too — the read operation's
    presence, `pagination`, `replication.supported_methods` and
-   `cursor_mappings`, a filterable param's own request-value contract — every
+   `cursor_mappings`, the request-value contract of a param a filter binds — every
    constraint it declares, not only its type and requiredness, since a bound or
    a pattern tightened around a value a stream already stores rejects that
    stream as surely as removing the param — a write mode's `input.schema`
@@ -123,11 +123,11 @@ rules for every document" says which file carries which artifact.
   not soften it: widening and narrowing alike re-type the column a
   destination already created from that `arrow_type`, and a JSON `type` that
   held still while the pair moved is the case a shape diff misses),
-  filter-operators-narrowed (an operator a param offered under `operators` —
-  the stream-filterability contract (`RULE-ENDP-055`) — is no longer
-  offered, whether the member left the list, the `operators` key was
-  dropped, or the param carrying it is gone. A stream filters on the members
-  the endpoint offered, so its filter stops being expressible),
+  filter-operators-narrowed (an operator a read operation offered on a field
+  under `filters` — the stream-filterability contract (`RULE-ENDP-055`) — is
+  no longer offered, whether the operator entry went, the field's whole
+  entry went, or the param it bound is gone. A stream filters on what the
+  endpoint offered, so its filter stops being expressible),
   conflict-keys-changed (the `conflict_keys` an upsert mode both releases
   ship matches on are not the same set. The key is endpoint-owned — a stream
   declares none — so a change re-keys every existing stream's upsert
@@ -164,13 +164,13 @@ rules for every document" says which file carries which artifact.
   `optional-output-added` names are a connector-level block, not this. Minor
   because nothing an existing stream binds stops resolving; a stream that
   maps its source without naming fields carries the new one too, so name the
-  added fields in the `note`), filter-operators-widened (a param offers an
-  operator it did not offer before, including a param newly declared with
-  `operators`. These are endpoint params, not the connection inputs
-  `optional-input-added` names), endpoint-capability-added (the additive
-  counterpart, and the same fallback: an endpoint both releases ship now
-  offers something a stream document can name that no category above
-  covers), type-map-rule-added.
+  added fields in the `note`), filter-operators-widened (a read operation
+  offers an operator on a field it did not offer before, including a field
+  newly entered in `filters`. These are read operations, not the connection
+  inputs `optional-input-added` names), endpoint-capability-added (the
+  additive counterpart, and the same fallback: an endpoint both releases
+  ship now offers something a stream document can name that no category
+  above covers), type-map-rule-added.
 - **patch**: bug-fix, doc-fix, tuning, capability-block-added (a top-level
   capability block the connector did not carry before (`sql_capabilities`,
   `error_map`) appears for the first time — neither an input, an output nor

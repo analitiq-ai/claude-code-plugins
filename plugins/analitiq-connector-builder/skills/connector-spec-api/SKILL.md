@@ -23,6 +23,8 @@ Pick what you need for the auth and pagination styles you're authoring:
   read this before authoring any endpoint request)
 - This skill's `spec-pagination.md` (for endpoint pagination)
 - This skill's `spec-replication.md` (for incremental sync)
+- This skill's `spec-filters.md` (which fields a stream may filter a read on,
+  and how each operator reaches the wire)
 - `connector-spec-db/spec-type-maps.md` for authoring the standalone
   `type-map-read.json` (same rule shape for API and DB; API ships the
   read direction only)
@@ -48,8 +50,8 @@ What to read instead:
 
 - `spec-request-binding.md` — how `params` reach a `request` (the part most
   likely to fail validation).
-- `spec-pagination.md` / `spec-replication.md` — choosing and wiring those
-  blocks.
+- `spec-pagination.md` / `spec-replication.md` / `spec-filters.md` — choosing
+  and wiring those blocks.
 - `connector-builder/references/rules/connector.md` — every rule binding the
   connector document, citable by id. Satisfy all of them.
 - `connector-builder/references/rules/api-endpoint.md` — the same, for each

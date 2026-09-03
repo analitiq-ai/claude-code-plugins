@@ -101,9 +101,10 @@ simpler and spares the runtime from computing an upper bound.
 
 Each param a cursor mapping names is an ordinary declared param: give it
 `controlled_by: "replication"` (`RULE-ENDP-011`), bind it with
-`{"from_param": …}` (`RULE-ENDP-009`), and declare no `operators` on it
-(`RULE-ENDP-002`) — replication owns its value, so an operator set advertises a
-filter the runtime overwrites and the run reports success over unfiltered data.
+`{"from_param": …}` (`RULE-ENDP-009`), and land no `operations.read.filters`
+entry on it (`RULE-ENDP-002`) — replication sets its value on every request, so
+a filter routed there advertises a predicate the runtime overwrites and the run
+reports success over unfiltered data.
 A window mapping wires `start_param` and `end_param` each that way.
 
 A cursor on `updated_at` requires `updated_at` to be a declared field of the

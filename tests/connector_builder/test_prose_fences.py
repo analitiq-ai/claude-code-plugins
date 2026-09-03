@@ -320,7 +320,7 @@ def test_every_block_is_annotated():
 # Coverage is a conscious number: adding a block (or changing a disposition)
 # must move this constant in the same change, so the validated surface never
 # shrinks silently.
-EXPECTED_DISPOSITIONS = {"validate": 14, "invalid": 0, "illustrative": 7}
+EXPECTED_DISPOSITIONS = {"validate": 16, "invalid": 1, "illustrative": 7}
 
 
 def test_disposition_counts_are_conscious():
@@ -488,6 +488,19 @@ HOSTS = {
     ("skills/connector-spec-api/spec-request-binding.md",
      "api-endpoint#/operations/write/upsert/request"):
         "tests/connector_builder/fixtures/prose-hosts/contact.json",
+    # The read fragments declare their own filter params, so no bundled example
+    # can host them: every declared param must be bound by exactly one request
+    # binding, and an example's params serve the operation it ships.
+    ("skills/connector-spec-api/spec-filters.md",
+     "api-endpoint#/operations/read"):
+        "tests/connector_builder/fixtures/prose-hosts/v1__invoices.json",
+    # The `filters`-only fragment names a param and a record field the host has
+    # to already declare, since the fragment shows neither.
+    ("skills/connector-spec-api/spec-filters.md",
+     "api-endpoint#/operations/read/filters"):
+        "tests/connector_builder/fixtures/prose-hosts/v1__events.json",
+    ("skills/connector-spec-api/spec-filters.md", "RULE-ENDP-066"):
+        "tests/connector_builder/fixtures/prose-hosts/v1__invoices.json",
     ("skills/connector-spec-db/spec-type-maps.md", "type-map-write"): STANDALONE,
 }
 
