@@ -1,8 +1,7 @@
 id: RULE-STRM-026
 statement: >
-  A filter on an API source MUST name a read parameter the referenced
-  endpoint declares filterable — one that publishes its own operator set and
-  is not reserved to the runtime.
+  A filter on an API source MUST name a record field the referenced endpoint
+  offers for filtering, and an operator that field gives a landing site.
 tier: referential
 severity: error
 scopes: [stream]
@@ -10,13 +9,12 @@ validator: null
 owners: [pipeline-plugin, engine]
 targets: [Filter]
 rationale: >
-  Filterability is declared per parameter in the api-endpoint document and
-  the stream carries no view of it, so the local check can prove only that
-  an operator is in the API vocabulary at all; the registry compares the
-  filter against that parameter's own subset on save. Two failures hide
-  here and look alike: a parameter that is filterable but does not accept
-  this operator, and a parameter the runtime owns — a pagination or
-  replication control — that the stream must not drive at all. Catching
-  either means reading the parameter's declaration in the endpoint document.
+  Which fields an API endpoint offers, and where each operator on them reaches
+  the wire, is declared in the api-endpoint document; the stream carries no view
+  of it, so the local check can prove only that an operator is in the API
+  vocabulary at all. Two failures hide here and look alike: a field the endpoint
+  offers but not with this operator, and a field it does not offer at all. Either
+  one is a filter with no landing site, which is a predicate the request cannot
+  express — catching it means reading the endpoint's map beside the filter.
 status: active
 superseded_by: null

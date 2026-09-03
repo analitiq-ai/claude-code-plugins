@@ -3363,59 +3363,69 @@ def _validate_filters_wiring(
     """
     for field, landings in filters.items():
         if not landings:
-            raise ValueError(
-                f"filters[{field!r}] declares no operator; omit the field instead "
-                "(spec: §Filters)"
+            raise violation(
+                "RULE-ENDP-065",
+                f"filters[{field!r}] declares no operator; omit the field instead",
             )
         seen: dict[tuple[str, str], str] = {}
         for operator, landing in landings.items():
             where = f"filters[{field!r}][{operator!r}]"
             if not isinstance(landing, dict):
-                raise ValueError(
-                    f"{where} must be a `{{from_param: <name>}}` or `{{template: ...}}` "
-                    "expression (spec: §Filters)"
+                raise violation(
+                    "RULE-ENDP-065",
+                    f"{where} must be a `{{from_param: <name>}}` or "
+                    "`{template: ...}` expression",
                 )
             declared = _FILTER_LANDING_KEYS & set(landing)
             if len(declared) != 1:
-                raise ValueError(
-                    f"{where} must declare exactly one of `from_param` or `template`; "
-                    f"got {sorted(declared) or 'neither'} (spec: §Filters)"
+                raise violation(
+                    "RULE-ENDP-065",
+                    f"{where} must declare exactly one of `from_param` or "
+                    f"`template`; got {sorted(declared) or 'neither'}",
                 )
             key = next(iter(declared))
             target = landing[key]
             if not isinstance(target, str) or not target:
-                raise ValueError(f"{where}.{key} must be a non-empty string (spec: §Filters)")
+                raise violation(
+                    "RULE-ENDP-065", f"{where}.{key} must be a non-empty string"
+                )
 
             if key == "from_param":
                 param = params.get(target)
                 if param is None:
-                    raise ValueError(f"{where} references unknown param {target!r} (spec: §Filters)")
+                    raise violation(
+                        "RULE-ENDP-065", f"{where} references unknown param {target!r}"
+                    )
                 if param.controlled_by is not None:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-002",
                         f"{where} names param {target!r}, which declares "
-                        f"controlled_by={param.controlled_by!r} — a param the runtime owns "
-                        "is never driven by a stream filter (spec: §Filters)"
+                        f"controlled_by={param.controlled_by!r} — a param the "
+                        "runtime owns is never driven by a stream filter",
                     )
             else:
                 unscoped = _first_unscoped_expression({"template": target})
                 if unscoped is not None:
-                    raise ValueError(
-                        f"{where}.template placeholder {unscoped!r} does not begin with a "
-                        "known resolution scope (spec: §Value Expressions)"
+                    raise violation(
+                        "RULE-ENDP-066",
+                        f"{where}.template placeholder {unscoped!r} does not begin "
+                        "with a known resolution scope",
                     )
                 if "${" + FILTER_VALUE_PLACEHOLDER + "}" not in target:
-                    raise ValueError(
+                    raise violation(
+                        "RULE-ENDP-066",
                         f"{where}.template never interpolates "
-                        f"`${{{FILTER_VALUE_PLACEHOLDER}}}`, so the comparison would be sent "
-                        "without the value the filter is narrowing on (spec: §Filters)"
+                        f"`${{{FILTER_VALUE_PLACEHOLDER}}}`, so the comparison "
+                        "would be sent without the value the filter narrows on",
                     )
 
             site = (key, target)
             if site in seen:
-                raise ValueError(
-                    f"{where} and filters[{field!r}][{seen[site]!r}] resolve to the same "
-                    f"landing site ({key}={target!r}) — two operators the wire cannot tell "
-                    "apart build one identical request (spec: §Filters)"
+                raise violation(
+                    "RULE-ENDP-065",
+                    f"{where} and filters[{field!r}][{seen[site]!r}] resolve to the "
+                    f"same landing site ({key}={target!r}) — two operators the wire "
+                    "cannot tell apart build one identical request",
                 )
             seen[site] = operator
 

@@ -320,7 +320,7 @@ def test_every_block_is_annotated():
 # Coverage is a conscious number: adding a block (or changing a disposition)
 # must move this constant in the same change, so the validated surface never
 # shrinks silently.
-EXPECTED_DISPOSITIONS = {"validate": 14, "invalid": 0, "illustrative": 7}
+EXPECTED_DISPOSITIONS = {"validate": 15, "invalid": 0, "illustrative": 7}
 
 
 def test_disposition_counts_are_conscious():
@@ -477,6 +477,11 @@ HOSTS = {
     ("skills/connector-spec-api/spec-replication.md",
      "api-endpoint#/operations/read/replication"):
         "tests/connector_builder/fixtures/prose-hosts/v1__items.json",
+    # The landing sites the fragment names have to be declared params, bound
+    # once each — so the host carries those and no pagination of its own.
+    ("skills/connector-spec-api/spec-filters.md",
+     "api-endpoint#/operations/read/filters"):
+        "tests/connector_builder/fixtures/prose-hosts/v1__charges.json",
     # The fragment replaces the whole read operation, so the host carries only
     # the id the fragment's `request.path` derives.
     ("skills/connector-spec-api/spec-request-binding.md",

@@ -57,9 +57,9 @@ rules for every document" says which file carries which artifact.
      it before comparing: an in-document `$ref` is followed and an `allOf`
      composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
      branch is not read as removed, and one that changed there is not missed.
-   - `operations.read.params.<name>.operators` — the operator members each
-     read param offers (`RULE-ENDP-055`). Read params only: a write mode
-     declares params through the same model, and a filter never names one.
+   - `operations.read.filters` — which record fields the read offers for
+     filtering, and the operator members each one offers (`RULE-ENDP-055`).
+     Reads only: a write mode declares no filters.
 
    Those are the interior sites with a category of their own. The interior is
    larger than they are, so compare the rest of it too — the read operation's

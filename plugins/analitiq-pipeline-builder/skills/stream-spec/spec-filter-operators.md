@@ -34,7 +34,10 @@ downstream, or ask the connector to expose a suitable parameter.
 - `like` / `ilike` accept SQL wildcard syntax in `value` (`%`, `_`). The engine
   routes these to the dialect's pattern operator.
 - `value` typing follows the referenced field (`RULE-STRM-027`).
-- `field` names a column (database) or a parameter key (API) — `RULE-STRM-022`.
+- `field` names a **record field** on either scope (`RULE-STRM-022`): a column of
+  the source endpoint's schema on a database source, a field the endpoint's read
+  `filters` map offers on an API source. It is never a provider parameter name —
+  the endpoint's map is what routes the comparison to a parameter.
 
 ## What the local validator still cannot check
 
@@ -50,11 +53,16 @@ above. Read the operator choice back to the user when the column type is
 unusual.
 
 For an API source, the endpoint document narrows the vocabulary further
-(`RULE-STRM-026`):
+(`RULE-STRM-026`). Read `operations.read.filters` on the endpoint:
 
-- `operators` present, no `controlled_by` → filterable; the declared list is the
-  subset that parameter accepts.
-- `controlled_by: "pagination"` or `controlled_by: "replication"` → runtime-owned,
-  never stream-owned. The runtime-side validator rejects a filter that targets
-  one, and such a parameter carries no `operators` to draw from anyway.
-- no `operators` → not filterable, whatever else the parameter declares.
+- a key for the field, carrying the operator → filterable with that operator.
+- a key for the field, without that operator → the provider offers no way to
+  send this comparison on this field. Pick an operator the field does offer, or
+  say so; there is no client-side fallback.
+- no key for the field → not filterable, whatever parameters the endpoint
+  declares.
+
+Each operator the map carries names where it reaches the wire — a parameter of
+its own, or a template rendering the comparison into the value. That is the
+endpoint author's concern, not the stream's; what matters here is that an
+operator with no entry cannot be asked for.

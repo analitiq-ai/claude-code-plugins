@@ -231,9 +231,9 @@ _FILTER_CONDITIONAL_RULES: dict[str, Any] = {
 class Filter(StrictModel):
     """Stream-owned read predicate.
 
-    Endpoint contracts own which fields/params are filterable and which
-    operators are allowed. Per spec §Filters, `value` is required except
-    when `operator` is a unary operator (`is_null` / `is_not_null`).
+    Endpoint contracts own which fields are filterable and which operators each
+    offers. Per spec §Filters, `value` is required except when `operator` takes
+    no operand.
     """
 
     model_config = ConfigDict(
@@ -244,7 +244,12 @@ class Filter(StrictModel):
     field: str = Field(
         ...,
         min_length=1,
-        description="Database field reference or API endpoint read parameter key.",
+        description=(
+            "Record field the predicate narrows on. A database source names a "
+            "column of the source endpoint's schema; an API source names a "
+            "field the endpoint's read `filters` map offers, and that map is "
+            "what turns the comparison into a request."
+        ),
     )
     operator: FilterOperator = Field(
         ...,

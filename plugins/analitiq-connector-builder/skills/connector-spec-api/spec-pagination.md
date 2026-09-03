@@ -30,8 +30,8 @@ request binding on its own**. Every param it names must be:
 3. **bound** into the request with `{"from_param": …}`.
 
 Miss any one and validation fails (RULE-ENDP-009, RULE-ENDP-010). A
-`controlled_by` param must **not** declare `operators`: pagination owns it, so a
-stream may not also filter on it (RULE-ENDP-002).
+`controlled_by` param must **not** be named as a filter operator's landing site:
+pagination owns its value, so a stream may not also drive it (RULE-ENDP-002).
 
 See `examples/api-key/endpoints/v1__items.json` for the full three-place
 wiring — every endpoint example under `examples/*/endpoints/` declares

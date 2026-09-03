@@ -94,9 +94,12 @@ was raised.
    - `request.transport_ref` — only if not the default transport.
    - `params` — declared operation inputs. `in` and `type` (the
      *request-input* type, not an Arrow type) each come from the vocabularies
-     `RULE-ENDP-050` prints; `operators` (`RULE-ENDP-055`) makes a param
-     stream-filterable and `controlled_by` (`RULE-ENDP-054`) hands it to
-     pagination or replication — never both on one param (`RULE-ENDP-002`).
+     `RULE-ENDP-050` prints; `controlled_by` (`RULE-ENDP-054`) hands a param to
+     pagination or replication.
+   - `filters` — which record fields a stream may filter on, and where each
+     operator reaches the wire (`RULE-ENDP-055`, `RULE-ENDP-065`,
+     `RULE-ENDP-066`). A param the runtime owns is never a landing site
+     (`RULE-ENDP-002`). See `skills/connector-spec-api/spec-filters.md`.
    - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
      `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are

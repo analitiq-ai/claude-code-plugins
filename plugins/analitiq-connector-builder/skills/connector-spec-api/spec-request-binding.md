@@ -127,10 +127,11 @@ though the response field it filters is `Timestamp(...)`.
 
 More param rules worth knowing while authoring:
 
-- **`operators` is the stream-filterability contract.** Declaring
-  `operators: ["gte", "lte"]` is what permits a downstream stream to filter on
-  that param, restricted to those operators. Omit it and the param is not
-  stream-filterable at all.
+- **Filterability is declared by the read operation's `filters` map, not by the
+  param.** A param is just a slot the request binds; what makes a *record field*
+  filterable is a key for it in `operations.read.filters`, and what makes an
+  operator available on that field is an entry naming where the comparison
+  reaches the wire (`RULE-ENDP-065`). See `spec-filters.md`.
 - **RULE-ENDP-003** — a container-typed `query` param has several legal
   spellings on the wire (repeated key, delimiter-joined, bracketed) and the
   provider accepts one, so the serialization has to be declared, not guessed.

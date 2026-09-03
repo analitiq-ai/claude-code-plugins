@@ -21,6 +21,8 @@ Pick what you need for the auth and pagination styles you're authoring:
 - This skill's `spec-transport.md` (for HTTP transport idioms)
 - This skill's `spec-request-binding.md` (how `params` reach a `request` —
   read this before authoring any endpoint request)
+- This skill's `spec-filters.md` (which fields a stream may filter on, and how
+  each operator is spelled on the wire)
 - This skill's `spec-pagination.md` (for endpoint pagination)
 - This skill's `spec-replication.md` (for incremental sync)
 - `connector-spec-db/spec-type-maps.md` for authoring the standalone
@@ -48,6 +50,8 @@ What to read instead:
 
 - `spec-request-binding.md` — how `params` reach a `request` (the part most
   likely to fail validation).
+- `spec-filters.md` — declaring which record fields a stream may filter on, and
+  where each operator lands.
 - `spec-pagination.md` / `spec-replication.md` — choosing and wiring those
   blocks.
 - `connector-builder/references/rules/connector.md` — every rule binding the
