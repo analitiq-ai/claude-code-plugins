@@ -161,7 +161,7 @@
             }
           ],
           "default": null,
-          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it renders around `${stream.filter.value}`, which it must interpolate at least once and must read nothing else from the stream scope \u2014 a value that drops the filter's own value carries a predicate the stream never asked for. A `ref` naming that path, and a template that is only that placeholder, are refused: both resolve to the filter's value unchanged, which omitting this field already spells. **A function is not decided here** \u2014 what it returns is the function's business, so one that returns its input unchanged is accepted and the author owns it.",
+          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it renders around `${stream.filter.value}`, which it must interpolate at least once and must read nothing else from the stream scope \u2014 a value that drops the filter's own value carries a predicate the stream never asked for. A `ref` naming that path is refused: it resolves to the filter's value unchanged, which omitting this field already spells. A template of only that placeholder is NOT that \u2014 resolution stringifies what it substitutes, so it is the way to ask for the value's string form. **A function is not decided here** \u2014 what it returns is the function's business, so one that returns its input unchanged is accepted and the author owns it; its `input` must address the value directly, since resolution does not reach into a plain object.",
           "title": "Value"
         }
       },

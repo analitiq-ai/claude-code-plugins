@@ -746,6 +746,38 @@ class TestFilterBindings:
         doc = parse_endpoint(payload)
         assert doc.operations.read.filters["created"]["gt"].param == "q"
 
+    def test_a_placeholder_only_template_is_a_string_coercion(self):
+        """Template resolution stringifies what it substitutes, so
+        `"${…}"` sends `"5"` where an omitted `value` sends `5`. That is a
+        transformation a typed request slot may need, not a restatement."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": {"gt": {
+                "param": "q",
+                "value": {"template": "${stream.filter.value}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        doc = parse_endpoint(payload)
+        assert doc.operations.read.filters["amount"]["gt"].param == "q"
+
+    def test_a_function_input_the_resolver_cannot_reach_is_refused(self):
+        """The filter value buried in a structural object under `input` is found
+        by a token walk and never by the resolver, which hands the whole object
+        to the function and gets nothing back — so the param drops and the read
+        goes out unfiltered, with the interpolation check satisfied."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount": {"gt": {
+                "param": "q",
+                "value": {"function": "url_encode",
+                          "input": {"nested": {"ref": "stream.filter.value"}}},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="cannot reach"):
+            parse_endpoint(payload)
+
     def test_literal_whitespace_around_the_placeholder_is_content(self):
         """A template renders its literal text, whitespace included, so
         `" ${…} "` puts a padded value on the wire — different from the bare

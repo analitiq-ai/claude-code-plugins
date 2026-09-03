@@ -281,7 +281,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="FilterBinding", field="value",
-        prose_hash="b5eaf57f7804",
+        prose_hash="be1b5fb7978c",
         rule_ids=("RULE-ENDP-067",),
         waiver=(
             "the description states its own unenforced half: whether a "

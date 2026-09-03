@@ -117,13 +117,17 @@ filter's own value:
 — the field and the operator are the keys it already sits under. A rendered
 value must interpolate it and must not restate it unchanged (`RULE-ENDP-067`):
 one that drops it carries a predicate the stream did not ask for, and a bare
-`{"ref": "stream.filter.value"}` — or a template that is only that placeholder —
-is what omitting `value` already spells.
+`{"ref": "stream.filter.value"}` is what omitting `value` already spells.
+
+A template of only that placeholder is a different thing and is allowed —
+resolution stringifies what it substitutes, so `{"template": "${stream.filter.value}"}`
+is how you ask for a numeric or boolean filter value in its string form.
 
 A `{"function": …}` wrapping the filter value is accepted whatever it returns:
 what a function renders is not knowable from the document, so the contract does
-not judge it. Reach for one when the provider needs the value transformed, not
-as a way to write the verbatim binding.
+not judge it. Its `input` must address the value directly, though —
+`{"input": {"ref": "stream.filter.value"}}`, never nested inside a plain object,
+which resolution hands to the function whole and cannot read.
 
 ## What you cannot author, and why
 

@@ -110,7 +110,7 @@ single field looks wrong.
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
 | RULE-ENDP-065 | Every operator a read operation offers on a filterable field MUST name a parameter that operation declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-066 | Two entries in a read operation's filter map MUST NOT bind the same parameter. | `api-endpoint` | error | validator |
-| RULE-ENDP-067 | A filter binding that renders its own value MUST interpolate the filter's value, MUST NOT restate it unchanged, and MUST read nothing else from the stream scope. | `api-endpoint` | error | validator |
+| RULE-ENDP-067 | A filter binding that renders its own value MUST interpolate the filter's value where resolution will reach it, MUST NOT restate it unchanged, and MUST read nothing else from the stream scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-068 | Every field a read operation offers filtering on MUST resolve to a field declared in the record shape the operation's response schema describes. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 

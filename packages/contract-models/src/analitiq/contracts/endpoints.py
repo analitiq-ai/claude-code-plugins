@@ -83,7 +83,6 @@ from analitiq.contracts.value_expression import (
     has_known_scope,
     iter_expression_strings,
     template_placeholders,
-    template_renders_only,
     validate_expression_shapes,
 )
 
@@ -531,11 +530,15 @@ class FilterBinding(_EndpointModel):
             "which it must interpolate at least once and must read nothing "
             "else from the stream scope — a value that drops the filter's own "
             "value carries a predicate the stream never asked for. A `ref` "
-            "naming that path, and a template that is only that placeholder, "
-            "are refused: both resolve to the filter's value unchanged, which "
-            "omitting this field already spells. **A function is not decided "
-            "here** — what it returns is the function's business, so one that "
-            "returns its input unchanged is accepted and the author owns it."
+            "naming that path is refused: it resolves to the filter's value "
+            "unchanged, which omitting this field already spells. A template "
+            "of only that placeholder is NOT that — resolution stringifies "
+            "what it substitutes, so it is the way to ask for the value's "
+            "string form. **A function is not decided here** — what it returns "
+            "is the function's business, so one that returns its input "
+            "unchanged is accepted and the author owns it; its `input` must "
+            "address the value directly, since resolution does not reach into "
+            "a plain object."
         ),
     )
 
@@ -3507,6 +3510,7 @@ def _validate_rendered_filter_value(value: Any, where: str) -> None:
     it — reporting that as a value that never does sends the author to fix the
     half of their template that was right.
     """
+    _reject_unreachable_function_input(value.model_dump(), where)
     tokens = list(_expression_tokens(value.model_dump()))
     stray = sorted(
         token for token in tokens
@@ -3534,22 +3538,58 @@ def _validate_rendered_filter_value(value: Any, where: str) -> None:
         )
 
 
+def _reject_unreachable_function_input(node: Any, where: str) -> None:
+    """Refuse a function whose `input` is a structural container.
+
+    The interpolation check below asks whether the filter's value appears
+    anywhere in the expression, and it walks structural containers to find it.
+    Resolution does not: a function's `input` is handed to the value-expression
+    resolver whole, which recognises the four expression forms and answers
+    `None` for a dict that is none of them — so the function receives nothing,
+    drops its field, and the param disappears from the request. The filter is
+    then satisfied on paper and absent from the wire, which is the unfiltered
+    read this map exists to prevent.
+
+    Rather than teach this check where each function looks — per-function
+    knowledge the contract would have to keep in step with the resolver — the
+    shape the two disagree about is made unrepresentable. What remains is
+    reachable by construction, so the interpolation check is sound on every
+    value that survives.
+    """
+    if not isinstance(node, dict):
+        return
+    if "function" in node:
+        inner = node.get("input")
+        if isinstance(inner, (dict, list)) and not (
+            isinstance(inner, dict) and set(_EXPRESSION_KEYS) & set(inner)
+        ):
+            raise ValueError(
+                f"{where}.value declares a function whose `input` is a plain "
+                "object, which resolution cannot reach into: it hands `input` "
+                "to the value-expression resolver whole, gets nothing back for "
+                "a shape that is not itself an expression, and drops the "
+                "field — so the filter's value never reaches the provider. "
+                "Address the value directly as the `input` "
+                "(spec: §Value Expressions)"
+            )
+        _reject_unreachable_function_input(inner, where)
+        return
+    for child in node.values():
+        _reject_unreachable_function_input(child, where)
+
+
 def _restates_the_filter_value(value: Any) -> bool:
     """True when a rendered `value` provably resolves to the filter's value unchanged.
 
-    Provably is the whole of it. Two forms settle it here: a `{ref}` naming the
-    path, and a template whose whole body is that one placeholder — whitespace
-    inside the braces included, since the resolver strips a placeholder before
-    looking it up. A `{function}` cannot be settled at all: what it returns is
-    the function's business, and one that returns its input unchanged is
-    indistinguishable from one that transforms it. So a function wrapping the
-    filter value is accepted, and whether it earns its place is the author's.
+    Only a `{ref}` naming the path does. A template does NOT, even when its
+    whole body is that one placeholder: template resolution stringifies what it
+    substitutes, so `"${...}"` puts `"5"` on the wire where the unrendered
+    binding puts `5` — a coercion a typed request slot may be the only way to
+    ask for. And a `{function}` cannot be settled at all: what it returns is the
+    function's business, and one that returns its input unchanged is
+    indistinguishable from one that transforms it.
     """
-    if isinstance(value, RefExpression):
-        return value.ref.strip() == FILTER_VALUE_REF
-    if isinstance(value, TemplateExpression):
-        return template_renders_only(value.template, FILTER_VALUE_REF)
-    return False
+    return isinstance(value, RefExpression) and value.ref.strip() == FILTER_VALUE_REF
 
 
 def _validate_param_binding_uniqueness(
