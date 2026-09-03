@@ -47,6 +47,16 @@ PARAM_VALUE_CONSTRAINT = (
     "binding resolved"
 )
 
+#: The filter map: which operator reaches the wire, and how.
+FILTER_BINDING = (
+    "an author declaring how an operator reaches the wire expects the run to "
+    "select that binding for a stream filter carrying it — RULE-ENDP-055 names "
+    "the vocabulary it is drawn from and RULE-ENDP-065 the binding it must "
+    "name; the pinned manifest claims no read of the map, so the run matches a "
+    "filter's field against the declared param names instead and sets that "
+    "param's value, and the operator selects nothing"
+)
+
 #: The wire half of a cursor mapping.
 CURSOR_MAPPING_WIRE = (
     "an author declaring how the watermark is compared and formatted expects "
@@ -116,6 +126,9 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "RULE-DBEP-013 forbids execution from branching on it, so the absence "
         "of a read is the rule being kept",
     ),
+    # --- endpoints.FilterBinding: neither half of a binding is read ---------
+    FieldDisposition("endpoints.FilterBinding", "param", "engine_gap", FILTER_BINDING),
+    FieldDisposition("endpoints.FilterBinding", "value", "engine_gap", FILTER_BINDING),
     # --- endpoints.Param: placement is graded at validation, the label is
     # for people, and the value constraints reach nobody.
     FieldDisposition(
@@ -150,16 +163,8 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "max_length", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "min_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
-    FieldDisposition(
-        "endpoints.Param", "operators", "authoring_only",
-        "read by the registry service's on-save comparison — the consumer "
-        "RULE-STRM-026's rationale describes — of a stream's filter against "
-        "the operators this param declares. RULE-STRM-026 names the "
-        "obligation on the filter; RULE-ENDP-002 and RULE-ENDP-055 name the "
-        "obligations on the set. The pinned manifest claims no read of the "
-        "set, so the run sends the filter with whatever operator the stream "
-        "declares",
-    ),
+    # --- endpoints.ReadOperation: the filter map ----------------------------
+    FieldDisposition("endpoints.ReadOperation", "filters", "engine_gap", FILTER_BINDING),
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(
         "endpoints.Replication", "supported_methods", "engine_gap",

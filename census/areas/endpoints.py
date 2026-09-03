@@ -272,16 +272,32 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="Param", field="controlled_by", prose_hash="d826ba713998", descriptive=True),
     ProseObligation(model="Param", field="default", prose_hash="95b46ea4340e", descriptive=True),
     ProseObligation(model="Param", field="location", prose_hash="4ad56f39fa37", descriptive=True),
+    ProseObligation(model="Param", field="style", prose_hash="491d84aaf9f9", descriptive=True),
+    ProseObligation(model="FilterBinding", prose_hash="e3c300caea17", descriptive=True),
     ProseObligation(
-        model="Param", field="operators",
-        prose_hash="c3ef12030ac5",
-        structural="typed as a list of `Literal` members — the operator vocabulary is the type",
+        model="FilterBinding", field="param",
+        prose_hash="a1ed888b1408",
+        rule_ids=("RULE-ENDP-002", "RULE-ENDP-065"),
+    ),
+    ProseObligation(
+        model="FilterBinding", field="value",
+        prose_hash="08748eab7c71",
+        rule_ids=("RULE-ENDP-067",),
+    ),
+    ProseObligation(
+        model="ReadOperation", field="filters",
+        prose_hash="01980b0c25eb",
+        rule_ids=("RULE-ENDP-055", "RULE-ENDP-066", "RULE-ENDP-068"),
+        structural=(
+            "the operator keys are a `Literal`, and the field keys are held to "
+            "RECORD_FIELD_PATH_PATTERN"
+        ),
         waiver=(
-            "the consequence of absence binds the stream document that "
-            "filters on this param, not a checkable shape of this endpoint"
+            "the sentence about what a STREAM may then declare binds the stream "
+            "document, which this endpoint never has in hand — RULE-STRM-026 "
+            "names that obligation and nothing applies it offline"
         ),
     ),
-    ProseObligation(model="Param", field="style", prose_hash="491d84aaf9f9", descriptive=True),
     ProseObligation(model="Param", field="type", prose_hash="e716f55ea092", descriptive=True),
     ProseObligation(model="PostReadRequest", prose_hash="ec73f959a39b", descriptive=True),
     ProseObligation(

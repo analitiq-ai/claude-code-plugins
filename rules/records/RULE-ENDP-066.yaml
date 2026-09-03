@@ -1,0 +1,21 @@
+id: RULE-ENDP-066
+statement: >
+  Two entries in a read operation's filter map MUST NOT send one parameter the
+  same value.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+rationale: >
+  Two entries routing to one param with one rendered value build the
+  byte-identical request, so the provider cannot tell the comparisons apart and
+  answers both with the rows of whichever one its own parameter means. The
+  stream that asked for the other gets wrong rows under a successful run — the
+  failure this map exists to make unrepresentable, and the reason the operator
+  is a key rather than a flag. It is checked across the whole map rather than
+  per field because two fields writing one param verbatim collide for the same
+  reason two operators do.
+status: active
+superseded_by: null

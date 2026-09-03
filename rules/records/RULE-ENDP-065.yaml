@@ -1,0 +1,21 @@
+id: RULE-ENDP-065
+statement: >
+  Every operator a read operation offers on a filterable field MUST name a
+  parameter that operation declares.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+rationale: >
+  A request binding maps a wire name to a value, so a declared param is the only
+  thing a value can be routed to; an operator naming no param names no route,
+  and the comparison it stands for cannot be sent. The offer is still made — a
+  stream reads the map to decide which operators it may filter with — so the
+  author of the stream picks an operator the endpoint advertises and the read
+  goes out without the predicate. This is the walk BACK the other wiring checks
+  do not make: they start from a block and confirm the param it names exists,
+  which leaves a declaration whose backing cannot exist accepted.
+status: active
+superseded_by: null

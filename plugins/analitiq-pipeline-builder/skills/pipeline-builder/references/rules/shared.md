@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns whose artifact kind has no file of its own in this set, plus the rules that bind every authored document. For a document of one of those kinds, this file is the whole of what this plugin's rules ask of it; a document whose kind has its own file needs only that file, even where a rule graded for it also appears here under another of its kinds.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 13 of the 20 below have no validator, so nothing rejects
+all hold: 13 of the 21 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **9** structural · **1** advisory · **5** referential · **3** procedural · **2** judgment.
+In this file: **9** structural · **2** advisory · **5** referential · **3** procedural · **2** judgment.
 
 ## Contents
 
@@ -38,7 +38,7 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
-| RULE-ENDP-055 | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. | `api-endpoint` | error | validator | `operators`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
+| RULE-ENDP-055 | The operators a read operation offers on a filterable field MUST come from the API filter-operator vocabulary the contract declares. | `api-endpoint` | error | validator | `filters`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
@@ -57,6 +57,7 @@ single field looks wrong.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
+| RULE-ENDP-068 | Every field a read operation offers filtering on MUST resolve to a field declared in the record shape the operation's response schema describes. | `api-endpoint` | error | validator |
 | RULE-RETRY-001 | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. | `any` | error | validator |
 
 ## Referential

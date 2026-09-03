@@ -1,20 +1,21 @@
 id: RULE-ENDP-002
 statement: >
-  A parameter declared as controlled by pagination or replication MUST NOT also
-  declare the operator set that makes it stream-filterable.
-tier: structural
+  A parameter the runtime controls MUST NOT be the landing site of a filter
+  binding.
+tier: advisory
 severity: error
 scopes: [api-endpoint]
-validator: "analitiq.contracts.endpoints::Param._validate"
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
-targets: [Param]
+targets: [ReadOperation]
 rationale: >
-  The operator set is the endpoint's promise that a downstream stream may filter
-  on that param; marking the param controlled hands its value to the paging or
-  incremental machinery, which sets it on every request. Declaring both
-  advertises a filter the runtime overwrites, so the stream's predicate vanishes
-  from the request and the run reports success over unfiltered data. It is a
-  conditional on the shape of one param object, mirrored declaratively into the
-  published schema, not an instance-relative comparison.
+  A filter binding is the endpoint's promise that a downstream stream may narrow
+  the read on that field; marking the param controlled hands its value to the
+  paging or incremental machinery, which sets it on every request. Declaring
+  both advertises a filter that is overwritten before the request goes out, so
+  the stream's predicate vanishes and the run reports success over unfiltered
+  data. The two halves sit in different blocks of the operation — the binding in
+  `filters`, the marker on the param — so no shape check on either alone can see
+  the conflict.
 status: active
 superseded_by: null

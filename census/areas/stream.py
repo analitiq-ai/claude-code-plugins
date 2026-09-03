@@ -185,7 +185,17 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "endpoint resolution"
         ),
     ),
-    ProseObligation(model="Filter", field="field", prose_hash="9fb3e42418e3", descriptive=True),
+    ProseObligation(
+        model="Filter", field="field",
+        prose_hash="18bb7a6c2763",
+        rule_ids=("RULE-STRM-022",),
+        waiver=(
+            "cross-document: the endpoint document declaring the field is not "
+            "part of the stream, so nothing local can resolve the name — on a "
+            "database source against the endpoint's columns, on an API source "
+            "against the read `filters` map"
+        ),
+    ),
     ProseObligation(
         model="Filter", field="operator", rule_ids=("RULE-STRM-012",),
         prose_hash="6382c8ad9ce6",

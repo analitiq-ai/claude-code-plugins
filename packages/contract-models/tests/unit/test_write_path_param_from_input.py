@@ -594,9 +594,9 @@ class TestAWritePathParamMustBeAbleToResolve:
     unimplementable: a write binding `{id}` to an `in: path`
     param that carries no `default`. On a write a param has exactly ONE source —
     its own `default`.
-    `operators` makes a param stream-filterable and `controlled_by` hands it to
-    pagination or replication; both are read-side and neither is reachable from
-    a write. So the placeholder provably can never be substituted, and the
+    A read operation's `filters` map makes a param stream-filterable and
+    `controlled_by` hands it to pagination or replication; both are read-side and
+    neither is reachable from a write. So the placeholder provably can never be substituted, and the
     endpoint is dead at the engine handshake while validating green.
 
     That is the sevdesk shape. It is refused here, naming the binding that
@@ -643,8 +643,8 @@ class TestAWritePathParamMustBeAbleToResolve:
                 },
                 "params": {"id": {
                     "in": "path", "type": "string", "required": True,
-                    "operators": ["eq"],
                 }},
+                "filters": {"id": {"eq": {"param": "id"}}},
                 "response": {
                     "records": {"ref": "response.body.objects"},
                     "schema": {

@@ -13,6 +13,7 @@ from pydantic import (
 )
 
 from analitiq.contracts.endpoints import (
+    API_FILTER_OPERATORS,
     ARROW_TYPE_PATTERN,
     WRITE_MODES,
     DatabaseObject,
@@ -204,18 +205,21 @@ def validate_endpoint_ref(data: Any) -> ConnectorEndpointRef | ConnectionEndpoin
 # Filter-operator vocabulary (spec §Filter Operators). The `Filter.operator`
 # Literal is the structural floor — the union of both scope vocabularies — and
 # `StreamSource` narrows it to the scope-appropriate subset (database operators
-# for a connection source, API operators for a connector source). The API set
-# mirrors `endpoints.Param.operators`; the finer per-endpoint subset an API
-# source may use is endpoint-owned and resolved at runtime.
+# for a connection source, API operators for a connector source). The finer
+# per-endpoint subset an API source may use is endpoint-owned: an api-endpoint's
+# read `filters` map says which operators it offers on which field, and how each
+# reaches the wire.
+#
+# The API half is `endpoints.ApiFilterOperator` — that is where an endpoint's own
+# filter map is keyed from, so the two sides of the same vocabulary are one
+# value. The database half is this module's, because nothing in the endpoint
+# contract expresses a SQL predicate.
 _COMMON_FILTER_OPERATORS = ("eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in")
 _DB_ONLY_FILTER_OPERATORS = ("is_null", "is_not_null", "like", "ilike")
-_API_ONLY_FILTER_OPERATORS = ("contains", "starts_with", "ends_with")
 _DB_FILTER_OPERATORS: frozenset[str] = frozenset(
     _COMMON_FILTER_OPERATORS + _DB_ONLY_FILTER_OPERATORS
 )
-_API_FILTER_OPERATORS: frozenset[str] = frozenset(
-    _COMMON_FILTER_OPERATORS + _API_ONLY_FILTER_OPERATORS
-)
+_API_FILTER_OPERATORS: frozenset[str] = frozenset(API_FILTER_OPERATORS)
 FilterOperator = Literal[
     "eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in",  # common
     "is_null", "is_not_null", "like", "ilike",              # database-only
@@ -261,7 +265,13 @@ class Filter(StrictModel):
     field: str = Field(
         ...,
         min_length=1,
-        description="Database field reference or API endpoint read parameter key.",
+        description=(
+            "Record field this predicate narrows on, named as the endpoint "
+            "document on this side of the transfer declares it (RULE-STRM-022). "
+            "A database source resolves it to a column; an API source resolves "
+            "it in the endpoint's read `filters` map, which says which operators "
+            "it offers on that field and how each reaches the wire."
+        ),
     )
     operator: FilterOperator = Field(
         ...,

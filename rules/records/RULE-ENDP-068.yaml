@@ -1,0 +1,20 @@
+id: RULE-ENDP-068
+statement: >
+  Every field a read operation offers filtering on MUST resolve to a field
+  declared in the record shape the operation's response schema describes.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, pipeline-plugin, engine]
+targets: [ReadOperation]
+rationale: >
+  The key is what a stream's filter field resolves against (RULE-STRM-022), so a
+  key the record shape does not declare offers a filter on a field this endpoint
+  never says it returns: the stream's reference resolves to a declaration and the
+  declaration resolves to nothing, and no later check can tell that from a field
+  the provider merely mentions in prose. Resolving it against the declared record
+  shape is the same answer the replication cursor field gets, for the same
+  reason — both name a field read off a record rather than off the response body.
+status: active
+superseded_by: null

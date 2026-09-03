@@ -21,6 +21,7 @@ Stream-side endpoint references (``EndpointRef``) live in ``analitiq.contracts.s
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -387,12 +388,11 @@ _UNBOUNDABLE_EXPRESSION_KEY = "literal"
 # ---------------------------------------------------------------------------
 
 
-# Declarative mirror of `Param._validate`'s cross-field rules for the published
+# Declarative mirror of `Param._validate`'s cross-field rule for the published
 # schema: a `query` param of `array`/`object` type must declare `style` and
-# `explode` (non-null); a `controlled_by` param must not declare `operators`.
-# Keyed on the wire name `in` (the `location` alias). `then` pins the required
-# fields to non-null types because they render nullable and the runtime demands
-# a value.
+# `explode` (non-null). Keyed on the wire name `in` (the `location` alias).
+# `then` pins the required fields to non-null types because they render
+# nullable and the runtime demands a value.
 _PARAM_SCHEMA_RULES: dict[str, Any] = {
     "allOf": [
         {
@@ -410,13 +410,6 @@ _PARAM_SCHEMA_RULES: dict[str, Any] = {
                     "explode": {"type": "boolean"},
                 },
             },
-        },
-        {
-            "if": {
-                "required": ["controlled_by"],
-                "properties": {"controlled_by": {"not": {"type": "null"}}},
-            },
-            "then": {"properties": {"operators": {"type": "null"}}},
         },
     ],
 }
@@ -445,16 +438,6 @@ class Param(_EndpointModel):
     max_length: StrictNonNegativeInt | None = Field(default=None, alias="maxLength")
     min_items: StrictNonNegativeInt | None = Field(default=None, alias="minItems")
     max_items: StrictNonNegativeInt | None = Field(default=None, alias="maxItems")
-    operators: list[Literal[
-        "eq", "neq", "gt", "gte", "lt", "lte",
-        "in", "not_in", "contains", "starts_with", "ends_with",
-    ]] | None = Field(
-        default=None,
-        description=(
-            "Subset of the Analitiq operator vocabulary stream filters may use. "
-            "Absence means the param is not stream-filterable."
-        ),
-    )
     controlled_by: Literal["pagination", "replication"] | None = Field(
         default=None,
         description="Marks the param as owned by pagination or replication.",
@@ -474,11 +457,6 @@ class Param(_EndpointModel):
                 "from_input is invalid in params.<name>.default "
                 "(spec: §Cross-Field Validation)"
             )
-        if self.controlled_by is not None and self.operators is not None:
-            raise ValueError(
-                "params with `controlled_by` must not declare `operators` "
-                "(spec: §Parameter Validation and Operators)"
-            )
         if (self.location == "query" and self.type in ("array", "object")
                 and (self.style is None or self.explode is None)):
             raise ValueError(
@@ -486,6 +464,63 @@ class Param(_EndpointModel):
                     "(spec: §Parameter Validation and Operators)"
                 )
         return self
+
+
+# ---------------------------------------------------------------------------
+# Filter bindings
+# ---------------------------------------------------------------------------
+
+
+# The operator vocabulary a stream may filter an API read with. Deliberately
+# excludes the SQL-only operators: those compile into a predicate a dialect
+# expresses, and an HTTP provider has no equivalent to serialise them into.
+#
+# `stream.py` derives its API half from this Literal and pins the two at import.
+ApiFilterOperator = Literal[
+    "eq", "neq", "gt", "gte", "lt", "lte",
+    "in", "not_in", "contains", "starts_with", "ends_with",
+]
+API_FILTER_OPERATORS: tuple[str, ...] = get_args(ApiFilterOperator)
+
+
+#: The one resolution path a filter binding's rendered `value` reads: the value
+#: the stream's own filter carries. A binding is already scoped to one field and
+#: one operator by the keys it sits under, so nothing else about the filter is
+#: addressable — and a path repeating the field key could disagree with the key
+#: above it.
+FILTER_VALUE_REF = "stream.filter.value"
+
+
+class FilterBinding(_EndpointModel):
+    """How one operator on one filterable record field reaches the wire.
+
+    A request binding maps a wire name to a value, so a **param** is the only
+    thing a value can be routed to; the operator therefore selects which param
+    carries the comparison. Providers that spell the comparison inside the value
+    instead (`amount=<>0`, `$filter=amount gt 100`) render it with `value`.
+    """
+
+    param: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Declared param that carries this comparison. `request.query` / "
+            "`headers` / `path_params` already say how that param reaches the "
+            "wire, so the operator selects a binding rather than introducing a "
+            "second spelling grammar. The param must not be `controlled_by`: "
+            "pagination and replication set those on every request, so a filter "
+            "routed to one is overwritten."
+        ),
+    )
+    value: Expression | None = Field(  # type: ignore[valid-type]
+        default=None,
+        description=(
+            "What the param receives. Omitted, it receives the filter's value "
+            f"verbatim; present, it must interpolate `${{{FILTER_VALUE_REF}}}` "
+            "at least once — a rendered value that drops the filter's own value "
+            "sends a predicate the stream never asked for."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2006,6 +2041,26 @@ class ReadOperation(_EndpointModel):
         ),
     )
     replication: Replication | None = Field(default=None)
+    filters: dict[str, Annotated[dict[ApiFilterOperator, FilterBinding], Field(min_length=1)]] = Field(
+        default_factory=dict,
+        description=(
+            "Which record fields a stream may filter this read on, and how each "
+            "operator reaches the wire. Keys are dotted record field paths, "
+            "resolved against the record shape `response.records` selects — the "
+            "same declared-path resolution a replication `cursor_field` gets. "
+            "Under each field, one entry per operator the endpoint offers; a "
+            "field with no entries offers no filtering and is omitted. An "
+            "operator with no entry cannot be sent, so a stream must not "
+            "declare it (RULE-STRM-026), and no two entries in the whole map "
+            "may resolve to the same param and rendered value — that is exactly "
+            "the pair of filters that would build one request and return the "
+            "rows of only one of them."
+        ),
+        json_schema_extra={
+            "propertyNames": {"pattern": RECORD_FIELD_PATH_PATTERN},
+            "additionalProperties": {"minProperties": 1},
+        },
+    )
 
     @model_validator(mode="after")
     def _wiring(self) -> "ReadOperation":
@@ -2051,11 +2106,15 @@ class ReadOperation(_EndpointModel):
                 where="pagination.keyset.order_by_field",
             )
 
+        _validate_filter_bindings(
+            self.filters, self.params, records_array_node, self.response.schema_
+        )
+
         # Last: the records anchor and the cursor fields are the paths an author
         # is most likely to have got right, so reporting them first keeps the
         # broader pagination/metadata sweep from masking a simpler error.
         _validate_response_body_paths(
-            self.response, self.pagination, self.request, self.params
+            self.response, self.pagination, self.request, self.params, self.filters
         )
 
         return self
@@ -3224,6 +3283,7 @@ def _validate_response_body_paths(
     pagination: Any,
     request: Any = None,
     params: dict[str, "Param"] | None = None,
+    filters: "dict[str, dict[str, FilterBinding]] | None" = None,
 ) -> None:
     """RULE-ENDP-023: every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
@@ -3305,6 +3365,18 @@ def _validate_response_body_paths(
                 operation=_OperationKind.READ,
                 can_read_response=False,
             ))
+    # A filter binding's rendered value goes onto the wire in the request it
+    # shapes, so it is a request-time slot like the rest: no `response.*` value
+    # exists yet, and its leading scope has to be one the resolver knows.
+    for field_path, bindings in (filters or {}).items():
+        for operator, binding in bindings.items():
+            if binding.value is not None:
+                sites.append(_ExpressionSite(
+                    where=f"filters[{field_path!r}][{operator!r}].value",
+                    payload=binding.value.model_dump(),
+                    operation=_OperationKind.READ,
+                    can_read_response=False,
+                ))
 
     _sweep_expression_sites(
         sites, response.schema_, frozenset(response.metadata or {})
@@ -3331,6 +3403,95 @@ def _validate_replication_wiring(replication: Replication, params: dict[str, Par
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
+
+
+def _validate_filter_bindings(
+    filters: dict[str, dict[str, FilterBinding]],
+    params: dict[str, Param],
+    records_array_node: dict[str, Any],
+    response_schema: Any,
+) -> None:
+    """Every offered operator names one landing site, and no two share one.
+
+    This is the walk BACK that the other wiring checks do not make: they start
+    from a block and confirm the param it names exists, so a declaration whose
+    backing cannot exist was accepted. Here the declaration IS the filter
+    surface, and an operator that reaches no param would be offered to every
+    stream and sent by none.
+
+    The uniqueness clause is what the whole block exists for. A landing site is
+    the pair (param, rendered value): two entries sharing one build the
+    byte-identical request, so the operator an author wrote is not the
+    comparison the provider performs and the read succeeds with the wrong rows.
+    It is checked across the WHOLE map, not per field — `amount gt` and
+    `created gt` both writing the raw value into one param is the same request
+    twice for the same reason.
+    """
+    seen: dict[tuple[str, str], tuple[str, str]] = {}
+    for field_path, bindings in filters.items():
+        _validate_record_field_path(
+            field_path, records_array_node, response_schema,
+            where="filters key",
+        )
+        for operator, binding in bindings.items():
+            where = f"filters[{field_path!r}][{operator!r}]"
+            param = params.get(binding.param)
+            if param is None:
+                raise ValueError(
+                    f"{where} references unknown param {binding.param!r} "
+                    "(spec: §Cross-Field Validation)"
+                )
+            if param.controlled_by is not None:
+                raise ValueError(
+                    f"{where} binds param {binding.param!r}, which declares "
+                    f"controlled_by={param.controlled_by!r}: the runtime sets "
+                    "that param on every request, so the filter's value is "
+                    "overwritten and the predicate vanishes. Declare a separate "
+                    "param for the filter (spec: §Parameter Validation and Operators)"
+                )
+            if binding.value is not None:
+                if FILTER_VALUE_REF not in set(_expression_tokens(binding.value.model_dump())):
+                    raise ValueError(
+                        f"{where}.value never interpolates "
+                        f"${{{FILTER_VALUE_REF}}}, so the filter's own value "
+                        "does not reach the provider and the request carries a "
+                        "predicate the stream did not ask for "
+                        "(spec: §Request Parameter Binding)"
+                    )
+                stray = sorted(
+                    token for token in _expression_tokens(binding.value.model_dump())
+                    if token.split(".")[0] == "stream" and token != FILTER_VALUE_REF
+                )
+                if stray:
+                    raise ValueError(
+                        f"{where}.value references {stray!r}; a filter binding "
+                        f"reads only ${{{FILTER_VALUE_REF}}} from the stream "
+                        "scope — its field and operator are the keys it sits "
+                        "under (spec: §Value Expressions)"
+                    )
+            site = (binding.param, _rendered_value_key(binding.value))
+            clash = seen.get(site)
+            if clash is not None:
+                raise ValueError(
+                    f"{where} and filters[{clash[0]!r}][{clash[1]!r}] both send "
+                    f"param {binding.param!r} the same value, so they build the "
+                    "identical request: the provider cannot tell the two "
+                    "comparisons apart and one of them reads the wrong rows. "
+                    "Give each its own param, or render its own value "
+                    "(spec: §Cross-Field Validation)"
+                )
+            seen[site] = (field_path, operator)
+
+
+def _rendered_value_key(value: Any) -> str:
+    """A stable key for what a binding puts on the wire.
+
+    `None` (the filter's value verbatim) and each distinct rendered expression
+    are different wire values; two spellings of one expression are not.
+    """
+    if value is None:
+        return ""
+    return json.dumps(value.model_dump(), sort_keys=True, default=str)
 
 
 def _validate_param_binding_uniqueness(

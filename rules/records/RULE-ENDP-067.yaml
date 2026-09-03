@@ -1,0 +1,21 @@
+id: RULE-ENDP-067
+statement: >
+  A filter binding that renders its own value MUST interpolate the filter's
+  value, and MUST read nothing else from the stream scope.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+rationale: >
+  A rendered value exists for the providers that spell a comparison inside the
+  value rather than in the key, so what it renders around is the filter's own
+  value; one that never interpolates it sends a predicate the stream did not
+  ask for, which is the same wrong-rows-on-a-green-run failure the map exists to
+  prevent, re-entering through the door the map opened. Nothing else about the
+  filter is addressable because nothing else is unambiguous: a binding is
+  already scoped to one field and one operator by the keys it sits under, so a
+  path naming either could disagree with the key above it.
+status: active
+superseded_by: null

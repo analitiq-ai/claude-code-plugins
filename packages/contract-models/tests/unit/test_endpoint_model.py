@@ -206,7 +206,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"unused": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"unused": {"in": "query", "type": "string", "required": False}},
             )},
         )
         with pytest.raises(ValidationError, match="not referenced"):
@@ -216,7 +216,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"status": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"status": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"status": {"from_param": "status"}}},
             )},
         )
@@ -226,7 +226,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"a": {"from_param": "p"}, "b": {"from_param": "p"}}},
             )},
         )
@@ -239,8 +239,8 @@ class TestParamBindingUniqueness:
             endpoint_id="x",
             operations={"read": _read_op_with(
                 params={
-                    "qa": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
-                    "qb": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
+                    "qa": {"in": "query", "type": "string", "required": False},
+                    "qb": {"in": "query", "type": "string", "required": False},
                 },
                 request_extras={"query": {"a": {"from_param": "qa"}, "b": {"from_param": "qb"}}},
             )},
@@ -545,13 +545,6 @@ class TestCursorMapping:
 
 
 class TestParamValidate:
-    def test_controlled_by_and_operators_mutex(self):
-        with pytest.raises(ValidationError, match="must not declare `operators`"):
-            Param(**{
-                "in": "query", "type": "string", "required": False,
-                "controlled_by": "pagination", "operators": ["eq"],
-            })
-
     def test_query_array_requires_style_and_explode(self):
         with pytest.raises(ValidationError, match="`style` and `explode`"):
             Param(**{"in": "query", "type": "array", "required": False})
@@ -565,6 +558,165 @@ class TestParamValidate:
                 "in": "body", "type": "object", "required": False,
                 "default": {"from_input": "record"},
             })
+
+
+# ---------------------------------------------------------------------------
+# §Filter Bindings: which operator reaches the wire, and how
+# ---------------------------------------------------------------------------
+
+
+def _read_op_with_filters(params, filters, query, record_fields=("amount", "created")):
+    """A read operation whose record shape declares the fields `filters` keys on."""
+    op = _read_op_with(params, request_extras={"query": query}, response={
+        "records": {"ref": "response.body"},
+        "schema": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {name: {"type": "string"} for name in record_fields},
+            },
+        },
+    })
+    op["filters"] = filters
+    return op
+
+
+class TestFilterBindings:
+    """An operator a stream may filter with names exactly one landing site.
+
+    The defect being closed: an endpoint declared WHICH operators a param
+    accepted and nothing said how each was spelled on the wire, so every
+    operator on one param built the byte-identical request and the read
+    succeeded with the wrong rows.
+    """
+
+    def test_a_param_cannot_declare_an_operator_set(self):
+        """The shape that made three operators build one request is gone."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with(
+            {"name": {
+                "in": "query", "type": "string", "required": False,
+                "operators": ["eq", "contains", "starts_with"],
+            }},
+            request_extras={"query": {"name": {"from_param": "name"}}},
+        )})
+        with pytest.raises(ValidationError, match="operators"):
+            parse_endpoint(payload)
+
+    def test_each_operator_names_its_own_landing_site(self):
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={
+                "minAmount": {"in": "query", "type": "number", "required": False},
+                "maxAmount": {"in": "query", "type": "number", "required": False},
+            },
+            filters={"amount": {
+                "gt": {"param": "minAmount"},
+                "lt": {"param": "maxAmount"},
+            }},
+            query={
+                "min_amount": {"from_param": "minAmount"},
+                "max_amount": {"from_param": "maxAmount"},
+            },
+        )})
+        doc = parse_endpoint(payload)
+        assert set(doc.operations.read.filters["amount"]) == {"gt", "lt"}
+
+    def test_two_operators_sharing_one_landing_site_are_refused(self):
+        """`gt` and `lt` into one param is the wrong-rows shape, respelled."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"amount": {"in": "query", "type": "number", "required": False}},
+            filters={"amount": {
+                "gt": {"param": "amount"},
+                "lt": {"param": "amount"},
+            }},
+            query={"amount": {"from_param": "amount"}},
+        )})
+        with pytest.raises(ValidationError, match="build the identical request"):
+            parse_endpoint(payload)
+
+    def test_an_operator_naming_an_undeclared_param_is_refused(self):
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"amount": {"in": "query", "type": "number", "required": False}},
+            filters={"amount": {"gt": {"param": "nope"}}},
+            query={"amount": {"from_param": "amount"}},
+        )})
+        with pytest.raises(ValidationError, match="references unknown param 'nope'"):
+            parse_endpoint(payload)
+
+    def test_an_operator_binding_a_runtime_owned_param_is_refused(self):
+        """Pagination and replication set their params on every request, so a
+        filter routed to one is overwritten and the predicate vanishes."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={
+                "cursor": {
+                    "in": "query", "type": "string", "required": False,
+                    "controlled_by": "pagination",
+                },
+            },
+            filters={"amount": {"gt": {"param": "cursor"}}},
+            query={"cursor": {"from_param": "cursor"}},
+        )})
+        with pytest.raises(ValidationError, match="the predicate vanishes"):
+            parse_endpoint(payload)
+
+    def test_a_filters_key_must_name_a_declared_record_field(self):
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"nosuchfield": {"eq": {"param": "q"}}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="filters key 'nosuchfield'"):
+            parse_endpoint(payload)
+
+    def test_two_fields_writing_one_param_verbatim_are_refused(self):
+        """The same identical-request defect across fields rather than operators."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={
+                "amount": {"gt": {"param": "q"}},
+                "created": {"gt": {"param": "q"}},
+            },
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="build the identical request"):
+            parse_endpoint(payload)
+
+    def test_a_value_reading_another_stream_path_is_refused(self):
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": "${stream.stream_id}>${stream.filter.value}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="reads only"):
+            parse_endpoint(payload)
+
+    def test_a_value_carried_operator_interpolates_the_filter_value(self):
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": "created>${stream.filter.value}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        doc = parse_endpoint(payload)
+        assert doc.operations.read.filters["created"]["gt"].param == "q"
+
+    def test_a_value_that_drops_the_filter_value_is_refused(self):
+        """A rendered value that never interpolates the filter sends a predicate
+        the stream did not ask for — the wrong-rows failure through a new door."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": "created>${connection.parameters.since}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="(?i)filter's value|stream.filter"):
+            parse_endpoint(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -1991,7 +2143,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "rogue": 1}}},
             )},
         )
@@ -2002,7 +2154,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "secrets.api_key", "rogue": 1}}},
             )},
         )
@@ -2013,7 +2165,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "x", "template": "y"}}},
             )},
         )
@@ -2025,7 +2177,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "x-vendor": "wise"}}},
             )},
         )
@@ -2042,7 +2194,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "stream.api_key"}}},
             )},
         )
@@ -2053,7 +2205,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "state.last_run"}}},
             )},
         )
@@ -2420,7 +2572,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"region": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"region": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {
                     "region": {"from_param": "region"},
                     "lookup": {
@@ -2469,7 +2621,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"r": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"r": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"q": {
                     "function": "lookup",
                     "input": {"from_param": "r", "rogue": 1},
