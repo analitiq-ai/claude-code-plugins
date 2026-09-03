@@ -276,7 +276,9 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ReadOperation", field="filters",
         prose_hash="2285a7543c6d",
-        rule_ids=("RULE-ENDP-055", "RULE-ENDP-066", "RULE-ENDP-068"),
+        rule_ids=(
+            "RULE-ENDP-055", "RULE-ENDP-065", "RULE-ENDP-066", "RULE-ENDP-068",
+        ),
         structural=(
             "the operator keys are a `Literal`, the field keys carry "
             "RECORD_FIELD_PATH_PATTERN through the key type itself, and an "

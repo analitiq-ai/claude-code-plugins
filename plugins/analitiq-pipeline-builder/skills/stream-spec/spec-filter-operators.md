@@ -73,7 +73,7 @@ Given an endpoint whose read operation declares
 ```json
 {
   "filters": {
-    "amount": { "gt": { "param": "min_amount" } }
+    "amount": { "gt": "min_amount" }
   }
 }
 ```
