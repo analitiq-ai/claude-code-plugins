@@ -1,4 +1,9 @@
-"""Pin the researcher's grounding instructions to the ProviderFacts fragment.
+"""Pin the researcher's fact fragments to the shapes they defer to.
+
+Two guards live here. The second is below, under "the param shape is the
+contract's"; this docstring's subject is the first.
+
+Pin the researcher's grounding instructions to the ProviderFacts fragment.
 
 `io-contracts.md` owns the ProviderFacts JSON Schema fragment;
 `connector-provider-researcher.md` restates several of its database-branch
@@ -172,3 +177,61 @@ def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
         "plugins/analitiq-connector-builder/agents/db-connector-creator.md, "
         "and this expectation together."
     )
+
+
+# ---------------------------------------------------------------------------
+# The param shape is the contract's
+# ---------------------------------------------------------------------------
+
+
+def _endpoint_facts_schema() -> dict:
+    """The first ```json fenced block inside the `## EndpointFacts` section."""
+    text = IO_CONTRACTS.read_text(encoding="utf-8")
+    section = re.search(
+        r"^## EndpointFacts.*?$(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL
+    )
+    assert section, f"{IO_CONTRACTS}: no '## EndpointFacts' heading"
+    fence = re.search(r"^```json\n(.*?)^```", section.group(1), re.MULTILINE | re.DOTALL)
+    assert fence, f"{IO_CONTRACTS}: no ```json block inside the EndpointFacts section"
+    return json.loads(fence.group(1))
+
+
+API_ENDPOINT_LATEST = REPO_ROOT / "schemas" / "api-endpoint" / "latest.json"
+
+
+def test_request_params_defers_to_the_contract_param_shape():
+    """A researched request parameter IS an api-endpoint param, by reference.
+
+    Enumerating a param's keys here is a hand-maintained copy of `Param`, and
+    it was one: it shipped naming a subset of the model's fields, and each one
+    it omitted surfaced as a separate review finding — a placement, a type, a
+    serialization pair — because a creator authoring only from these facts
+    cannot declare what they do not carry. The shape has ONE owner, so this
+    fragment references it.
+
+    Structural, not semantic (`.claude/rules/guards.md`): the fenced block is
+    parsed and the pointer is resolved against the rendered schema. Re-adding
+    an enumeration fails on the missing `$ref`; renaming the definition the
+    pointer names fails on resolution.
+    """
+    entry = _endpoint_facts_schema()["properties"]["request_params"]
+    value = entry.get("additionalProperties")
+    assert isinstance(value, dict) and "$ref" in value, (
+        "EndpointFacts.request_params must reference the api-endpoint param "
+        "definition rather than enumerate a param's keys — a curated copy of "
+        f"`Param` goes stale the moment the contract gains a field. Got: {value!r}"
+    )
+    ref = value["$ref"]
+    url, _, pointer = ref.partition("#")
+    assert url == "https://schemas.analitiq.ai/api-endpoint/latest.json", (
+        f"the reference must name the published api-endpoint schema; got {url!r}")
+
+    node = json.loads(API_ENDPOINT_LATEST.read_text(encoding="utf-8"))
+    for token in [t for t in pointer.split("/") if t]:
+        assert token in node, (
+            f"{ref} does not resolve in the rendered api-endpoint schema: "
+            f"{token!r} is not there. The definition was renamed, so the "
+            "fragment points at nothing and the researcher has no shape to fill.")
+        node = node[token]
+    assert node.get("type") == "object" and "properties" in node, (
+        f"{ref} resolves to something that is not a param object: {node!r}")

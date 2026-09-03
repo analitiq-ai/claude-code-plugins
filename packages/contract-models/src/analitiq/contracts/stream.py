@@ -482,7 +482,7 @@ class StreamSource(StrictModel):
             # written. The database branch keeps every spelling: a column is
             # whatever the provider named it, and nothing narrows that.
             for filt in self.filters:
-                if not RECORD_FIELD_PATH_RE.match(filt.field):
+                if not RECORD_FIELD_PATH_RE.fullmatch(filt.field):
                     raise violation(
                         "RULE-STRM-022",
                         f"filters[].field {filt.field!r} is not a record field "

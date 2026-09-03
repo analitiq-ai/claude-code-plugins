@@ -45,9 +45,13 @@ aliasing joins the sweep on its own.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
+import analitiq.contracts
+from analitiq.contracts import endpoints, stream
 from analitiq.contracts.shared.introspect import contract_classes
 
 
@@ -148,3 +152,42 @@ def test_the_wire_spelling_still_works() -> None:
     assert accepted.location == "query"
     with pytest.raises(ValidationError):
         Param.model_validate({"location": "query", "type": "string", "required": True})
+
+
+# ---------------------------------------------------------------------------
+# Anchored patterns are applied with fullmatch
+# ---------------------------------------------------------------------------
+
+
+def test_anchored_patterns_are_applied_with_fullmatch():
+    """A `$`-anchored pattern applied with `re.match` accepts a trailing newline.
+
+    `$` matches before a final `\\n`, so `match` on `^[a-z_]+$` admits
+    `"total\\n"` — a key no provider has, that every later comparison treats as
+    the key without it. This contract has closed the hole three times, by
+    fullmatch and a comment each time, and left other call sites open: a record
+    field path and a `response.metadata` key both accepted a trailing newline.
+
+    So the rule is applied here rather than remembered: any compiled `*_RE`
+    whose pattern ends in `$` may only be called with `fullmatch`. Source-level
+    and lexical — it reads this package's own code for a call shape, never
+    prose for a meaning.
+    """
+    src_root = Path(analitiq.contracts.__path__[0])
+    anchored = {
+        name.removesuffix("_PATTERN")
+        for module in (endpoints, stream)
+        for name, value in vars(module).items()
+        if name.endswith("_PATTERN") and isinstance(value, str) and value.endswith("$")
+    }
+    assert anchored, "found no anchored patterns — the guard has stopped measuring"
+
+    offenders = []
+    for path in sorted(src_root.rglob("*.py")):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for stem in anchored:
+                if f"{stem}_RE.match(" in line:
+                    offenders.append(f"{path.relative_to(src_root)}:{lineno} {stem}_RE.match(")
+    assert not offenders, (
+        "an anchored pattern is applied with `match`, which accepts a trailing "
+        "newline; use `fullmatch`:\n  " + "\n  ".join(offenders))

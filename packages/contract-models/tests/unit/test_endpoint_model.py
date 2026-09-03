@@ -695,6 +695,19 @@ class TestFilterBindings:
         with pytest.raises(ValidationError, match="filters key 'meta.nope'"):
             parse_endpoint(_minimal_api_payload(operations={"read": op}))
 
+    def test_a_key_with_a_trailing_newline_is_refused(self):
+        """`$` matches before a trailing newline, so an anchored pattern applied
+        with `match` accepts `"amount\n"` — the hole this contract already
+        closed for path placeholders and Arrow types."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"amount\n": {"gt": "q"}},
+            query={"q": {"from_param": "q"}},
+            record_fields=("amount\n",),
+        )})
+        with pytest.raises(ValidationError):
+            parse_endpoint(payload)
+
     def test_a_key_that_is_not_a_record_field_path_is_refused(self):
         """The pattern rides the KEY's own type: a `Field(pattern=...)` reaches
         a value and never a key, so without it the models accept a document the

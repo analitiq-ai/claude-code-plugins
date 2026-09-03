@@ -120,6 +120,14 @@ PATH_PLACEHOLDER_REPEATED_PATTERN = (
 # Record field paths preserve segment spelling and casing. The pattern only
 # enforces the dotted non-empty-segment shape; identifier chars are
 # provider-owned.
+#
+# Applied with `fullmatch`, never `match`, wherever this repo applies it in
+# Python: `$` also matches before a trailing newline, so `match` accepts
+# `"amount\n"` — a name no provider has and every later check treats as the
+# name without it. The same is true of every anchored pattern here, and
+# `test_anchored_patterns_are_applied_with_fullmatch` holds the call sites to
+# it. A `Field(pattern=...)` needs no such care: pydantic anchors its own
+# check.
 RECORD_FIELD_PATH_PATTERN = (
     r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$"
 )
@@ -1800,7 +1808,7 @@ class ResponseExtraction(_EndpointModel):
             )
         if self.metadata is not None:
             for key in self.metadata:
-                if not METADATA_KEY_RE.match(key):
+                if not METADATA_KEY_RE.fullmatch(key):
                     raise ValueError(
                         f"response.metadata key {key!r} must match {METADATA_KEY_PATTERN!r} "
                         "(spec: §API Response Extraction)"
@@ -1921,7 +1929,7 @@ class WriteResponse(_EndpointModel):
         if self.metadata is None:
             return self
         for key in self.metadata:
-            if not METADATA_KEY_RE.match(key):
+            if not METADATA_KEY_RE.fullmatch(key):
                 raise ValueError(
                     f"response.metadata key {key!r} must match {METADATA_KEY_PATTERN!r} "
                     "(spec: §API Write Response Contract — follows §API Response Extraction)"
@@ -3058,7 +3066,7 @@ def _validate_param_wiring(
                     f"{from_input!r}` — a batch has no single value for a path "
                     "segment (spec: §Request Parameter Binding)"
                 )
-            if not from_input.startswith("record.") or not RECORD_FIELD_PATH_RE.match(
+            if not from_input.startswith("record.") or not RECORD_FIELD_PATH_RE.fullmatch(
                 from_input.removeprefix("record.")
             ):
                 # The dotted REMAINDER must be a real field path, not merely
