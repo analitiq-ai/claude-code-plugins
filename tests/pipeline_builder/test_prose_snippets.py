@@ -70,10 +70,10 @@ import test_examples  # noqa: E402  (sibling suite; pytest puts this dir on sys.
 
 # A fence opener: a run of >=3 backticks or tildes, then the info string.
 # Matched against the line AFTER lstrip, so indented fences (idiomatic inside
-# list steps) are seen. Unlike the fence scanning in
-# scripts/render_validator_claims.py, this gate pairs openers with closers by
-# matching character and closer length >= opener length, and captures the
-# info string, both of which this gate needs and that scanner does not.
+# list steps) are seen. Pairs openers with closers by matching character and
+# closer length >= opener length, and captures the info string — identical to
+# tests/connector_builder/test_prose_fences.py's `_fence_spans`, this plugin's
+# own copy of the same scanner.
 _FENCE_OPEN = re.compile(r"^(`{3,}|~{3,})\s*(.*?)\s*$")
 
 # The corroboration backstop: any line that LOOKS like a json/jsonc fence

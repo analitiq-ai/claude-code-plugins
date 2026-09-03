@@ -2301,12 +2301,12 @@ def main(argv: list[str] | None = None) -> int:
     p_list = sub.add_parser(
         "list",
         help="print registered resource names (one per line); "
-        "with --paths, print the union of CI path filters",
+        "with --paths, print each resource's declared source_paths",
     )
     p_list.add_argument(
         "--paths",
         action="store_true",
-        help="print the union of source/output paths used by the CI workflow",
+        help="print each resource's declared source_paths, one per line",
     )
     p_list.add_argument(
         "--latest",

@@ -45,8 +45,8 @@ ties the vendored file to the engine's published truth:
      (the engine serves these pointers `cache-control: no-cache`, so a lag
      is a publish that has not gone visible yet, or one that failed, not a
      caching delay) or a half-completed publish. Remediation: re-check
-     after a short wait and treat persistence as a real divergence and
-     repair the pointer — re-vendoring does not fix the pointer.
+     after a short wait and repair the pointer if it persists —
+     re-vendoring does not fix the pointer.
 
 Exit codes: 0 ok (including the newer-version notice), 1 divergence, 2
 GuardError. Every infrastructure failure — missing vendored file, fetch
@@ -414,8 +414,8 @@ def check_published(failures: list[str]) -> list[str]:
                 "stale latest.json (these pointers are served no-cache, so "
                 "a lag is a publish not yet visible or one that failed, not "
                 "a caching delay) or a half-completed publish. Re-check "
-                "after a short wait and treat persistence as a real "
-                "divergence — re-vendoring does not fix the pointer"
+                "after a short wait and repair the pointer if it persists "
+                "— re-vendoring does not fix the pointer"
             )
     return notices
 

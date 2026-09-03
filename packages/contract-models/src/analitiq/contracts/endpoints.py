@@ -992,9 +992,10 @@ _REQUEST_SCHEMA_RULES: dict[str, Any] = {
 #: dropping a slot from one table and not the other is how `request.path_params`
 #: came to be checked on reads and not on writes.
 #: `test_the_slot_tuple_still_covers_every_expression_carrying_field` in
-#: packages/contract-models/tests/unit/test_response_path_resolution.py pins it
-#: against the models, so a new expression-carrying request field cannot
-#: be added without either landing here or failing the suite.
+#: packages/contract-models/tests/unit/test_response_path_resolution.py pins
+#: this tuple against that file's own `FREE_SLOTS` list, so a slot dropped from
+#: one and not the other fails the suite; a genuinely new expression-carrying
+#: model field is caught by neither list until an author adds it to both.
 _REQUEST_EXPRESSION_SLOTS: tuple[str, ...] = (
     "path_params",
     "headers",
