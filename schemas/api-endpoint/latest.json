@@ -161,7 +161,7 @@
             }
           ],
           "default": null,
-          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it renders around `${stream.filter.value}`, which it must interpolate at least once and must render something around \u2014 a value that drops the filter's own value carries a predicate the stream never asked for, and one that restates it alone is what omitting this field already spells.",
+          "description": "What the param receives. Omitted, it receives the filter's value verbatim; present, it renders around `${stream.filter.value}`, which it must interpolate at least once and must read nothing else from the stream scope \u2014 a value that drops the filter's own value carries a predicate the stream never asked for. A `ref` naming that path, and a template that is only that placeholder, are refused: both resolve to the filter's value unchanged, which omitting this field already spells. **A function is not decided here** \u2014 what it returns is the function's business, so one that returns its input unchanged is accepted and the author owns it.",
           "title": "Value"
         }
       },

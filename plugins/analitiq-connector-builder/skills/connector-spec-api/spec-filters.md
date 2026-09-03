@@ -115,9 +115,15 @@ filter's own value:
 
 `${stream.filter.value}` is the only thing a binding reads from the stream scope
 — the field and the operator are the keys it already sits under. A rendered
-value must interpolate it, and must render something around it (`RULE-ENDP-067`):
-one that drops it carries a predicate the stream did not ask for, and one that
-restates it alone is what omitting `value` already spells.
+value must interpolate it and must not restate it unchanged (`RULE-ENDP-067`):
+one that drops it carries a predicate the stream did not ask for, and a bare
+`{"ref": "stream.filter.value"}` — or a template that is only that placeholder —
+is what omitting `value` already spells.
+
+A `{"function": …}` wrapping the filter value is accepted whatever it returns:
+what a function renders is not knowable from the document, so the contract does
+not judge it. Reach for one when the provider needs the value transformed, not
+as a way to write the verbatim binding.
 
 ## What you cannot author, and why
 

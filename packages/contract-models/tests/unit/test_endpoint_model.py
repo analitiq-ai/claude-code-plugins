@@ -672,7 +672,7 @@ class TestFilterBindings:
             }}},
             query={"q": {"from_param": "q"}},
         )})
-        with pytest.raises(ValidationError, match="renders nothing around"):
+        with pytest.raises(ValidationError, match="resolves to the filter's value unchanged"):
             parse_endpoint(payload)
 
     def test_an_operator_naming_an_undeclared_param_is_refused(self):
@@ -746,6 +746,21 @@ class TestFilterBindings:
         doc = parse_endpoint(payload)
         assert doc.operations.read.filters["created"]["gt"].param == "q"
 
+    def test_a_sub_path_of_the_filter_value_is_named_as_the_stray_it_is(self):
+        """`stream.filter.value.sub` DOES interpolate the filter's value, so
+        reporting it as a value that never does sends the author to fix the
+        wrong half of their template."""
+        payload = _minimal_api_payload(operations={"read": _read_op_with_filters(
+            params={"q": {"in": "query", "type": "string", "required": False}},
+            filters={"created": {"gt": {
+                "param": "q",
+                "value": {"template": ">${stream.filter.value.sub}"},
+            }}},
+            query={"q": {"from_param": "q"}},
+        )})
+        with pytest.raises(ValidationError, match="reads only"):
+            parse_endpoint(payload)
+
     def test_a_value_reading_the_response_is_refused(self):
         """A filter shapes the request, which is built before the response
         exists — so a `response.*` ref here interpolates nothing and the
@@ -778,8 +793,13 @@ class TestFilterBindings:
 
     def test_a_literal_value_is_refused_and_a_function_value_is_not(self):
         """`value` is the whole expression union, and the two branches an author
-        reaches for behave oppositely: a `literal` payload is opaque to the
-        resolver, so it can never interpolate the filter's value."""
+        reaches for behave oppositely.
+
+        A `literal` payload is opaque to the resolver, so it can never
+        interpolate the filter's value. A `function` is opaque the other way:
+        what it returns is the function's business, so one that returns its
+        input unchanged cannot be told from one that transforms it, and the
+        contract does not pretend to."""
         def _payload(value):
             return _minimal_api_payload(operations={"read": _read_op_with_filters(
                 params={"q": {"in": "query", "type": "string", "required": False}},

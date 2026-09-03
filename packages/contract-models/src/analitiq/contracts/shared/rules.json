@@ -3075,7 +3075,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type, requiredness and operator set get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether it may filter on that value or with which operators, and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
+   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type and requiredness get declared, and the only landing site a read's filter map can name. A direct ref delivers the value and declares nothing, so no downstream stream can filter on that value at all — a filter binding names a param, and there is none — and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3931,7 +3931,7 @@
   },
   {
    "id": "RULE-ENDP-067",
-   "statement": "A filter binding that renders its own value MUST interpolate the filter's value, MUST render something around it, and MUST read nothing else from the stream scope.\n",
+   "statement": "A filter binding that renders its own value MUST interpolate the filter's value, MUST NOT restate it unchanged, and MUST read nothing else from the stream scope.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3949,7 +3949,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A rendered value exists for the providers that spell a comparison inside the value rather than in the key, so what it renders around is the filter's own value; one that never interpolates it carries a predicate the stream did not ask for, which is the same wrong-rows-on-a-green-run failure the map exists to prevent, re-entering through the door the map opened. One that interpolates it and renders nothing around it is the verbatim binding written the long way, and omitting the value already spells that — admitting both would give one wire value two spellings, which is what a rule about parameters being bound once has to compare. Nothing else about the filter is addressable because nothing else is unambiguous: a binding is already scoped to one field and one operator by the keys it sits under, so a path naming either could disagree with the key above it.\n",
+   "rationale": "A rendered value exists for the providers that spell a comparison inside the value rather than in the key, so what it renders around is the filter's own value; one that never interpolates it carries a predicate the stream did not ask for, which is the same wrong-rows-on-a-green-run failure the map exists to prevent, re-entering through the door the map opened. One that restates it unchanged is the verbatim binding written the long way, and omitting the value already spells that — admitting both would give one wire value two spellings, which is what a rule about parameters being bound once has to compare. Nothing else about the filter is addressable because nothing else is unambiguous: a binding is already scoped to one field and one operator by the keys it sits under, so a path naming either could disagree with the key above it. The unchanged-restatement half reaches only the forms a document settles on its own — a ref naming the path, and a template that is only that placeholder. A function is not settled: what it returns is the function's business, and one that returns its input unchanged cannot be told from one that transforms it, so a function wrapping the filter value is accepted and the author owns whether it earns its place.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5703,7 +5703,7 @@
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per parameter.\n",
+   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per record field, in the filter map its read operation declares.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -528,10 +528,14 @@ class FilterBinding(_EndpointModel):
         description=(
             "What the param receives. Omitted, it receives the filter's value "
             f"verbatim; present, it renders around `${{{FILTER_VALUE_REF}}}`, "
-            "which it must interpolate at least once and must render something "
-            "around — a value that drops the filter's own value carries a "
-            "predicate the stream never asked for, and one that restates it "
-            "alone is what omitting this field already spells."
+            "which it must interpolate at least once and must read nothing "
+            "else from the stream scope — a value that drops the filter's own "
+            "value carries a predicate the stream never asked for. A `ref` "
+            "naming that path, and a template that is only that placeholder, "
+            "are refused: both resolve to the filter's value unchanged, which "
+            "omitting this field already spells. **A function is not decided "
+            "here** — what it returns is the function's business, so one that "
+            "returns its input unchanged is accepted and the author owns it."
         ),
     )
 
@@ -3489,22 +3493,21 @@ def _validate_filter_bindings(
 
 
 def _validate_rendered_filter_value(value: Any, where: str) -> None:
-    """A rendered `value` renders the filter's own value, and renders something.
+    """A rendered `value` reads the filter's own value, and only that.
 
-    Two ways to write one that cannot work, and they fail differently: a value
+    Three ways to write one that cannot work, and they fail differently: a value
     that never interpolates the filter's value sends a predicate the stream did
-    not ask for, and one that interpolates it and nothing else is the verbatim
-    binding written the long way — which an omitted `value` already spells, so
-    admitting it would be a second spelling of one wire value.
+    not ask for; one that reaches for another `stream.*` path names something a
+    binding cannot see; and one that restates the filter's value unchanged is
+    the verbatim binding written the long way, which an omitted `value` already
+    spells.
+
+    The stray check runs FIRST because a stray token is usually a sub-path of
+    the filter value itself (`stream.filter.value.sub`), which does interpolate
+    it — reporting that as a value that never does sends the author to fix the
+    half of their template that was right.
     """
     tokens = list(_expression_tokens(value.model_dump()))
-    if FILTER_VALUE_REF not in tokens:
-        raise ValueError(
-            f"{where}.value never interpolates ${{{FILTER_VALUE_REF}}}, so the "
-            "filter's own value does not reach the provider and the request "
-            "carries a predicate the stream did not ask for "
-            "(spec: §Request Parameter Binding)"
-        )
     stray = sorted(
         token for token in tokens
         if token.split(".")[0] == "stream" and token != FILTER_VALUE_REF
@@ -3515,20 +3518,32 @@ def _validate_rendered_filter_value(value: Any, where: str) -> None:
             f"${{{FILTER_VALUE_REF}}} from the stream scope — its field and "
             "operator are the keys it sits under (spec: §Value Expressions)"
         )
-    if _renders_only_the_filter_value(value):
+    if FILTER_VALUE_REF not in tokens:
         raise ValueError(
-            f"{where}.value renders nothing around ${{{FILTER_VALUE_REF}}}, so "
-            "the param receives the filter's value exactly as it would with no "
-            "`value` at all. Omit `value` (spec: §Request Parameter Binding)"
+            f"{where}.value never interpolates ${{{FILTER_VALUE_REF}}}, so the "
+            "filter's own value does not reach the provider and the request "
+            "carries a predicate the stream did not ask for "
+            "(spec: §Request Parameter Binding)"
+        )
+    if _restates_the_filter_value(value):
+        raise ValueError(
+            f"{where}.value resolves to the filter's value unchanged, which is "
+            "what omitting `value` already spells. Omit it, or render "
+            "something around the filter's value "
+            "(spec: §Request Parameter Binding)"
         )
 
 
-def _renders_only_the_filter_value(value: Any) -> bool:
-    """True when a rendered `value` resolves to the filter's value and nothing more.
+def _restates_the_filter_value(value: Any) -> bool:
+    """True when a rendered `value` provably resolves to the filter's value unchanged.
 
-    The two spellings that reach it: a `{ref}` naming the path, and a template
-    whose whole body is that one placeholder — whitespace inside the braces
-    included, since the resolver strips a placeholder before looking it up.
+    Provably is the whole of it. Two forms settle it here: a `{ref}` naming the
+    path, and a template whose whole body is that one placeholder — whitespace
+    inside the braces included, since the resolver strips a placeholder before
+    looking it up. A `{function}` cannot be settled at all: what it returns is
+    the function's business, and one that returns its input unchanged is
+    indistinguishable from one that transforms it. So a function wrapping the
+    filter value is accepted, and whether it earns its place is the author's.
     """
     if isinstance(value, RefExpression):
         return value.ref.strip() == FILTER_VALUE_REF

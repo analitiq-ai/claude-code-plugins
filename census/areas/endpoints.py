@@ -281,8 +281,14 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="FilterBinding", field="value",
-        prose_hash="85b124cd7056",
+        prose_hash="b5eaf57f7804",
         rule_ids=("RULE-ENDP-067",),
+        waiver=(
+            "the description states its own unenforced half: whether a "
+            "function returns its input unchanged is not decidable from the "
+            "document, so a function wrapping the filter value is accepted and "
+            "the author owns whether it renders anything"
+        ),
     ),
     ProseObligation(
         model="ReadOperation", field="filters",

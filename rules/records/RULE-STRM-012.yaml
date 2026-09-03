@@ -16,6 +16,7 @@ rationale: >
   can carry the other's operators. Checking it at the source is the earliest
   point where the scope is in view. Membership is not a promise of
   executability: a dialect may still refuse an operator for a given column
-  type, and an API endpoint narrows the set further per parameter.
+  type, and an API endpoint narrows the set further per record field, in the
+  filter map its read operation declares.
 status: active
 superseded_by: null
