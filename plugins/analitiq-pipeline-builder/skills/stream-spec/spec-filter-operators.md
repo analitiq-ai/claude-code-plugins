@@ -43,9 +43,11 @@ downstream, or ask the connector to expose a suitable parameter.
 
 <!-- PROBE: stream-filter-field-unresolved-locally -->
 Field-existence is **not** resolved locally — the validator does not read filter
-fields against endpoint files, so a typo in `field` passes here and fails
-server-side at save time. Read the field name back to the user rather than
-guessing it.
+fields against endpoint files. Nothing else resolves it either
+(`RULE-STRM-026`), so a typo in `field` is not caught before the read runs and
+fails: it does not surface at save time, and there is no later gate to rely on.
+Read the field name back to the user rather than guessing it — you are the only
+check there is.
 
 Membership is not a promise of executability (`RULE-STRM-012`): a dialect may
 refuse an operator for a given column or type even though it is in the set
