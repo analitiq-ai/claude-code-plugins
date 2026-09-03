@@ -18,7 +18,9 @@ module adds only what a single-document model cannot express:
 - **endpoint id ↔ locator** (`endpoint-id-locator`): an `endpoint_id` equals the
   handle derived from its locator — an API id from its `operations.*.request.path`
   (lowercase, `__` between path levels, path-params dropped) so `/v1/x` and `/v2/x`
-  cannot collide (the derivation `RULE-ENDP-046` states);
+  cannot collide (`RULE-ENDP-046` requires it; the algorithm is
+  `plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md`'s
+  `resources[].key` description);
   a database id from its verbatim
   `database_object` (`slug(schema)__slug(table)[__slug(catalog)]__hash8`, via the
   shared `analitiq.contracts.endpoint_identity`);
@@ -682,8 +684,10 @@ _PATH_PARAM_SEGMENT = re.compile(r"^\{[^{}]+\}$")
 
 
 def _flatten_api_locator(path: str) -> str:
-    """Derive an API `endpoint_id` handle from a request path, per the
-    derivation `RULE-ENDP-046` states: lowercase,
+    """Derive an API `endpoint_id` handle from a request path — required by
+    `RULE-ENDP-046`, per the algorithm
+    plugins/analitiq-connector-builder/skills/connector-builder/references/io-contracts.md's
+    `resources[].key` description states: lowercase,
     `__` between path levels, `{param}` segments dropped, every segment in order.
     The FULL path (not just the leaf) forms the id, which is what keeps `/v1/x`
     and `/v2/x` from colliding."""
