@@ -107,7 +107,7 @@ Schemas are generated from — so there is no schema fetch. It runs:
 Run directly (console entry point `analitiq-validate`):
 
 ```bash
-pip install -r requirements-dev.txt      # from the repo root — owns the pin
+pip install -r requirements-dev.txt      # from the repo root
 analitiq-validate \
   --schema-url https://schemas.analitiq.ai/connector/latest.json \
   --document path/to/connector.json

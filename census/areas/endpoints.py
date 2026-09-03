@@ -18,7 +18,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         model="endpoints.RefExpression", field="ref",
         prose_hash="44646d257e20",
         structural=(
-            "Field(pattern=_RESOLUTION_SCOPE_PATTERN), built from the "
+            "Field(pattern=RESOLUTION_SCOPE_PATTERN), built from the "
             "RESOLUTION_SCOPES tuple the description itself enumerates"
         ),
     ),

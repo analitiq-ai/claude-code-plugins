@@ -20,7 +20,7 @@ Output trees:
                                              release the whole tree renders from)
 
 Resources are declared in the `RESOURCES` registry below. Adding a schema is one
-entry there + a `paths:` filter line in the CI workflow.
+entry there.
 
 Subcommands:
     write       Auto-compute the next version (classify → advance) and write
@@ -209,9 +209,10 @@ class Resource:
         post_process: Optional in-place mutator applied to the rendered body
             before stamping. Use this for surgery JSON-Schema generators don't
             do natively (e.g. forcing a discriminator field into `required[]`).
-        source_paths: Repository paths whose changes should trigger re-render
-            checks for this resource — surfaced via the `list --paths` command
-            so CI workflow filters stay in sync with the registry.
+        source_paths: Repository paths associated with this resource, printed
+            in the union `list --paths` reports (this script's own
+            subcommand). Nothing in this repo invokes `list --paths` today —
+            no CI workflow reads its output.
     """
 
     name: str

@@ -52,9 +52,11 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install pinned contract packages
         id: install
-        # The pin lives in requirements-dev.txt only - see CLAUDE.md
-        # "The contract pin". Never inline a version here; that would be a
-        # second copy of a fact one file already owns.
+        # The pin is VALIDATOR_PIN in
+        # plugins/analitiq-pipeline-builder/scripts/_bootstrap.py (see
+        # CLAUDE.md "The contract, and the runtime pin"). Never inline a
+        # version here; that would be a second copy of a fact one file
+        # already owns.
         run: pip install -r requirements-dev.txt
       - name: Run the suites
         id: tests
