@@ -21,6 +21,7 @@ not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-request-binding.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-pagination.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-replication.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-spec-api/spec-filters.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/value-expressions.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
   (the whole of what an endpoint document must satisfy. Read it before

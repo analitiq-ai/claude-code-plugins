@@ -154,11 +154,12 @@ CATEGORIES: tuple[Category, ...] = (
         "major",
         "Filter binding rerouted on a kept operator",
         note=(
-            "a field and operator both releases offer now reach the provider "
-            "as a different request — a different slot, a different wire key, "
-            "or the same key serialized differently, which turns repeated keys "
-            "into a joined value — so the same stream filter may read "
-            "different rows. Judged "
+            "a field and operator both releases offer would build a different "
+            "request for the same filter value, so the same stream filter may "
+            "read different rows. Any difference counts and the test is the "
+            "request, never a list of attributes: a body binding moved to "
+            "another position, a container serialized as a joined value where "
+            "it was repeated keys, a different slot or wire key. Judged "
             "on the resolved binding, never on the param name: a param renamed "
             "consistently across the declaration, its binding and the filter "
             "map is an endpoint-local handle moving and is not this. The "
