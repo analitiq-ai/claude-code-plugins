@@ -1,0 +1,21 @@
+id: RULE-ENDP-065
+statement: >
+  A read response's metadata key MUST match the contract's metadata-key
+  pattern and MUST NOT collide with a reserved response-scope name.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
+owners: [connector-plugin, engine]
+targets: [ResponseExtraction]
+fields: [metadata]
+mechanism: pattern
+symbol: "analitiq.contracts.endpoints::METADATA_KEY_PATTERN"
+rationale: >
+  RULE-ENDP-029 carries the addressable-name/reserved-scope collision
+  argument for this shape in full, and why the pattern earns its severity
+  though the field goes unread, and it binds identically here: this is the
+  read side that check deliberately mirrors. The pinned contract-consumption
+  manifest claims no read of `ResponseExtraction.metadata`.
+status: active
+superseded_by: null

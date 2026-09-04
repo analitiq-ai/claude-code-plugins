@@ -3892,6 +3892,32 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-065",
+   "statement": "A read response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ResponseExtraction._validate",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ResponseExtraction"
+   ],
+   "fields": [
+    "metadata"
+   ],
+   "mechanism": "pattern",
+   "symbol": "analitiq.contracts.endpoints::METADATA_KEY_PATTERN",
+   "fixture_model": null,
+   "rationale": "RULE-ENDP-029 carries the addressable-name/reserved-scope collision argument for this shape in full, and why the pattern earns its severity though the field goes unread, and it binds identically here: this is the read side that check deliberately mirrors. The pinned contract-consumption manifest claims no read of `ResponseExtraction.metadata`.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
