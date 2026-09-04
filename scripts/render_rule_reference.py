@@ -257,8 +257,9 @@ def _live_values(rule, models: dict) -> str:
     validator.
     """
     from analitiq.contracts.shared.introspect import closed_members
+    from analitiq.contracts.shared.rule_record import SYMBOL_MECHANISMS
 
-    if rule.mechanism in ("pattern", "reserved_names"):
+    if rule.mechanism in SYMBOL_MECHANISMS:
         return _live_symbol(rule)
     if rule.mechanism != "literal_enum":
         return "—"

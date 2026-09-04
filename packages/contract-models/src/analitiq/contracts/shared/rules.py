@@ -115,14 +115,13 @@ class HeaderMergeRules:
         return self
 
 
-#: The one header name RULE-HTTP-002 forbids, named rather than inline so the
-#: rule registry can resolve and print it (`RuleRecord.symbol`, mechanism
-#: `reserved_names`). A set of one member: the rule forbids exactly this one
-#: name, and a set is the shape the registry's renderer expects, not an
-#: implication that more members are coming.
+#: The header name RULE-HTTP-002 forbids, named rather than inline so the rule
+#: registry can resolve and print it (`RuleRecord.symbol`, mechanism
+#: `reserved_names`). A frozenset because that is the shape the renderer
+#: expects, not a claim about how the forbidden set will grow.
 FORBIDDEN_CONTENT_LENGTH_HEADER: frozenset[str] = frozenset({"content-length"})
 
-#: The one header name RULE-HTTP-003 forbids, same reasoning.
+#: The header name RULE-HTTP-003 forbids, same reasoning.
 FORBIDDEN_CONTENT_TYPE_HEADER: frozenset[str] = frozenset({"content-type"})
 
 

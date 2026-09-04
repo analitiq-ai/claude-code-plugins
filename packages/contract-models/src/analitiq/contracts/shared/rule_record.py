@@ -123,6 +123,15 @@ MECHANISMS = (
     "reserved_names",
 )
 
+#: The `MECHANISMS` subset a `symbol` may accompany — the devices the rendered
+#: reference resolves a live constant for (`_live_symbol` in
+#: `render_rule_reference.py`). Named once and imported everywhere it is
+#: checked (construction here, the renderer's dispatch, the registry test),
+#: so a third symbol-bearing mechanism updates one tuple instead of three —
+#: missing one of the other two would silently print `—` for a record whose
+#: `symbol` no longer resolves against what the renderer actually reads.
+SYMBOL_MECHANISMS = ("pattern", "reserved_names")
+
 #: Ids retired before the registry had files, so no record on disk remembers
 #: them. A live record normally carries `status: retired` and guards its own id;
 #: these have nothing to carry it, and an id is never reissued — it appears in
@@ -326,8 +335,7 @@ class RuleRecord:
                     f"symbol {self.symbol!r} is not "
                     "dotted.module::NAME — name the constant that is imported"
                 )
-        _SYMBOL_MECHANISMS = ("pattern", "reserved_names")
-        if self.symbol and self.mechanism not in _SYMBOL_MECHANISMS:
+        if self.symbol and self.mechanism not in SYMBOL_MECHANISMS:
             self._fail(
                 "symbol names the constant a `pattern` or `reserved_names` "
                 f"rule is about; this record's mechanism is {self.mechanism!r}"
