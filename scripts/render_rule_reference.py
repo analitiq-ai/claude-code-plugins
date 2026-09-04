@@ -258,8 +258,8 @@ def _live_values(rule, models: dict) -> str:
     """
     from analitiq.contracts.shared.introspect import closed_members
 
-    if rule.mechanism == "pattern":
-        return _live_patterns(rule)
+    if rule.mechanism in ("pattern", "reserved_names"):
+        return _live_symbol(rule)
     if rule.mechanism != "literal_enum":
         return "—"
     by_field: dict[str, list[str]] = {}
@@ -296,32 +296,37 @@ def _live_values(rule, models: dict) -> str:
     return " · ".join(rendered) if rendered else "—"
 
 
-def _live_patterns(rule) -> str:
-    """The regex a `mechanism: pattern` rule is about, read from its constant.
+def _live_symbol(rule) -> str:
+    """The constant a `pattern` or `reserved_names` rule is about, read live.
 
     Same argument as the enum members beside it: a rule saying a value matches
-    "the contract's pattern" names a form the reader is then never shown, and
-    the reference is the whole of what an author must satisfy.
+    "the contract's pattern" or "avoids a reserved name" names a form the
+    reader is then never shown, and the reference is the whole of what an
+    author must satisfy.
 
-    Read from `pattern_symbol` rather than off the field, because a field
-    carries one pattern per rule that grades it and the shape says nothing
-    about which rule owns which — rendering a field's whole set under every
-    rule that touches it tells an author what the FIELD must satisfy and never
-    what THIS rule requires. A record naming no constant renders nothing, which
-    is the honest answer to "which of these is yours".
+    Read from `symbol` rather than off the field, because a field carries one
+    device per rule that grades it and the shape says nothing about which
+    rule owns which — rendering a field's whole set under every rule that
+    touches it tells an author what the FIELD must satisfy and never what
+    THIS rule requires. A record naming no constant renders nothing, which is
+    the honest answer to "which of these is yours".
     """
-    if not rule.pattern_symbol:
+    if not rule.symbol:
         return "—"
-    module_name, _, name = rule.pattern_symbol.partition("::")
+    module_name, _, name = rule.symbol.partition("::")
     module = importlib.import_module(module_name)
     try:
-        pattern = getattr(module, name)
+        value = getattr(module, name)
     except AttributeError:  # pragma: no cover - the lint below reports it
         raise SystemExit(
-            f"{rule.id}: pattern_symbol {rule.pattern_symbol!r} resolves to "
+            f"{rule.id}: symbol {rule.symbol!r} resolves to "
             f"no name in {module_name}"
         ) from None
-    return f"`{pattern}`"
+    if rule.mechanism == "pattern":
+        return f"`{value}`"
+    # reserved_names: a frozenset of forbidden literal strings. Sorted so the
+    # render is stable — a set carries no order of its own.
+    return ", ".join(f"`{m}`" for m in sorted(value))
 
 
 def _cell(text: str) -> str:

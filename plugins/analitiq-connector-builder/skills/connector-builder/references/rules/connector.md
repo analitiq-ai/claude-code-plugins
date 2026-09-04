@@ -62,14 +62,14 @@ than edited.
 | RULE-CTOR-064 | An authored connector document MUST NOT declare `created_at` or `updated_at`, which the registry stamps on insert and on update; the connector model rejects any key it does not name. | `connector` | error | validator | — |
 | RULE-CTOR-065 | An expression dict in a connector field a runtime resolves MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares. | `connector` | error | validator | — |
 | RULE-CTOR-066 | An HTTP transport's `base_url` MUST NOT carry URL userinfo in text the connector author writes — the bare-string form, the `{literal}` form, or the authority of a `{template}`. | `connector` | error | validator | — |
-| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | — |
-| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | — | — |
-| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | — |
-| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | — |
+| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
+| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 
 ## Advisory
 

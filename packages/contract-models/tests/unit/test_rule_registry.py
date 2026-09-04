@@ -320,31 +320,42 @@ def test_every_owner_owns_something():
     assert used == set(OWNERS), f"owners nothing is assigned to: {sorted(set(OWNERS) - used)}"
 
 
-def test_every_pattern_rule_names_the_regex_it_is_about():
-    """A `mechanism: pattern` rule resolves to a live constant, or renders none.
+def test_every_symbol_rule_resolves_to_the_shape_its_mechanism_needs():
+    """A `mechanism: pattern` or `mechanism: reserved_names` rule resolves to a
+    live constant of the right shape, or renders none.
 
     The reference prints that constant so an author is shown the form the
     statement points at. A record naming one that moved must fail here rather
     than at the renderer, and a record naming none renders `—` — which is the
-    honest answer, not a defect, so this only grades the ones that do.
+    honest answer, not a defect, so this only grades the ones that do. The
+    shape check is per mechanism: a `pattern` rule points at a regex string, a
+    `reserved_names` rule at a frozenset of forbidden literal strings — mixing
+    them up would render silently wrong (a regex printed as a member list, or
+    a set's repr printed as if it were a pattern).
     """
     import importlib
 
     for rule in all_rules():
-        if not rule.pattern_symbol:
+        if not rule.symbol:
             continue
-        assert rule.mechanism == "pattern", (
-            f"{rule.id}: pattern_symbol on a {rule.mechanism!r} rule"
+        assert rule.mechanism in ("pattern", "reserved_names"), (
+            f"{rule.id}: symbol on a {rule.mechanism!r} rule"
         )
-        module_name, _, name = rule.pattern_symbol.partition("::")
+        module_name, _, name = rule.symbol.partition("::")
         module = importlib.import_module(module_name)
         assert hasattr(module, name), (
-            f"{rule.id}: pattern_symbol {rule.pattern_symbol!r} resolves to no "
+            f"{rule.id}: symbol {rule.symbol!r} resolves to no "
             f"name in {module_name}"
         )
-        assert isinstance(getattr(module, name), str), (
-            f"{rule.id}: {rule.pattern_symbol!r} is not a regex string"
-        )
+        value = getattr(module, name)
+        if rule.mechanism == "pattern":
+            assert isinstance(value, str), (
+                f"{rule.id}: {rule.symbol!r} is not a regex string"
+            )
+        else:
+            assert isinstance(value, frozenset) and value, (
+                f"{rule.id}: {rule.symbol!r} is not a non-empty frozenset"
+            )
 
 
 def test_every_mechanism_names_a_rule():

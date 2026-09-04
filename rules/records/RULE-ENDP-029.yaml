@@ -9,6 +9,8 @@ validator: "analitiq.contracts.endpoints::WriteResponse._metadata_keys"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]
 fields: [metadata]
+mechanism: pattern
+symbol: "analitiq.contracts.endpoints::METADATA_KEY_PATTERN"
 rationale: >
   A metadata key is declared as an addressable name in the response scope,
   and one that collides with a reserved response-scope name would give one

@@ -38,14 +38,14 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
-| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | — |
-| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | — | — |
-| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | — |
-| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | — |
+| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
+| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 | RULE-TMAP-005 | A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect. | `type-map` | error | validator | — |
 | RULE-TMAP-006 | A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | `type-map` | error | validator | — |
 | RULE-TMAP-007 | A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name. | `type-map` | error | validator | — |

@@ -10,7 +10,7 @@ owners: [connector-plugin, engine]
 targets: [_RequestBase]
 fields: [path]
 mechanism: pattern
-pattern_symbol: "analitiq.contracts.endpoints::PATH_TEMPLATE_SIGIL_PATTERN"
+symbol: "analitiq.contracts.endpoints::PATH_TEMPLATE_SIGIL_PATTERN"
 fixture_model: WriteRequest
 rationale: >
   RULE-SHRD-006 states the general form — a `${...}` resolves only where the

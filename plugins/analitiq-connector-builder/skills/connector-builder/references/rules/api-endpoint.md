@@ -45,7 +45,7 @@ than edited.
 | RULE-ENDP-018 | An operations block MUST declare at least one operation, and any write map it declares MUST carry at least one mode. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-022 | An expression dict in a request slot MUST declare exactly one expression key and carry no sibling beyond the argument fields that key itself declares and extension keys. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-027 | A request.path_params binding MUST NOT apply a wire-encoding function, because the engine percent-encodes every substituted path segment. | `api-endpoint` | error | validator | — |
-| RULE-ENDP-029 | A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-029 | A write response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
 | RULE-ENDP-036 | An endpoint document's `endpoint_id` MUST match the slug pattern `_EndpointBase.endpoint_id` declares. | `api-endpoint` `database-endpoint` | error | validator | `^[a-z0-9][a-z0-9_-]*$` |
 | RULE-ENDP-037 | A predicate MUST be tagged by exactly one operator key, and that key MUST be one the contract's predicate union tags. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-038 | An endpoint's `replication.supported_methods` MUST name only methods the vocabulary `Replication.supported_methods` declares, and the block MUST NOT carry a separate default-method key. | `api-endpoint` | error | validator | `supported_methods`: `full_refresh`, `incremental` |
@@ -61,18 +61,18 @@ than edited.
 | RULE-ENDP-055 | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. | `api-endpoint` | error | validator | `operators`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
 | RULE-ENDP-056 | A single-bound cursor mapping MUST state the wire format it sends the cursor value as, and the comparison the provider applies to it, using only the vocabularies `SingleCursorMapping` declares for each. | `api-endpoint` | error | validator | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `operator`: `gt`, `gte`, `lt`, `lte` |
 | RULE-ENDP-057 | A windowed cursor mapping MUST state the wire format it sends its bounds as, and the comparison the provider applies at each end of the window, using only the vocabularies `WindowCursorMapping` declares for each. | `api-endpoint` | error | validator | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `start_operator`: `gt`, `gte`, `lt`, `lte` · `end_operator`: `gt`, `gte`, `lt`, `lte` |
-| RULE-ENDP-059 | A request's `path` MUST NOT declare the same `{name}` placeholder more than once. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-059 | A request's `path` MUST NOT declare the same `{name}` placeholder more than once. | `api-endpoint` | error | validator | `\{([a-z][a-z0-9_]*)\}[\s\S]*\{\1\}` |
 | RULE-ENDP-060 | A brace in a request's `path` MUST delimit a `{name}` placeholder, and every such name MUST match the contract's placeholder-name pattern, regardless of how the provider spells the value that placeholder carries. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
 | RULE-ENDP-061 | A request's `path` MUST NOT carry a `${...}` template expression; the only substitution into a path is the `{name}` placeholders `path_params` binds. | `api-endpoint` | error | validator | `\$\{` |
 | RULE-ENDP-064 | An embedded request or response schema MUST NOT declare `$schema` on a subschema; the dialect is declared on the schema itself, or not at all. | `api-endpoint` | error | validator | — |
-| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | — |
-| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | — | — |
-| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | — |
-| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | — |
+| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
+| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 
 ## Advisory
 

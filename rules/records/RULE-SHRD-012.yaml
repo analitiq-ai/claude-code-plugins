@@ -8,6 +8,8 @@ scopes: [any]
 validator: "analitiq.contracts.connector::ConnectorBase._validate_tags_field"
 owners: [connector-plugin, pipeline-plugin]
 targets: [ConnectorBase, ConnectionAuthored, StreamAuthored, PipelineAuthored, _EndpointBase]
+mechanism: pattern
+symbol: "analitiq.contracts.shared.common::NO_EDGE_WHITESPACE_PATTERN"
 rationale: >
   Tags exist to be grouped and searched on, which makes them compared rather
   than read. A padded tag is a different string from the one an author meant

@@ -38,8 +38,8 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
-| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | — |
-| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | — |
+| RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
+| RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-PKG-005 | A write-path renderer on a connector's dialect MUST return statement text and perform no I/O — `bulk_land` is the one hook handed a live connection and the batch, because a bulk mechanism is itself the act of landing data. | `connector-package` | error | — | — |
 | RULE-PKG-006 | A database connector's `pyproject.toml` MUST declare its dependencies dynamically from `requirements.txt` rather than restating them, so `requirements.txt` stays the only place the driver is pinned. | `connector-package` | warning | — | — |
 | RULE-PKG-008 | A database connector MUST register its connector class under `connector_id` in the `analitiq.source_connectors` entry-point group and in the `analitiq.destination_connectors` group, so it lands read and write as one working unit. | `connector-package` | error | — | — |
@@ -59,8 +59,8 @@ than edited.
 | RULE-SHRD-003 | Every document a plugin authors MUST declare `$schema` with the published canonical URL for its family, including the families whose contract leaves the field optional. | `any` | warning | — | — |
 | RULE-SHRD-006 | A `${...}` placeholder MUST appear only where the value-expression grammar resolves a template; every other slot takes the characters literally. | `any` | error | — | — |
 | RULE-SHRD-010 | An inherited header MUST be dropped with `headers_remove`; declaring the header with a value that resolves to null or empty is not a deletion. | `any` | error | — | — |
-| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | — |
-| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | — |
+| RULE-SHRD-011 | A `display_name` MUST NOT carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
+| RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 
 ## Advisory
 

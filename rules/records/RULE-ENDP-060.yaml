@@ -11,7 +11,7 @@ owners: [connector-plugin]
 targets: [_RequestBase]
 fields: [path]
 mechanism: pattern
-pattern_symbol: "analitiq.contracts.endpoints::PATH_PLACEHOLDER_NAME_PATTERN"
+symbol: "analitiq.contracts.endpoints::PATH_PLACEHOLDER_NAME_PATTERN"
 fixture_model: WriteRequest
 rationale: >
   The placeholder is a slot this document names, not a provider identifier: it

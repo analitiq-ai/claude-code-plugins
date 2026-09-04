@@ -15,6 +15,8 @@ targets:
   - HttpTransport
   - TransportDefaults
   - Idempotency
+mechanism: reserved_names
+symbol: "analitiq.contracts.shared.rules::FORBIDDEN_CONTENT_TYPE_HEADER"
 fixture_model: AuthOperationTemplate
 rationale: >
   `Content-Type` describes the entity body of one request, and it is what
