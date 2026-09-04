@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 19 of the 78 below have no validator, so nothing rejects
+all hold: 19 of the 82 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **36** structural · **26** advisory · **8** referential · **4** procedural · **4** judgment.
+In this file: **36** structural · **30** advisory · **8** referential · **4** procedural · **4** judgment.
 
 ## Contents
 
@@ -38,7 +38,6 @@ than edited.
 
 | ID | Rule | Grades | Severity | Checked | Values |
 |---|---|---|---|---|---|
-| RULE-ENDP-002 | A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-003 | A query parameter whose declared request-input type is a container rather than a scalar MUST declare both its wire serialization style and its explode flag. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-007 | A read operation issued as GET MUST NOT declare a parameter located in the request body. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-015 | A write mode MUST NOT declare both an idempotency key placement and batching. | `api-endpoint` | error | validator | — |
@@ -58,7 +57,7 @@ than edited.
 | RULE-ENDP-052 | A write mode's request MUST name its HTTP method from the vocabulary `WriteRequest.method` carries. | `api-endpoint` | error | validator | `method`: `POST`, `PUT`, `PATCH` |
 | RULE-ENDP-053 | Every key of an endpoint's write map MUST name a write mode from the vocabulary `Operations` declares. | `api-endpoint` | error | validator | `write`: `insert`, `upsert`, `truncate_insert` |
 | RULE-ENDP-054 | A parameter handed to a runtime mechanism MUST name that mechanism from the vocabulary `Param` declares. | `api-endpoint` | error | validator | `controlled_by`: `pagination`, `replication` |
-| RULE-ENDP-055 | The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares. | `api-endpoint` | error | validator | `operators`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
+| RULE-ENDP-055 | The operator a `filters` map entry keys on MUST come from the Analitiq API-filter operator vocabulary. | `api-endpoint` | error | validator | `filters`: `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `in`, `not_in`, `contains`, `starts_with`, `ends_with` |
 | RULE-ENDP-056 | A single-bound cursor mapping MUST state the wire format it sends the cursor value as, and the comparison the provider applies to it, using only the vocabularies `SingleCursorMapping` declares for each. | `api-endpoint` | error | validator | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `operator`: `gt`, `gte`, `lt`, `lte` |
 | RULE-ENDP-057 | A windowed cursor mapping MUST state the wire format it sends its bounds as, and the comparison the provider applies at each end of the window, using only the vocabularies `WindowCursorMapping` declares for each. | `api-endpoint` | error | validator | `format`: `date-time`, `date`, `epoch_seconds`, `epoch_milliseconds` · `start_operator`: `gt`, `gte`, `lt`, `lte` · `end_operator`: `gt`, `gte`, `lt`, `lte` |
 | RULE-ENDP-059 | A request's `path` MUST NOT declare the same `{name}` placeholder more than once. | `api-endpoint` | error | validator | `\{([a-z][a-z0-9_]*)\}[\s\S]*\{\1\}` |
@@ -66,6 +65,7 @@ than edited.
 | RULE-ENDP-061 | A request's `path` MUST NOT carry a `${...}` template expression; the only substitution into a path is the `{name}` placeholders `path_params` binds. | `api-endpoint` | error | validator | `\$\{` |
 | RULE-ENDP-064 | An embedded request or response schema MUST NOT declare `$schema` on a subschema; the dialect is declared on the schema itself, or not at all. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-065 | A read response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
+| RULE-ENDP-069 | Every `${...}` placeholder in a `filters` map template landing MUST begin with a declared resolution scope. | `api-endpoint` | error | validator | — |
 | RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
 | RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
@@ -85,6 +85,7 @@ single field looks wrong.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-ENDP-001 | A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares. | `api-endpoint` | error | validator |
+| RULE-ENDP-002 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST NOT name a param controlled by pagination or replication. | `api-endpoint` | error | validator |
 | RULE-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | `api-endpoint` | error | validator |
 | RULE-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
 | RULE-ENDP-006 | Every node of a write mode's input schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
@@ -109,6 +110,9 @@ single field looks wrong.
 | RULE-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
+| RULE-ENDP-066 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares. | `api-endpoint` | error | validator |
+| RULE-ENDP-067 | Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
+| RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential

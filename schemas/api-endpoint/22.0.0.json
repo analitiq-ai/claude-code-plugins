@@ -2280,7 +2280,7 @@
     },
     "TemplateFilterLanding": {
       "additionalProperties": false,
-      "description": "``{\"param\": \"<name>\", \"template\": \"...${scope.path}...\"}`` \u2014 a\n`filters` map entry landing on a param via a computed value.\n\nUnlike `FromParamExpression`, the value the param carries is not the\nfilter's own value but this template rendered \u2014 for a provider that\nspells ONE comparison inside the value rather than in a distinct param\n(``amount=<>0``, ``q=created>2020-01-01``). `param` is still the\ndestination; only what reaches it differs, so it is checked the same way\n`from_param` is (RULE-ENDP-066, RULE-ENDP-002). A provider needing two\ncomparisons on one field composed into one value (a bounded range inside\na single `$filter`) has no landing site here: RULE-ENDP-067 refuses two\nentries sharing a param, and this model carries no way to compose two\ntemplates into one rendered value.",
+      "description": "``{\"param\": \"<name>\", \"template\": \"...${scope.path}...\"}`` \u2014 a\n`filters` map entry landing on a param via a computed value.\n\nUnlike `FromParamExpression`, the value the param carries is not the\nfilter's own value but this template rendered \u2014 for a provider that\nspells the comparison inside the value rather than in a distinct param\n(``amount=<>0``, ``q=created>2020-01-01``). `param` is still the\ndestination; only what reaches it differs, so it is checked the same way\n`from_param` is (RULE-ENDP-066, RULE-ENDP-002).",
       "properties": {
         "param": {
           "description": "Name of a param this operation declares under `params`.",
@@ -2963,7 +2963,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+  "$id": "https://schemas.analitiq.ai/api-endpoint/22.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for API endpoint documents (owned by connectors with `kind: 'api'`) \u2014 authored shape only. Endpoint documents have no top-level `kind` field; the owning connector's `kind` selects this schema. Reserved server-managed fields (endpoint_id, connector_id, connector_version, connection_id, schema_hash) are forbidden in the authored shape. The persisted catalog-row shape is internal and not published. Source of truth: analitiq.contracts.endpoints.ApiEndpointDoc (Pydantic).",
@@ -3043,5 +3043,5 @@
   ],
   "title": "Analitiq API Endpoint",
   "type": "object",
-  "version": "22.0.1"
+  "version": "22.0.0"
 }

@@ -1,20 +1,21 @@
 id: RULE-ENDP-002
 statement: >
-  A parameter declared as controlled by pagination or replication MUST NOT also
-  declare the operator set that makes it stream-filterable.
-tier: structural
+  A `filters` map entry's landing site — `from_param`, or `param` on a
+  template landing — MUST NOT name a param controlled by pagination or
+  replication.
+tier: advisory
 severity: error
 scopes: [api-endpoint]
-validator: "analitiq.contracts.endpoints::Param._validate"
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
 owners: [connector-plugin, engine]
-targets: [Param]
+targets: [ReadOperation]
+fields: [filters]
 rationale: >
-  The operator set is the endpoint's promise that a downstream stream may filter
-  on that param; marking the param controlled hands its value to the paging or
-  incremental machinery, which sets it on every request. Declaring both
-  advertises a filter the runtime overwrites, so the stream's predicate vanishes
-  from the request and the run reports success over unfiltered data. It is a
-  conditional on the shape of one param object, mirrored declaratively into the
-  published schema, not an instance-relative comparison.
+  A `controlled_by` param's value is set by the paging or incremental
+  machinery on every request; landing a filter operator on it hands the
+  runtime a value it immediately overwrites, so the stream's predicate
+  vanishes from the request and the run reports success over unfiltered
+  data. Refusing the entry at authoring time is cheaper than discovering the
+  silent overwrite after the run.
 status: active
 superseded_by: null

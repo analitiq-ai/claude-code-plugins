@@ -1,24 +1,21 @@
 id: RULE-ENDP-055
 statement: >
-  The filter operators a parameter offers MUST come from the operator
-  vocabulary `Param` declares.
+  The operator a `filters` map entry keys on MUST come from the Analitiq
+  API-filter operator vocabulary.
 tier: structural
 severity: error
 scopes: [api-endpoint]
-validator: "analitiq.contracts.endpoints::Param.operators"
+validator: "analitiq.contracts.endpoints::ReadOperation.filters"
 owners: [connector-plugin, pipeline-plugin, engine]
-targets: [Param]
-fields: [operators]
+targets: [ReadOperation]
+fields: [filters]
 mechanism: literal_enum
 rationale: >
-  This set is the endpoint's promise to every stream that binds it: a
+  This vocabulary is the endpoint's promise to every stream that binds it: a
   filter is authored against these members (RULE-STRM-026 names that
-  obligation), so the documents agree only while each reads one vocabulary.
-  Which operators survive the trip to the provider — sent as request input
-  rather than compiled into a predicate the way a database read's operator
-  is — is a fact about the provider, so an endpoint declares what it offers
-  instead of inheriting a vocabulary whole. The pinned contract-consumption
-  manifest claims no read of the set, and it has no effect on a run today;
-  the promise does its work where the set is read, at authoring time.
+  obligation on the stream side), so the two documents agree only while both
+  read one set. Membership is a promise the operation accepts a request built
+  with that operator; how it reaches the wire is the entry's own
+  `from_param`/`template` landing site, not a fact this vocabulary states.
 status: active
 superseded_by: null

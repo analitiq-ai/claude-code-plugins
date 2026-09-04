@@ -125,6 +125,17 @@ RECORD_FIELD_PATH_PATTERN = (
 )
 METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
+#: A `filters` map's outer key — the record field a predicate targets.
+#: Pydantic renders a constrained dict key as `patternProperties`, which says
+#: what a MATCHING key holds and forbids nothing, so a schema-only consumer
+#: would accept the names the models reject. `_RECORD_FIELD_PATH_PROPERTY_NAMES`
+#: is the `propertyNames` companion that refuses them — the same split
+#: `HeaderName`/`HEADER_NAME_PROPERTY_NAMES` uses.
+RecordFieldPathKey = Annotated[str, StringConstraints(pattern=RECORD_FIELD_PATH_PATTERN)]
+_RECORD_FIELD_PATH_PROPERTY_NAMES: dict[str, Any] = {
+    "propertyNames": {"pattern": RECORD_FIELD_PATH_PATTERN}
+}
+
 # Canonical Apache Arrow type vocabulary. `ARROW_TYPE_PATTERN` is GENERATED
 # from the engine-published, vendored grammar manifest — see
 # `analitiq.contracts.arrow_grammar` (the executable family set is a capability
@@ -275,6 +286,28 @@ class RefExpression(_EndpointModel):
     )
 
 
+def _validate_template_placeholders(value: str) -> str:
+    # Every `${...}` placeholder must begin with a known resolution scope.
+    # An unqualified `${name}` is not refused by every runtime that reads
+    # this document: one takes the bare name as a top-level context key and
+    # falls back to `secrets`, substituting whatever is stored under it,
+    # while the other raises on a scope it does not know. Neither names the
+    # placeholder to the author of the endpoint.
+    # Placeholders are parsed by the shared resolver grammar
+    # (`template_placeholders`), so this agrees with the resolver by
+    # construction. Model-enforced only — not a published JSON-Schema
+    # pattern, so the validator, not `latest.json`, is the complete gate.
+    for placeholder in template_placeholders(value):
+        if not has_known_scope(placeholder):
+            raise ValueError(
+                f"template placeholder ${{{placeholder}}} must begin with a "
+                "known resolution scope "
+                f"({', '.join(RESOLUTION_SCOPES)}); unqualified placeholders "
+                "are invalid (spec: §Value Expressions)"
+            )
+    return value
+
+
 class TemplateExpression(_EndpointModel):
     """``{"template": "...${scope.path}..."}`` value expression."""
 
@@ -283,25 +316,88 @@ class TemplateExpression(_EndpointModel):
     @field_validator("template")
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
-        # Every `${...}` placeholder must begin with a known resolution scope.
-        # An unqualified `${name}` is not refused by every runtime that reads
-        # this document: one takes the bare name as a top-level context key and
-        # falls back to `secrets`, substituting whatever is stored under it,
-        # while the other raises on a scope it does not know. Neither names the
-        # placeholder to the author of the endpoint.
-        # Placeholders are parsed by the shared resolver grammar
-        # (`template_placeholders`), so this agrees with the resolver by
-        # construction. Model-enforced only — not a published JSON-Schema
-        # pattern, so the validator, not `latest.json`, is the complete gate.
-        for placeholder in template_placeholders(value):
-            if not has_known_scope(placeholder):
-                raise ValueError(
-                    f"template placeholder ${{{placeholder}}} must begin with a "
-                    "known resolution scope "
-                    f"({', '.join(RESOLUTION_SCOPES)}); unqualified placeholders "
-                    "are invalid (spec: §Value Expressions)"
-                )
-        return value
+        return _validate_template_placeholders(value)
+
+
+# `path_params` / `headers` / `query` recognize `from_param` as an untyped
+# procedural convention; `filters` is closed to the members `FilterLanding`
+# declares, so it gets a typed member instead.
+class FromParamExpression(_EndpointModel):
+    """``{"from_param": "<name>"}`` — a `filters` map entry landing on a param,
+    verbatim: the filter's own value is what reaches the param.
+    """
+
+    from_param: str = Field(
+        ...,
+        min_length=1,
+        description="Name of a param this operation declares under `params`.",
+    )
+
+
+class TemplateFilterLanding(_EndpointModel):
+    """``{"param": "<name>", "template": "...${scope.path}..."}`` — a
+    `filters` map entry landing on a param via a computed value.
+
+    Unlike `FromParamExpression`, the value the param carries is not the
+    filter's own value but this template rendered — for a provider that
+    spells ONE comparison inside the value rather than in a distinct param
+    (``amount=<>0``, ``q=created>2020-01-01``). `param` is still the
+    destination; only what reaches it differs, so it is checked the same way
+    `from_param` is (RULE-ENDP-066, RULE-ENDP-002). A provider needing two
+    comparisons on one field composed into one value (a bounded range inside
+    a single `$filter`) has no landing site here: RULE-ENDP-067 refuses two
+    entries sharing a param, and this model carries no way to compose two
+    templates into one rendered value.
+    """
+
+    param: str = Field(
+        ...,
+        min_length=1,
+        description="Name of a param this operation declares under `params`.",
+    )
+    template: str = Field(..., min_length=1)
+
+    @field_validator("template")
+    @classmethod
+    def _placeholders_qualified(cls, value: str) -> str:
+        return _validate_template_placeholders(value)
+
+
+def _filter_landing_discriminator(v: Any) -> str | None:
+    """Pick the `filters` landing-site branch by inspecting which key is present."""
+    if isinstance(v, dict):
+        if "from_param" in v:
+            return "from_param"
+        if "template" in v:
+            return "template"
+        return None
+    if isinstance(v, FromParamExpression):
+        return "from_param"
+    if isinstance(v, TemplateFilterLanding):
+        return "template"
+    return None
+
+
+#: Where a `filters` map entry's operator lands: an already-declared param
+#: carrying the filter's own value, or the same param carrying a computed
+#: value rendered from a template — the value-expression `${scope.path}`
+#: syntax reused, not a second grammar.
+FilterLanding = Annotated[
+    Union[
+        Annotated[FromParamExpression, UnionTag("from_param")],
+        Annotated[TemplateFilterLanding, UnionTag("template")],
+    ],
+    Discriminator(_filter_landing_discriminator),
+]
+
+#: The operator vocabulary a `filters` map entry may key on — the API-only
+#: half of `stream.FilterOperator`. A database-only member (`is_null`,
+#: `like`, ...) never reaches a request as a bound value, only as a compiled
+#: predicate, so it has no landing site here at all.
+FilterableOperator = Literal[
+    "eq", "neq", "gt", "gte", "lt", "lte",
+    "in", "not_in", "contains", "starts_with", "ends_with",
+]
 
 
 class LiteralExpression(_EndpointModel):
@@ -387,12 +483,11 @@ _UNBOUNDABLE_EXPRESSION_KEY = "literal"
 # ---------------------------------------------------------------------------
 
 
-# Declarative mirror of `Param._validate`'s cross-field rules for the published
+# Declarative mirror of `Param._validate`'s cross-field rule for the published
 # schema: a `query` param of `array`/`object` type must declare `style` and
-# `explode` (non-null); a `controlled_by` param must not declare `operators`.
-# Keyed on the wire name `in` (the `location` alias). `then` pins the required
-# fields to non-null types because they render nullable and the runtime demands
-# a value.
+# `explode` (non-null). Keyed on the wire name `in` (the `location` alias).
+# `then` pins the required fields to non-null types because they render
+# nullable and the runtime demands a value.
 _PARAM_SCHEMA_RULES: dict[str, Any] = {
     "allOf": [
         {
@@ -410,13 +505,6 @@ _PARAM_SCHEMA_RULES: dict[str, Any] = {
                     "explode": {"type": "boolean"},
                 },
             },
-        },
-        {
-            "if": {
-                "required": ["controlled_by"],
-                "properties": {"controlled_by": {"not": {"type": "null"}}},
-            },
-            "then": {"properties": {"operators": {"type": "null"}}},
         },
     ],
 }
@@ -445,16 +533,6 @@ class Param(_EndpointModel):
     max_length: StrictNonNegativeInt | None = Field(default=None, alias="maxLength")
     min_items: StrictNonNegativeInt | None = Field(default=None, alias="minItems")
     max_items: StrictNonNegativeInt | None = Field(default=None, alias="maxItems")
-    operators: list[Literal[
-        "eq", "neq", "gt", "gte", "lt", "lte",
-        "in", "not_in", "contains", "starts_with", "ends_with",
-    ]] | None = Field(
-        default=None,
-        description=(
-            "Subset of the Analitiq operator vocabulary stream filters may use. "
-            "Absence means the param is not stream-filterable."
-        ),
-    )
     controlled_by: Literal["pagination", "replication"] | None = Field(
         default=None,
         description="Marks the param as owned by pagination or replication.",
@@ -473,11 +551,6 @@ class Param(_EndpointModel):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
                 "(spec: §Cross-Field Validation)"
-            )
-        if self.controlled_by is not None and self.operators is not None:
-            raise ValueError(
-                "params with `controlled_by` must not declare `operators` "
-                "(spec: §Parameter Validation and Operators)"
             )
         if (self.location == "query" and self.type in ("array", "object")
                 and (self.style is None or self.explode is None)):
@@ -1987,13 +2060,28 @@ class ReadOperation(_EndpointModel):
                             }
                         }
                     },
-                }
+                },
+                {"properties": {"filters": _RECORD_FIELD_PATH_PROPERTY_NAMES}},
             ]
         }
     )
 
     request: ReadRequest = Field(...)
     params: dict[str, Param] = Field(default_factory=dict)
+    filters: dict[RecordFieldPathKey, dict[FilterableOperator, FilterLanding]] | None = Field(
+        default=None,
+        description=(
+            "How a stream filter's operator reaches this operation's request, "
+            "keyed by the record field a filter targets and then by operator. "
+            "Each entry names a param declared under `params` as its landing "
+            "site: `from_param` carries the filter's own value there "
+            "verbatim; `param` plus `template` carries a value rendered "
+            "through the value-expression grammar instead, for a provider "
+            "that spells the comparison inside the value rather than in a "
+            "distinct param. RULE-STRM-026 is what a stream-side filter on "
+            "this operation must agree with."
+        ),
+    )
     response: ResponseExtraction = Field(...)
     pagination: Pagination | None = Field(  # type: ignore[type-arg]
         default=None,
@@ -2038,6 +2126,21 @@ class ReadOperation(_EndpointModel):
                 self.replication, records_array_node, self.response.schema_
             )
 
+        if self.filters:
+            _validate_filters_wiring(self.filters, self.params)
+            # A `filters` key is a RECORD field, not a `response.body` ref —
+            # `RECORD_FIELD_PATH_PATTERN` on the field type is a shape check,
+            # not an existence one, the same gap `keyset.order_by_field` closes
+            # below. Without this, `filters: {"updatedAt": …}` against a record
+            # declaring `updated_at` validates clean and a stream filtering on
+            # `updated_at` lands nowhere — the wrong-rows failure this map
+            # exists to close, relocated from the operator to the field name.
+            for field in self.filters:
+                _validate_record_field_path(
+                    field, records_array_node, self.response.schema_,
+                    where="filters",
+                )
+
         # `keyset.order_by_field` is a RECORD path, not a `response.body` ref, so
         # the sweep below never sees it — `_response_body_segments` returns None
         # and it is skipped. It needs the record-shape walk instead, the same one
@@ -2058,7 +2161,7 @@ class ReadOperation(_EndpointModel):
         # is most likely to have got right, so reporting them first keeps the
         # broader pagination/metadata sweep from masking a simpler error.
         _validate_response_body_paths(
-            self.response, self.pagination, self.request, self.params
+            self.response, self.pagination, self.request, self.params, self.filters
         )
 
         return self
@@ -3063,8 +3166,8 @@ def _validate_param_wiring(
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
             # RULE-ENDP-028, on WRITES only. A write param has exactly one
-            # source: its own `default`. `operators` makes a param
-            # stream-filterable and `controlled_by` hands it to
+            # source: its own `default`. A `filters` map entry makes a param
+            # a stream's landing site and `controlled_by` hands it to
             # pagination/replication — both read-side, neither reachable from a
             # write. So a write path param with no `default` provably cannot
             # resolve, and the placeholder it fills can never be substituted.
@@ -3227,6 +3330,7 @@ def _validate_response_body_paths(
     pagination: Any,
     request: Any = None,
     params: dict[str, "Param"] | None = None,
+    filters: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """RULE-ENDP-023: every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
@@ -3308,6 +3412,23 @@ def _validate_response_body_paths(
                 operation=_OperationKind.READ,
                 can_read_response=False,
             ))
+    # `filters` is request-shaping too — its `template` landing renders
+    # before any request goes out, so a `${response...}` ref there is the
+    # identical never-has-a-value defect the request slots above are swept
+    # for, just reached through a newer field. Only `template` is scanned:
+    # `TemplateFilterLanding` also carries `param`, and dumping both together
+    # reads as an `Expression` dict with an unexpected sibling to the shared
+    # walker's own shape check (RULE-ENDP-022), which this compound landing
+    # is not subject to.
+    for field, landings in (filters or {}).items():
+        for operator, landing in landings.items():
+            if isinstance(landing, TemplateFilterLanding):
+                sites.append(_ExpressionSite(
+                    where=f"filters[{field!r}][{operator!r}].template",
+                    payload={"template": landing.template},
+                    operation=_OperationKind.READ,
+                    can_read_response=False,
+                ))
 
     _sweep_expression_sites(
         sites, response.schema_, frozenset(response.metadata or {})
@@ -3334,6 +3455,53 @@ def _validate_replication_wiring(replication: Replication, params: dict[str, Par
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
+
+
+def _validate_filters_wiring(
+    filters: dict[str, dict[str, Any]], params: dict[str, Param]
+) -> None:
+    """Every `filters` entry lands on a declared, non-`controlled_by` param,
+    and no two entries anywhere in the map land on the same one.
+
+    Both landing forms name a destination param (`from_param` / `param`), so
+    one param existence/`controlled_by` check and one uniqueness check cover
+    both — uniqueness spans the whole map, not one field: two DIFFERENT
+    fields landing on the same param is the identical ambiguity as two
+    operators on one field doing so, since the param still carries only one
+    value and a run can honour only one of the two predicates.
+
+    `filters`' landing is a routing declaration, not a request binding —
+    whether the named param is itself bound into a request location at all is
+    `_validate_param_binding_uniqueness`'s separate, already-covered concern.
+    """
+    seen: dict[str, tuple[str, str]] = {}
+    for field, landings in filters.items():
+        for operator, landing in landings.items():
+            name = (
+                landing.from_param
+                if isinstance(landing, FromParamExpression)
+                else landing.param
+            )
+            param = params.get(name)
+            if param is None:
+                raise violation(
+                    "RULE-ENDP-066",
+                    f"filters.{field}.{operator} names undeclared param {name!r}",
+                )
+            if param.controlled_by is not None:
+                raise violation(
+                    "RULE-ENDP-002",
+                    f"filters.{field}.{operator} names param {name!r}, which "
+                    f"declares controlled_by={param.controlled_by!r}",
+                )
+            if name in seen:
+                other_field, other_operator = seen[name]
+                raise violation(
+                    "RULE-ENDP-067",
+                    f"filters.{other_field}.{other_operator} and "
+                    f"filters.{field}.{operator} both land on param {name!r}",
+                )
+            seen[name] = (field, operator)
 
 
 def _validate_param_binding_uniqueness(
@@ -4753,13 +4921,14 @@ def _validate_record_field_path(
 ) -> None:
     """A dotted RECORD field path must resolve under the records array's ``items``.
 
-    The generic form of the `cursor_field` check, for any site that names a
-    field the engine reads off a record rather than off the response body.
-    `pagination.keyset.order_by_field` is the other one: the seek order is
-    defined over it, so a path the record shape does not declare means pages
-    advance from a value the engine cannot read — silently truncating or
-    repeating, which is the same wrong-data-on-a-green-run failure
-    RULE-ENDP-023 catches on the response-body side, with a different cause.
+    The generic form of the `cursor_field` check, reused at every site that
+    names a field the engine reads off a record rather than off the response
+    body — `pagination.keyset.order_by_field` and each `filters` map key
+    among them: a path the record shape does not declare means the field it
+    names is read from a value the engine cannot resolve — silently
+    truncating or repeating pages, or silently filtering nothing — which is
+    the same wrong-data-on-a-green-run failure RULE-ENDP-023 catches on the
+    response-body side, with a different cause.
 
     Unknowable shapes are reported, not skipped: this is `response.schema`,
     which the contract holds to the strict standard (see

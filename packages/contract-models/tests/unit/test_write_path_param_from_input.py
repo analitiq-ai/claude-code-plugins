@@ -594,9 +594,10 @@ class TestAWritePathParamMustBeAbleToResolve:
     unimplementable: a write binding `{id}` to an `in: path`
     param that carries no `default`. On a write a param has exactly ONE source —
     its own `default`.
-    `operators` makes a param stream-filterable and `controlled_by` hands it to
-    pagination or replication; both are read-side and neither is reachable from
-    a write. So the placeholder provably can never be substituted, and the
+    A `filters` map entry makes a param a stream's landing site, and
+    `controlled_by` hands it to pagination or replication; both are read-side
+    and neither is reachable from a write. So the placeholder provably can
+    never be substituted, and the
     endpoint is dead at the engine handshake while validating green.
 
     That is the sevdesk shape. It is refused here, naming the binding that
@@ -632,7 +633,8 @@ class TestAWritePathParamMustBeAbleToResolve:
 
     def test_a_read_path_param_needs_no_default(self):
         # Reads keep the old latitude: a read path param can be supplied by a
-        # stream filter, so a missing `default` is not proof it cannot resolve.
+        # stream filter (via `filters`), so a missing `default` is not proof
+        # it cannot resolve.
         payload = {
             "$schema": API_SCHEMA_URL,
             "endpoint_id": "contact",
@@ -643,8 +645,8 @@ class TestAWritePathParamMustBeAbleToResolve:
                 },
                 "params": {"id": {
                     "in": "path", "type": "string", "required": True,
-                    "operators": ["eq"],
                 }},
+                "filters": {"id": {"eq": {"from_param": "id"}}},
                 "response": {
                     "records": {"ref": "response.body.objects"},
                     "schema": {

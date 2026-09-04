@@ -57,9 +57,9 @@ rules for every document" says which file carries which artifact.
      it before comparing: an in-document `$ref` is followed and an `allOf`
      composed (`RULE-ENDP-026`), so a field that moved under `$defs` or into a
      branch is not read as removed, and one that changed there is not missed.
-   - `operations.read.params.<name>.operators` — the operator members each
-     read param offers (`RULE-ENDP-055`). Read params only: a write mode
-     declares params through the same model, and a filter never names one.
+   - `operations.read.filters.<field>` — the operator members each field's
+     entry offers (`RULE-ENDP-055`). Read operations only: a write mode
+     declares no `filters` map.
 
    Those are the interior sites with a category of their own. The interior is
    larger than they are, so compare the rest of it too — the read operation's
@@ -123,24 +123,24 @@ rules for every document" says which file carries which artifact.
   not soften it: widening and narrowing alike re-type the column a
   destination already created from that `arrow_type`, and a JSON `type` that
   held still while the pair moved is the case a shape diff misses),
-  filter-operators-narrowed (an operator a param offered under `operators` —
-  the stream-filterability contract (`RULE-ENDP-055`) — is no longer
-  offered, whether the member left the list, the `operators` key was
-  dropped, or the param carrying it is gone. A stream filters on the members
-  the endpoint offered, so its filter stops being expressible),
-  conflict-keys-changed (the `conflict_keys` an upsert mode both releases
-  ship matches on are not the same set. The key is endpoint-owned — a stream
-  declares none — so a change re-keys every existing stream's upsert
-  silently: rows that matched an existing row now insert, and rows that did
-  not now overwrite one), endpoint-capability-narrowed (an endpoint both
-  releases ship no longer offers something an existing stream depends on —
-  whether the stream names it or reads it through the endpoint's own
-  behaviour — and no category above says which. The endpoint's interior is
-  wider than the categories that enumerate it — a read operation dropped
-  from a write-bearing endpoint, a replication method or a cursor mapping
-  withdrawn, a `pagination` block removed so a stream silently reads one
-  page, a filterable param whose request-value contract tightened anywhere —
-  a bound, a pattern, a length, not only its type — an idempotency block
+  filter-operators-narrowed (an operator a field's `filters` entry offered
+  (`RULE-ENDP-055`) is no longer offered, whether the operator key left the
+  entry, the field's whole entry was dropped, or the landing site it named
+  is gone. A stream filters on the members the endpoint offered, so its
+  filter stops being expressible), conflict-keys-changed (the
+  `conflict_keys` an upsert mode both releases ship matches on are not the
+  same set. The key is endpoint-owned — a stream declares none — so a change
+  re-keys every existing stream's upsert silently: rows that matched an
+  existing row now insert, and rows that did not now overwrite one),
+  endpoint-capability-narrowed (an endpoint both releases ship no longer
+  offers something an existing stream depends on — whether the stream names
+  it or reads it through the endpoint's own behaviour — and no category
+  above says which. The endpoint's interior is wider than the categories
+  that enumerate it — a read operation dropped from a write-bearing
+  endpoint, a replication method or a cursor mapping withdrawn, a
+  `pagination` block removed so a stream silently reads one page, a
+  filterable param whose request-value contract tightened anywhere — a
+  bound, a pattern, a length, not only its type — an idempotency block
   removed, a write input field removed or retyped, a nested record field
   changed under an unchanged parent. Reach for this when the diff withdraws
   something and nothing more specific fits, and say in the `note` what was
@@ -164,9 +164,9 @@ rules for every document" says which file carries which artifact.
   `optional-output-added` names are a connector-level block, not this. Minor
   because nothing an existing stream binds stops resolving; a stream that
   maps its source without naming fields carries the new one too, so name the
-  added fields in the `note`), filter-operators-widened (a param offers an
-  operator it did not offer before, including a param newly declared with
-  `operators`. These are endpoint params, not the connection inputs
+  added fields in the `note`), filter-operators-widened (a field's `filters`
+  entry offers an operator it did not offer before, including a field newly
+  declared in the map. These are endpoint filters, not the connection inputs
   `optional-input-added` names), endpoint-capability-added (the additive
   counterpart, and the same fallback: an endpoint both releases ship now
   offers something a stream document can name that no category above

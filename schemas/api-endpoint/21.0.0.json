@@ -130,7 +130,7 @@
     },
     "FromParamExpression": {
       "additionalProperties": false,
-      "description": "``{\"from_param\": \"<name>\"}`` \u2014 a `filters` map entry landing on a param,\nverbatim: the filter's own value is what reaches the param.",
+      "description": "``{\"from_param\": \"<name>\"}`` \u2014 a `filters` map entry landing on a param.\n\n`path_params` / `headers` / `query` recognize this same key as an untyped\nprocedural convention (`_collect_singleton_values`); `filters` is a closed,\ntwo-form slot (`from_param` or `template`, see `FilterLanding`) so it gets\na typed member instead, the same way `template` already has one in\n`TemplateExpression`.",
       "properties": {
         "from_param": {
           "description": "Name of a param this operation declares under `params`.",
@@ -1957,7 +1957,7 @@
                         "$ref": "#/$defs/FromParamExpression"
                       },
                       {
-                        "$ref": "#/$defs/TemplateFilterLanding"
+                        "$ref": "#/$defs/TemplateExpression"
                       }
                     ]
                   },
@@ -1986,7 +1986,7 @@
             }
           ],
           "default": null,
-          "description": "How a stream filter's operator reaches this operation's request, keyed by the record field a filter targets and then by operator. Each entry names a param declared under `params` as its landing site: `from_param` carries the filter's own value there verbatim; `param` plus `template` carries a value rendered through the value-expression grammar instead, for a provider that spells the comparison inside the value rather than in a distinct param. RULE-STRM-026 is what a stream-side filter on this operation must agree with.",
+          "description": "How a stream filter's operator reaches this operation's request, keyed by the record field a filter targets and then by operator. `from_param` lands the operator on a param declared under `params`; `template` renders the filter's own value into the request through the value-expression grammar. RULE-STRM-026 is what a stream-side filter on this operation must agree with.",
           "title": "Filters"
         },
         "pagination": {
@@ -2276,29 +2276,6 @@
         "template"
       ],
       "title": "TemplateExpression",
-      "type": "object"
-    },
-    "TemplateFilterLanding": {
-      "additionalProperties": false,
-      "description": "``{\"param\": \"<name>\", \"template\": \"...${scope.path}...\"}`` \u2014 a\n`filters` map entry landing on a param via a computed value.\n\nUnlike `FromParamExpression`, the value the param carries is not the\nfilter's own value but this template rendered \u2014 for a provider that\nspells ONE comparison inside the value rather than in a distinct param\n(``amount=<>0``, ``q=created>2020-01-01``). `param` is still the\ndestination; only what reaches it differs, so it is checked the same way\n`from_param` is (RULE-ENDP-066, RULE-ENDP-002). A provider needing two\ncomparisons on one field composed into one value (a bounded range inside\na single `$filter`) has no landing site here: RULE-ENDP-067 refuses two\nentries sharing a param, and this model carries no way to compose two\ntemplates into one rendered value.",
-      "properties": {
-        "param": {
-          "description": "Name of a param this operation declares under `params`.",
-          "minLength": 1,
-          "title": "Param",
-          "type": "string"
-        },
-        "template": {
-          "minLength": 1,
-          "title": "Template",
-          "type": "string"
-        }
-      },
-      "required": [
-        "param",
-        "template"
-      ],
-      "title": "TemplateFilterLanding",
       "type": "object"
     },
     "WindowCursorMapping": {
@@ -2963,7 +2940,7 @@
       "type": "object"
     }
   },
-  "$id": "https://schemas.analitiq.ai/api-endpoint/latest.json",
+  "$id": "https://schemas.analitiq.ai/api-endpoint/21.0.0.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Public JSON Schema contract for API endpoint documents (owned by connectors with `kind: 'api'`) \u2014 authored shape only. Endpoint documents have no top-level `kind` field; the owning connector's `kind` selects this schema. Reserved server-managed fields (endpoint_id, connector_id, connector_version, connection_id, schema_hash) are forbidden in the authored shape. The persisted catalog-row shape is internal and not published. Source of truth: analitiq.contracts.endpoints.ApiEndpointDoc (Pydantic).",
@@ -3043,5 +3020,5 @@
   ],
   "title": "Analitiq API Endpoint",
   "type": "object",
-  "version": "22.0.1"
+  "version": "21.0.0"
 }
