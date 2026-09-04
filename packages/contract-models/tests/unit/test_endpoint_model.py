@@ -545,6 +545,17 @@ class TestCursorMapping:
 
 
 class TestParamValidate:
+    def test_operators_no_longer_a_declarable_field(self):
+        # Filterability moved to the read operation's `filters` map;
+        # `Param` no longer carries a vocabulary of its own, and `extra`
+        # is forbidden so a document still declaring it is refused rather
+        # than silently ignored.
+        with pytest.raises(ValidationError, match="operators"):
+            Param(**{
+                "in": "query", "type": "string", "required": False,
+                "operators": ["eq"],
+            })
+
     def test_query_array_requires_style_and_explode(self):
         with pytest.raises(ValidationError, match="`style` and `explode`"):
             Param(**{"in": "query", "type": "array", "required": False})
@@ -576,6 +587,20 @@ def _filters_read_op(filters, params=None, extra_query=None):
     return _read_op_with(
         params=params,
         request_extras={"query": query},
+        response={
+            "records": {"ref": "response.body"},
+            "schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "created": {"type": "string"},
+                        "total": {"type": "number"},
+                    },
+                },
+            },
+        },
     ) | {"filters": filters}
 
 
@@ -590,12 +615,21 @@ class TestFiltersWiring:
         # `template` reaches into `stream.*` — the filter's own value — which
         # `request.query`/`headers` refuse for a `ref`, but this slot must
         # permit: the value it interpolates IS the filter it is declared on.
+        # Unlike `from_param`, the rendered string — not the filter's raw
+        # value — is what reaches `param`, so `param` still names the
+        # destination.
         result = parse_endpoint(_minimal_api_payload(operations={
             "read": _filters_read_op({
-                "created": {"gt": {"template": "${stream.filters.created.value}"}},
+                "created": {
+                    "gt": {
+                        "param": "minAmount",
+                        "template": "${stream.filters.created.value}",
+                    },
+                },
             }),
         }))
         landing = result.operations.read.filters["created"]["gt"]
+        assert landing.param == "minAmount"
         assert landing.template == "${stream.filters.created.value}"
 
     def test_operator_with_no_landing_form_rejected(self):
@@ -660,17 +694,18 @@ class TestFiltersWiring:
                 }),
             }))
 
-    def test_two_operators_on_different_fields_may_share_a_param(self):
-        # The collision RULE-ENDP-067 refuses is scoped to one field; two
-        # different fields landing on the same param is a connector's choice,
-        # not an ambiguity this map can detect.
-        result = parse_endpoint(_minimal_api_payload(operations={
-            "read": _filters_read_op({
-                "amount": {"gt": {"from_param": "minAmount"}},
-                "total": {"gt": {"from_param": "minAmount"}},
-            }),
-        }))
-        assert result.operations.read.filters["total"]["gt"].from_param == "minAmount"
+    def test_two_fields_landing_on_the_same_param_rejected(self):
+        # A param carries one value. Two DIFFERENT fields landing on the
+        # same one is the identical ambiguity RULE-ENDP-067 refuses within
+        # one field — only one of the two predicates can ever be honoured,
+        # and the run reads as if the other were never declared.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-067\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "amount": {"gt": {"from_param": "minAmount"}},
+                    "total": {"gt": {"from_param": "minAmount"}},
+                }),
+            }))
 
 
 # ---------------------------------------------------------------------------

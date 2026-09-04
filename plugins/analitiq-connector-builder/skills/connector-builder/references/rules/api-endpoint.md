@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 19 of the 80 below have no validator, so nothing rejects
+all hold: 19 of the 82 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **35** structural · **29** advisory · **8** referential · **4** procedural · **4** judgment.
+In this file: **36** structural · **30** advisory · **8** referential · **4** procedural · **4** judgment.
 
 ## Contents
 
@@ -65,6 +65,7 @@ than edited.
 | RULE-ENDP-061 | A request's `path` MUST NOT carry a `${...}` template expression; the only substitution into a path is the `{name}` placeholders `path_params` binds. | `api-endpoint` | error | validator | `\$\{` |
 | RULE-ENDP-064 | An embedded request or response schema MUST NOT declare `$schema` on a subschema; the dialect is declared on the schema itself, or not at all. | `api-endpoint` | error | validator | — |
 | RULE-ENDP-065 | A read response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
+| RULE-ENDP-069 | Every `${...}` placeholder in a `filters` map template landing MUST begin with a declared resolution scope. | `api-endpoint` | error | validator | — |
 | RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
 | RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |
@@ -111,6 +112,7 @@ single field looks wrong.
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
 | RULE-ENDP-066 | A `filters` map entry's `from_param` MUST name a param the same operation declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-067 | Two operators on the same `filters` field entry MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
+| RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential

@@ -286,6 +286,28 @@ class RefExpression(_EndpointModel):
     )
 
 
+def _validate_template_placeholders(value: str) -> str:
+    # Every `${...}` placeholder must begin with a known resolution scope.
+    # An unqualified `${name}` is not refused by every runtime that reads
+    # this document: one takes the bare name as a top-level context key and
+    # falls back to `secrets`, substituting whatever is stored under it,
+    # while the other raises on a scope it does not know. Neither names the
+    # placeholder to the author of the endpoint.
+    # Placeholders are parsed by the shared resolver grammar
+    # (`template_placeholders`), so this agrees with the resolver by
+    # construction. Model-enforced only — not a published JSON-Schema
+    # pattern, so the validator, not `latest.json`, is the complete gate.
+    for placeholder in template_placeholders(value):
+        if not has_known_scope(placeholder):
+            raise ValueError(
+                f"template placeholder ${{{placeholder}}} must begin with a "
+                "known resolution scope "
+                f"({', '.join(RESOLUTION_SCOPES)}); unqualified placeholders "
+                "are invalid (spec: §Value Expressions)"
+            )
+    return value
+
+
 class TemplateExpression(_EndpointModel):
     """``{"template": "...${scope.path}..."}`` value expression."""
 
@@ -294,35 +316,15 @@ class TemplateExpression(_EndpointModel):
     @field_validator("template")
     @classmethod
     def _placeholders_qualified(cls, value: str) -> str:
-        # Every `${...}` placeholder must begin with a known resolution scope.
-        # An unqualified `${name}` is not refused by every runtime that reads
-        # this document: one takes the bare name as a top-level context key and
-        # falls back to `secrets`, substituting whatever is stored under it,
-        # while the other raises on a scope it does not know. Neither names the
-        # placeholder to the author of the endpoint.
-        # Placeholders are parsed by the shared resolver grammar
-        # (`template_placeholders`), so this agrees with the resolver by
-        # construction. Model-enforced only — not a published JSON-Schema
-        # pattern, so the validator, not `latest.json`, is the complete gate.
-        for placeholder in template_placeholders(value):
-            if not has_known_scope(placeholder):
-                raise ValueError(
-                    f"template placeholder ${{{placeholder}}} must begin with a "
-                    "known resolution scope "
-                    f"({', '.join(RESOLUTION_SCOPES)}); unqualified placeholders "
-                    "are invalid (spec: §Value Expressions)"
-                )
-        return value
+        return _validate_template_placeholders(value)
 
 
+# `path_params` / `headers` / `query` recognize `from_param` as an untyped
+# procedural convention; `filters` is a closed, two-form slot, so it gets a
+# typed member instead.
 class FromParamExpression(_EndpointModel):
-    """``{"from_param": "<name>"}`` — a `filters` map entry landing on a param.
-
-    `path_params` / `headers` / `query` recognize this same key as an untyped
-    procedural convention (`_collect_singleton_values`); `filters` is a closed,
-    two-form slot (`from_param` or `template`, see `FilterLanding`) so it gets
-    a typed member instead, the same way `template` already has one in
-    `TemplateExpression`.
+    """``{"from_param": "<name>"}`` — a `filters` map entry landing on a param,
+    verbatim: the filter's own value is what reaches the param.
     """
 
     from_param: str = Field(
@@ -330,6 +332,31 @@ class FromParamExpression(_EndpointModel):
         min_length=1,
         description="Name of a param this operation declares under `params`.",
     )
+
+
+class TemplateFilterLanding(_EndpointModel):
+    """``{"param": "<name>", "template": "...${scope.path}..."}`` — a
+    `filters` map entry landing on a param via a computed value.
+
+    Unlike `FromParamExpression`, the value the param carries is not the
+    filter's own value but this template rendered — for a provider that
+    spells the comparison inside the value rather than in a distinct param
+    (``amount=<>0``, ``q=created>2020-01-01``). `param` is still the
+    destination; only what reaches it differs, so it is checked the same way
+    `from_param` is (RULE-ENDP-066, RULE-ENDP-002).
+    """
+
+    param: str = Field(
+        ...,
+        min_length=1,
+        description="Name of a param this operation declares under `params`.",
+    )
+    template: str = Field(..., min_length=1)
+
+    @field_validator("template")
+    @classmethod
+    def _placeholders_qualified(cls, value: str) -> str:
+        return _validate_template_placeholders(value)
 
 
 def _filter_landing_discriminator(v: Any) -> str | None:
@@ -342,18 +369,19 @@ def _filter_landing_discriminator(v: Any) -> str | None:
         return None
     if isinstance(v, FromParamExpression):
         return "from_param"
-    if isinstance(v, TemplateExpression):
+    if isinstance(v, TemplateFilterLanding):
         return "template"
     return None
 
 
-#: Where a `filters` map entry's operator lands: an already-declared param, or
-#: a template rendering the filter's own value into the request. Reuses
-#: `TemplateExpression` rather than declaring a second template shape.
+#: Where a `filters` map entry's operator lands: an already-declared param
+#: carrying the filter's own value, or the same param carrying a computed
+#: value rendered from a template — the value-expression `${scope.path}`
+#: syntax reused, not a second grammar.
 FilterLanding = Annotated[
     Union[
         Annotated[FromParamExpression, UnionTag("from_param")],
-        Annotated[TemplateExpression, UnionTag("template")],
+        Annotated[TemplateFilterLanding, UnionTag("template")],
     ],
     Discriminator(_filter_landing_discriminator),
 ]
@@ -451,12 +479,11 @@ _UNBOUNDABLE_EXPRESSION_KEY = "literal"
 # ---------------------------------------------------------------------------
 
 
-# Declarative mirror of `Param._validate`'s cross-field rules for the published
+# Declarative mirror of `Param._validate`'s cross-field rule for the published
 # schema: a `query` param of `array`/`object` type must declare `style` and
-# `explode` (non-null); a `controlled_by` param must not declare `operators`.
-# Keyed on the wire name `in` (the `location` alias). `then` pins the required
-# fields to non-null types because they render nullable and the runtime demands
-# a value.
+# `explode` (non-null). Keyed on the wire name `in` (the `location` alias).
+# `then` pins the required fields to non-null types because they render
+# nullable and the runtime demands a value.
 _PARAM_SCHEMA_RULES: dict[str, Any] = {
     "allOf": [
         {
@@ -2042,10 +2069,13 @@ class ReadOperation(_EndpointModel):
         description=(
             "How a stream filter's operator reaches this operation's request, "
             "keyed by the record field a filter targets and then by operator. "
-            "`from_param` lands the operator on a param declared under "
-            "`params`; `template` renders the filter's own value into the "
-            "request through the value-expression grammar. RULE-STRM-026 is "
-            "what a stream-side filter on this operation must agree with."
+            "Each entry names a param declared under `params` as its landing "
+            "site: `from_param` carries the filter's own value there "
+            "verbatim; `param` plus `template` carries a value rendered "
+            "through the value-expression grammar instead, for a provider "
+            "that spells the comparison inside the value rather than in a "
+            "distinct param. RULE-STRM-026 is what a stream-side filter on "
+            "this operation must agree with."
         ),
     )
     response: ResponseExtraction = Field(...)
@@ -2083,9 +2113,6 @@ class ReadOperation(_EndpointModel):
         if self.replication is not None:
             _validate_replication_wiring(self.replication, self.params)
 
-        if self.filters:
-            _validate_filters_wiring(self.filters, self.params)
-
         # response.records → response.schema traversal raises directly.
         # When replication is declared, the same traversal feeds cursor-field
         # validation (avoiding a second walk of the same JSON Schema).
@@ -2094,6 +2121,21 @@ class ReadOperation(_EndpointModel):
             _validate_cursor_fields_in_record_shape(
                 self.replication, records_array_node, self.response.schema_
             )
+
+        if self.filters:
+            _validate_filters_wiring(self.filters, self.params)
+            # A `filters` key is a RECORD field, not a `response.body` ref —
+            # `RECORD_FIELD_PATH_PATTERN` on the field type is a shape check,
+            # not an existence one, the same gap `keyset.order_by_field` closes
+            # below. Without this, `filters: {"updatedAt": …}` against a record
+            # declaring `updated_at` validates clean and a stream filtering on
+            # `updated_at` lands nowhere — the wrong-rows failure this map
+            # exists to close, relocated from the operator to the field name.
+            for field in self.filters:
+                _validate_record_field_path(
+                    field, records_array_node, self.response.schema_,
+                    where="filters",
+                )
 
         # `keyset.order_by_field` is a RECORD path, not a `response.body` ref, so
         # the sweep below never sees it — `_response_body_segments` returns None
@@ -3120,8 +3162,8 @@ def _validate_param_wiring(
                     f"in={param.location!r}; expected in='path' (spec: §Parameter Validation and Operators)"
                 )
             # RULE-ENDP-028, on WRITES only. A write param has exactly one
-            # source: its own `default`. `operators` makes a param
-            # stream-filterable and `controlled_by` hands it to
+            # source: its own `default`. A `filters` map entry makes a param
+            # a stream's landing site and `controlled_by` hands it to
             # pagination/replication — both read-side, neither reachable from a
             # write. So a write path param with no `default` provably cannot
             # resolve, and the placeholder it fills can never be substituted.
@@ -3396,40 +3438,48 @@ def _validate_replication_wiring(replication: Replication, params: dict[str, Par
 def _validate_filters_wiring(
     filters: dict[str, dict[str, Any]], params: dict[str, Param]
 ) -> None:
-    """Every `filters` entry lands on exactly one param or template, never on
-    a `controlled_by` param, and no two operators on one field collide.
+    """Every `filters` entry lands on a declared, non-`controlled_by` param,
+    and no two entries anywhere in the map land on the same one.
 
-    `filters`' `from_param` is a landing declaration, not a request binding —
+    Both landing forms name a destination param (`from_param` / `param`), so
+    one param existence/`controlled_by` check and one uniqueness check cover
+    both — uniqueness spans the whole map, not one field: two DIFFERENT
+    fields landing on the same param is the identical ambiguity as two
+    operators on one field doing so, since the param still carries only one
+    value and a run can honour only one of the two predicates.
+
+    `filters`' landing is a routing declaration, not a request binding —
     whether the named param is itself bound into a request location at all is
     `_validate_param_binding_uniqueness`'s separate, already-covered concern.
     """
+    seen: dict[str, tuple[str, str]] = {}
     for field, landings in filters.items():
-        seen: dict[tuple[str, Any], str] = {}
         for operator, landing in landings.items():
-            if isinstance(landing, FromParamExpression):
-                name = landing.from_param
-                param = params.get(name)
-                if param is None:
-                    raise violation(
-                        "RULE-ENDP-066",
-                        f"filters.{field}.{operator} names undeclared param {name!r}",
-                    )
-                if param.controlled_by is not None:
-                    raise violation(
-                        "RULE-ENDP-002",
-                        f"filters.{field}.{operator} names param {name!r}, which "
-                        f"declares controlled_by={param.controlled_by!r}",
-                    )
-                target = ("from_param", name)
-            else:
-                target = ("template", landing.template)
-            if target in seen:
+            name = (
+                landing.from_param
+                if isinstance(landing, FromParamExpression)
+                else landing.param
+            )
+            param = params.get(name)
+            if param is None:
+                raise violation(
+                    "RULE-ENDP-066",
+                    f"filters.{field}.{operator} names undeclared param {name!r}",
+                )
+            if param.controlled_by is not None:
+                raise violation(
+                    "RULE-ENDP-002",
+                    f"filters.{field}.{operator} names param {name!r}, which "
+                    f"declares controlled_by={param.controlled_by!r}",
+                )
+            if name in seen:
+                other_field, other_operator = seen[name]
                 raise violation(
                     "RULE-ENDP-067",
-                    f"filters.{field} operators {seen[target]!r} and {operator!r} "
-                    "resolve to the same landing site",
+                    f"filters.{other_field}.{other_operator} and "
+                    f"filters.{field}.{operator} both land on param {name!r}",
                 )
-            seen[target] = operator
+            seen[name] = (field, operator)
 
 
 def _validate_param_binding_uniqueness(

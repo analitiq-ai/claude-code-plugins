@@ -109,6 +109,13 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         rationale_sha256="763df584d5bb7387b1088632243f28a1143a6cc330876ccb57ea8477e783edcd",
     ),
     RecordAffirmation(
+        "RULE-ENDP-068",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="91e72193e7f044a1c3696d3313fdb7d5eeeda11612bb39fc718140fb15daba59",
+    ),
+    RecordAffirmation(
         "RULE-PIPE-017",
         refs=(
             "pipelines.config.Logging.log_level",

@@ -204,6 +204,21 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "operator, and re-keys onto param alone",
     ),
     FieldDisposition("endpoints.SingleCursorMapping", "format", "engine_gap", CURSOR_MAPPING_WIRE),
+    # --- endpoints.TemplateFilterLanding: the computed-value filters landing,
+    # unread end to end until the engine honours the filters map.
+    FieldDisposition(
+        "endpoints.TemplateFilterLanding", "param", "engine_gap",
+        "an author naming the param a computed filter value lands on expects "
+        "the run to carry the rendered template there; the pinned manifest "
+        "claims no read of it, so the request goes out exactly as it would "
+        "with no filters map at all",
+    ),
+    FieldDisposition(
+        "endpoints.TemplateFilterLanding", "template", "engine_gap",
+        "an author writing the template expects it rendered into the "
+        "request; the pinned manifest claims no read of it, so nothing "
+        "computes or sends the value it describes",
+    ),
     # --- endpoints.WindowCursorMapping: the whole windowed form is unread ---
     FieldDisposition(
         "endpoints.WindowCursorMapping", "cursor_field", "engine_gap",

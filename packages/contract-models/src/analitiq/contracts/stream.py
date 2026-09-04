@@ -16,6 +16,7 @@ from analitiq.contracts.endpoints import (
     ARROW_TYPE_PATTERN,
     WRITE_MODES,
     DatabaseObject,
+    FilterableOperator,
     WriteMode,
 )
 from analitiq.contracts.endpoint_identity import derive_db_endpoint_id
@@ -206,8 +207,9 @@ def validate_endpoint_ref(data: Any) -> ConnectorEndpointRef | ConnectionEndpoin
 # Literal is the structural floor — the union of both scope vocabularies — and
 # `StreamSource` narrows it to the scope-appropriate subset (database operators
 # for a connection source, API operators for a connector source). The API set
-# mirrors `endpoints.Param.operators`; the finer per-endpoint subset an API
-# source may use is endpoint-owned and resolved at runtime.
+# mirrors `endpoints.FilterableOperator`, the vocabulary a `filters` map entry
+# on a read operation may key on; the finer per-field subset an API source
+# actually offers is endpoint-owned, in that map.
 _COMMON_FILTER_OPERATORS = ("eq", "neq", "gt", "gte", "lt", "lte", "in", "not_in")
 _DB_ONLY_FILTER_OPERATORS = ("is_null", "is_not_null", "like", "ilike")
 _API_ONLY_FILTER_OPERATORS = ("contains", "starts_with", "ends_with")
@@ -229,6 +231,15 @@ FilterOperator = Literal[
 if set(get_args(FilterOperator)) != _DB_FILTER_OPERATORS | _API_FILTER_OPERATORS:
     raise AssertionError(
         "FilterOperator Literal must equal the union of the DB and API operator vocabularies")
+
+# Cross-module guard: `endpoints.FilterableOperator` is authored as a second
+# copy of `_API_FILTER_OPERATORS` (the `filters` map's key vocabulary cannot
+# import from this module — `endpoints.py` cannot import `stream.py`, which
+# already imports it). Adding an operator to one copy and not the other fails
+# loudly at import, not silently at authoring time.
+if set(get_args(FilterableOperator)) != _API_FILTER_OPERATORS:
+    raise AssertionError(
+        "endpoints.FilterableOperator Literal must equal the API filter operator vocabulary")
 
 
 _FILTER_CONDITIONAL_RULES: dict[str, Any] = {
@@ -453,7 +464,8 @@ class StreamSource(StrictModel):
         # which subset is valid depends on the source scope, which only the
         # binding (endpoint_ref) knows. A database (connection) source may use
         # the database operators; an API (connector) source may use the API
-        # operators — its finer per-endpoint subset is resolved at runtime.
+        # operators — its finer per-field subset is declared in the
+        # referenced operation's `filters` map.
         if not self.filters:
             return self
         allowed = (

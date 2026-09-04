@@ -145,39 +145,57 @@ keyed by record field and then by operator:
     "account_id": { "in": "path", "type": "string", "required": true },
     "minUpdatedAt": {
       "in": "query", "type": "string", "format": "date-time", "required": false
-    }
+    },
+    "q": { "in": "query", "type": "string", "required": false }
   },
   "request": {
     "method": "GET",
     "path": "/v1/accounts/{account_id}/invoices",
     "path_params": { "account_id": { "from_param": "account_id" } },
-    "query": { "minUpdatedAt": { "from_param": "minUpdatedAt" } }
+    "query": {
+      "minUpdatedAt": { "from_param": "minUpdatedAt" },
+      "q": { "from_param": "q" }
+    }
   },
   "filters": {
-    "updated_at": { "gte": { "from_param": "minUpdatedAt" } }
+    "updated_at": { "gte": { "from_param": "minUpdatedAt" } },
+    "status": {
+      "eq": {
+        "param": "q",
+        "template": "status:${stream.filters.status.value}"
+      }
+    }
   },
   "response": {
     "records": { "ref": "response.body.data" },
     "schema": { "type": "object", "properties": { "data": { "type": "array",
-      "items": { "type": "object", "properties": { "updated_at": { "type": "string" } } } } } }
+      "items": { "type": "object", "properties": {
+        "updated_at": { "type": "string" }, "status": { "type": "string" }
+      } } } } }
   }
 }
 ```
 
 - The outer key is the record field a stream filter targets; the inner key
   is the operator, from the API-filter vocabulary `RULE-ENDP-055` prints.
-- `{"from_param": "<name>"}` lands the operator on a param this operation
-  already declares (RULE-ENDP-066) — bound into the request exactly like any
-  other param. `{"template": "..."}` is the other landing form, for a
-  provider that spells the comparison inside a value rather than a param;
-  reach `${stream.filters.<field>.value}` for the filter's own value.
+- `{"from_param": "<name>"}` (`updated_at` above) lands the operator on a
+  param this operation already declares (RULE-ENDP-066), carrying the
+  filter's own value verbatim — bound into the request exactly like any
+  other param.
+- `{"param": "<name>", "template": "..."}` (`status` above) is the other
+  landing form, for a provider that spells the comparison inside the
+  value rather than in a distinct param (`q=status:paid`, not
+  `status=paid`). `param` is still the destination, checked the same way;
+  `template` renders through the value-expression grammar, reaching
+  `${stream.filters.<field>.value}` for the filter's own value.
 - A `controlled_by` param — pagination or replication owns it — must never
   be a `filters` landing site (RULE-ENDP-002), and two operators on the same
   field must never land on the same site (RULE-ENDP-067): each would tell
   the provider it received a different comparison than the one it did.
-- A stream's filter on this endpoint is checked against this map on the
-  stream side — a filter naming a field or operator this map does not carry
-  is refused there, not here.
+- A stream's filter is authored against this map — its `field` names a
+  key here and its `operator` an entry under it — but nothing in this
+  document's own validation reads a stream at all; whether a mismatch is
+  caught is outside what authoring an endpoint document controls.
 
 ## The same value in two places is two params
 

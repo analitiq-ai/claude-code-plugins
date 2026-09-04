@@ -201,9 +201,15 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="e72cf4e9227b",
     ),
     ProseObligation(model="DatabaseObject", field="name", prose_hash="ba4aa8eaf86d", descriptive=True),
-    ProseObligation(model="FromParamExpression", prose_hash="049c219ecf5d", descriptive=True),
+    ProseObligation(model="FromParamExpression", prose_hash="7c8360b7bd53", descriptive=True),
     ProseObligation(
         model="FromParamExpression", field="from_param",
+        rule_ids=("RULE-ENDP-066",),
+        prose_hash="68776809d6d5",
+    ),
+    ProseObligation(model="TemplateFilterLanding", prose_hash="e7b35d50abe0", descriptive=True),
+    ProseObligation(
+        model="TemplateFilterLanding", field="param",
         rule_ids=("RULE-ENDP-066",),
         prose_hash="68776809d6d5",
     ),
@@ -314,7 +320,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ReadOperation", field="filters",
         rule_ids=("RULE-ENDP-002", "RULE-ENDP-055", "RULE-ENDP-066", "RULE-ENDP-067"),
-        prose_hash="343e20e9e17e",
+        prose_hash="267481e3090d",
         structural=(
             "dict[RecordFieldPathKey, dict[FilterableOperator, FilterLanding]] "
             "— the field-then-operator keying and the two landing forms are "

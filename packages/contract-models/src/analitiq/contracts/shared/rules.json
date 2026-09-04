@@ -2495,7 +2495,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, the operators a stream may filter it with — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
+   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, whether a `filters` map entry names it as a stream's landing site — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2980,7 +2980,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The other things that fill a param are read-side: operators make it filterable from a stream, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
+   "rationale": "The other things that fill a param are read-side: a `filters` map entry makes it a stream's landing site, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3087,7 +3087,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type, requiredness and operator set get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether it may filter on that value or with which operators, and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
+   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type and requiredness get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether the value may be filtered at all — that depends on a `filters` map entry naming this param, which a ref bypasses entirely — and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3968,6 +3968,53 @@
    "symbol": null,
    "fixture_model": null,
    "rationale": "A landing site — one param, or one template — carries one value. Two operators bound to the same one is the ambiguity this map exists to close: before it, nothing checked whether `eq`, `contains` and `starts_with` built the request identically, and a run over the wrong operator succeeded silently. Refusing the entry at authoring time is where the mistake is still attached to the line that made it.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-068",
+   "statement": "A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "The key is a record field path typed only to a dotted-segment shape (RECORD_FIELD_PATH_PATTERN); nothing about that type says the field exists. A key that resolves to nothing does not fail at run time — the filters map entry simply sits unused, and a stream that filters on the field it meant is refused nowhere and reads unfiltered, the wrong-rows failure this map exists to close, relocated from the operator to the field name. `pagination.keyset.order_by_field` (RULE-ENDP-023) closes the identical gap for the same reason; this is the same check reused for a second record-path site.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-069",
+   "statement": "Every `${...}` placeholder in a `filters` map template landing MUST begin with a declared resolution scope.\n",
+   "tier": "structural",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::TemplateFilterLanding._placeholders_qualified",
+   "owners": [
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "The same obligation RULE-ENDP-049 states for the general value-expression `template` form, applied to the `filters` map's own template-landing model — a separate class carrying the identical check (`_validate_template_placeholders`) because `filters` needs a destination `param` a bare `TemplateExpression` does not carry. An unqualified placeholder here is the same ambiguity RULE-ENDP-049's rationale describes, now over the value a `filters` entry sends the provider instead of a general request slot.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5700,7 +5747,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per parameter.\n",
+   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per record field, in its `filters` map.\n",
    "status": "active",
    "superseded_by": null
   },

@@ -1,0 +1,23 @@
+id: RULE-ENDP-068
+statement: >
+  A `filters` map key MUST resolve by declared-path resolution against the
+  read operation's response schema record shape.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+fields: [filters]
+rationale: >
+  The key is a record field path typed only to a dotted-segment shape
+  (RECORD_FIELD_PATH_PATTERN); nothing about that type says the field
+  exists. A key that resolves to nothing does not fail at run time — the
+  filters map entry simply sits unused, and a stream that filters on the
+  field it meant is refused nowhere and reads unfiltered, the wrong-rows
+  failure this map exists to close, relocated from the operator to the
+  field name. `pagination.keyset.order_by_field` (RULE-ENDP-023) closes the
+  identical gap for the same reason; this is the same check reused for a
+  second record-path site.
+status: active
+superseded_by: null
