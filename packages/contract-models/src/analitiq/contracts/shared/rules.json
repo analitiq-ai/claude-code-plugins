@@ -3918,6 +3918,55 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-066",
+   "statement": "A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — the `operators` that make it stream-filterable, a pagination block that gives it a starting value, or a replication block that supports `incremental`.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation",
+    "WriteOperation"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "`required` says the operation is wrong without the value, and the document is what has to be able to supply it. Every declared param is bound by exactly one request binding, and the value that binding carries reaches it from the param's own `default`, from a stream filter, or from a pagination or replication block. `operators` and those blocks are read-side, so a write param has only its `default` — the argument RULE-ENDP-028 also makes, about a write path_param whether or not it is required, so neither rule contains the other. A required param with none of them resolves to nothing on every run, while the document says in the same breath that the operation is wrong that way. That contradiction is settled by reading one document, which is why it is refused where it is written rather than left to a run to discover. Being driven by a block is not the same as being given a value by one: a `controlled_by` marker is self-declared, only the block-to-param direction is checked anywhere, and a block can name a param and leave it with nothing. What that looks like differs by block, which is why the two are stated apart. A pagination strategy declares the first request's value, so a page size with no `default`, a keyset or an offset or page cursor whose `initial` carries no value, and an opaque cursor, which has no field for one because there is no cursor before the first page, each name a param and fill it never. A replication block declares no such value anywhere: its cursor comes from the state a run stores, so what decides is `supported_methods`, and one that never says `incremental` says no run will leave a cursor behind. Counting a mention would be worse than not checking, because the refusal names the blocks as a way out and an author would take it. What the refusal proves is that a source is DECLARED, never that it resolves: a `default` reffing a connection parameter the connection leaves unset, a filterable param no stream filters, and a cursor param on a run that is not incremental or on a mapping the stream did not select, all pass, because which run and which stream is not something one document settles. RULE-ENDP-067 is the obligation over that remainder, and it is what says a param whose absence a legitimate run tolerates is not required in the first place. Nothing in the check reads `required` back out of any consumer, so it stays correct however the flag comes to be honoured; what `operators` rests on is the registry service's comparison of a stream's filter against the operators the param declares, the same consumer RULE-STRM-026 names.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-067",
+   "statement": "A param MUST be declared `required` if and only if its operation is wrong without the value: `required` is the contract's demand that such an operation fail rather than send the request with that param's slot dropped, so leaving the flag off a param the operation cannot be correct without is the same defect as setting it on one whose absence the operation tolerates.\n",
+   "tier": "judgment",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": null,
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "Param"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A request slot whose value expression resolves to nothing is dropped, and for an optional param that is right — an unsubmitted optional input and a missing one read the same, and a request that leaves the slot out is what the author meant. It is wrong for a param the operation cannot be correct without, and the two are indistinguishable at the slot: one is the request the author intended and the other asks a different question than the stream did, and both go out. The flag is what an author separates them with, which is why it is a decision rather than documentation, and why declaring it on a param whose absence the operation tolerates is as much a defect as omitting it on one whose absence it does not — the first refuses a read that works, once anything honours the flag, and the second leaves the wrong request indistinguishable from the right one. Nothing honours it: the pinned consumption manifest claims no read of the flag, so it reaches the run as nothing at all. What the run does then is a reading of the request path as it stands — the slot is dropped and the run reports success, except where the request cannot be built at all without the value, as an unresolved path segment cannot, and that refusal does not read the flag either. Catching a violation means reading the provider's own parameter reference beside the endpoint and deciding, per param, whether a response built without it answers the question the read asked; RULE-ENDP-066 mechanises only the half one document settles, that a required param the document gives no source resolves to nothing on every run.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
