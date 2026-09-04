@@ -16,7 +16,6 @@ rationale: >
   argument for this shape in full, and why the pattern earns its severity
   though the field goes unread, and it binds identically here: this is the
   read side that check deliberately mirrors. The pinned contract-consumption
-  manifest claims no read of `ResponseExtraction.metadata` the same way it
-  claims none of the write side's.
+  manifest claims no read of `ResponseExtraction.metadata`.
 status: active
 superseded_by: null
