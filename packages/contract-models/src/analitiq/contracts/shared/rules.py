@@ -115,6 +115,16 @@ class HeaderMergeRules:
         return self
 
 
+#: The header name RULE-HTTP-002 forbids, named rather than inline so the rule
+#: registry can resolve and print it (`RuleRecord.symbol`, mechanism
+#: `reserved_names`). A frozenset because that is the shape the renderer
+#: expects, not a claim about how the forbidden set will grow.
+FORBIDDEN_CONTENT_LENGTH_HEADER: frozenset[str] = frozenset({"content-length"})
+
+#: The header name RULE-HTTP-003 forbids, same reasoning.
+FORBIDDEN_CONTENT_TYPE_HEADER: frozenset[str] = frozenset({"content-type"})
+
+
 class DeclaredHeaderNames:
     """A block that names an HTTP header the engine puts on a request.
 
@@ -132,15 +142,15 @@ class DeclaredHeaderNames:
     """
 
     @staticmethod
-    def _matches(name: str, refused: str) -> bool:
-        """Whether an authored name is `refused`, as a wire reader sees it.
+    def _matches(name: str, refused: frozenset[str]) -> bool:
+        """Whether an authored name is one of `refused`, as a wire reader sees it.
 
         Reduced through `header_name_key`, so matching a name here and
         matching one anywhere else in the contract mean the same thing;
         letting the spelling decide whether a rule applies is what that
         function exists to prevent.
         """
-        return header_name_key(name) == refused
+        return header_name_key(name) in refused
 
     def declared_header_names(self) -> list[tuple[str, str]]:
         """Each header name this block names, paired with where it named it.
@@ -156,13 +166,13 @@ class DeclaredHeaderNames:
     @model_validator(mode="after")
     def _no_content_length_header(self):
         for name, where in self.declared_header_names():
-            if self._matches(name, "content-length"):
+            if self._matches(name, FORBIDDEN_CONTENT_LENGTH_HEADER):
                 raise violation("RULE-HTTP-002", where)
         return self
 
     @model_validator(mode="after")
     def _no_content_type_header(self):
         for name, where in self.declared_header_names():
-            if self._matches(name, "content-type"):
+            if self._matches(name, FORBIDDEN_CONTENT_TYPE_HEADER):
                 raise violation("RULE-HTTP-003", where)
         return self

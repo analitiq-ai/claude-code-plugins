@@ -28,6 +28,7 @@ from analitiq.contracts.shared.rule_record import (
     RETIRED_BEFORE_THE_REGISTRY,
     SEVERITIES,
     STRUCTURAL_TIER,
+    SYMBOL_MECHANISMS,
     TIERS,
     RuleRecord,
 )
@@ -320,38 +321,81 @@ def test_every_owner_owns_something():
     assert used == set(OWNERS), f"owners nothing is assigned to: {sorted(set(OWNERS) - used)}"
 
 
-def test_every_pattern_rule_names_the_regex_it_is_about():
-    """A `mechanism: pattern` rule resolves to a live constant, or renders none.
+def test_every_symbol_rule_resolves_to_the_shape_its_mechanism_needs():
+    """A `mechanism: pattern` or `mechanism: reserved_names` rule resolves to a
+    live constant of the right shape, or renders none.
 
     The reference prints that constant so an author is shown the form the
     statement points at. A record naming one that moved must fail here rather
     than at the renderer, and a record naming none renders `—` — which is the
-    honest answer, not a defect, so this only grades the ones that do.
+    honest answer, not a defect, so this only grades the ones that do. The
+    shape check is per mechanism: a `pattern` rule points at a regex string, a
+    `reserved_names` rule at a frozenset of forbidden literal strings — mixing
+    them up would render silently wrong (a regex printed as a member list, or
+    a set's repr printed as if it were a pattern).
     """
     import importlib
 
     for rule in all_rules():
-        if not rule.pattern_symbol:
+        if not rule.symbol:
             continue
-        assert rule.mechanism == "pattern", (
-            f"{rule.id}: pattern_symbol on a {rule.mechanism!r} rule"
+        assert rule.mechanism in SYMBOL_MECHANISMS, (
+            f"{rule.id}: symbol on a {rule.mechanism!r} rule"
         )
-        module_name, _, name = rule.pattern_symbol.partition("::")
+        module_name, _, name = rule.symbol.partition("::")
         module = importlib.import_module(module_name)
         assert hasattr(module, name), (
-            f"{rule.id}: pattern_symbol {rule.pattern_symbol!r} resolves to no "
+            f"{rule.id}: symbol {rule.symbol!r} resolves to no "
             f"name in {module_name}"
         )
-        assert isinstance(getattr(module, name), str), (
-            f"{rule.id}: {rule.pattern_symbol!r} is not a regex string"
-        )
+        value = getattr(module, name)
+        if rule.mechanism == "pattern":
+            assert isinstance(value, str), (
+                f"{rule.id}: {rule.symbol!r} is not a regex string"
+            )
+        else:
+            assert isinstance(value, frozenset) and value, (
+                f"{rule.id}: {rule.symbol!r} is not a non-empty frozenset"
+            )
+
+
+def test_a_symbol_refuses_a_mechanism_that_does_not_take_one():
+    """`symbol` names the constant a `pattern` or `reserved_names` rule is
+    about; every other mechanism — and no mechanism at all — refuses it.
+
+    `RuleRecord` says no at construction, same as `test_descriptive_prose_
+    cannot_take_a_rule_id` pins the sibling refusal on `tier`; this pins that
+    the message still names which mechanisms DO take one, because an author
+    who reaches for `symbol` on the wrong record needs to learn that, not
+    that the field is misspelled.
+    """
+    base = dict(
+        id="RULE-TEST-001",
+        statement="A connector MUST be versioned by git tag.",
+        tier=STRUCTURAL_TIER,
+        severity="error",
+        scopes=("connector",),
+        rationale="—",
+        owners=("connector-plugin",),
+        symbol="analitiq.contracts.shared.rule_record::MECHANISMS",
+    )
+    # base names no `mechanism`, so RuleRecord(**base) alone exercises the
+    # default (None) — the second case below is the explicit mismatch.
+    with pytest.raises(ValueError) as exc:
+        RuleRecord(**base)
+    assert "pattern" in str(exc.value) and "reserved_names" in str(exc.value)
+
+    with pytest.raises(ValueError) as exc:
+        RuleRecord(**base, mechanism="literal_enum")
+    assert "pattern" in str(exc.value) and "reserved_names" in str(exc.value)
 
 
 def test_every_mechanism_names_a_rule():
     """The same, for the shape-device axis.
 
-    Only `literal_enum` is read — it is what makes the rendered reference print
-    a rule's members off the live model — so the rest earn their place by
+    Only `literal_enum`, `pattern` and `reserved_names` are read — each is
+    what makes the rendered reference print something off the live model or
+    the constant a record's `symbol` names — so the rest earn their place by
     being the answer some author chose instead. A member no record takes is a
     distinction offered and never used, which is the shape of a vocabulary kept
     ready rather than one in service.

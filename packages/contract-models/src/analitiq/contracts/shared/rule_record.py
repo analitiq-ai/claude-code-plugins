@@ -120,7 +120,17 @@ MECHANISMS = (
     "pattern",
     "closed_object",
     "default",
+    "reserved_names",
 )
+
+#: The `MECHANISMS` subset a `symbol` may accompany — the devices the rendered
+#: reference resolves a live constant for (`_live_symbol` in
+#: `render_rule_reference.py`). Named once and imported everywhere it is
+#: checked (construction here, the renderer's dispatch, the registry test),
+#: so a third symbol-bearing mechanism updates one tuple instead of three —
+#: missing one of the other two would silently print `—` for a record whose
+#: `symbol` no longer resolves against what the renderer actually reads.
+SYMBOL_MECHANISMS = ("pattern", "reserved_names")
 
 #: Ids retired before the registry had files, so no record on disk remembers
 #: them. A live record normally carries `status: retired` and guards its own id;
@@ -195,14 +205,16 @@ class RuleRecord:
     fields: tuple[str, ...] = ()
     #: Which shape device a structural rule is about, from :data:`MECHANISMS`.
     mechanism: str | None = None
-    #: The dotted symbol holding the regex a `mechanism: pattern` rule is
-    #: about, `dotted.module::NAME`. A field can carry several patterns — one
-    #: per rule that grades it — and nothing in the shape says which rule owns
-    #: which, so a reference rendering all of them under each rule tells an
-    #: author what the FIELD must satisfy and never what the RULE requires.
-    #: Resolved by import like `validator`, so a renamed constant fails the
-    #: build rather than leaving a rule pointing at a regex that moved.
-    pattern_symbol: str | None = None
+    #: The dotted constant the rule's `mechanism` is about, `dotted.module::NAME`
+    #: — the regex a `pattern` rule points at, or the frozenset a
+    #: `reserved_names` rule points at. A field can carry several of these —
+    #: one per rule that grades it — and nothing in the shape says which rule
+    #: owns which, so a reference rendering all of them under each rule tells
+    #: an author what the FIELD must satisfy and never what THIS RULE
+    #: requires. Resolved by import like `validator`, so a renamed constant
+    #: fails the build rather than leaving a rule pointing at a value that
+    #: moved.
+    symbol: str | None = None
     #: The concrete model the shared fixture corpus validates against. Naming
     #: one is how a rule joins the corpus, so membership is a thing the record
     #: says rather than a thing derived from how the rule happens to be
@@ -314,19 +326,19 @@ class RuleRecord:
                     "dotted.module::Symbol — bind the module that is imported "
                     "(analitiq.contracts.x::Symbol), never a path to a file"
                 )
-        if self.pattern_symbol:
-            dotted, separator, _ = self.pattern_symbol.partition("::")
+        if self.symbol:
+            dotted, separator, _ = self.symbol.partition("::")
             if not separator or not all(
                 part.isidentifier() for part in dotted.split(".")
             ):
                 self._fail(
-                    f"pattern_symbol {self.pattern_symbol!r} is not "
+                    f"symbol {self.symbol!r} is not "
                     "dotted.module::NAME — name the constant that is imported"
                 )
-        if self.pattern_symbol and self.mechanism != "pattern":
+        if self.symbol and self.mechanism not in SYMBOL_MECHANISMS:
             self._fail(
-                "pattern_symbol names the regex a `mechanism: pattern` rule is "
-                f"about; this record's mechanism is {self.mechanism!r}"
+                "symbol names the constant a `pattern` or `reserved_names` "
+                f"rule is about; this record's mechanism is {self.mechanism!r}"
             )
         if self.status == "retired" and not self.superseded_by:
             self._fail(

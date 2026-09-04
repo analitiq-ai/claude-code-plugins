@@ -14,6 +14,8 @@ targets:
   - HttpTransport
   - TransportDefaults
   - Idempotency
+mechanism: reserved_names
+symbol: "analitiq.contracts.shared.rules::FORBIDDEN_CONTENT_LENGTH_HEADER"
 fixture_model: AuthOperationTemplate
 rationale: >
   The value is the size of a body nobody has built yet — one record or a page

@@ -209,7 +209,7 @@ def compile_registry(records: list[RuleRecord]) -> str:
                 "targets": list(r.targets),
                 "fields": list(r.fields),
                 "mechanism": r.mechanism,
-                "pattern_symbol": r.pattern_symbol,
+                "symbol": r.symbol,
                 "fixture_model": r.fixture_model,
                 "rationale": r.rationale,
                 "status": r.status,

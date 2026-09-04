@@ -9,6 +9,8 @@ validator: "analitiq.contracts.endpoints::_RequestBase._validate"
 owners: [connector-plugin]
 targets: [_RequestBase]
 fields: [path]
+mechanism: pattern
+symbol: "analitiq.contracts.endpoints::PATH_PLACEHOLDER_REPEATED_PATTERN"
 fixture_model: WriteRequest
 rationale: >
   A repeated placeholder is filled from the one `path_params` entry it collapses
