@@ -25,10 +25,12 @@ One disposition per kind of consumer an unread field may have:
   model from it at parse time, and that derived field is what the engine
   reads. No attribute read of this field exists because the run reads the
   derived field, whose value this one settles. ``derives`` names
-  that field, and the census holds it to being one the model declares and
-  the manifest claims: a derivation whose product nothing reads is a gap,
-  not a derivation. Which field is computed from which, and why the input
-  is therefore not free, is the entry's ``reason``.
+  that field, and the census holds it to being one the model declares, one
+  the manifest claims, and one naming this field as the input it is computed
+  from — a ``DerivedFrom`` annotation the contract carries on it: a
+  derivation whose product nothing reads is a gap, not a derivation, and a
+  computation the contract never states is not one at all. Why the input is
+  therefore not free is the entry's ``reason``.
 - ``engine_gap`` — the contract permits something the engine ignores and
   should honour: what the author declared has no effect on the run. The
   ``reason`` states what an author writing the field expects and what the
@@ -106,8 +108,10 @@ class FieldDisposition:
     ``derives`` belongs to ``derivation_input`` and to no other kind: it
     names the field on this model whose value the contract computes from
     this one, and it is what the census can hold the entry to — the entry
-    fails when the model stops declaring that field or the manifest stops
-    claiming it. That a derivation exists at all is the reader's, under
+    fails when the model stops declaring that field, when the manifest stops
+    claiming it, or when that field stops naming this one as the input it is
+    computed from. That the validator performing the computation honours
+    that declaration is the reader's, under
     ``.claude/rules/reachability-dispositions.md``.
     """
 

@@ -30,6 +30,7 @@ from analitiq.contracts.shared.common import (
     DISPLAY_NAME_MIN,
     NO_EDGE_WHITESPACE_PATTERN,
     BatchSize,
+    DerivedFrom,
     NonEmptyStr,
     RetryErrorHandlingBase,
     StrictModel,
@@ -145,7 +146,7 @@ class ConnectionEndpointRef(_EndpointRefBase):
             "`endpoint_id` cannot be parsed for identity."
         ),
     )
-    endpoint_id: str | None = Field(
+    endpoint_id: Annotated[str | None, DerivedFrom("database_object")] = Field(
         default=None,
         description=(
             "Opaque handle derived from `database_object` "

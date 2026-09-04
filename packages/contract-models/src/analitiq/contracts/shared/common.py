@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
 from pydantic import (
@@ -279,6 +280,36 @@ def set_derived_field(model: BaseModel, field: str, value: Any) -> None:
     derived field re-derives on re-parse, so such a dump still round-trips.
     """
     object.__setattr__(model, field, value)
+
+
+@dataclass(frozen=True)
+class DerivedFrom:
+    """Annotation on a derived field naming the field it is computed from.
+
+    A ``mode="after"`` validator computing one field from another states the
+    computation in code, where only that code says which field feeds which.
+    This puts the relation on the field itself, so a document's derived
+    values can be traced without reading a validator body — and so the
+    reachability census can hold a ``derivation_input`` disposition to the
+    contract's own declaration instead of inferring it.
+
+    The name is the input field on the same model::
+
+        endpoint_id: Annotated[str | None, DerivedFrom("database_object")]
+
+    That the validator honours the declaration is a reader's obligation;
+    that the validator exists is the rule record's ``validator:``, resolved
+    against the live models when the registry compiles.
+
+    pydantic carries an unrecognised annotation as field metadata and
+    publishes nothing about it, so this adds no key to the rendered schema.
+    """
+
+    field: str
+
+    def __post_init__(self) -> None:
+        if not self.field.strip():
+            raise ValueError("DerivedFrom names the field derived from")
 
 
 # --- Shared retry/error-handling behavior ----------------------------------

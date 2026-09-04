@@ -36,6 +36,7 @@ import types
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal, Union, get_args, get_origin
 
+from analitiq.contracts.shared.common import DerivedFrom
 from pydantic import BaseModel
 
 from census.consumption.disposition import DispositionKind, FieldDisposition
@@ -112,6 +113,20 @@ def _is_literal(annotation: Any) -> bool:
         members = [a for a in get_args(annotation) if a is not type(None)]
         return bool(members) and all(_is_literal(m) for m in members)
     return False
+
+
+def _declares_derivation(cls: type[BaseModel], product: str, source: str) -> bool:
+    """Whether ``cls`` declares ``product`` as computed from ``source``.
+
+    The contract states the relation on the derived field itself, as a
+    :class:`DerivedFrom` annotation, so this is a lookup rather than a
+    reading of the validator that performs the computation. That the
+    validator honours the declaration is the reader's, under
+    ``.claude/rules/reachability-dispositions.md``; that it exists at all is
+    the rule record's ``validator:``, resolved against the live models when
+    the registry compiles.
+    """
+    return DerivedFrom(source) in cls.model_fields[product].metadata
 
 
 def reachable_models(manifest: dict[str, Any]) -> dict[str, type[BaseModel]]:
@@ -197,6 +212,11 @@ class ConsumptionReport:
     #: it derives, and the manifest claims no read of that name on this
     #: model — either it is the wrong name, or nothing reads the product.
     derivation_product_unread: tuple[FieldDisposition, ...]
+    #: ``derivation_input`` claims the contract computes ``derives`` from
+    #: this field, and the model declares no such derivation — the entry
+    #: names a computation the contract does not state, or states over a
+    #: different input.
+    derivation_not_declared: tuple[FieldDisposition, ...]
     #: A claim naming a field the live model does not declare — the manifest
     #: was generated against another contract version.
     claim_of_unknown_field: tuple[FieldRef, ...]
@@ -213,6 +233,7 @@ class ConsumptionReport:
             or self.duplicate_dispositions
             or self.structural_not_literal
             or self.derivation_product_unread
+            or self.derivation_not_declared
             or self.claim_of_unknown_field
             or self.manifest_names_unknown_model
         )
@@ -265,6 +286,14 @@ class ConsumptionReport:
             "the wrong field, or the product reaches no run-time read either "
             "and this is a gap, not a derivation",
             self.derivation_product_unread,
+            lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
+        )
+        group(
+            "derivation_input dispositions the contract does not declare — "
+            f"the derived field carries no {DerivedFrom.__name__} naming "
+            "this one as its input, so the entry states a computation the "
+            "model does not, or states it over a different field",
+            self.derivation_not_declared,
             lambda d: f"{d.qualified_model}.{d.field} -> {d.derives}",
         )
         group(
@@ -322,6 +351,7 @@ def census_report(
     unknown: list[FieldDisposition] = []
     not_literal: list[FieldDisposition] = []
     product_unread: list[FieldDisposition] = []
+    not_declared: list[FieldDisposition] = []
     for entry in dispositions:
         ref = (entry.qualified_model, entry.field)
         cls = models.get(entry.qualified_model)
@@ -348,6 +378,15 @@ def census_report(
             and (entry.qualified_model, entry.derives) not in classes["read"]
         ):
             product_unread.append(entry)
+        # Only where the model declares the product: a `derives` naming no
+        # field is already the finding above, and "nothing derives a field
+        # that does not exist" would print a duplicate line about one defect.
+        if (
+            entry.kind == "derivation_input"
+            and entry.derives in cls.model_fields
+            and not _declares_derivation(cls, entry.derives, entry.field)
+        ):
+            not_declared.append(entry)
 
     return ConsumptionReport(
         unread_without_disposition=tuple(sorted(classes["unread"] - set(seen))),
@@ -356,6 +395,7 @@ def census_report(
         duplicate_dispositions=duplicates,
         structural_not_literal=tuple(not_literal),
         derivation_product_unread=tuple(product_unread),
+        derivation_not_declared=tuple(not_declared),
         claim_of_unknown_field=tuple(unknown_claims),
         manifest_names_unknown_model=tuple(unknown_models),
     )

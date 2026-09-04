@@ -16,9 +16,11 @@ is the same split on fields and on the records over them.
 
 `census/consumption/reachability.py` compares sets, checks an annotation
 shape (a `structural` entry must sit on a `Literal`) and holds a
-`derivation_input` entry's `derives` to a field the same model declares and
-the manifest claims; `ConsumptionReport` there carries every finding those
-can reach.
+`derivation_input` entry's `derives` to a field the same model declares, the
+manifest claims, and names this one as the input it is computed from — the
+last a `DerivedFrom` annotation the contract carries on the derived field,
+so the census reads a declaration rather than the validator performing the
+computation; `ConsumptionReport` there carries every finding those can reach.
 `tests/census/test_contract_consumption.py` and
 `scripts/render_contract_consumption.py check` fail on every finding that
 dataclass carries. **Neither decides whether a reason is honest, nor which
@@ -54,7 +56,13 @@ means. What a reader settles is which one applies:
   `structural`.
 - The contract computes another field of the same model from it, and the
   engine reads that one → `derivation_input`, and `derives` names it. The
-  reason says which field is computed from which and why the input is
+  guard reads the derived field's `DerivedFrom` declaration and holds it to
+  naming this field. What it cannot decide, and you must, is whether a
+  validator **performs** the computation the declaration states: the
+  record's `validator:` holds that symbol to existing, and nothing here
+  reads its body, so a validator refactored to stop deriving — or to derive
+  from something else — leaves both the declaration and this census green.
+  The reason says which field is computed from which and why the input is
   therefore not free — a value reaching the run under another name is not
   an ignored value. It does not say that the contract rejects a document
   contradicting the derivation; whether a rule is applied is the record's

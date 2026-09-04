@@ -36,12 +36,14 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Union, get_args
 
 import pytest
+from analitiq.contracts.shared.common import DerivedFrom
 from pydantic import BaseModel, Field
 
 from census.consumption import pin
 from census.consumption.disposition import DispositionKind, FieldDisposition
 from census.consumption.reachability import (
     ConsumptionReport,
+    _declares_derivation,
     _is_literal,
     census_report,
     classify,
@@ -333,7 +335,10 @@ class ViaDict(BaseModel):
 
 
 class Root(BaseModel):
-    direct: Leaf
+    # `maybe` is dispositioned `derivation_input` deriving the claimed
+    # `direct`, and `_COMPLETE` is the accepted baseline every other test
+    # builds on, so the model has to declare what that entry says it does.
+    direct: Annotated[Leaf, DerivedFrom("maybe")]
     maybe: Optional[Grammar] = None
     either: Union[Tagged, int]
     annotated: Optional[Annotated[list[ViaDict], Field(min_length=0)]] = None
@@ -680,11 +685,104 @@ def test_derivation_input_whose_product_is_unread_is_a_finding(shadowed, derives
     assert not report.ok, why
     assert report.derivation_product_unread == (wrong,)
     assert f"Root.annotated -> {derives}" in report.render()
+    # A declared product raises the derivation check too, and each fact is
+    # true of it: nothing reads it and nothing computes it. Narrowing the
+    # second to claimed products alone — the obvious way to stop printing two
+    # lines — would silently stop grading every entry whose product is
+    # unread, and would pass every other test here.
+    assert report.derivation_not_declared == (() if derives == "vanished" else (wrong,))
 
 
 def test_derivation_input_naming_a_claimed_field_is_accepted(shadowed):
     report = census_report(shadowed, _COMPLETE)
     assert report.derivation_product_unread == ()
+
+
+# --- The declaration a `derivation_input` entry is held to -------------------
+#
+# A `derivation_input` says the contract computes another field from this one
+# at parse time. The contract states that on the derived field, as a
+# `DerivedFrom` annotation, so the entry is held to a declaration the model
+# carries — a lookup, never a reading of the validator that performs it.
+
+
+class Derives(BaseModel):
+    source: str = ""
+    product: Annotated[str, DerivedFrom("source")] = ""
+    unrelated: Annotated[str, DerivedFrom("elsewhere")] = ""
+    bare: str = ""
+
+
+@pytest.mark.parametrize(
+    "product,source,declared",
+    [
+        ("product", "source", True),
+        ("unrelated", "source", False),  # declared, over another input
+        ("bare", "source", False),  # no declaration at all
+    ],
+)
+def test_a_declared_derivation_names_its_own_input(product, source, declared):
+    assert _declares_derivation(Derives, product, source) is declared
+
+
+def test_a_derivation_declaration_names_the_field_it_derives_from():
+    """An empty name would bind a derived field to nothing while still
+    reading as a declaration."""
+    with pytest.raises(ValueError, match="names the field derived from"):
+        DerivedFrom("   ")
+
+
+def test_derivation_input_the_contract_does_not_declare_is_a_finding(shadowed):
+    """`either` is claimed, so the product-unread check passes it — and
+    `Root` declares no derivation of it, which is the claim this grades."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived, allegedly",
+        derives="either",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert not report.ok
+    assert report.derivation_product_unread == ()
+    assert report.derivation_not_declared == (wrong,)
+    assert "Root.annotated -> either" in report.render()
+
+
+def test_derivation_input_naming_the_declared_input_is_accepted(shadowed):
+    report = census_report(shadowed, _COMPLETE)
+    assert report.derivation_not_declared == ()
+
+
+def test_a_declaration_over_another_input_does_not_accept_this_entry(shadowed):
+    """`Root.direct` is declared derived from `maybe`. An entry keying it to
+    a different unread field of the same model is what a check reading only
+    "is this field derived at all" would accept."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived from something else",
+        derives="direct",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_not_declared == (wrong,)
+
+
+def test_a_derives_the_model_does_not_declare_raises_one_finding(shadowed):
+    """A duplicate finding over one defect prints the same line twice: a field
+    that does not exist is named by the product-unread finding, and nothing
+    declaring a derivation of it is not a second fact about it."""
+    wrong = _entry(
+        f"{_M}.Root",
+        "annotated",
+        kind="derivation_input",
+        reason="derived elsewhere",
+        derives="vanished",
+    )
+    report = census_report(shadowed, _COMPLETE[:2] + _COMPLETE[3:] + (wrong,))
+    assert report.derivation_product_unread == (wrong,)
+    assert report.derivation_not_declared == ()
 
 
 def test_every_finding_field_fails_the_report_and_is_rendered():
@@ -842,6 +940,44 @@ def test_a_manifest_generated_against_a_newer_tree_fails(monkeypatch):
     monkeypatch.setattr(pin, "load_manifest", lambda: ahead)
     with pytest.raises(AssertionError, match="ahead of this tree"):
         test_manifest_was_generated_against_this_tree_or_an_older_one()
+
+
+def test_the_live_census_grades_at_least_one_derivation():
+    """Non-vacuity, per `.claude/rules/guards.md`: the derivation check runs
+    only over `derivation_input` entries, so a registry holding none leaves
+    it never entered — and a report that graded nothing reads exactly like
+    one that found nothing wrong. Retiring the last such entry must fail
+    here and be a decision, not a silent exemption."""
+    from census.consumption.dispositions import DISPOSITIONS
+
+    graded = [d for d in DISPOSITIONS if d.kind == "derivation_input"]
+    assert graded, (
+        "no derivation_input disposition in the live census — the derivation "
+        "check now grades nothing while reporting success"
+    )
+    # Through the report, not the helper: the guard is `census_report`, and a
+    # helper answering correctly proves nothing about a report that stopped
+    # calling it. Each live entry is then re-keyed onto a product the model
+    # declares and no DerivedFrom names this field as the input to, and the
+    # report must name it — the live sites are proven gradeable, not merely
+    # present.
+    manifest = pin.load_manifest()
+    assert census_report(manifest, DISPOSITIONS).derivation_not_declared == ()
+    for entry in graded:
+        model = resolve_model(entry.qualified_model)
+        undeclared = [
+            name
+            for name in model.model_fields
+            if name != entry.field and not _declares_derivation(model, name, entry.field)
+        ]
+        assert undeclared, f"{entry.qualified_model} derives every other field"
+        broken = FieldDisposition(
+            entry.model, entry.field, entry.kind, entry.reason, derives=undeclared[0]
+        )
+        report = census_report(
+            manifest, tuple(d for d in DISPOSITIONS if d is not entry) + (broken,)
+        )
+        assert broken in report.derivation_not_declared
 
 
 def test_every_unread_contract_field_carries_a_disposition():
