@@ -1,0 +1,19 @@
+id: RULE-ENDP-066
+statement: >
+  A `filters` map entry's `from_param` MUST name a param the same operation
+  declares.
+tier: advisory
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ReadOperation._wiring"
+owners: [connector-plugin, engine]
+targets: [ReadOperation]
+fields: [filters]
+rationale: >
+  `from_param` is a cross-field reference within one document, the same shape
+  `request.query`/`headers`/`path_params` already resolve against `params`.
+  An undeclared name would otherwise parse as a landing site the operation
+  never sends, so the filter it carries silently drops out of the request
+  while the run reports success over unfiltered data.
+status: active
+superseded_by: null

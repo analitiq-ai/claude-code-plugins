@@ -176,7 +176,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="Filter", rule_ids=("RULE-STRM-004",),
-        prose_hash="60735ecfb653",
+        prose_hash="aa0450de5222",
         waiver=(
             "cross-document: which fields/params are filterable and which "
             "operators each allows is endpoint-owned; and the requires-half "
@@ -185,7 +185,10 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
             "endpoint resolution"
         ),
     ),
-    ProseObligation(model="Filter", field="field", prose_hash="9fb3e42418e3", descriptive=True),
+    ProseObligation(
+        model="Filter", field="field", rule_ids=("RULE-STRM-022",),
+        prose_hash="3dee33d60210",
+    ),
     ProseObligation(
         model="Filter", field="operator", rule_ids=("RULE-STRM-012",),
         prose_hash="6382c8ad9ce6",

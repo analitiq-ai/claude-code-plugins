@@ -17,6 +17,7 @@ re-deriving them.
 - What must NOT go directly in a request slot
 - What legitimately stays direct
 - Params carry the *request-input* type
+- Filtering: the `filters` map
 - The same value in two places is two params
 - Writes: `from_input`
 - Write path segments: `path_params` + `from_input`
@@ -89,9 +90,9 @@ prohibitions below).
   **No direct `stream.*`, `state.*`, or `runtime.*` ref** in `headers`,
   `query`, or `body` (RULE-ENDP-032). These are the per-run values (filters,
   cursors, batch sizing), and routing them through a param is what gives them a
-  declared type, requiredness, and operator set. Without that, nothing
-  downstream knows whether a stream may filter on the value or what it may
-  filter with.
+  declared type and requiredness. A value a stream filter supplies additionally
+  needs a `filters` map entry naming that param as its landing site (below) —
+  without one, nothing downstream knows a stream may filter on it at all.
 
   <!-- PROBE: request-slot-template-smuggle -->
   The check catches `{"ref": …}` specifically; smuggling the same value in as
@@ -127,13 +128,56 @@ though the response field it filters is `Timestamp(...)`.
 
 More param rules worth knowing while authoring:
 
-- **`operators` is the stream-filterability contract.** Declaring
-  `operators: ["gte", "lte"]` is what permits a downstream stream to filter on
-  that param, restricted to those operators. Omit it and the param is not
-  stream-filterable at all.
 - **RULE-ENDP-003** — a container-typed `query` param has several legal
   spellings on the wire (repeated key, delimiter-joined, bracketed) and the
   provider accepts one, so the serialization has to be declared, not guessed.
+
+## Filtering: the `filters` map
+
+A param carries no filterability of its own. What makes a record field
+stream-filterable is an entry in the read operation's own `filters` map,
+keyed by record field and then by operator:
+
+<!-- validate: api-endpoint#/operations/read -->
+```json
+{
+  "params": {
+    "account_id": { "in": "path", "type": "string", "required": true },
+    "minUpdatedAt": {
+      "in": "query", "type": "string", "format": "date-time", "required": false
+    }
+  },
+  "request": {
+    "method": "GET",
+    "path": "/v1/accounts/{account_id}/invoices",
+    "path_params": { "account_id": { "from_param": "account_id" } },
+    "query": { "minUpdatedAt": { "from_param": "minUpdatedAt" } }
+  },
+  "filters": {
+    "updated_at": { "gte": { "from_param": "minUpdatedAt" } }
+  },
+  "response": {
+    "records": { "ref": "response.body.data" },
+    "schema": { "type": "object", "properties": { "data": { "type": "array",
+      "items": { "type": "object", "properties": { "updated_at": { "type": "string" } } } } } }
+  }
+}
+```
+
+- The outer key is the record field a stream filter targets; the inner key
+  is the operator, from the API-filter vocabulary `RULE-ENDP-055` prints.
+- `{"from_param": "<name>"}` lands the operator on a param this operation
+  already declares (RULE-ENDP-066) — bound into the request exactly like any
+  other param. `{"template": "..."}` is the other landing form, for a
+  provider that spells the comparison inside a value rather than a param;
+  reach `${stream.filters.<field>.value}` for the filter's own value.
+- A `controlled_by` param — pagination or replication owns it — must never
+  be a `filters` landing site (RULE-ENDP-002), and two operators on the same
+  field must never land on the same site (RULE-ENDP-067): each would tell
+  the provider it received a different comparison than the one it did.
+- A stream's filter on this endpoint is checked against this map on the
+  stream side — a filter naming a field or operator this map does not carry
+  is refused there, not here.
 
 ## The same value in two places is two params
 

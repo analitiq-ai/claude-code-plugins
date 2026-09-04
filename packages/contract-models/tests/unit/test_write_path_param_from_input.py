@@ -632,7 +632,8 @@ class TestAWritePathParamMustBeAbleToResolve:
 
     def test_a_read_path_param_needs_no_default(self):
         # Reads keep the old latitude: a read path param can be supplied by a
-        # stream filter, so a missing `default` is not proof it cannot resolve.
+        # stream filter (via `filters`), so a missing `default` is not proof
+        # it cannot resolve.
         payload = {
             "$schema": API_SCHEMA_URL,
             "endpoint_id": "contact",
@@ -643,8 +644,8 @@ class TestAWritePathParamMustBeAbleToResolve:
                 },
                 "params": {"id": {
                     "in": "path", "type": "string", "required": True,
-                    "operators": ["eq"],
                 }},
+                "filters": {"id": {"eq": {"from_param": "id"}}},
                 "response": {
                     "records": {"ref": "response.body.objects"},
                     "schema": {

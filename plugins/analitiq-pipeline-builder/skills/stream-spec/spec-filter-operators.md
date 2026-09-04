@@ -34,7 +34,9 @@ downstream, or ask the connector to expose a suitable parameter.
 - `like` / `ilike` accept SQL wildcard syntax in `value` (`%`, `_`). The engine
   routes these to the dialect's pattern operator.
 - `value` typing follows the referenced field (`RULE-STRM-027`).
-- `field` names a column (database) or a parameter key (API) — `RULE-STRM-022`.
+- `field` names a record field — a column on a database source, a field an API
+  source's endpoint declares filterable — resolved against the endpoint
+  document on this stream's side (`RULE-STRM-022`).
 
 ## What the local validator still cannot check
 
@@ -50,11 +52,10 @@ above. Read the operator choice back to the user when the column type is
 unusual.
 
 For an API source, the endpoint document narrows the vocabulary further
-(`RULE-STRM-026`):
-
-- `operators` present, no `controlled_by` → filterable; the declared list is the
-  subset that parameter accepts.
-- `controlled_by: "pagination"` or `controlled_by: "replication"` → runtime-owned,
-  never stream-owned. The runtime-side validator rejects a filter that targets
-  one, and such a parameter carries no `operators` to draw from anyway.
-- no `operators` → not filterable, whatever else the parameter declares.
+(`RULE-STRM-026`): a field is filterable only where the referenced operation's
+own `filters` map carries an entry for it, keyed by record field and then by
+operator — a field the map does not mention, or an operator the field's entry
+does not carry, is not filterable, whatever else the parameter declares. That
+map is what a `contains` or `starts_with` filter actually lands on: the
+endpoint author names, per field and operator, which declared param or
+template receives it.

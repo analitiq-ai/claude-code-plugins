@@ -201,6 +201,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         prose_hash="e72cf4e9227b",
     ),
     ProseObligation(model="DatabaseObject", field="name", prose_hash="ba4aa8eaf86d", descriptive=True),
+    ProseObligation(model="FromParamExpression", prose_hash="049c219ecf5d", descriptive=True),
+    ProseObligation(
+        model="FromParamExpression", field="from_param",
+        rule_ids=("RULE-ENDP-066",),
+        prose_hash="68776809d6d5",
+    ),
     ProseObligation(
         model="FunctionExpression",
         prose_hash="bfc558a4d975",
@@ -272,15 +278,6 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="Param", field="controlled_by", prose_hash="d826ba713998", descriptive=True),
     ProseObligation(model="Param", field="default", prose_hash="95b46ea4340e", descriptive=True),
     ProseObligation(model="Param", field="location", prose_hash="4ad56f39fa37", descriptive=True),
-    ProseObligation(
-        model="Param", field="operators",
-        prose_hash="c3ef12030ac5",
-        structural="typed as a list of `Literal` members — the operator vocabulary is the type",
-        waiver=(
-            "the consequence of absence binds the stream document that "
-            "filters on this param, not a checkable shape of this endpoint"
-        ),
-    ),
     ProseObligation(model="Param", field="style", prose_hash="491d84aaf9f9", descriptive=True),
     ProseObligation(model="Param", field="type", prose_hash="e716f55ea092", descriptive=True),
     ProseObligation(model="PostReadRequest", prose_hash="ec73f959a39b", descriptive=True),
@@ -314,6 +311,16 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(model="PostReadRequest", field="method", prose_hash="ea42a27602c8", descriptive=True),
     ProseObligation(model="ReadOperation", prose_hash="ec0e00d340de", descriptive=True),
+    ProseObligation(
+        model="ReadOperation", field="filters",
+        rule_ids=("RULE-ENDP-002", "RULE-ENDP-055", "RULE-ENDP-066", "RULE-ENDP-067"),
+        prose_hash="343e20e9e17e",
+        structural=(
+            "dict[RecordFieldPathKey, dict[FilterableOperator, FilterLanding]] "
+            "— the field-then-operator keying and the two landing forms are "
+            "the type"
+        ),
+    ),
     ProseObligation(model="Replication", prose_hash="4c297fc4a9ce", descriptive=True),
     ProseObligation(model="ResponseExtraction", prose_hash="a28b53384cfe", descriptive=True),
     ProseObligation(model="SingleCursorMapping", prose_hash="47d7dccff621", descriptive=True),

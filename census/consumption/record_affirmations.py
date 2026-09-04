@@ -18,6 +18,13 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         rationale_sha256="d0b1bea51d12dd2bb4d4226920d1a3acf2d41f42d986adb527bc0a3ae58e466f",
     ),
     RecordAffirmation(
+        "RULE-ENDP-002",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="22d2a0139b271daefab9e0ee27e030e1456bb5e15e3531621d09d7228ef832ae",
+    ),
+    RecordAffirmation(
         "RULE-ENDP-014",
         refs=(
             "endpoints.WriteOperation.conflict_keys",
@@ -59,9 +66,9 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
     RecordAffirmation(
         "RULE-ENDP-055",
         refs=(
-            "endpoints.Param.operators",
+            "endpoints.ReadOperation.filters",
         ),
-        rationale_sha256="9f43b803651c39df93e9e4b673b9c06dc3a33f860d382a7b2f7102f2c4dc375f",
+        rationale_sha256="6ec3610043ff2d8e1f4e444d4291d9e5b2569731949fe7197521f83dbfcc321b",
     ),
     RecordAffirmation(
         "RULE-ENDP-056",
@@ -86,6 +93,20 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "endpoints.ResponseExtraction.metadata",
         ),
         rationale_sha256="b0c2dc7627fb3e6a001fe502f85e900147152a1befc3894da91624dc725d4194",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-066",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="99d7da2b1e0607a48a4876d6eb6c438d873f1a93bf229e269103852e38eaeb6b",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-067",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="763df584d5bb7387b1088632243f28a1143a6cc330876ccb57ea8477e783edcd",
     ),
     RecordAffirmation(
         "RULE-PIPE-017",

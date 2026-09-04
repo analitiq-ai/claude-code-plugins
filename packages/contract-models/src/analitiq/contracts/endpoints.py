@@ -125,6 +125,17 @@ RECORD_FIELD_PATH_PATTERN = (
 )
 METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
+#: A `filters` map's outer key — the record field a predicate targets.
+#: Pydantic renders a constrained dict key as `patternProperties`, which says
+#: what a MATCHING key holds and forbids nothing, so a schema-only consumer
+#: would accept the names the models reject. `_RECORD_FIELD_PATH_PROPERTY_NAMES`
+#: is the `propertyNames` companion that refuses them — the same split
+#: `HeaderName`/`HEADER_NAME_PROPERTY_NAMES` uses.
+RecordFieldPathKey = Annotated[str, StringConstraints(pattern=RECORD_FIELD_PATH_PATTERN)]
+_RECORD_FIELD_PATH_PROPERTY_NAMES: dict[str, Any] = {
+    "propertyNames": {"pattern": RECORD_FIELD_PATH_PATTERN}
+}
+
 # Canonical Apache Arrow type vocabulary. `ARROW_TYPE_PATTERN` is GENERATED
 # from the engine-published, vendored grammar manifest — see
 # `analitiq.contracts.arrow_grammar` (the executable family set is a capability
@@ -304,6 +315,59 @@ class TemplateExpression(_EndpointModel):
         return value
 
 
+class FromParamExpression(_EndpointModel):
+    """``{"from_param": "<name>"}`` — a `filters` map entry landing on a param.
+
+    `path_params` / `headers` / `query` recognize this same key as an untyped
+    procedural convention (`_collect_singleton_values`); `filters` is a closed,
+    two-form slot (`from_param` or `template`, see `FilterLanding`) so it gets
+    a typed member instead, the same way `template` already has one in
+    `TemplateExpression`.
+    """
+
+    from_param: str = Field(
+        ...,
+        min_length=1,
+        description="Name of a param this operation declares under `params`.",
+    )
+
+
+def _filter_landing_discriminator(v: Any) -> str | None:
+    """Pick the `filters` landing-site branch by inspecting which key is present."""
+    if isinstance(v, dict):
+        if "from_param" in v:
+            return "from_param"
+        if "template" in v:
+            return "template"
+        return None
+    if isinstance(v, FromParamExpression):
+        return "from_param"
+    if isinstance(v, TemplateExpression):
+        return "template"
+    return None
+
+
+#: Where a `filters` map entry's operator lands: an already-declared param, or
+#: a template rendering the filter's own value into the request. Reuses
+#: `TemplateExpression` rather than declaring a second template shape.
+FilterLanding = Annotated[
+    Union[
+        Annotated[FromParamExpression, UnionTag("from_param")],
+        Annotated[TemplateExpression, UnionTag("template")],
+    ],
+    Discriminator(_filter_landing_discriminator),
+]
+
+#: The operator vocabulary a `filters` map entry may key on — the API-only
+#: half of `stream.FilterOperator`. A database-only member (`is_null`,
+#: `like`, ...) never reaches a request as a bound value, only as a compiled
+#: predicate, so it has no landing site here at all.
+FilterableOperator = Literal[
+    "eq", "neq", "gt", "gte", "lt", "lte",
+    "in", "not_in", "contains", "starts_with", "ends_with",
+]
+
+
 class LiteralExpression(_EndpointModel):
     """``{"literal": <any-json>}`` value expression — opt out of expression interpretation."""
 
@@ -411,13 +475,6 @@ _PARAM_SCHEMA_RULES: dict[str, Any] = {
                 },
             },
         },
-        {
-            "if": {
-                "required": ["controlled_by"],
-                "properties": {"controlled_by": {"not": {"type": "null"}}},
-            },
-            "then": {"properties": {"operators": {"type": "null"}}},
-        },
     ],
 }
 
@@ -445,16 +502,6 @@ class Param(_EndpointModel):
     max_length: StrictNonNegativeInt | None = Field(default=None, alias="maxLength")
     min_items: StrictNonNegativeInt | None = Field(default=None, alias="minItems")
     max_items: StrictNonNegativeInt | None = Field(default=None, alias="maxItems")
-    operators: list[Literal[
-        "eq", "neq", "gt", "gte", "lt", "lte",
-        "in", "not_in", "contains", "starts_with", "ends_with",
-    ]] | None = Field(
-        default=None,
-        description=(
-            "Subset of the Analitiq operator vocabulary stream filters may use. "
-            "Absence means the param is not stream-filterable."
-        ),
-    )
     controlled_by: Literal["pagination", "replication"] | None = Field(
         default=None,
         description="Marks the param as owned by pagination or replication.",
@@ -473,11 +520,6 @@ class Param(_EndpointModel):
             raise ValueError(
                 "from_input is invalid in params.<name>.default "
                 "(spec: §Cross-Field Validation)"
-            )
-        if self.controlled_by is not None and self.operators is not None:
-            raise ValueError(
-                "params with `controlled_by` must not declare `operators` "
-                "(spec: §Parameter Validation and Operators)"
             )
         if (self.location == "query" and self.type in ("array", "object")
                 and (self.style is None or self.explode is None)):
@@ -1987,13 +2029,25 @@ class ReadOperation(_EndpointModel):
                             }
                         }
                     },
-                }
+                },
+                {"properties": {"filters": _RECORD_FIELD_PATH_PROPERTY_NAMES}},
             ]
         }
     )
 
     request: ReadRequest = Field(...)
     params: dict[str, Param] = Field(default_factory=dict)
+    filters: dict[RecordFieldPathKey, dict[FilterableOperator, FilterLanding]] | None = Field(
+        default=None,
+        description=(
+            "How a stream filter's operator reaches this operation's request, "
+            "keyed by the record field a filter targets and then by operator. "
+            "`from_param` lands the operator on a param declared under "
+            "`params`; `template` renders the filter's own value into the "
+            "request through the value-expression grammar. RULE-STRM-026 is "
+            "what a stream-side filter on this operation must agree with."
+        ),
+    )
     response: ResponseExtraction = Field(...)
     pagination: Pagination | None = Field(  # type: ignore[type-arg]
         default=None,
@@ -2028,6 +2082,9 @@ class ReadOperation(_EndpointModel):
 
         if self.replication is not None:
             _validate_replication_wiring(self.replication, self.params)
+
+        if self.filters:
+            _validate_filters_wiring(self.filters, self.params)
 
         # response.records → response.schema traversal raises directly.
         # When replication is declared, the same traversal feeds cursor-field
@@ -3334,6 +3391,45 @@ def _validate_replication_wiring(replication: Replication, params: dict[str, Par
                 f"param {name!r} is referenced by replication but does not declare "
                 "controlled_by='replication' (spec: §Cross-Field Validation)"
             )
+
+
+def _validate_filters_wiring(
+    filters: dict[str, dict[str, Any]], params: dict[str, Param]
+) -> None:
+    """Every `filters` entry lands on exactly one param or template, never on
+    a `controlled_by` param, and no two operators on one field collide.
+
+    `filters`' `from_param` is a landing declaration, not a request binding —
+    whether the named param is itself bound into a request location at all is
+    `_validate_param_binding_uniqueness`'s separate, already-covered concern.
+    """
+    for field, landings in filters.items():
+        seen: dict[tuple[str, Any], str] = {}
+        for operator, landing in landings.items():
+            if isinstance(landing, FromParamExpression):
+                name = landing.from_param
+                param = params.get(name)
+                if param is None:
+                    raise violation(
+                        "RULE-ENDP-066",
+                        f"filters.{field}.{operator} names undeclared param {name!r}",
+                    )
+                if param.controlled_by is not None:
+                    raise violation(
+                        "RULE-ENDP-002",
+                        f"filters.{field}.{operator} names param {name!r}, which "
+                        f"declares controlled_by={param.controlled_by!r}",
+                    )
+                target = ("from_param", name)
+            else:
+                target = ("template", landing.template)
+            if target in seen:
+                raise violation(
+                    "RULE-ENDP-067",
+                    f"filters.{field} operators {seen[target]!r} and {operator!r} "
+                    "resolve to the same landing site",
+                )
+            seen[target] = operator
 
 
 def _validate_param_binding_uniqueness(

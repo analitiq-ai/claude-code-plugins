@@ -116,6 +116,15 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
         "RULE-DBEP-013 forbids execution from branching on it, so the absence "
         "of a read is the rule being kept",
     ),
+    # --- endpoints.FromParamExpression: a filters-map landing site, unread
+    # end to end until the engine honours the map.
+    FieldDisposition(
+        "endpoints.FromParamExpression", "from_param", "engine_gap",
+        "an author naming the param a filter operator lands on expects the "
+        "run to carry the filter's value there; the pinned manifest claims "
+        "no read of it, so the request goes out exactly as it would with no "
+        "filters map at all",
+    ),
     # --- endpoints.Param: placement is graded at validation, the label is
     # for people, and the value constraints reach nobody.
     FieldDisposition(
@@ -150,15 +159,17 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     FieldDisposition("endpoints.Param", "max_length", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "min_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
     FieldDisposition("endpoints.Param", "max_items", "engine_gap", PARAM_VALUE_CONSTRAINT),
+    # --- endpoints.ReadOperation: the filters map, unread as a whole until
+    # the engine honours it.
     FieldDisposition(
-        "endpoints.Param", "operators", "authoring_only",
-        "read by the registry service's on-save comparison — the consumer "
-        "RULE-STRM-026's rationale describes — of a stream's filter against "
-        "the operators this param declares. RULE-STRM-026 names the "
-        "obligation on the filter; RULE-ENDP-002 and RULE-ENDP-055 name the "
-        "obligations on the set. The pinned manifest claims no read of the "
-        "set, so the run sends the filter with whatever operator the stream "
-        "declares",
+        "endpoints.ReadOperation", "filters", "engine_gap",
+        "an author declaring how a filter operator reaches this operation's "
+        "request expects the run to route a stream's filter value through "
+        "the named landing site (RULE-ENDP-002, RULE-ENDP-055, RULE-ENDP-066 "
+        "and RULE-ENDP-067 name the obligations on the map's shape; "
+        "RULE-STRM-026 the obligation on the stream side); the pinned "
+        "manifest claims no read of it, so the request goes out as it would "
+        "with no filters map declared at all",
     ),
     # --- endpoints.Replication: the method set the endpoint supports --------
     FieldDisposition(

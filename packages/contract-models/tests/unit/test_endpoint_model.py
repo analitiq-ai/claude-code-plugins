@@ -206,7 +206,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"unused": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"unused": {"in": "query", "type": "string", "required": False}},
             )},
         )
         with pytest.raises(ValidationError, match="not referenced"):
@@ -216,7 +216,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"status": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"status": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"status": {"from_param": "status"}}},
             )},
         )
@@ -226,7 +226,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"a": {"from_param": "p"}, "b": {"from_param": "p"}}},
             )},
         )
@@ -239,8 +239,8 @@ class TestParamBindingUniqueness:
             endpoint_id="x",
             operations={"read": _read_op_with(
                 params={
-                    "qa": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
-                    "qb": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
+                    "qa": {"in": "query", "type": "string", "required": False},
+                    "qb": {"in": "query", "type": "string", "required": False},
                 },
                 request_extras={"query": {"a": {"from_param": "qa"}, "b": {"from_param": "qb"}}},
             )},
@@ -545,13 +545,6 @@ class TestCursorMapping:
 
 
 class TestParamValidate:
-    def test_controlled_by_and_operators_mutex(self):
-        with pytest.raises(ValidationError, match="must not declare `operators`"):
-            Param(**{
-                "in": "query", "type": "string", "required": False,
-                "controlled_by": "pagination", "operators": ["eq"],
-            })
-
     def test_query_array_requires_style_and_explode(self):
         with pytest.raises(ValidationError, match="`style` and `explode`"):
             Param(**{"in": "query", "type": "array", "required": False})
@@ -565,6 +558,119 @@ class TestParamValidate:
                 "in": "body", "type": "object", "required": False,
                 "default": {"from_input": "record"},
             })
+
+
+# ---------------------------------------------------------------------------
+# `filters` map — an operator's landing site on the request
+# ---------------------------------------------------------------------------
+
+
+def _filters_read_op(filters, params=None, extra_query=None):
+    params = dict(params or {})
+    params.setdefault(
+        "minAmount", {"in": "query", "type": "number", "required": False},
+    )
+    query = {"minAmount": {"from_param": "minAmount"}}
+    if extra_query:
+        query.update(extra_query)
+    return _read_op_with(
+        params=params,
+        request_extras={"query": query},
+    ) | {"filters": filters}
+
+
+class TestFiltersWiring:
+    def test_from_param_landing_is_accepted(self):
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op({"amount": {"gt": {"from_param": "minAmount"}}}),
+        }))
+        assert result.operations.read.filters["amount"]["gt"].from_param == "minAmount"
+
+    def test_template_landing_is_accepted(self):
+        # `template` reaches into `stream.*` — the filter's own value — which
+        # `request.query`/`headers` refuse for a `ref`, but this slot must
+        # permit: the value it interpolates IS the filter it is declared on.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op({
+                "created": {"gt": {"template": "${stream.filters.created.value}"}},
+            }),
+        }))
+        landing = result.operations.read.filters["created"]["gt"]
+        assert landing.template == "${stream.filters.created.value}"
+
+    def test_operator_with_no_landing_form_rejected(self):
+        # Neither `from_param` nor `template` — the silent wrong-rows case
+        # this map exists to close, refused structurally rather than parsing
+        # as an operator with nowhere to land.
+        with pytest.raises(ValidationError, match="union_tag_not_found"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({"amount": {"gt": {}}}),
+            }))
+
+    def test_operator_outside_vocabulary_rejected(self):
+        with pytest.raises(ValidationError, match="literal_error"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"amount": {"like": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_field_key_not_a_record_field_path_rejected(self):
+        with pytest.raises(ValidationError):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"1bad": {"gt": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_from_param_naming_undeclared_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-066\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"amount": {"gt": {"from_param": "nonexistent"}}}
+                ),
+            }))
+
+    def test_from_param_naming_a_controlled_by_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-002\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"amount": {"gt": {"from_param": "cursor"}}},
+                    params={
+                        "cursor": {
+                            "in": "query", "type": "string", "required": False,
+                            "controlled_by": "pagination",
+                        },
+                    },
+                    extra_query={"cursor": {"from_param": "cursor"}},
+                ),
+            }))
+
+    def test_two_operators_on_one_field_landing_on_the_same_param_rejected(self):
+        # Before `filters` existed, nothing checked this: an author could
+        # write `contains`, `starts_with` and `eq` filters that all bound to
+        # the identical request — the read-wrong-rows defect this map closes.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-067\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "amount": {
+                        "gt": {"from_param": "minAmount"},
+                        "gte": {"from_param": "minAmount"},
+                    },
+                }),
+            }))
+
+    def test_two_operators_on_different_fields_may_share_a_param(self):
+        # The collision RULE-ENDP-067 refuses is scoped to one field; two
+        # different fields landing on the same param is a connector's choice,
+        # not an ambiguity this map can detect.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op({
+                "amount": {"gt": {"from_param": "minAmount"}},
+                "total": {"gt": {"from_param": "minAmount"}},
+            }),
+        }))
+        assert result.operations.read.filters["total"]["gt"].from_param == "minAmount"
 
 
 # ---------------------------------------------------------------------------
@@ -1991,7 +2097,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "rogue": 1}}},
             )},
         )
@@ -2002,7 +2108,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "secrets.api_key", "rogue": 1}}},
             )},
         )
@@ -2013,7 +2119,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "x", "template": "y"}}},
             )},
         )
@@ -2025,7 +2131,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "x-vendor": "wise"}}},
             )},
         )
@@ -2042,7 +2148,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "stream.api_key"}}},
             )},
         )
@@ -2053,7 +2159,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "state.last_run"}}},
             )},
         )
@@ -2420,7 +2526,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"region": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"region": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {
                     "region": {"from_param": "region"},
                     "lookup": {
@@ -2469,7 +2575,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"r": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"r": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"q": {
                     "function": "lookup",
                     "input": {"from_param": "r", "rogue": 1},
