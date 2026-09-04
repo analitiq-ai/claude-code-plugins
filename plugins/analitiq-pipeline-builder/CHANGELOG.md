@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.2](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.2.1...analitiq-pipeline-builder-v0.2.2) (2026-09-04)
+
+
+### Features
+
+* structural records name their shape device where the constant exists ([77baef4](https://github.com/analitiq-ai/claude-code-plugins/commit/77baef42f7b21464e18952e8c8b50a1d1fab266f))
+* structural records name their shape device where the constant exists ([8e3561a](https://github.com/analitiq-ai/claude-code-plugins/commit/8e3561a41644f6b4ccdfece52a275b65bc712922))
+* **validator:** grade a recorded sample against the node declaring it ([bd20654](https://github.com/analitiq-ai/claude-code-plugins/commit/bd20654880161cbe07839a90648f6091389b3cf2))
+* **validator:** grade a recorded sample against the node declaring it ([e7da677](https://github.com/analitiq-ai/claude-code-plugins/commit/e7da6779c6ccfbc798a9841a999fade208faba16))
+
 ## [0.2.1](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.2.0...analitiq-pipeline-builder-v0.2.1) (2026-08-14)
 
 
