@@ -6,10 +6,12 @@ reads — and ``census/consumption/pin.py`` vendors one pinned version. The
 census walks the live contract models from the manifest's roots and holds,
 for every reachable field the manifest does not claim, a
 ``FieldDisposition`` in ``census/consumption/dispositions.py`` saying what
-consumes it instead, or declaring the gap. The report this script prints is
-computed once, in ``census.consumption.reachability.census_report``, the
-same function ``tests/census/test_contract_consumption.py`` asserts on — the
-lint and this tool can never disagree.
+consumes it instead, or declaring the gap. The census also grades the rule
+records over that ground — ``census/consumption/records.py`` owns what that
+means. Each report this script prints is computed once —
+``census.consumption.reachability.census_report`` and
+``census.consumption.records.record_report`` — the same functions the
+census test suite asserts on, so the lint and this tool can never disagree.
 
 Usage:
     render_contract_consumption.py check    # exit 1 on any finding (CI)
@@ -18,15 +20,19 @@ Exit codes: 0 when the census is complete and current, 1 on any finding, 2
 when the check could not run — a usage error, a vendored manifest the
 envelope check refuses, a manifest ROOT the live tree does not hold (a
 ``claims`` or ``opaque`` key naming an unknown model is an exit-1 finding),
-or a contract tree that does not import. A check that cannot run
+a compiled registry the record census refuses as vacuous, or a contract
+tree that does not import. A check that cannot run
 prints a "could not run" line and never reads as a finding: the exit-1
-remediation is "write or retire a disposition", which fixes none of those.
+remediation is "write or retire a disposition" or "re-affirm a record",
+which fixes none of those.
 
 There is no ``write`` mode. A disposition is a judgment — which consumer
 reads the field off the run-time path, or what an author loses when the
 engine ignores it — and nothing here can make it; the report names each
-field that needs one and the author writes the entry by hand. Whether an
-entry's kind and reason are the right ones is the reader's half —
+field that needs one and the author writes the entry by hand. An
+affirmation is the same shape of judgment over a record's rationale.
+Whether an entry's kind and reason — or an affirmed rationale — are the
+right ones is the reader's half —
 ``.claude/rules/reachability-dispositions.md``.
 """
 
@@ -49,9 +55,9 @@ sys.path.insert(0, str(REPO_ROOT))
 os.environ.setdefault("DOMAIN", "analitiq.ai")
 
 
-def check(report) -> int:
-    print(report.render())
-    return 0 if report.ok else 1
+def check(*reports) -> int:
+    print("\n\n".join(report.render() for report in reports))
+    return 0 if all(report.ok for report in reports) else 1
 
 
 def main(argv: list[str]) -> int:
@@ -64,8 +70,12 @@ def main(argv: list[str]) -> int:
         from census.consumption.dispositions import DISPOSITIONS
         from census.consumption.pin import load_manifest
         from census.consumption.reachability import census_report
+        from census.consumption.record_affirmations import AFFIRMATIONS
+        from census.consumption.records import load_rules, record_report
 
-        report = census_report(load_manifest(), DISPOSITIONS)
+        manifest = load_manifest()
+        fields = census_report(manifest, DISPOSITIONS)
+        records = record_report(manifest, load_rules(), AFFIRMATIONS)
     # Anything at all: a fault the check did not anticipate must still read
     # as "could not run" (the pin guards carry the same arm), never as a
     # finding whose remediation is to write a disposition.
@@ -75,7 +85,7 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
         )
         return 2
-    return check(report)
+    return check(fields, records)
 
 
 if __name__ == "__main__":

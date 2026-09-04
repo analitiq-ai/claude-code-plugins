@@ -8,14 +8,17 @@ scopes: [api-endpoint]
 validator: "analitiq.contracts.endpoints::WriteResponse._metadata_keys"
 owners: [connector-plugin, engine]
 targets: [WriteResponse]
+fields: [metadata]
 rationale: >
-  A metadata key becomes an addressable name in the response scope, so one
-  that collides with a scope the engine already owns creates two meanings
-  for the same reference and the author's extraction is shadowed by an
-  engine-supplied value with no diagnostic anywhere. The pattern is what
-  keeps those names addressable at all. The write side follows the read
-  side's key rules deliberately rather than inventing its own: an author
-  who learned the shape on a read would otherwise meet a different, silent
-  contract on a write.
+  A metadata key is declared as an addressable name in the response scope,
+  and one that collides with a reserved response-scope name would give one
+  reference two meanings — which is why the reserved set and the key
+  pattern are graded where the document is read, at validation. The pinned
+  contract-consumption manifest claims no read of the metadata, and it has
+  no effect on a run today; the pattern is what keeps the names
+  addressable wherever the block is read. The write side follows
+  the read side's key rules deliberately rather than inventing its own: an
+  author who learned the shape on a read would otherwise meet a different,
+  silent contract on a write.
 status: active
 superseded_by: null

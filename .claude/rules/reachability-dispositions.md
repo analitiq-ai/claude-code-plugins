@@ -5,10 +5,12 @@ paths:
 
 # Rule: the disposition of an unread contract field
 
-Governs every `FieldDisposition` under `census/consumption/` — the entry a
+Governs every `FieldDisposition` and every `RecordAffirmation` under
+`census/consumption/` — the entry a
 contract field carries when the pinned consumption manifest claims no read of
-it. `contract-prose.md` is the same split on prose sites; this file is the
-same split on fields.
+it, and the entry a rule record carries when its `targets`/`fields` govern
+such a field. `contract-prose.md` is the same split on prose sites; this file
+is the same split on fields and on the records over them.
 
 ## What the guard decides, and what a reader decides
 
@@ -87,6 +89,35 @@ A reason cites a `RULE-*` id as what **names** the obligation. Whether a
 validator applies that rule is the record's `validator:` field, and a reason
 that restates it is a second copy of a fact the registry owns.
 
+## A record over an unread field is affirmed
+
+A rule record's `rationale` ships to users inside the compiled registry and
+routinely explains the rule by what the engine does with the governed field.
+`census/consumption/records.py` owns the guard — how records are located
+against the unread set and what a `RecordAffirmation` in
+`census/consumption/record_affirmations.py` pins. The link is the fields a
+record names: a record naming no `fields:` is outside the guard — unlocated,
+not affirmed, the record-side analogue of a model no root reaches — so a
+record whose rationale leans on a field owes that field to its `fields:`
+list, and a reviewer of a record that names none asks whether it should.
+The guard summons the reader; this section is what the reader applies
+before re-computing the entry:
+
+- The rationale carries no unpinned engine read of a field the manifest
+  leaves unread. Its engine claims land on a rung of
+  `engine-behaviour-claims.md`, following "The reason, and its halves"
+  above as if the rationale were a gap entry's reason.
+- The rule still earns its severity with the manifest fact in view: what the
+  check grades must be defensible without the engine reading the field — a
+  closed vocabulary, an agreement between documents — or the record says
+  which way it fails if the reading goes stale.
+- A rationale already stating that the field reaches nothing is affirmed as
+  it stands; the affirmation records that a reader checked, not that a
+  rewrite happened.
+
+Re-affirming is re-reading against the current unread set and then
+re-computing the refs and hash — never re-computing alone.
+
 ## A pin bump re-reads every entry it touches
 
 This section owns the pin-bump procedure; `census/consumption/pin.py`, the
@@ -108,3 +139,7 @@ pin guard and the root `CLAUDE.md` point here rather than restating it.
    claiming the field. So re-affirm or rewrite the consequence half — the
    same obligation `contract-prose.md` places on a prose site whose hash has
    moved.
+4. The record guard reports every affirmation whose refs the bump moved and
+   every record newly governing an unread field. Each is a re-read of the
+   rationale under the section above — and where the bump claims a field a
+   rationale leaned on as unread, a rewrite of the rationale too.

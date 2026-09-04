@@ -9,13 +9,18 @@ scopes: [stream]
 validator: "analitiq.contracts.stream::ArrowFieldSpec._validate_container_shape"
 owners: [pipeline-plugin]
 targets: [ArrowFieldSpec]
+fields: [arrow_type, properties, items]
 rationale: >
   The container markers are the only place the authored shape says anything
   about nested data, so a marker without its inner declaration describes a
-  container with unknown contents and an inner declaration beside a scalar
-  describes nesting the type cannot hold — both produce a schema the engine
-  cannot build a record from. The same chokepoint serves endpoint columns
-  and stream mapping alike, so a shape accepted here would have to be
-  accepted there too.
+  container with unknown contents, and an inner declaration beside a scalar
+  describes nesting the type cannot hold — a shape that contradicts itself
+  before anything consumes it. The declared sub-tree reaches a run inside
+  the assignment target it sits on, and the pinned contract-consumption
+  manifest claims no field-level read of the shape members declared here,
+  so the contradiction is caught where the shape is graded field by field:
+  at validation. The
+  same chokepoint serves endpoint columns and stream mapping alike, so a
+  shape accepted here would have to be accepted there too.
 status: active
 superseded_by: null

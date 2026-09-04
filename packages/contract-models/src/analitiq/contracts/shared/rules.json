@@ -2632,11 +2632,13 @@
    "targets": [
     "WriteOperation"
    ],
-   "fields": [],
+   "fields": [
+    "conflict_keys"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Conflict keys are the provider-defined natural key an upsert matches existing rows on, and the provider can only match on values the request actually carries. A key naming a field the input schema never declares matches nothing, so every upsert inserts and the destination accumulates duplicates without a single failed run. Membership is resolved through composition, so a record assembled from shared definitions still enumerates the fields it declares.\n",
+   "rationale": "Conflict keys are the provider-defined natural key an upsert is declared to match existing rows on, and a provider can only match on values the request actually carries — a key naming a field the input schema never declares is one no request could let it match on. That is why the declaration is graded against the input schema at authoring time. The pinned contract-consumption manifest claims no read of the list, and it has no effect on a run today: the check keeps the declaration honest about the schema it rides on, where it is read. Membership is resolved through composition, so a record assembled from shared definitions still enumerates the fields it declares.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2996,11 +2998,13 @@
    "targets": [
     "WriteResponse"
    ],
-   "fields": [],
+   "fields": [
+    "metadata"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A metadata key becomes an addressable name in the response scope, so one that collides with a scope the engine already owns creates two meanings for the same reference and the author's extraction is shadowed by an engine-supplied value with no diagnostic anywhere. The pattern is what keeps those names addressable at all. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
+   "rationale": "A metadata key is declared as an addressable name in the response scope, and one that collides with a reserved response-scope name would give one reference two meanings — which is why the reserved set and the key pattern are graded where the document is read, at validation. The pinned contract-consumption manifest claims no read of the metadata, and it has no effect on a run today; the pattern is what keeps the names addressable wherever the block is read. The write side follows the read side's key rules deliberately rather than inventing its own: an author who learned the shape on a read would otherwise meet a different, silent contract on a write.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3020,11 +3024,17 @@
    "targets": [
     "WriteResponse"
    ],
-   "fields": [],
+   "fields": [
+    "success_when",
+    "error",
+    "affected_records",
+    "generated_keys",
+    "metadata"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The record count is a read-path quantity, so on a write the ref resolves to nothing rather than to zero — and a `success_when` predicate over a ref that resolves to nothing holds unconditionally, so every write reports success including the ones whose rejected rows the provider listed. The author is usually adapting a read response block to the write side, where the scope silently stops existing; refusing the ref at author time is what keeps that from becoming partial data loss under a green run.\n",
+   "rationale": "The record count is a read-path quantity — the write scope never declares it — so a write-side reference to it names nothing, and a `success_when` built over it is written against a scope the document does not have. The author is usually adapting a read response block to the write side, where the quantity silently stops existing; refusing the reference at authoring time keeps the declaration honest about the scope it reads from. The pinned contract-consumption manifest claims no read of the write-response block, and it has no effect on a run today: the refusal at authoring time is the whole of what the rule buys.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3236,7 +3246,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "This list is a capability claim the engine acts on: it says which syncs the runtime actually has a path for on this endpoint. An invented name advertises a sync nothing implements, and the stream that selects it fails during a run rather than while it is being authored. There is no default-method key because which method to run is the stream's decision per run; an endpoint naming one would be settling a policy it does not own, and the stream that meant to override it would have no way to tell whether it had.\n",
+   "rationale": "This list is the endpoint's capability claim — the syncs it declares a path for — and the set RULE-STRM-025 obliges a stream's chosen method to come from, so an invented name advertises a sync nothing implements to every stream that binds the endpoint. The pinned contract-consumption manifest claims no read of the set, and it has no effect on a run today: the declaration does its work where it is read, at authoring time. There is no default-method key because which method to run is the stream's decision per run; an endpoint naming one would be settling a policy it does not own, and the stream that meant to override it would have no way to tell whether it had.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3521,7 +3531,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The placement decides which part of the request the engine builds the value into, and it is also what every binding is matched against: a binding may only sit in the request slot its param's placement names, so the placement and the one legal binding site move together. Closing the set is what makes a wrong placement report as a wrong placement: RULE-ENDP-009 catches the same document one step later, as a param no binding references, and that diagnosis sends the author to delete the param rather than to correct where it is sent. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because one param can carry a value on both journeys. Each field's closed set also publishes the admissible values in the JSON Schema, so nothing has to restate them.\n",
+   "rationale": "The placement is what every binding is matched against: a binding may only sit in the request slot its param's placement names (RULE-ENDP-008 holds that agreement), so the placement and the one legal binding site move together. The pinned contract-consumption manifest claims no read of the placement, and it directs no part of a run today; the agreement is what the placement buys. Closing the set is what makes a wrong placement report as a wrong placement: RULE-ENDP-009 catches the same document one step later, as a param no binding references, and that diagnosis sends the author to delete the param rather than to correct where it is sent. The type vocabulary is the request-input one, describing what the connector sends up, and it is separate from the Arrow vocabulary describing what comes back; they are easy to confuse precisely because the same param can carry a value on the way up and on the way back.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3653,7 +3663,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members and rendered onto this param, so the two documents agree only while both read one vocabulary. An operator offered here has to survive being serialised into a request the provider accepts, rather than compiled into a predicate the way a database read's operator is, and which ones do is a fact about the provider — so an endpoint declares what it offers instead of inheriting a vocabulary whole.\n",
+   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members (RULE-STRM-026 names that obligation), so the documents agree only while each reads one vocabulary. Which operators survive the trip to the provider — sent as request input rather than compiled into a predicate the way a database read's operator is — is a fact about the provider, so an endpoint declares what it offers instead of inheriting a vocabulary whole. The pinned contract-consumption manifest claims no read of the set, and it has no effect on a run today; the promise does its work where the set is read, at authoring time.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3680,7 +3690,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The format member decides how the engine renders the stored cursor onto the request, and the comparison member decides which records the provider is expected to return for it. Both are read at every incremental run and neither is discoverable from the response: a format the engine cannot render sends a value the provider parses as something else, and a comparison the provider does not apply silently changes what the window covers — either way the run succeeds and the rows it should have carried are gone.\n",
+   "rationale": "The wire half of a cursor mapping — the spelling the document declares for sending the stored cursor, and the comparison the provider is expected to apply to it — is a fact about the provider, so each member draws on a closed vocabulary: that is what lets the declaration be graded at authoring time rather than trusted. The pinned contract-consumption manifest claims no read of the wire half of a cursor mapping, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3708,7 +3718,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "A window is sent as a pair of params, and each end carries its own comparison because whether a bound is inclusive is a provider fact and the two ends are routinely spelled differently. Getting one end wrong is the quiet failure: the run succeeds, and the records on that boundary are either dropped from every window or carried in two of them, which reads downstream as missing rows or as duplicates rather than as a mapping to fix.\n",
+   "rationale": "Each end of a window carries its own comparison because whether a bound is inclusive is a provider fact, and the ends of a provider's window are routinely spelled differently; the format is the spelling the document declares for sending the bounds. A wrong end is the quiet kind of defect — a comparison the provider does not apply changes which records a boundary's window covers, a gap that reads as missing rows or duplicates rather than as a mapping to fix — which is why each member draws on a closed vocabulary instead of free text. The pinned contract-consumption manifest claims no read of the wire half of the windowed form — the format, and the comparison at each end — and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4364,7 +4374,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The member is handed to the engine's logging configuration as a threshold, so it is ordered rather than merely named — the level chosen decides how much of a failed run there is to read afterwards. An unrecognised value has no position in that ordering, and the resolutions available to a runtime that cannot place it are to log everything or to log nothing, on a run nobody is watching.\n",
+   "rationale": "A level is a threshold, ordered rather than merely named — the level an author chooses states how much of a failed run they expect to have to read afterwards — and an unrecognised value has no position in that ordering, so the vocabulary is closed where the document is graded. The pinned contract-consumption manifest claims no read of the level, and it has no effect on a run today; the admissible values are the contract's to settle, not whichever read the manifest claims.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5341,7 +5351,7 @@
    "mechanism": "literal_enum",
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "Each member is a different disposition for data the run could not deliver — stop, park it where someone can retrieve it, or drop it and continue — so the choice decides whether records that failed are recoverable at all. It is declared once on the shared base because every block that inherits it is answering the same question about a different stage, and an author who learns the vocabulary at one of them carries it to the rest. `RULE-RETRY-001` reads the sibling retry fields on the same base.\n",
+   "rationale": "Each member is a different disposition for data the run could not deliver — stop, park it where someone can retrieve it, or drop it and continue — so where an error-handling block is read, the choice decides whether records that failed are recoverable at all. It is declared once on the shared base because every block that inherits it is answering the same question about a different stage, and an author who learns the vocabulary at one of them carries it to the rest. Not every stage is read: the per-assignment validation override is the block RULE-STRM-040 governs, and the pinned contract-consumption manifest claims no read of the strategy it declares. `RULE-RETRY-001` reads the sibling retry fields on the same base.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5509,11 +5519,15 @@
    "targets": [
     "ArrowFieldSpec"
    ],
-   "fields": [],
+   "fields": [
+    "arrow_type",
+    "properties",
+    "items"
+   ],
    "mechanism": null,
    "pattern_symbol": null,
    "fixture_model": null,
-   "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents and an inner declaration beside a scalar describes nesting the type cannot hold — both produce a schema the engine cannot build a record from. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
+   "rationale": "The container markers are the only place the authored shape says anything about nested data, so a marker without its inner declaration describes a container with unknown contents, and an inner declaration beside a scalar describes nesting the type cannot hold — a shape that contradicts itself before anything consumes it. The declared sub-tree reaches a run inside the assignment target it sits on, and the pinned contract-consumption manifest claims no field-level read of the shape members declared here, so the contradiction is caught where the shape is graded field by field: at validation. The same chokepoint serves endpoint columns and stream mapping alike, so a shape accepted here would have to be accepted there too.\n",
    "status": "active",
    "superseded_by": null
   },

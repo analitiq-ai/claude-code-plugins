@@ -1,0 +1,113 @@
+"""The record affirmations — one per rule record governing an unread field.
+
+``census.consumption.records`` is the guard that consumes this registry and
+says what an entry is; what a reader holds an affirmed rationale to, and
+what re-affirming means, is the record-affirmation section of
+``.claude/rules/reachability-dispositions.md``.
+"""
+from __future__ import annotations
+
+from census.consumption.records import RecordAffirmation
+
+AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
+    RecordAffirmation(
+        "RULE-DBEP-013",
+        refs=(
+            "endpoints.DatabaseObject.object_type",
+        ),
+        rationale_sha256="d0b1bea51d12dd2bb4d4226920d1a3acf2d41f42d986adb527bc0a3ae58e466f",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-014",
+        refs=(
+            "endpoints.WriteOperation.conflict_keys",
+        ),
+        rationale_sha256="427d440fff9b176002d40638791081fb36f91339093d1a7318e2d3d2cdfc70c1",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-029",
+        refs=(
+            "endpoints.WriteResponse.metadata",
+        ),
+        rationale_sha256="ac1a96f926b5b41450b5c15500be41d7896d6ab9ab0d582557c850c34398d24f",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-030",
+        refs=(
+            "endpoints.WriteResponse.affected_records",
+            "endpoints.WriteResponse.error",
+            "endpoints.WriteResponse.generated_keys",
+            "endpoints.WriteResponse.metadata",
+            "endpoints.WriteResponse.success_when",
+        ),
+        rationale_sha256="f6a37a14bf3bdf1a2922a538e854e19880c98d915b11165d260e081cf70dc93a",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-038",
+        refs=(
+            "endpoints.Replication.supported_methods",
+        ),
+        rationale_sha256="7cb72bd0b143e50770dafa63a6f59de4ca18121f45ba7e8840647a57678cf2b5",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-050",
+        refs=(
+            "endpoints.Param.location",
+        ),
+        rationale_sha256="47efc4946c6c3515e30d130a6d511586858caeb523a8cdbcd515a687f4088eb4",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-055",
+        refs=(
+            "endpoints.Param.operators",
+        ),
+        rationale_sha256="9f43b803651c39df93e9e4b673b9c06dc3a33f860d382a7b2f7102f2c4dc375f",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-056",
+        refs=(
+            "endpoints.SingleCursorMapping.format",
+            "endpoints.SingleCursorMapping.operator",
+        ),
+        rationale_sha256="3478354df318863cb51b6b7799ab58770bffd35d038880884eb43a961e04a7f9",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-057",
+        refs=(
+            "endpoints.WindowCursorMapping.end_operator",
+            "endpoints.WindowCursorMapping.format",
+            "endpoints.WindowCursorMapping.start_operator",
+        ),
+        rationale_sha256="49315ae3d7649186d1eefd9b16faf715d38a5d87d95d6670b9ac5a8dcf9059d0",
+    ),
+    RecordAffirmation(
+        "RULE-PIPE-017",
+        refs=(
+            "pipelines.config.Logging.log_level",
+        ),
+        rationale_sha256="c8a15de80c6f6c6f3d2de3afbaaa229783764ad96f478183beb971020061145c",
+    ),
+    RecordAffirmation(
+        "RULE-SHRD-013",
+        refs=(
+            "stream.StreamValidationErrorHandling.strategy",
+        ),
+        rationale_sha256="ee6070d3bd4a98d02a1679552005ec4bf8439cb917bde9ba428c764689f4db2b",
+    ),
+    RecordAffirmation(
+        "RULE-STRM-006",
+        refs=(
+            "stream.ArrowFieldSpec.arrow_type",
+            "stream.ArrowFieldSpec.items",
+            "stream.ArrowFieldSpec.properties",
+        ),
+        rationale_sha256="e4c7d422da4b4ab5ab487eea4725b8cef217baa2b454256a087be7d1073f1797",
+    ),
+    RecordAffirmation(
+        "RULE-STRM-040",
+        refs=(
+            "stream.Validation.error_handling",
+        ),
+        rationale_sha256="097d0229508016640e7d3c68142510cd17600d6be1d66eb60cf7fe1ea79e0a3a",
+    ),
+)

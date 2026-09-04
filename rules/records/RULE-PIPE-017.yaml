@@ -11,11 +11,12 @@ targets: [Logging]
 fields: [log_level]
 mechanism: literal_enum
 rationale: >
-  The member is handed to the engine's logging configuration as a threshold, so
-  it is ordered rather than merely named — the level chosen decides how much of
-  a failed run there is to read afterwards. An unrecognised value has no
-  position in that ordering, and the resolutions available to a runtime that
-  cannot place it are to log everything or to log nothing, on a run nobody is
-  watching.
+  A level is a threshold, ordered rather than merely named — the level an
+  author chooses states how much of a failed run they expect to have to
+  read afterwards — and an unrecognised value has no position in that
+  ordering, so the vocabulary is closed where the document is graded. The
+  pinned contract-consumption manifest claims no read of the level, and it
+  has no effect on a run today; the admissible values are the
+  contract's to settle, not whichever read the manifest claims.
 status: active
 superseded_by: null

@@ -1,12 +1,14 @@
 """The exit-code contract of ``scripts/render_contract_consumption.py``.
 
 The script prints the same report the census test asserts on; what is its
-own is the verdict it maps that report to. Pinned here: a clean census is
-exit 0 with the completion line, a finding is exit 1, a usage error is
-exit 2, and a check that cannot run — the vendored manifest refused, a
-root the tree does not hold (a ``claims`` or ``opaque`` key naming an
-unknown model is an exit-1 finding) — is exit 2 with a "could not run"
-line, never the exit-1 remediation.
+own is the verdict it maps those reports to — the field half and the
+record half gate it together. Pinned here: a clean census is
+exit 0 with the completion line, a finding in either half is exit 1, a
+usage error is exit 2, and a check that cannot run — the vendored manifest
+refused, a root the tree does not hold (a ``claims`` or ``opaque`` key
+naming an unknown model is an exit-1 finding), a registry the record
+census refuses — is exit 2 with a "could not run" line, never the exit-1
+remediation.
 """
 from __future__ import annotations
 
@@ -56,6 +58,40 @@ def test_a_finding_is_exit_1(monkeypatch, capsys):
     monkeypatch.setattr(reachability, "census_report", with_a_finding)
     assert module.main(["render_contract_consumption.py", "check"]) == 1
     assert "analitiq.contracts.x.Y.z" in capsys.readouterr().out
+
+
+def test_a_record_census_finding_is_exit_1(monkeypatch, capsys):
+    """The record half gates the verdict too — a clean field census must
+    not carry a record finding through to exit 0."""
+    module = _load_script()
+    import census.consumption.records as records
+
+    real = records.record_report
+
+    def with_a_finding(manifest, rules, affirmations):
+        report = real(manifest, rules, affirmations)
+        return type(report)(
+            **{**report.__dict__, "stale_rationale": ("RULE-TEST-999",)}
+        )
+
+    monkeypatch.setattr(records, "record_report", with_a_finding)
+    assert module.main(["render_contract_consumption.py", "check"]) == 1
+    assert "RULE-TEST-999" in capsys.readouterr().out
+
+
+def test_a_record_census_that_cannot_run_is_exit_2(monkeypatch, capsys):
+    """A registry the record census refuses — its non-vacuity floor — is a
+    check that could not run, never a finding."""
+    module = _load_script()
+    import census.consumption.records as records
+
+    def refuse():
+        raise ValueError("compiled registry holds no active records")
+
+    monkeypatch.setattr(records, "load_rules", refuse)
+    assert module.main(["render_contract_consumption.py", "check"]) == 2
+    err = capsys.readouterr().err
+    assert "could not run" in err and "no active records" in err
 
 
 def test_bad_argv_is_exit_2(capsys):
