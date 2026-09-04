@@ -65,7 +65,7 @@ than edited.
 | RULE-ENDP-060 | A brace in a request's `path` MUST delimit a `{name}` placeholder, and every such name MUST match the contract's placeholder-name pattern, regardless of how the provider spells the value that placeholder carries. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
 | RULE-ENDP-061 | A request's `path` MUST NOT carry a `${...}` template expression; the only substitution into a path is the `{name}` placeholders `path_params` binds. | `api-endpoint` | error | validator | `\$\{` |
 | RULE-ENDP-064 | An embedded request or response schema MUST NOT declare `$schema` on a subschema; the dialect is declared on the schema itself, or not at all. | `api-endpoint` | error | validator | — |
-| RULE-ENDP-065 | A read response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | — |
+| RULE-ENDP-065 | A read response's metadata key MUST match the contract's metadata-key pattern and MUST NOT collide with a reserved response-scope name. | `api-endpoint` | error | validator | `^[a-z][a-z0-9_]*$` |
 | RULE-HTTP-002 | A block that names an HTTP header MUST NOT name `Content-Length`, matched case-insensitively. | `any` | error | validator | `content-length` |
 | RULE-HTTP-003 | A block that names an HTTP header MUST NOT name `Content-Type`, matched case-insensitively; a request body's media type is declared by the request's own `content_type` field. | `any` | error | validator | `content-type` |
 | RULE-SHRD-001 | A credential MUST appear in an authored document only as a reference expression into the secret scope, never as a literal value. | `any` | error | — | — |

@@ -3910,10 +3910,10 @@
    "fields": [
     "metadata"
    ],
-   "mechanism": null,
-   "symbol": null,
+   "mechanism": "pattern",
+   "symbol": "analitiq.contracts.endpoints::METADATA_KEY_PATTERN",
    "fixture_model": null,
-   "rationale": "A metadata key is declared as an addressable name in the response scope, and one that collides with a reserved response-scope name would give one reference two meanings — which is why the reserved set and the key pattern are graded where the document is read, at validation. The pinned contract-consumption manifest claims no read of the metadata, and it has no effect on a run today; the pattern is what keeps the names addressable wherever the block is read. This is the read-side obligation the write side's metadata-key check deliberately mirrors rather than inventing its own: an author who learned the shape on a read meets the same contract on a write.\n",
+   "rationale": "RULE-ENDP-029 carries the addressable-name/reserved-scope collision argument for this shape in full, and why the pattern earns its severity though the field goes unread, and it binds identically here: this is the read side that check deliberately mirrors. The pinned contract-consumption manifest claims no read of `ResponseExtraction.metadata` the same way it claims none of the write side's.\n",
    "status": "active",
    "superseded_by": null
   },

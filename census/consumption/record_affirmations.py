@@ -85,7 +85,7 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         refs=(
             "endpoints.ResponseExtraction.metadata",
         ),
-        rationale_sha256="94d8491982d50f4e694b9521ea64538be2574f25bdfad5cc14aefbb5895265c9",
+        rationale_sha256="907a92ab4a5560ed388a850c904fea6b7648b8d768b54b31cbdfe5c42d666ff6",
     ),
     RecordAffirmation(
         "RULE-PIPE-017",
