@@ -99,14 +99,14 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         refs=(
             "endpoints.ReadOperation.filters",
         ),
-        rationale_sha256="99d7da2b1e0607a48a4876d6eb6c438d873f1a93bf229e269103852e38eaeb6b",
+        rationale_sha256="abf7bcf27565b052f3a085648b7917b08cae3ac911ebb52c19989a09f4eea23e",
     ),
     RecordAffirmation(
         "RULE-ENDP-067",
         refs=(
             "endpoints.ReadOperation.filters",
         ),
-        rationale_sha256="763df584d5bb7387b1088632243f28a1143a6cc330876ccb57ea8477e783edcd",
+        rationale_sha256="686ee9c41add6790466bf68f5c7cfe22b9aea0b9412eb6b5ff777eacc6500562",
     ),
     RecordAffirmation(
         "RULE-ENDP-068",

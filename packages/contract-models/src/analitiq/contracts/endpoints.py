@@ -320,8 +320,8 @@ class TemplateExpression(_EndpointModel):
 
 
 # `path_params` / `headers` / `query` recognize `from_param` as an untyped
-# procedural convention; `filters` is a closed, two-form slot, so it gets a
-# typed member instead.
+# procedural convention; `filters` is closed to the members `FilterLanding`
+# declares, so it gets a typed member instead.
 class FromParamExpression(_EndpointModel):
     """``{"from_param": "<name>"}`` — a `filters` map entry landing on a param,
     verbatim: the filter's own value is what reaches the param.
@@ -340,10 +340,14 @@ class TemplateFilterLanding(_EndpointModel):
 
     Unlike `FromParamExpression`, the value the param carries is not the
     filter's own value but this template rendered — for a provider that
-    spells the comparison inside the value rather than in a distinct param
+    spells ONE comparison inside the value rather than in a distinct param
     (``amount=<>0``, ``q=created>2020-01-01``). `param` is still the
     destination; only what reaches it differs, so it is checked the same way
-    `from_param` is (RULE-ENDP-066, RULE-ENDP-002).
+    `from_param` is (RULE-ENDP-066, RULE-ENDP-002). A provider needing two
+    comparisons on one field composed into one value (a bounded range inside
+    a single `$filter`) has no landing site here: RULE-ENDP-067 refuses two
+    entries sharing a param, and this model carries no way to compose two
+    templates into one rendered value.
     """
 
     param: str = Field(
@@ -2157,7 +2161,7 @@ class ReadOperation(_EndpointModel):
         # is most likely to have got right, so reporting them first keeps the
         # broader pagination/metadata sweep from masking a simpler error.
         _validate_response_body_paths(
-            self.response, self.pagination, self.request, self.params
+            self.response, self.pagination, self.request, self.params, self.filters
         )
 
         return self
@@ -3326,6 +3330,7 @@ def _validate_response_body_paths(
     pagination: Any,
     request: Any = None,
     params: dict[str, "Param"] | None = None,
+    filters: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """RULE-ENDP-023: every `response.body[.<path>]` a read operation reads
     OUTSIDE `response.records` must resolve against `response.schema`.
@@ -3407,6 +3412,23 @@ def _validate_response_body_paths(
                 operation=_OperationKind.READ,
                 can_read_response=False,
             ))
+    # `filters` is request-shaping too — its `template` landing renders
+    # before any request goes out, so a `${response...}` ref there is the
+    # identical never-has-a-value defect the request slots above are swept
+    # for, just reached through a newer field. Only `template` is scanned:
+    # `TemplateFilterLanding` also carries `param`, and dumping both together
+    # reads as an `Expression` dict with an unexpected sibling to the shared
+    # walker's own shape check (RULE-ENDP-022), which this compound landing
+    # is not subject to.
+    for field, landings in (filters or {}).items():
+        for operator, landing in landings.items():
+            if isinstance(landing, TemplateFilterLanding):
+                sites.append(_ExpressionSite(
+                    where=f"filters[{field!r}][{operator!r}].template",
+                    payload={"template": landing.template},
+                    operation=_OperationKind.READ,
+                    can_read_response=False,
+                ))
 
     _sweep_expression_sites(
         sites, response.schema_, frozenset(response.metadata or {})
@@ -4899,13 +4921,14 @@ def _validate_record_field_path(
 ) -> None:
     """A dotted RECORD field path must resolve under the records array's ``items``.
 
-    The generic form of the `cursor_field` check, for any site that names a
-    field the engine reads off a record rather than off the response body.
-    `pagination.keyset.order_by_field` is the other one: the seek order is
-    defined over it, so a path the record shape does not declare means pages
-    advance from a value the engine cannot read — silently truncating or
-    repeating, which is the same wrong-data-on-a-green-run failure
-    RULE-ENDP-023 catches on the response-body side, with a different cause.
+    The generic form of the `cursor_field` check, reused at every site that
+    names a field the engine reads off a record rather than off the response
+    body — `pagination.keyset.order_by_field` and each `filters` map key
+    among them: a path the record shape does not declare means the field it
+    names is read from a value the engine cannot resolve — silently
+    truncating or repeating pages, or silently filtering nothing — which is
+    the same wrong-data-on-a-green-run failure RULE-ENDP-023 catches on the
+    response-body side, with a different cause.
 
     Unknowable shapes are reported, not skipped: this is `response.schema`,
     which the contract holds to the strict standard (see

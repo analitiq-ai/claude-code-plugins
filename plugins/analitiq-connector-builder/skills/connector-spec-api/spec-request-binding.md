@@ -189,9 +189,11 @@ keyed by record field and then by operator:
   `template` renders through the value-expression grammar, reaching
   `${stream.filters.<field>.value}` for the filter's own value.
 - A `controlled_by` param — pagination or replication owns it — must never
-  be a `filters` landing site (RULE-ENDP-002), and two operators on the same
-  field must never land on the same site (RULE-ENDP-067): each would tell
-  the provider it received a different comparison than the one it did.
+  be a `filters` landing site (RULE-ENDP-002), and no two entries anywhere
+  in the map — two operators on one field, or the same operator on two
+  different fields — may land on the same site (RULE-ENDP-067): a shared
+  param carries one value, and each entry would tell the provider it
+  received a different comparison than the one it did.
 - A stream's filter is authored against this map — its `field` names a
   key here and its `operator` an entry under it — but nothing in this
   document's own validation reads a stream at all; whether a mismatch is

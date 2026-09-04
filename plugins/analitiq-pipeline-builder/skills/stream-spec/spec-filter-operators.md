@@ -57,5 +57,5 @@ own `filters` map carries an entry for it, keyed by record field and then by
 operator — a field the map does not mention, or an operator the field's entry
 does not carry, is not filterable, whatever else the parameter declares. That
 map is what a `contains` or `starts_with` filter actually lands on: the
-endpoint author names, per field and operator, which declared param or
-template receives it.
+endpoint author names, per field and operator, which declared param
+receives it — the filter's own value verbatim, or a template-rendered one.

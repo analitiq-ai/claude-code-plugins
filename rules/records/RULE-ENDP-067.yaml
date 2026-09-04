@@ -1,6 +1,6 @@
 id: RULE-ENDP-067
 statement: >
-  Two operators on the same `filters` field entry MUST NOT resolve to the
+  Two `filters` map entries anywhere in the map MUST NOT resolve to the
   same landing site.
 tier: advisory
 severity: error
@@ -10,11 +10,15 @@ owners: [connector-plugin, engine]
 targets: [ReadOperation]
 fields: [filters]
 rationale: >
-  A landing site — one param, or one template — carries one value. Two
-  operators bound to the same one is the ambiguity this map exists to close:
-  before it, nothing checked whether `eq`, `contains` and `starts_with` built
-  the request identically, and a run over the wrong operator succeeded
-  silently. Refusing the entry at authoring time is where the mistake is
-  still attached to the line that made it.
+  A landing site — a param, whether it carries the filter's own value or a
+  template-computed one — carries one value. Two entries bound to the same
+  one is the ambiguity this map exists to close, whether they are two
+  operators on one field or two different fields entirely: before it,
+  nothing checked whether `eq`, `contains` and `starts_with` built the
+  request identically, and a run over the wrong operator succeeded
+  silently; the same silent collision happens when a second, unrelated
+  field's filter overwrites the first's value on the same param. Refusing
+  the entry at authoring time is where the mistake is still attached to the
+  line that made it.
 status: active
 superseded_by: null

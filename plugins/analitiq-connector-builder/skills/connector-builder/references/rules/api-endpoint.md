@@ -85,7 +85,7 @@ single field looks wrong.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-ENDP-001 | A request's path_params block MUST be present exactly when the path declares placeholders, and its keys MUST be exactly the placeholder names that path declares. | `api-endpoint` | error | validator |
-| RULE-ENDP-002 | A `filters` map entry's `from_param` MUST NOT name a param controlled by pagination or replication. | `api-endpoint` | error | validator |
+| RULE-ENDP-002 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST NOT name a param controlled by pagination or replication. | `api-endpoint` | error | validator |
 | RULE-ENDP-004 | A cursor mapping MUST carry the fields of a single filter form and MUST NOT mix fields belonging to different forms. | `api-endpoint` | error | validator |
 | RULE-ENDP-005 | Every node of a read operation's response schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
 | RULE-ENDP-006 | Every node of a write mode's input schema that declares either the native type or the canonical Arrow type MUST declare both, and MUST carry the sibling declarations its container form requires. | `api-endpoint` | error | validator |
@@ -110,8 +110,8 @@ single field looks wrong.
 | RULE-ENDP-034 | A `from_input` binding MUST NOT be authored at a request site the engine builds before a record is in scope. | `api-endpoint` | error | validator |
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
-| RULE-ENDP-066 | A `filters` map entry's `from_param` MUST name a param the same operation declares. | `api-endpoint` | error | validator |
-| RULE-ENDP-067 | Two operators on the same `filters` field entry MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
+| RULE-ENDP-066 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares. | `api-endpoint` | error | validator |
+| RULE-ENDP-067 | Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
 | RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 

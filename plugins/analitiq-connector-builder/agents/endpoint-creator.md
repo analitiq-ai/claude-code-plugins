@@ -98,9 +98,11 @@ was raised.
      pagination or replication.
    - `filters` — makes a record field stream-filterable: keyed by field, then
      by operator (`RULE-ENDP-055`'s vocabulary), each landing on a declared
-     param (`RULE-ENDP-066`) or a template — never on a `controlled_by` param
-     (`RULE-ENDP-002`), and never two operators on one field on the same
-     landing site (`RULE-ENDP-067`). Full rules: `spec-request-binding.md`.
+     param, either verbatim (`from_param`) or via a rendered value
+     (`param`+`template`) (`RULE-ENDP-066`) — never on a `controlled_by`
+     param (`RULE-ENDP-002`), and never two entries anywhere in the map on
+     the same landing site (`RULE-ENDP-067`). Full rules:
+     `spec-request-binding.md`.
    - <!-- PROBE: read-pathparam-from-input-rejected, read-pathparam-bare-ref-rejected, request-slot-direct-runtime-ref -->
      `request.query` / `request.headers` / `request.path_params` /
      `request.body` — the declarative request shape. Dynamic values are

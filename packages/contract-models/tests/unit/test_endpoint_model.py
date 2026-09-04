@@ -657,6 +657,66 @@ class TestFiltersWiring:
                 ),
             }))
 
+    def test_field_key_not_declared_in_record_shape_rejected(self):
+        # Shape-valid (matches RECORD_FIELD_PATH_PATTERN) but the response
+        # schema's record never declares it — RULE-ENDP-068, the same
+        # existence check `pagination.keyset.order_by_field` gets, closing
+        # the class of defect a shape-only check leaves open.
+        with pytest.raises(ValidationError, match="not declared in the response.schema"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"updatedAt": {"gt": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_template_param_naming_undeclared_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-066\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {"param": "nonexistent", "template": "${stream.filters.created.value}"},
+                    },
+                }),
+            }))
+
+    def test_template_param_naming_a_controlled_by_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-002\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"created": {
+                        "gt": {"param": "cursor", "template": "${stream.filters.created.value}"},
+                    }},
+                    params={
+                        "cursor": {
+                            "in": "query", "type": "string", "required": False,
+                            "controlled_by": "pagination",
+                        },
+                    },
+                    extra_query={"cursor": {"from_param": "cursor"}},
+                ),
+            }))
+
+    def test_template_placeholder_unscoped_rejected(self):
+        with pytest.raises(ValidationError, match="known resolution scope"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {"gt": {"param": "minAmount", "template": "${bogus}"}},
+                }),
+            }))
+
+    def test_template_response_ref_rejected(self):
+        # A request is built before the response exists — the identical
+        # never-has-a-value defect `_validate_response_body_paths` refuses
+        # for request.query/headers/body, now reached through `filters`.
+        with pytest.raises(ValidationError, match="request is built before the response exists"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {"param": "minAmount", "template": "${response.body.total}"},
+                    },
+                }),
+            }))
+
     def test_from_param_naming_undeclared_param_rejected(self):
         with pytest.raises(ValidationError, match=r"\[RULE-ENDP-066\]"):
             parse_endpoint(_minimal_api_payload(operations={

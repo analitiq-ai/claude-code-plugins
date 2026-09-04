@@ -1,7 +1,8 @@
 id: RULE-ENDP-002
 statement: >
-  A `filters` map entry's `from_param` MUST NOT name a param controlled by
-  pagination or replication.
+  A `filters` map entry's landing site — `from_param`, or `param` on a
+  template landing — MUST NOT name a param controlled by pagination or
+  replication.
 tier: advisory
 severity: error
 scopes: [api-endpoint]

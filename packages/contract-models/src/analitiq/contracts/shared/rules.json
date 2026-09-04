@@ -2333,7 +2333,7 @@
   },
   {
    "id": "RULE-ENDP-002",
-   "statement": "A `filters` map entry's `from_param` MUST NOT name a param controlled by pagination or replication.\n",
+   "statement": "A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST NOT name a param controlled by pagination or replication.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3921,7 +3921,7 @@
   },
   {
    "id": "RULE-ENDP-066",
-   "statement": "A `filters` map entry's `from_param` MUST name a param the same operation declares.\n",
+   "statement": "A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3941,13 +3941,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "`from_param` is a cross-field reference within one document, the same shape `request.query`/`headers`/`path_params` already resolve against `params`. An undeclared name would otherwise parse as a landing site the operation never sends, so the filter it carries silently drops out of the request while the run reports success over unfiltered data.\n",
+   "rationale": "The destination is a cross-field reference within one document, the same shape `request.query`/`headers`/`path_params` already resolve against `params`. An undeclared name would otherwise parse as a landing site the operation never sends, so the filter it carries silently drops out of the request while the run reports success over unfiltered data.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-ENDP-067",
-   "statement": "Two operators on the same `filters` field entry MUST NOT resolve to the same landing site.\n",
+   "statement": "Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3967,7 +3967,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A landing site — one param, or one template — carries one value. Two operators bound to the same one is the ambiguity this map exists to close: before it, nothing checked whether `eq`, `contains` and `starts_with` built the request identically, and a run over the wrong operator succeeded silently. Refusing the entry at authoring time is where the mistake is still attached to the line that made it.\n",
+   "rationale": "A landing site — a param, whether it carries the filter's own value or a template-computed one — carries one value. Two entries bound to the same one is the ambiguity this map exists to close, whether they are two operators on one field or two different fields entirely: before it, nothing checked whether `eq`, `contains` and `starts_with` built the request identically, and a run over the wrong operator succeeded silently; the same silent collision happens when a second, unrelated field's filter overwrites the first's value on the same param. Refusing the entry at authoring time is where the mistake is still attached to the line that made it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -4014,7 +4014,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The same obligation RULE-ENDP-049 states for the general value-expression `template` form, applied to the `filters` map's own template-landing model — a separate class carrying the identical check (`_validate_template_placeholders`) because `filters` needs a destination `param` a bare `TemplateExpression` does not carry. An unqualified placeholder here is the same ambiguity RULE-ENDP-049's rationale describes, now over the value a `filters` entry sends the provider instead of a general request slot.\n",
+   "rationale": "The same obligation RULE-ENDP-049 states for the general value-expression `template` form, applied to the `filters` map's own template-landing model — a separate class carrying the identical check, because `filters` needs a destination `param` a bare `TemplateExpression` does not carry. An unqualified placeholder here is the same ambiguity RULE-ENDP-049's rationale describes, now over the value a `filters` entry sends the provider instead of a general request slot.\n",
    "status": "active",
    "superseded_by": null
   },
