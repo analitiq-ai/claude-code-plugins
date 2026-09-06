@@ -4,7 +4,10 @@
   "operations": {
     "read": {
       "params": {
-        "account_id": { "in": "path", "type": "string", "required": true }
+        "account_id": {
+          "in": "path", "type": "string", "required": true,
+          "default": { "ref": "connection.parameters.account_id" }
+        }
       },
       "request": {
         "method": "GET",

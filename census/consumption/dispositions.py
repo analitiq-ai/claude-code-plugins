@@ -136,9 +136,16 @@ DISPOSITIONS: tuple[FieldDisposition, ...] = (
     ),
     FieldDisposition(
         "endpoints.Param", "required", "engine_gap",
-        "an author marking a param required expects a request whose binding "
-        "resolves to nothing to be refused; the pinned manifest claims no read "
-        "of the flag, so the request goes out with the slot empty",
+        "RULE-ENDP-067 names the obligation: an operation whose required "
+        "param resolves to nothing is refused rather than sent with that "
+        "param's slot dropped. The pinned manifest claims no read of the flag, "
+        "so setting it changes nothing about the request that goes out, and "
+        "reading the request path as it stands: the slot is dropped with a "
+        "warning on a run that reports success, except where the request "
+        "cannot be built without the value at all, as an unresolved path "
+        "segment cannot — and that refusal does not read the flag either. "
+        "RULE-ENDP-066 names the obligation the same flag places on the "
+        "document that declares it",
     ),
     FieldDisposition("endpoints.Param", "description", "authoring_only", HUMAN_METADATA),
     FieldDisposition("endpoints.Param", "enum", "engine_gap", PARAM_VALUE_CONSTRAINT),

@@ -30,7 +30,8 @@ that input — and **referenced** from the request slot with a binding expressio
 ```json
 {
   "params": {
-    "account_id": { "in": "path", "type": "string", "required": true },
+    "account_id": { "in": "path", "type": "string", "required": true,
+                    "default": { "ref": "connection.parameters.account_id" } },
     "updated_since": { "in": "query", "type": "string", "format": "date-time",
                        "required": false, "controlled_by": "replication" }
   },
@@ -76,6 +77,18 @@ prohibitions below).
   `connector-builder/references/rules/api-endpoint.md`.
 - **RULE-ENDP-009** — a declared-but-unbound param is an error, not dead
   weight: if you don't need it, delete it.
+- **`required` is a decision, not documentation** (RULE-ENDP-067) — set it only
+  where the operation is wrong without the value, and then give the param a
+  source the document can actually supply (RULE-ENDP-066). Which source is the
+  craft: a value the connection holds takes a `default` reffing it under the
+  scope that connection value is actually stored in — a contract input under
+  `connection.parameters`, a post-auth selection under `connection.selections`,
+  an auto-discovered value under `connection.discovered` (see
+  `connector-builder/references/lifecycle-phases.md`). Endpoint validation
+  grades the leading `connection` token only, so the wrong sub-scope validates
+  and resolves to nothing. A param a stream narrows on is sourced by the
+  `operators` it declares instead — and a param may not carry those beside
+  `controlled_by`.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
   only `x-*` siblings (RULE-ENDP-022).

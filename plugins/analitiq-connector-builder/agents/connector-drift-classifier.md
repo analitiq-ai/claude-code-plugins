@@ -150,12 +150,15 @@ rules for every document" says which file carries which artifact.
   existing `native` resolves to a different canonical; write map: an
   existing `canonical` renders a different native DDL — either invalidates
   downstream consumers), endpoint-obligation-added (an addition an existing
-  stream must satisfy rather than one it may opt into: a read param declared
-  `required` with no default, so a stream supplying no value for it stops
-  resolving, or a member added to a write mode's required input, so a stream
-  whose mapping does not produce it sends a record the provider refuses. The
-  additive categories are for what a stream MAY now use; an addition it MUST
-  now satisfy is drift wearing the other sign).
+  stream must satisfy rather than one it may opt into: a read param the
+  stream is the source for that becomes `required`, so a stream supplying no
+  value for it now asks a different question than it did (RULE-ENDP-067) — a
+  param that becomes required and gains a `default` in the same release asks
+  nothing of any stream and is not this. Or a member added to a write mode's
+  required input, so a stream whose mapping does not produce it sends a
+  record the provider refuses. The additive categories are for what a stream
+  MAY now use; an addition it MUST now satisfy is drift wearing the other
+  sign).
 - **minor**: optional-input-added, optional-output-added,
   optional-endpoint-added, write-mode-added (a mode key under
   `operations.write` that endpoint did not declare before; a whole new

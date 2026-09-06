@@ -633,6 +633,10 @@ class TestAWritePathParamMustBeAbleToResolve:
     def test_a_read_path_param_needs_no_default(self):
         # Reads keep the old latitude: a read path param can be supplied by a
         # stream filter, so a missing `default` is not proof it cannot resolve.
+        # The param below declares the `operators` that open that filter, which
+        # is what RULE-ENDP-066 reads — a required read param declaring neither
+        # a `default` nor a source is refused, so this shape holds because it
+        # names one, not because reads are ungraded.
         payload = {
             "$schema": API_SCHEMA_URL,
             "endpoint_id": "contact",
