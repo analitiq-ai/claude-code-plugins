@@ -55,7 +55,7 @@ For an API source, the endpoint document narrows the vocabulary further
 (`RULE-STRM-026`): a field is filterable only where the referenced operation's
 own `filters` map carries an entry for it, keyed by record field and then by
 operator — a field the map does not mention, or an operator the field's entry
-does not carry, is not filterable, whatever else the parameter declares. That
-map is what a `contains` or `starts_with` filter actually lands on: the
+does not carry, is not filterable. That map is what a `contains` or
+`starts_with` filter actually lands on: the
 endpoint author names, per field and operator, which declared param
 receives it — the filter's own value verbatim, or a template-rendered one.

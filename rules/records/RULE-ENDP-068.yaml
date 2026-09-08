@@ -1,7 +1,8 @@
 id: RULE-ENDP-068
 statement: >
   A `filters` map key MUST resolve by declared-path resolution against the
-  read operation's response schema record shape.
+  read operation's response schema record shape onto a node declaring a
+  type.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -16,8 +17,11 @@ rationale: >
   filters map entry simply sits unused, and a stream that filters on the
   field it meant is refused nowhere and reads unfiltered, the wrong-rows
   failure this map exists to close, relocated from the operator to the
-  field name. `pagination.keyset.order_by_field` (RULE-ENDP-023) closes the
-  identical gap for the same reason; this is the same check reused for a
-  second record-path site.
+  field name. A key that resolves but whose node declares no type is the same
+  failure one step later: whatever plants the value gets to invent its type,
+  and a comparison built on it either works or raises depending on the row.
+  `pagination.keyset.order_by_field` (RULE-ENDP-023) closes the identical gap
+  for the same reason; this is the same check reused for a second
+  record-path site.
 status: active
 superseded_by: null

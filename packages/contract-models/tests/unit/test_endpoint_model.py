@@ -764,8 +764,8 @@ class TestFiltersWiring:
             }))
 
     def test_template_with_no_current_value_placeholder_rejected(self):
-        # A constant template uses a known scope nowhere — it uses none at
-        # all — so RULE-ENDP-032's check passes it. Every value for this
+        # A constant template names no placeholder at all, so RULE-ENDP-069's
+        # scope check has nothing to refuse it on. Every value for this
         # field/operator would render the identical request; RULE-ENDP-072
         # is what refuses it.
         with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
@@ -776,9 +776,10 @@ class TestFiltersWiring:
             }))
 
     def test_template_referencing_a_different_fields_value_rejected(self):
-        # `stream.filters.total.value` is a known scope, so it clears
-        # RULE-ENDP-032 too — but it is the total field's own value, not the
-        # created field/operator entry this landing is declared on.
+        # `stream.filters.total.value` is a known placeholder, so it clears
+        # RULE-ENDP-069's scope check — but it is the total field's own
+        # value, not the created field/operator entry this landing is
+        # declared on.
         with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
             parse_endpoint(_minimal_api_payload(operations={
                 "read": _filters_read_op({

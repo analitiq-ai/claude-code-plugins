@@ -94,7 +94,7 @@ single field looks wrong.
 | RULE-ENDP-010 | Every parameter a pagination block names MUST be declared by the same operation and MUST declare itself controlled by pagination. | `api-endpoint` | error | validator |
 | RULE-ENDP-011 | Every parameter a replication cursor mapping names MUST be declared by the same operation and MUST declare itself controlled by replication. | `api-endpoint` | error | validator |
 | RULE-ENDP-012 | A read operation's records reference MUST resolve, against that operation's declared response schema, to an array node whose record shape declares something. | `api-endpoint` | error | validator |
-| RULE-ENDP-013 | Every replication cursor field MUST resolve to a field declared in the record shape the operation's response schema describes. | `api-endpoint` | error | validator |
+| RULE-ENDP-013 | Every replication cursor field MUST resolve to a field declared in the record shape the operation's response schema describes, onto a node declaring a type. | `api-endpoint` | error | validator |
 | RULE-ENDP-014 | Every conflict key a write mode declares MUST name a top-level field of that mode's input schema. | `api-endpoint` | error | validator |
 | RULE-ENDP-016 | An idempotency key's name MUST NOT collide with any header the same write request declares, nor with any field of the body it resolves to. | `api-endpoint` | error | validator |
 | RULE-ENDP-017 | A write mode's request body MUST address the record scope its batching declaration implies — the whole batch when batching is declared, a single record or one of its fields otherwise — and any field path it addresses MUST be declared in that mode's input schema. | `api-endpoint` | error | validator |
@@ -111,7 +111,7 @@ single field looks wrong.
 | RULE-ENDP-035 | A write request body's `from_input` MUST NOT address a field through the batch array; a dotted path is resolvable only against a single record. | `api-endpoint` | error | validator |
 | RULE-ENDP-063 | Every value an embedded request or response schema records under `examples` MUST satisfy the schema node that declares it. | `api-endpoint` | error | validator |
 | RULE-ENDP-066 | A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — a `filters` entry landing on it, a pagination block that gives it a starting value, or a replication block that supports `incremental`. | `api-endpoint` | error | validator |
-| RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape. | `api-endpoint` | error | validator |
+| RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape onto a node declaring a type. | `api-endpoint` | error | validator |
 | RULE-ENDP-070 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-071 | Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
 | RULE-ENDP-072 | A `filters` map entry's `template` MUST interpolate `${stream.filters.<field>.value}` for the field/operator entry it is declared on. | `api-endpoint` | error | validator |
