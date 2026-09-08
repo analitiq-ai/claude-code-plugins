@@ -4215,7 +4215,15 @@ def _reject_unsatisfiable_branch(branch: Any) -> None:
 
 
 def _declared_types(declaration: Any) -> set[str] | None:
-    """The `type` values a declaration allows, or ``None`` when it declares none."""
+    """The `type` values a declaration allows, or ``None`` when it declares none.
+
+    A bare `type` (string or list) is the direct case. Absent that, `anyOf`/
+    `oneOf` — the common nullable idiom (`{"anyOf": [{"type": "string"},
+    {"type": "null"}]}`) among them — declares a type when EVERY branch does:
+    the value is provably one of the union, so the union of their type sets is
+    what this declaration allows. One branch declaring nothing makes the whole
+    union unbounded, so the declaration is treated as declaring none.
+    """
     if not isinstance(declaration, dict):
         return None
     declared = declaration.get("type")
@@ -4223,6 +4231,17 @@ def _declared_types(declaration: Any) -> set[str] | None:
         return {declared}
     if isinstance(declared, list) and all(isinstance(t, str) for t in declared):
         return set(declared)
+    for key in ("anyOf", "oneOf"):
+        branches = declaration.get(key)
+        if isinstance(branches, list) and branches:
+            union: set[str] = set()
+            for branch in branches:
+                branch_types = _declared_types(branch)
+                if branch_types is None:
+                    break
+                union |= branch_types
+            else:
+                return union
     return None
 
 

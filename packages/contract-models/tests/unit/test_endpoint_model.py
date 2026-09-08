@@ -351,6 +351,24 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="declares no `type`"):
             parse_endpoint(self._payload_with_cursor_field("updated_at", {"updated_at": {}}))
 
+    def test_cursor_field_typed_only_via_anyof_accepted(self):
+        # The common nullable idiom — every anyOf branch declares a type, so
+        # the union ({string, null}) is a real, usable type even with no
+        # top-level `type` key.
+        parse_endpoint(self._payload_with_cursor_field(
+            "updated_at",
+            {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+        ))
+
+    def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
+        # One branch declaring nothing makes the union unbounded — not a
+        # usable type.
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
+            ))
+
     def test_dotted_cursor_field_traverses_nested_objects(self):
         parse_endpoint(self._payload_with_cursor_field(
             "metadata.updated_at",
@@ -791,6 +809,16 @@ class TestFiltersWiring:
                     extra_record_props={"untyped": {}},
                 ),
             }))
+
+    def test_field_key_typed_only_via_anyof_accepted(self):
+        # The common nullable idiom — every anyOf branch declares a type.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op(
+                {"nullable": {"gt": {"from_param": "minAmount"}}},
+                extra_record_props={"nullable": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            ),
+        }))
+        assert "nullable" in result.operations.read.filters
 
     def test_template_param_naming_undeclared_param_rejected(self):
         with pytest.raises(ValidationError, match=r"\[RULE-ENDP-070\]"):
