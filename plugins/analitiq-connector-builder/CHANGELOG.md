@@ -6,24 +6,21 @@
 ### ⚠ BREAKING CHANGES
 
 * a type-map document keyed `native`/`canonical` no longer validates. Both keys must be renamed to `native_type`/`arrow_type`.
+* a `$ref` at `arrow-types.json#/$defs/canonical_type` or `#/$defs/canonical_type_or_template` no longer resolves. Point it at `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`.
 
 ### Features
 
-* a required param must have something that can fill it ([e0f296a](https://github.com/analitiq-ai/claude-code-plugins/commit/e0f296afe6d1ca19cab0f4abde375f3041d4deca))
 * a required param must have something that can fill it ([18bb6a7](https://github.com/analitiq-ai/claude-code-plugins/commit/18bb6a7aa830597382ecba4d62683b73968aa72a))
 * **connector-builder:** an addition a stream must satisfy is drift too ([7b10cb0](https://github.com/analitiq-ai/claude-code-plugins/commit/7b10cb0f543739f2f75081ce117c6db9c3cd7ea7))
 * **connector-builder:** an entry carrying a sample names exactly one direction ([e84067b](https://github.com/analitiq-ai/claude-code-plugins/commit/e84067b223b0f46acbc6edf04902f20c56d5581b))
 * **connector-builder:** give the drift vocabulary the interior endpoint changes ([dde7f93](https://github.com/analitiq-ai/claude-code-plugins/commit/dde7f93c8f16e9aa71a2f7ffe80b38114e136bb0))
 * **connector-builder:** give the interior a floor, not a longer list ([a650817](https://github.com/analitiq-ai/claude-code-plugins/commit/a6508172d7c527b40d50ed608fb5a25805d9c9fc))
 * **contract-models:** name the rules a request path's placeholders answer to ([3a5a434](https://github.com/analitiq-ai/claude-code-plugins/commit/3a5a434cfec8d77964a0fc8ca0a78d94a7c059fb))
-* **contract-models:** own the headers a connector may name, and refuse credentials in a base_url ([225f3c3](https://github.com/analitiq-ai/claude-code-plugins/commit/225f3c3288cede620969f954fc0325245d2f2067))
 * **contract-models:** own the headers a connector may name, and refuse credentials in a base_url ([e6aa37b](https://github.com/analitiq-ai/claude-code-plugins/commit/e6aa37bcbf18e4c0c3c31fab0802b64a0a4d1874))
-* **contracts:** register the read-side response.metadata key rule ([274b6a4](https://github.com/analitiq-ai/claude-code-plugins/commit/274b6a4bad63d8386327f78e8b5b32878137c7c6))
 * **contracts:** register the read-side response.metadata key rule ([d3df192](https://github.com/analitiq-ai/claude-code-plugins/commit/d3df192567e4b3e4a5e058186cfbd3e2e969535a))
 * native_type and arrow_type are the only declared type keys ([b6cba01](https://github.com/analitiq-ai/claude-code-plugins/commit/b6cba0179dbaee9ff2102acc2fcb7deabe9171af))
-* structural records name their shape device where the constant exists ([77baef4](https://github.com/analitiq-ai/claude-code-plugins/commit/77baef42f7b21464e18952e8c8b50a1d1fab266f))
+* the vocabulary document exports arrow_type, not canonical_type ([f6e219a](https://github.com/analitiq-ai/claude-code-plugins/commit/f6e219a76021787140949c5dcb440172d646e22e))
 * structural records name their shape device where the constant exists ([8e3561a](https://github.com/analitiq-ai/claude-code-plugins/commit/8e3561a41644f6b4ccdfece52a275b65bc712922))
-* **validator:** grade a recorded sample against the node declaring it ([bd20654](https://github.com/analitiq-ai/claude-code-plugins/commit/bd20654880161cbe07839a90648f6091389b3cf2))
 * **validator:** grade a recorded sample against the node declaring it ([e7da677](https://github.com/analitiq-ai/claude-code-plugins/commit/e7da6779c6ccfbc798a9841a999fade208faba16))
 
 
@@ -34,7 +31,6 @@
 * a starting value is a value, and each block's way out is one its author has ([91037d2](https://github.com/analitiq-ai/claude-code-plugins/commit/91037d2e614c3e8f5e6f8ffe56fef97d683f695b))
 * **connector-builder:** a value contract narrows anywhere, not only at its type ([c564448](https://github.com/analitiq-ai/claude-code-plugins/commit/c564448fe35b5c0a88c6f2642f40c45282b1a9e6))
 * **connector-builder:** a write_modes name is a mode key, and a wrong one is reported ([768b893](https://github.com/analitiq-ai/claude-code-plugins/commit/768b8931deb9472af851f28b7753029caad5f1a2))
-* **connector-builder:** an entry carrying a sample names exactly one direction ([f5571b4](https://github.com/analitiq-ai/claude-code-plugins/commit/f5571b40a30af172544e2128dd55839a8e6d7767))
 * **connector-builder:** cite the vocabulary that prints mode keys, and look for coverage where it fails ([c6a4647](https://github.com/analitiq-ai/claude-code-plugins/commit/c6a4647ccbc3da8a5413dd0f4b46acac5e3f25cb))
 * **connector-builder:** let the facts say which mode a write field belongs to ([88220cd](https://github.com/analitiq-ai/claude-code-plugins/commit/88220cdf359e62207f8e4f47dea14d55af77e3b8))
 * **connector-builder:** point the interior diff at the node the contract reads ([d1e8968](https://github.com/analitiq-ai/claude-code-plugins/commit/d1e896852f23436b86d82dde32d5d8cc804ff423))
@@ -44,7 +40,6 @@
 * **contract-models:** a brace in a path delimits a placeholder or nothing ([57a08b6](https://github.com/analitiq-ai/claude-code-plugins/commit/57a08b671a4254e6717465104f1bec5b3be915aa))
 * **contract-models:** read a header name one way, and publish a pattern a JSON Schema consumer can compile ([aee289f](https://github.com/analitiq-ai/claude-code-plugins/commit/aee289f435e5262077deba4aa0210a3141276540))
 * **contracts:** classify RULE-ENDP-065's pattern, dedup its rationale ([040dee8](https://github.com/analitiq-ai/claude-code-plugins/commit/040dee8fc15d7a5f4574d4742bfa01df3ab7cc9a))
-* **contracts:** refuse a dialect declaration below an embedded schema's root ([5435284](https://github.com/analitiq-ai/claude-code-plugins/commit/5435284076f32e82d5051898eccf80404215e466))
 * **contracts:** refuse a dialect declaration below an embedded schema's root ([0dd82ff](https://github.com/analitiq-ai/claude-code-plugins/commit/0dd82ff2dfb2d6e2062145b8d5147ac6ed605b1f)), closes [#209](https://github.com/analitiq-ai/claude-code-plugins/issues/209)
 * correct stale citations across 15 sites (closes [#222](https://github.com/analitiq-ai/claude-code-plugins/issues/222) partially — 1 site deferred) ([99d18a6](https://github.com/analitiq-ai/claude-code-plugins/commit/99d18a6628d746c839784e357a4eccbdad7890cf))
 * correct stale citations to symbols, tests and paths that no longer exist ([6cf093d](https://github.com/analitiq-ai/claude-code-plugins/commit/6cf093d228d8cdc13fc2cc8bb30f6c4a2053c6a5))
@@ -56,11 +51,9 @@
 * **rules:** say what RULE-HTTP-001 now matches ([f79d8d5](https://github.com/analitiq-ai/claude-code-plugins/commit/f79d8d5b43c914a9f6fb977dabd1d7260885282c))
 * **rules:** say whether a write input schema declares its field types ([8524d8b](https://github.com/analitiq-ai/claude-code-plugins/commit/8524d8bca059d155b95fdf560ae2fda31017d32a))
 * **rules:** show the form the placeholder rule asks an author to match ([9d9546b](https://github.com/analitiq-ai/claude-code-plugins/commit/9d9546b4baeb8eade0900bc39c0a7a0879f200ea))
-* shape-check the connector document's untyped expression sites ([e485461](https://github.com/analitiq-ai/claude-code-plugins/commit/e48546108858b9c5157de301c674b49f5b530a48))
 * shape-check the connector document's untyped expression sites ([5a7d481](https://github.com/analitiq-ai/claude-code-plugins/commit/5a7d48128aa0b975f6891a75130a828c51110a33)), closes [#172](https://github.com/analitiq-ai/claude-code-plugins/issues/172)
 * stop crediting the header rules with a match no input reaches them by ([2a7eaab](https://github.com/analitiq-ai/claude-code-plugins/commit/2a7eaabe81c7c3bdb37f678797753400d8c7bbbf))
 * teach the case rule for API read maps — uppercase exact, cased regex ([5c2caf9](https://github.com/analitiq-ai/claude-code-plugins/commit/5c2caf95e84d2735671702a69774a3ca3cdee6e3))
-* teach the case rule for API read maps — uppercase exact, never regex ([135921f](https://github.com/analitiq-ai/claude-code-plugins/commit/135921ffbb2f1d1b360478df66854de184464fbe))
 * the rename reaches the prose, and the probe grades what it claims ([98ba580](https://github.com/analitiq-ai/claude-code-plugins/commit/98ba5802aceb8804873cc7fad59036ee6b821f6f))
 * the render-change category names the render, not one direction's key ([680181e](https://github.com/analitiq-ai/claude-code-plugins/commit/680181e54020dfee1d67de8e2acdf411f3f55669))
 * the source has to be backed, and it is graded where the bindings are settled ([a27e9dc](https://github.com/analitiq-ai/claude-code-plugins/commit/a27e9dc8bd6d22c5996e4f69ac48e11ab6df5033))
