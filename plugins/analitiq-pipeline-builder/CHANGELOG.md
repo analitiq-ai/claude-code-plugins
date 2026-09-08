@@ -6,13 +6,13 @@
 ### ⚠ BREAKING CHANGES
 
 * a type-map document keyed `native`/`canonical` no longer validates. Both keys must be renamed to `native_type`/`arrow_type`.
+* a `$ref` at `arrow-types.json#/$defs/canonical_type` or `#/$defs/canonical_type_or_template` no longer resolves. Point it at `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`.
 
 ### Features
 
 * native_type and arrow_type are the only declared type keys ([b6cba01](https://github.com/analitiq-ai/claude-code-plugins/commit/b6cba0179dbaee9ff2102acc2fcb7deabe9171af))
-* structural records name their shape device where the constant exists ([77baef4](https://github.com/analitiq-ai/claude-code-plugins/commit/77baef42f7b21464e18952e8c8b50a1d1fab266f))
 * structural records name their shape device where the constant exists ([8e3561a](https://github.com/analitiq-ai/claude-code-plugins/commit/8e3561a41644f6b4ccdfece52a275b65bc712922))
-* **validator:** grade a recorded sample against the node declaring it ([bd20654](https://github.com/analitiq-ai/claude-code-plugins/commit/bd20654880161cbe07839a90648f6091389b3cf2))
+* the vocabulary document exports arrow_type, not canonical_type ([f6e219a](https://github.com/analitiq-ai/claude-code-plugins/commit/f6e219a76021787140949c5dcb440172d646e22e))
 * **validator:** grade a recorded sample against the node declaring it ([e7da677](https://github.com/analitiq-ai/claude-code-plugins/commit/e7da6779c6ccfbc798a9841a999fade208faba16))
 
 
