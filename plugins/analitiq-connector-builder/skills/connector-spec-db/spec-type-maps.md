@@ -99,7 +99,7 @@ Uppercase remains the house style for `exact` natives too — it reads
 consistently against the regex rules that sit beside them — but it is a
 convention there, not a correctness requirement.
 
-<!-- PROBE: write-map-regex-canonical-case-unchecked -->
+<!-- PROBE: write-map-regex-arrow-type-case-unchecked -->
 Case matters on the write side (`RULE-TMAP-015`): a lowercase **`regex`**
 `arrow_type` is not checked at all — `{"match": "regex", "arrow_type": "^utf8$"}`
 validates with zero findings and simply never fires.

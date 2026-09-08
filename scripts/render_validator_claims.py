@@ -954,7 +954,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("param-key-keeps-provider-spelling", "clean", _p_param_key_provider_spelling,
           forbid_re=r"(?i)objectId"),
     # type maps
-    Probe("write-map-regex-canonical-case-unchecked", "silent", _p_write_map_regex_case),
+    Probe("write-map-regex-arrow-type-case-unchecked", "silent", _p_write_map_regex_case),
     # require_re holds the coverage warning itself in existence: without it,
     # deleting the whole type-map-write-coverage check would leave this probe
     # green while spec-type-maps.md keeps instructing authors to reconcile a

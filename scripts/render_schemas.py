@@ -1087,12 +1087,13 @@ def get_resource(name: str) -> Resource:
 # committed file differs from the rendered output, exactly like a registered
 # resource.
 #
-# This document was published under an earlier name. The publish is additive
-# and deletes nothing, so that name keeps serving the last document rendered
-# under it — frozen, and describing a type-map key spelling the contract no
-# longer accepts. Retiring it is a delete on the serving side, which this repo
-# cannot perform and no check here can observe; until it happens the stale
-# object stays reachable. Renaming this document again inherits the same debt.
+# This document was published as `canonical-types.json` before it was renamed.
+# The publish is additive and deletes nothing, so that path keeps serving the
+# last document rendered under it — frozen, and describing the `type_map`
+# key spelling the contract no longer accepts. Retiring it is a delete on the
+# serving side, which this repo cannot perform and no check here can observe;
+# until it happens the stale object stays reachable. Renaming this document
+# again inherits the same debt.
 
 from analitiq.contracts import arrow_grammar  # noqa: E402
 
