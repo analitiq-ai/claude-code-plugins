@@ -367,7 +367,7 @@ access and may not guess field types).
               "record-field-removed", "record-field-type-changed",
               "filter-operators-narrowed", "conflict-keys-changed",
               "endpoint-capability-narrowed", "type-map-rule-removed",
-              "type-map-arrow-type-changed", "optional-input-added",
+              "type-map-render-changed", "optional-input-added",
               "optional-output-added", "optional-endpoint-added",
               "write-mode-added", "record-field-added",
               "filter-operators-widened", "endpoint-obligation-added",

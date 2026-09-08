@@ -185,7 +185,7 @@ CATEGORIES: tuple[Category, ...] = (
     ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
     Category(
-        "type-map-arrow-type-changed",
+        "type-map-render-changed",
         "major",
         "Render side changed for an existing matcher (read map: `arrow_type` "
         "changed for an existing `native_type`; write map: `native_type` changed for "

@@ -145,7 +145,7 @@ rules for every document" says which file carries which artifact.
   changed under an unchanged parent. Reach for this when the diff withdraws
   something and nothing more specific fits, and say in the `note` what was
   withdrawn. A release is never patch because the vocabulary had no word for
-  what it took away), type-map-rule-removed, type-map-arrow-type-changed (an
+  what it took away), type-map-rule-removed, type-map-render-changed (an
   existing matcher now resolves to a different render — read map: an
   existing `native_type` resolves to a different `arrow_type`; write map: an
   existing `arrow_type` renders a different `native_type` DDL — either
