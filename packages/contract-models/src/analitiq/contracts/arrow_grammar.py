@@ -17,7 +17,7 @@ from it everything the contract used to restate by hand:
 - the `ARROW_TYPE_PATTERN` alternatives (re-exported by `endpoints.py`),
 - the published `arrow-types.json` `$defs` (via `scripts/render_schemas.py`),
 - the container-head set type-map validation reasons over,
-- the dummy substitutions templated type-map canonicals are checked with.
+- the dummy substitutions templated type-map `arrow_type`s are checked with.
 
 Both artifacts self-declare their version in a top-level `version` key
 (grammar v1.1.0 and matrix v2.0.0 on). The pin below still states

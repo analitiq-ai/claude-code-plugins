@@ -204,7 +204,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="TypeMapReadRegexRule",
-        prose_hash="0daa053aabe4",
+        prose_hash="1fa594a4d2d2",
         rule_ids=("RULE-TMAP-003", "RULE-TMAP-005", "RULE-TMAP-006"),
     ),
     ProseObligation(

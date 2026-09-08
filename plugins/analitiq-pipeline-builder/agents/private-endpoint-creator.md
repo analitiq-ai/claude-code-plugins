@@ -77,7 +77,7 @@ One invocation runs exactly one mode.
 
 1. Receive the orchestrator's user-picked table list, plus — on a re-invocation
    after a type-map ambiguity interview — `write_render_choices`
-   (`{canonical: native}`, see step 7).
+   (`{arrow_type: native_type}`, see step 7).
 2. For each table, query the per-column facts `skills/endpoint-spec/spec-columns.md`
    documents, taking every identifier and provider type label verbatim
    (`RULE-DBEP-009`) and omitting what the dialect does not expose.
@@ -112,8 +112,10 @@ One invocation runs exactly one mode.
    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/type_map_gaps.py" --direction read`
    (maps in precedence order: the
    connection's own `definition/type-map-read.json` if present, then the
-   connector's) and freeze the rendered canonical for every covered native
-   (`RULE-DBEP-004`). Only for natives in `gaps` derive the canonical yourself:
+   connector's) and freeze the rendered `arrow_type` for every covered
+   `native_type`
+   (`RULE-DBEP-004`). Only for the `native_type`s in `gaps` derive the
+   `arrow_type` yourself:
    the vocabulary, the parameterized forms and the per-native mapping guidance
    are `skills/endpoint-spec/spec-columns.md` §`arrow_type` — carry precision
    and scale across from `native_type`, and derive nothing that file does not
@@ -126,10 +128,10 @@ One invocation runs exactly one mode.
    - Probe the distinct frozen `arrow_type` strings with `--direction write`
      against the write maps (connection first if present, then connector); for
      every write gap, a write rule rendering the discovered native that
-     produced the canonical. When several distinct natives share one uncovered
-     canonical, do **not** pick — report it in `type_maps.ambiguities` and
+     produced the `arrow_type`. When several distinct `native_type`s share one
+     uncovered `arrow_type`, do **not** pick — report it in `type_maps.ambiguities` and
      leave `type_maps.write` null, unless the orchestrator supplied the choice
-     in `write_render_choices` (a `{canonical: native}` map from the user
+     in `write_render_choices` (an `{arrow_type: native_type}` map from the user
      interview; honor it verbatim).
    - No gaps in a direction → that key is `null`. When the connection already
      ships a map, return its rules with the new ones appended after
@@ -177,13 +179,13 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
    inline (a `database-endpoint` document, or the connector's api-endpoint
    document for an API source — its file may not exist on disk yet), the
    user-confirmed `primary_keys`, and — on a re-invocation after a
-   write-gap interview — `write_render_choices` (`{canonical: native}`).
+   write-gap interview — `write_render_choices` (`{arrow_type: native_type}`).
 2. Derive the column list from the passed source document per
    `spec-new-table.md`.
 3. Resolve every distinct `arrow_type` through the write maps with
    `type_map_gaps.py --direction write` (connection map first if present,
    then the connector's): a rendered native becomes the column's
-   `native_type`; an uncovered canonical follows `spec-new-table.md` —
+   `native_type`; an uncovered `arrow_type` follows `spec-new-table.md` —
    dialect override → the fallback label the `native_type` field declares
    (`RULE-DBEP-012`) plus a `type_maps.notes` entry; otherwise
    a `write_gaps` entry, or the `write_render_choices` value plus its
@@ -195,11 +197,11 @@ document's columns. Derivation rules: `skills/endpoint-spec/spec-new-table.md`.
    (one `CreatorOutput`, the same `type_maps` object) plus one addition:
 
    ```text
-   "type_maps": { /* write / notes */, "read": null, "ambiguities": [], "write_gaps": ["<canonical>"] }
+   "type_maps": { /* write / notes */, "read": null, "ambiguities": [], "write_gaps": ["<arrow_type>"] }
    ```
 
    With nothing discovered, `read` is always `null` and `ambiguities` always
-   empty in this mode. `write_gaps` lists canonicals no write map covers and
+   empty in this mode. `write_gaps` lists the `arrow_type`s no write map covers and
    no dialect override renders — each needs the user's native spelling,
    supplied back via `write_render_choices`; a re-invocation must return no
    `write_gaps`.

@@ -131,7 +131,7 @@ def test_malformed_rule_fails_loud(tmp_path):
     # the resolver mirrors runtime semantics and SKIPS a malformed rule — which
     # would surface as a false "gap" and drive the agent to shadow the rule the
     # map intended. The prober must therefore refuse the map outright, naming it.
-    bad = _map(tmp_path, "r.json", [{"match": "exact", "native_type": "CITEXT"}])  # no canonical
+    bad = _map(tmp_path, "r.json", [{"match": "exact", "native_type": "CITEXT"}])  # no arrow_type
     with pytest.raises(ValueError, match="r.json"):
         G.resolve("read", ["citext"], [bad])
 

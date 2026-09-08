@@ -27,7 +27,7 @@ database connector ships both, an API connector the read map alone.
 - Non-obvious natives (derive, don't guess)
 - API coverage (read map)
 - Database coverage
-- Canonical types
+- Arrow types
 - Worked example: Postgres (read)
 - Worked example: Postgres (write)
 - Out of scope
@@ -60,8 +60,8 @@ depends on the direction:
 | Key | Read map (`type-map-read.json`) | Write map (`type-map-write.json`) |
 |---|---|---|
 | `match` | `"exact"` or `"regex"` — how the matcher is compared. | Same. |
-| `native_type` | **Matcher.** Literal label (`exact`) or pattern (`regex`). | **Rendered.** The native DDL emitted for a matching canonical; may carry `${name}` substitutions on `regex` rules. |
-| `arrow_type` | **Rendered.** Literal Arrow type, or (on `regex` rules) a template with `${name}` placeholders. | **Matcher.** Literal Arrow type (`exact`) or pattern over the canonical string (`regex`). |
+| `native_type` | **Matcher.** Literal label (`exact`) or pattern (`regex`). | **Rendered.** The native DDL emitted for a matching `arrow_type`; may carry `${name}` substitutions on `regex` rules. |
+| `arrow_type` | **Rendered.** Literal Arrow type, or (on `regex` rules) a template with `${name}` placeholders. | **Matcher.** Literal Arrow type (`exact`) or pattern over the `arrow_type` string (`regex`). |
 
 Matching is full-string, so leading `^` and trailing `$` are harmless but
 redundant — keep them for readability when the pattern would otherwise look
@@ -101,7 +101,7 @@ convention there, not a correctness requirement.
 
 <!-- PROBE: write-map-regex-canonical-case-unchecked -->
 Case matters on the write side (`RULE-TMAP-015`): a lowercase **`regex`**
-canonical is not checked at all — `{"match": "regex", "arrow_type": "^utf8$"}`
+`arrow_type` is not checked at all — `{"match": "regex", "arrow_type": "^utf8$"}`
 validates with zero findings and simply never fires.
 
 ## `${name}` substitution in regex rules
@@ -130,14 +130,14 @@ placeholder's well-formedness is held (`RULE-TMAP-009`).
 
 On the **read** side a templated render is only legal on a `regex` rule —
 an `exact` rule's `arrow_type` must be a fully-resolved Arrow type (the
-type-pattern constraint rejects `${…}` there), and an `exact` native has
+type-pattern constraint rejects `${…}` there), and an `exact` `native_type` has
 no captures to substitute from.
 
 On the **write** side, never author a `${…}` in an `exact` rule's rendered
 `native_type`: a placeholder must name a capture its own matcher declares
 (`RULE-TMAP-016`), and an `exact` rule has none. Render a concrete native
 (`TEXT`, or a fixed `VARCHAR(255)`); use a `regex` rule when the width
-genuinely comes from the canonical.
+genuinely comes from the `arrow_type`.
 
 (Timestamp precision is **not** a `${}` case — Arrow's unit is a
 symbolic enum, not a digit; match on the native's digit count and ladder
@@ -148,7 +148,7 @@ it to a unit instead. See "Database coverage → Read map".)
 A schemaless or structured-container native — `JSON`, `JSONB`, `VARIANT`,
 `OBJECT`, `ARRAY`, `MAP`, `STRUCT`, a parameterized container like
 `array<object>`, or a SQL array suffix like `integer[]` — maps to **`Json`**
-(`RULE-TMAP-001`). The canonical is a *claim about the shape* of the data:
+(`RULE-TMAP-001`). The `arrow_type` is a *claim about the shape* of the data:
 `Utf8` asserts an opaque string and throws the structure away, so it is wrong
 for a JSON / array / struct column even when the driver happens to hand the
 value over as text on the wire.
@@ -311,7 +311,7 @@ Common API natives:
 
 **Write map:** cover the full executable canonical vocabulary
 (`RULE-TMAP-017`). Angle-bracket spellings are outside that vocabulary and get
-no rules (see "Canonical types"); what it holds includes the parameterized
+no rules (see "Arrow types"); what it holds includes the parameterized
 families (Decimal via a regex with `${p}`/`${s}` captures), the bare and
 tz-aware `Timestamp` forms, and the bare container markers `Object` / `List`
 (see "Schemaless / JSON-shaped natives" — API sources hand them over as
@@ -343,7 +343,7 @@ Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a
 bare `DATETIME` silently truncates.
 
-## Canonical types
+## Arrow types
 
 Arrow canonical types are fully-qualified PascalCase strings from the shared
 Arrow vocabulary: a bare name where the family declares no parameters; where it
@@ -387,11 +387,11 @@ count → Arrow unit, there instantiated to Postgres's 0–6 range), and a
 ## Worked example: Postgres (write)
 
 See the reference write map, `examples/postgresql/type-map-write.json` —
-`arrow_type` is the matcher (note the regexes over the canonical string
+`arrow_type` is the matcher (note the regexes over the `arrow_type` string
 with lowercase capture names), and `native_type` is the rendered DDL.
 
 Ordering is what that file demonstrates: the bare `^Timestamp\([A-Z]+\)$`
-rule sits before the tz rule yet cannot swallow a two-argument canonical —
+rule sits before the tz rule yet cannot swallow a two-argument `arrow_type` —
 but a genuinely overlapping family rule must be ordered carefully.
 
 ## Out of scope

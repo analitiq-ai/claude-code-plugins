@@ -2,7 +2,7 @@
 
 The guard's network half runs only in CI (`contracts-version-guard` job), so
 its verdict logic — published-vs-committed byte equality, the pin comparison,
-strict-vs-warn windows, missing-object handling and its sentinel
+strict-vs-warn windows, missing-object handling and its probe
 corroboration — would otherwise only ever execute against live healthy data,
 where an inverted comparison is a permanent false green. Same charter as
 `test_engine_grammar_guard.py` next door: every verdict branch offline, with
@@ -79,14 +79,14 @@ def _redigested_stamp(guard) -> bytes:
     return render(doc)
 
 
-def _stub_fetch(guard, monkeypatch, stamp, sentinel=b"{}") -> list:
+def _stub_fetch(guard, monkeypatch, stamp, probe=b"{}") -> list:
     """Stub `_fetch` per URL: `stamp` serves the stamp URL (bytes returned,
-    exception raised), `sentinel` the sentinel URL. Returns the call log."""
+    exception raised), `probe` the probe URL. Returns the call log."""
     calls: list[str] = []
 
     def fetch(url: str) -> bytes:
         calls.append(url)
-        item = stamp if url == guard.PUBLISHED_URL else sentinel
+        item = stamp if url == guard.PUBLISHED_URL else probe
         if isinstance(item, Exception):
             raise item
         return item
@@ -142,7 +142,7 @@ def test_healthy_publication_passes(guard, monkeypatch, tmp_path, capsys):
     calls = _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 0
     assert "OK: published stamp == committed stamp" in capsys.readouterr().out
-    assert calls == [guard.PUBLISHED_URL], "a served stamp needs no sentinel probe"
+    assert calls == [guard.PUBLISHED_URL], "a served stamp needs no second probe"
 
 
 def test_published_mismatch_warns_on_ordinary_prs(guard, monkeypatch, capsys):
@@ -183,11 +183,11 @@ def test_same_release_stale_digest_warns_on_ordinary_prs(guard, monkeypatch, cap
 def test_unpublished_stamp_warns_on_ordinary_prs(guard, monkeypatch, capsys):
     # The bootstrap state: the change introducing the stamp has not reached
     # main yet, so the CDN has no stamp to serve — corroborated by the
-    # sentinel, which IS served.
+    # probe, which IS served.
     calls = _stub_fetch(guard, monkeypatch, guard.NotPublished("HTTP 403"))
     assert guard.main() == 0
     assert guard.PUBLISHED_URL in capsys.readouterr().out
-    assert calls == [guard.PUBLISHED_URL, guard.SENTINEL_URL]
+    assert calls == [guard.PUBLISHED_URL, guard.PROBE_URL]
 
 
 def test_unpublished_stamp_fails_strict(guard, monkeypatch, capsys):
@@ -197,19 +197,19 @@ def test_unpublished_stamp_fails_strict(guard, monkeypatch, capsys):
     assert "schemas-publish.yml" in capsys.readouterr().err
 
 
-def test_missing_sentinel_is_a_guard_error_not_a_missing_stamp(
+def test_missing_probe_is_a_guard_error_not_a_missing_stamp(
     guard, monkeypatch, capsys
 ):
     """A 403 on every key is an access fault. Believing the stamp-side 403
     would mint the divergence verdict with a re-run-the-publish remediation
-    that cannot fix it — the exact conflation the sentinel exists to refuse.
+    that cannot fix it — the exact conflation the probe exists to refuse.
     """
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
     _stub_fetch(
         guard,
         monkeypatch,
         guard.NotPublished("HTTP 403"),
-        sentinel=guard.NotPublished("HTTP 403"),
+        probe=guard.NotPublished("HTTP 403"),
     )
     assert guard.main() == 2
     assert "GUARD ERROR" in capsys.readouterr().err

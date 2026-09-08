@@ -1086,6 +1086,13 @@ def get_resource(name: str) -> Resource:
 # `check` (and the dedicated `arrow-types --check`) fails when the
 # committed file differs from the rendered output, exactly like a registered
 # resource.
+#
+# This document was published under an earlier name. The publish is additive
+# and deletes nothing, so that name keeps serving the last document rendered
+# under it — frozen, and describing a type-map key spelling the contract no
+# longer accepts. Retiring it is a delete on the serving side, which this repo
+# cannot perform and no check here can observe; until it happens the stale
+# object stays reachable. Renaming this document again inherits the same debt.
 
 from analitiq.contracts import arrow_grammar  # noqa: E402
 
@@ -1315,7 +1322,7 @@ def _arrow_types_description() -> str:
     )
 
 
-def _canonical_group_schema(members: tuple[str, ...]) -> dict[str, Any]:
+def _arrow_group_schema(members: tuple[str, ...]) -> dict[str, Any]:
     """Schema node for one display group, from the grammar fragments."""
     branches: list[dict[str, Any]] = []
     for family in members:
@@ -1374,7 +1381,7 @@ def build_arrow_types_doc() -> dict[str, Any]:
     }
     for def_name, title, description, members in _ARROW_GROUPS:
         node: dict[str, Any] = {"title": title, "description": description}
-        node.update(_canonical_group_schema(members))
+        node.update(_arrow_group_schema(members))
         defs[def_name] = node
 
     templated_branches: list[dict[str, Any]] = [

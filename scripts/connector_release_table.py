@@ -192,9 +192,9 @@ CATEGORIES: tuple[Category, ...] = (
         "an existing `arrow_type`)",
         note=(
             "an existing matcher now resolves to a different render — read "
-            "map: an existing `native_type` resolves to a different Arrow type; "
-            "write map: an existing `arrow_type` renders a different native "
-            "DDL — either invalidates downstream consumers"
+            "map: an existing `native_type` resolves to a different `arrow_type`; "
+            "write map: an existing `arrow_type` renders a different "
+            "`native_type` DDL — either invalidates downstream consumers"
         ),
     ),
     Category("optional-input-added", "minor", "Optional input added"),

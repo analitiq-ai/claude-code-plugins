@@ -415,7 +415,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
       "anyOf": [
         {
           "$ref": "https://schemas.analitiq.ai/type-map-write/latest.json",
-          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Same rule shape as the read map but the direction inverts: `arrow_type` is the matcher (regex with ECMA named captures for parameterized types) and `native_type` is the rendered DDL (may carry ${name} substitutions backed by captures in `arrow_type`). Canonical-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
+          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Same rule shape as the read map but the direction inverts: `arrow_type` is the matcher (regex with ECMA named captures for parameterized types) and `native_type` is the rendered DDL (may carry ${name} substitutions backed by captures in `arrow_type`). Arrow-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
         },
         { "type": "null", "description": "kind=api connectors and stub agents return null — the write direction is a database-package concept." }
       ]

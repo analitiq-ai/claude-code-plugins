@@ -312,7 +312,7 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
      connection's `create-endpoints` for a database source, after
      phase 2's connector download for an API source.
    - If the return carries `type_maps.write_gaps`, ask the user one
-     question per canonical — what native type this destination
+     question per `arrow_type` — what native type this destination
      should render it to — then re-invoke `author-new-table` with
      `write_render_choices`. The re-run must return no `write_gaps`.
    - `type_maps` file writes and validation are identical to
@@ -326,8 +326,8 @@ fix-and-revalidate loop phase 9 runs — is `references/pipeline.md`.
    `endpoint-spec/spec-type-map-gaps.md`):
    - If `type_maps.ambiguities` is non-empty, ask the user one question per
      entry — which of the candidate natives this connection should render the
-     canonical to — then re-invoke `create-endpoints` for the same tables with
-     `write_render_choices` (`{canonical: native}`). The re-run must return no
+     `arrow_type` to — then re-invoke `create-endpoints` for the same tables with
+     `write_render_choices` (`{arrow_type: native_type}`). The re-run must return no
      ambiguities.
    - Write a non-null `type_maps.read` / `type_maps.write` to
      `connections/<connection-slug>/definition/type-map-read.json` /

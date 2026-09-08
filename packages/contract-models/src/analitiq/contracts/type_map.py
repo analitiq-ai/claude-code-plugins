@@ -110,7 +110,7 @@ _ECMA_NAMED_BACKREF = re.compile(r"\\k<([A-Za-z_][A-Za-z0-9_]*)>")
 # `(?P>)`. None are valid ECMA-262.
 _PYTHON_REGEX_FEATURE = re.compile(r"\(\?P[<=>]")
 
-# Canonical (Arrow) container heads — the engine's own vocabulary, so reasoning
+# Arrow container heads — the engine's own vocabulary, so reasoning
 # over them is DB-agnostic. A read rule that maps a structured native to a
 # scalar Arrow type (not one of these) silently drops the value's structure.
 # Derived from the vendored engine grammar (imported above): the structural
@@ -285,7 +285,7 @@ class TypeMapReadExactRule(_TypeMapRuleBase):
 
 class TypeMapReadRegexRule(_TypeMapRuleBase):
     """Read regex rule: ECMA-262 `native_type` matches, Arrow `arrow_type` render template
-    (its `${name}` placeholders draw from the native's named captures)."""
+    (its `${name}` placeholders draw from the `native_type`'s named captures)."""
 
     match: Literal["regex"]
 
@@ -297,7 +297,7 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
         _validate_render_placeholders(self.arrow_type)
         _guard_container_not_collapsed(self.native_type, "regex", self.arrow_type)
 
-        # Every `${name}` in the arrow_type render must name a native_type capture.
+        # Every `${name}` in the `arrow_type` render must name a `native_type` capture.
         capture_names = set(compiled.groupindex.keys())
         placeholders = _PLACEHOLDER_RE.findall(self.arrow_type)
         for name in placeholders:

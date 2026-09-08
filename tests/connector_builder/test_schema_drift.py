@@ -1270,7 +1270,7 @@ def test_type_map_rule_keys_match_schema_and_prose() -> None:
     EVERY variant, not just the read/exact one. The table the sentence points
     at carries a Write-map column, so the claim spans all four; checking one
     would leave a key added to a write variant — the likelier direction, since
-    `canonical` is already overridden per variant — falsifying the sentence
+    `arrow_type` is already overridden per variant — falsifying the sentence
     with the suite green.
     """
     from analitiq.contracts.type_map import (

@@ -8,11 +8,12 @@ the clean path — these tests inject the failure states (stale stamp, missing
 stamp, versionless pyproject) and pin the cross-file facts no import can
 carry: `scripts/check_contracts_version_pin.py` cannot import the renderer
 (the guard job installs nothing and the renderer imports pydantic), so the
-stamp's key, the paths, the serving host, and the sentinel's basename are
+stamp's key, the paths, the serving host, and the probe's basename are
 stated in the guard as copies of renderer-owned values and pinned equal here.
 """
 from __future__ import annotations
 
+import json
 import re
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
@@ -121,8 +122,8 @@ def test_guard_probes_an_object_that_cannot_stop_being_served(guard):
     construction: the publish is first-write-wins and never deletes.
     """
     prefix = f"{render_schemas.CANONICAL_BASE}/"
-    assert guard.SENTINEL_URL.startswith(prefix)
-    resource_name, _, filename = guard.SENTINEL_URL[len(prefix):].partition("/")
+    assert guard.PROBE_URL.startswith(prefix)
+    resource_name, _, filename = guard.PROBE_URL[len(prefix):].partition("/")
     assert re.fullmatch(r"\d+\.\d+\.\d+\.json", filename), (
         f"the probe names {filename!r}, which is not a pinned version document; "
         "a mutable object cannot carry the guarantee the probe rests on"
@@ -134,6 +135,18 @@ def test_guard_probes_an_object_that_cannot_stop_being_served(guard):
     assert (render_schemas.SCHEMAS_ROOT / resource_name / filename).exists(), (
         f"the probe names {resource_name}/{filename}, which this tree does not "
         "contain — it cannot be relied on to be served"
+    )
+    # Existing is not enough: a version this release CUTS exists in the tree
+    # too, and publishes at the same moment as the stamp — so it would be
+    # absent exactly when the stamp is, and corroborate nothing. Only a version
+    # the resource has already moved past was published by an earlier release.
+    latest = json.loads(
+        (render_schemas.SCHEMAS_ROOT / resource_name / "latest.json").read_text()
+    )["version"]
+    assert filename != f"{latest}.json", (
+        f"the probe names {resource_name}/{filename}, which is that resource's "
+        "CURRENT version — a version can publish in the same release as the "
+        "stamp it is meant to disambiguate. Name a superseded one."
     )
 
 

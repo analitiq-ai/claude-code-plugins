@@ -32,7 +32,7 @@ Probes are a JSON array of strings on stdin (or --probes-file): provider
      "gaps": ["citext", "vector(3)"]}
 
 ``resolved`` maps each probe (verbatim) to its rendered value — the Arrow
-arrow_type (read) or the native DDL (write) — or ``null`` when no rule in any
+Arrow type (read) or the native DDL (write) — or ``null`` when no rule in any
 map matches; ``gaps`` lists the null probes. Exit status is ``0`` on a clean
 run regardless of gaps (a gap is a result, not an error), ``2`` on a CLI /
 input error.

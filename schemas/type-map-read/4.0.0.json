@@ -31,7 +31,7 @@
     },
     "TypeMapReadRegexRule": {
       "additionalProperties": false,
-      "description": "Read regex rule: ECMA-262 `native_type` matches, Arrow `arrow_type` render template\n(its `${name}` placeholders draw from the native's named captures).",
+      "description": "Read regex rule: ECMA-262 `native_type` matches, Arrow `arrow_type` render template\n(its `${name}` placeholders draw from the `native_type`'s named captures).",
       "properties": {
         "arrow_type": {
           "minLength": 1,

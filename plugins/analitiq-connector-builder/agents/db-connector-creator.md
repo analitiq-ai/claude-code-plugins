@@ -198,7 +198,7 @@ artifacts, not the plugin's.
    direction: `arrow_type` is the matcher — regex with named captures
    for parameterized types — and `native_type` is the rendered DDL, with
    `${name}` substitutions backed by those captures — `RULE-TMAP-016`).
-   Cover the full canonical vocabulary (`RULE-TMAP-017`). Reconcile every
+   Cover the full Arrow vocabulary (`RULE-TMAP-017`). Reconcile every
    family the validator's `type-map-write-coverage` warning names, then
    hand-check the families `spec-type-maps.md` lists as unprobed. A family
    goes unmapped only under `RULE-TMAP-019` — BigQuery's NUMERIC/BIGNUMERIC

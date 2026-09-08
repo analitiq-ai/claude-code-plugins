@@ -764,7 +764,7 @@ def test_validate_disposition_catches_a_shape_the_contract_refuses(tmp_path):
     fails, and the failure names the prose block."""
     with pytest.raises(AssertionError, match="does not validate as type-map-write"):
         _assert_block_upholds_marker(
-            _parse_marker("<!-- validate: type-map-write -->"),  # no `native`
+            _parse_marker("<!-- validate: type-map-write -->"),  # no `native_type`
             '[{"match": "exact", "arrow_type": "Object"}]',
             "synthetic", _TYPE_MAP_HOST, tmp_path)
 

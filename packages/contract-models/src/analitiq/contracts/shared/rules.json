@@ -6452,7 +6452,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the arrow_type's parentheses, so a capture dropped into a Arrow type that carries no parameters at all is out of its reach.\n",
+   "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the arrow_type's parentheses, so a capture dropped into an Arrow type that carries no parameters at all is out of its reach.\n",
    "status": "active",
    "superseded_by": null
   },
