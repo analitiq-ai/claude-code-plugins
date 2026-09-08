@@ -114,7 +114,7 @@ single field looks wrong.
 | RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape onto a node declaring a type. | `api-endpoint` | error | validator |
 | RULE-ENDP-070 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-071 | Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
-| RULE-ENDP-072 | A `filters` map entry's `template` MUST interpolate `${stream.filters.<field>.value}` for the field/operator entry it is declared on. | `api-endpoint` | error | validator |
+| RULE-ENDP-072 | A `filters` map entry's `template` MUST interpolate `${stream.filters.<field>.value}` for the field/operator entry it is declared on, and MUST NOT interpolate any other `stream.filters.*` reference. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential

@@ -2,7 +2,8 @@ id: RULE-ENDP-072
 statement: >
   A `filters` map entry's `template` MUST interpolate
   `${stream.filters.<field>.value}` for the field/operator entry it is
-  declared on.
+  declared on, and MUST NOT interpolate any other `stream.filters.*`
+  reference.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -21,7 +22,14 @@ rationale: >
   incorrect rows with no finding anywhere. `${stream.filters.<field>.value}`
   is the one placeholder form that ties the rendered value back to the
   filter this entry exists to express, so its absence is refused at
-  authoring time rather than left to a run to discover.
+  authoring time rather than left to a run to discover. A template naming
+  the required placeholder alongside a second `stream.filters.*` reference
+  (a typo'd field, or a real one this map does not declare a landing for)
+  passes the same way: the required token is present, RULE-ENDP-069 accepts
+  the extra token as a known scope, and nothing resolves it — the resolver
+  substitutes an empty string for an unresolved reference, silently sending
+  a malformed or narrowed value. A `filters` template's only dependency is
+  the entry it is declared on.
 
   This address is this repo's own invention, not a read of engine behaviour:
   the engine's resolver has no `stream` scope today, and a template landing's
