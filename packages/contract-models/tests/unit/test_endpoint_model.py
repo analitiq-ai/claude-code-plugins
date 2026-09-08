@@ -675,8 +675,9 @@ class TestFiltersWiring:
     def test_field_key_with_a_provider_owned_name_accepted(self):
         # A response property is a legal JSON key however it is spelled —
         # `created-at`, `@timestamp` — and RECORD_FIELD_PATH_PATTERN reserves
-        # only "." as the segment separator, so either resolves against a
-        # response schema that declares it.
+        # "." as the segment separator and "}" (template-addressability, see
+        # the next test), so either resolves against a response schema that
+        # declares it.
         result = parse_endpoint(_minimal_api_payload(operations={
             "read": _filters_read_op(
                 {"created-at": {"gt": {"from_param": "minAmount"}}},
@@ -684,6 +685,19 @@ class TestFiltersWiring:
             ),
         }))
         assert "created-at" in result.operations.read.filters
+
+    def test_field_key_containing_a_closing_brace_rejected(self):
+        # `${stream.filters.<field>.value}` (RULE-ENDP-072) embeds the field
+        # name inside a `${...}` placeholder whose extraction regex stops at
+        # the first "}" — a field named "a}b" would truncate every
+        # placeholder built from it to "a", so the key pattern refuses "}"
+        # even though it is otherwise a legal JSON property character.
+        with pytest.raises(ValidationError):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"a}b": {"gt": {"from_param": "minAmount"}}}
+                ),
+            }))
 
     def test_field_key_not_declared_in_record_shape_rejected(self):
         # Shape-valid (matches RECORD_FIELD_PATH_PATTERN) but the response

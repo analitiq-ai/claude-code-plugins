@@ -117,14 +117,17 @@ PATH_TEMPLATE_SIGIL_PATTERN = re.escape(TEMPLATE_SIGIL)
 PATH_PLACEHOLDER_REPEATED_PATTERN = (
     rf"\{{({PATH_PLACEHOLDER_NAME_INNER})\}}[\s\S]*\{{\1\}}"
 )
-# Record field paths preserve segment spelling and casing. "." is the only
-# reserved character — the segment separator — so the pattern enforces
-# non-empty segments and nothing about their content: a response property is
-# a legal JSON key however a provider spells it (`created-at`, `@timestamp`),
-# and stream.Filter.field (unconstrained on the database branch) already
-# carries that latitude; this is the API branch's equivalent.
+# Record field paths preserve segment spelling and casing. "." is the
+# segment separator, so segments exclude it; a response property is
+# otherwise a legal JSON key however a provider spells it (`created-at`,
+# `@timestamp`), and stream.Filter.field (unconstrained on the database
+# branch) already carries that latitude — this is the API branch's
+# equivalent. A `filters` map key additionally has to be embeddable inside a
+# `${stream.filters.<field>.value}` placeholder (RULE-ENDP-072), whose
+# extraction regex stops at the first `}` — a field name carrying one would
+# truncate every placeholder built from it, so `}` is excluded too.
 RECORD_FIELD_PATH_PATTERN = (
-    r"^[^.]+(\.[^.]+)*$"
+    r"^[^.}]+(\.[^.}]+)*$"
 )
 METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
