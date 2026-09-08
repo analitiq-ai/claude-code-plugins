@@ -5125,6 +5125,14 @@ def _for_each_record_shape_position(
     `check` runs once per object-subschema position: once for the dict form,
     once per element for the tuple form. The tuple form's `where` carries an
     `items[i]` suffix so a per-position failure names which one.
+
+    The tuple form's tail — every position past the listed ones — is
+    governed by the legacy `additionalItems` keyword, defaulting to `true`
+    (unconstrained) when omitted: a record at one of those positions could
+    be any shape, so "the field resolves at every position" cannot hold
+    there. `additionalItems: false` closes the tuple (no further positions
+    exist); a schema there is checked as one more position, the same as any
+    prefix item.
     """
     items = array_node.get("items")
     if items is None or items is True:
@@ -5154,6 +5162,20 @@ def _for_each_record_shape_position(
                     "object schema (spec: §Cross-Field Validation)"
                 )
             check(sub, f"items[{idx}]")
+        additional = array_node.get("additionalItems", True)
+        if additional is False:
+            return
+        if not isinstance(additional, dict):
+            raise ValueError(
+                f"{subject} is declared but the response.schema records array "
+                "`items` is a tuple with no `additionalItems: false` — every "
+                "position past the listed ones is unconstrained, so it "
+                "cannot be verified there. Close the tuple with "
+                "`additionalItems: false`, or give `additionalItems` an "
+                "object schema declaring that position too "
+                "(spec: §Cross-Field Validation)"
+            )
+        check(additional, "additionalItems")
         return
     if not isinstance(items, dict):
         raise ValueError(

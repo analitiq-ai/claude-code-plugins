@@ -724,7 +724,7 @@ class TestFiltersWiring:
                     "schema": {"type": "array", "items": [
                         {"type": "object", "properties": {"created": {"type": "string"}}},
                         {"type": "object", "properties": {"created": {"type": "string"}}},
-                    ]},
+                    ], "additionalItems": False},
                 },
                 "filters": {"created": {"gt": {"from_param": "minAmount"}}},
             }},
@@ -2888,7 +2888,7 @@ class TestRecordsArrayItemsTupleForm:
                     "schema": {"type": "array", "items": [
                         {"type": "object", "properties": {"updated_at": {"type": "string"}}},
                         {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-                    ]},
+                    ], "additionalItems": False},
                 },
             }},
         )
@@ -2914,6 +2914,79 @@ class TestRecordsArrayItemsTupleForm:
             }},
         )
         with pytest.raises(ValidationError, match="not an object schema"):
+            parse_endpoint(payload)
+
+    def test_tuple_items_with_permissive_tail_rejected(self):
+        # `additionalItems` omitted defaults to `true` — a record past the
+        # listed positions could be any shape, so "the field resolves at
+        # every position" cannot hold there even though every LISTED
+        # position declares it.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": [
+                        {"type": "object", "properties": {"updated_at": {"type": "string"}}},
+                    ]},
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="additionalItems"):
+            parse_endpoint(payload)
+
+    def test_tuple_items_with_additionalItems_schema_checked_as_a_position(self):
+        # `additionalItems` given an object schema is a real, checkable
+        # position — accepted when it declares the field, exactly like a
+        # listed prefix item.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "type": "array",
+                        "items": [{"type": "object", "properties": {"updated_at": {"type": "string"}}}],
+                        "additionalItems": {"type": "object", "properties": {"updated_at": {"type": "string"}}},
+                    },
+                },
+            }},
+        )
+        parse_endpoint(payload)
+
+    def test_tuple_items_with_additionalItems_schema_missing_field_rejected(self):
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "type": "array",
+                        "items": [{"type": "object", "properties": {"updated_at": {"type": "string"}}}],
+                        "additionalItems": {"type": "object", "properties": {}},
+                    },
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="not declared in response.schema record-shape branch"):
             parse_endpoint(payload)
 
 
