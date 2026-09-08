@@ -512,8 +512,10 @@ class TestCursorMapping:
         assert cm.start_param == "from"
 
     def test_invalid_cursor_field_pattern_rejected(self):
+        # "." is the only reserved character in a record field path — the
+        # segment separator — so an empty segment is the shape still refused.
         with pytest.raises(ValidationError):
-            SingleCursorMapping(cursor_field="0bad_path", param="p", operator="gte")
+            SingleCursorMapping(cursor_field="a..b", param="p", operator="gte")
 
     def test_mixed_form_via_parse_rejected(self):
         # When both forms' fields are present, `Replication._reject_mixed_cursor_forms`
@@ -659,13 +661,29 @@ class TestFiltersWiring:
                 ),
             }))
 
-    def test_field_key_not_a_record_field_path_rejected(self):
+    def test_field_key_with_an_empty_segment_rejected(self):
+        # "." is the only reserved character — the path separator between
+        # segments — so an empty segment either side of one is the shape
+        # this pattern still refuses.
         with pytest.raises(ValidationError):
             parse_endpoint(_minimal_api_payload(operations={
                 "read": _filters_read_op(
-                    {"1bad": {"gt": {"from_param": "minAmount"}}}
+                    {"a..b": {"gt": {"from_param": "minAmount"}}}
                 ),
             }))
+
+    def test_field_key_with_a_provider_owned_name_accepted(self):
+        # A response property is a legal JSON key however it is spelled —
+        # `created-at`, `@timestamp` — and RECORD_FIELD_PATH_PATTERN reserves
+        # only "." as the segment separator, so either resolves against a
+        # response schema that declares it.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op(
+                {"created-at": {"gt": {"from_param": "minAmount"}}},
+                extra_record_props={"created-at": {"type": "string"}},
+            ),
+        }))
+        assert "created-at" in result.operations.read.filters
 
     def test_field_key_not_declared_in_record_shape_rejected(self):
         # Shape-valid (matches RECORD_FIELD_PATH_PATTERN) but the response

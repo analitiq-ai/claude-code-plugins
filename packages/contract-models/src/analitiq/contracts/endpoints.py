@@ -117,11 +117,14 @@ PATH_TEMPLATE_SIGIL_PATTERN = re.escape(TEMPLATE_SIGIL)
 PATH_PLACEHOLDER_REPEATED_PATTERN = (
     rf"\{{({PATH_PLACEHOLDER_NAME_INNER})\}}[\s\S]*\{{\1\}}"
 )
-# Record field paths preserve segment spelling and casing. The pattern only
-# enforces the dotted non-empty-segment shape; identifier chars are
-# provider-owned.
+# Record field paths preserve segment spelling and casing. "." is the only
+# reserved character — the segment separator — so the pattern enforces
+# non-empty segments and nothing about their content: a response property is
+# a legal JSON key however a provider spells it (`created-at`, `@timestamp`),
+# and stream.Filter.field (unconstrained on the database branch) already
+# carries that latitude; this is the API branch's equivalent.
 RECORD_FIELD_PATH_PATTERN = (
-    r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$"
+    r"^[^.]+(\.[^.]+)*$"
 )
 METADATA_KEY_PATTERN = r"^[a-z][a-z0-9_]*$"
 
