@@ -6,7 +6,7 @@
 ### ⚠ BREAKING CHANGES
 
 * a type-map document keyed `native`/`canonical` no longer validates. Both keys must be renamed to `native_type`/`arrow_type`.
-* a `$ref` at `arrow-types.json#/$defs/canonical_type` or `#/$defs/canonical_type_or_template` no longer resolves. Point it at `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`.
+* a `$ref` at `canonical-types.json#/$defs/canonical_type` or `#/$defs/canonical_type_or_template` no longer resolves. Point it at `arrow-types.json#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`.
 
 ### Features
 
