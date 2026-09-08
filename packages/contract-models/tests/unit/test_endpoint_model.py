@@ -686,6 +686,48 @@ class TestFiltersWiring:
         }))
         assert "created-at" in result.operations.read.filters
 
+    def test_field_key_resolves_in_every_tuple_items_position(self):
+        # response.schema `items` may be the tuple form (repository-supported,
+        # see TestRecordsArrayItemsTupleForm) — a filters key must resolve at
+        # every position, the same "every position" reading the cursor_field
+        # check already gives it.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"minAmount": {"from_param": "minAmount"}}},
+                "params": {"minAmount": {"in": "query", "type": "number", "required": False}},
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": [
+                        {"type": "object", "properties": {"created": {"type": "string"}}},
+                        {"type": "object", "properties": {"created": {"type": "string"}}},
+                    ]},
+                },
+                "filters": {"created": {"gt": {"from_param": "minAmount"}}},
+            }},
+        )
+        result = parse_endpoint(payload)
+        assert "created" in result.operations.read.filters
+
+    def test_field_key_missing_from_one_tuple_items_position_rejected(self):
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"minAmount": {"from_param": "minAmount"}}},
+                "params": {"minAmount": {"in": "query", "type": "number", "required": False}},
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": [
+                        {"type": "object", "properties": {"created": {"type": "string"}}},
+                        {"type": "object", "properties": {}},
+                    ]},
+                },
+                "filters": {"created": {"gt": {"from_param": "minAmount"}}},
+            }},
+        )
+        with pytest.raises(ValidationError, match="not declared in the response.schema"):
+            parse_endpoint(payload)
+
     def test_field_key_containing_a_closing_brace_rejected(self):
         # `${stream.filters.<field>.value}` (RULE-ENDP-072) embeds the field
         # name inside a `${...}` placeholder whose extraction regex stops at

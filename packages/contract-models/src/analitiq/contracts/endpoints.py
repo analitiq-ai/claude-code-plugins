@@ -5163,35 +5163,14 @@ def _validate_cursor_fields_in_record_shape(
         _check_cursor_field_in_node(cf, items, where="items", root=root)
 
 
-def _validate_record_field_path(
-    field_path: str, array_node: dict[str, Any], root: Any, *, where: str
+def _check_record_field_in_node(
+    field_path: str, items: dict[str, Any], root: Any, *, where: str
 ) -> None:
-    """A dotted RECORD field path must resolve under the records array's ``items``.
+    """Resolve `field_path` under one records-array `items` object subschema.
 
-    The generic form of the `cursor_field` check, reused at every site that
-    names a field the engine reads off a record rather than off the response
-    body — `pagination.keyset.order_by_field` and each `filters` map key
-    among them: a path the record shape does not declare means the field it
-    names is read from a value the engine cannot resolve — silently
-    truncating or repeating pages, or silently filtering nothing — which is
-    the same wrong-data-on-a-green-run failure RULE-ENDP-023 catches on the
-    response-body side, with a different cause.
-
-    Unknowable shapes are reported, not skipped: this is `response.schema`,
-    which the contract holds to the strict standard (see
-    :func:`_validate_cursor_fields_in_record_shape`). The resolved node must
-    also declare a type — the same requirement `_validate_response_body_paths`
-    holds response-body refs to — since a comparison built over an untyped
-    node (a keyset ordering, a `filters` value match) has nothing to tell it
-    what a valid value looks like.
+    The single-position body `_validate_record_field_path` reuses for both
+    the dict form of `items` and each position of the tuple form.
     """
-    items = array_node.get("items")
-    if not isinstance(items, dict):
-        raise ValueError(
-            f"{where} is declared but the response.schema records array has no "
-            f"object `items` subschema, so {field_path!r} cannot be verified — "
-            "tighten the response schema (spec: §Cross-Field Validation)"
-        )
     segments = field_path.split(".")
     try:
         node = resolve_declared_path(items, segments, root=root)
@@ -5218,6 +5197,56 @@ def _validate_record_field_path(
             "read there, or nothing can tell what a valid comparison looks "
             "like (spec: §Cross-Field Validation)"
         )
+
+
+def _validate_record_field_path(
+    field_path: str, array_node: dict[str, Any], root: Any, *, where: str
+) -> None:
+    """A dotted RECORD field path must resolve under the records array's ``items``.
+
+    The generic form of the `cursor_field` check, reused at every site that
+    names a field the engine reads off a record rather than off the response
+    body — `pagination.keyset.order_by_field` and each `filters` map key
+    among them: a path the record shape does not declare means the field it
+    names is read from a value the engine cannot resolve — silently
+    truncating or repeating pages, or silently filtering nothing — which is
+    the same wrong-data-on-a-green-run failure RULE-ENDP-023 catches on the
+    response-body side, with a different cause.
+
+    Unknowable shapes are reported, not skipped: this is `response.schema`,
+    which the contract holds to the strict standard (see
+    :func:`_validate_cursor_fields_in_record_shape`). The resolved node must
+    also declare a type — the same requirement `_validate_response_body_paths`
+    holds response-body refs to — since a comparison built over an untyped
+    node (a keyset ordering, a `filters` value match) has nothing to tell it
+    what a valid value looks like.
+
+    ``items`` may be the tuple form (a list of per-position object
+    subschemas) `_validate_cursor_fields_in_record_shape` already accepts —
+    the field must resolve at every position, the same "every position"
+    reading that check gives a `cursor_field`.
+    """
+    items = array_node.get("items")
+    if isinstance(items, list):
+        for idx, sub in enumerate(items):
+            if not isinstance(sub, dict):
+                raise ValueError(
+                    f"{where} is declared but the response.schema records array "
+                    f"`items[{idx}]` is {type(sub).__name__}, not an object "
+                    f"schema, so {field_path!r} cannot be verified at that "
+                    "position (spec: §Cross-Field Validation)"
+                )
+            _check_record_field_in_node(
+                field_path, sub, root, where=f"{where} (items[{idx}])"
+            )
+        return
+    if not isinstance(items, dict):
+        raise ValueError(
+            f"{where} is declared but the response.schema records array has no "
+            f"object `items` subschema, so {field_path!r} cannot be verified — "
+            "tighten the response schema (spec: §Cross-Field Validation)"
+        )
+    _check_record_field_in_node(field_path, items, root, where=where)
 
 
 def _cursor_field_of(cm: Any) -> str:
