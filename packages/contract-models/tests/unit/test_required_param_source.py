@@ -135,7 +135,7 @@ def test_a_required_read_param_with_no_source_is_refused():
 
 def test_the_detail_names_every_way_out_a_read_has():
     detail = _detail(_one_read_param({"in": "query", "type": "string", "required": True}))
-    for way_out in ("`default`", "`operators`", "pagination block",
+    for way_out in ("`default`", "`filters`", "pagination block",
                     "`incremental`", "not required"):
         assert way_out in detail
 
@@ -230,18 +230,14 @@ def test_a_default_the_resolver_cannot_turn_into_a_value_is_not_a_source(default
     }))
 
 
-def test_operators_are_a_source_a_stream_filter_can_fill():
-    ApiEndpointDoc.model_validate(_one_read_param({
-        "in": "query", "type": "string", "required": True, "operators": ["gte"],
-    }))
-
-
-def test_an_empty_operator_list_opens_nothing():
-    """Absence means the param is not stream-filterable, and an empty list says
-    the same thing in more characters."""
-    assert "params['since']" in _detail(_one_read_param({
-        "in": "query", "type": "string", "required": True, "operators": [],
-    }))
+def test_a_filters_landing_is_a_source():
+    payload = _one_read_param({"in": "query", "type": "string", "required": True})
+    read = payload["operations"]["read"]
+    read["filters"] = {"since_field": {"gte": {"from_param": "since"}}}
+    read["response"]["schema"]["items"] = {
+        "type": "object", "properties": {"since_field": {"type": "string"}},
+    }
+    ApiEndpointDoc.model_validate(payload)
 
 
 def _replicated(params, cursor_mappings, methods=("incremental",)):
@@ -464,14 +460,15 @@ def test_the_detail_sends_a_replication_author_to_supported_methods():
     assert "starting value" not in detail
 
 
-def test_a_marker_carrying_param_is_not_told_to_declare_operators():
-    """`Param` forbids `operators` beside `controlled_by`, so offering it here
-    would cost the author a round trip to a different refusal."""
+def test_a_marker_carrying_param_is_not_told_to_declare_filters():
+    """A `controlled_by` param is refused as a `filters` landing site
+    (`_validate_filters_wiring`), so offering it here would cost the author a
+    round trip to a different refusal."""
     detail = _detail(_one_read_param({
         "in": "query", "type": "string", "required": True,
         "controlled_by": "replication",
     }))
-    assert "`operators`" not in detail
+    assert "`filters`" not in detail
 
 
 # --- The latitude an optional param keeps -----------------------------------
@@ -504,7 +501,7 @@ def test_the_write_detail_offers_no_read_side_way_out():
     cannot work."""
     detail = _detail(_write_payload({"in": "query", "type": "string", "required": True}))
     assert "`default`" in detail
-    assert "`operators`" not in detail
+    assert "`filters`" not in detail
     assert "pagination or replication" not in detail
 
 
@@ -515,14 +512,6 @@ def test_the_write_detail_names_the_record_for_a_body_param():
         {"in": "body", "type": "string", "required": True}, slot="body",
     ))
     assert "from_input" in detail
-
-
-def test_operators_do_not_fill_a_write_param():
-    """A write has no stream filter, so `operators` on a write param opens
-    nothing. The contract accepts the declaration; it is not a source."""
-    assert "params['since']" in _detail(_write_payload({
-        "in": "query", "type": "string", "required": True, "operators": ["gte"],
-    }))
 
 
 def test_a_write_marker_does_not_divert_the_author_to_the_block():
@@ -600,8 +589,7 @@ def test_a_field_added_to_param_puts_this_rule_in_front_of_a_reader():
     assert set(Param.model_fields) == {
         "location", "type", "required", "description", "default", "enum",
         "format", "pattern", "minimum", "maximum", "min_length", "max_length",
-        "min_items", "max_items", "operators", "controlled_by", "style",
-        "explode",
+        "min_items", "max_items", "controlled_by", "style", "explode",
     }
 
 

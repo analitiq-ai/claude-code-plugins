@@ -1,9 +1,9 @@
 id: RULE-ENDP-066
 statement: >
   A param declared `required` MUST declare a source its operation can supply
-  the value from: its own `default`, or — on a read — the `operators` that
-  make it stream-filterable, a pagination block that gives it a starting
-  value, or a replication block that supports `incremental`.
+  the value from: its own `default`, or — on a read — a `filters` entry
+  landing on it, a pagination block that gives it a starting value, or a
+  replication block that supports `incremental`.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -14,8 +14,8 @@ rationale: >
   `required` says the operation is wrong without the value, and the document is
   what has to be able to supply it. Every declared param is bound by exactly
   one request binding, and the value that binding carries reaches it from the
-  param's own `default`, from a stream filter, or from a pagination or
-  replication block. `operators` and those blocks are read-side, so a write
+  param's own `default`, from a `filters` landing, or from a pagination or
+  replication block. `filters` and those blocks are read-side, so a write
   param has only its `default` — the argument RULE-ENDP-028 also makes, about
   a write path_param whether or not it is required, so neither rule contains
   the other. A required param with none of them resolves to nothing on every
@@ -36,15 +36,16 @@ rationale: >
   mention would be worse than not checking, because the refusal names the
   blocks as a way out and an author would take it. What the refusal proves is that a source
   is DECLARED, never that it resolves: a `default` reffing a connection
-  parameter the connection leaves unset, a filterable param no stream filters,
-  and a cursor param on a run that is not incremental or on a mapping the
+  parameter the connection leaves unset, a param `filters` names but no
+  stream filters, and a cursor param on a run that is not incremental or on a mapping the
   stream did not select, all pass, because which run and which stream is not
   something one document settles. RULE-ENDP-067 is the obligation over that
   remainder, and it is what says a param whose absence a legitimate run
   tolerates is not required in the first place.
   Nothing in the check reads `required` back out of any consumer, so it stays
-  correct however the flag comes to be honoured; what `operators` rests on is
-  the registry service's comparison of a stream's filter against the operators
-  the param declares, the same consumer RULE-STRM-026 names.
+  correct however the flag comes to be honoured; what a `filters` landing
+  rests on is the registry service's resolution of a stream's filter, by
+  record field and operator, against the map, the same consumer RULE-STRM-026
+  names.
 status: active
 superseded_by: null

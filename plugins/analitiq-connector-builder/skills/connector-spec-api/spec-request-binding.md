@@ -155,7 +155,8 @@ keyed by record field and then by operator:
 ```json
 {
   "params": {
-    "account_id": { "in": "path", "type": "string", "required": true },
+    "account_id": { "in": "path", "type": "string", "required": true,
+                    "default": { "ref": "connection.parameters.account_id" } },
     "minUpdatedAt": {
       "in": "query", "type": "string", "format": "date-time", "required": false
     },

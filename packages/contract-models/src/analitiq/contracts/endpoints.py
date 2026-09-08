@@ -2123,7 +2123,11 @@ class ReadOperation(_EndpointModel):
             named |= block.named
             controlled |= block.filled
         _validate_required_params_have_a_source(
-            self.params, allow_from_input=False, controlled=controlled, named=named
+            self.params,
+            allow_from_input=False,
+            controlled=controlled,
+            named=named,
+            filters_landed=_filters_landed_params(self.filters),
         )
 
         # response.records → response.schema traversal raises directly.
@@ -3553,12 +3557,35 @@ def _validate_replication_wiring(
     return _BlockParams(named, named)
 
 
+def _filters_landed_params(filters: dict[str, dict[str, Any]] | None) -> frozenset[str]:
+    """Param names any `filters` entry names as a landing site.
+
+    Reads names only — whether a named param exists or collides with another
+    entry is `_validate_filters_wiring`'s separate, later concern. Called from
+    `_validate_required_params_have_a_source`, which runs before that wiring
+    check, so a required param naming itself as a landing site already counts
+    as sourced even though the map as a whole has not been graded yet.
+    """
+    if not filters:
+        return frozenset()
+    names: set[str] = set()
+    for landings in filters.values():
+        for landing in landings.values():
+            names.add(
+                landing.from_param
+                if isinstance(landing, FromParamExpression)
+                else landing.param
+            )
+    return frozenset(names)
+
+
 def _validate_required_params_have_a_source(
     params: dict[str, Param],
     *,
     allow_from_input: bool,
     controlled: frozenset[str],
     named: frozenset[str],
+    filters_landed: frozenset[str] = frozenset(),
 ) -> None:
     """RULE-ENDP-066 — a required param the document can never fill.
 
@@ -3568,11 +3595,12 @@ def _validate_required_params_have_a_source(
     before the response-side resolution checks, which grade a different half of
     the document. Not from `_validate_param_wiring`, which sees neither.
 
-    The sources are the ones RULE-ENDP-066 names. `operators` — non-empty, an
-    empty list opens nothing — and the blocks behind `controlled` are
-    read-side, so on a write the `default` is the whole set. RULE-ENDP-028
-    makes that argument about a write path_param whether or not it is required,
-    so neither rule contains the other.
+    The sources are the ones RULE-ENDP-066 names. `filters_landed` — any param
+    a `filters` entry names as its landing site, from `_filters_landed_params`
+    — and the blocks behind `controlled` are read-side, so on a write the
+    `default` is the whole set. RULE-ENDP-028 makes that argument about a
+    write path_param whether or not it is required, so neither rule contains
+    the other.
 
     `controlled` is read instead of `param.controlled_by` because the marker is
     self-declared and only the block-to-param direction is checked anywhere: a
@@ -3592,15 +3620,15 @@ def _validate_required_params_have_a_source(
 
     What this proves is that a source is DECLARED, never that it resolves. A
     `default` reffing a connection parameter the connection leaves unset, and a
-    filterable param no stream filters, both pass here; what the request path
-    then does with the empty value depends on the slot, and RULE-ENDP-067 is
-    the obligation over that remainder.
+    param `filters` names but no stream filters, both pass here; what the
+    request path then does with the empty value depends on the slot, and
+    RULE-ENDP-067 is the obligation over that remainder.
     """
     findings: list[tuple[str, str]] = []
     for name, param in params.items():
         if not param.required or _declares_a_value(param.default):
             continue
-        if not allow_from_input and (param.operators or name in controlled):
+        if not allow_from_input and (name in filters_landed or name in controlled):
             continue
         if allow_from_input and param.location == "body":
             # The value a write puts in the body comes from the record, and the
@@ -3617,15 +3645,16 @@ def _validate_required_params_have_a_source(
             ways_out = "give it a `default`"
         elif param.controlled_by is None:
             ways_out = (
-                "give it a `default`, declare the `operators` a stream may "
-                "filter it with, or have a pagination block give it a starting "
-                "value or a replication block support `incremental`"
+                "give it a `default`, name it as a `filters` entry's landing "
+                "site, or have a pagination block give it a starting value or "
+                "a replication block support `incremental`"
             )
         else:
             # The author already reached for a block, so the fix is on that
-            # side. `operators` is not offered here: a param may not carry it
-            # beside `controlled_by`, so taking that advice would cost a round
-            # trip to a different refusal.
+            # side. `filters` is not offered here: a param naming
+            # `controlled_by` is refused as a `filters` landing site
+            # (`_validate_filters_wiring`), so taking that advice would cost a
+            # round trip to a different refusal.
             if name not in named:
                 cause = "no block names it"
             elif param.controlled_by == "replication":
