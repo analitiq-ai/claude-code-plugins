@@ -484,6 +484,28 @@ class StreamSource(StrictModel):
         return self
 
     @model_validator(mode="after")
+    def _validate_no_duplicate_api_filter_landings(self) -> "StreamSource":
+        # An API-scope source's filters land through its endpoint's `filters`
+        # map, which RULE-ENDP-071 holds to one landing per field/operator
+        # pair regardless of which endpoint is referenced — checkable here
+        # without reading that document. A database-scope source compiles
+        # each filter into its own predicate independently and has no such
+        # landing to collide on.
+        if not self.filters or self.endpoint_ref.scope == SCOPE_CONNECTION:
+            return self
+        seen: set[tuple[str, str]] = set()
+        for filt in self.filters:
+            pair = (filt.field, filt.operator)
+            if pair in seen:
+                raise violation(
+                    "RULE-STRM-041",
+                    f"filters[] has two entries for field={filt.field!r} "
+                    f"operator={filt.operator!r}",
+                )
+            seen.add(pair)
+        return self
+
+    @model_validator(mode="after")
     def _validate_database_only_read_features(self) -> "StreamSource":
         # `selected_columns`, `replication.tie_breaker_fields` and
         # `database_pagination` describe how a database read is shaped; an API

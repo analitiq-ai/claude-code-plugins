@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`stream`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 29 of the 56 below have no validator, so nothing rejects
+all hold: 29 of the 57 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** structural · **14** advisory · **16** referential · **5** procedural · **6** judgment.
+In this file: **15** structural · **15** advisory · **16** referential · **5** procedural · **6** judgment.
 
 ## Contents
 
@@ -77,6 +77,7 @@ single field looks wrong.
 | RULE-STRM-014 | A stream source bound to a connector-scoped endpoint MUST NOT declare any read feature the source model reserves for database sources. | `stream` | error | validator |
 | RULE-STRM-015 | A validation rule's field MUST resolve within its own mapping: the first token naming an assignment target the mapping declares, and each later token a field declared beneath the one before it. | `stream` | error | validator |
 | RULE-STRM-021 | A validation rule's value MUST carry the payload shape its type requires. | `stream` | error | — |
+| RULE-STRM-041 | For an API-scope source, no two `filters` entries MUST share the same `field`/`operator` pair. | `stream` | error | validator |
 
 ## Referential
 

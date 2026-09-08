@@ -6486,6 +6486,32 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-STRM-041",
+   "statement": "For an API-scope source, no two `filters` entries MUST share the same `field`/`operator` pair.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "stream"
+   ],
+   "validator": "analitiq.contracts.stream::StreamSource._validate_no_duplicate_api_filter_landings",
+   "owners": [
+    "engine",
+    "pipeline-plugin"
+   ],
+   "targets": [
+    "StreamSource"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "An API-scope source's `filters` land through its endpoint's `filters` map, which RULE-ENDP-071 holds to exactly one landing site per `field`/operator pair — a fact the endpoint contract guarantees regardless of which endpoint is referenced, so it is checkable here without reading the endpoint document at all. Two stream-side entries sharing a pair (two `status != \"red\"`/`status != \"blue\"` predicates, say) both resolve to that one landing: whichever value the request-building step applies last wins, and the run reports success having silently dropped a predicate. A database-scope source compiles each filter into its own predicate independently and has no such landing to collide on, so the check is scoped to the API side the same way RULE-STRM-012 already is.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-TMAP-001",
    "statement": "An `exact` read rule whose native_type names a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
    "tier": "advisory",
