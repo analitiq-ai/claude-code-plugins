@@ -26,7 +26,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from collections.abc import Iterator, Sequence
-from typing import Annotated, Any, Literal, NamedTuple, Union, get_args
+from typing import Annotated, Any, Callable, Literal, NamedTuple, Union, get_args
 from urllib.parse import unquote
 
 from pydantic import (
@@ -5110,6 +5110,59 @@ def _validate_records_in_response_schema(
     return node
 
 
+def _for_each_record_shape_position(
+    array_node: dict[str, Any], *, subject: str, check: Callable[[dict[str, Any], str], None]
+) -> None:
+    """Dispatch `check(node, where)` over the records array's `items` subschema.
+
+    `items` may be a single object subschema, or the repository-supported
+    tuple form (`items: [...]`) — the shared dispatch every record-shape
+    check (`cursor_field`, a `filters` map key, `keyset.order_by_field`)
+    needs, so a fix to one (or a gap left open in one, like an empty tuple
+    passing every position vacuously) does not have to be separately made
+    or separately caught in the other.
+
+    `check` runs once per object-subschema position: once for the dict form,
+    once per element for the tuple form. The tuple form's `where` carries an
+    `items[i]` suffix so a per-position failure names which one.
+    """
+    items = array_node.get("items")
+    if items is None or items is True:
+        raise ValueError(
+            f"{subject} is declared but the response.schema records array has "
+            "no `items` subschema, so it cannot be verified — tighten the "
+            "response schema (spec: §Cross-Field Validation)"
+        )
+    if items is False:
+        raise ValueError(
+            f"response.schema records array disallows items (`items: false`) "
+            f"but {subject} is declared (spec: §Cross-Field Validation)"
+        )
+    if isinstance(items, list):
+        if not items:
+            raise ValueError(
+                f"{subject} is declared but the response.schema records array "
+                "`items` is an empty tuple (`[]`), which declares no record "
+                "shape at any position — tighten the response schema "
+                "(spec: §Cross-Field Validation)"
+            )
+        for idx, sub in enumerate(items):
+            if not isinstance(sub, dict):
+                raise ValueError(
+                    f"{subject} is declared but the response.schema records "
+                    f"array `items[{idx}]` is {type(sub).__name__}, not an "
+                    "object schema (spec: §Cross-Field Validation)"
+                )
+            check(sub, f"items[{idx}]")
+        return
+    if not isinstance(items, dict):
+        raise ValueError(
+            f"response.schema records array `items` has unexpected type "
+            f"{type(items).__name__}; cannot validate {subject}"
+        )
+    check(items, "items")
+
+
 def _validate_cursor_fields_in_record_shape(
     replication: Replication, array_node: dict[str, Any], root: Any
 ) -> None:
@@ -5125,42 +5178,13 @@ def _validate_cursor_fields_in_record_shape(
     the subtree it starts at. Rooting at the subtree would find no `$defs` and
     report a field that IS declared as undeclared.
     """
-    items = array_node.get("items")
     cursor_fields = [_cursor_field_of(cm) for cm in replication.cursor_mappings]
 
-    if items is None or items is True:
-        raise ValueError(
-            "replication is declared but response.schema array node has no "
-            f"`items` subschema; cursor_fields {cursor_fields!r} cannot be "
-            "verified — tighten the response schema "
-            "(spec: §Cross-Field Validation)"
-        )
-    if items is False:
-        raise ValueError(
-            "response.schema array node disallows items (`items: false`) but "
-            "replication is declared (spec: §Cross-Field Validation)"
-        )
-    if isinstance(items, list):
-        # Tuple validation: every cursor_field must exist in every position.
-        for idx, sub in enumerate(items):
-            if not isinstance(sub, dict):
-                raise ValueError(
-                    f"replication is declared but response.schema array `items[{idx}]` "
-                    f"is {type(sub).__name__}, not an object schema; cursor_fields "
-                    f"{cursor_fields!r} cannot be verified at that position "
-                    "(spec: §Cross-Field Validation)"
-                )
-            for cf in cursor_fields:
-                _check_cursor_field_in_node(cf, sub, where=f"items[{idx}]", root=root)
-        return
-    if not isinstance(items, dict):
-        raise ValueError(
-            f"response.schema array node `items` has unexpected type "
-            f"{type(items).__name__}; cannot validate cursor fields"
-        )
+    def check(node: dict[str, Any], where: str) -> None:
+        for cf in cursor_fields:
+            _check_cursor_field_in_node(cf, node, where=where, root=root)
 
-    for cf in cursor_fields:
-        _check_cursor_field_in_node(cf, items, where="items", root=root)
+    _for_each_record_shape_position(array_node, subject="replication", check=check)
 
 
 def _check_record_field_in_node(
@@ -5226,27 +5250,12 @@ def _validate_record_field_path(
     the field must resolve at every position, the same "every position"
     reading that check gives a `cursor_field`.
     """
-    items = array_node.get("items")
-    if isinstance(items, list):
-        for idx, sub in enumerate(items):
-            if not isinstance(sub, dict):
-                raise ValueError(
-                    f"{where} is declared but the response.schema records array "
-                    f"`items[{idx}]` is {type(sub).__name__}, not an object "
-                    f"schema, so {field_path!r} cannot be verified at that "
-                    "position (spec: §Cross-Field Validation)"
-                )
-            _check_record_field_in_node(
-                field_path, sub, root, where=f"{where} (items[{idx}])"
-            )
-        return
-    if not isinstance(items, dict):
-        raise ValueError(
-            f"{where} is declared but the response.schema records array has no "
-            f"object `items` subschema, so {field_path!r} cannot be verified — "
-            "tighten the response schema (spec: §Cross-Field Validation)"
-        )
-    _check_record_field_in_node(field_path, items, root, where=where)
+
+    def check(node: dict[str, Any], position: str) -> None:
+        combined = where if position == "items" else f"{where} ({position})"
+        _check_record_field_in_node(field_path, node, root, where=combined)
+
+    _for_each_record_shape_position(array_node, subject=where, check=check)
 
 
 def _cursor_field_of(cm: Any) -> str:

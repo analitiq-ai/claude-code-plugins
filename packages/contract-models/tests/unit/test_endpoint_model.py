@@ -377,6 +377,29 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="cannot be verified"):
             parse_endpoint(payload)
 
+    def test_empty_tuple_items_rejected(self):
+        # `items: []` is the tuple form declaring zero positions — a naive
+        # "every position" loop over it runs zero times and passes
+        # vacuously, so this is refused explicitly rather than silently
+        # accepted.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": []},
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="empty tuple"):
+            parse_endpoint(payload)
+
 
 # ---------------------------------------------------------------------------
 # §Cross-Field Validation: cursor.next_cursor / link.next_url shape
@@ -726,6 +749,25 @@ class TestFiltersWiring:
             }},
         )
         with pytest.raises(ValidationError, match="not declared in the response.schema"):
+            parse_endpoint(payload)
+
+    def test_field_key_against_empty_tuple_items_rejected(self):
+        # `items: []` declares zero positions — a naive "every position"
+        # loop over it runs zero times and passes vacuously, so this is
+        # refused explicitly rather than treating the key as declared.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"minAmount": {"from_param": "minAmount"}}},
+                "params": {"minAmount": {"in": "query", "type": "number", "required": False}},
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": []},
+                },
+                "filters": {"created": {"gt": {"from_param": "minAmount"}}},
+            }},
+        )
+        with pytest.raises(ValidationError, match="empty tuple"):
             parse_endpoint(payload)
 
     def test_field_key_containing_a_closing_brace_rejected(self):
