@@ -397,7 +397,7 @@ class TestCursorFieldsInRecordShape:
                 },
             }},
         )
-        with pytest.raises(ValidationError, match="legacy tuple form"):
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
             parse_endpoint(payload)
 
 
@@ -726,13 +726,13 @@ class TestFiltersWiring:
                 "filters": {"created": {"gt": {"from_param": "minAmount"}}},
             }},
         )
-        with pytest.raises(ValidationError, match="legacy tuple form"):
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
             parse_endpoint(payload)
 
-    def test_field_key_resolves_in_every_prefix_items_position(self):
-        # `prefixItems` (Draft 2020-12's positional-tuple keyword — see
-        # TestRecordsArrayPrefixItems) is not legacy; a filters key must
-        # resolve at every listed position, with the tail closed.
+    def test_field_key_against_prefix_items_rejected(self):
+        # `prefixItems` (positional/tuple) is refused the same as the
+        # legacy `items: [...]` form — a records array is a page of rows,
+        # every row the same shape.
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": {
@@ -744,7 +744,6 @@ class TestFiltersWiring:
                         "type": "array",
                         "prefixItems": [
                             {"type": "object", "properties": {"created": {"type": "string"}}},
-                            {"type": "object", "properties": {"created": {"type": "string"}}},
                         ],
                         "items": False,
                     },
@@ -752,8 +751,8 @@ class TestFiltersWiring:
                 "filters": {"created": {"gt": {"from_param": "minAmount"}}},
             }},
         )
-        result = parse_endpoint(payload)
-        assert "created" in result.operations.read.filters
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(payload)
 
     def test_field_key_containing_a_closing_brace_rejected(self):
         # `${stream.filters.<field>.value}` (RULE-ENDP-072) embeds the field
@@ -2875,16 +2874,15 @@ class TestFunctionExpressionInRequestBindings:
 # ---------------------------------------------------------------------------
 
 
-class TestRecordsArrayItemsRejectsLegacyForms:
-    """A pre-2020-12 tuple form is refused; the Draft 2020-12 form is not.
+class TestRecordsArrayItemsRejectsPositionalShapes:
+    """`items` must be a single object schema — no positional/tuple form.
 
-    This repo does not accommodate backwards-compatibility or legacy
-    authoring styles: the retired tuple form (`items: [...]`, plus its
-    `additionalItems` partner) is refused outright on every record-shape
-    check that reads the records array (`cursor_field`, a `filters` map
-    key, `keyset.order_by_field`). `prefixItems` — `response.schema`'s own
-    declared draft's positional-tuple keyword — is not legacy and is
-    handled properly; see TestRecordsArrayPrefixItems.
+    A records array is a page of API rows: every row the same shape. There
+    is no "row 0 looks different from row 1" case to support, so both the
+    pre-2020-12 tuple form (`items: [...]`, plus its `additionalItems`
+    partner) and its Draft 2020-12 replacement (`prefixItems`) are refused
+    outright, on every record-shape check that reads the records array
+    (`cursor_field`, a `filters` map key, `keyset.order_by_field`).
     """
 
     def test_tuple_items_rejected(self):
@@ -2905,7 +2903,7 @@ class TestRecordsArrayItemsRejectsLegacyForms:
                 },
             }},
         )
-        with pytest.raises(ValidationError, match="legacy tuple form"):
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
             parse_endpoint(payload)
 
     def test_boolean_items_rejected(self):
@@ -2927,97 +2925,30 @@ class TestRecordsArrayItemsRejectsLegacyForms:
         with pytest.raises(ValidationError, match="cannot be verified"):
             parse_endpoint(payload)
 
-
-class TestRecordsArrayPrefixItems:
-    """`prefixItems` (Draft 2020-12) is a real, checkable tuple form.
-
-    Unlike the retired `items: [...]` form, `prefixItems` is
-    `response.schema`'s own declared draft's positional-tuple keyword and
-    is already understood elsewhere in this module — a field must resolve
-    at every listed position, and `items` (Draft 2020-12's tail keyword)
-    must close the tuple (`items: false`) or declare the tail position too.
-    """
-
-    def _payload(self, prefix_items, items_tail, cursor_field="updated_at"):
-        return _minimal_api_payload(
+    def test_prefix_items_rejected(self):
+        payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": {
                 "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
                 "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
                 "replication": {
                     "supported_methods": ["incremental"],
-                    "cursor_mappings": [{"cursor_field": cursor_field, "param": "u", "operator": "gte"}],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
                 },
                 "response": {
                     "records": {"ref": "response.body"},
                     "schema": {
                         "type": "array",
-                        "prefixItems": prefix_items,
-                        "items": items_tail,
+                        "prefixItems": [
+                            {"type": "object", "properties": {"updated_at": {"type": "string"}}},
+                        ],
+                        "items": False,
                     },
                 },
             }},
         )
-
-    def test_cursor_field_in_every_prefix_position_with_closed_tail_accepted(self):
-        parse_endpoint(self._payload(
-            [
-                {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-                {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-            ],
-            False,
-        ))
-
-    def test_prefix_position_missing_field_rejected(self):
-        with pytest.raises(ValidationError, match="not declared in response.schema record-shape branch"):
-            parse_endpoint(self._payload(
-                [
-                    {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-                    {"type": "object", "properties": {}},
-                ],
-                False,
-            ))
-
-    def test_permissive_tail_rejected(self):
-        # `items` omitted (or `true`) leaves the tail unconstrained — a
-        # record past the listed prefix positions could be any shape.
-        with pytest.raises(ValidationError, match="items: false"):
-            parse_endpoint(self._payload(
-                [{"type": "object", "properties": {"updated_at": {"type": "string"}}}],
-                True,
-            ))
-
-    def test_items_tail_schema_checked_as_a_position(self):
-        parse_endpoint(self._payload(
-            [{"type": "object", "properties": {"updated_at": {"type": "string"}}}],
-            {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-        ))
-
-    def test_items_tail_schema_missing_field_rejected(self):
-        with pytest.raises(ValidationError, match="not declared in response.schema record-shape branch"):
-            parse_endpoint(self._payload(
-                [{"type": "object", "properties": {"updated_at": {"type": "string"}}}],
-                {"type": "object", "properties": {}},
-            ))
-
-    def test_empty_prefix_items_treated_as_homogeneous(self):
-        # `prefixItems: []` imposes no positional constraint at all — every
-        # index falls to `items` — so it is the ordinary homogeneous case,
-        # not a tuple with zero positions.
-        parse_endpoint(self._payload(
-            [], {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-        ))
-
-    def test_empty_prefix_items_with_untyped_items_rejected(self):
-        with pytest.raises(ValidationError, match="cannot be verified"):
-            parse_endpoint(self._payload([], True))
-
-    def test_non_object_prefix_position_rejected(self):
-        with pytest.raises(ValidationError, match="not an object schema"):
-            parse_endpoint(self._payload(
-                [True, {"type": "object", "properties": {"updated_at": {"type": "string"}}}],
-                False,
-            ))
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(payload)
 
 
 # ---------------------------------------------------------------------------

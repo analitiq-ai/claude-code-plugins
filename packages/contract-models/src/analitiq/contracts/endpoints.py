@@ -26,7 +26,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import Enum
 from collections.abc import Iterator, Sequence
-from typing import Annotated, Any, Callable, Literal, NamedTuple, Union, get_args
+from typing import Annotated, Any, Literal, NamedTuple, Union, get_args
 from urllib.parse import unquote
 
 from pydantic import (
@@ -5122,65 +5122,24 @@ def _validate_records_in_response_schema(
     return node
 
 
-def _for_each_record_shape_position(
-    array_node: dict[str, Any], *, subject: str, check: Callable[[dict[str, Any], str], None]
-) -> None:
-    """Dispatch `check(node, where)` over the records array's declared shape.
+def _require_record_shape_items(array_node: dict[str, Any], *, subject: str) -> dict[str, Any]:
+    """Return the records array's `items` object subschema, or raise.
 
-    `items` alone (a single object subschema) is the common case — `check`
-    runs once. `prefixItems`, Draft 2020-12's positional-tuple keyword
-    (`ResponseExtraction.schema` is explicitly Draft 2020-12, and this
-    module already resolves `prefixItems` elsewhere — see
-    `resolve_declared_path`), runs `check` once per listed position, plus
-    once more for `items` as the *tail* schema when it is a schema rather
-    than the `false` that closes the tuple or the unconstrained default
-    that leaves it open — a record at an unclosed tail position could be
-    any shape, so "the field resolves at every position" cannot hold there.
-    An empty `prefixItems` (`[]`) imposes no positional constraint at all —
-    every index falls to `items` — so it is treated as the homogeneous case,
-    not a tuple with zero positions.
-
-    The pre-2020-12 tuple form (`items: [...]`) is refused outright — no
-    backwards-compatibility accommodation for a form the contract's own
-    declared draft retired.
+    `items` must be a single object subschema. A records array is a page
+    of API rows — every row the same shape — so there is no positional
+    ("row 0 looks different from row 1") case to support. Both the
+    pre-2020-12 tuple form (`items: [...]`) and Draft 2020-12's replacement
+    (`prefixItems`) are refused outright: no accommodation for an authoring
+    style the contract has no real use for.
     """
-    if isinstance(array_node.get("items"), list):
+    if isinstance(array_node.get("items"), list) or array_node.get("prefixItems") is not None:
         raise ValueError(
             f"{subject} is declared but the response.schema records array "
-            "`items` is the legacy tuple form (`items: [...]`), which "
-            "Draft 2020-12 retired for `prefixItems` — author the record "
-            "shape with `prefixItems` instead (spec: §Cross-Field Validation)"
+            "declares a positional/tuple shape (`items: [...]` or "
+            "`prefixItems`) — a records array is a page of rows and every "
+            "row must be the same shape; declare one `items` object schema "
+            "(spec: §Cross-Field Validation)"
         )
-    prefix_items = array_node.get("prefixItems")
-    if prefix_items is not None and not isinstance(prefix_items, list):
-        raise ValueError(
-            f"{subject} is declared but the response.schema records array "
-            "`prefixItems` is not a list of object subschemas — tighten the "
-            "response schema (spec: §Cross-Field Validation)"
-        )
-    if prefix_items:
-        for idx, sub in enumerate(prefix_items):
-            if not isinstance(sub, dict):
-                raise ValueError(
-                    f"{subject} is declared but the response.schema records "
-                    f"array `prefixItems[{idx}]` is {type(sub).__name__}, not "
-                    "an object schema (spec: §Cross-Field Validation)"
-                )
-            check(sub, f"prefixItems[{idx}]")
-        tail = array_node.get("items", True)
-        if tail is False:
-            return
-        if not isinstance(tail, dict):
-            raise ValueError(
-                f"{subject} is declared but the response.schema records array "
-                "has no `items: false` closing its `prefixItems` tuple — every "
-                "position past the listed ones is unconstrained, so it cannot "
-                "be verified there. Close the tuple with `items: false`, or "
-                "give `items` an object schema declaring that position too "
-                "(spec: §Cross-Field Validation)"
-            )
-        check(tail, "items")
-        return
     items = array_node.get("items")
     if items is None or items is True:
         raise ValueError(
@@ -5195,10 +5154,11 @@ def _for_each_record_shape_position(
         )
     if not isinstance(items, dict):
         raise ValueError(
-            f"response.schema records array `items` has unexpected type "
-            f"{type(items).__name__}; cannot validate {subject}"
+            f"{subject} is declared but the response.schema records array "
+            f"`items` is {type(items).__name__}, not a single object schema "
+            "(spec: §Cross-Field Validation)"
         )
-    check(items, "items")
+    return items
 
 
 def _validate_cursor_fields_in_record_shape(
@@ -5216,13 +5176,9 @@ def _validate_cursor_fields_in_record_shape(
     the subtree it starts at. Rooting at the subtree would find no `$defs` and
     report a field that IS declared as undeclared.
     """
-    cursor_fields = [_cursor_field_of(cm) for cm in replication.cursor_mappings]
-
-    def check(node: dict[str, Any], where: str) -> None:
-        for cf in cursor_fields:
-            _check_cursor_field_in_node(cf, node, where=where, root=root)
-
-    _for_each_record_shape_position(array_node, subject="replication", check=check)
+    items = _require_record_shape_items(array_node, subject="replication")
+    for cm in replication.cursor_mappings:
+        _check_cursor_field_in_node(_cursor_field_of(cm), items, where="items", root=root)
 
 
 def _validate_record_field_path(
@@ -5247,37 +5203,33 @@ def _validate_record_field_path(
     node (a keyset ordering, a `filters` value match) has nothing to tell it
     what a valid value looks like.
     """
-
-    def check(node: dict[str, Any], position: str) -> None:
-        combined = where if position == "items" else f"{where} ({position})"
-        segments = field_path.split(".")
-        try:
-            resolved = resolve_declared_path(node, segments, root=root)
-        except DeclaredPathError as exc:
-            walked = ".".join(segments[: exc.index + 1])
-            raise ValueError(
-                f"{combined} {field_path!r} is not declared in the "
-                f"response.schema record shape at {walked!r}: {exc.reason} "
-                "(spec: §Cross-Field Validation)"
-            ) from None
-        try:
-            materialized = materialize_node(resolved, root)
-        except SchemaResolutionError as exc:
-            raise ValueError(
-                f"{combined} {field_path!r} resolves in the response.schema "
-                f"record shape to a self-contradictory node: {exc.reason} "
-                "(spec: §Cross-Field Validation)"
-            ) from None
-        if not _declares_a_type(materialized):
-            raise ValueError(
-                f"{combined} {field_path!r} resolves in the response.schema "
-                "record shape to a node that declares no `type` (and no "
-                "`native_type`/`arrow_type` pair). Declare the type of the "
-                "value read there, or nothing can tell what a valid "
-                "comparison looks like (spec: §Cross-Field Validation)"
-            )
-
-    _for_each_record_shape_position(array_node, subject=where, check=check)
+    items = _require_record_shape_items(array_node, subject=where)
+    segments = field_path.split(".")
+    try:
+        node = resolve_declared_path(items, segments, root=root)
+    except DeclaredPathError as exc:
+        walked = ".".join(segments[: exc.index + 1])
+        raise ValueError(
+            f"{where} {field_path!r} is not declared in the response.schema "
+            f"record shape at {walked!r}: {exc.reason} "
+            "(spec: §Cross-Field Validation)"
+        ) from None
+    try:
+        materialized = materialize_node(node, root)
+    except SchemaResolutionError as exc:
+        raise ValueError(
+            f"{where} {field_path!r} resolves in the response.schema record "
+            f"shape to a self-contradictory node: {exc.reason} "
+            "(spec: §Cross-Field Validation)"
+        ) from None
+    if not _declares_a_type(materialized):
+        raise ValueError(
+            f"{where} {field_path!r} resolves in the response.schema record "
+            "shape to a node that declares no `type` (and no "
+            "`native_type`/`arrow_type` pair). Declare the type of the value "
+            "read there, or nothing can tell what a valid comparison looks "
+            "like (spec: §Cross-Field Validation)"
+        )
 
 
 def _cursor_field_of(cm: Any) -> str:
