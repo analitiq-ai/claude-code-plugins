@@ -37,7 +37,7 @@ SCRIPTS = REPO_ROOT / "scripts"
 
 # (script, write argvs, check argv). Order is the dependency order for write.
 PIPELINE = [
-    # schemas/ is rendered output of packages/contract-models; canonical-types
+    # schemas/ is rendered output of packages/contract-models; arrow-types
     # is rendered from the vendored engine grammar, and contracts-version is
     # the tree's provenance stamp. One check covers every one of them.
     # Checked in BOTH modes, never written here: `render_schemas.py write`

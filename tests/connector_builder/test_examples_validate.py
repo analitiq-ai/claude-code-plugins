@@ -73,9 +73,9 @@ def _errors(findings: list[dict]) -> list[dict]:
     return [f for f in findings if f["severity"] == "error"]
 
 
-#: An inline `native: "…"` / `canonical: "…"` field written in skill prose,
+#: An inline `native_type: "…"` / `arrow_type: "…"` field written in skill prose,
 #: JSON-quoted exactly as it would appear in a rule.
-_PROSE_FIELD_RE = re.compile(r"`(native|canonical):\s*(\"(?:[^\"\\]|\\.)*\")`")
+_PROSE_FIELD_RE = re.compile(r"`(native_type|arrow_type):\s*(\"(?:[^\"\\]|\\.)*\")`")
 
 
 def _decode(raw: str) -> str | None:
@@ -120,10 +120,10 @@ def _prose_type_map_rules() -> list[tuple[Path, int, str, dict]]:
             if val_a is None or val_b is None:
                 found.append((path, line_a, "unquotable", rule))
                 continue
-            templated = [k for k in ("native", "canonical") if "${" in rule[k]]
+            templated = [k for k in ("native_type", "arrow_type") if "${" in rule[k]]
             if len(templated) != 1:
                 continue
-            direction = "write" if templated == ["native"] else "read"
+            direction = "write" if templated == ["native_type"] else "read"
             found.append((path, line_a, direction, rule))
     return found
 

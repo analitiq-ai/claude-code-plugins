@@ -2,12 +2,12 @@
   "$defs": {
     "TypeMapWriteExactRule": {
       "additionalProperties": false,
-      "description": "Write exact rule: literal Arrow `canonical` matches, `native` DDL renders.",
+      "description": "Write exact rule: literal Arrow `arrow_type` matches, `native_type` DDL renders.",
       "properties": {
-        "canonical": {
+        "arrow_type": {
           "minLength": 1,
           "pattern": "^(?:Binary|Boolean|Date32|Date64|Decimal128\\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-8])\\)|Decimal256\\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\)|Duration\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)\\)|FixedSizeBinary\\([1-9][0-9]*\\)|Float16|Float32|Float64|Int16|Int32|Int64|Int8|Json|LargeBinary|LargeUtf8|List|Null|Object|Time32\\((?:SECOND|MILLISECOND)\\)|Time64\\((?:MICROSECOND|NANOSECOND)\\)|Timestamp\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\\s*,\\s*(?:null|[A-Za-z_][A-Za-z0-9_\\/\\-]*|Etc\\/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\\)|UInt16|UInt32|UInt64|UInt8|Utf8)$",
-          "title": "Canonical",
+          "title": "Arrow Type",
           "type": "string"
         },
         "match": {
@@ -15,15 +15,15 @@
           "title": "Match",
           "type": "string"
         },
-        "native": {
+        "native_type": {
           "minLength": 1,
-          "title": "Native",
+          "title": "Native Type",
           "type": "string"
         }
       },
       "required": [
-        "native",
-        "canonical",
+        "native_type",
+        "arrow_type",
         "match"
       ],
       "title": "TypeMapWriteExactRule",
@@ -31,11 +31,11 @@
     },
     "TypeMapWriteRegexRule": {
       "additionalProperties": false,
-      "description": "Write regex rule: ECMA-262 `canonical` matches, `native` DDL render template.\n`canonical` is the matcher here, so it is NOT held to the Arrow vocabulary.",
+      "description": "Write regex rule: ECMA-262 `arrow_type` matches, `native_type` DDL render template.\n`arrow_type` is the matcher here, so it is NOT held to the Arrow vocabulary.",
       "properties": {
-        "canonical": {
+        "arrow_type": {
           "minLength": 1,
-          "title": "Canonical",
+          "title": "Arrow Type",
           "type": "string"
         },
         "match": {
@@ -43,15 +43,15 @@
           "title": "Match",
           "type": "string"
         },
-        "native": {
+        "native_type": {
           "minLength": 1,
-          "title": "Native",
+          "title": "Native Type",
           "type": "string"
         }
       },
       "required": [
-        "native",
-        "canonical",
+        "native_type",
+        "arrow_type",
         "match"
       ],
       "title": "TypeMapWriteRegexRule",
@@ -60,7 +60,7 @@
   },
   "$id": "https://schemas.analitiq.ai/type-map-write/latest.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Public JSON Schema contract for a database connector's `type-map-write.json` \u2014 the write direction (canonical \u2192 native DDL) of its type-map pair, a top-level array of `{match, native, canonical}` rules where `canonical` matches and `native` renders. The full per-rule contract lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapWriteDoc (Pydantic).",
+  "description": "Public JSON Schema contract for a database connector's `type-map-write.json` \u2014 the write direction (arrow_type \u2192 native_type DDL) of its type-map pair, a top-level array of `{match, native_type, arrow_type}` rules where `arrow_type` matches and `native_type` renders. The full per-rule contract lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapWriteDoc (Pydantic).",
   "items": {
     "discriminator": {
       "mapping": {
@@ -81,5 +81,5 @@
   "minItems": 1,
   "title": "Analitiq Type Map (write)",
   "type": "array",
-  "version": "3.0.0"
+  "version": "4.0.0"
 }

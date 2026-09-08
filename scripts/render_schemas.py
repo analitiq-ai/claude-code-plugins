@@ -14,7 +14,7 @@ Output trees:
         schemas/<resource>/{X.Y.Z}.json   (immutable per version)
         schemas/<resource>/latest.json     (mutable; mirrors current X.Y.Z)
         schemas/<resource>/index.json       (manifest: latest + versions)
-        schemas/canonical-types.json        (mutable; generated from the vendored
+        schemas/arrow-types.json        (mutable; generated from the vendored
                                              engine grammar)
         schemas/contracts-version.json      (mutable; the analitiq-contract-models
                                              release the whole tree renders from)
@@ -31,8 +31,8 @@ Subcommands:
     bump-check  Exit 1 if the committed version bump (base→head) is below the
                 detected floor or is a rollback (CI gate; replaces labels).
     list        Print registered resource names (one per line) — used by CI.
-    canonical-types
-                Render schemas/canonical-types.json from the vendored engine
+    arrow-types
+                Render schemas/arrow-types.json from the vendored engine
                 grammar (versionless + mutable; covered by the full `check`).
     contracts-version
                 Render schemas/contracts-version.json — the tree's provenance
@@ -911,10 +911,10 @@ RESOURCES: tuple[Resource, ...] = (
         title="Analitiq Type Map (read)",
         description=(
             "Public JSON Schema contract for a connector's `type-map-read.json` "
-            "— the read direction (native → canonical) of its type-map pair, a "
-            "top-level array of `{match, native, canonical}` rules, order "
+            "— the read direction (native_type → arrow_type) of its type-map pair, "
+            "a top-level array of `{match, native_type, arrow_type}` rules, order "
             "significant (first match wins). The full per-rule contract (ECMA-262 "
-            "regex, `${name}` capture correspondence, canonical vocabulary, "
+            "regex, `${name}` capture correspondence, Arrow vocabulary, "
             "schemaless-container handling) lives in the model and is enforced by "
             "the connector validator; this published schema is the structural "
             "projection. Source of truth: analitiq.contracts.type_map.TypeMapReadDoc (Pydantic)."
@@ -929,9 +929,10 @@ RESOURCES: tuple[Resource, ...] = (
         title="Analitiq Type Map (write)",
         description=(
             "Public JSON Schema contract for a database connector's "
-            "`type-map-write.json` — the write direction (canonical → native "
-            "DDL) of its type-map pair, a top-level array of `{match, native, "
-            "canonical}` rules where `canonical` matches and `native` renders. "
+            "`type-map-write.json` — the write direction (arrow_type → native_type "
+            "DDL) of its type-map pair, a top-level array of "
+            "`{match, native_type, arrow_type}` rules where `arrow_type` matches "
+            "and `native_type` renders. "
             "The full per-rule contract lives in the model and is enforced by the "
             "connector validator; this published schema is the structural "
             "projection. Source of truth: analitiq.contracts.type_map.TypeMapWriteDoc (Pydantic)."
@@ -1075,20 +1076,28 @@ def get_resource(name: str) -> Resource:
 
 
 # ---------------------------------------------------------------------------
-# canonical-types.json — generated from the vendored engine grammar
+# arrow-types.json — generated from the vendored engine grammar
 # ---------------------------------------------------------------------------
 # Not a registry Resource: the document is versionless and mutable (no
 # {X.Y.Z}/latest/index triple — it rides the publish workflow's `**/*.json`
 # glob). Its ACCEPTED SET is generated from the engine-published, vendored
 # grammar manifest (`analitiq.contracts.arrow_grammar`); only the
 # prose below — titles, descriptions, display grouping — is authored here.
-# `check` (and the dedicated `canonical-types --check`) fails when the
+# `check` (and the dedicated `arrow-types --check`) fails when the
 # committed file differs from the rendered output, exactly like a registered
 # resource.
+#
+# This document was published as `canonical-types.json` before it was renamed.
+# The publish is additive and deletes nothing, so that path keeps serving the
+# last document rendered under it — frozen, and describing the `type_map`
+# key spelling the contract no longer accepts. Retiring it is a delete on the
+# serving side, which this repo cannot perform and no check here can observe;
+# until it happens the stale object stays reachable. Renaming this document
+# again inherits the same debt.
 
 from analitiq.contracts import arrow_grammar  # noqa: E402
 
-CANONICAL_TYPES_PATH = SCHEMAS_ROOT / "canonical-types.json"
+ARROW_TYPES_PATH = SCHEMAS_ROOT / "arrow-types.json"
 
 
 def _units(family: str) -> str:
@@ -1117,7 +1126,7 @@ def _precision_bounds(family: str) -> str:
 #: one group and no group names an unknown family — so trimming or adding a
 #: family in the vendored manifest fails this render loudly instead of
 #: silently publishing a stale vocabulary.
-_CANONICAL_GROUPS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+_ARROW_GROUPS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     (
         "null_type",
         "Null",
@@ -1227,7 +1236,7 @@ _CANONICAL_GROUPS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
 
 #: Examples embedded in the top-level description. Each is validated against
 #: the generated pattern at render time, so a stale example fails the render.
-_CANONICAL_EXAMPLES: tuple[str, ...] = (
+_ARROW_EXAMPLES: tuple[str, ...] = (
     "Utf8",
     "Int64",
     "Boolean",
@@ -1247,13 +1256,13 @@ _CANONICAL_EXAMPLES: tuple[str, ...] = (
 )
 
 
-def _canonical_types_description() -> str:
-    examples = "\n".join(f"  {e}" for e in _CANONICAL_EXAMPLES)
+def _arrow_types_description() -> str:
+    examples = "\n".join(f"  {e}" for e in _ARROW_EXAMPLES)
     return (
-        "Analitiq's profile of the Apache Arrow logical type system. Canonical "
+        "Analitiq's profile of the Apache Arrow logical type system. Arrow "
         "types are strings that identify an Arrow logical type in the form used "
-        "by `type_map.canonical` entries on connector definitions and "
-        "`arrow_type` fields throughout the schema contracts.\n\n"
+        "by `arrow_type` fields throughout the schema contracts — on connector "
+        "type-map rules and on endpoint columns alike.\n\n"
         "Ownership: the ACCEPTED SET below is generated from the engine-"
         "published Arrow type grammar manifest "
         f"(`https://schemas.analitiq.ai/{arrow_grammar.ENGINE_GRAMMAR_RESOURCE}/latest.json`, "
@@ -1284,7 +1293,7 @@ def _canonical_types_description() -> str:
         "name (including `Etc/GMT±N`; the pattern gates the shape only — real "
         "zone membership is the engine's runtime check), or fixed `±HH:MM` "
         "offset.\n\n"
-        "Full canonical examples:\n"
+        "Full Arrow type examples:\n"
         f"{examples}\n\n"
         "Why uppercase unit names instead of PyArrow shorthand (`us`/`ms`/`ns`): "
         "the uppercase identifiers are the only spelling that's actually in the "
@@ -1308,13 +1317,13 @@ def _canonical_types_description() -> str:
         "`LargeListView`), the typed nested families (`List<T>`, `LargeList<T>`, "
         "`FixedSizeList<T>[n]`, `Struct<...>`, `Map<K, V>`), unions, encodings "
         "(`Dictionary`, `RunEndEncoded`), and `Interval` are not part of this "
-        "canonical vocabulary: the platform does not execute them end-to-end. "
+        "Arrow vocabulary: the platform does not execute them end-to-end. "
         "They return, if ever, by shipping in the engine first and re-consuming "
         "the grammar manifest — never by editing this document."
     )
 
 
-def _canonical_group_schema(members: tuple[str, ...]) -> dict[str, Any]:
+def _arrow_group_schema(members: tuple[str, ...]) -> dict[str, Any]:
     """Schema node for one display group, from the grammar fragments."""
     branches: list[dict[str, Any]] = []
     for family in members:
@@ -1336,48 +1345,48 @@ def _canonical_group_schema(members: tuple[str, ...]) -> dict[str, Any]:
     return {"oneOf": branches}
 
 
-def build_canonical_types_doc() -> dict[str, Any]:
-    """Build the full canonical-types.json document: generated accepted set
+def build_arrow_types_doc() -> dict[str, Any]:
+    """Build the full arrow-types.json document: generated accepted set
     (from the vendored engine grammar) + authored prose."""
-    grouped = [f for _, _, _, members in _CANONICAL_GROUPS for f in members]
+    grouped = [f for _, _, _, members in _ARROW_GROUPS for f in members]
     if sorted(grouped) != sorted(arrow_grammar.FAMILY_NAMES) or len(grouped) != len(
         set(grouped)
     ):
         raise RuntimeError(
-            "canonical-types display grouping is out of sync with the vendored "
+            "arrow-types display grouping is out of sync with the vendored "
             "engine grammar: every family must appear in exactly one group. "
             f"grammar={sorted(arrow_grammar.FAMILY_NAMES)} grouped={sorted(grouped)}"
         )
     pattern_re = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
-    for example in _CANONICAL_EXAMPLES:
+    for example in _ARROW_EXAMPLES:
         if not pattern_re.fullmatch(example):
             raise RuntimeError(
-                f"canonical-types example {example!r} does not match the "
-                "generated ARROW_TYPE_PATTERN — update _CANONICAL_EXAMPLES"
+                f"arrow-types example {example!r} does not match the "
+                "generated ARROW_TYPE_PATTERN — update _ARROW_EXAMPLES"
             )
 
     defs: dict[str, Any] = {
-        "canonical_type": {
-            "title": "canonical_type",
+        "arrow_type": {
+            "title": "arrow_type",
             "description": (
-                "A canonical type string. Must match one of the Arrow logical "
+                "An Arrow type string. Must match one of the Arrow logical "
                 "type families below — exactly the families the engine "
                 "executes, per the pinned grammar manifest."
             ),
             "type": "string",
             "oneOf": [
                 {"$ref": f"#/$defs/{def_name}"}
-                for def_name, _, _, _ in _CANONICAL_GROUPS
+                for def_name, _, _, _ in _ARROW_GROUPS
             ],
         }
     }
-    for def_name, title, description, members in _CANONICAL_GROUPS:
+    for def_name, title, description, members in _ARROW_GROUPS:
         node: dict[str, Any] = {"title": title, "description": description}
-        node.update(_canonical_group_schema(members))
+        node.update(_arrow_group_schema(members))
         defs[def_name] = node
 
     templated_branches: list[dict[str, Any]] = [
-        {"$ref": "#/$defs/canonical_type"}
+        {"$ref": "#/$defs/arrow_type"}
     ]
     for family in arrow_grammar.PARAMETERIZED_FAMILY_NAMES:
         params = ", ".join(
@@ -1396,28 +1405,28 @@ def build_canonical_types_doc() -> dict[str, Any]:
                 + "$",
             }
         )
-    defs["canonical_type_or_template"] = {
-        "title": "canonical_type_or_template",
+    defs["arrow_type_or_template"] = {
+        "title": "arrow_type_or_template",
         "description": (
-            "A canonical type string OR a templated canonical type carrying "
+            "An Arrow type string OR a templated Arrow type carrying "
             "`${name}` placeholders in parameter positions. Used by type-map "
             "regex rules where parameters are substituted from named capture "
             "groups (e.g. `Decimal128(${precision}, ${scale})`). Each "
-            "parameter position accepts either a LITERAL canonical value at "
+            "parameter position accepts either a LITERAL Arrow value at "
             "its valid range/enum (`38`, `MICROSECOND`, `UTC`) or a `${name}` "
             "placeholder; a literal out of range is rejected exactly as the "
             "strict vocabulary rejects it, so `Decimal128(999, 0)` and "
             "`Time32(NANOSECOND)` do NOT match. A `${name}` placeholder must "
             "be a valid identifier (`[A-Za-z_][A-Za-z0-9_]*`), matching the "
             "native capture-group naming it resolves from; `${1bad}` / `${ }` "
-            "do not match. Outside parameter positions, the canonical Arrow "
+            "do not match. Outside parameter positions, the Arrow "
             "base name must appear verbatim — `not an arrow type ${precision}` "
             "does not match. Templated branches use `anyOf` (not `oneOf`) "
-            "because a literal parameterized canonical (e.g. "
+            "because a literal parameterized Arrow type (e.g. "
             "`Timestamp(MICROSECOND, UTC)`) intentionally matches both the "
-            "strict canonical_type vocabulary AND the templated branch — both "
+            "strict arrow_type vocabulary AND the templated branch — both "
             "readings are correct, and `anyOf` reflects that. This vocabulary "
-            "mirrors the runtime `_validate_type_map_canonical` shape check "
+            "mirrors the runtime `_validate_type_map_arrow_type` shape check "
             "plus the placeholder-name rule its sibling validators enforce; a "
             "differential parity test pins that alignment."
         ),
@@ -1427,61 +1436,61 @@ def build_canonical_types_doc() -> dict[str, Any]:
 
     return {
         "$schema": SCHEMA_DRAFT,
-        "$id": f"{CANONICAL_BASE}/canonical-types.json",
-        "title": "Analitiq canonical types",
-        "description": _canonical_types_description(),
+        "$id": f"{CANONICAL_BASE}/arrow-types.json",
+        "title": "Analitiq Arrow types",
+        "description": _arrow_types_description(),
         "$comment": (
             "GENERATED by scripts/render_schemas.py from the vendored engine "
             "grammar manifest (analitiq.contracts.arrow_grammar) — do not "
-            "hand-edit; run `render_schemas.py canonical-types` after a pin "
+            "hand-edit; run `render_schemas.py arrow-types` after a pin "
             "bump. Validating a value directly against this document's URL "
-            "checks it against the strict canonical_type vocabulary. Type-map "
+            "checks it against the strict arrow_type vocabulary. Type-map "
             "regex rules that permit ${name} templates reference the "
-            "#/$defs/canonical_type_or_template fragment explicitly."
+            "#/$defs/arrow_type_or_template fragment explicitly."
         ),
-        "$ref": "#/$defs/canonical_type",
+        "$ref": "#/$defs/arrow_type",
         "$defs": defs,
     }
 
 
-def _canonical_types_text() -> str:
-    return json.dumps(build_canonical_types_doc(), indent=2) + "\n"
+def _arrow_types_text() -> str:
+    return json.dumps(build_arrow_types_doc(), indent=2) + "\n"
 
 
-def check_canonical_types() -> tuple[bool, str]:
-    """(ok, message) — committed canonical-types.json vs rendered output.
+def check_arrow_types() -> tuple[bool, str]:
+    """(ok, message) — committed arrow-types.json vs rendered output.
 
     A builder failure (grouping / example drift) is reported as a normal check
     failure so it participates in `cmd_check`'s aggregate run instead of
     truncating it mid-way."""
-    hint = "`scripts/render_schemas.py canonical-types`"
-    if not CANONICAL_TYPES_PATH.exists():
-        return (False, f"canonical-types: {CANONICAL_TYPES_PATH} is missing; run {hint}")
+    hint = "`scripts/render_schemas.py arrow-types`"
+    if not ARROW_TYPES_PATH.exists():
+        return (False, f"arrow-types: {ARROW_TYPES_PATH} is missing; run {hint}")
     try:
-        rendered = _canonical_types_text()
+        rendered = _arrow_types_text()
     except RuntimeError as exc:
-        return (False, f"canonical-types: cannot render — {exc}")
-    if CANONICAL_TYPES_PATH.read_text() != rendered:
+        return (False, f"arrow-types: cannot render — {exc}")
+    if ARROW_TYPES_PATH.read_text() != rendered:
         return (
             False,
-            "canonical-types: canonical-types.json is stale or hand-edited; "
+            "arrow-types: arrow-types.json is stale or hand-edited; "
             f"re-run {hint}",
         )
-    return (True, "canonical-types: OK — canonical-types.json matches rendered output")
+    return (True, "arrow-types: OK — arrow-types.json matches rendered output")
 
 
-def cmd_canonical_types(args: argparse.Namespace) -> int:
+def cmd_arrow_types(args: argparse.Namespace) -> int:
     if args.check:
-        ok, msg = check_canonical_types()
+        ok, msg = check_arrow_types()
         print(msg, file=None if ok else sys.stderr)
         return 0 if ok else 1
     try:
-        rendered = _canonical_types_text()
+        rendered = _arrow_types_text()
     except RuntimeError as exc:
-        print(f"canonical-types: cannot render — {exc}", file=sys.stderr)
+        print(f"arrow-types: cannot render — {exc}", file=sys.stderr)
         return 2
-    CANONICAL_TYPES_PATH.write_text(rendered)
-    print(f"wrote {CANONICAL_TYPES_PATH.relative_to(REPO_ROOT)}")
+    ARROW_TYPES_PATH.write_text(rendered)
+    print(f"wrote {ARROW_TYPES_PATH.relative_to(REPO_ROOT)}")
     _refresh_contracts_version()
     return 0
 
@@ -1489,7 +1498,7 @@ def cmd_canonical_types(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # contracts-version.json — the tree's provenance stamp
 # ---------------------------------------------------------------------------
-# Not a registry Resource: versionless and mutable, like canonical-types.json
+# Not a registry Resource: versionless and mutable, like arrow-types.json
 # (it rides the publish workflow's `**/*.json` glob as a mutable pointer).
 # The document carries the facts a consumer needs to check that the schema it
 # fetched and the validator it pinned came from the same contract: the
@@ -2048,11 +2057,11 @@ def cmd_check(args: argparse.Namespace) -> int:
             print(msg, file=sys.stderr)
         else:
             print(msg)
-    # canonical-types.json and contracts-version.json are generated but not
+    # arrow-types.json and contracts-version.json are generated but not
     # registry Resources (versionless + mutable); a full check covers them so
     # CI needs no extra invocation.
     if not args.resource:
-        for extra_check in (check_canonical_types, check_contracts_version):
+        for extra_check in (check_arrow_types, check_contracts_version):
             ok, msg = extra_check()
             if not ok:
                 failed = True
@@ -2061,7 +2070,7 @@ def cmd_check(args: argparse.Namespace) -> int:
                 print(msg)
     else:
         print(
-            "note: canonical-types.json and contracts-version.json not "
+            "note: arrow-types.json and contracts-version.json not "
             "checked with --resource; run a full `check` (CI does) to cover them"
         )
     return 1 if failed else 0
@@ -2194,8 +2203,8 @@ def cmd_list(args: argparse.Namespace) -> int:
             seen.add(f"{resource.dir().relative_to(REPO_ROOT).as_posix()}/**")
         seen.add("scripts/render_schemas.py")
         seen.add(".github/workflows/tests.yml")
-        # Generated canonical-types.json + the vendored grammar it renders from.
-        seen.add("schemas/canonical-types.json")
+        # Generated arrow-types.json + the vendored grammar it renders from.
+        seen.add("schemas/arrow-types.json")
         seen.add(f"{_CONTRACTS_PREFIX}/arrow_grammar.py")
         seen.add(f"{_CONTRACTS_PREFIX}/arrow_type_grammar.json")
         for p in sorted(seen):
@@ -2248,8 +2257,8 @@ def main(argv: list[str] | None = None) -> int:
     p_check.set_defaults(func=cmd_check)
 
     p_ct = sub.add_parser(
-        "canonical-types",
-        help="render schemas/canonical-types.json from the vendored engine "
+        "arrow-types",
+        help="render schemas/arrow-types.json from the vendored engine "
         "grammar (versionless + mutable, so no write/{X.Y.Z} machinery)",
     )
     p_ct.add_argument(
@@ -2258,7 +2267,7 @@ def main(argv: list[str] | None = None) -> int:
         help="exit 1 if the committed file differs from rendered output "
         "(also part of the full `check` run)",
     )
-    p_ct.set_defaults(func=cmd_canonical_types)
+    p_ct.set_defaults(func=cmd_arrow_types)
 
     p_cv = sub.add_parser(
         "contracts-version",

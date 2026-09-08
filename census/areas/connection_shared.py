@@ -191,34 +191,34 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     # === type-map ============================================================
     ProseObligation(
         model="_TypeMapRuleBase", descriptive=True,
-        prose_hash="3b29164f42c1",
+        prose_hash="7ff5114dd3f1",
     ),
     ProseObligation(
         model="TypeMapReadExactRule",
-        prose_hash="bb49209dbee3",
+        prose_hash="d28bbed3fdd6",
         structural=(
-            "`match` is the `Literal` discriminator, and `canonical` is typed "
-            "`_ExactCanonical`, whose `ARROW_TYPE_PATTERN` field pattern "
+            "`match` is the `Literal` discriminator, and `arrow_type` is typed "
+            "`_ExactArrowType`, whose `ARROW_TYPE_PATTERN` field pattern "
             "holds the literal to the Arrow vocabulary"
         ),
     ),
     ProseObligation(
         model="TypeMapReadRegexRule",
-        prose_hash="2226dbb14336",
+        prose_hash="1fa594a4d2d2",
         rule_ids=("RULE-TMAP-003", "RULE-TMAP-005", "RULE-TMAP-006"),
     ),
     ProseObligation(
         model="TypeMapWriteExactRule",
-        prose_hash="f485f9589850",
+        prose_hash="ee3b5d470485",
         structural=(
-            "`canonical` is typed `_ExactCanonical`, whose "
+            "`arrow_type` is typed `_ExactArrowType`, whose "
             "`ARROW_TYPE_PATTERN` field pattern holds the matcher to the "
-            "Arrow vocabulary; the `native` DDL render is free-form"
+            "Arrow vocabulary; the `native_type` DDL render is free-form"
         ),
     ),
     ProseObligation(
         model="TypeMapWriteRegexRule",
-        prose_hash="2ba3689a611b",
+        prose_hash="b0ca4da498ef",
         rule_ids=("RULE-TMAP-009",),
     ),
 )

@@ -1,7 +1,7 @@
 id: RULE-TMAP-002
 statement: >
-  A `regex` read rule whose native pattern spells a schemaless or structured
-  container MUST NOT render a scalar canonical.
+  A `regex` read rule whose native_type pattern spells a schemaless or structured
+  container MUST NOT render a scalar Arrow type.
 tier: advisory
 severity: error
 scopes: [type-map]

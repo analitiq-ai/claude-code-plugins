@@ -1958,7 +1958,7 @@
   },
   {
    "id": "RULE-DBEP-004",
-   "statement": "A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical.\n",
+   "statement": "A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native_type or the arrow_type.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -1977,7 +1977,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The type maps are separate documents the engine resolves against twice — once when discovery types a column, once when it renders the DDL for a table it creates — so a value frozen into the endpoint by hand is a second answer to a question the maps already answer. Nothing in the endpoint records where its types came from, so a re-derived value validates here and diverges silently at run time: the column is created as one type and read back as another. Catching it means resolving each canonical through the connection map and then the connector map and comparing, which is also why the uncovered case is carved out — there the author is not disagreeing with a map, there is no map, and the missing rule has to be authored too.\n",
+   "rationale": "The type maps are separate documents the engine resolves against twice — once when discovery types a column, once when it renders the DDL for a table it creates — so a value frozen into the endpoint by hand is a second answer to a question the maps already answer. Nothing in the endpoint records where its types came from, so a re-derived value validates here and diverges silently at run time: the column is created as one type and read back as another. Catching it means resolving each arrow_type through the connection map and then the connector map and comparing, which is also why the uncovered case is carved out — there the author is not disagreeing with a map, there is no map, and the missing rule has to be authored too.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6360,7 +6360,7 @@
   },
   {
    "id": "RULE-TMAP-001",
-   "statement": "An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical.\n",
+   "statement": "An `exact` read rule whose native_type names a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6379,13 +6379,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The canonical is a claim about the shape of the data, not about how the driver happens to hand it over: a container column often arrives as text on the wire, so a scalar canonical looks right at the connection and throws the structure away for every consumer downstream, which then sees an opaque string it cannot address. Only the syntactic half is reachable here — a native whose spelling is visibly a container is refused, while a bare vendor spelling validates clean, so the common case is still the author's to get right.\n",
+   "rationale": "The arrow_type is a claim about the shape of the data, not about how the driver happens to hand it over: a container column often arrives as text on the wire, so a scalar Arrow type looks right at the connection and throws the structure away for every consumer downstream, which then sees an opaque string it cannot address. Only the syntactic half is reachable here — a native_type whose spelling is visibly a container is refused, while a bare vendor spelling validates clean, so the common case is still the author's to get right.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-002",
-   "statement": "A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical.\n",
+   "statement": "A `regex` read rule whose native_type pattern spells a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6410,7 +6410,7 @@
   },
   {
    "id": "RULE-TMAP-003",
-   "statement": "Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares.\n",
+   "statement": "Every `${name}` a read rule's arrow_type render substitutes MUST name a capture group its own native_type pattern declares.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6428,13 +6428,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A placeholder with no capture behind it has nothing to substitute, so the rule renders a canonical still carrying `${…}` — a string no Arrow type parser accepts — and the failure lands at discovery, far from the map that caused it. Typing the placeholder and the group with different spellings is the ordinary way to get here, which is why the correspondence is checked rather than assumed.\n",
+   "rationale": "A placeholder with no capture behind it has nothing to substitute, so the rule renders an arrow_type still carrying `${…}` — a string no Arrow type parser accepts — and the failure lands at discovery, far from the map that caused it. Typing the placeholder and the group with different spellings is the ordinary way to get here, which is why the correspondence is checked rather than assumed.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-004",
-   "statement": "A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed.\n",
+   "statement": "A read rule whose native_type pattern captures a declared parameter MUST carry that capture into its arrow_type render rather than rendering an Arrow type whose parameters are all fixed.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6452,13 +6452,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the canonical's parentheses, so a capture dropped into a canonical that carries no parameters at all is out of its reach.\n",
+   "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the arrow_type's parentheses, so a capture dropped into an Arrow type that carries no parameters at all is out of its reach.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-005",
-   "statement": "A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect.\n",
+   "statement": "A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex dialect.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6482,7 +6482,7 @@
   },
   {
    "id": "RULE-TMAP-006",
-   "statement": "A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions.\n",
+   "statement": "A `regex` read rule's arrow_type MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6501,13 +6501,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The rendered canonical is what discovery freezes into the endpoint document, so a spelling outside the engine-published Arrow vocabulary would not fail here but at schema construction, with the column already declared. Matching full-string is what makes that check mean anything — a partial match would accept trailing whitespace or a newline that no consumer parses — and it is also why a placeholder is legal only where the family declares a parameter.\n",
+   "rationale": "The rendered arrow_type is what discovery freezes into the endpoint document, so a spelling outside the engine-published Arrow vocabulary would not fail here but at schema construction, with the column already declared. Matching full-string is what makes that check mean anything — a partial match would accept trailing whitespace or a newline that no consumer parses — and it is also why a placeholder is legal only where the family declares a parameter.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-007",
-   "statement": "A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name.\n",
+   "statement": "A `${` opening a placeholder in an arrow_type render MUST be closed around a non-empty name.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6525,13 +6525,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A malformed placeholder names no capture, so substitution leaves it in place and the rule renders a canonical carrying literal `${` text that no Arrow parser accepts. Nothing about the surrounding string looks wrong, and the well-formedness check is what lets `RULE-TMAP-003`'s capture-backing check read the render at all.\n",
+   "rationale": "A malformed placeholder names no capture, so substitution leaves it in place and the rule renders an arrow_type carrying literal `${` text that no Arrow parser accepts. Nothing about the surrounding string looks wrong, and the well-formedness check is what lets `RULE-TMAP-003`'s capture-backing check read the render at all.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-008",
-   "statement": "A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders.\n",
+   "statement": "A write `exact` rule's arrow_type MUST hold against the cross-parameter bounds its Arrow family declares, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6550,13 +6550,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A write rule's canonical is a matcher, so a canonical violating its own family's bounds is a rule that can never match anything the read side is allowed to produce — it reads as coverage and delivers none. The bounds themselves are the engine-published grammar's, not this rule's, so the check moves with the grammar pin. The placeholder half is folded in here because the DDL render is the one string in the rule that reaches the database.\n",
+   "rationale": "A write rule's arrow_type is a matcher, so an arrow_type violating its own family's bounds is a rule that can never match anything the read side is allowed to produce — it reads as coverage and delivers none. The bounds themselves are the engine-published grammar's, not this rule's, so the check moves with the grammar pin. The placeholder half is folded in here because the DDL render is the one string in the rule that reaches the database.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-009",
-   "statement": "A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders.\n",
+   "statement": "A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262 regex dialect, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6574,13 +6574,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `canonical` while the placeholder obligation moves onto `native` — an author carrying a read rule's habits across writes the right syntax in the wrong key. A pattern that does not compile is not a narrower match, it is a rule the engine cannot load at the moment it needs to render DDL.\n",
+   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `arrow_type` while the placeholder obligation moves onto `native_type` — an author carrying a read rule's habits across writes the right syntax in the wrong key. A pattern that does not compile is not a narrower match, it is a rule the engine cannot load at the moment it needs to render DDL.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-010",
-   "statement": "A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match.\n",
+   "statement": "A capture feeding an arrow_type parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6599,7 +6599,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A capture written loosely — an unbounded digit run where the family admits a range — validates as a rule and then renders an out-of-vocabulary canonical the first time a real column falls outside the range, which is exactly the column the tiered rules were written to route. Bounding each capture to its own tier is the fix, and it is not obvious because the pattern already looks specific. Two things stay out of reach: a position the grammar states as an open pattern rather than a member list is not interrogated, and where a bound carries a placeholder on each side each capture is judged against its own position, so the pair jointly reachable from them is not judged at all.\n",
+   "rationale": "A capture written loosely — an unbounded digit run where the family admits a range — validates as a rule and then renders an out-of-vocabulary Arrow type the first time a real column falls outside the range, which is exactly the column the tiered rules were written to route. Bounding each capture to its own tier is the fix, and it is not obvious because the pattern already looks specific. Two things stay out of reach: a position the grammar states as an open pattern rather than a member list is not interrogated, and where a bound carries a placeholder on each side each capture is judged against its own position, so the pair jointly reachable from them is not judged at all.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6622,7 +6622,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "An unmapped native or canonical is meant to stop the stream loudly, so the gap is visible and gets closed in whichever map owns it; a catch-all converts that into silent type corruption, handing every unrecognised column whatever the fallback renders while the map reads as complete. The temptation is real on families the vocabulary cannot express at all — a precision beyond Arrow's range — where a fallback feels like graceful degradation rather than the wrong answer. Nothing here can catch it: a catch-all is a well-formed rule like any other, so only the author's intent separates a deliberate fallback from a coverage gap papered over.\n",
+   "rationale": "An unmapped native_type or arrow_type is meant to stop the stream loudly, so the gap is visible and gets closed in whichever map owns it; a catch-all converts that into silent type corruption, handing every unrecognised column whatever the fallback renders while the map reads as complete. The temptation is real on families the vocabulary cannot express at all — a precision beyond Arrow's range — where a fallback feels like graceful degradation rather than the wrong answer. Nothing here can catch it: a catch-all is a well-formed rule like any other, so only the author's intent separates a deliberate fallback from a coverage gap papered over.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6666,13 +6666,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Resolution stops at the first matching rule in both directions, and for a connection-scoped endpoint the two scopes' rule lists are concatenated into one such list, so a rule placed under a broader sibling does not merely fail to fire — the broader rule renders its canonical instead, for exactly the columns the narrow rule was written for. Order carries no visible weight in the document, so an author grouping rules by family rather than by breadth produces a map that validates and resolves wrongly. Every permutation of the same rules is an equally valid document, so nothing here can see the shadowing.\n",
+   "rationale": "Resolution stops at the first matching rule in both directions, and for a connection-scoped endpoint the two scopes' rule lists are concatenated into one such list, so a rule placed under a broader sibling does not merely fail to fire — the broader rule renders its arrow_type instead, for exactly the columns the narrow rule was written for. Order carries no visible weight in the document, so an author grouping rules by family rather than by breadth produces a map that validates and resolves wrongly. Every permutation of the same rules is an equally valid document, so nothing here can see the shadowing.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-014",
-   "statement": "A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored.\n",
+   "statement": "A `regex` read rule MUST spell the literals in its native_type pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored.\n",
    "tier": "procedural",
    "severity": "warning",
    "scopes": [
@@ -6697,7 +6697,7 @@
   },
   {
    "id": "RULE-TMAP-015",
-   "statement": "A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not.\n",
+   "statement": "A write rule's `arrow_type` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not.\n",
    "tier": "procedural",
    "severity": "warning",
    "scopes": [
@@ -6717,13 +6717,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. How loudly the mistake fails then depends on the rule kind: a mis-cased `exact` canonical is rejected outright by the Arrow type pattern, while a mis-cased `regex` canonical is structurally a valid pattern, validates with no findings at all, and simply never fires — leaving the family to hard-error at stream configuration, long after the map was reviewed.\n",
+   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. How loudly the mistake fails then depends on the rule kind: a mis-cased `exact` arrow_type is rejected outright by the Arrow type pattern, while a mis-cased `regex` arrow_type is structurally a valid pattern, validates with no findings at all, and simply never fires — leaving the family to hard-error at stream configuration, long after the map was reviewed.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-016",
-   "statement": "Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares.\n",
+   "statement": "Every `${name}` a write rule's rendered native_type substitutes MUST name a capture group its own `arrow_type` matcher declares.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6742,13 +6742,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "This is the read side's capture-backing obligation with the keys swapped, and the swap is the trap — the placeholders move to `native` and the captures to `canonical`, so a rule copied across directions keeps both in the wrong place and still parses. An unbacked placeholder is never substituted, so the engine raises during type mapping, before any DDL is emitted, on a destination table that may already exist. Only the read direction's backing is checked here; the write correspondence is first exercised when the engine renders DDL, which no document in this repo holds.\n",
+   "rationale": "This is the read side's capture-backing obligation with the keys swapped, and the swap is the trap — the placeholders move to `native_type` and the captures to `arrow_type`, so a rule copied across directions keeps both in the wrong place and still parses. An unbacked placeholder is never substituted, so the engine raises during type mapping, before any DDL is emitted, on a destination table that may already exist. Only the read direction's backing is checked here; the write correspondence is first exercised when the engine renders DDL, which no document in this repo holds.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-017",
-   "statement": "A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals.\n",
+   "statement": "A connector's write map MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types.\n",
    "tier": "structural",
    "severity": "warning",
    "scopes": [
@@ -6765,13 +6765,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The write map is the connector's whole DDL vocabulary and is consulted on every run — stream configuration renders each destination column's frozen canonical through it even when the table already exists — so an uncovered family fails the stream at configuration rather than at first write. The container markers are the ones authors miss, because a database-sourced test never produces them: they arrive only when an API source's struct or array field lands in a database destination. A gap is legitimate only where the dialect renders that family in code (`RULE-TMAP-019`). Nothing here can prove the map complete — completeness is observable only against a real column's canonical at stream configuration, and the validator's coverage check sends one probe per family and one parameter value per probe, so a clean run says only that the probed spellings resolved.\n",
+   "rationale": "The write map is the connector's whole DDL vocabulary and is consulted on every run — stream configuration renders each destination column's frozen Arrow type through it even when the table already exists — so an uncovered family fails the stream at configuration rather than at first write. The container markers are the ones authors miss, because a database-sourced test never produces them: they arrive only when an API source's struct or array field lands in a database destination. A gap is legitimate only where the dialect renders that family in code (`RULE-TMAP-019`). Nothing here can prove the map complete — completeness is observable only against a real column's Arrow type at stream configuration, and the validator's coverage check sends one probe per family and one parameter value per probe, so a clean run says only that the probed spellings resolved.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-018",
-   "statement": "A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved.\n",
+   "statement": "A connection-scoped type map MUST declare a rule only for a native_type or arrow_type its connector's own map leaves unresolved.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -6794,7 +6794,7 @@
   },
   {
    "id": "RULE-TMAP-019",
-   "statement": "A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope.\n",
+   "statement": "An Arrow family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope.\n",
    "tier": "referential",
    "severity": "warning",
    "scopes": [
@@ -6817,7 +6817,7 @@
   },
   {
    "id": "RULE-TMAP-021",
-   "statement": "A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches.\n",
+   "statement": "A connection-scoped read rule MUST render the Arrow type the endpoint document already froze for the native_type it matches.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -6836,7 +6836,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Discovery resolves each native through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored, so this is a gap a bundle-aware check could close rather than an inherently unreachable one; today it means reading the endpoint's frozen type beside the rule.\n",
+   "rationale": "Discovery resolves each native_type through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored, so this is a gap a bundle-aware check could close rather than an inherently unreachable one; today it means reading the endpoint's frozen type beside the rule.\n",
    "status": "active",
    "superseded_by": null
   },

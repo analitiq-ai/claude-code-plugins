@@ -27,7 +27,7 @@ database connector ships both, an API connector the read map alone.
 - Non-obvious natives (derive, don't guess)
 - API coverage (read map)
 - Database coverage
-- Canonical types
+- Arrow types
 - Worked example: Postgres (read)
 - Worked example: Postgres (write)
 - Out of scope
@@ -44,7 +44,7 @@ Both files are **standalone** siblings of `connector.json`:
 The read map validates against
 `https://schemas.analitiq.ai/type-map-read/latest.json`. The write map
 shares the same rule shape but inverts the direction
-(`canonical` matches, `native` renders) and validates against its own
+(`arrow_type` matches, `native_type` renders) and validates against its own
 published schema, `https://schemas.analitiq.ai/type-map-write/latest.json`.
 Neither map is ever embedded inside `connector.json` or any endpoint document.
 
@@ -60,8 +60,8 @@ depends on the direction:
 | Key | Read map (`type-map-read.json`) | Write map (`type-map-write.json`) |
 |---|---|---|
 | `match` | `"exact"` or `"regex"` — how the matcher is compared. | Same. |
-| `native` | **Matcher.** Literal label (`exact`) or pattern (`regex`). | **Rendered.** The native DDL emitted for a matching canonical; may carry `${name}` substitutions on `regex` rules. |
-| `canonical` | **Rendered.** Literal Arrow type, or (on `regex` rules) a template with `${name}` placeholders. | **Matcher.** Literal Arrow type (`exact`) or pattern over the canonical string (`regex`). |
+| `native_type` | **Matcher.** Literal label (`exact`) or pattern (`regex`). | **Rendered.** The native DDL emitted for a matching `arrow_type`; may carry `${name}` substitutions on `regex` rules. |
+| `arrow_type` | **Rendered.** Literal Arrow type, or (on `regex` rules) a template with `${name}` placeholders. | **Matcher.** Literal Arrow type (`exact`) or pattern over the `arrow_type` string (`regex`). |
 
 Matching is full-string, so leading `^` and trailing `$` are harmless but
 redundant — keep them for readability when the pattern would otherwise look
@@ -82,9 +82,9 @@ Read-side normalization rewrites a native before it is matched:
 It is applied differently to each rule kind, and that difference is the whole
 rule:
 
-- **`exact` rules are normalized symmetrically.** The rule's `native` is
+- **`exact` rules are normalized symmetrically.** The rule's `native_type` is
   normalized at map-build time and the probed native at lookup, so
-  `{"native": "varchar"}` and `{"native": "CHARACTER  VARYING"}` both match.
+  `{"native_type": "varchar"}` and `{"native_type": "CHARACTER  VARYING"}` both match.
   Case and spacing genuinely don't matter here — SQL type names are
   case-insensitive and drivers report inconsistent casing, so matching verbatim
   would be a silent-miss footgun.
@@ -99,9 +99,9 @@ Uppercase remains the house style for `exact` natives too — it reads
 consistently against the regex rules that sit beside them — but it is a
 convention there, not a correctness requirement.
 
-<!-- PROBE: write-map-regex-canonical-case-unchecked -->
+<!-- PROBE: write-map-regex-arrow-type-case-unchecked -->
 Case matters on the write side (`RULE-TMAP-015`): a lowercase **`regex`**
-canonical is not checked at all — `{"match": "regex", "canonical": "^utf8$"}`
+`arrow_type` is not checked at all — `{"match": "regex", "arrow_type": "^utf8$"}`
 validates with zero findings and simply never fires.
 
 ## `${name}` substitution in regex rules
@@ -114,13 +114,13 @@ ECMA-262, so write the capture form `(?<name>…)`; the Python-only
 `(?P<name>…)` is rejected on either side (`RULE-TMAP-005` read,
 `RULE-TMAP-009` write).
 
-- Read map: placeholders in `canonical`, captures in `native` —
-  `native: "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$"`,
-  `canonical: "Decimal128(${precision}, ${scale})"`. Each capture is bounded to
+- Read map: placeholders in `arrow_type`, captures in `native_type` —
+  `native_type: "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$"`,
+  `arrow_type: "Decimal128(${precision}, ${scale})"`. Each capture is bounded to
   what its parameter position admits — RULE-TMAP-010 refuses the rule otherwise.
-- Write map: placeholders in `native`, captures in `canonical` —
-  `canonical: "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$"`,
-  `native: "NUMERIC(${p}, ${s})"`.
+- Write map: placeholders in `native_type`, captures in `arrow_type` —
+  `arrow_type: "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$"`,
+  `native_type: "NUMERIC(${p}, ${s})"`.
 
 Placeholders are only legal in **parameter positions** of parameterized
 types — `Decimal128(${precision}, ${scale})`, `FixedSizeBinary(${n})` on the
@@ -129,15 +129,15 @@ similar on the write side, where the rendered native is DDL and only the
 placeholder's well-formedness is held (`RULE-TMAP-009`).
 
 On the **read** side a templated render is only legal on a `regex` rule —
-an `exact` rule's `canonical` must be a fully-resolved Arrow type (the
-type-pattern constraint rejects `${…}` there), and an `exact` native has
+an `exact` rule's `arrow_type` must be a fully-resolved Arrow type (the
+type-pattern constraint rejects `${…}` there), and an `exact` `native_type` has
 no captures to substitute from.
 
 On the **write** side, never author a `${…}` in an `exact` rule's rendered
-`native`: a placeholder must name a capture its own matcher declares
+`native_type`: a placeholder must name a capture its own matcher declares
 (`RULE-TMAP-016`), and an `exact` rule has none. Render a concrete native
 (`TEXT`, or a fixed `VARCHAR(255)`); use a `regex` rule when the width
-genuinely comes from the canonical.
+genuinely comes from the `arrow_type`.
 
 (Timestamp precision is **not** a `${}` case — Arrow's unit is a
 symbolic enum, not a digit; match on the native's digit count and ladder
@@ -148,7 +148,7 @@ it to a unit instead. See "Database coverage → Read map".)
 A schemaless or structured-container native — `JSON`, `JSONB`, `VARIANT`,
 `OBJECT`, `ARRAY`, `MAP`, `STRUCT`, a parameterized container like
 `array<object>`, or a SQL array suffix like `integer[]` — maps to **`Json`**
-(`RULE-TMAP-001`). The canonical is a *claim about the shape* of the data:
+(`RULE-TMAP-001`). The `arrow_type` is a *claim about the shape* of the data:
 `Utf8` asserts an opaque string and throws the structure away, so it is wrong
 for a JSON / array / struct column even when the driver happens to hand the
 value over as text on the wire.
@@ -158,13 +158,13 @@ value over as text on the wire.
 string→string rule cannot carry. Any other container spelling is outside the
 published vocabulary and fails validation at author time — check a family's
 exact spelling against
-[`canonical-types.json`](https://schemas.analitiq.ai/canonical-types.json).
+[`arrow-types.json`](https://schemas.analitiq.ai/arrow-types.json).
 
 <!-- PROBE: read-map-native-semantics-unchecked -->
 > **Only the syntactic half is enforced** (RULE-TMAP-001/002). The contract
 > flags a native whose *shape* is visibly a container — angle brackets
 > (`array<object>`) or a `[]` suffix (`integer[]`). A bare vendor spelling is
-> deliberately not special-cased, so `{"native": "JSONB", "canonical": "Utf8"}`
+> deliberately not special-cased, so `{"native_type": "JSONB", "arrow_type": "Utf8"}`
 > validates **clean**. That is the common case and the one you have to get
 > right yourself.
 
@@ -198,8 +198,8 @@ The shape markers `Object` and `List` split by direction:
   <!-- validate: type-map-write -->
   ```json
   [
-    { "match": "exact", "canonical": "Object", "native": "JSONB" },
-    { "match": "exact", "canonical": "List",   "native": "JSONB" }
+    { "match": "exact", "arrow_type": "Object", "native_type": "JSONB" },
+    { "match": "exact", "arrow_type": "List",   "native_type": "JSONB" }
   ]
   ```
 
@@ -244,7 +244,7 @@ mechanical — the same judgment transfers across providers:
 <!-- PROBE: endpoint-pair-unresolved-through-read-map -->
 For API connectors, every `(native_type, arrow_type)` pair a typed endpoint
 field declares must resolve through `type-map-read.json` — the matched rule's
-rendered `canonical` (with any `${name}` captures substituted) has to equal
+rendered `arrow_type` (with any `${name}` captures substituted) has to equal
 the field's frozen `arrow_type` (`RULE-PKG-033`).
 
 `Object` / `List` endpoint markers are accepted narrowings of `Json` —
@@ -311,7 +311,7 @@ Common API natives:
 
 **Write map:** cover the full executable canonical vocabulary
 (`RULE-TMAP-017`). Angle-bracket spellings are outside that vocabulary and get
-no rules (see "Canonical types"); what it holds includes the parameterized
+no rules (see "Arrow types"); what it holds includes the parameterized
 families (Decimal via a regex with `${p}`/`${s}` captures), the bare and
 tz-aware `Timestamp` forms, and the bare container markers `Object` / `List`
 (see "Schemaless / JSON-shaped natives" — API sources hand them over as
@@ -343,7 +343,7 @@ Mind precision survival on the write side: MySQL's write map renders
 `DATETIME(6)` / `TIME(6)` so microseconds survive the round trip — a
 bare `DATETIME` silently truncates.
 
-## Canonical types
+## Arrow types
 
 Arrow canonical types are fully-qualified PascalCase strings from the shared
 Arrow vocabulary: a bare name where the family declares no parameters; where it
@@ -355,8 +355,8 @@ Nested data goes through the authored-shape path only — `Object` / `List` with
 a sub-schema on the owning document, opaque `Json`; no family spells its
 members inside angle brackets.
 
-The full vocabulary is `schemas/canonical-types.json`, published at
-[`https://schemas.analitiq.ai/canonical-types.json`](https://schemas.analitiq.ai/canonical-types.json)
+The full vocabulary is `schemas/arrow-types.json`, published at
+[`https://schemas.analitiq.ai/arrow-types.json`](https://schemas.analitiq.ai/arrow-types.json)
 — the readable reference when you need a family's exact spelling. Note the flat
 path: unlike the connector and endpoint schemas there is no `/latest.json`
 variant. Validation never fetches it; the enforced form is `ARROW_TYPE_PATTERN`,
@@ -372,7 +372,7 @@ default, encode the default explicitly:
 - MongoDB `decimal` → `Decimal128(34, 0)` (IEEE 754 decimal128).
 
 Do NOT emit a bare parameterized name from an `exact` rule
-(`{"match": "exact", "native": "TIMESTAMP_NTZ", "canonical": "Timestamp"}`
+(`{"match": "exact", "native_type": "TIMESTAMP_NTZ", "arrow_type": "Timestamp"}`
 is wrong — `Timestamp` requires a unit).
 
 ## Worked example: Postgres (read)
@@ -387,11 +387,11 @@ count → Arrow unit, there instantiated to Postgres's 0–6 range), and a
 ## Worked example: Postgres (write)
 
 See the reference write map, `examples/postgresql/type-map-write.json` —
-`canonical` is the matcher (note the regexes over the canonical string
-with lowercase capture names), and `native` is the rendered DDL.
+`arrow_type` is the matcher (note the regexes over the `arrow_type` string
+with lowercase capture names), and `native_type` is the rendered DDL.
 
 Ordering is what that file demonstrates: the bare `^Timestamp\([A-Z]+\)$`
-rule sits before the tz rule yet cannot swallow a two-argument canonical —
+rule sits before the tz rule yet cannot swallow a two-argument `arrow_type` —
 but a genuinely overlapping family rule must be ordered carefully.
 
 ## Out of scope

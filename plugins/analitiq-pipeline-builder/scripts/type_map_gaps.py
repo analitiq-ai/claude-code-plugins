@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve native / canonical type probes through type-map rule files.
+"""Resolve native_type / arrow_type probes through type-map rule files.
 
 This is the gap-detection half of connection-scoped type-map authoring
 (`endpoint-spec/spec-type-map-gaps.md`). It holds no matching logic of its
@@ -24,7 +24,7 @@ Usage::
         --map connectors/postgresql/definition/type-map-read.json
 
 Probes are a JSON array of strings on stdin (or --probes-file): provider
-`native_type` labels for ``--direction read``, Arrow canonical strings for
+`native_type` labels for ``--direction read``, `arrow_type` strings for
 ``--direction write``. Output on stdout::
 
     {"direction": "read",
@@ -32,7 +32,7 @@ Probes are a JSON array of strings on stdin (or --probes-file): provider
      "gaps": ["citext", "vector(3)"]}
 
 ``resolved`` maps each probe (verbatim) to its rendered value — the Arrow
-canonical (read) or the native DDL (write) — or ``null`` when no rule in any
+Arrow type (read) or the native DDL (write) — or ``null`` when no rule in any
 map matches; ``gaps`` lists the null probes. Exit status is ``0`` on a clean
 run regardless of gaps (a gap is a result, not an error), ``2`` on a CLI /
 input error.
@@ -80,10 +80,10 @@ def _load_rules(path: Path, direction: str) -> list:
 def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
     """Resolve every probe through the concatenated rule lists, primary first."""
     # The pinned validator's internal resolution helpers (private API — see the
-    # module docstring). `_render_canonical` bundles the read-side native
-    # normalization; write matchers compare the canonical as authored
+    # module docstring). `_render_arrow_type` bundles the read-side native_type
+    # normalization; write matchers compare the arrow_type as authored
     # (case-preserving).
-    from analitiq.validator import _render_canonical
+    from analitiq.validator import _render_arrow_type
     from analitiq.validator.connectors import _first_match_render
 
     rules: list = []
@@ -92,9 +92,9 @@ def resolve(direction: str, probes: list[str], rule_files: list[Path]) -> dict:
 
     probes = list(dict.fromkeys(probes))  # dedupe, order-preserving — one verdict per probe
     if direction == "read":
-        resolved = {p: _render_canonical(p, rules) for p in probes}
+        resolved = {p: _render_arrow_type(p, rules) for p in probes}
     else:
-        resolved = {p: _first_match_render(p, rules, "canonical", "native") for p in probes}
+        resolved = {p: _first_match_render(p, rules, "arrow_type", "native_type") for p in probes}
     return {
         "direction": direction,
         "resolved": resolved,
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--direction", required=True, choices=("read", "write"),
                         help="read: probes are native types, maps are type-map-read files; "
-                             "write: probes are Arrow canonicals, maps are type-map-write files.")
+                             "write: probes are Arrow types, maps are type-map-write files.")
     parser.add_argument("--map", action="append", required=True, dest="maps", metavar="PATH",
                         help="Rule-list file; repeatable, in precedence order "
                              "(connection-scoped map first, connector map after).")
@@ -119,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as exc:
         return _fail(str(exc))
 
-    # Read and write rules share the {match, native, canonical} key set, so a
+    # Read and write rules share the {match, native_type, arrow_type} key set, so a
     # wrong-direction map would not error — it would resolve, plausibly and
     # wrongly. The two load-bearing filenames declare their direction; hold a
     # map named either of them to it.

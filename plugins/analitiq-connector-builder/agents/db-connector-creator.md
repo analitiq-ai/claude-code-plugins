@@ -185,7 +185,7 @@ artifacts, not the plugin's.
      Optional and additive: declare a cap only where the docs establish
      one, and omit the block entirely when they establish none.
 7. **Read map** — author `type_map_read`, the rule array
-   `spec-type-maps.md` § File shape defines, with `native` as the matcher,
+   `spec-type-maps.md` § File shape defines, with `native_type` as the matcher,
    covering the documented native vocabulary. For OLTP databases,
    expand from your knowledge of the documented native vocabulary; for
    warehouses and NoSQL stores, restrict to the researched list.
@@ -195,10 +195,10 @@ artifacts, not the plugin's.
    orchestrator writes this array to
    `{connector_id}/definition/type-map-read.json`.
 8. **Write map** — author `type_map_write` (same rule shape, inverted
-   direction: `canonical` is the matcher — regex with named captures
-   for parameterized types — and `native` is the rendered DDL, with
+   direction: `arrow_type` is the matcher — regex with named captures
+   for parameterized types — and `native_type` is the rendered DDL, with
    `${name}` substitutions backed by those captures — `RULE-TMAP-016`).
-   Cover the full canonical vocabulary (`RULE-TMAP-017`). Reconcile every
+   Cover the full Arrow vocabulary (`RULE-TMAP-017`). Reconcile every
    family the validator's `type-map-write-coverage` warning names, then
    hand-check the families `spec-type-maps.md` lists as unprobed. A family
    goes unmapped only under `RULE-TMAP-019` — BigQuery's NUMERIC/BIGNUMERIC

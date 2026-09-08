@@ -1127,7 +1127,7 @@ IO_CONTRACTS = (
 
 EXPECTED_REPLICATION_KEYS = {"supported_methods", "cursor_mappings"}
 EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
-EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
+EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native_type", "arrow_type"}
 
 
 # Each of the three specs above closes its set with an exhaustive-enumeration
@@ -1270,7 +1270,7 @@ def test_type_map_rule_keys_match_schema_and_prose() -> None:
     EVERY variant, not just the read/exact one. The table the sentence points
     at carries a Write-map column, so the claim spans all four; checking one
     would leave a key added to a write variant — the likelier direction, since
-    `canonical` is already overridden per variant — falsifying the sentence
+    `arrow_type` is already overridden per variant — falsifying the sentence
     with the suite green.
     """
     from analitiq.contracts.type_map import (

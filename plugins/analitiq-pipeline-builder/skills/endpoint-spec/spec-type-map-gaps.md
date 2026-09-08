@@ -59,7 +59,7 @@ uncovered ones. Pass only map files that exist.
 The rules a type-map document is graded by, whichever scope the map is authored
 at, are in `../pipeline-builder/references/rules/type-map.md` — **read it
 before authoring** and satisfy every row.
-<!-- PROBE: write-map-regex-canonical-case-unchecked -->
+<!-- PROBE: write-map-regex-arrow-type-case-unchecked -->
 A clean validation run is not proof they all hold — some are applied only at
 connect or run time.
 

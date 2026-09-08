@@ -111,7 +111,7 @@ def _write_tree(root: Path, connector: dict, endpoints: dict):
     (root / "endpoints").mkdir(parents=True)
     (root / "connector.json").write_text(json.dumps(connector))
     (root / "type-map-read.json").write_text(json.dumps(
-        [{"match": "exact", "native": "STRING", "canonical": "Utf8"}]))
+        [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
     for name, ep in endpoints.items():
         (root / "endpoints" / name).write_text(
             ep if isinstance(ep, str) else json.dumps(ep))

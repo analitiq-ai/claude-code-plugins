@@ -6,7 +6,7 @@ analitiq-core publishes it as generated, versioned artifacts —
 `arrow-type-grammar` (family + parameter grammar) and `conversion-matrix`
 (family x family convertibility grid) — and this repo consumes a pinned,
 vendored copy of the grammar (`analitiq.contracts.arrow_grammar`) to build
-`ARROW_TYPE_PATTERN` and render `canonical-types.json`. Everything the
+`ARROW_TYPE_PATTERN` and render `arrow-types.json`. Everything the
 contract accepts therefore derives from the vendored file; this guard is what
 ties the vendored file to the engine's published truth:
 

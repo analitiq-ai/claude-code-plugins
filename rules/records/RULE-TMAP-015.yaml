@@ -1,6 +1,6 @@
 id: RULE-TMAP-015
 statement: >
-  A write rule's `canonical` matcher MUST be spelled in the casing the
+  A write rule's `arrow_type` matcher MUST be spelled in the casing the
   canonical Arrow vocabulary uses, because write-side matching preserves case
   where read-side matching does not.
 tier: procedural
@@ -13,8 +13,8 @@ rationale: >
   Case handling belongs to the reader, and the reader normalizes only on the
   read side — so an author who learned that casing does not matter learns it
   from the direction where it genuinely does not. How loudly the mistake fails
-  then depends on the rule kind: a mis-cased `exact` canonical is rejected
-  outright by the Arrow type pattern, while a mis-cased `regex` canonical is
+  then depends on the rule kind: a mis-cased `exact` arrow_type is rejected
+  outright by the Arrow type pattern, while a mis-cased `regex` arrow_type is
   structurally a valid pattern, validates with no findings at all, and simply
   never fires — leaving the family to hard-error at stream configuration, long
   after the map was reviewed.

@@ -1,142 +1,142 @@
 [
   {
     "match": "exact",
-    "canonical": "Boolean",
-    "native": "BOOLEAN"
+    "arrow_type": "Boolean",
+    "native_type": "BOOLEAN"
   },
   {
     "match": "exact",
-    "canonical": "Int8",
-    "native": "SMALLINT"
+    "arrow_type": "Int8",
+    "native_type": "SMALLINT"
   },
   {
     "match": "exact",
-    "canonical": "Int16",
-    "native": "SMALLINT"
+    "arrow_type": "Int16",
+    "native_type": "SMALLINT"
   },
   {
     "match": "exact",
-    "canonical": "Int32",
-    "native": "INTEGER"
+    "arrow_type": "Int32",
+    "native_type": "INTEGER"
   },
   {
     "match": "exact",
-    "canonical": "Int64",
-    "native": "BIGINT"
+    "arrow_type": "Int64",
+    "native_type": "BIGINT"
   },
   {
     "match": "exact",
-    "canonical": "UInt8",
-    "native": "SMALLINT"
+    "arrow_type": "UInt8",
+    "native_type": "SMALLINT"
   },
   {
     "match": "exact",
-    "canonical": "UInt16",
-    "native": "INTEGER"
+    "arrow_type": "UInt16",
+    "native_type": "INTEGER"
   },
   {
     "match": "exact",
-    "canonical": "UInt32",
-    "native": "BIGINT"
+    "arrow_type": "UInt32",
+    "native_type": "BIGINT"
   },
   {
     "match": "exact",
-    "canonical": "UInt64",
-    "native": "BIGINT"
+    "arrow_type": "UInt64",
+    "native_type": "BIGINT"
   },
   {
     "match": "exact",
-    "canonical": "Float16",
-    "native": "REAL"
+    "arrow_type": "Float16",
+    "native_type": "REAL"
   },
   {
     "match": "exact",
-    "canonical": "Float32",
-    "native": "REAL"
+    "arrow_type": "Float32",
+    "native_type": "REAL"
   },
   {
     "match": "exact",
-    "canonical": "Float64",
-    "native": "DOUBLE PRECISION"
+    "arrow_type": "Float64",
+    "native_type": "DOUBLE PRECISION"
   },
   {
     "match": "regex",
-    "canonical": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
-    "native": "NUMERIC(${p}, ${s})"
+    "arrow_type": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
+    "native_type": "NUMERIC(${p}, ${s})"
   },
   {
     "match": "exact",
-    "canonical": "Utf8",
-    "native": "TEXT"
+    "arrow_type": "Utf8",
+    "native_type": "TEXT"
   },
   {
     "match": "exact",
-    "canonical": "LargeUtf8",
-    "native": "TEXT"
+    "arrow_type": "LargeUtf8",
+    "native_type": "TEXT"
   },
   {
     "match": "exact",
-    "canonical": "Json",
-    "native": "JSONB"
+    "arrow_type": "Json",
+    "native_type": "JSONB"
   },
   {
     "match": "exact",
-    "canonical": "Object",
-    "native": "JSONB"
+    "arrow_type": "Object",
+    "native_type": "JSONB"
   },
   {
     "match": "exact",
-    "canonical": "List",
-    "native": "JSONB"
+    "arrow_type": "List",
+    "native_type": "JSONB"
   },
   {
     "match": "exact",
-    "canonical": "Binary",
-    "native": "BYTEA"
+    "arrow_type": "Binary",
+    "native_type": "BYTEA"
   },
   {
     "match": "exact",
-    "canonical": "LargeBinary",
-    "native": "BYTEA"
+    "arrow_type": "LargeBinary",
+    "native_type": "BYTEA"
   },
   {
     "match": "regex",
-    "canonical": "^FixedSizeBinary\\(\\d+\\)$",
-    "native": "BYTEA"
+    "arrow_type": "^FixedSizeBinary\\(\\d+\\)$",
+    "native_type": "BYTEA"
   },
   {
     "match": "exact",
-    "canonical": "Date32",
-    "native": "DATE"
+    "arrow_type": "Date32",
+    "native_type": "DATE"
   },
   {
     "match": "exact",
-    "canonical": "Date64",
-    "native": "DATE"
+    "arrow_type": "Date64",
+    "native_type": "DATE"
   },
   {
     "match": "regex",
-    "canonical": "^Time(32|64)\\([A-Z]+\\)$",
-    "native": "TIME"
+    "arrow_type": "^Time(32|64)\\([A-Z]+\\)$",
+    "native_type": "TIME"
   },
   {
     "match": "regex",
-    "canonical": "^Timestamp\\([A-Z]+\\)$",
-    "native": "TIMESTAMP"
+    "arrow_type": "^Timestamp\\([A-Z]+\\)$",
+    "native_type": "TIMESTAMP"
   },
   {
     "match": "regex",
-    "canonical": "^Timestamp\\([A-Z]+,\\s*UTC\\)$",
-    "native": "TIMESTAMPTZ"
+    "arrow_type": "^Timestamp\\([A-Z]+,\\s*UTC\\)$",
+    "native_type": "TIMESTAMPTZ"
   },
   {
     "match": "regex",
-    "canonical": "^Duration\\([A-Z]+\\)$",
-    "native": "INTERVAL"
+    "arrow_type": "^Duration\\([A-Z]+\\)$",
+    "native_type": "INTERVAL"
   },
   {
     "match": "exact",
-    "canonical": "Null",
-    "native": "TEXT"
+    "arrow_type": "Null",
+    "native_type": "TEXT"
   }
 ]

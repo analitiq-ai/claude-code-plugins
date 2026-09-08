@@ -87,15 +87,15 @@ jobs:
         # means a hand-edited tree can't publish even if that gate is
         # bypassed. Coverage, stated precisely: the render check covers every
         # registered resource plus the generated versionless documents
-        # (canonical-types.json and the contracts-version.json provenance
-        # stamp); the pytest guard re-covers canonical-types.json.
+        # (arrow-types.json and the contracts-version.json provenance
+        # stamp); the pytest guard re-covers arrow-types.json.
         # The remaining hand-authored files have no content gate in this
         # workflow — data-sync-run-response/1.0.0.json is protected by the
         # first-write-wins byte-compare at upload, data-sync-api/openapi.json
         # only by PR review.
         run: |
           python3 scripts/render_schemas.py check
-          python3 -m pytest -q packages/contract-models/tests/unit/test_canonical_types_schema.py
+          python3 -m pytest -q packages/contract-models/tests/unit/test_arrow_types_schema.py
 
       - name: Assume the publisher role (OIDC)
         uses: aws-actions/configure-aws-credentials@v6

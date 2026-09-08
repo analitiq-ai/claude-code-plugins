@@ -1,7 +1,7 @@
 id: RULE-TMAP-021
 statement: >
-  A connection-scoped read rule MUST render the canonical type the endpoint
-  document already froze for the native it matches.
+  A connection-scoped read rule MUST render the Arrow type the endpoint
+  document already froze for the native_type it matches.
 tier: referential
 severity: error
 scopes: [type-map]
@@ -9,7 +9,7 @@ validator: null
 owners: [pipeline-plugin, engine]
 targets: [TypeMapReadExactRule, TypeMapReadRegexRule]
 rationale: >
-  Discovery resolves each native through the read map once and freezes the
+  Discovery resolves each native_type through the read map once and freezes the
   result into the endpoint document; from then on the frozen value is what runs
   are configured against, so the rule is the durable record of a judgment the
   endpoint already recorded. Authoring the two independently — the endpoint

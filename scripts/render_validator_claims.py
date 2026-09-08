@@ -503,7 +503,7 @@ def _p_read_map_completeness() -> list[dict]:
 def _p_read_map_native_semantics() -> list[dict]:
     read_map = json.loads((DB_EXAMPLE / "type-map-read.json").read_text())
     read_map = [r for r in read_map if "JSONB" not in json.dumps(r)]
-    read_map.append({"match": "exact", "native": "JSONB", "canonical": "Utf8"})
+    read_map.append({"match": "exact", "native_type": "JSONB", "arrow_type": "Utf8"})
     return _staged_connector(lambda doc: doc, DB_EXAMPLE, read_map=read_map)
 
 
@@ -569,15 +569,15 @@ def _p_param_key_provider_spelling() -> list[dict]:
 
 def _p_write_map_regex_case() -> list[dict]:
     rules = json.loads((DB_EXAMPLE / "type-map-write.json").read_text())
-    rules.append({"match": "regex", "canonical": "^utf8$", "native": "TEXT"})
+    rules.append({"match": "regex", "arrow_type": "^utf8$", "native_type": "TEXT"})
     return _staged_type_map(rules, "type-map-write.json")
 
 
 def _p_write_coverage_sample_gap() -> list[dict]:
     rules = [
-        {"match": "exact", "canonical": "Utf8", "native": "TEXT"},
-        {"match": "exact", "canonical": "Int64", "native": "BIGINT"},
-        {"match": "exact", "canonical": "Boolean", "native": "BOOLEAN"},
+        {"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
+        {"match": "exact", "arrow_type": "Int64", "native_type": "BIGINT"},
+        {"match": "exact", "arrow_type": "Boolean", "native_type": "BOOLEAN"},
     ]
     return _staged_type_map(rules, "type-map-write.json")
 
@@ -954,7 +954,7 @@ PROBES: tuple[Probe, ...] = (
     Probe("param-key-keeps-provider-spelling", "clean", _p_param_key_provider_spelling,
           forbid_re=r"(?i)objectId"),
     # type maps
-    Probe("write-map-regex-canonical-case-unchecked", "silent", _p_write_map_regex_case),
+    Probe("write-map-regex-arrow-type-case-unchecked", "silent", _p_write_map_regex_case),
     # require_re holds the coverage warning itself in existence: without it,
     # deleting the whole type-map-write-coverage check would leave this probe
     # green while spec-type-maps.md keeps instructing authors to reconcile a

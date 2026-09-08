@@ -11,7 +11,7 @@ rationale: >
   Resolution stops at the first matching rule in both directions, and for a
   connection-scoped endpoint the two scopes' rule lists are concatenated into
   one such list, so a rule placed under a broader sibling does not merely fail
-  to fire — the broader rule renders its canonical instead, for exactly the
+  to fire — the broader rule renders its arrow_type instead, for exactly the
   columns the narrow rule was written for. Order carries no visible weight in
   the document, so an author grouping rules by family rather than by breadth
   produces a map that validates and resolves wrongly. Every permutation of the

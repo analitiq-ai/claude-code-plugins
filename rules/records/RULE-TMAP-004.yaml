@@ -1,7 +1,7 @@
 id: RULE-TMAP-004
 statement: >
-  A read rule whose native pattern captures a declared parameter MUST carry
-  that capture into its canonical render rather than rendering a canonical
+  A read rule whose native_type pattern captures a declared parameter MUST carry
+  that capture into its arrow_type render rather than rendering an Arrow type
   whose parameters are all fixed.
 tier: advisory
 severity: error
@@ -15,7 +15,7 @@ rationale: >
   a wide one silently loses digits at the destination — and the map still reads
   as if it handled the family. A fixed default is legitimate only on the
   unparameterized fallback rule, where nothing was declared to preserve. The
-  detector keys on the canonical's parentheses, so a capture dropped into a
-  canonical that carries no parameters at all is out of its reach.
+  detector keys on the arrow_type's parentheses, so a capture dropped into
+  an Arrow type that carries no parameters at all is out of its reach.
 status: active
 superseded_by: null

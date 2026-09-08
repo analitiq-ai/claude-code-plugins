@@ -24,14 +24,14 @@ pytest.importorskip("analitiq.validator",
                     reason="requires: pip install -r requirements-dev.txt")
 
 CONNECTOR_READ = [
-    {"match": "exact", "native": "CITEXT", "canonical": "Utf8"},
-    {"match": "regex", "native": "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$",
-     "canonical": "Decimal128(${precision}, ${scale})"},
+    {"match": "exact", "native_type": "CITEXT", "arrow_type": "Utf8"},
+    {"match": "regex", "native_type": "^NUMERIC\\((?<precision>[1-9]|[12]\\d|3[0-8]),\\s*(?<scale>\\d|[12]\\d|3[0-8])\\)$",
+     "arrow_type": "Decimal128(${precision}, ${scale})"},
 ]
 CONNECTOR_WRITE = [
-    {"match": "exact", "canonical": "Utf8", "native": "TEXT"},
-    {"match": "regex", "canonical": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
-     "native": "NUMERIC(${p}, ${s})"},
+    {"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
+    {"match": "regex", "arrow_type": "^Decimal(128|256)\\((?<p>\\d+),\\s*(?<s>\\d+)\\)$",
+     "native_type": "NUMERIC(${p}, ${s})"},
 ]
 
 
@@ -62,7 +62,7 @@ def test_read_gap_reported(tmp_path):
 def test_read_connection_map_is_primary(tmp_path):
     # maps concatenate in argument order, first match wins — the engine's compose order
     connection = _map(tmp_path, "conn.json",
-                      [{"match": "exact", "native": "CITEXT", "canonical": "LargeUtf8"}])
+                      [{"match": "exact", "native_type": "CITEXT", "arrow_type": "LargeUtf8"}])
     connector = _map(tmp_path, "base.json", CONNECTOR_READ)
     result = G.resolve("read", ["citext"], [connection, connector])
     assert result["resolved"]["citext"] == "LargeUtf8"
@@ -131,7 +131,7 @@ def test_malformed_rule_fails_loud(tmp_path):
     # the resolver mirrors runtime semantics and SKIPS a malformed rule — which
     # would surface as a false "gap" and drive the agent to shadow the rule the
     # map intended. The prober must therefore refuse the map outright, naming it.
-    bad = _map(tmp_path, "r.json", [{"match": "exact", "native": "CITEXT"}])  # no canonical
+    bad = _map(tmp_path, "r.json", [{"match": "exact", "native_type": "CITEXT"}])  # no arrow_type
     with pytest.raises(ValueError, match="r.json"):
         G.resolve("read", ["citext"], [bad])
 

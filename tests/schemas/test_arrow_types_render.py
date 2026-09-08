@@ -1,6 +1,6 @@
-"""Prove the canonical-types renderer's drift guards FIRE — not merely pass.
+"""Prove the arrow-types renderer's drift guards FIRE — not merely pass.
 
-`build_canonical_types_doc` in `scripts/render_schemas.py` is the wall between
+`build_arrow_types_doc` in `scripts/render_schemas.py` is the wall between
 the vendored engine grammar and the published vocabulary: its grouping check is
 what turns a pin bump that adds a family into a loud render failure instead of
 a silently narrower published document, and its example check keeps the
@@ -30,8 +30,8 @@ from analitiq.contracts import arrow_grammar  # noqa: E402
 
 
 def test_clean_build_succeeds():
-    doc = render_schemas.build_canonical_types_doc()
-    assert set(doc["$defs"]) >= {"canonical_type", "canonical_type_or_template"}
+    doc = render_schemas.build_arrow_types_doc()
+    assert set(doc["$defs"]) >= {"arrow_type", "arrow_type_or_template"}
 
 
 def test_missing_family_in_grouping_fails_loudly(monkeypatch):
@@ -40,30 +40,30 @@ def test_missing_family_in_grouping_fails_loudly(monkeypatch):
     narrows relative to the pattern."""
     trimmed = tuple(
         (name, title, desc, tuple(m for m in members if m != "Utf8"))
-        for name, title, desc, members in render_schemas._CANONICAL_GROUPS
+        for name, title, desc, members in render_schemas._ARROW_GROUPS
     )
-    monkeypatch.setattr(render_schemas, "_CANONICAL_GROUPS", trimmed)
+    monkeypatch.setattr(render_schemas, "_ARROW_GROUPS", trimmed)
     with pytest.raises(RuntimeError, match="out of sync with the vendored"):
-        render_schemas.build_canonical_types_doc()
+        render_schemas.build_arrow_types_doc()
 
 
 def test_duplicated_family_in_grouping_fails_loudly(monkeypatch):
-    doubled = render_schemas._CANONICAL_GROUPS + (
+    doubled = render_schemas._ARROW_GROUPS + (
         ("extra_type", "Extra", "duplicate member", ("Utf8",)),
     )
-    monkeypatch.setattr(render_schemas, "_CANONICAL_GROUPS", doubled)
+    monkeypatch.setattr(render_schemas, "_ARROW_GROUPS", doubled)
     with pytest.raises(RuntimeError, match="out of sync with the vendored"):
-        render_schemas.build_canonical_types_doc()
+        render_schemas.build_arrow_types_doc()
 
 
 def test_stale_example_fails_loudly(monkeypatch):
     monkeypatch.setattr(
         render_schemas,
-        "_CANONICAL_EXAMPLES",
-        render_schemas._CANONICAL_EXAMPLES + ("Interval(YEAR_MONTH)",),
+        "_ARROW_EXAMPLES",
+        render_schemas._ARROW_EXAMPLES + ("Interval(YEAR_MONTH)",),
     )
     with pytest.raises(RuntimeError, match="does not match the"):
-        render_schemas.build_canonical_types_doc()
+        render_schemas.build_arrow_types_doc()
 
 
 def test_check_reports_builder_failure_instead_of_truncating(monkeypatch):
@@ -71,10 +71,10 @@ def test_check_reports_builder_failure_instead_of_truncating(monkeypatch):
     (False, message) result — it must not abort the run mid-way."""
     monkeypatch.setattr(
         render_schemas,
-        "_CANONICAL_EXAMPLES",
-        render_schemas._CANONICAL_EXAMPLES + ("Interval(YEAR_MONTH)",),
+        "_ARROW_EXAMPLES",
+        render_schemas._ARROW_EXAMPLES + ("Interval(YEAR_MONTH)",),
     )
-    ok, msg = render_schemas.check_canonical_types()
+    ok, msg = render_schemas.check_arrow_types()
     assert not ok and "cannot render" in msg
 
 
@@ -100,23 +100,23 @@ def _representative(family: str) -> str:
 
 def test_every_manifest_family_is_accepted_by_the_published_vocabulary():
     """Derived parity: a representative canonical per family must validate
-    against the built document's strict `canonical_type` — catching a grouping
+    against the built document's strict `arrow_type` — catching a grouping
     or pattern regression that drops a family, without hand-listed fixtures
     that predate future families."""
     from jsonschema import Draft202012Validator
     from referencing import Registry, Resource
     from referencing.jsonschema import DRAFT202012
 
-    doc = render_schemas.build_canonical_types_doc()
+    doc = render_schemas.build_arrow_types_doc()
     registry = Registry().with_resource(
-        "canonical-types.json", Resource(contents=doc, specification=DRAFT202012)
+        "arrow-types.json", Resource(contents=doc, specification=DRAFT202012)
     )
     validator = Draft202012Validator(
-        {"$ref": "canonical-types.json#/$defs/canonical_type"}, registry=registry
+        {"$ref": "arrow-types.json#/$defs/arrow_type"}, registry=registry
     )
     pattern = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
     for family in arrow_grammar.FAMILY_NAMES:
         rep = _representative(family)
         assert pattern.fullmatch(rep), f"{rep!r} not accepted by ARROW_TYPE_PATTERN"
         errs = list(validator.iter_errors(rep))
-        assert not errs, f"{rep!r} rejected by published canonical_type: {errs}"
+        assert not errs, f"{rep!r} rejected by published arrow_type: {errs}"

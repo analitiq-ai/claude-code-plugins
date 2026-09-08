@@ -73,7 +73,7 @@ both artifacts, which is more than you are authoring at the moment.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-DBEP-004 | A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical. | `database-endpoint` | error | — |
+| RULE-DBEP-004 | A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native_type or the arrow_type. | `database-endpoint` | error | — |
 | RULE-DBEP-009 | A database endpoint MUST record every provider identifier exactly as its source reports it, with no case-folding, quoting or other normalisation. | `database-endpoint` | error | — |
 | RULE-DBEP-010 | A database endpoint for a table that does not exist yet MUST target a namespace discovery returned. | `database-endpoint` | error | — |
 | RULE-DBEP-011 | A database endpoint's `endpoint_id` MUST equal the handle the contract's derivation produces from its verbatim `database_object`. | `database-endpoint` | error | validator |

@@ -18,7 +18,7 @@ Four concerns, all offline:
    silently misparse.
 
 Acceptance/rejection of concrete type strings is exercised where the pattern
-is consumed (test_endpoint_model.py, test_canonical_types_schema.py,
+is consumed (test_endpoint_model.py, test_arrow_types_schema.py,
 validator's test_type_map_model.py) — not restated here.
 """
 from __future__ import annotations
@@ -149,7 +149,7 @@ def test_no_dead_families_in_the_manifest():
     assert not present, (
         f"families {sorted(present)} are back in the vendored manifest — if the "
         "engine now executes them, update this list together with the re-add "
-        "(prose, examples, and canonical-types groups all need the same pass)"
+        "(prose, examples, and arrow-types groups all need the same pass)"
     )
 
 
@@ -163,7 +163,7 @@ def test_container_heads_derive_from_structural_families():
 
 def test_template_dummies_cover_every_param_kind():
     """Substituting each dummy for every placeholder must resolve at least one
-    dummy per parameterized family — the property `_validate_type_map_canonical`
+    dummy per parameterized family — the property `_validate_type_map_arrow_type`
     relies on."""
     compiled = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
     for name in arrow_grammar.PARAMETERIZED_FAMILY_NAMES:
