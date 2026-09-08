@@ -205,7 +205,7 @@ def test_strict_retry_recovers_once_the_pointer_catches_up(
 
     def fetch(url: str) -> bytes:
         calls.append(url)
-        return next(responses) if url == guard.PUBLISHED_URL else b"{}"
+        return next(responses) if url == guard.PUBLISHED_URL else b"{}"  # skipcq: PTC-W0063
 
     monkeypatch.setattr(guard, "_fetch", fetch)
     assert guard.main() == 0
