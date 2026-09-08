@@ -11,8 +11,9 @@ owners: [connector-plugin]
 targets: [ReadOperation, WriteOperation]
 rationale: >
   A param declaration is the typed contract for one request input — its type,
-  its requiredness, the operators a stream may filter it with — and the binding
-  is what routes it onto the wire. When the binding site and the declared
+  its requiredness, whether a `filters` map entry names it as a stream's
+  landing site — and the binding is what routes it onto the wire. When the
+  binding site and the declared
   location disagree there are two answers for where one value goes, and nothing
   downstream can tell which the provider will see; when the name resolves to
   nothing, the slot silently sends no value at all. Rejecting both at authoring

@@ -94,7 +94,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-STRM-023 | A stream MUST reproduce every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization. | `stream` | error | — |
 | RULE-STRM-024 | An API destination's write mode MUST be one the referenced api-endpoint document declares a write operation for. | `stream` | error | — |
 | RULE-STRM-025 | An API source's replication method MUST be one the referenced endpoint declares in its supported set. | `stream` | error | — |
-| RULE-STRM-026 | A filter on an API source MUST name a read parameter the referenced endpoint declares filterable — one that publishes its own operator set and is not reserved to the runtime. | `stream` | error | — |
+| RULE-STRM-026 | A filter on an API source MUST name a field with an entry for that operator in the referenced endpoint's read operation `filters` map. | `stream` | error | — |
 | RULE-STRM-027 | A filter's value MUST carry the type the referenced field declares, and a membership operator MUST carry an array of such values. | `stream` | error | — |
 | RULE-STRM-028 | An assignment target's arrow_type MUST reproduce the destination column's declared type exactly, its parameters included. | `stream` | error | — |
 | RULE-STRM-029 | A stream source MUST declare a replication policy unless the referenced source endpoint supports full refresh. | `stream` | error | — |

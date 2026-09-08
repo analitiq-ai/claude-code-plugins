@@ -1958,7 +1958,7 @@
   },
   {
    "id": "RULE-DBEP-004",
-   "statement": "A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native_type or the arrow_type.\n",
+   "statement": "A column's frozen `arrow_type` and `native_type` MUST be the values the applicable type maps render for it; judgment supplies a value only where no map covers the native or the canonical.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -1977,7 +1977,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The type maps are separate documents the engine resolves against twice — once when discovery types a column, once when it renders the DDL for a table it creates — so a value frozen into the endpoint by hand is a second answer to a question the maps already answer. Nothing in the endpoint records where its types came from, so a re-derived value validates here and diverges silently at run time: the column is created as one type and read back as another. Catching it means resolving each arrow_type through the connection map and then the connector map and comparing, which is also why the uncovered case is carved out — there the author is not disagreeing with a map, there is no map, and the missing rule has to be authored too.\n",
+   "rationale": "The type maps are separate documents the engine resolves against twice — once when discovery types a column, once when it renders the DDL for a table it creates — so a value frozen into the endpoint by hand is a second answer to a question the maps already answer. Nothing in the endpoint records where its types came from, so a re-derived value validates here and diverges silently at run time: the column is created as one type and read back as another. Catching it means resolving each canonical through the connection map and then the connector map and comparing, which is also why the uncovered case is carved out — there the author is not disagreeing with a map, there is no map, and the missing rule has to be authored too.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2333,25 +2333,27 @@
   },
   {
    "id": "RULE-ENDP-002",
-   "statement": "A parameter declared as controlled by pagination or replication MUST NOT also declare the operator set that makes it stream-filterable.\n",
-   "tier": "structural",
+   "statement": "A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST NOT name a param controlled by pagination or replication.\n",
+   "tier": "advisory",
    "severity": "error",
    "scopes": [
     "api-endpoint"
    ],
-   "validator": "analitiq.contracts.endpoints::Param._validate",
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
    ],
    "targets": [
-    "Param"
+    "ReadOperation"
    ],
-   "fields": [],
+   "fields": [
+    "filters"
+   ],
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The operator set is the endpoint's promise that a downstream stream may filter on that param; marking the param controlled hands its value to the paging or incremental machinery, which sets it on every request. Declaring both advertises a filter the runtime overwrites, so the stream's predicate vanishes from the request and the run reports success over unfiltered data. It is a conditional on the shape of one param object, mirrored declaratively into the published schema, not an instance-relative comparison.\n",
+   "rationale": "A `controlled_by` param's value is set by the paging or incremental machinery on every request; landing a filter operator on it hands the runtime a value it immediately overwrites, so the stream's predicate vanishes from the request and the run reports success over unfiltered data. Refusing the entry at authoring time is cheaper than discovering the silent overwrite after the run.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2493,7 +2495,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, the operators a stream may filter it with — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
+   "rationale": "A param declaration is the typed contract for one request input — its type, its requiredness, whether a `filters` map entry names it as a stream's landing site — and the binding is what routes it onto the wire. When the binding site and the declared location disagree there are two answers for where one value goes, and nothing downstream can tell which the provider will see; when the name resolves to nothing, the slot silently sends no value at all. Rejecting both at authoring time is what makes the declaration worth reading.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -2978,7 +2980,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The other things that fill a param are read-side: operators make it filterable from a stream, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
+   "rationale": "The other things that fill a param are read-side: a `filters` map entry makes it a stream's landing site, and controlled_by hands it to pagination or replication. Neither is reachable from a write, so a write param with no default has provably no source, and the placeholder it fills can never be substituted — a document that validates and is dead at the first request. Nothing else in the param's own shape refuses it, which is why it is worth refusing explicitly rather than leaving to discovery at run time; the diagnostic names the two ways out, giving the param a default or binding the segment to the record instead. Reads keep the latitude, because there a stream filter can supply the value.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3085,7 +3087,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type, requiredness and operator set get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether it may filter on that value or with which operators, and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
+   "rationale": "Per-run values are the ones something upstream supplies — the filters, the cursor, the batch sizing — and the param is the only place their type and requiredness get declared. A direct ref delivers the value and declares nothing, so no downstream stream can tell whether the value may be filtered at all — that depends on a `filters` map entry naming this param, which a ref bypasses entirely — and the endpoint that works for its author's own run is unusable as a contract. Worth knowing while authoring: the check looks for a ref, so the same value smuggled in as a template placeholder passes it — the reason to route through a param is the declaration, not the check.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3642,28 +3644,28 @@
   },
   {
    "id": "RULE-ENDP-055",
-   "statement": "The filter operators a parameter offers MUST come from the operator vocabulary `Param` declares.\n",
+   "statement": "The operator a `filters` map entry keys on MUST come from the Analitiq API-filter operator vocabulary.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
     "api-endpoint"
    ],
-   "validator": "analitiq.contracts.endpoints::Param.operators",
+   "validator": "analitiq.contracts.endpoints::ReadOperation.filters",
    "owners": [
     "engine",
     "connector-plugin",
     "pipeline-plugin"
    ],
    "targets": [
-    "Param"
+    "ReadOperation"
    ],
    "fields": [
-    "operators"
+    "filters"
    ],
    "mechanism": "literal_enum",
    "symbol": null,
    "fixture_model": null,
-   "rationale": "This set is the endpoint's promise to every stream that binds it: a filter is authored against these members (RULE-STRM-026 names that obligation), so the documents agree only while each reads one vocabulary. Which operators survive the trip to the provider — sent as request input rather than compiled into a predicate the way a database read's operator is — is a fact about the provider, so an endpoint declares what it offers instead of inheriting a vocabulary whole. The pinned contract-consumption manifest claims no read of the set, and it has no effect on a run today; the promise does its work where the set is read, at authoring time.\n",
+   "rationale": "This vocabulary is the endpoint's promise to every stream that binds it: a filter is authored against these members (RULE-STRM-026 names that obligation on the stream side), so the two documents agree only while both read one set. Membership is a promise the operation accepts a request built with that operator; how it reaches the wire is the entry's own `from_param`/`template` landing site, not a fact this vocabulary states.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -3918,8 +3920,8 @@
    "superseded_by": null
   },
   {
-   "id": "RULE-ENDP-066",
-   "statement": "A param declared `required` MUST declare a source its operation can supply the value from: its own `default`, or — on a read — the `operators` that make it stream-filterable, a pagination block that gives it a starting value, or a replication block that supports `incremental`.\n",
+   "id": "RULE-ENDP-068",
+   "statement": "A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -3931,38 +3933,88 @@
     "connector-plugin"
    ],
    "targets": [
-    "ReadOperation",
-    "WriteOperation"
+    "ReadOperation"
    ],
-   "fields": [],
+   "fields": [
+    "filters"
+   ],
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "`required` says the operation is wrong without the value, and the document is what has to be able to supply it. Every declared param is bound by exactly one request binding, and the value that binding carries reaches it from the param's own `default`, from a stream filter, or from a pagination or replication block. `operators` and those blocks are read-side, so a write param has only its `default` — the argument RULE-ENDP-028 also makes, about a write path_param whether or not it is required, so neither rule contains the other. A required param with none of them resolves to nothing on every run, while the document says in the same breath that the operation is wrong that way. That contradiction is settled by reading one document, which is why it is refused where it is written rather than left to a run to discover. Being driven by a block is not the same as being given a value by one: a `controlled_by` marker is self-declared, only the block-to-param direction is checked anywhere, and a block can name a param and leave it with nothing. What that looks like differs by block, which is why the two are stated apart. A pagination strategy declares the first request's value, so a page size with no `default`, a keyset or an offset or page cursor whose `initial` carries no value, and an opaque cursor, which has no field for one because there is no cursor before the first page, each name a param and fill it never. A replication block declares no such value anywhere: its cursor comes from the state a run stores, so what decides is `supported_methods`, and one that never says `incremental` says no run will leave a cursor behind. Counting a mention would be worse than not checking, because the refusal names the blocks as a way out and an author would take it. What the refusal proves is that a source is DECLARED, never that it resolves: a `default` reffing a connection parameter the connection leaves unset, a filterable param no stream filters, and a cursor param on a run that is not incremental or on a mapping the stream did not select, all pass, because which run and which stream is not something one document settles. RULE-ENDP-067 is the obligation over that remainder, and it is what says a param whose absence a legitimate run tolerates is not required in the first place. Nothing in the check reads `required` back out of any consumer, so it stays correct however the flag comes to be honoured; what `operators` rests on is the registry service's comparison of a stream's filter against the operators the param declares, the same consumer RULE-STRM-026 names.\n",
+   "rationale": "The key is a record field path typed only to a dotted-segment shape (RECORD_FIELD_PATH_PATTERN); nothing about that type says the field exists. A key that resolves to nothing does not fail at run time — the filters map entry simply sits unused, and a stream that filters on the field it meant is refused nowhere and reads unfiltered, the wrong-rows failure this map exists to close, relocated from the operator to the field name. `pagination.keyset.order_by_field` (RULE-ENDP-023) closes the identical gap for the same reason; this is the same check reused for a second record-path site.\n",
    "status": "active",
    "superseded_by": null
   },
   {
-   "id": "RULE-ENDP-067",
-   "statement": "A param MUST be declared `required` if and only if its operation is wrong without the value: `required` is the contract's demand that such an operation fail rather than send the request with that param's slot dropped, so leaving the flag off a param the operation cannot be correct without is the same defect as setting it on one whose absence the operation tolerates.\n",
-   "tier": "judgment",
+   "id": "RULE-ENDP-069",
+   "statement": "Every `${...}` placeholder in a `filters` map template landing MUST begin with a declared resolution scope.\n",
+   "tier": "structural",
    "severity": "error",
    "scopes": [
     "api-endpoint"
    ],
-   "validator": null,
+   "validator": "analitiq.contracts.endpoints::TemplateFilterLanding._placeholders_qualified",
+   "owners": [
+    "connector-plugin"
+   ],
+   "targets": [],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "The same obligation RULE-ENDP-049 states for the general value-expression `template` form, applied to the `filters` map's own template-landing model — a separate class carrying the identical check, because `filters` needs a destination `param` a bare `TemplateExpression` does not carry. An unqualified placeholder here is the same ambiguity RULE-ENDP-049's rationale describes, now over the value a `filters` entry sends the provider instead of a general request slot.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-070",
+   "statement": "A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
    "owners": [
     "engine",
     "connector-plugin"
    ],
    "targets": [
-    "Param"
+    "ReadOperation"
    ],
-   "fields": [],
+   "fields": [
+    "filters"
+   ],
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A request slot whose value expression resolves to nothing is dropped, and for an optional param that is right — an unsubmitted optional input and a missing one read the same, and a request that leaves the slot out is what the author meant. It is wrong for a param the operation cannot be correct without, and the two are indistinguishable at the slot: one is the request the author intended and the other asks a different question than the stream did, and both go out. The flag is what an author separates them with, which is why it is a decision rather than documentation, and why declaring it on a param whose absence the operation tolerates is as much a defect as omitting it on one whose absence it does not — the first refuses a read that works, once anything honours the flag, and the second leaves the wrong request indistinguishable from the right one. Nothing honours it: the pinned consumption manifest claims no read of the flag, so it reaches the run as nothing at all. What the run does then is a reading of the request path as it stands — the slot is dropped and the run reports success, except where the request cannot be built at all without the value, as an unresolved path segment cannot, and that refusal does not read the flag either. Catching a violation means reading the provider's own parameter reference beside the endpoint and deciding, per param, whether a response built without it answers the question the read asked; RULE-ENDP-066 mechanises only the half one document settles, that a required param the document gives no source resolves to nothing on every run.\n",
+   "rationale": "The destination is a cross-field reference within one document, the same shape `request.query`/`headers`/`path_params` already resolve against `params`. An undeclared name would otherwise parse as a landing site the operation never sends, so the filter it carries silently drops out of the request while the run reports success over unfiltered data.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-ENDP-071",
+   "statement": "Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A landing site — a param, whether it carries the filter's own value or a template-computed one — carries one value. Two entries bound to the same one is the ambiguity this map exists to close, whether they are two operators on one field or two different fields entirely: before it, nothing checked whether `eq`, `contains` and `starts_with` built the request identically, and a run over the wrong operator succeeded silently; the same silent collision happens when a second, unrelated field's filter overwrites the first's value on the same param. Refusing the entry at authoring time is where the mistake is still attached to the line that made it.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5695,7 +5747,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per parameter.\n",
+   "rationale": "The operator field structurally admits the union of both vocabularies, because only the binding knows which read path a filter will be rendered onto — a database read renders a predicate the dialect must express, an API read renders a request parameter the provider must accept, and neither can carry the other's operators. Checking it at the source is the earliest point where the scope is in view. Membership is not a promise of executability: a dialect may still refuse an operator for a given column type, and an API endpoint narrows the set further per record field, in its `filters` map.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -5991,7 +6043,7 @@
   },
   {
    "id": "RULE-STRM-026",
-   "statement": "A filter on an API source MUST name a read parameter the referenced endpoint declares filterable — one that publishes its own operator set and is not reserved to the runtime.\n",
+   "statement": "A filter on an API source MUST name a field with an entry for that operator in the referenced endpoint's read operation `filters` map.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -6009,7 +6061,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Filterability is declared per parameter in the api-endpoint document and the stream carries no view of it, so the local check can prove only that an operator is in the API vocabulary at all; the registry compares the filter against that parameter's own subset on save. Two failures hide here and look alike: a parameter that is filterable but does not accept this operator, and a parameter the runtime owns — a pagination or replication control — that the stream must not drive at all. Catching either means reading the parameter's declaration in the endpoint document.\n",
+   "rationale": "The `filters` map lives on the endpoint document, which is not part of the stream, so no in-process check can compare a stream's filter against it — a connector-scoped (API) endpoint document is never carried by the pipeline bundle the local validator resolves against, only connection-scoped ones are — and resolution happens server-side when the stream is saved. Two failures hide behind one string until then: a field the map does not carry at all, and a field the map carries with no entry for this operator, which is a parameter the runtime owns (RULE-ENDP-002) or an operator the map simply never declared for that field.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6360,7 +6412,7 @@
   },
   {
    "id": "RULE-TMAP-001",
-   "statement": "An `exact` read rule whose native_type names a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
+   "statement": "An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6379,13 +6431,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The arrow_type is a claim about the shape of the data, not about how the driver happens to hand it over: a container column often arrives as text on the wire, so a scalar Arrow type looks right at the connection and throws the structure away for every consumer downstream, which then sees an opaque string it cannot address. Only the syntactic half is reachable here — a native_type whose spelling is visibly a container is refused, while a bare vendor spelling validates clean, so the common case is still the author's to get right.\n",
+   "rationale": "The canonical is a claim about the shape of the data, not about how the driver happens to hand it over: a container column often arrives as text on the wire, so a scalar canonical looks right at the connection and throws the structure away for every consumer downstream, which then sees an opaque string it cannot address. Only the syntactic half is reachable here — a native whose spelling is visibly a container is refused, while a bare vendor spelling validates clean, so the common case is still the author's to get right.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-002",
-   "statement": "A `regex` read rule whose native_type pattern spells a schemaless or structured container MUST NOT render a scalar Arrow type.\n",
+   "statement": "A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6410,7 +6462,7 @@
   },
   {
    "id": "RULE-TMAP-003",
-   "statement": "Every `${name}` a read rule's arrow_type render substitutes MUST name a capture group its own native_type pattern declares.\n",
+   "statement": "Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6428,13 +6480,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A placeholder with no capture behind it has nothing to substitute, so the rule renders an arrow_type still carrying `${…}` — a string no Arrow type parser accepts — and the failure lands at discovery, far from the map that caused it. Typing the placeholder and the group with different spellings is the ordinary way to get here, which is why the correspondence is checked rather than assumed.\n",
+   "rationale": "A placeholder with no capture behind it has nothing to substitute, so the rule renders a canonical still carrying `${…}` — a string no Arrow type parser accepts — and the failure lands at discovery, far from the map that caused it. Typing the placeholder and the group with different spellings is the ordinary way to get here, which is why the correspondence is checked rather than assumed.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-004",
-   "statement": "A read rule whose native_type pattern captures a declared parameter MUST carry that capture into its arrow_type render rather than rendering an Arrow type whose parameters are all fixed.\n",
+   "statement": "A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6452,13 +6504,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the arrow_type's parentheses, so a capture dropped into an Arrow type that carries no parameters at all is out of its reach.\n",
+   "rationale": "Capturing a column's declared precision and then discarding it collapses every column in the family onto one width, so a narrow column is widened and a wide one silently loses digits at the destination — and the map still reads as if it handled the family. A fixed default is legitimate only on the unparameterized fallback rule, where nothing was declared to preserve. The detector keys on the canonical's parentheses, so a capture dropped into a canonical that carries no parameters at all is out of its reach.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-005",
-   "statement": "A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex dialect.\n",
+   "statement": "A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6482,7 +6534,7 @@
   },
   {
    "id": "RULE-TMAP-006",
-   "statement": "A `regex` read rule's arrow_type MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions.\n",
+   "statement": "A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6501,13 +6553,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The rendered arrow_type is what discovery freezes into the endpoint document, so a spelling outside the engine-published Arrow vocabulary would not fail here but at schema construction, with the column already declared. Matching full-string is what makes that check mean anything — a partial match would accept trailing whitespace or a newline that no consumer parses — and it is also why a placeholder is legal only where the family declares a parameter.\n",
+   "rationale": "The rendered canonical is what discovery freezes into the endpoint document, so a spelling outside the engine-published Arrow vocabulary would not fail here but at schema construction, with the column already declared. Matching full-string is what makes that check mean anything — a partial match would accept trailing whitespace or a newline that no consumer parses — and it is also why a placeholder is legal only where the family declares a parameter.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-007",
-   "statement": "A `${` opening a placeholder in an arrow_type render MUST be closed around a non-empty name.\n",
+   "statement": "A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6525,13 +6577,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A malformed placeholder names no capture, so substitution leaves it in place and the rule renders an arrow_type carrying literal `${` text that no Arrow parser accepts. Nothing about the surrounding string looks wrong, and the well-formedness check is what lets `RULE-TMAP-003`'s capture-backing check read the render at all.\n",
+   "rationale": "A malformed placeholder names no capture, so substitution leaves it in place and the rule renders a canonical carrying literal `${` text that no Arrow parser accepts. Nothing about the surrounding string looks wrong, and the well-formedness check is what lets `RULE-TMAP-003`'s capture-backing check read the render at all.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-008",
-   "statement": "A write `exact` rule's arrow_type MUST hold against the cross-parameter bounds its Arrow family declares, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
+   "statement": "A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6550,13 +6602,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A write rule's arrow_type is a matcher, so an arrow_type violating its own family's bounds is a rule that can never match anything the read side is allowed to produce — it reads as coverage and delivers none. The bounds themselves are the engine-published grammar's, not this rule's, so the check moves with the grammar pin. The placeholder half is folded in here because the DDL render is the one string in the rule that reaches the database.\n",
+   "rationale": "A write rule's canonical is a matcher, so a canonical violating its own family's bounds is a rule that can never match anything the read side is allowed to produce — it reads as coverage and delivers none. The bounds themselves are the engine-published grammar's, not this rule's, so the check moves with the grammar pin. The placeholder half is folded in here because the DDL render is the one string in the rule that reaches the database.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-009",
-   "statement": "A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262 regex dialect, and the native_type DDL it renders MUST carry only well-formed placeholders.\n",
+   "statement": "A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders.\n",
    "tier": "structural",
    "severity": "error",
    "scopes": [
@@ -6574,13 +6626,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `arrow_type` while the placeholder obligation moves onto `native_type` — an author carrying a read rule's habits across writes the right syntax in the wrong key. A pattern that does not compile is not a narrower match, it is a rule the engine cannot load at the moment it needs to render DDL.\n",
+   "rationale": "The write direction inverts which key is the matcher, so the regex dialect obligation moves onto `canonical` while the placeholder obligation moves onto `native` — an author carrying a read rule's habits across writes the right syntax in the wrong key. A pattern that does not compile is not a narrower match, it is a rule the engine cannot load at the moment it needs to render DDL.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-010",
-   "statement": "A capture feeding an arrow_type parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match.\n",
+   "statement": "A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6599,7 +6651,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "A capture written loosely — an unbounded digit run where the family admits a range — validates as a rule and then renders an out-of-vocabulary Arrow type the first time a real column falls outside the range, which is exactly the column the tiered rules were written to route. Bounding each capture to its own tier is the fix, and it is not obvious because the pattern already looks specific. Two things stay out of reach: a position the grammar states as an open pattern rather than a member list is not interrogated, and where a bound carries a placeholder on each side each capture is judged against its own position, so the pair jointly reachable from them is not judged at all.\n",
+   "rationale": "A capture written loosely — an unbounded digit run where the family admits a range — validates as a rule and then renders an out-of-vocabulary canonical the first time a real column falls outside the range, which is exactly the column the tiered rules were written to route. Bounding each capture to its own tier is the fix, and it is not obvious because the pattern already looks specific. Two things stay out of reach: a position the grammar states as an open pattern rather than a member list is not interrogated, and where a bound carries a placeholder on each side each capture is judged against its own position, so the pair jointly reachable from them is not judged at all.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6622,7 +6674,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "An unmapped native_type or arrow_type is meant to stop the stream loudly, so the gap is visible and gets closed in whichever map owns it; a catch-all converts that into silent type corruption, handing every unrecognised column whatever the fallback renders while the map reads as complete. The temptation is real on families the vocabulary cannot express at all — a precision beyond Arrow's range — where a fallback feels like graceful degradation rather than the wrong answer. Nothing here can catch it: a catch-all is a well-formed rule like any other, so only the author's intent separates a deliberate fallback from a coverage gap papered over.\n",
+   "rationale": "An unmapped native or canonical is meant to stop the stream loudly, so the gap is visible and gets closed in whichever map owns it; a catch-all converts that into silent type corruption, handing every unrecognised column whatever the fallback renders while the map reads as complete. The temptation is real on families the vocabulary cannot express at all — a precision beyond Arrow's range — where a fallback feels like graceful degradation rather than the wrong answer. Nothing here can catch it: a catch-all is a well-formed rule like any other, so only the author's intent separates a deliberate fallback from a coverage gap papered over.\n",
    "status": "active",
    "superseded_by": null
   },
@@ -6666,13 +6718,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Resolution stops at the first matching rule in both directions, and for a connection-scoped endpoint the two scopes' rule lists are concatenated into one such list, so a rule placed under a broader sibling does not merely fail to fire — the broader rule renders its arrow_type instead, for exactly the columns the narrow rule was written for. Order carries no visible weight in the document, so an author grouping rules by family rather than by breadth produces a map that validates and resolves wrongly. Every permutation of the same rules is an equally valid document, so nothing here can see the shadowing.\n",
+   "rationale": "Resolution stops at the first matching rule in both directions, and for a connection-scoped endpoint the two scopes' rule lists are concatenated into one such list, so a rule placed under a broader sibling does not merely fail to fire — the broader rule renders its canonical instead, for exactly the columns the narrow rule was written for. Order carries no visible weight in the document, so an author grouping rules by family rather than by breadth produces a map that validates and resolves wrongly. Every permutation of the same rules is an equally valid document, so nothing here can see the shadowing.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-014",
-   "statement": "A `regex` read rule MUST spell the literals in its native_type pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored.\n",
+   "statement": "A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored.\n",
    "tier": "procedural",
    "severity": "warning",
    "scopes": [
@@ -6697,7 +6749,7 @@
   },
   {
    "id": "RULE-TMAP-015",
-   "statement": "A write rule's `arrow_type` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not.\n",
+   "statement": "A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not.\n",
    "tier": "procedural",
    "severity": "warning",
    "scopes": [
@@ -6717,13 +6769,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. How loudly the mistake fails then depends on the rule kind: a mis-cased `exact` arrow_type is rejected outright by the Arrow type pattern, while a mis-cased `regex` arrow_type is structurally a valid pattern, validates with no findings at all, and simply never fires — leaving the family to hard-error at stream configuration, long after the map was reviewed.\n",
+   "rationale": "Case handling belongs to the reader, and the reader normalizes only on the read side — so an author who learned that casing does not matter learns it from the direction where it genuinely does not. How loudly the mistake fails then depends on the rule kind: a mis-cased `exact` canonical is rejected outright by the Arrow type pattern, while a mis-cased `regex` canonical is structurally a valid pattern, validates with no findings at all, and simply never fires — leaving the family to hard-error at stream configuration, long after the map was reviewed.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-016",
-   "statement": "Every `${name}` a write rule's rendered native_type substitutes MUST name a capture group its own `arrow_type` matcher declares.\n",
+   "statement": "Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares.\n",
    "tier": "advisory",
    "severity": "error",
    "scopes": [
@@ -6742,13 +6794,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "This is the read side's capture-backing obligation with the keys swapped, and the swap is the trap — the placeholders move to `native_type` and the captures to `arrow_type`, so a rule copied across directions keeps both in the wrong place and still parses. An unbacked placeholder is never substituted, so the engine raises during type mapping, before any DDL is emitted, on a destination table that may already exist. Only the read direction's backing is checked here; the write correspondence is first exercised when the engine renders DDL, which no document in this repo holds.\n",
+   "rationale": "This is the read side's capture-backing obligation with the keys swapped, and the swap is the trap — the placeholders move to `native` and the captures to `canonical`, so a rule copied across directions keeps both in the wrong place and still parses. An unbacked placeholder is never substituted, so the engine raises during type mapping, before any DDL is emitted, on a destination table that may already exist. Only the read direction's backing is checked here; the write correspondence is first exercised when the engine renders DDL, which no document in this repo holds.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-017",
-   "statement": "A connector's write map MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types.\n",
+   "statement": "A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals.\n",
    "tier": "structural",
    "severity": "warning",
    "scopes": [
@@ -6765,13 +6817,13 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "The write map is the connector's whole DDL vocabulary and is consulted on every run — stream configuration renders each destination column's frozen Arrow type through it even when the table already exists — so an uncovered family fails the stream at configuration rather than at first write. The container markers are the ones authors miss, because a database-sourced test never produces them: they arrive only when an API source's struct or array field lands in a database destination. A gap is legitimate only where the dialect renders that family in code (`RULE-TMAP-019`). Nothing here can prove the map complete — completeness is observable only against a real column's Arrow type at stream configuration, and the validator's coverage check sends one probe per family and one parameter value per probe, so a clean run says only that the probed spellings resolved.\n",
+   "rationale": "The write map is the connector's whole DDL vocabulary and is consulted on every run — stream configuration renders each destination column's frozen canonical through it even when the table already exists — so an uncovered family fails the stream at configuration rather than at first write. The container markers are the ones authors miss, because a database-sourced test never produces them: they arrive only when an API source's struct or array field lands in a database destination. A gap is legitimate only where the dialect renders that family in code (`RULE-TMAP-019`). Nothing here can prove the map complete — completeness is observable only against a real column's canonical at stream configuration, and the validator's coverage check sends one probe per family and one parameter value per probe, so a clean run says only that the probed spellings resolved.\n",
    "status": "active",
    "superseded_by": null
   },
   {
    "id": "RULE-TMAP-018",
-   "statement": "A connection-scoped type map MUST declare a rule only for a native_type or arrow_type its connector's own map leaves unresolved.\n",
+   "statement": "A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -6794,7 +6846,7 @@
   },
   {
    "id": "RULE-TMAP-019",
-   "statement": "An Arrow family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope.\n",
+   "statement": "A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope.\n",
    "tier": "referential",
    "severity": "warning",
    "scopes": [
@@ -6817,7 +6869,7 @@
   },
   {
    "id": "RULE-TMAP-021",
-   "statement": "A connection-scoped read rule MUST render the Arrow type the endpoint document already froze for the native_type it matches.\n",
+   "statement": "A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches.\n",
    "tier": "referential",
    "severity": "error",
    "scopes": [
@@ -6836,7 +6888,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Discovery resolves each native_type through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored, so this is a gap a bundle-aware check could close rather than an inherently unreachable one; today it means reading the endpoint's frozen type beside the rule.\n",
+   "rationale": "Discovery resolves each native through the read map once and freezes the result into the endpoint document; from then on the frozen value is what runs are configured against, so the rule is the durable record of a judgment the endpoint already recorded. Authoring the two independently — the endpoint from the discovered column, the map rule from the type name — is the ordinary path to two records of one column's type that disagree, and which one wins depends on which path reads it. Both files are on disk when the connection is authored, so this is a gap a bundle-aware check could close rather than an inherently unreachable one; today it means reading the endpoint's frozen type beside the rule.\n",
    "status": "active",
    "superseded_by": null
   },
