@@ -114,7 +114,7 @@ artifacts, not the plugin's.
    The orchestrator writes this array to the connector's sibling read-map
    file and validates it (`RULE-PKG-030`; layout in
    `skills/shared/type-maps.md`). Author
-   read-side regex `native` literals uppercase (`RULE-TMAP-014`). API
+   read-side regex `native_type` literals uppercase (`RULE-TMAP-014`). API
    connectors ship no write map and no package files (`RULE-CTOR-043`):
    return `type_map_write: null` and `package_files: null`.
 

@@ -152,7 +152,7 @@ One invocation runs exactly one mode.
      "type_maps": {
        "read":  [ /* full file content for definition/type-map-read.json, or null */ ],
        "write": [ /* full file content for definition/type-map-write.json, or null */ ],
-       "ambiguities": [ {"canonical": "…", "candidates": ["<native>", "<native>"]} ],
+       "ambiguities": [ {"arrow_type": "…", "candidates": ["<native>", "<native>"]} ],
        "notes": []
      }
    }

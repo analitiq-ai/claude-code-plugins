@@ -13,6 +13,7 @@ stated in the guard as copies of renderer-owned values and pinned equal here.
 """
 from __future__ import annotations
 
+import re
 import sys
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
@@ -80,7 +81,7 @@ def test_tree_digest_moves_with_the_tree_and_ignores_the_stamp(
 
 def test_full_check_gates_the_stamp(monkeypatch, tmp_path):
     """schemas-publish.yml's verify step runs only `render_schemas.py check`
-    (plus one canonical-types pytest module), so the stamp's only content
+    (plus one arrow-types pytest module), so the stamp's only content
     gate on the publish path is the full check reaching
     check_contracts_version — dropping it from cmd_check must fail here, not
     silently un-gate the publish."""
@@ -93,11 +94,10 @@ def test_full_check_gates_the_stamp(monkeypatch, tmp_path):
 def test_renderer_and_guard_agree_on_key_paths_and_host(guard):
     """The guard reads what the renderer writes, without importing it.
 
-    The fact key, the file paths, the serving host (carried for every guard
-    by `scripts/_guard_lib.py`), and the sentinel's basename therefore exist
-    guard-side as copies of renderer-owned (or contract-owned) values; these
-    pins are what make each copy one value
-    (`.claude/rules/no-drift-surfaces.md`).
+    The fact key, the file paths and the serving host (carried for every guard
+    by `scripts/_guard_lib.py`) therefore exist guard-side as copies of
+    renderer-owned (or contract-owned) values; these pins are what make each
+    copy one value (`.claude/rules/no-drift-surfaces.md`).
     """
     assert guard.CONTRACTS_VERSION_KEY == render_schemas.CONTRACTS_VERSION_KEY
     assert guard.COMMITTED_PATH == render_schemas.CONTRACTS_VERSION_PATH
@@ -108,8 +108,32 @@ def test_renderer_and_guard_agree_on_key_paths_and_host(guard):
     assert guard.PUBLISHED_URL == (
         f"{render_schemas.CANONICAL_BASE}/{render_schemas.CONTRACTS_VERSION_PATH.name}"
     )
-    assert guard.SENTINEL_URL == (
-        f"{render_schemas.CANONICAL_BASE}/{render_schemas.CANONICAL_TYPES_PATH.name}"
+
+
+def test_guard_probes_an_object_that_cannot_stop_being_served(guard):
+    """The 403-vs-absent probe must name a PINNED version document.
+
+    The probe's whole job is to be served whenever the bucket is healthy, so
+    that a missing stamp can be believed. A mutable document does not carry
+    that property — it can be renamed or retired, and then a broken bucket and
+    a healthy one answer the probe identically and the guard silently stops
+    being able to reach a verdict. A pinned `X.Y.Z.json` carries it by
+    construction: the publish is first-write-wins and never deletes.
+    """
+    prefix = f"{render_schemas.CANONICAL_BASE}/"
+    assert guard.SENTINEL_URL.startswith(prefix)
+    resource_name, _, filename = guard.SENTINEL_URL[len(prefix):].partition("/")
+    assert re.fullmatch(r"\d+\.\d+\.\d+\.json", filename), (
+        f"the probe names {filename!r}, which is not a pinned version document; "
+        "a mutable object cannot carry the guarantee the probe rests on"
+    )
+    assert resource_name in {r.name for r in render_schemas.RESOURCES}, (
+        f"the probe names resource {resource_name!r}, which the renderer does "
+        "not publish"
+    )
+    assert (render_schemas.SCHEMAS_ROOT / resource_name / filename).exists(), (
+        f"the probe names {resource_name}/{filename}, which this tree does not "
+        "contain — it cannot be relied on to be served"
     )
 
 

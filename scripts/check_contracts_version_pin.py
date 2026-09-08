@@ -75,9 +75,9 @@ verdicts behind it are this guard's own):
     the same treatment: strict fails, non-strict warns. It is the expected
     state only while the change introducing the stamp has not reached main.
     Because a 403 is also what a site-wide access fault returns for objects
-    that DO exist, a missing stamp is believed only after a sentinel object
-    that predates it (`canonical-types.json`) is confirmed served; a sentinel
-    that is also missing is a GuardError, never a verdict.
+    that DO exist, a missing stamp is believed only after an object that is
+    certain to be served (a pinned, immutable `X.Y.Z.json`) is confirmed
+    served; a probe that is also missing is a GuardError, never a verdict.
 
 Exit codes: 0 ok (including warn-mode divergences), 1 divergence, 2
 GuardError. Every infrastructure failure — unreadable repo files, a fetch
@@ -116,13 +116,25 @@ PYPROJECT_PATH = REPO_ROOT / "packages" / "contract-models" / "pyproject.toml"
 STRICT_ENV = "CONTRACTS_VERSION_GUARD_STRICT"
 
 PUBLISHED_URL = f"{BASE_URL}/{COMMITTED_PATH.name}"
-#: A versionless object published since before the stamp existed. Fetched only
-#: when the stamp comes back 403/404: served sentinel = the stamp is genuinely
-#: absent; missing sentinel = the CDN/bucket access itself is broken. The
-#: basename is a copy of the renderer's `CANONICAL_TYPES_PATH` (this script
-#: cannot import the renderer — it needs pydantic, and guard jobs install
-#: nothing); `tests/schemas/test_contracts_version_render.py` pins it.
-SENTINEL_URL = f"{BASE_URL}/canonical-types.json"
+#: Probed only when the stamp comes back 403/404, to tell the two causes apart:
+#: probe served = the stamp is genuinely absent; probe missing = access to the
+#: bucket itself is broken, which is a fault and never a verdict.
+#:
+#: This probe exists only because the CDN cannot say "absent" and "denied"
+#: differently. S3 answers `NoSuchKey` for a missing object only when the reader
+#: also holds `s3:ListBucket`; the schemas bucket policy grants `GetObject`
+#: alone, so a missing key returns `AccessDenied` — the same 403 a site-wide
+#: fault returns for an object that does exist. Granting `ListBucket` in the
+#: Terraform that serves this bucket would make the two distinguishable and let
+#: this second fetch be deleted outright.
+#:
+#: The requirement on the object named here is that it is CERTAIN to be served
+#: whenever the bucket is healthy. A pinned `X.Y.Z.json` satisfies that by
+#: construction: the publish is first-write-wins and never deletes, so the
+#: object cannot go away or change. It deliberately belongs to a resource this
+#: guard does not otherwise touch, so the probe is never knocked over by the
+#: same release it is being used to judge.
+SENTINEL_URL = f"{BASE_URL}/connector/1.0.0.json"
 
 # The stamp's fact key — the PyPI distribution name. `render_schemas.py` owns
 # the document and states the same key (`CONTRACTS_VERSION_KEY`);

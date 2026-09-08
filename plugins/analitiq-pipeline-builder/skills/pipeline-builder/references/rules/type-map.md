@@ -46,13 +46,13 @@ than edited.
 | RULE-SHRD-012 | A `tags` list MUST NOT repeat a tag, and no tag MAY carry leading or trailing whitespace. | `any` | error | validator | `^\S(?:[\s\S]*\S)?$` |
 | RULE-SHRD-013 | An error-handling block MUST name what happens to a record once its retries are exhausted, from the vocabulary `RetryErrorHandlingBase` declares. | `any` | error | validator | `strategy`: `fail`, `dlq`, `skip` |
 | RULE-SHRD-014 | An authored document MUST NOT declare a field the registry stamps on insert or update; the authored models name the authorable fields and reject every other key. | `any` | error | validator | — |
-| RULE-TMAP-005 | A `regex` read rule's native pattern MUST compile under the ECMA-262 regex dialect. | `type-map` | error | validator | — |
-| RULE-TMAP-006 | A `regex` read rule's canonical MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | `type-map` | error | validator | — |
-| RULE-TMAP-007 | A `${` opening a placeholder in a canonical render MUST be closed around a non-empty name. | `type-map` | error | validator | — |
-| RULE-TMAP-008 | A write `exact` rule's canonical MUST hold against the cross-parameter bounds its Arrow family declares, and the native DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
-| RULE-TMAP-009 | A write `regex` rule's canonical matcher MUST compile under the ECMA-262 regex dialect, and the native DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
+| RULE-TMAP-005 | A `regex` read rule's native_type pattern MUST compile under the ECMA-262 regex dialect. | `type-map` | error | validator | — |
+| RULE-TMAP-006 | A `regex` read rule's arrow_type MUST be a full-string-valid Arrow type once its placeholders are read as parameter positions. | `type-map` | error | validator | — |
+| RULE-TMAP-007 | A `${` opening a placeholder in an arrow_type render MUST be closed around a non-empty name. | `type-map` | error | validator | — |
+| RULE-TMAP-008 | A write `exact` rule's arrow_type MUST hold against the cross-parameter bounds its Arrow family declares, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
+| RULE-TMAP-009 | A write `regex` rule's arrow_type matcher MUST compile under the ECMA-262 regex dialect, and the native_type DDL it renders MUST carry only well-formed placeholders. | `type-map` | error | validator | — |
 | RULE-TMAP-011 | A type map MUST NOT carry a catch-all rule standing in for whatever the map's earlier-resolving rules leave uncovered. | `type-map` | error | — | — |
-| RULE-TMAP-017 | A connector's write map MUST render every canonical type a source can hand its system, including the bare container markers an API source emits as literal canonicals. | `type-map` | warning | validator | — |
+| RULE-TMAP-017 | A connector's write map MUST render every Arrow type a source can hand its system, including the bare container markers an API source emits as literal Arrow types. | `type-map` | warning | validator | — |
 
 ## Advisory
 
@@ -64,12 +64,12 @@ single field looks wrong.
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
 | RULE-RETRY-001 | A block that allows no retry attempts MUST NOT declare a non-zero retry delay. | `any` | error | validator |
-| RULE-TMAP-001 | An `exact` read rule whose native names a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | validator |
-| RULE-TMAP-002 | A `regex` read rule whose native pattern spells a schemaless or structured container MUST NOT render a scalar canonical. | `type-map` | error | validator |
-| RULE-TMAP-003 | Every `${name}` a read rule's canonical render substitutes MUST name a capture group its own native pattern declares. | `type-map` | error | validator |
-| RULE-TMAP-004 | A read rule whose native pattern captures a declared parameter MUST carry that capture into its canonical render rather than rendering a canonical whose parameters are all fixed. | `type-map` | error | validator |
-| RULE-TMAP-010 | A capture feeding a canonical parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match. | `type-map` | error | validator |
-| RULE-TMAP-016 | Every `${name}` a write rule's rendered native substitutes MUST name a capture group its own `canonical` matcher declares. | `type-map` | error | — |
+| RULE-TMAP-001 | An `exact` read rule whose native_type names a schemaless or structured container MUST NOT render a scalar Arrow type. | `type-map` | error | validator |
+| RULE-TMAP-002 | A `regex` read rule whose native_type pattern spells a schemaless or structured container MUST NOT render a scalar Arrow type. | `type-map` | error | validator |
+| RULE-TMAP-003 | Every `${name}` a read rule's arrow_type render substitutes MUST name a capture group its own native_type pattern declares. | `type-map` | error | validator |
+| RULE-TMAP-004 | A read rule whose native_type pattern captures a declared parameter MUST carry that capture into its arrow_type render rather than rendering an Arrow type whose parameters are all fixed. | `type-map` | error | validator |
+| RULE-TMAP-010 | A capture feeding an arrow_type parameter position MUST NOT be able to match a value that position refuses, and a literal sharing a bounded position with such a capture MUST hold against every value that capture can match. | `type-map` | error | validator |
+| RULE-TMAP-016 | Every `${name}` a write rule's rendered native_type substitutes MUST name a capture group its own `arrow_type` matcher declares. | `type-map` | error | — |
 | RULE-TMAP-022 | A type map MUST NOT carry two rules an earlier one already resolves for — the same match kind over the same matcher, compared the way the reader compares it. | `type-map` | warning | validator |
 
 ## Referential
@@ -83,9 +83,9 @@ both artifacts, which is more than you are authoring at the moment.
 |---|---|---|---|---|
 | RULE-SHRD-007 | A `function` expression MUST name a function the engine's registry declares, including where documentation describes an unregistered one as planned. | `any` | error | — |
 | RULE-SHRD-008 | A ref path MUST be authored only from the scope paths the engine documents as supplied; the contract patterns the leading token alone, so an invented tail validates and resolves to nothing. | `any` | error | — |
-| RULE-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native or canonical its connector's own map leaves unresolved. | `type-map` | error | — |
-| RULE-TMAP-019 | A canonical family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. | `type-map` | warning | — |
-| RULE-TMAP-021 | A connection-scoped read rule MUST render the canonical type the endpoint document already froze for the native it matches. | `type-map` | error | — |
+| RULE-TMAP-018 | A connection-scoped type map MUST declare a rule only for a native_type or arrow_type its connector's own map leaves unresolved. | `type-map` | error | — |
+| RULE-TMAP-019 | An Arrow family a connector's write map leaves unrendered MUST be one the connector's own dialect renders in code, never one left out to cut scope. | `type-map` | warning | — |
+| RULE-TMAP-021 | A connection-scoped read rule MUST render the Arrow type the endpoint document already froze for the native_type it matches. | `type-map` | error | — |
 
 ## Procedural
 
@@ -99,8 +99,8 @@ one usually produces a document that validates and then behaves unexpectedly.
 | RULE-SHRD-009 | A value the platform derives at connection time MUST be declared as a `function` expression and MUST NOT be authored as a pre-computed literal. | `any` | error | — |
 | RULE-TMAP-012 | New rules on a connection-scoped type map MUST be appended after the rules already present, and a rule already there MUST NOT be removed, reordered or rewritten. | `type-map` | error | — |
 | RULE-TMAP-013 | A type map's rules MUST be authored in the order they are meant to resolve, with a narrow rule ahead of any broader rule that would also match its input. | `type-map` | error | — |
-| RULE-TMAP-014 | A `regex` read rule MUST spell the literals in its native pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored. | `type-map` | warning | validator |
-| RULE-TMAP-015 | A write rule's `canonical` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not. | `type-map` | warning | — |
+| RULE-TMAP-014 | A `regex` read rule MUST spell the literals in its native_type pattern the way the engine's native-type normalization spells the probe, because the probe is normalized before matching and the pattern is used exactly as authored. | `type-map` | warning | validator |
+| RULE-TMAP-015 | A write rule's `arrow_type` matcher MUST be spelled in the casing the canonical Arrow vocabulary uses, because write-side matching preserves case where read-side matching does not. | `type-map` | warning | — |
 
 ## Judgment
 

@@ -1,14 +1,14 @@
 """Type-map contract models — the on-disk `type-map-read.json` /
 `type-map-write.json` files a connector ships under its `definition/`.
 
-Each file is a top-level JSON array of `{match, native, canonical}` rules,
+Each file is a top-level JSON array of `{match, native_type, arrow_type}` rules,
 order significant (first match wins), non-empty. The two directions share the
 rule shape but invert which key is the *matcher* and which is *rendered*:
 
-- **read**  (`native → canonical`): match on `native`, render `canonical`
-  (the canonical side is the Apache Arrow vocabulary).
-- **write** (`canonical → native`): match on `canonical`, render `native`
-  (the native side is free-form dialect DDL).
+- **read**  (`native_type → arrow_type`): match on `native_type`, render
+  `arrow_type` (the rendered side is the Apache Arrow vocabulary).
+- **write** (`arrow_type → native_type`): match on `arrow_type`, render
+  `native_type` (the rendered side is free-form dialect DDL).
 
 Source of truth for both the published `type-map-read` / `type-map-write` JSON
 Schemas and the connector validator (which validates via `model_validate`).
@@ -33,9 +33,9 @@ from analitiq.contracts.arrow_grammar import (
 from analitiq.contracts.endpoints import ARROW_TYPE_PATTERN
 from analitiq.contracts.shared.common import StrictModel
 
-# A literal `canonical` uses the SAME strict Arrow vocabulary the endpoint
+# A literal `arrow_type` uses the SAME strict Arrow vocabulary the endpoint
 # `arrow_type` does (`ARROW_TYPE_PATTERN`, incl. the `Json`/`Object`/`List`
-# markers): one source of truth, so a type map cannot render a canonical an
+# markers): one source of truth, so a type map cannot render an Arrow type an
 # endpoint would reject. The pattern requires parameterized types to carry their
 # parameters (`Timestamp(MICROSECOND)`, not bare `Timestamp`).
 _ARROW_TYPE_RE = re.compile(ARROW_TYPE_PATTERN)
@@ -55,7 +55,7 @@ def normalize_native_type(value: str) -> str:
     read-side consumer normalizes with, so a native resolves identically
     wherever it is matched:
 
-    * **exact** rules — applied SYMMETRICALLY to the rule's `native` (at
+    * **exact** rules — applied SYMMETRICALLY to the rule's `native_type` (at
       map-build time) and to the probed native (at lookup), so a rule authored
       `varchar` or `CHARACTER  VARYING` still matches `VARCHAR` /
       `character varying`. SQL type names are case-insensitive and drivers
@@ -71,17 +71,17 @@ def normalize_native_type(value: str) -> str:
     return _NATIVE_WS_RUN.sub(" ", value.strip()).upper()
 
 
-def _validate_type_map_canonical(value: str) -> None:
-    """Validate a `canonical` Arrow type against the strict Arrow pattern.
+def _validate_type_map_arrow_type(value: str) -> None:
+    """Validate an `arrow_type` value against the strict Arrow pattern.
 
-    A literal is `fullmatch`ed directly. A templated canonical
+    A literal is `fullmatch`ed directly. A templated `arrow_type`
     (`Decimal128(${p}, ${s})`, `Timestamp(${unit})`) has each `${...}`
     substituted with a dummy first, then `fullmatch`ed — so the whole SHAPE is
     validated (a scalar carrying parameters like `Utf8(${x})`, trailing garbage,
     or a typo'd head all fail), not just the head. Several dummies are tried
     (one per parameter grammar — a number for int positions plus one keyword
     per unit family, derived from the vendored engine grammar); a templated
-    canonical is valid if ANY substitution yields a real Arrow type.
+    value is valid if ANY substitution yields a real Arrow type.
     Substitutions are parameter-positional, so one placeholder per parameter
     (`Decimal128(${p}, ${s})`, not `Decimal128(${p})`)."""
     if _PLACEHOLDER_RE.search(value):
@@ -92,7 +92,7 @@ def _validate_type_map_canonical(value: str) -> None:
     # `fullmatch`, not `match`, so a trailing newline (which Python `$` allows)
     # is rejected — matching the endpoint model's arrow_type check.
     if not any(_ARROW_TYPE_RE.fullmatch(c) for c in candidates):
-        raise ValueError(f"canonical {value!r} is not a valid Arrow type")
+        raise ValueError(f"arrow_type {value!r} is not a valid Arrow type")
     # Pattern first, cross-parameter bound second — same order as the endpoint
     # model sites, so one mistake gets one diagnosis (a shape error never
     # surfaces as a scale complaint) and the check only ever sees
@@ -112,9 +112,9 @@ _PYTHON_REGEX_FEATURE = re.compile(r"\(\?P[<=>]")
 
 # Canonical (Arrow) container heads — the engine's own vocabulary, so reasoning
 # over them is DB-agnostic. A read rule that maps a structured native to a
-# scalar canonical (not one of these) silently drops the value's structure.
+# scalar Arrow type (not one of these) silently drops the value's structure.
 # Derived from the vendored engine grammar (imported above): the structural
-# authored-shape markers plus opaque `Json` — the only container canonicals the
+# authored-shape markers plus opaque `Json` — the only container Arrow types the
 # executable vocabulary carries.
 
 
@@ -195,9 +195,9 @@ def _strip_regex_meta(pattern: str) -> str:
     return re.sub(r"\\(.)", r"\1", without_class_escapes)
 
 
-def _canonical_head(canonical: str) -> str:
+def _arrow_type_head(arrow_type: str) -> str:
     """Leading PascalCase Arrow type name (empty if it opens with `${…}`)."""
-    m = re.match(r"\s*([A-Za-z][A-Za-z0-9]*)", canonical)
+    m = re.match(r"\s*([A-Za-z][A-Za-z0-9]*)", arrow_type)
     return m.group(1) if m else ""
 
 
@@ -217,7 +217,7 @@ def _native_is_schemaless_container(native: str, match: str) -> bool:
 def _validate_render_placeholders(render: str) -> None:
     """Reject malformed `${...}` in a render template: an empty `${}` or an
     unclosed `${` (missing `}`). Applies to any render that may carry `${name}`
-    substitutions — a regex render, or an exact WRITE rule's `native` DDL."""
+    substitutions — a regex render, or an exact WRITE rule's `native_type` DDL."""
     if any(not name.strip() for name in _PLACEHOLDER_RE.findall(render)):
         raise ValueError(f"render value {render!r} contains an empty ${{}} placeholder")
     if "${" in _PLACEHOLDER_RE.sub("", render):
@@ -237,69 +237,69 @@ def _compile_ecma_matcher(matcher: str) -> "re.Pattern[str]":
         raise ValueError(f"matcher is not a valid regex ({exc})") from exc
 
 
-def _guard_container_not_collapsed(native: str, match: str, canonical: str) -> None:
-    """A schemaless/structured native must not resolve to a scalar canonical
+def _guard_container_not_collapsed(native_type: str, match: str, arrow_type: str) -> None:
+    """A schemaless/structured native_type must not resolve to a scalar Arrow type
     (which would silently drop the value's structure). Read direction only."""
-    if _native_is_schemaless_container(native, match):
-        head = _canonical_head(canonical)
+    if _native_is_schemaless_container(native_type, match):
+        head = _arrow_type_head(arrow_type)
         if head and head not in _CONTAINER_CANONICAL_HEADS:
             raise ValueError(
-                f"native {native!r} is a schemaless/structured container but "
-                f"resolves to scalar canonical {canonical!r}; map it to a container "
-                "canonical (`Json`, or `Object`/`List` for endpoint narrowings)"
+                f"native_type {native_type!r} is a schemaless/structured container but "
+                f"resolves to scalar arrow_type {arrow_type!r}; map it to a container "
+                "Arrow type (`Json`, or `Object`/`List` for endpoint narrowings)"
             )
 
 
-# An EXACT rule's `canonical` is a literal Arrow type. `ARROW_TYPE_PATTERN` both
+# An EXACT rule's `arrow_type` is a literal Arrow type. `ARROW_TYPE_PATTERN` both
 # validates the Arrow grammar AND forbids `${…}` (the grammar admits no `$`), so
-# this one field constraint replaces the runtime canonical-vocabulary + no-template
+# this one field constraint replaces the runtime Arrow-vocabulary + no-template
 # checks — and, unlike a `@model_validator`, it publishes into the generated JSON
-# Schema, so external consumers enforce it too. (A REGEX rule's canonical is a
+# Schema, so external consumers enforce it too. (A REGEX rule's `arrow_type` is a
 # render template or matcher and is validated at runtime instead — see below.)
-_ExactCanonical = Annotated[str, Field(min_length=1, pattern=ARROW_TYPE_PATTERN)]
+_ExactArrowType = Annotated[str, Field(min_length=1, pattern=ARROW_TYPE_PATTERN)]
 _NonEmptyStr = Annotated[str, Field(min_length=1)]
 
 
 class _TypeMapRuleBase(StrictModel):
-    """Shared fields for every `{match, native, canonical}` rule. `match` is the
+    """Shared fields for every `{match, native_type, arrow_type}` rule. `match` is the
     discriminator selecting the exact/regex variant."""
 
-    native: _NonEmptyStr
-    canonical: _NonEmptyStr
+    native_type: _NonEmptyStr
+    arrow_type: _NonEmptyStr
 
 
 class TypeMapReadExactRule(_TypeMapRuleBase):
-    """Read exact rule: literal `native` matches, literal Arrow `canonical` renders."""
+    """Read exact rule: literal `native_type` matches, literal Arrow `arrow_type` renders."""
 
     match: Literal["exact"]
-    canonical: _ExactCanonical
+    arrow_type: _ExactArrowType
 
     @model_validator(mode="after")
     def _check(self) -> "TypeMapReadExactRule":
         # Cross-parameter bounds the field pattern cannot express
         # (Decimal scale <= precision).
-        validate_cross_params(self.canonical)
-        _guard_container_not_collapsed(self.native, "exact", self.canonical)
+        validate_cross_params(self.arrow_type)
+        _guard_container_not_collapsed(self.native_type, "exact", self.arrow_type)
         return self
 
 
 class TypeMapReadRegexRule(_TypeMapRuleBase):
-    """Read regex rule: ECMA-262 `native` matches, Arrow `canonical` render template
+    """Read regex rule: ECMA-262 `native_type` matches, Arrow `arrow_type` render template
     (its `${name}` placeholders draw from the native's named captures)."""
 
     match: Literal["regex"]
 
     @model_validator(mode="after")
     def _check(self) -> "TypeMapReadRegexRule":
-        # `canonical` is a (possibly templated) Arrow type — validate its shape.
-        _validate_type_map_canonical(self.canonical)
-        compiled = _compile_ecma_matcher(self.native)
-        _validate_render_placeholders(self.canonical)
-        _guard_container_not_collapsed(self.native, "regex", self.canonical)
+        # `arrow_type` is a (possibly templated) Arrow type — validate its shape.
+        _validate_type_map_arrow_type(self.arrow_type)
+        compiled = _compile_ecma_matcher(self.native_type)
+        _validate_render_placeholders(self.arrow_type)
+        _guard_container_not_collapsed(self.native_type, "regex", self.arrow_type)
 
-        # Every `${name}` in the canonical render must name a native capture.
+        # Every `${name}` in the arrow_type render must name a native_type capture.
         capture_names = set(compiled.groupindex.keys())
-        placeholders = _PLACEHOLDER_RE.findall(self.canonical)
+        placeholders = _PLACEHOLDER_RE.findall(self.arrow_type)
         for name in placeholders:
             if name not in capture_names:
                 raise ValueError(
@@ -307,65 +307,65 @@ class TypeMapReadRegexRule(_TypeMapRuleBase):
                     f"(?<{name}>…) capture group"
                 )
         # Reverse correspondence: a native that CAPTURES parameters must not map to
-        # a FULLY hardcoded parameterized canonical that discards them (every match
+        # a FULLY hardcoded parameterized arrow_type that discards them (every match
         # would collapse to that one by-example constant). A literal parameterized
         # Arrow type carries `(...)`; match-and-discard is expressed with a
         # non-capturing group `(?:…)`. Scope: the detector keys on `(`
         # — paren-parameterized scalars (`Decimal128(…)`, `Timestamp(…)`).
-        # Deliberately out of scope: a partially-templated canonical
+        # Deliberately out of scope: a partially-templated arrow_type
         # (`Decimal128(${p}, 9)`, guarded by `not placeholders`) and a capture
-        # discarded into a hardcoded nested `<…>`/`[…]` canonical (governed by the
+        # discarded into a hardcoded nested `<…>`/`[…]` arrow_type (governed by the
         # schemaless-container rule instead).
-        if capture_names and not placeholders and "(" in self.canonical:
+        if capture_names and not placeholders and "(" in self.arrow_type:
             raise ValueError(
-                f"native {self.native!r} captures {sorted(capture_names)} but canonical "
-                f"{self.canonical!r} is a hardcoded parameterized type that discards them; "
+                f"native_type {self.native_type!r} captures {sorted(capture_names)} but arrow_type "
+                f"{self.arrow_type!r} is a hardcoded parameterized type that discards them; "
                 "reference the captures (e.g. `Decimal128(${p}, ${s})`) or use a "
                 "non-capturing group `(?:…)` if the parameter is intentionally dropped"
             )
         # Last, because it presumes every `${name}` resolves to a real capture:
-        # what the rule RENDERS must be a canonical whatever the native matches,
+        # what the rule RENDERS must be an Arrow type whatever the native_type matches,
         # and a templated position carries no value of its own — so the only
         # thing that decides it is the capture the render draws from.
         validate_template_bounds(
-            self.canonical,
-            lambda name, probes: _capture_language(self.native, name, probes),
+            self.arrow_type,
+            lambda name, probes: _capture_language(self.native_type, name, probes),
         )
         return self
 
 
 class TypeMapWriteExactRule(_TypeMapRuleBase):
-    """Write exact rule: literal Arrow `canonical` matches, `native` DDL renders."""
+    """Write exact rule: literal Arrow `arrow_type` matches, `native_type` DDL renders."""
 
     match: Literal["exact"]
-    canonical: _ExactCanonical
+    arrow_type: _ExactArrowType
 
     @model_validator(mode="after")
     def _check(self) -> "TypeMapWriteExactRule":
         # Cross-parameter bounds the field pattern cannot express
         # (Decimal scale <= precision).
-        validate_cross_params(self.canonical)
-        # A write `native` render may carry `${length}` DDL hints — they must be
+        validate_cross_params(self.arrow_type)
+        # A write `native_type` render may carry `${length}` DDL hints — they must be
         # syntactically valid (no empty `${}` / unclosed `${`).
-        _validate_render_placeholders(self.native)
+        _validate_render_placeholders(self.native_type)
         return self
 
 
 class TypeMapWriteRegexRule(_TypeMapRuleBase):
-    """Write regex rule: ECMA-262 `canonical` matches, `native` DDL render template.
-    `canonical` is the matcher here, so it is NOT held to the Arrow vocabulary."""
+    """Write regex rule: ECMA-262 `arrow_type` matches, `native_type` DDL render template.
+    `arrow_type` is the matcher here, so it is NOT held to the Arrow vocabulary."""
 
     match: Literal["regex"]
 
     @model_validator(mode="after")
     def _check(self) -> "TypeMapWriteRegexRule":
-        _compile_ecma_matcher(self.canonical)
-        _validate_render_placeholders(self.native)
+        _compile_ecma_matcher(self.arrow_type)
+        _validate_render_placeholders(self.native_type)
         return self
 
 
 # `match`-discriminated unions: the exact branch carries the Arrow `pattern` on
-# `canonical` (published into the JSON Schema); the regex branch keeps its
+# `arrow_type` (published into the JSON Schema); the regex branch keeps its
 # runtime-only render/capture checks. Both directions render a `oneOf` with a
 # `match` discriminator, so external validators reject exactly what the model does.
 TypeMapReadRule = Annotated[

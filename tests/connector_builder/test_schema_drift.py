@@ -1127,7 +1127,7 @@ IO_CONTRACTS = (
 
 EXPECTED_REPLICATION_KEYS = {"supported_methods", "cursor_mappings"}
 EXPECTED_DISCOVERY_ACTIONS = {"list_resources", "describe_resource"}
-EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native", "canonical"}
+EXPECTED_TYPE_MAP_RULE_KEYS = {"match", "native_type", "arrow_type"}
 
 
 # Each of the three specs above closes its set with an exhaustive-enumeration

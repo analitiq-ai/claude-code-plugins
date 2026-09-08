@@ -1,6 +1,6 @@
 id: RULE-TMAP-006
 statement: >
-  A `regex` read rule's canonical MUST be a full-string-valid Arrow type once
+  A `regex` read rule's arrow_type MUST be a full-string-valid Arrow type once
   its placeholders are read as parameter positions.
 tier: structural
 severity: error
@@ -9,7 +9,7 @@ validator: "analitiq.contracts.type_map::TypeMapReadRegexRule._check"
 owners: [connector-plugin, pipeline-plugin, engine]
 targets: [TypeMapReadRegexRule]
 rationale: >
-  The rendered canonical is what discovery freezes into the endpoint document,
+  The rendered arrow_type is what discovery freezes into the endpoint document,
   so a spelling outside the engine-published Arrow vocabulary would not fail
   here but at schema construction, with the column already declared. Matching
   full-string is what makes that check mean anything — a partial match would

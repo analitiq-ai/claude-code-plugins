@@ -145,10 +145,10 @@ rules for every document" says which file carries which artifact.
   changed under an unchanged parent. Reach for this when the diff withdraws
   something and nothing more specific fits, and say in the `note` what was
   withdrawn. A release is never patch because the vocabulary had no word for
-  what it took away), type-map-rule-removed, type-map-canonical-changed (an
+  what it took away), type-map-rule-removed, type-map-arrow-type-changed (an
   existing matcher now resolves to a different render — read map: an
-  existing `native` resolves to a different canonical; write map: an
-  existing `canonical` renders a different native DDL — either invalidates
+  existing `native_type` resolves to a different Arrow type; write map: an
+  existing `arrow_type` renders a different native DDL — either invalidates
   downstream consumers), endpoint-obligation-added (an addition an existing
   stream must satisfy rather than one it may opt into: a read param the
   stream is the source for that becomes `required`, so a stream supplying no

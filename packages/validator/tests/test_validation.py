@@ -217,7 +217,7 @@ def connector_base():
 
 def test_coverage_passes_when_map_covers_endpoints(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
@@ -228,7 +228,7 @@ def test_coverage_passes_with_lowercase_exact_matcher(tmp_path, connector_base, 
     # reported as uncovered. The endpoint declares `varchar`; the runtime
     # normalizes both sides and matches, so coverage must too.
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "varchar", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "varchar", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("varchar", "Utf8")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
     assert not _errors(findings), [e["message"] for e in _errors(findings)]
@@ -263,7 +263,7 @@ def _read_and_write(read_native, read_arrow, write_native, write_arrow):
 def test_directional_pairs_the_read_map_can_render(
         tmp_path, connector_base, validator, rules, read_pair, write_pair):
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": n, "canonical": c} for n, c in rules],
+                [{"match": "exact", "native_type": n, "arrow_type": c} for n, c in rules],
                 {"widgets.json": _read_and_write(*read_pair, *write_pair)})
     errors = _errors(validator.validate_document(
         connector_base, doc_path=tmp_path / "connector.json"))
@@ -275,7 +275,7 @@ def test_one_token_cannot_carry_two_canonicals(tmp_path, connector_base, validat
     # rejected: that token already resolves to the zoned canonical. Two entries that
     # resolve differently need two tokens, which the domain type map then spells.
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "date-time", "canonical": _UTC}],
+                [{"match": "exact", "native_type": "date-time", "arrow_type": _UTC}],
                 {"widgets.json": _read_and_write("date-time", _UTC, "date-time", _NAIVE)})
     errors = _errors(validator.validate_document(
         connector_base, doc_path=tmp_path / "connector.json"))
@@ -285,7 +285,7 @@ def test_one_token_cannot_carry_two_canonicals(tmp_path, connector_base, validat
 
 def test_coverage_flags_uncovered_native(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("BIGINT", "Int64")})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any("no matching rule" in e["message"] for e in errors)
@@ -293,7 +293,7 @@ def test_coverage_flags_uncovered_native(tmp_path, connector_base, validator):
 
 def test_coverage_flags_arrow_mismatch(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Int64")})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any("resolves to" in e["message"] and "Int64" in e["message"] for e in errors)
@@ -323,7 +323,7 @@ def _object_endpoint():
 def test_coverage_json_narrowing_allowed(tmp_path, connector_base, validator):
     # A read map that renders `Json` satisfies an endpoint declaring `Object`.
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "JSONB", "canonical": "Json"}],
+                [{"match": "exact", "native_type": "JSONB", "arrow_type": "Json"}],
                 {"widgets.json": _object_endpoint()})
     assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
 
@@ -331,7 +331,7 @@ def test_coverage_json_narrowing_allowed(tmp_path, connector_base, validator):
 def test_coverage_json_narrowing_is_narrow(tmp_path, connector_base, validator):
     # ...but `Json` does NOT satisfy a scalar like `Int64` (the allowance is narrow).
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "JSONB", "canonical": "Json"}],
+                [{"match": "exact", "native_type": "JSONB", "arrow_type": "Json"}],
                 {"widgets.json": _endpoint("JSONB", "Int64")})
     assert _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
 
@@ -347,24 +347,24 @@ def test_coverage_checks_field_named_like_a_keyword(tmp_path, connector_base, va
                       "properties": {"default": {"type": "string",
                           "native_type": "WEIRDTYPE", "arrow_type": "Utf8"}}}}}}}}
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],  # no WEIRDTYPE rule
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],  # no WEIRDTYPE rule
                 {"widgets.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any("WEIRDTYPE" in e["message"] and "no matching rule" in e["message"] for e in errors)
 
 
 def test_coverage_exact_match_normalizes_both_sides(validator):
-    # Mirrors the runtime reader: an `exact` rule's `native` is
+    # Mirrors the runtime reader: an `exact` rule's `native_type` is
     # normalized the same way as the probe — trim, collapse internal whitespace
     # runs, uppercase — on BOTH sides. So a lowercase or extra-spaced matcher
     # covers the (normalized) endpoint native, exactly as the runtime resolves
     # it — the validator is no longer stricter than the runtime.
-    assert validator._render_canonical("STRING", [{"match": "exact", "native": "string", "canonical": "Utf8"}]) == "Utf8"
-    assert validator._render_canonical("STRING", [{"match": "exact", "native": "STRING", "canonical": "Utf8"}]) == "Utf8"
+    assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "string", "arrow_type": "Utf8"}]) == "Utf8"
+    assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]) == "Utf8"
     # Whitespace: a two-space matcher covers a single-space native.
-    assert validator._render_canonical("character varying", [{"match": "exact", "native": "CHARACTER  VARYING", "canonical": "Utf8"}]) == "Utf8"
+    assert validator._render_arrow_type("character varying", [{"match": "exact", "native_type": "CHARACTER  VARYING", "arrow_type": "Utf8"}]) == "Utf8"
     # A genuinely different native is still uncovered.
-    assert validator._render_canonical("STRING", [{"match": "exact", "native": "BIGINT", "canonical": "Int64"}]) is None
+    assert validator._render_arrow_type("STRING", [{"match": "exact", "native_type": "BIGINT", "arrow_type": "Int64"}]) is None
 
 
 def test_normalize_native_is_the_canonical(validator):
@@ -378,8 +378,8 @@ def test_normalize_native_is_the_canonical(validator):
     assert normalize_native_type("Timestamp\tWith Time  Zone") == "TIMESTAMP WITH TIME ZONE"
 
 
-def test_canonical_eq_normalizes_separators_not_identifiers(validator):
-    eq = validator._canonical_eq
+def test_arrow_type_eq_normalizes_separators_not_identifiers(validator):
+    eq = validator._arrow_type_eq
     assert eq("Decimal128(38, 9)", "Decimal128(38,9)")          # param spacing insignificant
     assert eq("Timestamp(MICROSECOND, UTC)", "Timestamp(MICROSECOND,UTC)")
     # Whitespace INSIDE a token is significant — must NOT compare equal.
@@ -399,8 +399,8 @@ def test_walk_collects_tuple_form_items(validator):
 def test_coverage_regex_rule_with_capture(tmp_path, connector_base, validator):
     # A regex read rule with a named capture + ${name} render must resolve.
     _write_tree(tmp_path, connector_base,
-                [{"match": "regex", "native": r"NUMERIC\((?<p>[1-9]|[12]\d|3[0-8]),\s*(?<s>\d|[12]\d|3[0-8])\)",
-                  "canonical": "Decimal128(${p}, ${s})"}],
+                [{"match": "regex", "native_type": r"NUMERIC\((?<p>[1-9]|[12]\d|3[0-8]),\s*(?<s>\d|[12]\d|3[0-8])\)",
+                  "arrow_type": "Decimal128(${p}, ${s})"}],
                 {"widgets.json": _endpoint("NUMERIC(38,9)", "Decimal128(38, 9)")})
     assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
 
@@ -411,7 +411,7 @@ def test_coverage_flags_duplicate_endpoint_id(tmp_path, connector_base, validato
     # not only obliquely as a filename mismatch.
     ep = _endpoint("STRING", "Utf8", endpoint_id="dup", path="/dup")
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"dup.json": ep, "other.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any(e["validator"] == "endpoint-id-unique" and "dup" in e["message"] for e in errors)
@@ -422,7 +422,7 @@ def test_coverage_distinct_endpoint_ids_pass(tmp_path, connector_base, validator
     a = _endpoint("STRING", "Utf8", endpoint_id="alpha", path="/alpha")
     b = _endpoint("STRING", "Utf8", endpoint_id="beta", path="/beta")
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"alpha.json": a, "beta.json": b})
     assert not _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
 
@@ -493,7 +493,7 @@ def test_coverage_non_dict_endpoint_file_no_crash(tmp_path, connector_base, vali
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector_base))
     (tmp_path / "type-map-read.json").write_text(
-        json.dumps([{"match": "exact", "native": "STRING", "canonical": "Utf8"}]))
+        json.dumps([{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]))
     (tmp_path / "endpoints" / "widgets.json").write_text("[]")  # array, not object
     errs = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert errs
@@ -505,7 +505,7 @@ def test_coverage_flags_endpoint_id_locator_mismatch(tmp_path, connector_base, v
     # is gated (filename still matches the id; only the locator rule catches it).
     ep = _endpoint("STRING", "Utf8", endpoint_id="widgets", path="/v1/widgets")
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": ep})
     errors = _errors(validator.validate_document(connector_base, doc_path=tmp_path / "connector.json"))
     assert any(e["validator"] == "endpoint-id-locator" for e in errors)
@@ -569,15 +569,15 @@ def _min_connector(kind: str):
 
 
 def test_coverage_database_requires_write_map(tmp_path, validator):
-    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native":"BIGINT","canonical":"Int64"}]')
+    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"BIGINT","arrow_type":"Int64"}]')
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector("database"), tmp_path / "connector.json"))
     assert any("type-map-write.json" in e["message"] for e in errors)
 
 
 def test_coverage_api_rejects_write_map(tmp_path, validator):
-    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native":"STRING","canonical":"Utf8"}]')
-    (tmp_path / "type-map-write.json").write_text('[{"match":"exact","canonical":"Utf8","native":"TEXT"}]')
+    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"STRING","arrow_type":"Utf8"}]')
+    (tmp_path / "type-map-write.json").write_text('[{"match":"exact","arrow_type":"Utf8","native_type":"TEXT"}]')
     (tmp_path / "endpoints").mkdir()
     (tmp_path / "endpoints" / "w.json").write_text("{}")
     (tmp_path / "connector.json").write_text("{}")
@@ -586,8 +586,8 @@ def test_coverage_api_rejects_write_map(tmp_path, validator):
 
 
 def test_coverage_flags_legacy_type_map(tmp_path, validator):
-    (tmp_path / "type-map.json").write_text('[{"match":"exact","native":"X","canonical":"Utf8"}]')
-    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native":"X","canonical":"Utf8"}]')
+    (tmp_path / "type-map.json").write_text('[{"match":"exact","native_type":"X","arrow_type":"Utf8"}]')
+    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"X","arrow_type":"Utf8"}]')
     (tmp_path / "endpoints").mkdir()
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage(_min_connector("api"), tmp_path / "connector.json"))
@@ -597,7 +597,7 @@ def test_coverage_flags_legacy_type_map(tmp_path, validator):
 @pytest.mark.parametrize("kind", ["database", "nosql", "document"])
 def test_coverage_database_family_requires_write_map(tmp_path, kind, validator):
     # nosql/document are database-family kinds — same read+write map requirement.
-    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native":"BIGINT","canonical":"Int64"}]')
+    (tmp_path / "type-map-read.json").write_text('[{"match":"exact","native_type":"BIGINT","arrow_type":"Int64"}]')
     (tmp_path / "connector.json").write_text("{}")
     errors = _errors(validator.check_coverage({"kind": kind, "transports": {}}, tmp_path / "connector.json"))
     assert any("type-map-write.json" in e["message"] for e in errors)
@@ -681,8 +681,8 @@ def test_is_stem_addressed_endpoint_path_public_helper(validator):
 def test_type_map_direction_from_schema_url(validator, tmp_path):
     # A write map from a generic filename is validated as write when --schema-url
     # points at type-map-write (backward-compatible direction hint).
-    write_rules = [{"match": "regex", "canonical": r"^Decimal128\((?<p>\d+),(?<s>\d+)\)",
-                    "native": "NUMERIC(${p}, ${s})"}]
+    write_rules = [{"match": "regex", "arrow_type": r"^Decimal128\((?<p>\d+),(?<s>\d+)\)",
+                    "native_type": "NUMERIC(${p}, ${s})"}]
     p = tmp_path / "generic.json"
     as_read = _errors(validator.validate_document(write_rules, doc_path=p))
     as_write = _errors(validator.validate_document(
@@ -694,7 +694,7 @@ def test_coverage_flags_nested_endpoint_file(tmp_path, connector_base, validator
     # A nested endpoints/**/x.json must be flagged (matches the registry gate,
     # which rejects non-flat endpoint paths) rather than silently ignored.
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
     nested = tmp_path / "endpoints" / "v1"
     nested.mkdir()
@@ -730,8 +730,8 @@ def _warnings(findings):
 
 
 def test_duplicate_type_map_rule_warns(validator):
-    rules = [{"match": "exact", "native": "STRING", "canonical": "Utf8"},
-             {"match": "exact", "native": "STRING", "canonical": "Utf8"}]
+    rules = [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"},
+             {"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}]
     warns = _warnings(validator.validate_document(rules))
     assert any("duplicate" in w["message"] for w in warns)
 
@@ -741,8 +741,8 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
     # matcher at runtime (first wins), so the second is unreachable — the dedup
     # must normalize the same way the reader does and flag it, even when the
     # rules map to DIFFERENT canonicals (a real, if rare, authoring bug).
-    rules = [{"match": "exact", "native": "character varying", "canonical": "Utf8"},
-             {"match": "exact", "native": "CHARACTER  VARYING", "canonical": "LargeUtf8"}]
+    rules = [{"match": "exact", "native_type": "character varying", "arrow_type": "Utf8"},
+             {"match": "exact", "native_type": "CHARACTER  VARYING", "arrow_type": "LargeUtf8"}]
     warns = _warnings(validator.validate_document(rules))
     assert any("duplicate" in w["message"] for w in warns)
 
@@ -764,7 +764,7 @@ def test_duplicate_exact_read_rule_warns_across_case_and_whitespace(validator):
 ])
 def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native, warns):
     findings = validator.validate_document(
-        [{"match": "regex", "native": native, "canonical": "Utf8"}],
+        [{"match": "regex", "native_type": native, "arrow_type": "Utf8"}],
         doc_path=tmp_path / "type-map-read.json")
     dead = [w for w in _warnings(findings)
             if w["validator"] == "type-map-rule" and "can never match" in w["message"]]
@@ -774,7 +774,7 @@ def test_regex_lowercase_literal_warning_truth_table(validator, tmp_path, native
 def test_write_vocabulary_gap_warns(validator, tmp_path):
     # A write map missing whole canonical families → advisory warning.
     p = tmp_path / "type-map-write.json"
-    findings = validator.validate_document([{"match": "exact", "canonical": "Utf8", "native": "TEXT"}],
+    findings = validator.validate_document([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}],
                                            doc_path=p)
     assert any(w["validator"] == "type-map-write-coverage" for w in _warnings(findings))
 
@@ -785,7 +785,7 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     # markers — a map without rules for them hard-errors the stream at
     # configuration. The coverage warning must name both.
     p = tmp_path / "type-map-write.json"
-    findings = validator.validate_document([{"match": "exact", "canonical": "Utf8", "native": "TEXT"}],
+    findings = validator.validate_document([{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"}],
                                            doc_path=p)
     # StopIteration here is the failure signal working, not a case to guard:
     # no coverage warning at all means the probe stopped running.
@@ -794,9 +794,9 @@ def test_write_vocabulary_probes_bare_container_markers(validator, tmp_path):
     )
     assert "'Object'" in gap["message"] and "'List'" in gap["message"]
 
-    covered = [{"match": "exact", "canonical": "Utf8", "native": "TEXT"},
-               {"match": "exact", "canonical": "Object", "native": "JSONB"},
-               {"match": "exact", "canonical": "List", "native": "JSONB"}]
+    covered = [{"match": "exact", "arrow_type": "Utf8", "native_type": "TEXT"},
+               {"match": "exact", "arrow_type": "Object", "native_type": "JSONB"},
+               {"match": "exact", "arrow_type": "List", "native_type": "JSONB"}]
     findings = validator.validate_document(covered, doc_path=p)
     # Covering the two markers must narrow the warning, not silence it — the map
     # still lacks rules for other probes. So StopIteration here is the failure
@@ -817,7 +817,7 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
     # families are covered by regex on purpose, pinning that a regex rule
     # fullmatching the bare probe satisfies it.
     full_map = [
-        {"match": "exact", "canonical": c, "native": n}
+        {"match": "exact", "arrow_type": c, "native_type": n}
         for c, n in [
             ("Boolean", "BOOLEAN"), ("Int8", "SMALLINT"), ("Int16", "SMALLINT"),
             ("Int32", "INTEGER"), ("Int64", "BIGINT"), ("UInt8", "SMALLINT"),
@@ -829,11 +829,11 @@ def test_write_vocabulary_fully_covered_map_warns_nothing(validator, tmp_path):
             ("Null", "TEXT"),
         ]
     ] + [
-        {"match": "regex", "canonical": r"^Decimal(128|256)\((?<p>\d+),\s*(?<s>\d+)\)$",
-         "native": "NUMERIC(${p}, ${s})"},
-        {"match": "regex", "canonical": r"^Time(32|64)\([A-Z]+\)$", "native": "TIME"},
-        {"match": "regex", "canonical": r"^Timestamp\([A-Z]+\)$", "native": "TIMESTAMP"},
-        {"match": "regex", "canonical": r"^Duration\([A-Z]+\)$", "native": "INTERVAL"},
+        {"match": "regex", "arrow_type": r"^Decimal(128|256)\((?<p>\d+),\s*(?<s>\d+)\)$",
+         "native_type": "NUMERIC(${p}, ${s})"},
+        {"match": "regex", "arrow_type": r"^Time(32|64)\([A-Z]+\)$", "native_type": "TIME"},
+        {"match": "regex", "arrow_type": r"^Timestamp\([A-Z]+\)$", "native_type": "TIMESTAMP"},
+        {"match": "regex", "arrow_type": r"^Duration\([A-Z]+\)$", "native_type": "INTERVAL"},
     ]
     findings = validator.validate_document(full_map, doc_path=tmp_path / "type-map-write.json")
     coverage = [f for f in findings if f["validator"] == "type-map-write-coverage"]
@@ -907,7 +907,7 @@ def _database_tree(root: Path, *, read_map: str | None, write_map: bool, endpoin
         (root / _READ_MAP_FILENAME).write_text(read_map)
     if write_map:
         (root / _WRITE_MAP_FILENAME).write_text(
-            '[{"match":"exact","canonical":"Utf8","native":"TEXT"}]')
+            '[{"match":"exact","arrow_type":"Utf8","native_type":"TEXT"}]')
     if endpoints:
         (root / "endpoints").mkdir()
         (root / "endpoints" / "misnamed.json").write_text(
@@ -956,7 +956,7 @@ def test_database_missing_both_maps_reports_both(tmp_path, validator):
 
 def test_clean_tree_emits_no_coverage_finding(tmp_path, connector_base, validator):
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("STRING", "Utf8")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
     assert [f for f in findings if f["validator"] == "type-map-coverage"] == [], findings
@@ -966,7 +966,7 @@ def test_rendered_coverage_reports_only_the_uncovered_native(tmp_path, connector
     # A readable map renders, so the uncovered native is the only thing coverage
     # has to say — no warning about a rendering that did happen.
     _write_tree(tmp_path, connector_base,
-                [{"match": "exact", "native": "STRING", "canonical": "Utf8"}],
+                [{"match": "exact", "native_type": "STRING", "arrow_type": "Utf8"}],
                 {"widgets.json": _endpoint("BIGINT", "Int64")})
     findings = validator.validate_document(connector_base, doc_path=tmp_path / "connector.json")
     coverage = [f for f in findings if f["validator"] == "type-map-coverage"]

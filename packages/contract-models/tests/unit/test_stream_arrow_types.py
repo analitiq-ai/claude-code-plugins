@@ -6,7 +6,7 @@ chokepoint (which carries the cross-parameter check) as the endpoint `Column`
 classes — but nothing else in the suite exercises the STREAM side of that
 wiring, so a stream-model refactor that dropped either would be invisible.
 Representative accept/reject per model, not a full per-family matrix: the
-vocabulary itself is exhaustively pinned in test_canonical_types_schema.py.
+vocabulary itself is exhaustively pinned in test_arrow_types_schema.py.
 """
 from __future__ import annotations
 

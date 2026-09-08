@@ -493,7 +493,7 @@ def test_the_connector_walk_labels_findings_with_the_endpoint_filename(tmp_path,
     (tmp_path / "endpoints").mkdir(parents=True)
     (tmp_path / "connector.json").write_text(json.dumps(connector))
     (tmp_path / "type-map-read.json").write_text(json.dumps(
-        [{"match": "exact", "native": "BOOLEAN", "canonical": "Boolean"}]))
+        [{"match": "exact", "native_type": "BOOLEAN", "arrow_type": "Boolean"}]))
     (tmp_path / "endpoints" / "widgets.json").write_text(
         json.dumps(_read_endpoint({"paid": STRING_FLAG})))
 

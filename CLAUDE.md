@@ -20,7 +20,7 @@ into `plugins/`.
 `packages/contract-models`; `render_schemas.py check` re-renders and fails on any
 diff, and CI runs it. Never hand-edit a file under `schemas/`. Two versionless
 documents are generated the same way and covered by `check`:
-`canonical-types.json` (from the vendored engine grammar) and
+`arrow-types.json` (from the vendored engine grammar) and
 `contracts-version.json`, the provenance stamp recording which
 `analitiq-contract-models` version the tree renders from plus a digest of it —
 the `contracts-version-guard` CI job holds the published copy, and
@@ -44,7 +44,7 @@ the platform executes is an engine capability surface: analitiq-core publishes
 `arrow-type-grammar` and `conversion-matrix` at `schemas.analitiq.ai`, and this
 repo vendors one pinned grammar version at
 `packages/contract-models/src/analitiq/contracts/arrow_type_grammar.json`.
-`ARROW_TYPE_PATTERN`, the canonical-types `$defs` and the container-head set are
+`ARROW_TYPE_PATTERN`, the arrow-types `$defs` and the container-head set are
 all derived from it; `analitiq.contracts.arrow_grammar` states the pin (version +
 sha256) once. Both artifacts self-declare a top-level `version` and keep their
 payload under a key of its own — the grammar's families under `families`, the
@@ -52,7 +52,7 @@ matrix's grid under `conversions`. Always read those keys, never the document
 itself. `test_arrow_grammar.py` and the `engine-grammar-pin-guard` CI job hold the
 vendored bytes and the self-declared versions to the pin. A family is added by
 shipping it in the engine first, then bumping the pin here (re-vendor,
-`render_schemas.py canonical-types`, re-render, re-run the plugin doc generator) —
+`render_schemas.py arrow-types`, re-render, re-run the plugin doc generator) —
 never by hand-editing the vocabulary.
 
 **`plugins/<name>/` is a distribution artifact.** Its contents are copied verbatim

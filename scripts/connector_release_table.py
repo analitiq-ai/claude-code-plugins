@@ -185,15 +185,15 @@ CATEGORIES: tuple[Category, ...] = (
     ),
     Category("type-map-rule-removed", "major", "Type-map rule removed"),
     Category(
-        "type-map-canonical-changed",
+        "type-map-arrow-type-changed",
         "major",
-        "Render side changed for an existing matcher (read map: `canonical` "
-        "changed for an existing `native`; write map: `native` changed for "
-        "an existing `canonical`)",
+        "Render side changed for an existing matcher (read map: `arrow_type` "
+        "changed for an existing `native_type`; write map: `native_type` changed for "
+        "an existing `arrow_type`)",
         note=(
             "an existing matcher now resolves to a different render — read "
-            "map: an existing `native` resolves to a different canonical; "
-            "write map: an existing `canonical` renders a different native "
+            "map: an existing `native_type` resolves to a different Arrow type; "
+            "write map: an existing `arrow_type` renders a different native "
             "DDL — either invalidates downstream consumers"
         ),
     ),

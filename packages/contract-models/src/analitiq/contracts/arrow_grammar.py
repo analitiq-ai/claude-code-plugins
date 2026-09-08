@@ -15,7 +15,7 @@ This module vendors ONE pinned, immutable version of the grammar manifest
 from it everything the contract used to restate by hand:
 
 - the `ARROW_TYPE_PATTERN` alternatives (re-exported by `endpoints.py`),
-- the published `canonical-types.json` `$defs` (via `scripts/render_schemas.py`),
+- the published `arrow-types.json` `$defs` (via `scripts/render_schemas.py`),
 - the container-head set type-map validation reasons over,
 - the dummy substitutions templated type-map canonicals are checked with.
 
@@ -46,7 +46,7 @@ Updating the pin:
   here can be an envelope/shape change rather than a vocabulary change (v2.0.0
   moved the grid under `conversions`), which means the guard's reader may need
   teaching before the pin can move.
-- Then re-render the schemas (`render_schemas.py canonical-types`, plus any
+- Then re-render the schemas (`render_schemas.py arrow-types`, plus any
   affected resource) and re-run the plugin doc generator.
 
 Per the re-add policy a family appears here only after the engine executes it:

@@ -367,7 +367,7 @@ access and may not guess field types).
               "record-field-removed", "record-field-type-changed",
               "filter-operators-narrowed", "conflict-keys-changed",
               "endpoint-capability-narrowed", "type-map-rule-removed",
-              "type-map-canonical-changed", "optional-input-added",
+              "type-map-arrow-type-changed", "optional-input-added",
               "optional-output-added", "optional-endpoint-added",
               "write-mode-added", "record-field-added",
               "filter-operators-widened", "endpoint-obligation-added",
@@ -406,7 +406,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
       "anyOf": [
         {
           "$ref": "https://schemas.analitiq.ai/type-map-read/latest.json",
-          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): `native` is the matcher (regex patterns authored UPPERCASE) and `canonical` is the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native`). Written by the orchestrator to {connector_id}/definition/type-map-read.json."
+          "description": "On-disk shape of the standalone type-map-read.json (native → Arrow): `native_type` is the matcher (regex patterns authored UPPERCASE) and `arrow_type` is the rendered Arrow type (may carry ${name} substitutions backed by named captures in `native_type`). Written by the orchestrator to {connector_id}/definition/type-map-read.json."
         },
         { "type": "null", "description": "Returned by stub agents that decline to author." }
       ]
@@ -415,7 +415,7 @@ Returned by `api-connector-creator` and `db-connector-creator`.
       "anyOf": [
         {
           "$ref": "https://schemas.analitiq.ai/type-map-write/latest.json",
-          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Same rule shape as the read map but the direction inverts: `canonical` is the matcher (regex with ECMA named captures for parameterized types) and `native` is the rendered DDL (may carry ${name} substitutions backed by captures in `canonical`). Canonical-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
+          "description": "On-disk shape of the standalone type-map-write.json (Arrow → native DDL render rules). Which kinds must ship it, and which must not: `RULE-PKG-030`. Same rule shape as the read map but the direction inverts: `arrow_type` is the matcher (regex with ECMA named captures for parameterized types) and `native_type` is the rendered DDL (may carry ${name} substitutions backed by captures in `arrow_type`). Canonical-vocabulary coverage, and when a family may be left unrendered: `RULE-TMAP-019`. Written to {connector_id}/definition/type-map-write.json."
         },
         { "type": "null", "description": "kind=api connectors and stub agents return null — the write direction is a database-package concept." }
       ]

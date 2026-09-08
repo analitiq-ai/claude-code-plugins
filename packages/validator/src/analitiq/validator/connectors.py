@@ -152,14 +152,14 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
                         normalize: Callable[[str], str] | None = None) -> str | None:
     """First-match-wins render; substitutes `${name}` from regex captures.
 
-    For read maps `normalize` is the canonical `normalize_native_type` (imported
-    as `_normalize_native`) and is applied to BOTH sides of an `exact`
-    comparison — the incoming probe and the rule's `native` matcher — because
-    every runtime reader normalizes an exact rule's `native` the same way it
-    normalizes the lookup value, so the two must agree here too. A `regex`
-    matcher is never normalized (uppercasing would turn `\\d` into `\\D`); only
-    its probe is. `normalize` is None for write maps, where the `canonical`
-    matcher is compared as authored.
+    For read maps `normalize` is `normalize_native_type` (imported as
+    `_normalize_native`) and is applied to BOTH sides of an `exact`
+    comparison — the incoming probe and the rule's `native_type` matcher —
+    because every runtime reader normalizes an exact rule's `native_type` the
+    same way it normalizes the lookup value, so the two must agree here too. A
+    `regex` matcher is never normalized (uppercasing would turn `\\d` into
+    `\\D`); only its probe is. `normalize` is None for write maps, where the
+    `arrow_type` matcher is compared as authored.
     """
     probe = normalize(value) if normalize else value
     for rule in rules:
@@ -188,23 +188,24 @@ def _first_match_render(value: str, rules: list, matcher_key: str, render_key: s
     return None
 
 
-def _render_canonical(native: str, rules: list) -> str | None:
-    return _first_match_render(native, rules, "native", "canonical", normalize=_normalize_native)
+def _render_arrow_type(native_type: str, rules: list) -> str | None:
+    return _first_match_render(native_type, rules, "native_type", "arrow_type",
+                               normalize=_normalize_native)
 
 
 # Collapse whitespace ONLY around Arrow separators — not inside identifiers.
-_CANONICAL_SEP_WS = re.compile(r"\s*([,()])\s*")
+_ARROW_SEP_WS = re.compile(r"\s*([,()])\s*")
 
 
-def _canonical_eq(a: str, b: str) -> bool:
-    """Compare two Arrow canonical types ignoring separator spacing only. The
+def _arrow_type_eq(a: str, b: str) -> bool:
+    """Compare two Arrow types ignoring separator spacing only. The
     intra-parameter spacing of `Decimal128(38, 9)` vs `Decimal128(38,9)` is not
     significant, but whitespace INSIDE a token IS (`Time stamp(SECOND)` is not
     `Timestamp(SECOND)`) — so whitespace is collapsed only around the Arrow
     separators (`,()`, the vocabulary's only SEPARATOR punctuation; `:`/`/`/`+`
     occur only inside timezone tokens, where whitespace stays significant),
     never deleted wholesale."""
-    norm = lambda s: _CANONICAL_SEP_WS.sub(r"\1", s).strip()  # noqa: E731
+    norm = lambda s: _ARROW_SEP_WS.sub(r"\1", s).strip()  # noqa: E731
     return norm(a) == norm(b)
 
 
@@ -524,7 +525,7 @@ def _embedded_schema_example_findings(ep_doc: dict, label: str = "") -> list[dic
     return findings
 
 
-# Representative canonicals a write map should render; gaps are warnings (a
+# Representative Arrow types a write map should render; gaps are warnings (a
 # dialect may override rendering for a family). `Object`/`List` are the bare
 # shape markers destination columns carry verbatim when an API source hands over
 # a struct/array field — the engine probes the write map with the document's
@@ -558,7 +559,7 @@ _WRITE_PROBE_EXCLUDED_FAMILIES: dict[str, str] = {
 
 
 def _family_probe(name: str) -> str:
-    """One representative canonical for a family: each REQUIRED parameter takes
+    """One representative Arrow type for a family: each REQUIRED parameter takes
     the first value its grammar allows, and optional parameters are omitted.
 
     Omitting optionals is why the tz-aware `Timestamp(<unit>, <tz>)` spelling is
@@ -596,16 +597,16 @@ _WRITE_VOCABULARY_PROBES: tuple[str, ...] = tuple(
 
 
 def _write_vocabulary_findings(rules: list) -> list[dict]:
-    """Warn when a write map renders no rule for a canonical family."""
+    """Warn when a write map renders no rule for an Arrow family."""
     missing = [
         probe for probe in _WRITE_VOCABULARY_PROBES
-        if _first_match_render(probe, rules, "canonical", "native") is None
+        if _first_match_render(probe, rules, "arrow_type", "native_type") is None
     ]
     if not missing:
         return []
     return [finding(
         "type-map-write-coverage", "warning", "/",
-        f"write map has no rule rendering these canonical families: {missing}. "
+        f"write map has no rule rendering these Arrow families: {missing}. "
         "If the dialect renders them via a column-type override this is expected; "
         "otherwise add rules so they materialize.",
     )]
@@ -616,7 +617,7 @@ def _type_map_rule_warnings(rules: list, direction: str) -> list[dict]:
     rules (later ones unreachable) and read patterns that can never match."""
     if not isinstance(rules, list):
         return []
-    matcher_key = "native" if direction == "read" else "canonical"
+    matcher_key = "native_type" if direction == "read" else "arrow_type"
     findings: list[dict] = []
     seen: set[tuple[Any, Any]] = set()
     for i, rule in enumerate(rules):
@@ -1070,13 +1071,13 @@ def check_coverage(doc: dict, doc_path: Path | None) -> list[dict]:
         # that did not load skips it, and the connector-level warning says so.
         if isinstance(read_doc, list):
             for native, arrow, pointer in _collect_native_arrow_pairs(ep_doc):
-                rendered = _render_canonical(native, read_doc)
+                rendered = _render_arrow_type(native, read_doc)
                 site = f"{ep_path.name}{pointer}"
                 if rendered is None:
                     findings.append(finding("type-map-coverage", "error", "/",
                                             f"native_type {native!r} at {site} has no matching rule in "
                                             f"sibling {_READ_MAP_FILENAME}."))
-                elif not _canonical_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
+                elif not _arrow_type_eq(rendered, arrow) and not (rendered == "Json" and arrow in _NARROWING_ARROW_TYPES):
                     findings.append(finding("type-map-coverage", "error", "/",
                                             f"native_type {native!r} at {site} resolves to {rendered!r} via "
                                             f"{_READ_MAP_FILENAME} but the endpoint declares arrow_type={arrow!r}."))

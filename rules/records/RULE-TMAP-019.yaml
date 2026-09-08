@@ -1,6 +1,6 @@
 id: RULE-TMAP-019
 statement: >
-  A canonical family a connector's write map leaves unrendered MUST be one the
+  An Arrow family a connector's write map leaves unrendered MUST be one the
   connector's own dialect renders in code, never one left out to cut scope.
 tier: referential
 severity: warning

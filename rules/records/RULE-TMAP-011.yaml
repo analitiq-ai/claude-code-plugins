@@ -8,7 +8,7 @@ scopes: [type-map]
 validator: null
 owners: [connector-plugin, pipeline-plugin, engine]
 rationale: >
-  An unmapped native or canonical is meant to stop the stream loudly, so the
+  An unmapped native_type or arrow_type is meant to stop the stream loudly, so the
   gap is visible and gets closed in whichever map owns it; a catch-all converts
   that into silent type corruption, handing every unrecognised column whatever
   the fallback renders while the map reads as complete. The temptation is real

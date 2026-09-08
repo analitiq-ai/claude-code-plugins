@@ -2,12 +2,12 @@
   "$defs": {
     "TypeMapReadExactRule": {
       "additionalProperties": false,
-      "description": "Read exact rule: literal `native` matches, literal Arrow `canonical` renders.",
+      "description": "Read exact rule: literal `native_type` matches, literal Arrow `arrow_type` renders.",
       "properties": {
-        "canonical": {
+        "arrow_type": {
           "minLength": 1,
           "pattern": "^(?:Binary|Boolean|Date32|Date64|Decimal128\\((?:[1-9]|1[0-9]|2[0-9]|3[0-8])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-8])\\)|Decimal256\\((?:[1-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\s*,\\s*(?:[0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9]|5[0-9]|6[0-9]|7[0-6])\\)|Duration\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)\\)|FixedSizeBinary\\([1-9][0-9]*\\)|Float16|Float32|Float64|Int16|Int32|Int64|Int8|Json|LargeBinary|LargeUtf8|List|Null|Object|Time32\\((?:SECOND|MILLISECOND)\\)|Time64\\((?:MICROSECOND|NANOSECOND)\\)|Timestamp\\((?:SECOND|MILLISECOND|MICROSECOND|NANOSECOND)(?:\\s*,\\s*(?:null|[A-Za-z_][A-Za-z0-9_\\/\\-]*|Etc\\/GMT[+\\-][0-9]{1,2}|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9]))?\\)|UInt16|UInt32|UInt64|UInt8|Utf8)$",
-          "title": "Canonical",
+          "title": "Arrow Type",
           "type": "string"
         },
         "match": {
@@ -15,15 +15,15 @@
           "title": "Match",
           "type": "string"
         },
-        "native": {
+        "native_type": {
           "minLength": 1,
-          "title": "Native",
+          "title": "Native Type",
           "type": "string"
         }
       },
       "required": [
-        "native",
-        "canonical",
+        "native_type",
+        "arrow_type",
         "match"
       ],
       "title": "TypeMapReadExactRule",
@@ -31,11 +31,11 @@
     },
     "TypeMapReadRegexRule": {
       "additionalProperties": false,
-      "description": "Read regex rule: ECMA-262 `native` matches, Arrow `canonical` render template\n(its `${name}` placeholders draw from the native's named captures).",
+      "description": "Read regex rule: ECMA-262 `native_type` matches, Arrow `arrow_type` render template\n(its `${name}` placeholders draw from the native's named captures).",
       "properties": {
-        "canonical": {
+        "arrow_type": {
           "minLength": 1,
-          "title": "Canonical",
+          "title": "Arrow Type",
           "type": "string"
         },
         "match": {
@@ -43,15 +43,15 @@
           "title": "Match",
           "type": "string"
         },
-        "native": {
+        "native_type": {
           "minLength": 1,
-          "title": "Native",
+          "title": "Native Type",
           "type": "string"
         }
       },
       "required": [
-        "native",
-        "canonical",
+        "native_type",
+        "arrow_type",
         "match"
       ],
       "title": "TypeMapReadRegexRule",
@@ -60,7 +60,7 @@
   },
   "$id": "https://schemas.analitiq.ai/type-map-read/latest.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Public JSON Schema contract for a connector's `type-map-read.json` \u2014 the read direction (native \u2192 canonical) of its type-map pair, a top-level array of `{match, native, canonical}` rules, order significant (first match wins). The full per-rule contract (ECMA-262 regex, `${name}` capture correspondence, canonical vocabulary, schemaless-container handling) lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapReadDoc (Pydantic).",
+  "description": "Public JSON Schema contract for a connector's `type-map-read.json` \u2014 the read direction (native_type \u2192 arrow_type) of its type-map pair, a top-level array of `{match, native_type, arrow_type}` rules, order significant (first match wins). The full per-rule contract (ECMA-262 regex, `${name}` capture correspondence, Arrow vocabulary, schemaless-container handling) lives in the model and is enforced by the connector validator; this published schema is the structural projection. Source of truth: analitiq.contracts.type_map.TypeMapReadDoc (Pydantic).",
   "items": {
     "discriminator": {
       "mapping": {
@@ -81,5 +81,5 @@
   "minItems": 1,
   "title": "Analitiq Type Map (read)",
   "type": "array",
-  "version": "3.0.0"
+  "version": "4.0.0"
 }
