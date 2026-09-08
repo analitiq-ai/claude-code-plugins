@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.2.1...analitiq-pipeline-builder-v0.3.0) (2026-09-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* a type-map document keyed `native`/`canonical` no longer validates. Both keys must be renamed to `native_type`/`arrow_type`.
+* the vocabulary's home is now `arrow-types.json` (bare, or `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`), not `canonical-types.json` (bare, or `#/$defs/canonical_type` / `#/$defs/canonical_type_or_template`). Schema publishing never deletes, so the old path keeps resolving — but it is now frozen at its last-rendered content and describes the retired `native`/`canonical` key spelling. Move any `$ref` to the new path rather than relying on the old one.
+
+### Features
+
+* native_type and arrow_type are the only declared type keys ([b6cba01](https://github.com/analitiq-ai/claude-code-plugins/commit/b6cba0179dbaee9ff2102acc2fcb7deabe9171af))
+* structural records name their shape device where the constant exists ([8e3561a](https://github.com/analitiq-ai/claude-code-plugins/commit/8e3561a41644f6b4ccdfece52a275b65bc712922))
+* the vocabulary document exports arrow_type, not canonical_type ([f6e219a](https://github.com/analitiq-ai/claude-code-plugins/commit/f6e219a76021787140949c5dcb440172d646e22e))
+* **validator:** grade a recorded sample against the node declaring it ([e7da677](https://github.com/analitiq-ai/claude-code-plugins/commit/e7da6779c6ccfbc798a9841a999fade208faba16))
+
+
+### Bug Fixes
+
+* name the retired document, and drop the word from the probe id ([dca03f5](https://github.com/analitiq-ai/claude-code-plugins/commit/dca03f53726fa043f9a22ade197fb4a105755101))
+* the rename reaches the prose, and the probe grades what it claims ([98ba580](https://github.com/analitiq-ai/claude-code-plugins/commit/98ba5802aceb8804873cc7fad59036ee6b821f6f))
+
 ## [0.2.1](https://github.com/analitiq-ai/claude-code-plugins/compare/analitiq-pipeline-builder-v0.2.0...analitiq-pipeline-builder-v0.2.1) (2026-08-14)
 
 
