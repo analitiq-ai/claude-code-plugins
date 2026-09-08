@@ -6,7 +6,7 @@
 ### ⚠ BREAKING CHANGES
 
 * a type-map document keyed `native`/`canonical` no longer validates. Both keys must be renamed to `native_type`/`arrow_type`.
-* a `$ref` at `canonical-types.json` — bare, or at `#/$defs/canonical_type` / `#/$defs/canonical_type_or_template` — no longer resolves. Point it at `arrow-types.json`, bare or at `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template` respectively; the bare document root validates the same way the bare `#/$defs/canonical_type` fragment did.
+* the vocabulary's home is now `arrow-types.json` (bare, or `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`), not `canonical-types.json` (bare, or `#/$defs/canonical_type` / `#/$defs/canonical_type_or_template`). Schema publishing never deletes, so the old path keeps resolving — but it is now frozen at its last-rendered content and describes the retired `native`/`canonical` key spelling. Move any `$ref` to the new path rather than relying on the old one.
 
 ### Features
 
