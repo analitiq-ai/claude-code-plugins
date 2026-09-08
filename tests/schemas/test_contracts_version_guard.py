@@ -189,11 +189,15 @@ def test_strict_retry_recovers_once_the_pointer_catches_up(
     guard, monkeypatch, tmp_path, capsys
 ):
     # The state the loop exists for: the publish already landed, the CDN
-    # just hadn't caught up yet when the first sample was taken.
+    # just hadn't caught up yet when the first sample was taken. The match
+    # sits BEFORE a still-diverging response, never consumed, so this proves
+    # the loop stops as soon as the bytes agree rather than always taking a
+    # fixed number of laps — a fixed-count bug would call `next(responses)` a
+    # third time and raise StopIteration instead of the assertions below.
     _pin_matching_stamp(guard, monkeypatch, tmp_path)
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
     responses = iter(
-        [_fact(guard, "0.0.0"), _fact(guard, "0.0.0"), guard.COMMITTED_PATH.read_bytes()]
+        [_fact(guard, "0.0.0"), guard.COMMITTED_PATH.read_bytes(), _fact(guard, "0.0.0")]
     )
     calls: list[str] = []
 
@@ -203,7 +207,7 @@ def test_strict_retry_recovers_once_the_pointer_catches_up(
 
     monkeypatch.setattr(guard, "_fetch", fetch)
     assert guard.main() == 0
-    assert calls == [guard.PUBLISHED_URL] * 3
+    assert calls == [guard.PUBLISHED_URL] * 2
     assert "OK: published stamp == committed stamp" in capsys.readouterr().out
 
 
@@ -222,11 +226,38 @@ def test_strict_retry_reports_progress_and_terminates(guard, monkeypatch, capsys
     calls = _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
     assert guard.main() == 1
     out = capsys.readouterr().out
-    assert "retrying in" in out
-    assert f"{guard.RETRY_BUDGET_SECONDS:.0f}s publish pointer TTL budget" in out
-    # Bounded by the budget over the interval (plus the first sample and a
-    # final check past the deadline) — never an infinite loop.
-    assert len(calls) <= guard.RETRY_BUDGET_SECONDS // guard.RETRY_INTERVAL_SECONDS + 2
+    assert "retrying in" in out and "retry window" in out
+    # Exact, not just bounded: an off-by-one in the deadline/loop arithmetic
+    # (stopping one lap early, or looping one lap too many) must fail this
+    # rather than slip through a padded inequality. The retry window is one
+    # interval wider than the budget (fetch_published_with_retry's margin
+    # against the CDN's own expiry boundary), and under the fake clock the
+    # loop samples once per interval across that window plus the initial
+    # sample.
+    window = guard.RETRY_BUDGET_SECONDS + guard.RETRY_INTERVAL_SECONDS
+    assert len(calls) == window / guard.RETRY_INTERVAL_SECONDS + 1
+
+
+def test_strict_retry_reports_the_final_sample_not_a_cached_first_one(
+    guard, monkeypatch, capsys
+):
+    # Each call returns a distinct, still-diverging value — a bug that
+    # cached the first response (while still making real, discarded fetches
+    # each lap to keep the call count looking right) would report "0.0.0"
+    # here instead of the last value actually sampled.
+    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
+    calls: list[str] = []
+
+    def fetch(url: str) -> bytes:
+        calls.append(url)
+        return (
+            _fact(guard, f"0.0.{len(calls) - 1}") if url == guard.PUBLISHED_URL else b"{}"
+        )
+
+    monkeypatch.setattr(guard, "_fetch", fetch)
+    assert guard.main() == 1
+    err = capsys.readouterr().err
+    assert f"0.0.{len(calls) - 1}" in err
 
 
 def test_same_release_stale_digest_warns_on_ordinary_prs(guard, monkeypatch, capsys):
@@ -276,11 +307,15 @@ def test_pin_lag_fails_strict(guard, monkeypatch, tmp_path, capsys):
     stale_pin = tmp_path / "_bootstrap.py"
     stale_pin.write_text('VALIDATOR_PIN = "analitiq-validator==0.0.1"\n')
     monkeypatch.setattr(guard, "PIN_SOURCE", stale_pin)
-    _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
+    calls = _stub_fetch(guard, monkeypatch, guard.COMMITTED_PATH.read_bytes())
     assert guard.main() == 1
     err = capsys.readouterr().err
     # The strict arm cites the tolerance it deliberately tightens.
     assert "VALIDATOR_PIN" in err and "CLAUDE.md" in err
+    # The pin catch-up divergence is graded only after the published bytes
+    # already match — not a network race, so it must fail on the first
+    # sample rather than entering the retry loop.
+    assert len(calls) == 1
 
 
 def test_pin_lag_warns_on_ordinary_prs(guard, monkeypatch, tmp_path, capsys):

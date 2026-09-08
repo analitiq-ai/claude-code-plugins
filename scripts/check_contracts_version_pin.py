@@ -25,11 +25,13 @@ offline test can see:
      mid-tree, or never ran (its `schemas` environment holds deployments
      for reviewer approval, so the stamp-changing push itself reaches this
      guard before the upload; a failed run retriggers only on the next
-     schemas/ push) all leave a stale or absent stamp and land here — after
-     a strict run has already retried across the publish's own pointer TTL
-     (`.github/workflows/schemas-publish.yml` owns the cache-control), so a
-     completed-but-not-yet-propagated publish resolves on its own instead of
-     reaching this guard at all. What this deliberately does NOT reach: an
+     schemas/ push) all leave a stale or absent stamp and land here. A
+     completed publish that simply has not propagated through the CDN yet
+     does NOT land here on a strict run: `fetch_published_with_retry`
+     already retries across the publish's own pointer TTL
+     (`.github/workflows/schemas-publish.yml` owns the cache-control) before
+     this step ever sees the divergence. What this deliberately does NOT
+     reach: an
      out-of-band write to some OTHER published object after a completed
      publish leaves the stamp intact — the stamp witnesses the last
      completed publish, not the bucket's current contents. The remediation
@@ -62,20 +64,24 @@ verdicts behind it are this guard's own):
   - CONTRACTS_VERSION_GUARD_STRICT=1 (CI sets it on pushes and on
     release-please branches): a published-fact or missing-stamp divergence
     (step 2) is retried — `fetch_published_with_retry` re-samples every
-    RETRY_INTERVAL_SECONDS until the published bytes match the committed
-    stamp or RETRY_BUDGET_SECONDS has elapsed, so a strict run no longer
-    reds on the schemas-publish pointer TTL by itself
+    RETRY_INTERVAL_SECONDS across a window one interval wider than
+    RETRY_BUDGET_SECONDS (margin against landing exactly on the CDN's own
+    expiry boundary), until the published bytes match the committed stamp
+    or the window is spent, so a strict run no longer reds on the
+    schemas-publish pointer TTL by itself
     (`.github/workflows/schemas-publish.yml` uploads that pointer with a
-    matching cache-control max-age; `test_retry_budget_covers_the_publish_ttl`
-    holds the two together). A run that still diverges once the budget is
-    spent FAILS: the standing signal that the committed render has not been
-    published, needing the `schemas` deployment approved or
-    schemas-publish.yml re-run before this job is re-run. The pin catch-up
-    divergence (step 3) is not a network race — it is graded only after step
-    2 already holds — so it fails on the first sample; that one is
-    deliberately TIGHTER than the offline "at or behind" tolerance (root
-    CLAUDE.md, "The contract, and the runtime pin", which governs the merge
-    gate): the red is the reminder that finishes the release.
+    cache-control max-age RETRY_BUDGET_SECONDS is pinned to at least —
+    `test_retry_budget_covers_the_publish_ttl` holds the floor). A run that
+    still diverges once the window is spent FAILS: the standing signal that
+    the committed render has not been published, needing the `schemas`
+    deployment approved or schemas-publish.yml re-run before this job is
+    re-run. The pin catch-up divergence (step 3) is not a network race — it
+    is graded only after step 2 already holds, and the loop returns as soon
+    as step 2's bytes match — so it fails on the first sample; that one is
+    deliberately TIGHTER than
+    the offline "at or behind" tolerance (root CLAUDE.md, "The contract, and
+    the runtime pin", which governs the merge gate): the red is the reminder
+    that finishes the release.
   - unset (ordinary PRs): divergences WARN (checks-UI annotation) and the
     job passes — a stale published fact is main's problem, and a release
     PR's stamp legitimately runs ahead of the published tree until it
@@ -195,27 +201,36 @@ def fetch_published() -> bytes | None:
         return None
 
 
-#: How long a strict run waits out schemas-publish.yml's own pointer TTL
-#: before minting a divergence verdict, and how often it re-samples while
-#: waiting. Bound to (at least) the mutable-pointer cache-control max-age
-#: that workflow uploads with — `test_retry_budget_covers_the_publish_ttl`
-#: reads that value back and holds the two together, so retrying for less
-#: than the CDN's own TTL (and reddening every schemas-touching push on the
-#: propagation window alone) cannot silently come back.
+#: The floor for how long a strict run waits out schemas-publish.yml's own
+#: pointer TTL before minting a divergence verdict, and how often it
+#: re-samples while waiting. Bound to (at least) the mutable-pointer
+#: cache-control max-age that workflow uploads with —
+#: `test_retry_budget_covers_the_publish_ttl` reads that value back and
+#: holds the floor, so retrying for less than the CDN's own TTL (and
+#: reddening every schemas-touching push on the propagation window alone)
+#: cannot silently come back. `fetch_published_with_retry` waits one
+#: RETRY_INTERVAL_SECONDS beyond this floor (see its docstring) rather than
+#: exactly up to it.
 RETRY_BUDGET_SECONDS = 300.0
 RETRY_INTERVAL_SECONDS = 20.0
 
 #: Overridable by tests so the loop's *behavior* (call count, termination on
-#: budget exhaustion, termination on a match) is exercised without either
-#: sleeping in real time or faking the wall clock. Production always binds
-#: the real ones.
+#: window exhaustion, termination on a match) is exercised without
+#: sleeping in real time. Production always binds the real ones; tests
+#: replace only these two local names — never the global `time` module —
+#: with a simulated clock that `_sleep` itself advances.
 _sleep = time.sleep
 _monotonic = time.monotonic
 
 
-def fetch_published_with_retry(*, strict: bool) -> bytes | None:
+def fetch_published_with_retry(committed_bytes: bytes, *, strict: bool) -> bytes | None:
     """`fetch_published`, retried in strict mode until the bytes it returns
-    match the committed stamp or RETRY_BUDGET_SECONDS has elapsed.
+    match `committed_bytes` or the retry window elapses.
+
+    The window is RETRY_BUDGET_SECONDS plus one extra RETRY_INTERVAL_SECONDS:
+    the deadline sits past the floor `test_retry_budget_covers_the_publish_ttl`
+    pins to the CDN's own TTL, so the sample deciding the verdict is not the
+    one racing that exact boundary against this job's own request latency.
 
     Warn-mode runs (ordinary PRs) fetch once, unretried: a stale published
     fact there is not a race to wait out — a release PR's committed stamp
@@ -224,8 +239,7 @@ def fetch_published_with_retry(*, strict: bool) -> bytes | None:
     """
     if not strict:
         return fetch_published()
-    committed_bytes = COMMITTED_PATH.read_bytes()
-    deadline = _monotonic() + RETRY_BUDGET_SECONDS
+    deadline = _monotonic() + RETRY_BUDGET_SECONDS + RETRY_INTERVAL_SECONDS
     while True:
         published_bytes = fetch_published()
         if published_bytes == committed_bytes:
@@ -237,7 +251,7 @@ def fetch_published_with_retry(*, strict: bool) -> bytes | None:
         print(
             f"published stamp still diverges from the committed one — "
             f"retrying in {wait:.0f}s ({remaining:.0f}s left of the "
-            f"{RETRY_BUDGET_SECONDS:.0f}s publish pointer TTL budget)"
+            f"retry window)"
         )
         _sleep(wait)
 
@@ -298,7 +312,7 @@ def run() -> int:
     print(f"committed: {committed}  validator pin: {pin_version}  strict: {strict}")
 
     committed_bytes = COMMITTED_PATH.read_bytes()
-    published_bytes = fetch_published_with_retry(strict=strict)
+    published_bytes = fetch_published_with_retry(committed_bytes, strict=strict)
 
     # Per divergent state: (what strict runs are told, what warn runs are
     # told). The strict text carries the on-main remediation; the warn text
