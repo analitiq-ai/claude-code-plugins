@@ -5136,6 +5136,9 @@ def _for_each_record_shape_position(
     than the `false` that closes the tuple or the unconstrained default
     that leaves it open — a record at an unclosed tail position could be
     any shape, so "the field resolves at every position" cannot hold there.
+    An empty `prefixItems` (`[]`) imposes no positional constraint at all —
+    every index falls to `items` — so it is treated as the homogeneous case,
+    not a tuple with zero positions.
 
     The pre-2020-12 tuple form (`items: [...]`) is refused outright — no
     backwards-compatibility accommodation for a form the contract's own
@@ -5149,13 +5152,13 @@ def _for_each_record_shape_position(
             "shape with `prefixItems` instead (spec: §Cross-Field Validation)"
         )
     prefix_items = array_node.get("prefixItems")
-    if prefix_items is not None:
-        if not isinstance(prefix_items, list) or not prefix_items:
-            raise ValueError(
-                f"{subject} is declared but the response.schema records array "
-                "`prefixItems` is not a non-empty list of object subschemas — "
-                "tighten the response schema (spec: §Cross-Field Validation)"
-            )
+    if prefix_items is not None and not isinstance(prefix_items, list):
+        raise ValueError(
+            f"{subject} is declared but the response.schema records array "
+            "`prefixItems` is not a list of object subschemas — tighten the "
+            "response schema (spec: §Cross-Field Validation)"
+        )
+    if prefix_items:
         for idx, sub in enumerate(prefix_items):
             if not isinstance(sub, dict):
                 raise ValueError(

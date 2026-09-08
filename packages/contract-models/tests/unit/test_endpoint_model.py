@@ -3000,9 +3000,17 @@ class TestRecordsArrayPrefixItems:
                 {"type": "object", "properties": {}},
             ))
 
-    def test_empty_prefix_items_rejected(self):
-        with pytest.raises(ValidationError, match="non-empty list"):
-            parse_endpoint(self._payload([], False))
+    def test_empty_prefix_items_treated_as_homogeneous(self):
+        # `prefixItems: []` imposes no positional constraint at all — every
+        # index falls to `items` — so it is the ordinary homogeneous case,
+        # not a tuple with zero positions.
+        parse_endpoint(self._payload(
+            [], {"type": "object", "properties": {"updated_at": {"type": "string"}}},
+        ))
+
+    def test_empty_prefix_items_with_untyped_items_rejected(self):
+        with pytest.raises(ValidationError, match="cannot be verified"):
+            parse_endpoint(self._payload([], True))
 
     def test_non_object_prefix_position_rejected(self):
         with pytest.raises(ValidationError, match="not an object schema"):
