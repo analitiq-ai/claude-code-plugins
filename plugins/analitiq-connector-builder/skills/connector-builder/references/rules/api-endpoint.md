@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds an **`api-endpoint`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 20 of the 84 below have no validator, so nothing rejects
+all hold: 20 of the 85 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **36** structural · **31** advisory · **8** referential · **4** procedural · **5** judgment.
+In this file: **36** structural · **32** advisory · **8** referential · **4** procedural · **5** judgment.
 
 ## Contents
 
@@ -114,6 +114,7 @@ single field looks wrong.
 | RULE-ENDP-068 | A `filters` map key MUST resolve by declared-path resolution against the read operation's response schema record shape. | `api-endpoint` | error | validator |
 | RULE-ENDP-070 | A `filters` map entry's landing site — `from_param`, or `param` on a template landing — MUST name a param the same operation declares. | `api-endpoint` | error | validator |
 | RULE-ENDP-071 | Two `filters` map entries anywhere in the map MUST NOT resolve to the same landing site. | `api-endpoint` | error | validator |
+| RULE-ENDP-072 | A `filters` map entry's `template` MUST interpolate `${stream.filters.<field>.value}` for the field/operator entry it is declared on. | `api-endpoint` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential

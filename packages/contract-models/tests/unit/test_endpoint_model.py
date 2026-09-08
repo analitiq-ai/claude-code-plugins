@@ -731,11 +731,44 @@ class TestFiltersWiring:
         # A request is built before the response exists — the identical
         # never-has-a-value defect `_validate_response_body_paths` refuses
         # for request.query/headers/body, now reached through `filters`.
+        # The current-value placeholder is present too, so RULE-ENDP-072
+        # passes and this is graded on the response ref alone.
         with pytest.raises(ValidationError, match="request is built before the response exists"):
             parse_endpoint(_minimal_api_payload(operations={
                 "read": _filters_read_op({
                     "created": {
-                        "gt": {"param": "minAmount", "template": "${response.body.total}"},
+                        "gt": {
+                            "param": "minAmount",
+                            "template": "${response.body.total}${stream.filters.created.value}",
+                        },
+                    },
+                }),
+            }))
+
+    def test_template_with_no_current_value_placeholder_rejected(self):
+        # A constant template uses a known scope nowhere — it uses none at
+        # all — so RULE-ENDP-032's check passes it. Every value for this
+        # field/operator would render the identical request; RULE-ENDP-072
+        # is what refuses it.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {"gt": {"param": "minAmount", "template": "status:active"}},
+                }),
+            }))
+
+    def test_template_referencing_a_different_fields_value_rejected(self):
+        # `stream.filters.total.value` is a known scope, so it clears
+        # RULE-ENDP-032 too — but it is the total field's own value, not the
+        # created field/operator entry this landing is declared on.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {
+                            "param": "minAmount",
+                            "template": "${stream.filters.total.value}",
+                        },
                     },
                 }),
             }))

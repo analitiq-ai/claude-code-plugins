@@ -3687,7 +3687,8 @@ def _validate_filters_wiring(
     filters: dict[str, dict[str, Any]], params: dict[str, Param]
 ) -> None:
     """Every `filters` entry lands on a declared, non-`controlled_by` param,
-    and no two entries anywhere in the map land on the same one.
+    no two entries anywhere in the map land on the same one, and a
+    `template` landing interpolates the entry's own filter value.
 
     Both landing forms name a destination param (`from_param` / `param`), so
     one param existence/`controlled_by` check and one uniqueness check cover
@@ -3699,6 +3700,11 @@ def _validate_filters_wiring(
     `filters`' landing is a routing declaration, not a request binding —
     whether the named param is itself bound into a request location at all is
     `_validate_param_binding_uniqueness`'s separate, already-covered concern.
+
+    RULE-ENDP-072 is checked here, not on `TemplateFilterLanding` itself: a
+    single-model `field_validator` sees the template string alone and cannot
+    know which `filters` key/operator pair it is nested under, so it cannot
+    tell a constant or a wrong-field reference from the entry's own value.
     """
     seen: dict[str, tuple[str, str]] = {}
     for field, landings in filters.items():
@@ -3728,6 +3734,15 @@ def _validate_filters_wiring(
                     f"filters.{field}.{operator} both land on param {name!r}",
                 )
             seen[name] = (field, operator)
+            if isinstance(landing, TemplateFilterLanding):
+                current_value = f"stream.filters.{field}.value"
+                if current_value not in template_placeholders(landing.template):
+                    raise violation(
+                        "RULE-ENDP-072",
+                        f"filters.{field}.{operator}.template {landing.template!r} "
+                        f"does not interpolate ${{{current_value}}} — every value "
+                        "for this field/operator renders the identical request",
+                    )
 
 
 def _validate_param_binding_uniqueness(

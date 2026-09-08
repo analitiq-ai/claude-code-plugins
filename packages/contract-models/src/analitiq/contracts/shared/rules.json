@@ -4068,6 +4068,32 @@
    "superseded_by": null
   },
   {
+   "id": "RULE-ENDP-072",
+   "statement": "A `filters` map entry's `template` MUST interpolate `${stream.filters.<field>.value}` for the field/operator entry it is declared on.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "api-endpoint"
+   ],
+   "validator": "analitiq.contracts.endpoints::ReadOperation._wiring",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ReadOperation"
+   ],
+   "fields": [
+    "filters"
+   ],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "A `template` is a full value-expression string, checked only for known resolution scopes (RULE-ENDP-032) — a constant (`\"status:active\"`) and a template referencing a different field's filter value both use a known scope and pass that check. Either shape sends the same rendered value to the provider whatever the stream's actual filter carries: every value for that field/operator produces one request, and a run can return silently incorrect rows with no finding anywhere. `${stream.filters.<field>.value}` is the one placeholder form that ties the rendered value back to the filter this entry exists to express, so its absence is refused at authoring time rather than left to a run to discover.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
    "id": "RULE-HTTP-001",
    "statement": "A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively.\n",
    "tier": "advisory",
