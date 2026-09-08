@@ -7,6 +7,7 @@
 
 * a type-map document keyed `native`/`canonical` no longer validates. Both keys must be renamed to `native_type`/`arrow_type`.
 * the vocabulary's home is now `arrow-types.json` (bare, or `#/$defs/arrow_type` / `#/$defs/arrow_type_or_template`), not `canonical-types.json` (bare, or `#/$defs/canonical_type` / `#/$defs/canonical_type_or_template`). Schema publishing never deletes, so the old path keeps resolving — but it is now frozen at its last-rendered content and describes the retired `native`/`canonical` key spelling. Move any `$ref` to the new path rather than relying on the old one.
+* the public `DriftVerdict.category` value `type-map-canonical-changed` is retired; a write-map render change now reports `type-map-render-changed`. A consumer with an enum check or dispatch table keyed on the old value must add the new one.
 
 ### Features
 
@@ -42,7 +43,6 @@
 * **contracts:** classify RULE-ENDP-065's pattern, dedup its rationale ([040dee8](https://github.com/analitiq-ai/claude-code-plugins/commit/040dee8fc15d7a5f4574d4742bfa01df3ab7cc9a))
 * **contracts:** refuse a dialect declaration below an embedded schema's root ([0dd82ff](https://github.com/analitiq-ai/claude-code-plugins/commit/0dd82ff2dfb2d6e2062145b8d5147ac6ed605b1f)), closes [#209](https://github.com/analitiq-ai/claude-code-plugins/issues/209)
 * correct stale citations across 15 sites (closes [#222](https://github.com/analitiq-ai/claude-code-plugins/issues/222) partially — 1 site deferred) ([99d18a6](https://github.com/analitiq-ai/claude-code-plugins/commit/99d18a6628d746c839784e357a4eccbdad7890cf))
-* correct stale citations to symbols, tests and paths that no longer exist ([6cf093d](https://github.com/analitiq-ai/claude-code-plugins/commit/6cf093d228d8cdc13fc2cc8bb30f6c4a2053c6a5))
 * land the rules audit's findings on the placeholder rules ([1f0f39d](https://github.com/analitiq-ai/claude-code-plugins/commit/1f0f39d6b0ba0f14b2838188a719547c6cf1e35a))
 * land the rules audit's prose findings ([23343f2](https://github.com/analitiq-ai/claude-code-plugins/commit/23343f27a72d4120efa87d33287732714bc39fcd))
 * name the retired document, and drop the word from the probe id ([dca03f5](https://github.com/analitiq-ai/claude-code-plugins/commit/dca03f53726fa043f9a22ade197fb4a105755101))
