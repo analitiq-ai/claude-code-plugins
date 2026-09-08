@@ -2,12 +2,13 @@
 
 The guard's network half runs only in CI (`contracts-version-guard` job), so
 its verdict logic — published-vs-committed byte equality, the pin comparison,
-strict-vs-warn windows, missing-object handling and its probe
-corroboration — would otherwise only ever execute against live healthy data,
-where an inverted comparison is a permanent false green. Same charter as
-`test_engine_grammar_guard.py` next door: every verdict branch offline, with
-the fetch monkeypatched out, plus the readers against the real working tree
-and the CI job's wiring.
+strict-vs-warn windows, missing-object handling, its probe corroboration and
+the strict-mode retry loop — would otherwise only ever execute against live
+healthy data, where an inverted comparison is a permanent false green. Same
+charter as `test_engine_grammar_guard.py` next door: every verdict branch
+offline, with the fetch monkeypatched out and the retry loop's clock replaced
+so no test sleeps in real time, plus the readers against the real working
+tree and the CI job's wiring.
 """
 from __future__ import annotations
 
@@ -50,6 +51,23 @@ def _plain_env(monkeypatch):
     monkeypatch.delenv("CONTRACTS_VERSION_GUARD_STRICT", raising=False)
     monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _fake_clock(guard, monkeypatch):
+    """Replace the retry loop's clock with one `_sleep` advances itself.
+
+    Every strict-mode test that reaches `fetch_published_with_retry` runs
+    the loop to one of its two ends — a match or the exhausted budget — and
+    without this, a permanently-diverging stub would block each such test
+    for RETRY_BUDGET_SECONDS of real `time.sleep`. The fake clock keeps the
+    loop's own termination logic (compare against a real deadline, sleep the
+    remaining budget on the last lap) exercised, just against simulated
+    elapsed time instead of the wall clock.
+    """
+    clock = [0.0]
+    monkeypatch.setattr(guard, "_monotonic", lambda: clock[0])
+    monkeypatch.setattr(guard, "_sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
 
 
 def _fact(guard, version: str) -> bytes:
@@ -157,10 +175,36 @@ def test_published_mismatch_warns_on_ordinary_prs(guard, monkeypatch, capsys):
 
 def test_published_mismatch_fails_strict(guard, monkeypatch, capsys):
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
-    _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
+    calls = _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
     assert guard.main() == 1
     err = capsys.readouterr().err
     assert "DIVERGENCE" in err and "workflow_dispatch" in err
+    # A permanently diverging stamp must be retried across the whole budget,
+    # not failed on the first sample — otherwise this is the exact race the
+    # loop exists to close.
+    assert len(calls) > 1
+
+
+def test_strict_retry_recovers_once_the_pointer_catches_up(
+    guard, monkeypatch, tmp_path, capsys
+):
+    # The state the loop exists for: the publish already landed, the CDN
+    # just hadn't caught up yet when the first sample was taken.
+    _pin_matching_stamp(guard, monkeypatch, tmp_path)
+    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
+    responses = iter(
+        [_fact(guard, "0.0.0"), _fact(guard, "0.0.0"), guard.COMMITTED_PATH.read_bytes()]
+    )
+    calls: list[str] = []
+
+    def fetch(url: str) -> bytes:
+        calls.append(url)
+        return next(responses) if url == guard.PUBLISHED_URL else b"{}"
+
+    monkeypatch.setattr(guard, "_fetch", fetch)
+    assert guard.main() == 0
+    assert calls == [guard.PUBLISHED_URL] * 3
+    assert "OK: published stamp == committed stamp" in capsys.readouterr().out
 
 
 def test_same_release_stale_digest_fails_strict(guard, monkeypatch, capsys):
@@ -171,6 +215,18 @@ def test_same_release_stale_digest_fails_strict(guard, monkeypatch, capsys):
     assert guard.main() == 1
     err = capsys.readouterr().err
     assert "tree digest" in err and "workflow_dispatch" in err
+
+
+def test_strict_retry_reports_progress_and_terminates(guard, monkeypatch, capsys):
+    monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
+    calls = _stub_fetch(guard, monkeypatch, _fact(guard, "0.0.0"))
+    assert guard.main() == 1
+    out = capsys.readouterr().out
+    assert "retrying in" in out
+    assert f"{guard.RETRY_BUDGET_SECONDS:.0f}s publish pointer TTL budget" in out
+    # Bounded by the budget over the interval (plus the first sample and a
+    # final check past the deadline) — never an infinite loop.
+    assert len(calls) <= guard.RETRY_BUDGET_SECONDS // guard.RETRY_INTERVAL_SECONDS + 2
 
 
 def test_same_release_stale_digest_warns_on_ordinary_prs(guard, monkeypatch, capsys):
@@ -400,6 +456,22 @@ def test_strictness_expression_is_identical_to_the_validator_guards():
     assert expression("CONTRACTS_VERSION_GUARD_STRICT") == expression(
         "VALIDATOR_PIN_GUARD_STRICT"
     )
+
+
+def test_retry_budget_covers_the_publish_ttl(guard):
+    # RETRY_BUDGET_SECONDS is a hand-maintained copy of the mutable-pointer
+    # cache-control max-age schemas-publish.yml uploads with, so this reads
+    # the owner back rather than trusting the docstring's claim: a budget
+    # shorter than the TTL would still red every schemas-touching push on
+    # the propagation window alone.
+    publish = _PUBLISH_WORKFLOW.read_text()
+    cache_line = next(  # skipcq: PTC-W0063
+        line for line in publish.splitlines() if 'mutable_cache="public, max-age=' in line
+    )
+    match = re.search(r"max-age=(\d+)", cache_line)
+    assert match, "schemas-publish.yml's mutable_cache line lost its max-age"
+    ttl_seconds = int(match.group(1))
+    assert guard.RETRY_BUDGET_SECONDS >= ttl_seconds
 
 
 def test_publish_workflow_uploads_the_stamp_last_as_json():
