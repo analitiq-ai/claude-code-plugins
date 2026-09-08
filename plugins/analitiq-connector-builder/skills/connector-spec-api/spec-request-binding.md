@@ -87,9 +87,9 @@ prohibitions below).
   an auto-discovered value under `connection.discovered` (see
   `connector-builder/references/lifecycle-phases.md`). Endpoint validation
   grades the leading `connection` token only, so the wrong sub-scope validates
-  and resolves to nothing. A param a stream narrows on is sourced by the
-  `operators` it declares instead — and a param may not carry those beside
-  `controlled_by`.
+  and resolves to nothing. A param a stream narrows on is sourced by a
+  `filters` entry naming it as a landing site instead (below) — and a param
+  a `filters` entry lands on may not carry `controlled_by`.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
   only `x-*` siblings (RULE-ENDP-022).
