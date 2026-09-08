@@ -1,7 +1,7 @@
 """Behavioral tests for the published `arrow-types.json` vocabulary schema.
 
-These exercise the regex grammar of `canonical_type` and
-`canonical_type_or_template` end-to-end through an external JSON Schema
+These exercise the regex grammar of `arrow_type` and
+`arrow_type_or_template` end-to-end through an external JSON Schema
 validator — the same path third-party authoring tools and the
 schema-contract-reviewer LLM agent take. They guard against regressions in the
 published `arrow-types.json` by exercising the contract directly rather than
@@ -29,7 +29,7 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
-# The authoritative runtime canonical check the published `canonical_type_or_template`
+# The authoritative runtime canonical check the published `arrow_type_or_template`
 # vocabulary must agree with — imported directly so the parity test below fails if
 # the schema and the runtime ever drift.
 from analitiq.contracts.type_map import _validate_type_map_arrow_type
@@ -64,17 +64,17 @@ def registry(canonical_doc):
 
 
 @pytest.fixture(scope="module")
-def canonical_type_validator(registry):
+def arrow_type_validator(registry):
     return Draft202012Validator(
-        {"$ref": "arrow-types.json#/$defs/canonical_type"},
+        {"$ref": "arrow-types.json#/$defs/arrow_type"},
         registry=registry,
     )
 
 
 @pytest.fixture(scope="module")
-def canonical_type_or_template_validator(registry):
+def arrow_type_or_template_validator(registry):
     return Draft202012Validator(
-        {"$ref": "arrow-types.json#/$defs/canonical_type_or_template"},
+        {"$ref": "arrow-types.json#/$defs/arrow_type_or_template"},
         registry=registry,
     )
 
@@ -85,7 +85,7 @@ def root_validator(canonical_doc):
     `https://schemas.<domain>/arrow-types.json` with no `#/$defs/...`
     fragment. A value validated against the bare URL must actually be checked,
     not accepted unconditionally; the root validates as the strict
-    canonical_type vocabulary."""
+    arrow_type vocabulary."""
     return Draft202012Validator(canonical_doc)
 
 
@@ -122,11 +122,11 @@ class TestCanonicalType:
         # Authored-shape JSON container markers — the vocabulary's ONLY nested
         # grammar — sibling-key rules
         # (`properties`/`items`) are enforced by validators, not by the
-        # canonical_type string vocabulary itself.
+        # arrow_type string vocabulary itself.
         "Object", "List", "Json",
     ])
-    def test_accepts(self, canonical_type_validator, value):
-        errs = list(canonical_type_validator.iter_errors(value))
+    def test_accepts(self, arrow_type_validator, value):
+        errs = list(arrow_type_validator.iter_errors(value))
         assert not errs, f"{value!r} rejected: {[e.message for e in errs]}"
 
     @pytest.mark.parametrize("value", [
@@ -172,15 +172,15 @@ class TestCanonicalType:
         "Int128", "Int7", "Float128", "Stringy",
         # Trailing junk
         "Utf8 ", "Utf8\n", "Utf8;",
-        # `${...}` templates belong to canonical_type_or_template ONLY. The
+        # `${...}` templates belong to arrow_type_or_template ONLY. The
         # strict vocabulary must reject them — this is the strict/relaxed
         # boundary the two `$defs` exist to draw.
         "Decimal128(${precision}, ${scale})",
         "Timestamp(${unit})",
         "FixedSizeBinary(${n})",
     ])
-    def test_rejects(self, canonical_type_validator, value):
-        errs = list(canonical_type_validator.iter_errors(value))
+    def test_rejects(self, arrow_type_validator, value):
+        errs = list(arrow_type_validator.iter_errors(value))
         assert errs, f"{value!r} unexpectedly accepted"
 
 
@@ -192,7 +192,7 @@ class TestCanonicalTypeOrTemplate:
     as the strict vocabulary does (mirroring the runtime canonical check)."""
 
     @pytest.mark.parametrize("value", [
-        # Literal canonicals must pass via the canonical_type branch
+        # Literal canonicals must pass via the arrow_type branch
         # (anyOf, not oneOf, so a literal parameterized canonical may match both).
         "Utf8", "Int64", "Boolean",
         "Decimal128(38, 9)", "Decimal256(76, 0)",
@@ -212,8 +212,8 @@ class TestCanonicalTypeOrTemplate:
         "Duration(${unit})",
         "FixedSizeBinary(${n})",
     ])
-    def test_accepts(self, canonical_type_or_template_validator, value):
-        errs = list(canonical_type_or_template_validator.iter_errors(value))
+    def test_accepts(self, arrow_type_or_template_validator, value):
+        errs = list(arrow_type_or_template_validator.iter_errors(value))
         assert not errs, f"{value!r} rejected: {[e.message for e in errs]}"
 
     @pytest.mark.parametrize("value", [
@@ -230,7 +230,7 @@ class TestCanonicalTypeOrTemplate:
         "Interval(YEAR_MONTH)", "Interval(${unit})",
         "List<Int64>", "List<${inner}>", "Struct<id:Int64>", "Map<Utf8, Int64>",
         "FixedSizeList<Int64>[${n}]", "FixedSizeList<${T}>[${n}]",
-        # Bare parameterized — same as canonical_type rejections
+        # Bare parameterized — same as arrow_type rejections
         "Timestamp", "Decimal128", "Struct",
         # Out-of-range / wrong-width LITERALS must be rejected here too — a
         # literal (no placeholder) is held to the same range/enum as the strict
@@ -248,15 +248,15 @@ class TestCanonicalTypeOrTemplate:
         # type-map rule files by hand are not a realistic source of trailing
         # newlines, so this is documented and not blocked.
     ])
-    def test_rejects(self, canonical_type_or_template_validator, value):
-        errs = list(canonical_type_or_template_validator.iter_errors(value))
+    def test_rejects(self, arrow_type_or_template_validator, value):
+        errs = list(arrow_type_or_template_validator.iter_errors(value))
         assert errs, f"{value!r} unexpectedly accepted"
 
 
 class TestBareDocumentRoot:
     """A value validated against the published document's own URL (no fragment)
     must be checked, not accepted unconditionally. The root `$ref`s the strict
-    canonical_type vocabulary, so a consumer that points at the bare
+    arrow_type vocabulary, so a consumer that points at the bare
     `arrow-types.json` gets real validation."""
 
     @pytest.mark.parametrize("value", [
@@ -325,8 +325,8 @@ _PARITY_CORPUS = [
 
 
 @pytest.mark.parametrize("value", _PARITY_CORPUS)
-def test_relaxed_vocabulary_matches_runtime(value, canonical_type_or_template_validator):
-    """The published `canonical_type_or_template` agrees with the runtime
+def test_relaxed_vocabulary_matches_runtime(value, arrow_type_or_template_validator):
+    """The published `arrow_type_or_template` agrees with the runtime
     type-map arrow_type check (`_validate_type_map_arrow_type`) across the
     realistic authoring space — literals held to their valid range/enum, and one
     placeholder per whole parameter position. No document in this space passes
@@ -345,7 +345,7 @@ def test_relaxed_vocabulary_matches_runtime(value, canonical_type_or_template_va
         published scope note, pinned by
         `test_cross_parameter_bound_is_runtime_owned` below.
     """
-    schema_ok = not list(canonical_type_or_template_validator.iter_errors(value))
+    schema_ok = not list(arrow_type_or_template_validator.iter_errors(value))
     try:
         _validate_type_map_arrow_type(value)
         runtime_ok = True
@@ -356,12 +356,12 @@ def test_relaxed_vocabulary_matches_runtime(value, canonical_type_or_template_va
     )
 
 
-def test_cross_parameter_bound_is_runtime_owned(canonical_type_or_template_validator):
+def test_cross_parameter_bound_is_runtime_owned(arrow_type_or_template_validator):
     """`Decimal` scale <= precision is the ONE documented asymmetry: JSON Schema
     patterns cannot relate two parameter positions, so the published schema
     accepts `Decimal128(5, 6)` while the runtime rejects it. Pin both sides so
     a future schema mechanism (or a runtime loosening) surfaces here."""
     value = "Decimal128(5, 6)"
-    assert not list(canonical_type_or_template_validator.iter_errors(value))
+    assert not list(arrow_type_or_template_validator.iter_errors(value))
     with pytest.raises(ValueError):
         _validate_type_map_arrow_type(value)

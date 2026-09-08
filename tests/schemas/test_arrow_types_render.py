@@ -31,7 +31,7 @@ from analitiq.contracts import arrow_grammar  # noqa: E402
 
 def test_clean_build_succeeds():
     doc = render_schemas.build_arrow_types_doc()
-    assert set(doc["$defs"]) >= {"canonical_type", "canonical_type_or_template"}
+    assert set(doc["$defs"]) >= {"arrow_type", "arrow_type_or_template"}
 
 
 def test_missing_family_in_grouping_fails_loudly(monkeypatch):
@@ -100,7 +100,7 @@ def _representative(family: str) -> str:
 
 def test_every_manifest_family_is_accepted_by_the_published_vocabulary():
     """Derived parity: a representative canonical per family must validate
-    against the built document's strict `canonical_type` — catching a grouping
+    against the built document's strict `arrow_type` — catching a grouping
     or pattern regression that drops a family, without hand-listed fixtures
     that predate future families."""
     from jsonschema import Draft202012Validator
@@ -112,11 +112,11 @@ def test_every_manifest_family_is_accepted_by_the_published_vocabulary():
         "arrow-types.json", Resource(contents=doc, specification=DRAFT202012)
     )
     validator = Draft202012Validator(
-        {"$ref": "arrow-types.json#/$defs/canonical_type"}, registry=registry
+        {"$ref": "arrow-types.json#/$defs/arrow_type"}, registry=registry
     )
     pattern = re.compile(arrow_grammar.ARROW_TYPE_PATTERN)
     for family in arrow_grammar.FAMILY_NAMES:
         rep = _representative(family)
         assert pattern.fullmatch(rep), f"{rep!r} not accepted by ARROW_TYPE_PATTERN"
         errs = list(validator.iter_errors(rep))
-        assert not errs, f"{rep!r} rejected by published canonical_type: {errs}"
+        assert not errs, f"{rep!r} rejected by published arrow_type: {errs}"

@@ -1293,7 +1293,7 @@ def _arrow_types_description() -> str:
         "name (including `Etc/GMT±N`; the pattern gates the shape only — real "
         "zone membership is the engine's runtime check), or fixed `±HH:MM` "
         "offset.\n\n"
-        "Full canonical examples:\n"
+        "Full Arrow type examples:\n"
         f"{examples}\n\n"
         "Why uppercase unit names instead of PyArrow shorthand (`us`/`ms`/`ns`): "
         "the uppercase identifiers are the only spelling that's actually in the "
@@ -1317,7 +1317,7 @@ def _arrow_types_description() -> str:
         "`LargeListView`), the typed nested families (`List<T>`, `LargeList<T>`, "
         "`FixedSizeList<T>[n]`, `Struct<...>`, `Map<K, V>`), unions, encodings "
         "(`Dictionary`, `RunEndEncoded`), and `Interval` are not part of this "
-        "canonical vocabulary: the platform does not execute them end-to-end. "
+        "Arrow vocabulary: the platform does not execute them end-to-end. "
         "They return, if ever, by shipping in the engine first and re-consuming "
         "the grammar manifest — never by editing this document."
     )
@@ -1366,10 +1366,10 @@ def build_arrow_types_doc() -> dict[str, Any]:
             )
 
     defs: dict[str, Any] = {
-        "canonical_type": {
-            "title": "canonical_type",
+        "arrow_type": {
+            "title": "arrow_type",
             "description": (
-                "A canonical type string. Must match one of the Arrow logical "
+                "An Arrow type string. Must match one of the Arrow logical "
                 "type families below — exactly the families the engine "
                 "executes, per the pinned grammar manifest."
             ),
@@ -1386,7 +1386,7 @@ def build_arrow_types_doc() -> dict[str, Any]:
         defs[def_name] = node
 
     templated_branches: list[dict[str, Any]] = [
-        {"$ref": "#/$defs/canonical_type"}
+        {"$ref": "#/$defs/arrow_type"}
     ]
     for family in arrow_grammar.PARAMETERIZED_FAMILY_NAMES:
         params = ", ".join(
@@ -1405,26 +1405,26 @@ def build_arrow_types_doc() -> dict[str, Any]:
                 + "$",
             }
         )
-    defs["canonical_type_or_template"] = {
-        "title": "canonical_type_or_template",
+    defs["arrow_type_or_template"] = {
+        "title": "arrow_type_or_template",
         "description": (
-            "A canonical type string OR a templated canonical type carrying "
+            "An Arrow type string OR a templated Arrow type carrying "
             "`${name}` placeholders in parameter positions. Used by type-map "
             "regex rules where parameters are substituted from named capture "
             "groups (e.g. `Decimal128(${precision}, ${scale})`). Each "
-            "parameter position accepts either a LITERAL canonical value at "
+            "parameter position accepts either a LITERAL Arrow value at "
             "its valid range/enum (`38`, `MICROSECOND`, `UTC`) or a `${name}` "
             "placeholder; a literal out of range is rejected exactly as the "
             "strict vocabulary rejects it, so `Decimal128(999, 0)` and "
             "`Time32(NANOSECOND)` do NOT match. A `${name}` placeholder must "
             "be a valid identifier (`[A-Za-z_][A-Za-z0-9_]*`), matching the "
             "native capture-group naming it resolves from; `${1bad}` / `${ }` "
-            "do not match. Outside parameter positions, the canonical Arrow "
+            "do not match. Outside parameter positions, the Arrow "
             "base name must appear verbatim — `not an arrow type ${precision}` "
             "does not match. Templated branches use `anyOf` (not `oneOf`) "
-            "because a literal parameterized canonical (e.g. "
+            "because a literal parameterized Arrow type (e.g. "
             "`Timestamp(MICROSECOND, UTC)`) intentionally matches both the "
-            "strict canonical_type vocabulary AND the templated branch — both "
+            "strict arrow_type vocabulary AND the templated branch — both "
             "readings are correct, and `anyOf` reflects that. This vocabulary "
             "mirrors the runtime `_validate_type_map_arrow_type` shape check "
             "plus the placeholder-name rule its sibling validators enforce; a "
@@ -1444,11 +1444,11 @@ def build_arrow_types_doc() -> dict[str, Any]:
             "grammar manifest (analitiq.contracts.arrow_grammar) — do not "
             "hand-edit; run `render_schemas.py arrow-types` after a pin "
             "bump. Validating a value directly against this document's URL "
-            "checks it against the strict canonical_type vocabulary. Type-map "
+            "checks it against the strict arrow_type vocabulary. Type-map "
             "regex rules that permit ${name} templates reference the "
-            "#/$defs/canonical_type_or_template fragment explicitly."
+            "#/$defs/arrow_type_or_template fragment explicitly."
         ),
-        "$ref": "#/$defs/canonical_type",
+        "$ref": "#/$defs/arrow_type",
         "$defs": defs,
     }
 
