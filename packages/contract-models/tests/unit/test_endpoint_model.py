@@ -369,6 +369,14 @@ class TestCursorFieldsInRecordShape:
                 {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
             ))
 
+    def test_cursor_field_typed_via_a_ref_branch_inside_anyof_accepted(self):
+        payload = self._payload_with_cursor_field(
+            "updated_at",
+            {"updated_at": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
+        )
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        parse_endpoint(payload)
+
     def test_dotted_cursor_field_traverses_nested_objects(self):
         parse_endpoint(self._payload_with_cursor_field(
             "metadata.updated_at",
@@ -818,6 +826,18 @@ class TestFiltersWiring:
                 extra_record_props={"nullable": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
             ),
         }))
+        assert "nullable" in result.operations.read.filters
+
+    def test_field_key_typed_via_a_ref_branch_inside_anyof_accepted(self):
+        # A branch can itself need $ref resolution before its type is visible
+        # — `materialize_node` does not recurse into anyOf/oneOf branches, so
+        # this exercises `_declared_types` resolving one against root itself.
+        read_op = _filters_read_op(
+            {"nullable": {"gt": {"from_param": "minAmount"}}},
+            extra_record_props={"nullable": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
+        )
+        read_op["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        result = parse_endpoint(_minimal_api_payload(operations={"read": read_op}))
         assert "nullable" in result.operations.read.filters
 
     def test_template_param_naming_undeclared_param_rejected(self):

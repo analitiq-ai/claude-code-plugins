@@ -3403,15 +3403,18 @@ def _validate_pagination_wiring(
     return _BlockParams(frozenset(referenced), frozenset(filled))
 
 
-def _declares_a_type(node: Any) -> bool:
+def _declares_a_type(node: Any, root: Any = None) -> bool:
     """Whether a resolved node says what kind of value lives there.
 
     `type` is the JSON Schema statement; the `native_type`/`arrow_type` pair is
     the contract's own, and either answers the question RULE-ENDP-023 asks.
+    `root` resolves a `$ref`/`allOf` branch nested inside `anyOf`/`oneOf` (see
+    `_declared_types`) — pass the same root `node` itself was materialized
+    against.
     """
     if not isinstance(node, dict):
         return False
-    if _declared_types(node):
+    if _declared_types(node, root):
         return True
     return node.get("native_type") is not None and node.get("arrow_type") is not None
 
@@ -4214,7 +4217,7 @@ def _reject_unsatisfiable_branch(branch: Any) -> None:
         )
 
 
-def _declared_types(declaration: Any) -> set[str] | None:
+def _declared_types(declaration: Any, root: Any = None) -> set[str] | None:
     """The `type` values a declaration allows, or ``None`` when it declares none.
 
     A bare `type` (string or list) is the direct case. Absent that, `anyOf`/
@@ -4223,6 +4226,14 @@ def _declared_types(declaration: Any) -> set[str] | None:
     the value is provably one of the union, so the union of their type sets is
     what this declaration allows. One branch declaring nothing makes the whole
     union unbounded, so the declaration is treated as declaring none.
+
+    A branch can itself be a `$ref`/`allOf` needing resolution (`{"anyOf":
+    [{"$ref": "#/$defs/T"}, {"type": "null"}]}`) — `materialize_node` is not
+    called recursively into `anyOf`/`oneOf` branches by the walk that produces
+    `declaration` in the first place, so each branch is materialized here
+    against `root` before it is inspected. Callers with no `root` in scope
+    (the `allOf`-contradiction check, whose sources are already materialized
+    on entry) skip this step, matching prior behaviour.
     """
     if not isinstance(declaration, dict):
         return None
@@ -4236,7 +4247,13 @@ def _declared_types(declaration: Any) -> set[str] | None:
         if isinstance(branches, list) and branches:
             union: set[str] = set()
             for branch in branches:
-                branch_types = _declared_types(branch)
+                resolved_branch = branch
+                if root is not None and isinstance(branch, dict):
+                    try:
+                        resolved_branch = materialize_node(branch, root)
+                    except SchemaResolutionError:
+                        break
+                branch_types = _declared_types(resolved_branch, root)
                 if branch_types is None:
                     break
                 union |= branch_types
@@ -4826,7 +4843,7 @@ def _sweep_expression_sites(
                     f"response.schema to a self-contradictory node: {exc.reason} "
                     "(spec: §API Response Extraction — declared-path resolution)"
                 ) from None
-            if not _declares_a_type(materialized):
+            if not _declares_a_type(materialized, response_schema):
                 raise ValueError(
                     f"{where} references {token!r}, which resolves in "
                     "response.schema to a node that declares no `type` (and no "
@@ -5259,7 +5276,7 @@ def _validate_record_field_path(
             f"shape to a self-contradictory node: {exc.reason} "
             "(spec: §Cross-Field Validation)"
         ) from None
-    if not _declares_a_type(materialized):
+    if not _declares_a_type(materialized, root):
         raise ValueError(
             f"{where} {field_path!r} resolves in the response.schema record "
             "shape to a node that declares no `type` (and no "
@@ -5312,7 +5329,7 @@ def _check_cursor_field_in_node(
             f"response.schema record-shape branch (under {where!r}) to a "
             f"self-contradictory node: {exc.reason} (spec: §Cross-Field Validation)"
         ) from None
-    if not _declares_a_type(materialized):
+    if not _declares_a_type(materialized, root):
         raise ValueError(
             f"replication cursor_field {cursor_field!r} resolves in the "
             f"response.schema record-shape branch (under {where!r}) to a node "

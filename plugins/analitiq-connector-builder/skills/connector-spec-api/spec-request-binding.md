@@ -92,7 +92,10 @@ prohibitions below).
   a `filters` entry lands on may not carry `controlled_by`.
 - **Every expression dict declares exactly one primary key** — one of `ref` /
   `template` / `literal` / `function` / `from_param` / `from_input`, alongside
-  only `x-*` siblings (RULE-ENDP-022).
+  only `x-*` siblings (RULE-ENDP-022). The template-landing form the read
+  operation's filter-routing map uses (`{"param": ..., "template": ...}`,
+  §Filtering below) is a different, compound shape this rule does not govern
+  — it names a landing site, not a request-slot expression.
 - **A GET read operation must not declare a body param** (RULE-ENDP-007) — a
   provider's body-bearing search route is a POST read, so change the method,
   not the param's placement.
