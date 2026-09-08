@@ -5082,6 +5082,24 @@ def _validate_records_in_response_schema(
             f"response.schema (got type={node.get('type')!r}); spec requires "
             "the schema location to be an array (spec: §Cross-Field Validation)"
         )
+    # A records array is a page of rows — every row the same shape — so a
+    # positional/tuple shape (the legacy `items: [...]`, or its Draft 2020-12
+    # replacement `prefixItems`) is refused here, unconditionally: this gate
+    # runs for every read with a `response.records` ref, whether or not
+    # replication/filters/keyset ever calls `_require_record_shape_items` to
+    # ask about a specific field. Without this an endpoint declaring no such
+    # feature could carry a positional records array straight past every
+    # check, and `resolve_read_record_schema` (below) only unwraps a
+    # dictionary-valued `items`, so it could not even see the record's
+    # fields for downstream mapping/type derivation.
+    if isinstance(node.get("items"), list) or node.get("prefixItems") is not None:
+        raise ValueError(
+            f"response.records ref {ref!r} resolves to an array declaring a "
+            "positional/tuple shape (`items: [...]` or `prefixItems`) — a "
+            "records array is a page of rows and every row must be the same "
+            "shape; declare one `items` object schema "
+            "(spec: §Cross-Field Validation)"
+        )
     # Gate the RECORD SHAPE too, not just the array node. Without this a
     # contradictory `items` (or a `$defs` entry it references) validated here and
     # then raised out of `resolve_read_record_schema` /
