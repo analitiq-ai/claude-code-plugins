@@ -31,9 +31,8 @@ offline test can see:
      already retries across the publish's own pointer TTL
      (`.github/workflows/schemas-publish.yml` owns the cache-control) before
      this step ever sees the divergence. What this deliberately does NOT
-     reach: an
-     out-of-band write to some OTHER published object after a completed
-     publish leaves the stamp intact — the stamp witnesses the last
+     reach: an out-of-band write to some OTHER published object after a
+     completed publish leaves the stamp intact — the stamp witnesses the last
      completed publish, not the bucket's current contents. The remediation
      once the retry budget is spent is the same flow the validator release
      already uses: land or re-run the publish, then re-run this job.
@@ -67,7 +66,7 @@ verdicts behind it are this guard's own):
     RETRY_INTERVAL_SECONDS across a window one interval wider than
     RETRY_BUDGET_SECONDS (margin against landing exactly on the CDN's own
     expiry boundary), until the published bytes match the committed stamp
-    or the window is spent, so a strict run no longer reds on the
+    or the window is spent, so a strict run does not red on the
     schemas-publish pointer TTL by itself
     (`.github/workflows/schemas-publish.yml` uploads that pointer with a
     cache-control max-age RETRY_BUDGET_SECONDS is pinned to at least —
@@ -78,10 +77,9 @@ verdicts behind it are this guard's own):
     re-run. The pin catch-up divergence (step 3) is not a network race — it
     is graded only after step 2 already holds, and the loop returns as soon
     as step 2's bytes match — so it fails on the first sample; that one is
-    deliberately TIGHTER than
-    the offline "at or behind" tolerance (root CLAUDE.md, "The contract, and
-    the runtime pin", which governs the merge gate): the red is the reminder
-    that finishes the release.
+    deliberately TIGHTER than the offline "at or behind" tolerance (root
+    CLAUDE.md, "The contract, and the runtime pin", which governs the merge
+    gate): the red is the reminder that finishes the release.
   - unset (ordinary PRs): divergences WARN (checks-UI annotation) and the
     job passes — a stale published fact is main's problem, and a release
     PR's stamp legitimately runs ahead of the published tree until it

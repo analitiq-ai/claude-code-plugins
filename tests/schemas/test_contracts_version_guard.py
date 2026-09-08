@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import urllib.error
 import urllib.request
@@ -192,8 +193,9 @@ def test_strict_retry_recovers_once_the_pointer_catches_up(
     # just hadn't caught up yet when the first sample was taken. The match
     # sits BEFORE a still-diverging response, never consumed, so this proves
     # the loop stops as soon as the bytes agree rather than always taking a
-    # fixed number of laps — a fixed-count bug would call `next(responses)` a
-    # third time and raise StopIteration instead of the assertions below.
+    # fixed number of laps — a fixed-count bug would consume the trailing
+    # diverging response too and fail the `calls` / exit-code assertions
+    # below instead of stopping at two.
     _pin_matching_stamp(guard, monkeypatch, tmp_path)
     monkeypatch.setenv("CONTRACTS_VERSION_GUARD_STRICT", "1")
     responses = iter(
@@ -235,7 +237,7 @@ def test_strict_retry_reports_progress_and_terminates(guard, monkeypatch, capsys
     # loop samples once per interval across that window plus the initial
     # sample.
     window = guard.RETRY_BUDGET_SECONDS + guard.RETRY_INTERVAL_SECONDS
-    assert len(calls) == window / guard.RETRY_INTERVAL_SECONDS + 1
+    assert len(calls) == math.ceil(window / guard.RETRY_INTERVAL_SECONDS) + 1
 
 
 def test_strict_retry_reports_the_final_sample_not_a_cached_first_one(
