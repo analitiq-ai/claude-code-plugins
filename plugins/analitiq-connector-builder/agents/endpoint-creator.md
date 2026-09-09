@@ -148,10 +148,11 @@ was raised.
        (`RULE-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
-       offset/`Z` → `Timestamp(<unit>, UTC)`. When two fields share a native
-       token but differ in zone-awareness, give them **distinct** native
-       tokens so each resolves to the right canonical under the read map's
-       first-match-wins rules.
+       offset/`Z` → `Timestamp(<unit>, UTC)`. When researched entries share a
+       native token but differ in zone-awareness — whether they come from
+       different fields or from one field's separate directional entries —
+       give them **distinct** native tokens so each resolves to the right
+       canonical under the read map's first-match-wins rules.
      - **Carry each sample onto the node it grounds.** Where a facts entry
        has a `sample_value`, put it verbatim into that node's `examples`, in
        the JSON kind the provider sends — the string `"0"` stays a string. It
@@ -207,7 +208,11 @@ was raised.
      set gets a different input schema. What the pair buys is a destination
      whose field types are declared and checkable rather than left to
      whatever a source produced; it is the contract's statement about the
-     field, not a conversion this document performs.
+     field, not a conversion this document performs. Carry each entry's
+     `sample_value` onto its node's `examples` the same way step 3 does for
+     the read record — the only value in the endpoint that came off the wire
+     for this direction, and the only thing this node's own assertions can be
+     graded against (`RULE-ENDP-063`).
      <!-- PROBE: write-input-pair-unresolved-through-read-map, write-input-unannotated-uncovered -->
      Those declarations are what put the destination record under the read map
      — `type-map-read` must resolve the `native_type` to the `arrow_type`
@@ -215,10 +220,13 @@ was raised.
      is resolved against nothing. A token the map cannot render is a
      domain-level type-map fix, exactly as on the read side.
      A field whose facts entry carries neither annotation is left untyped
-     here, exactly as on the read side. Never invent a token to satisfy the
-     map: the read map is first-match-wins and shared with the read
-     direction, so a rule added for a native the provider never emits can
-     shadow a real one.
+     here, exactly as on the read side. Never invent a token no researched
+     entry carries to satisfy the map: the read map is first-match-wins and
+     shared with the read direction, so a rule added for a native the
+     provider never emits can shadow a real one. This bans a fabricated
+     token — never distinct tokens the provider genuinely documents
+     differently, whether for different fields or for one field's separate
+     directional entries.
    - `conflict_keys` (`RULE-ENDP-019`, `RULE-ENDP-014`) — the
      provider-defined natural key the upsert matches on. Use
      `endpoint_facts.conflict_keys`; never invent one.
