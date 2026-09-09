@@ -14,17 +14,20 @@ equivalent to omission.
 Facts that have to hold and stay held, so they are pinned here:
 
 1. **Model boundary.** Declared content is validated fail-loud: an
-   off-vocabulary category, a malformed family identifier, an unknown family or
-   field, or a non-positive/boolean cap is a config error. Key grammars and the
-   failure-category vocabulary mirror the engine's typed parsers
-   (`cdk/declarations.py`, `cdk/sql/capabilities.py`) exactly.
+   off-vocabulary category, a malformed `key_attrs` entry, a retired top-level
+   `error_map` key, an unknown field, or a non-positive/boolean cap is a config
+   error. `error_map`'s `http` grammar and the failure-category vocabulary
+   mirror the engine's typed parser (`cdk/declarations.py`) exactly; `codes`
+   keys are deliberately open (driver-defined, not family-defined).
 
-2. **JSON-Schema parity.** Pydantic renders a patterned-key dict as
+2. **JSON-Schema parity.** Pydantic renders `http`'s patterned-key dict as
    `patternProperties` alone — under which a JSON-Schema-only consumer would
-   accept off-grammar keys the model rejects. The models inject a sibling
-   `additionalProperties: false` per family so an external Draft 2020-12
-   validator rejects what Pydantic rejects — proven on each sub-model's own
-   schema and end-to-end against the published `connector/latest.json`.
+   accept off-grammar keys the model rejects. The model injects a sibling
+   `additionalProperties: false` for `http` so an external Draft 2020-12
+   validator rejects what Pydantic rejects — proven on the sub-model's own
+   schema and end-to-end against the published `connector/latest.json`. The
+   `key_attrs`/`codes` pairing rule gets the same treatment via an `allOf`
+   mirror on `ErrorMap` itself.
    Unlike the contract's lax int fields (`write_unit.rows`), the three cap
    fields are strict (`strict=True`): booleans are rejected by the model AND by
    the schema's `type: integer`, mirroring the engine parser's explicit
@@ -76,9 +79,8 @@ POSTGRES_EXAMPLE = (
 # per-transport map shape), reused as the accepted baseline that the negative
 # cases mutate.
 VALID_ERROR_MAP = {
-    "sqlstate": {"08": "unreachable", "28000": "auth", "23": "write_rejected"},
-    "exception": {"OperationalError": "transient"},
-    "vendor_code": {"1045": "auth"},
+    "key_attrs": ["sqlstate"],
+    "codes": {"08": "unreachable", "28000": "auth", "23": "write_rejected"},
     "http": {"429": "rate_limited", "401": "auth"},
 }
 VALID_SQL_CAPS = {
@@ -106,12 +108,16 @@ def _external_validator(model) -> Draft202012Validator:
     [
         VALID_ERROR_MAP,
         {},  # empty block declares nothing — legal, ≡ absence
-        {"sqlstate": {}},  # empty family map declares nothing — legal
-        {"http": {"429": "rate_limited"}},  # any single family alone
-        {"sqlstate": {"08": "unreachable"}, "http": {"500": "transient"}},
-        {"vendor_code": {"-803": "config"}},  # negative vendor codes are legal
-        {"exception": {"_Timeout": "transient"}},  # leading underscore is legal
-        {"http": {"100": "transient", "599": "transient"}},  # range edges
+        {"http": {"429": "rate_limited"}},  # http alone
+        {"key_attrs": ["sqlstate"], "codes": {"08": "unreachable"}},  # key_attrs+codes alone
+        {"key_attrs": ["sqlstate"], "codes": {"08": "unreachable"}, "http": {"500": "transient"}},
+        {"key_attrs": ["errno", "vendor_code"], "codes": {"-803": "config"}},  # ordered, multi-attr
+        # the reserved sentinel is a plain identifier-shaped entry, no special case
+        {"key_attrs": ["__exception_class__"], "codes": {"OperationalError": "transient"}},
+        {"http": {"100": "transient", "599": "transient"}},  # http range edges
+        # codes keys are OPEN strings — no family-specific grammar, unlike the
+        # retired sqlstate/exception/vendor_code patterns
+        {"key_attrs": ["code"], "codes": {"E-1045!": "auth"}},
     ],
 )
 def test_error_map_accepts(payload):
@@ -122,30 +128,32 @@ def test_error_map_accepts(payload):
 @pytest.mark.parametrize(
     ("payload", "why"),
     [
-        ({"grpc": {"UNAVAILABLE": "transient"}}, "unknown family is rejected"),
-        ({"sqlstate": {"08": "flaky"}}, "off-vocabulary category"),
-        ({"sqlstate": {"zz": "auth"}}, "sqlstate keys are uppercase-only"),
-        ({"sqlstate": {"0": "auth"}}, "sqlstate class is exactly 2 chars"),
-        ({"sqlstate": {"080": "auth"}}, "sqlstate is 2 or 5 chars, never 3"),
-        ({"sqlstate": {"0800": "auth"}}, "sqlstate is 2 or 5 chars, never 4"),
-        ({"exception": {"1BadName": "auth"}}, "exception name can't start with a digit"),
-        ({"exception": {"Op.Error": "auth"}}, "exception name is a bare class name"),
-        ({"vendor_code": {"1.5": "auth"}}, "vendor code is an integer string"),
-        ({"vendor_code": {"": "auth"}}, "vendor code can't be empty"),
+        ({"grpc": {"UNAVAILABLE": "transient"}}, "unknown field is rejected"),
+        ({"sqlstate": {"08": "unreachable"}}, "retired top-level sqlstate key is rejected"),
+        ({"exception": {"OperationalError": "transient"}}, "retired top-level exception key is rejected"),
+        ({"vendor_code": {"1045": "auth"}}, "retired top-level vendor_code key is rejected"),
+        ({"key_attrs": ["sqlstate"], "codes": {"08": "flaky"}}, "off-vocabulary category"),
+        ({"key_attrs": ["bad-name!"], "codes": {"x": "auth"}}, "key_attrs entry must be identifier-shaped"),
+        ({"key_attrs": [], "codes": {"x": "auth"}}, "key_attrs can't be empty when declared"),
+        ({"key_attrs": ["sqlstate"], "codes": {}}, "codes can't be empty when declared"),
+        ({"key_attrs": ["sqlstate"]}, "key_attrs without codes is rejected"),
+        ({"codes": {"08": "auth"}}, "codes without key_attrs is rejected"),
+        ({"key_attrs": "sqlstate", "codes": {"08": "auth"}}, "key_attrs must be an array, not a bare string"),
+        ({"key_attrs": ["sqlstate"], "codes": ["08"]}, "codes must be an object, not an array"),
         ({"http": {"999": "auth"}}, "http status first digit is 1-5"),
         ({"http": {"42": "auth"}}, "http status is exactly 3 digits"),
         ({"http": {"4290": "auth"}}, "http status is exactly 3 digits (anchors)"),
-        ({"sqlstate": ["08"]}, "family must be an object, not an array"),
-        ({"sqlstate": {"08": None}}, "category must be a string, never null"),
+        ({"key_attrs": ["sqlstate"], "codes": {"08": None}}, "category must be a string, never null"),
     ],
 )
 def test_error_map_rejects(payload, why):
     # Both layers, one list: the model must reject, and — thanks to the
-    # `additionalProperties: false` mirror injected next to each family's
-    # `patternProperties` — the published schema must reject the same payload;
-    # patternProperties alone would let off-grammar keys through. `4290` is
-    # the load-bearing anchor case: it flips to accepted if either regex
-    # anchor is lost (prefix `429` / suffix `290` both match unanchored).
+    # `additionalProperties: false` mirror injected next to `http`'s
+    # `patternProperties`, and the `allOf` mirror of the key_attrs/codes
+    # pairing rule — the published schema must reject the same payload.
+    # `4290` is the load-bearing anchor case for `http`: it flips to accepted
+    # if either regex anchor is lost (prefix `429` / suffix `290` both match
+    # unanchored).
     with pytest.raises(ValidationError):
         ErrorMap.model_validate(payload)
     assert not _external_validator(ErrorMap).is_valid(payload)
@@ -162,14 +170,14 @@ def test_error_map_rejects(payload, why):
 # code imports, so pinning the contract's `ErrorCategory` against it directly
 # is safe.
 #
-# The family-key patterns below (EXPECTED_FAMILY_KEY_PATTERNS,
-# EXPECTED_PUBLISHED_KEY_PATTERNS) stay an unguarded hand restatement: as of
-# the pinned `analitiq-cdk`, the engine's equivalents (`_SQLSTATE_KEY` and its
-# siblings) are module-private with no public re-export, so pinning against
-# them would be a private-implementation-detail coupling rather than a
-# stability signal the engine has actually published. They remain a
-# hand-maintained copy until the engine settles a public mechanism for
-# connector-owned error classification.
+# `http`'s key pattern stays an unguarded hand restatement: as of the pinned
+# `analitiq-cdk`, the engine's equivalent (`_HTTP_KEY`) is module-private with
+# no public re-export, so pinning against it would be a
+# private-implementation-detail coupling rather than a stability signal the
+# engine has actually published. `key_attrs`' pattern is this repo's own
+# choice (identifier-shaped, admitting the reserved `__exception_class__`
+# sentinel), not mirrored from anything engine-private — `codes` deliberately
+# carries no key pattern at all.
 EXPECTED_ERROR_CATEGORIES = {
     "transient",
     "config",
@@ -178,60 +186,107 @@ EXPECTED_ERROR_CATEGORIES = {
     "rate_limited",
     "write_rejected",
 }
-# The settled model-side grammar (the engine's compiled patterns and the
-# StringConstraints on the family aliases are this, verbatim).
-EXPECTED_FAMILY_KEY_PATTERNS = {
-    "sqlstate": r"^[0-9A-Z]{2}([0-9A-Z]{3})?$",
-    "exception": r"^[A-Za-z_][A-Za-z0-9_]*$",
-    "vendor_code": r"^-?[0-9]+$",
-    "http": r"^[1-5][0-9]{2}$",
-}
-# What the PUBLISHED schema carries: the same grammar with the trailing `$`
-# replaced by the dialect-portable true-end assertion (`_closed_true_end_keys`
-# — Python `re`'s `$` would admit a trailing newline that pydantic-core's Rust
-# regex rejects). Pinned VERBATIM, not derived by re-running the transform, so
-# a transform bug fails here instead of replicating into the expectation.
-EXPECTED_PUBLISHED_KEY_PATTERNS = {
-    "sqlstate": r"^[0-9A-Z]{2}([0-9A-Z]{3})?(?![\s\S])",
-    "exception": r"^[A-Za-z_][A-Za-z0-9_]*(?![\s\S])",
-    "vendor_code": r"^-?[0-9]+(?![\s\S])",
-    "http": r"^[1-5][0-9]{2}(?![\s\S])",
-}
+EXPECTED_ERROR_MAP_FIELDS = {"key_attrs", "codes", "http"}
+EXPECTED_KEY_ATTR_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
+EXPECTED_HTTP_KEY_PATTERN = r"^[1-5][0-9]{2}$"
+# What the PUBLISHED schema carries for `http`: the same grammar with the
+# trailing `$` replaced by the dialect-portable true-end assertion
+# (`_closed_true_end_keys` — Python `re`'s `$` would admit a trailing newline
+# that pydantic-core's Rust regex rejects). Pinned VERBATIM, not derived by
+# re-running the transform, so a transform bug fails here instead of
+# replicating into the expectation.
+EXPECTED_PUBLISHED_HTTP_KEY_PATTERN = r"^[1-5][0-9]{2}(?![\s\S])"
 
 
-def _family_object_schema(schema: dict, family: str) -> dict:
-    """The object branch of a family's `anyOf` (the other branch is null)."""
-    branches = schema["properties"][family]["anyOf"]
+def _http_object_schema(schema: dict) -> dict:
+    """The object branch of `http`'s `anyOf` (the other branch is null)."""
+    branches = schema["properties"]["http"]["anyOf"]
     (obj,) = [b for b in branches if b.get("type") == "object"]
     return obj
 
 
-@pytest.mark.parametrize("family", sorted(EXPECTED_PUBLISHED_KEY_PATTERNS))
-def test_error_map_family_grammar_is_pinned(family):
+def _key_attrs_array_schema(schema: dict) -> dict:
+    """The array branch of `key_attrs`'s `anyOf` (the other branch is null)."""
+    branches = schema["properties"]["key_attrs"]["anyOf"]
+    (arr,) = [b for b in branches if b.get("type") == "array"]
+    return arr
+
+
+def _codes_object_schema(schema: dict) -> dict:
+    """The object branch of `codes`'s `anyOf` (the other branch is null)."""
+    branches = schema["properties"]["codes"]["anyOf"]
+    (obj,) = [b for b in branches if b.get("type") == "object"]
+    return obj
+
+
+def test_error_map_http_grammar_is_pinned():
     schema = ErrorMap.model_json_schema()
-    obj = _family_object_schema(schema, family)
+    obj = _http_object_schema(schema)
     # Exactly the pinned published key pattern, closed against off-grammar
     # keys...
-    assert set(obj["patternProperties"]) == {EXPECTED_PUBLISHED_KEY_PATTERNS[family]}
+    assert set(obj["patternProperties"]) == {EXPECTED_PUBLISHED_HTTP_KEY_PATTERN}
     assert obj["additionalProperties"] is False
     # ...and exactly the pinned category vocabulary as values.
     (value_schema,) = obj["patternProperties"].values()
     assert set(value_schema["enum"]) == EXPECTED_ERROR_CATEGORIES
 
 
-def test_error_map_families_are_pinned():
-    # These families are the whole surface; ErrorMap itself is closed
-    # (extra="forbid" → additionalProperties: false), so a new family is a
+def test_error_map_key_attrs_grammar_is_pinned():
+    schema = ErrorMap.model_json_schema()
+    arr = _key_attrs_array_schema(schema)
+    assert arr["minItems"] == 1
+    assert arr["items"]["pattern"] == EXPECTED_KEY_ATTR_PATTERN
+
+
+def test_error_map_codes_values_are_pinned():
+    schema = ErrorMap.model_json_schema()
+    obj = _codes_object_schema(schema)
+    assert obj["minProperties"] == 1
+    # No key grammar at all — `additionalProperties` is the value schema
+    # directly, not `false`, and there is no `patternProperties` sibling.
+    assert "patternProperties" not in obj
+    assert set(obj["additionalProperties"]["enum"]) == EXPECTED_ERROR_CATEGORIES
+
+
+def test_error_map_fields_are_pinned():
+    # These fields are the whole surface; ErrorMap itself is closed
+    # (extra="forbid" → additionalProperties: false), so a new field is a
     # contract change, never a silent addition.
     schema = ErrorMap.model_json_schema()
-    assert set(schema["properties"]) == set(EXPECTED_FAMILY_KEY_PATTERNS)
+    assert set(schema["properties"]) == EXPECTED_ERROR_MAP_FIELDS
     assert schema["additionalProperties"] is False
 
 
 @pytest.mark.parametrize("category", sorted(EXPECTED_ERROR_CATEGORIES))
 def test_every_pinned_category_validates(category):
-    error_map = ErrorMap.model_validate({"sqlstate": {"08": category}})
-    assert error_map.sqlstate == {"08": category}
+    error_map = ErrorMap.model_validate({"key_attrs": ["sqlstate"], "codes": {"08": category}})
+    assert error_map.codes == {"08": category}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"key_attrs": ["sqlstate"]},
+        {"codes": {"08": "auth"}},
+    ],
+)
+def test_key_attrs_and_codes_required_together(payload):
+    # Both layers: the model's `_key_attrs_and_codes_together` validator, and
+    # the published schema's symmetric `allOf`/`if`/`then` mirror.
+    with pytest.raises(ValidationError):
+        ErrorMap.model_validate(payload)
+    assert not _external_validator(ErrorMap).is_valid(payload)
+
+
+@pytest.mark.parametrize("retired_key", ["sqlstate", "exception", "vendor_code"])
+def test_retired_family_keys_are_rejected(retired_key):
+    # The engine's own acceptance criterion: a block still carrying a
+    # top-level family key from the retired shape fails loud rather than
+    # being silently reinterpreted or accepted.
+    payload = {retired_key: {"08": "unreachable"}}
+    with pytest.raises(ValidationError):
+        ErrorMap.model_validate(payload)
+    assert not _external_validator(ErrorMap).is_valid(payload)
 
 
 def test_error_categories_match_engine_cdk():
@@ -368,22 +423,16 @@ def test_integral_float_is_a_known_one_way_divergence(model, payload):
     assert _external_validator(model).is_valid(payload)
 
 
-@pytest.mark.parametrize(
-    "payload",
-    [
-        {"http": {"429\n": "auth"}},
-        {"sqlstate": {"08\n": "unreachable"}},
-        {"vendor_code": {"1045\n": "auth"}},
-        {"exception": {"OperationalError\n": "transient"}},
-    ],
-)
-def test_trailing_newline_keys_rejected_by_both_layers(payload):
+def test_trailing_newline_http_keys_rejected_by_both_layers():
     # Python `jsonschema` matches patterns with `re.search`, where a trailing
-    # `$` also matches before a final newline — which would let these keys
+    # `$` also matches before a final newline — which would let this key
     # through a schema-only consumer while pydantic-core's Rust regex
-    # (end-of-string `$`) rejects them. The published patterns therefore end
-    # in the dialect-portable `(?![\s\S])` (`_closed_true_end_keys`), so BOTH
-    # layers reject. Would fail if the transform were dropped.
+    # (end-of-string `$`) rejects it. The published pattern therefore ends in
+    # the dialect-portable `(?![\s\S])` (`_closed_true_end_keys`), so BOTH
+    # layers reject. Would fail if the transform were dropped. `codes` carries
+    # no such mechanism at all — its keys are open strings by design, so a
+    # trailing-newline `codes` key is legal, not tested here.
+    payload = {"http": {"429\n": "auth"}}
     with pytest.raises(ValidationError):
         ErrorMap.model_validate(payload)
     assert not _external_validator(ErrorMap).is_valid(payload)
@@ -462,7 +511,7 @@ def test_database_connector_carries_all_three_blocks(db_example):
         "limits": dict(VALID_LIMITS),
     }
     connector = parse_connector(doc)
-    assert connector.error_map.sqlstate["08"] == "unreachable"
+    assert connector.error_map.codes["08"] == "unreachable"
     assert connector.error_map.http["429"] == "rate_limited"
     assert connector.concurrency.max_connections == 8
     assert connector.sql_capabilities.limits.max_bind_params == 2100
@@ -539,10 +588,12 @@ def test_published_connector_schema_exposes_new_defs():
     # database-only.
     assert "limits" in defs["SqlCapabilities"]["properties"]
     assert "sql_capabilities" not in defs["ApiConnector"]["properties"]
-    # The parity mirror survived rendering on every family.
-    for family in EXPECTED_FAMILY_KEY_PATTERNS:
-        obj = _family_object_schema(defs["ErrorMap"], family)
-        assert obj["additionalProperties"] is False
+    # The parity mirrors survived rendering: `http` stays closed, `key_attrs`
+    # keeps its minItems/pattern, and the key_attrs/codes pairing rule's
+    # `allOf` mirror is present on `ErrorMap` itself.
+    assert _http_object_schema(defs["ErrorMap"])["additionalProperties"] is False
+    assert _key_attrs_array_schema(defs["ErrorMap"])["minItems"] == 1
+    assert "allOf" in defs["ErrorMap"]
 
 
 def test_full_connector_validates_against_published_schema(db_example):
@@ -567,14 +618,17 @@ def test_full_connector_validates_against_published_schema(db_example):
     # Each `mutate` is applied to a fresh deepcopy of the valid doc, so a
     # rejection isolates to that one change — covering every v2 rule
     # end-to-end against the composed artifact.
-    def _unknown_family(doc):
+    def _unknown_field(doc):
         doc["error_map"]["grpc"] = {"UNAVAILABLE": "transient"}
 
-    def _off_grammar_key(doc):
-        doc["error_map"]["sqlstate"]["zz"] = "auth"
+    def _retired_top_level_key(doc):
+        doc["error_map"]["sqlstate"] = {"08": "unreachable"}
+
+    def _off_grammar_key_attrs_entry(doc):
+        doc["error_map"]["key_attrs"] = ["bad-name!"]
 
     def _off_vocabulary_category(doc):
-        doc["error_map"]["sqlstate"]["08"] = "flaky"
+        doc["error_map"]["codes"]["08"] = "flaky"
 
     def _boolean_cap(doc):
         doc["concurrency"]["max_connections"] = True
@@ -586,8 +640,9 @@ def test_full_connector_validates_against_published_schema(db_example):
         doc["sql_capabilities"]["limits"]["max_rows"] = 10
 
     for mutate in (
-        _unknown_family,
-        _off_grammar_key,
+        _unknown_field,
+        _retired_top_level_key,
+        _off_grammar_key_attrs_entry,
         _off_vocabulary_category,
         _boolean_cap,
         _zero_limit,

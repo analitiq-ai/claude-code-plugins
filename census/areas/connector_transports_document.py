@@ -166,7 +166,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ErrorMap", waiver=ENGINE_CONDUCT,
-        prose_hash="a15cfabb6c44",
+        prose_hash="3ccd8c0c32cb",
     ),
     # === connector: remaining transport, capability + document sites =========
     ProseObligation(model="AdbcTransport", prose_hash="f6a5cb5e119c", descriptive=True),
@@ -229,7 +229,7 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ConnectorBase", field="error_map", waiver=ENGINE_CONDUCT,
-        prose_hash="9e28b733fc2c",
+        prose_hash="f25b15859232",
     ),
     ProseObligation(model="ConnectorBase", field="resource_discovery", prose_hash="847ff0961beb", descriptive=True),
     ProseObligation(
@@ -335,34 +335,29 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(model="DsnBinding", field="encoding", prose_hash="e51510dbf8a0", descriptive=True),
     ProseObligation(model="DsnBinding", field="value", prose_hash="8fc1a5b9a6a5", descriptive=True),
     ProseObligation(
-        model="ErrorMap", field="exception",
-        prose_hash="5099fa850437",
+        model="ErrorMap", field="key_attrs",
+        prose_hash="19b70782c691",
         structural=(
-            "keys are pinned by the `_ExceptionFamily` patterned-key "
-            "annotation; values by the closed `ErrorCategory` vocabulary"
+            "entries are pinned by the `_KeyAttrsTuple` identifier-pattern, "
+            "non-empty annotation; the together-with-`codes` rule is "
+            "`_key_attrs_and_codes_together`, mirrored for the published "
+            "schema by `ErrorMap`'s own `model_config`"
+        ),
+    ),
+    ProseObligation(
+        model="ErrorMap", field="codes",
+        prose_hash="177caa757622",
+        structural=(
+            "keys are open per `_ErrorCodeMap`'s non-empty-dict annotation; "
+            "values by the closed `ErrorCategory` vocabulary; the "
+            "together-with-`key_attrs` rule is `_key_attrs_and_codes_together`"
         ),
     ),
     ProseObligation(
         model="ErrorMap", field="http",
-        prose_hash="744f15344540",
+        prose_hash="4c829da30af9",
         structural=(
             "keys are pinned by the `_HttpStatusFamily` patterned-key "
-            "annotation; values by the closed `ErrorCategory` vocabulary"
-        ),
-    ),
-    ProseObligation(
-        model="ErrorMap", field="sqlstate",
-        prose_hash="6328e5551e7a",
-        structural=(
-            "keys are pinned by the `_SqlstateFamily` patterned-key "
-            "annotation; values by the closed `ErrorCategory` vocabulary"
-        ),
-    ),
-    ProseObligation(
-        model="ErrorMap", field="vendor_code",
-        prose_hash="482a1d01c129",
-        structural=(
-            "keys are pinned by the `_VendorCodeFamily` patterned-key "
             "annotation; values by the closed `ErrorCategory` vocabulary"
         ),
     ),

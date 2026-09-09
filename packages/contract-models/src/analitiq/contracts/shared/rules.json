@@ -1652,7 +1652,7 @@
    "scopes": [
     "connector"
    ],
-   "validator": "analitiq.contracts.connector::ErrorMap.exception",
+   "validator": "analitiq.contracts.connector::ErrorMap.codes",
    "owners": [
     "engine",
     "connector-plugin"
@@ -1661,10 +1661,8 @@
     "ErrorMap"
    ],
    "fields": [
-    "exception",
-    "http",
-    "sqlstate",
-    "vendor_code"
+    "codes",
+    "http"
    ],
    "mechanism": "literal_enum",
    "symbol": null,
@@ -1881,6 +1879,30 @@
    "symbol": null,
    "fixture_model": "HttpTransport",
    "rationale": "The HTTP client the engine sends with derives Basic authentication from the request URL, so a base URL carrying userinfo authenticates the first request and nothing after it: a provider-supplied absolute continuation link is same-origin and omits the credentials, the client sends no authorization header, and the provider answers 401 — which reads as a credential or provider fault rather than a connector-definition one. The origin guard that already grades a next link cannot report it, because origin comparison strips userinfo, so the link that dropped the credentials is same-origin by construction. Credentials in a URL are also logged wherever the URL is, which is why the remedy is the transport's `auth` block or its declared headers rather than a safer-looking URL. The rule reaches as far as the author's own text: a `{ref}` or a function node resolves per connection, and a `{template}` whose host arrives through a placeholder can carry userinfo that no reading of the document reveals. Those are refused again at connect time, where the resolved URL is in hand — passing this rule is not a sanctioned way to reach a provider with credentials in the host.\n",
+   "status": "active",
+   "superseded_by": null
+  },
+  {
+   "id": "RULE-CTOR-067",
+   "statement": "error_map's key_attrs and codes MUST be declared together; a block declaring one without the other MUST be rejected.\n",
+   "tier": "advisory",
+   "severity": "error",
+   "scopes": [
+    "connector"
+   ],
+   "validator": "analitiq.contracts.connector::ErrorMap._key_attrs_and_codes_together",
+   "owners": [
+    "engine",
+    "connector-plugin"
+   ],
+   "targets": [
+    "ErrorMap"
+   ],
+   "fields": [],
+   "mechanism": null,
+   "symbol": null,
+   "fixture_model": null,
+   "rationale": "key_attrs names where to read a connector's native error signal from; codes names what each value it finds means. Declaring key_attrs alone leaves the engine with nowhere to route a matched value — a no-op that reads as a declared mapping. Declaring codes alone leaves the engine with nothing to read a native value from at all — unusable, not merely incomplete. Neither half is a degraded version of the mapping; each is meaningless without the other, so a block declaring only one is rejected rather than silently accepted as a partial classification.\n",
    "status": "active",
    "superseded_by": null
   },

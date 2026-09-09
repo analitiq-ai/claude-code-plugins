@@ -1600,13 +1600,12 @@ ErrorCategory = Literal[
     "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected"
 ]
 
-# Per-family identifier grammars, mirrored from the engine parser: a 2-char
-# SQLSTATE class or full 5-char state (uppercase alphanumeric only); a Python
-# exception class name; a signed integer vendor code; a 3-digit HTTP status
-# (100-599 — string-typed on the wire, like every JSON object key).
-_SQLSTATE_KEY_PATTERN = r"^[0-9A-Z]{2}([0-9A-Z]{3})?$"
-_EXCEPTION_KEY_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
-_VENDOR_CODE_KEY_PATTERN = r"^-?[0-9]+$"
+# `key_attrs` entries: a Python attribute name — or the reserved sentinel
+# `__exception_class__`, itself a valid match under the same identifier
+# pattern, so no separate grammar is needed for it. `http`'s grammar is
+# mirrored from the engine parser unchanged: a 3-digit HTTP status (100-599 —
+# string-typed on the wire, like every JSON object key).
+_KEY_ATTR_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]*$"
 _HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 
 # Pydantic renders a patterned-key dict as `patternProperties` alone, under
@@ -1628,9 +1627,9 @@ _HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 #    `url_template` pattern above, the ECMA-safe form goes in the published
 #    schema only and the Rust `$` (already true-end) is the runtime mirror.
 #
-# The four aliases stay explicit (not factory-built) so static type checkers
-# keep covering the fields; the callable is shared so both invariants are
-# stated once.
+# The alias stays explicit (not factory-built) so static type checkers keep
+# covering the field; the callable itself stays shared with any future
+# patterned-key family that needs the same schema-parity treatment.
 def _closed_true_end_keys(schema: dict[str, Any]) -> None:
     pattern_props = schema.pop("patternProperties", None)
     if pattern_props:
@@ -1639,64 +1638,117 @@ def _closed_true_end_keys(schema: dict[str, Any]) -> None:
             for key, value in pattern_props.items()
         }
     schema["additionalProperties"] = False
-_SqlstateFamily = Annotated[
-    dict[Annotated[str, StringConstraints(pattern=_SQLSTATE_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_closed_true_end_keys),
-]
-_ExceptionFamily = Annotated[
-    dict[Annotated[str, StringConstraints(pattern=_EXCEPTION_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_closed_true_end_keys),
-]
-_VendorCodeFamily = Annotated[
-    dict[Annotated[str, StringConstraints(pattern=_VENDOR_CODE_KEY_PATTERN)], ErrorCategory],
-    Field(json_schema_extra=_closed_true_end_keys),
-]
 _HttpStatusFamily = Annotated[
     dict[Annotated[str, StringConstraints(pattern=_HTTP_STATUS_KEY_PATTERN)], ErrorCategory],
     Field(json_schema_extra=_closed_true_end_keys),
 ]
+# `key_attrs`: an ordered, non-empty tuple of identifier-shaped strings — a
+# minimum of one, since an empty tuple would mean "read nothing", which is
+# indistinguishable from omitting the field entirely.
+_KeyAttrsTuple = Annotated[
+    tuple[Annotated[str, StringConstraints(pattern=_KEY_ATTR_PATTERN)], ...],
+    Field(min_length=1),
+]
+# `codes`: keys are open strings — no pattern constraint, since a native
+# code's shape (a SQLSTATE, a numeric vendor code, an arbitrary driver string)
+# is now entirely driver-defined, not family-defined. Non-empty for the same
+# reason as `key_attrs` above.
+_ErrorCodeMap = Annotated[dict[str, ErrorCategory], Field(min_length=1)]
 
 
 class ErrorMap(StrictModel):
     """Driver-fact error classification map.
 
-    Maps driver-reported identifiers onto the engine's closed failure-category
-    vocabulary, one map per identifier family. A subset of families (including
-    none — an empty block declares nothing) is legal, and so is an empty family
-    map. Additive: absence never blocks anything. Connectors declare driver
+    Reads the connector's own caught exception for its native error signal via
+    `key_attrs` (an ordered, non-empty tuple of attribute names, most-specific
+    first — declared order IS the specificity order — or the reserved name
+    `__exception_class__` to match the exception's class name up its MRO
+    instead of an attribute read) and maps whatever value that produces,
+    through `codes`, onto the engine's closed failure-category vocabulary.
+    `http` maps an HTTP status read at the call site the same way — never off
+    an exception, so it is independent of `key_attrs`/`codes`. `key_attrs` and
+    `codes` are declared together or not at all: one without the other is
+    either unusable (`codes` with nowhere to read a native value from) or a
+    no-op (`key_attrs` with no mapping to apply). Absence of the whole block,
+    or of `http` alone, is legal and means "no declared mapping" for that
+    half. Additive: absence never blocks anything. Connectors declare driver
     facts only; the engine alone derives verdicts (ack status, failure
     category, error code) from them.
     """
 
-    sqlstate: _SqlstateFamily | None = Field(
+    model_config = ConfigDict(
+        extra="forbid",
+        # Mirror `_key_attrs_and_codes_together` for JSON-Schema-only
+        # consumers: `key_attrs` present-and-non-null implies `codes` likewise,
+        # and symmetrically the other way — together, "both or neither". Same
+        # if/then shape as the rest of this contract's cross-field mirrors,
+        # applied twice for a two-way implication instead of `WriteUnit`'s
+        # one-way `anyOf`.
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {
+                        "required": ["key_attrs"],
+                        "properties": {"key_attrs": {"not": {"type": "null"}}},
+                    },
+                    "then": {
+                        "required": ["codes"],
+                        "properties": {"codes": {"not": {"type": "null"}}},
+                    },
+                },
+                {
+                    "if": {
+                        "required": ["codes"],
+                        "properties": {"codes": {"not": {"type": "null"}}},
+                    },
+                    "then": {
+                        "required": ["key_attrs"],
+                        "properties": {"key_attrs": {"not": {"type": "null"}}},
+                    },
+                },
+            ]
+        },
+    )
+
+    key_attrs: _KeyAttrsTuple | None = Field(
         default=None,
         description=(
-            "SQLSTATE → failure category. Keys are a 2-char SQLSTATE class "
-            "(e.g. `08`) or a full 5-char state (e.g. `28000`), uppercase "
-            "alphanumeric."
+            "Ordered attribute names to read the connector's caught exception "
+            "for its native error signal, most-specific first. The reserved "
+            "name `__exception_class__` matches the exception's class name up "
+            "its MRO instead of an attribute read. Declared together with "
+            "`codes`."
         ),
     )
-    exception: _ExceptionFamily | None = Field(
+    codes: _ErrorCodeMap | None = Field(
         default=None,
         description=(
-            "Python exception class name → failure category "
-            "(e.g. `OperationalError`)."
-        ),
-    )
-    vendor_code: _VendorCodeFamily | None = Field(
-        default=None,
-        description=(
-            "Vendor error code → failure category. Keys are signed integers "
-            "in string form (e.g. `1045`, `-803`)."
+            "Native code (whatever a `key_attrs` read produces) → failure "
+            "category. Keys are open strings — the native code's shape (a "
+            "SQLSTATE, a numeric vendor code, or any other driver-defined "
+            "code) is entirely driver-defined. Declared together with "
+            "`key_attrs`."
         ),
     )
     http: _HttpStatusFamily | None = Field(
         default=None,
         description=(
             "HTTP status → failure category. Keys are 3-digit statuses "
-            "100-599 in string form (e.g. `429`)."
+            "100-599 in string form (e.g. `429`). Read at the HTTP call "
+            "site, never off an exception — independent of "
+            "`key_attrs`/`codes`."
         ),
     )
+
+    @model_validator(mode="after")
+    def _key_attrs_and_codes_together(self) -> "ErrorMap":
+        if (self.key_attrs is None) != (self.codes is None):
+            raise ValueError(
+                "error_map requires `key_attrs` and `codes` together "
+                "(one without the other cannot classify anything; omit both "
+                "instead of declaring only one)"
+            )
+        return self
 
 
 class Concurrency(StrictModel):
@@ -2175,11 +2227,12 @@ class ConnectorBase(StrictModel):
     error_map: ErrorMap | None = Field(
         default=None,
         description=(
-            "Driver-fact error classification map: "
-            "per-family identifier → failure-category facts "
-            "(sqlstate, exception, vendor_code, http). Connector-level "
-            "because families span kinds (http for API connectors, sqlstate/"
-            "vendor_code for databases). Additive — absence never blocks "
+            "Driver-fact error classification map: `key_attrs`/`codes` read "
+            "the connector's caught exception for its native error signal and "
+            "map it to a failure category; `http` does the same for a status "
+            "read at the call site. Connector-level because `http` and "
+            "`key_attrs`/`codes` span kinds (http for API connectors, "
+            "key_attrs/codes for databases). Additive — absence never blocks "
             "anything; the engine alone derives verdicts from these facts."
         ),
     )
