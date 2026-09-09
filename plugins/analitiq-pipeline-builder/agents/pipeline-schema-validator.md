@@ -65,7 +65,8 @@ published contract structurally cannot make (see its module docstring).
   when it exits non-zero (`passed: false`). The orchestrator interprets the
   verdict.
 - The adapter contains every crash it can reach into an `adapter-crash` finding
-  on stdout — see `io-contracts.md` § `Diagnostics`. If the command still
+  on stdout — see `skills/pipeline-builder/references/io-contracts.md` §
+  `Diagnostics`. If the command still
   prints no JSON on stdout (a `SystemExit` or another fatal interpreter failure
   before any guard runs — not something Python exception handling can contain),
   return the stderr excerpt as a single error finding; never forward partial or

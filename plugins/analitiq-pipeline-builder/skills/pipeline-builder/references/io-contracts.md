@@ -160,9 +160,13 @@ structurally cannot make:
 - `connection-type-map` — **error**: file-level gates on the connection-scoped
   type maps the engine loads beside `connection.json`. See
   `endpoint-spec/spec-type-map-gaps.md`.
-- `adapter-crash` — **error**: a containment guard inside `scripts/validate.py`
-  fired; the document was not evaluated for that stage. `path` and `message`
-  name which stage crashed and why.
+
+One further id names not a check but a failure mode: `adapter-crash` —
+**error**: the run could not be evaluated normally. Either a containment guard
+inside `scripts/validate.py` fired — the document was not evaluated for that
+stage, and `path`/`message` name which stage crashed and why — or the process
+printed no `Diagnostics` JSON at all and the driving agent reconstructed this
+finding from a stderr excerpt, carried in `message` with `path` empty.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and

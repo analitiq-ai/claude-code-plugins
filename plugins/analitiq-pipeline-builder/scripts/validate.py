@@ -121,7 +121,7 @@ def _crash_finding(path: str, exc: BaseException) -> dict:
 
 
 @contextlib.contextmanager
-def _contained(findings: list[dict], path: str = ""):
+def _contained(findings: list[dict], path: str):
     """Run one independently-decidable stage. Any exception besides
     `MemoryError` becomes one `adapter-crash` finding and the walk continues
     past it. `MemoryError` re-raises: only the outermost guard in `main()`
@@ -281,9 +281,13 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
 
     streams: list[dict] = []
     for p in sorted((document_path.parent / "streams").glob("*.json")):
-        doc = _read_bundle_member(p, findings)
-        if doc is not None:
-            streams.append(doc)
+        # One stream is one independently-decidable unit, same as one connection
+        # or one connector below: a crash reading it (e.g. a pathologically deep
+        # document) must not discard the streams already appended above.
+        with _contained(findings, f"streams/{p.name}"):
+            doc = _read_bundle_member(p, findings)
+            if doc is not None:
+                streams.append(doc)
 
     connections: list[dict] = []
     endpoints: list[dict] = []
@@ -301,15 +305,21 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
                 endpoint = _read_bundle_member(ep_json, findings)
                 if endpoint is None:
                     continue
-                # files here are stem-addressed by construction (globbed from
-                # definition/endpoints/), so the published filename gate applies directly
-                findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
                 # Endpoint documents omit connection_id (server-managed); supply the
                 # owning connection's id so the bundle's endpoint-ref check can resolve
                 # connection-scoped references.
                 endpoint.setdefault("connection_id", connection_id)
                 endpoint.setdefault("scope", "connection")
                 endpoints.append(endpoint)
+                # files here are stem-addressed by construction (globbed from
+                # definition/endpoints/), so the published filename gate applies
+                # directly. One endpoint's gate is its own independently-decidable
+                # unit, contained and run LAST: a crash here must not cost this
+                # endpoint its place above, nor the remaining endpoints and the
+                # trailing type-map check still to run for this connection.
+                ep_site = f"connections/{conn_json.parent.name}/definition/endpoints/{ep_json.name}"
+                with _contained(findings, ep_site):
+                    findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
             # Connection-scoped type maps are files the engine loads beside the
             # connection, invisible to the assembled-document bundle — check them
             # here, LAST: a crash here must not cost the connection/endpoints
@@ -453,7 +463,7 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # only, so scope='connector' endpoint refs go unresolved. The plugin has the
     # downloaded connector endpoint files, so verify those refs here and warn (with an
     # alignment suggestion) rather than error — connectors are trusted, pinned at runtime.
-    with _contained(findings, "streams"):
+    with _contained(findings, "connector-endpoint-refs"):
         findings.extend(_check_connector_endpoint_refs(
             bundle["streams"], bundle["connections"], _connector_endpoint_sets(root)))
     return findings
@@ -498,11 +508,14 @@ def main(argv: list[str] | None = None) -> int:
                              "Only meaningful with --entity pipeline.")
     args = parser.parse_args(argv)
 
-    # The one guard that must contain everything unconditionally, MemoryError
-    # included — it is reached however deep the failing call is, so it is what
-    # keeps a crash anywhere in the dispatch below from ever reaching the
-    # interpreter's own uncaught-exception handling (a traceback on stderr,
-    # nothing on stdout).
+    # The one guard that must contain everything Python exception handling can
+    # contain, MemoryError included — it is reached however deep the failing
+    # call is, so it is what keeps such a crash anywhere in the dispatch below
+    # from ever reaching the interpreter's own uncaught-exception handling (a
+    # traceback on stderr, nothing on stdout). A SystemExit raised below this
+    # point (or anything else `except Exception` does not catch) still escapes
+    # uncontained — the driving agent's stderr-excerpt fallback is for exactly
+    # that case.
     try:
         ensure_deps_or_reexec(__file__)
         bundle_root = Path(args.bundle_root) if args.bundle_root else None

@@ -533,7 +533,7 @@ def test_bundle_flags_type_map_that_is_not_a_file(tmp_path):
 # than a bare traceback with an empty stdout.
 # ---------------------------------------------------------------------------
 
-def test_model_findings_crash_becomes_adapter_crash_finding(tmp_path, capsys):
+def test_model_findings_crash_becomes_adapter_crash_finding(tmp_path, monkeypatch, capsys):
     # an exception type pydantic never converts to ValidationError (a bug in a
     # custom validator, a typo'd attribute access, ...) must not escape as a
     # bare traceback — it is contained at the CLI's outermost guard
@@ -542,13 +542,9 @@ def test_model_findings_crash_becomes_adapter_crash_finding(tmp_path, capsys):
     def boom(cls, *a, **kw):
         raise TypeError("simulated crash")
 
-    original = connection_module.ConnectionInput.model_validate
-    connection_module.ConnectionInput.model_validate = classmethod(boom)
-    try:
-        p = _write(tmp_path, "connection.json", CONN_PG)
-        rc = V.main(["--entity", "connection", "--document", str(p)])
-    finally:
-        connection_module.ConnectionInput.model_validate = original
+    monkeypatch.setattr(connection_module.ConnectionInput, "model_validate", classmethod(boom))
+    p = _write(tmp_path, "connection.json", CONN_PG)
+    rc = V.main(["--entity", "connection", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert out["passed"] is False
@@ -603,7 +599,7 @@ def test_bundle_connector_endpoint_refs_crash_contained(tmp_path, monkeypatch):
     assert "adapter-crash" in validators, diag["findings"]
 
 
-def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, capsys):
+def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, monkeypatch, capsys):
     # MemoryError re-raises through every per-stage guard so only the single
     # outermost guard in main() contains it — one finding, not one per
     # in-progress unit — and a bare MemoryError() (empty str()) must not leave
@@ -613,12 +609,8 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, c
     def boom(conn_dir):
         raise MemoryError()
 
-    orig = V._connection_type_map_findings
-    V._connection_type_map_findings = boom
-    try:
-        rc = V.main(["--entity", "pipeline", "--document", str(doc), "--bundle-root", str(tmp_path)])
-    finally:
-        V._connection_type_map_findings = orig
+    monkeypatch.setattr(V, "_connection_type_map_findings", boom)
+    rc = V.main(["--entity", "pipeline", "--document", str(doc), "--bundle-root", str(tmp_path)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
     crash = [f for f in out["findings"] if f["validator"] == "adapter-crash"]
@@ -627,7 +619,7 @@ def test_bundle_memory_error_yields_single_finding_no_dangling_colon(tmp_path, c
     assert not crash[0]["message"].endswith(": ")
 
 
-def test_endpoint_route_crash_before_validate_document_contained(tmp_path, capsys):
+def test_endpoint_route_crash_before_validate_document_contained(tmp_path, monkeypatch, capsys):
     # the import and doc_path.resolve() ahead of validate_document's own
     # internal guard are not themselves guarded by it — a failure there (e.g.
     # a path that cannot resolve) must still produce Diagnostics on stdout
@@ -639,11 +631,8 @@ def test_endpoint_route_crash_before_validate_document_contained(tmp_path, capsy
             raise OSError("cannot resolve")
         return original_resolve(self, *a, **kw)
 
-    Path.resolve = boom
-    try:
-        rc = V.main(["--entity", "database_endpoint", "--document", str(p)])
-    finally:
-        Path.resolve = original_resolve
+    monkeypatch.setattr(Path, "resolve", boom)
+    rc = V.main(["--entity", "database_endpoint", "--document", str(p)])
     out = json.loads(capsys.readouterr().out)
     assert rc == 1
     assert any(f["validator"] == "adapter-crash" for f in out["findings"]), out["findings"]
@@ -667,6 +656,119 @@ def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check
     assert "adapter-crash" in validators, diag["findings"]
     assert "bundle-connection-ref" not in validators, diag["findings"]
     assert "bundle-endpoint-ref" not in validators, diag["findings"]
+
+
+def test_bundle_endpoint_filename_crash_preserves_endpoint_and_siblings(tmp_path, monkeypatch):
+    # a crash in one endpoint's filename gate must not cost that endpoint its
+    # place in the bundle passed to the referential check, nor the remaining
+    # endpoints and the connection's trailing type-map check the per-connection
+    # guard would otherwise discard as one shared unit
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    second_eid = derive_db_endpoint_id(None, "public", "customers")
+    second_endpoint = {**DB_ENDPOINT, "endpoint_id": second_eid,
+                        "database_object": build_database_object(None, "public", "customers")}
+    _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
+
+    import analitiq.validator as validator_module
+    original = validator_module.endpoint_filename_findings
+
+    def boom(endpoint, filename):
+        if filename == f"{EID}.json":
+            raise TypeError("simulated crash")
+        return original(endpoint, filename)
+
+    monkeypatch.setattr(validator_module, "endpoint_filename_findings", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    # the crashed endpoint still holds its place in the bundle -> no false
+    # bundle-endpoint-ref for the stream's legitimate reference to it
+    assert "bundle-endpoint-ref" not in validators, diag["findings"]
+    # the connection's trailing type-map check still ran despite the earlier
+    # crash in this same per-connection unit
+    assert "connection-type-map" in validators, diag["findings"]
+
+
+def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path, monkeypatch):
+    # a crash beyond the read errors _assemble_bundle's connectors loop already
+    # handles (e.g. a pathologically deep document) is its own guarded unit —
+    # it must not abort the loop before a later connector's identity is read
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connectors/wise/definition/connector.json",
+           {"connector_id": "wise-live", "kind": "api"})
+
+    original = V._read_json
+
+    def boom(path):
+        if path.name == "connector.json" and path.parent.parent.name == "postgresql":
+            raise TypeError("simulated crash")
+        return original(path)
+
+    monkeypatch.setattr(V, "_read_json", boom)
+    pipeline_doc = json.loads(doc.read_text())
+    bundle, findings = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    validators = [f["validator"] for f in findings]
+    assert "adapter-crash" in validators, findings
+    crash = [f for f in findings if f["validator"] == "adapter-crash"][0]
+    assert crash["path"] == "connectors/postgresql"
+    # postgresql's directory slug is recorded unconditionally, before the crash
+    assert "postgresql" in bundle["connectors"], bundle["connectors"]
+    # wise, processed after the crashed unit in loop order, still registers its
+    # connector_id (which here differs from its directory slug)
+    assert "wise-live" in bundle["connectors"], bundle["connectors"]
+
+
+def test_bundle_pipeline_validator_crash_preserves_other_unit_result(tmp_path, monkeypatch):
+    # the "pipeline" guarded unit (validate_pipeline_bundle) is not the only
+    # unit _bundle_findings decides — a crash in it must not discard the
+    # OTHER unit's (_check_connector_endpoint_refs) result
+    doc = _build_bundle(tmp_path)
+    _add_wise_endpoint(tmp_path, "transfers")
+    stream_path = tmp_path / "pipelines/p/streams/orders.json"
+    stream = json.loads(stream_path.read_text())
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo
+    stream_path.write_text(json.dumps(stream))
+
+    import analitiq.validator as validator_module
+
+    def boom(*a, **kw):
+        raise TypeError("simulated crash")
+
+    monkeypatch.setattr(validator_module, "validate_pipeline_bundle", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    assert not diag["passed"]
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    assert "connector-endpoint-ref" in validators, diag["findings"]  # the other unit's result
+
+
+def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembly(tmp_path, monkeypatch):
+    # one stream file is its own independently-decidable unit, same as one
+    # connection or connector below it — a crash reading it must not discard a
+    # sibling stream already appended, nor abort bundle assembly before the
+    # connections loop that runs after it
+    doc = _build_bundle(tmp_path)
+    second_stream = {**STREAM, "stream_id": "55555555-5555-4555-8555-555555555555"}
+    _write(tmp_path, "pipelines/p/streams/second.json", second_stream)
+    _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+
+    original = V._read_json
+
+    def boom(path):
+        if path.name == "orders.json":
+            raise TypeError("simulated crash")
+        return original(path)
+
+    monkeypatch.setattr(V, "_read_json", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    crash = [f for f in diag["findings"] if f["validator"] == "adapter-crash"][0]
+    assert crash["path"] == "streams/orders.json"
+    # the connections loop, which runs after the crashed streams loop, still
+    # ran and decided its own finding
+    assert "connection-type-map" in validators, diag["findings"]
 
 
 def test_crash_finding_handles_broken_exception_str():
