@@ -334,8 +334,8 @@ class TestScalarNodePropertiesAreNotTraversable:
         assert resolve_declared_path(root, ["age"]) == {"type": "integer"}
 
     def test_disjoint_type_refusal_across_allof_branches_is_unaffected(self):
-        # `_permits_object` gates whether `properties` is trusted; it does not
-        # fold into or replace `_refuse_disjoint_types`: an `allOf` branch
+        # `_composed_permits_object` gates whether `properties` is trusted; it
+        # does not fold into or replace `_refuse_disjoint_types`: an `allOf` branch
         # declaring `object` beside one declaring `array` is still a provable
         # contradiction.
         node = {
@@ -464,6 +464,60 @@ class TestScalarNodePropertiesAreNotTraversable:
         # (see the function's own docstring), so the same contradiction
         # surfaces here as a `DeclaredPathError` instead.
         with pytest.raises(DeclaredPathError, match="conflicting redeclaration"):
+            resolve_declared_path(root, ["age"], root=root)
+
+    def test_a_scalar_only_anyof_union_does_not_permit_properties(self):
+        # A node can express its scalar type through `anyOf`/`oneOf` instead
+        # of a bare `type` key: an instance satisfying the union need only
+        # match ONE branch, so the union's possible types are its branches'
+        # types UNIONED — `{string, null}` here, neither of which is
+        # `object`. `_fold_permits_object` must fold this union the same as
+        # any other composition keyword, or a node with no bare `type` of its
+        # own and no `object`-permitting branch anywhere still defaults to
+        # "permits object".
+        node = {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+        # `anyOf` is also a CONDITIONAL_DECLARATION_KEYWORD: once "age" is
+        # correctly excluded from `properties`, the ambiguity check (not the
+        # plain "not declared" one) is what fires — see
+        # TestNotStaticallyResolvable for that message's own coverage.
+        with pytest.raises(DeclaredPathError, match="not statically resolvable"):
+            resolve_declared_path(node, ["age"])
+
+    def test_a_oneof_union_with_no_object_branch_does_not_permit_properties(self):
+        # `oneOf`'s exclusivity ("exactly one branch") is irrelevant to which
+        # types are POSSIBLE — an instance still need only match one branch,
+        # so `oneOf` folds identically to `anyOf` here.
+        node = {
+            "oneOf": [{"arrow_type": "Utf8"}, {"arrow_type": "Int64"}],
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+
+    def test_an_own_arrow_type_object_does_not_override_an_inherited_bare_type(self):
+        # The two tracks this predicate composes — bare `type` and
+        # `arrow_type` — never merge: an own `arrow_type: "Object"` overrides
+        # an INHERITED `arrow_type` exclusion (the legitimate "enclosing
+        # override" idiom, see the `arrow_type: "Utf8"` rescue test above),
+        # but must never override an inherited BARE `type` exclusion moved
+        # into the `$ref` target instead of restated on this node — `Scalar:
+        # {type: "string"}` still excludes `object` for a referencing node
+        # whose own declaration never repeats a bare `type` of its own.
+        root = {
+            "$defs": {"Scalar": {"type": "string"}},
+            "$ref": "#/$defs/Scalar",
+            "native_type": "record",
+            "arrow_type": "Object",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {}
+        assert materialize_node(root)["properties"] == {}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
             resolve_declared_path(root, ["age"], root=root)
 
     def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
