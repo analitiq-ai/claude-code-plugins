@@ -5,10 +5,10 @@ statement: >
 tier: structural
 severity: error
 scopes: [connector]
-validator: "analitiq.contracts.connector::ErrorMap.exception"
+validator: "analitiq.contracts.connector::ErrorMap.codes"
 owners: [connector-plugin, engine]
 targets: [ErrorMap]
-fields: [exception, http, sqlstate, vendor_code]
+fields: [codes, http]
 mechanism: literal_enum
 rationale: >
   The category is not a label the run reports afterwards; it is the branch the

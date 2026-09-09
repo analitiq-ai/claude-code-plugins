@@ -10,7 +10,9 @@
 # namespace portion no matter what sys.path says. The suite would then exercise
 # the last published release instead of the source you are editing.
 #
-# Only the packages' own runtime dependencies belong here.
+# Only the packages' own runtime dependencies belong here. `analitiq-cdk`, a
+# separate engine-published package a drift guard live-imports against, is
+# installed by a dedicated `--no-deps` step instead — see requirements-cdk.txt.
 
 # analitiq-contract-models runtime deps
 pydantic>=2.12,<3

@@ -1,0 +1,21 @@
+id: RULE-CTOR-067
+statement: >
+  error_map's key_attrs and codes MUST be declared together; a block declaring
+  one without the other MUST be rejected.
+tier: advisory
+severity: error
+scopes: [connector]
+validator: "analitiq.contracts.connector::ErrorMap._key_attrs_and_codes_together"
+owners: [engine, connector-plugin]
+targets: [ErrorMap]
+rationale: >
+  key_attrs names where to read a connector's native error signal from; codes
+  names what each value it finds means. Declaring key_attrs alone leaves the
+  engine with nowhere to route a matched value — a no-op that reads as a
+  declared mapping. Declaring codes alone leaves the engine with nothing to
+  read a native value from at all — unusable, not merely incomplete. Neither
+  half is a degraded version of the mapping; each is meaningless without the
+  other, so a block declaring only one is rejected rather than silently
+  accepted as a partial classification.
+status: active
+superseded_by: null

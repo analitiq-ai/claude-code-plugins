@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`connector`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 41 of the 85 below have no validator, so nothing rejects
+all hold: 41 of the 86 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **32** structural · **29** advisory · **10** referential · **8** procedural · **6** judgment.
+In this file: **32** structural · **30** advisory · **10** referential · **8** procedural · **6** judgment.
 
 ## Contents
 
@@ -53,7 +53,7 @@ than edited.
 | RULE-CTOR-055 | A DSN `template` MUST NOT contain `${...}` value-expression syntax; a substitution point is a `{name}` placeholder declared in `bindings`. | `connector` | error | validator | — |
 | RULE-CTOR-056 | A connection condition's `present` MUST be the JSON boolean `true`, never a number or string that stands in for it. | `connector` | error | validator | — |
 | RULE-CTOR-057 | In a connector field a runtime resolves, every ref and every `${...}` template placeholder MUST lead with one of the resolution scopes the contract declares. | `connector` | error | validator | — |
-| RULE-CTOR-058 | Every entry in a connector's error map MUST name its failure category from the vocabulary `ErrorMap` declares. | `connector` | error | validator | `exception`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `http`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `sqlstate`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `vendor_code`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` |
+| RULE-CTOR-058 | Every entry in a connector's error map MUST name its failure category from the vocabulary `ErrorMap` declares. | `connector` | error | validator | `codes`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` · `http`: `transient`, `config`, `auth`, `unreachable`, `rate_limited`, `write_rejected` |
 | RULE-CTOR-059 | A destination's SQL capability block MUST state its catalog support, its upsert grammar and how a write selects its target schema using only the vocabulary `SqlCapabilities` declares for each. | `connector` | error | validator | `catalog`: `none`, `read`, `full` · `merge_form`: `merge`, `insert_on_conflict`, `insert_on_duplicate_key`, `none` · `session_targeting`: `per_statement`, `session_default` |
 | RULE-CTOR-060 | A destination's stage-relation block MUST state where stage relations live and how long they survive using only the vocabulary `SqlStageCapabilities` declares for each. | `connector` | error | validator | `schema`: `target`, `dedicated` · `scope`: `temp`, `real` |
 | RULE-CTOR-061 | The transport type a connector declares as its default MUST come from the transport vocabulary `TransportDefaults` declares. | `connector` | error | validator | `transport_type`: `http`, `sqlalchemy`, `adbc`, `s3`, `file`, `stdout` |
@@ -108,6 +108,7 @@ single field looks wrong.
 | RULE-CTOR-051 | A `runtime.oauth.*` reference MUST appear only in the auth operation for which that value exists, and only on a connector whose auth type produces it. | `connector` | error | — |
 | RULE-CTOR-052 | Every connector-internal ref — to a secret, a connection parameter or a discovered value — MUST name something the connection contract declares as an input or as a post-auth output. | `connector` | error | — |
 | RULE-CTOR-054 | A DSN binding's `value` MUST NOT apply a wire-encoding function, because the binding's declared `encoding` already owns that encoding. | `connector` | error | — |
+| RULE-CTOR-067 | error_map's key_attrs and codes MUST be declared together; a block declaring one without the other MUST be rejected. | `connector` | error | validator |
 | RULE-HTTP-001 | A block MUST NOT both declare a header and list that same header name for removal, matched case-insensitively. | `any` | error | validator |
 
 ## Referential
