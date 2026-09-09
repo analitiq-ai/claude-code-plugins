@@ -58,6 +58,13 @@ jobs:
         # inline one here; that would let a wheel shadow the source under
         # test (requirements-dev.txt's own header owns this).
         run: pip install -r requirements-dev.txt
+      - name: Install the analitiq-cdk drift-guard dependency
+        id: install-cdk
+        # Separate, --no-deps step: analitiq-cdk's own dependencies pin
+        # analitiq-contract-models to a version this repo does not ship, which
+        # would shadow the in-repo source the same way a direct install would
+        # (requirements-cdk.txt owns the full explanation).
+        run: pip install --no-deps -r requirements-cdk.txt
       - name: Run the suites
         id: tests
         # DRIFT_REQUIRE_CONTRACT_MODELS=1 turns a missing/broken contract package

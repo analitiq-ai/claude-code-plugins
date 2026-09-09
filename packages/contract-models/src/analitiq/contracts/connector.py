@@ -1591,9 +1591,11 @@ def _reject_post_auth_contract(contract: "ConnectionContract", kind: str) -> Non
 
 
 # Closed failure-category vocabulary (capability block v2), mirrored by the
-# engine's typed parser (`cdk/declarations.py`). The schema rendered from this
-# Literal is the published contract; a vocabulary change is a coordinated
-# engine + contract revision, never a local edit.
+# engine's typed parser (`cdk/declarations.py`) and guarded by a live-import
+# drift test against a pinned `analitiq-cdk` install
+# (`packages/contract-models/tests/unit/test_capability_block_v2.py`). The
+# schema rendered from this Literal is the published contract; a vocabulary
+# change is a coordinated engine + contract revision, never a local edit.
 ErrorCategory = Literal[
     "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected"
 ]

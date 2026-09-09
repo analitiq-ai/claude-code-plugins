@@ -63,6 +63,7 @@ tests/<plugin>/                   # one suite per plugin (package suites live be
 
 ```bash
 pip install -r requirements-dev.txt
+pip install --no-deps -r requirements-cdk.txt   # see requirements-cdk.txt for why --no-deps
 git config core.hooksPath .githooks   # once per clone — see below
 pytest
 ```

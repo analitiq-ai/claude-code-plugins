@@ -1,0 +1,13 @@
+# The engine's own CDK package, published unconditionally to PyPI. Live-imported
+# by packages/contract-models/tests/unit/test_capability_block_v2.py to guard
+# ErrorCategory against cdk.declarations.ERROR_CATEGORY_VALUES — pin
+# deliberately, bump deliberately, never silently ahead of what CI tests against.
+#
+# MUST be installed with `--no-deps` (see .github/workflows/tests.yml):
+# analitiq-cdk's own runtime dependencies pin analitiq-contract-models to a
+# version this repo does not ship. A normal install would pull that wheel in,
+# which SILENTLY SHADOWS the in-repo contract-models source every other test
+# in this suite depends on (requirements-dev.txt's header owns that invariant).
+# `cdk.declarations`, the only module this repo imports from analitiq-cdk,
+# needs nothing from analitiq-cdk's own dependency set to import.
+analitiq-cdk==0.3.0

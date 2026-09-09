@@ -51,6 +51,8 @@ import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
+from cdk.declarations import ERROR_CATEGORY_VALUES
+
 from analitiq.contracts.connector import (
     Concurrency,
     ErrorMap,
@@ -152,10 +154,22 @@ def test_error_map_rejects(payload, why):
 
 # Hand-pinned expected member sets — a deliberate restatement so a future
 # NARROWING fails loudly (same rationale as EXPECTED_SQL_CAP_ENUMS in
-# test_sql_capabilities.py). The vocabulary and key grammars are settled and
-# mirrored by the engine's typed parser (`cdk/declarations.py`);
-# this is the sanctioned copy — a restatement that cannot be avoided, carrying
-# the test assertion that keeps it honest.
+# test_sql_capabilities.py).
+#
+# The category vocabulary (EXPECTED_ERROR_CATEGORIES) is guarded below against
+# a live-imported, pinned `analitiq-cdk` install
+# (`test_error_categories_match_engine_cdk`): `ERROR_CATEGORY_VALUES` is a
+# public, unconditionally-shipped module constant the engine's own production
+# code imports, so pinning the contract's `ErrorCategory` against it directly
+# is safe.
+#
+# The four family-key patterns below (EXPECTED_FAMILY_KEY_PATTERNS,
+# EXPECTED_PUBLISHED_KEY_PATTERNS) stay an unguarded hand restatement: their
+# engine equivalents are underscore-prefixed, carry no public re-export, and
+# are imported by name nowhere in the engine's own codebase, so pinning
+# against them would be a private-implementation-detail coupling. They remain
+# a hand-maintained copy until the engine settles a public mechanism for
+# connector-owned error classification.
 EXPECTED_ERROR_CATEGORIES = {
     "transient",
     "config",
@@ -218,6 +232,26 @@ def test_error_map_families_are_pinned():
 def test_every_pinned_category_validates(category):
     error_map = ErrorMap.model_validate({"sqlstate": {"08": category}})
     assert error_map.sqlstate == {"08": category}
+
+
+def test_error_categories_match_engine_cdk():
+    """Live-import drift guard: `ErrorCategory` against the pinned `analitiq-cdk`.
+
+    Reads `cdk.declarations.ERROR_CATEGORY_VALUES` from the `analitiq-cdk`
+    version pinned in requirements-cdk.txt, fresh on every run — no vendored
+    snapshot to go stale. A category the engine adds, renames or removes fails
+    here before `ErrorCategory` (and this module's `EXPECTED_ERROR_CATEGORIES`)
+    silently drifts from what the engine actually classifies.
+    """
+    engine_categories = set(ERROR_CATEGORY_VALUES)
+    assert engine_categories == EXPECTED_ERROR_CATEGORIES, (
+        "cdk.declarations.ERROR_CATEGORY_VALUES disagrees with the pinned "
+        f"contract — engine-only={sorted(engine_categories - EXPECTED_ERROR_CATEGORIES)} "
+        f"contract-only={sorted(EXPECTED_ERROR_CATEGORIES - engine_categories)}. "
+        "Update ErrorCategory in analitiq/contracts/connector.py and "
+        "EXPECTED_ERROR_CATEGORIES here together, as a coordinated engine + "
+        "contract revision."
+    )
 
 
 # ---------------------------------------------------------------------------
