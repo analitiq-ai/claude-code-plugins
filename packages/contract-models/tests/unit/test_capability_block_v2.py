@@ -45,13 +45,12 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
-
-from cdk.declarations import ERROR_CATEGORY_VALUES
 
 from analitiq.contracts.connector import (
     Concurrency,
@@ -163,12 +162,13 @@ def test_error_map_rejects(payload, why):
 # code imports, so pinning the contract's `ErrorCategory` against it directly
 # is safe.
 #
-# The four family-key patterns below (EXPECTED_FAMILY_KEY_PATTERNS,
-# EXPECTED_PUBLISHED_KEY_PATTERNS) stay an unguarded hand restatement: their
-# engine equivalents are underscore-prefixed, carry no public re-export, and
-# are imported by name nowhere in the engine's own codebase, so pinning
-# against them would be a private-implementation-detail coupling. They remain
-# a hand-maintained copy until the engine settles a public mechanism for
+# The family-key patterns below (EXPECTED_FAMILY_KEY_PATTERNS,
+# EXPECTED_PUBLISHED_KEY_PATTERNS) stay an unguarded hand restatement: as of
+# the pinned `analitiq-cdk`, the engine's equivalents (`_SQLSTATE_KEY` and its
+# siblings) are module-private with no public re-export, so pinning against
+# them would be a private-implementation-detail coupling rather than a
+# stability signal the engine has actually published. They remain a
+# hand-maintained copy until the engine settles a public mechanism for
 # connector-owned error classification.
 EXPECTED_ERROR_CATEGORIES = {
     "transient",
@@ -220,8 +220,8 @@ def test_error_map_family_grammar_is_pinned(family):
 
 
 def test_error_map_families_are_pinned():
-    # The four families are the whole surface; ErrorMap itself is closed
-    # (extra="forbid" → additionalProperties: false), so a fifth family is a
+    # These families are the whole surface; ErrorMap itself is closed
+    # (extra="forbid" → additionalProperties: false), so a new family is a
     # contract change, never a silent addition.
     schema = ErrorMap.model_json_schema()
     assert set(schema["properties"]) == set(EXPECTED_FAMILY_KEY_PATTERNS)
@@ -242,7 +242,20 @@ def test_error_categories_match_engine_cdk():
     snapshot to go stale. A category the engine adds, renames or removes fails
     here before `ErrorCategory` (and this module's `EXPECTED_ERROR_CATEGORIES`)
     silently drifts from what the engine actually classifies.
+
+    `analitiq-cdk` needs its own `--no-deps` install step (requirements-cdk.txt),
+    so — unlike this module's other imports — it skips locally when absent
+    rather than aborting collection of the whole module; CI sets
+    `DRIFT_REQUIRE_CONTRACT_MODELS=1` (the same flag that already guards the
+    contract-models pin) so this can never pass by skipping there.
     """
+    if os.environ.get("DRIFT_REQUIRE_CONTRACT_MODELS") != "1":
+        pytest.importorskip(
+            "cdk.declarations",
+            reason="requires: pip install --no-deps -r requirements-cdk.txt",
+        )
+    from cdk.declarations import ERROR_CATEGORY_VALUES
+
     engine_categories = set(ERROR_CATEGORY_VALUES)
     assert engine_categories == EXPECTED_ERROR_CATEGORIES, (
         "cdk.declarations.ERROR_CATEGORY_VALUES disagrees with the pinned "
