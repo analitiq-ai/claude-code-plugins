@@ -316,11 +316,10 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
     for conn_json in sorted((root / "connections").glob("*/connection.json")):
         # One connection is one independently-decidable unit: a crash processing
         # it must not discard the findings already decided for connections
-        # processed earlier in this same loop. Reading the connection and its
-        # endpoints is the part that can exclude a bundle member, so only a
-        # crash here marks assembly incomplete; the trailing type-map check
-        # below runs against a connection already in the bundle and gets its
-        # own guard, so a crash there never costs the connection its place.
+        # processed earlier in this same loop. Reading the connection is the
+        # part that can exclude a bundle member, so only a crash here (or one
+        # from a per-endpoint guard below, which reports through its own site)
+        # marks assembly incomplete.
         conn = None
         with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
             conn = _read_bundle_member(conn_json, findings)
@@ -328,8 +327,17 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
                 connections.append(conn)
                 connection_id = conn.get("connection_id")
                 for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
-                    endpoint = _read_bundle_member(ep_json, findings)
-                    if endpoint is None:
+                    # One endpoint is its own independently-decidable unit, same
+                    # as one stream or connection above: a crash reading it
+                    # (e.g. a pathologically deep document) must not abort the
+                    # loop and cost its siblings their place in the bundle —
+                    # each gets its own guard rather than sharing the
+                    # connection-level one above.
+                    ep_site = f"connections/{conn_json.parent.name}/definition/endpoints/{ep_json.name}"
+                    endpoint = None
+                    with _contained(findings, ep_site) as ep_outcome:
+                        endpoint = _read_bundle_member(ep_json, findings)
+                    if ep_outcome.crashed or endpoint is None:
                         complete = False
                         continue
                     # Endpoint documents omit connection_id (server-managed); supply the
@@ -340,26 +348,23 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
                     endpoints.append(endpoint)
                     # files here are stem-addressed by construction (globbed from
                     # definition/endpoints/), so the published filename gate applies
-                    # directly. One endpoint's gate is its own independently-decidable
-                    # unit, contained and run LAST: a crash here must not cost this
-                    # endpoint its place above, nor the remaining endpoints and the
-                    # trailing type-map check still to run for this connection. The
-                    # endpoint is already in the bundle by this point, so a crash here
-                    # costs only this one finding, not the bundle's completeness.
-                    ep_site = f"connections/{conn_json.parent.name}/definition/endpoints/{ep_json.name}"
+                    # directly. The gate is its own guard too, run LAST: the
+                    # endpoint is already in the bundle by this point, so a crash
+                    # here costs only this one finding, not the bundle's completeness.
                     with _contained(findings, ep_site):
                         findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
         if outcome.crashed or conn is None:
             complete = False
-        if conn is not None:
-            # Connection-scoped type maps are files the engine loads beside the
-            # connection, invisible to the assembled-document bundle — check them
-            # here, in their own guard, LAST: the connection and its endpoints
-            # already hold their place in the bundle above, so a crash here costs
-            # only this finding, never the bundle's completeness (which would
-            # otherwise misreport a live connection as unresolved).
-            with _contained(findings, f"connections/{conn_json.parent.name}"):
-                findings.extend(_connection_type_map_findings(conn_json.parent))
+        # Connection-scoped type maps are files the engine loads beside the
+        # connection, invisible to the assembled-document bundle, and depend
+        # only on conn_json.parent — never on whether connection.json itself
+        # parsed — so they are checked unconditionally, in their own guard: a
+        # crash here costs only this finding, never the bundle's completeness
+        # (which would otherwise misreport a live connection as unresolved),
+        # and a genuinely malformed or legacy type-map file is still reported
+        # even when connection.json itself is unreadable.
+        with _contained(findings, f"connections/{conn_json.parent.name}"):
+            findings.extend(_connection_type_map_findings(conn_json.parent))
 
     # Connectors supply identity only, and the directory slug already is that
     # identity — so a malformed connector.json is best-effort skipped (its slug
@@ -391,7 +396,7 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
     return bundle, findings, complete
 
 
-def _connector_endpoint_sets(root: Path) -> dict[str, set[str]]:
+def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[str]]:
     """Map each downloaded connector — by directory slug **and** its authored
     `connector_id` — to the set of endpoint ids it publishes on disk (each
     `connectors/<slug>/definition/endpoints/*.json` contributes both its filename
@@ -403,32 +408,34 @@ def _connector_endpoint_sets(root: Path) -> dict[str, set[str]]:
     **omitted**, not recorded as an empty set: its endpoint set is *unknown* here
     (the plugin may not have downloaded endpoints for it), and an unknown set must
     not read as "no endpoints", which would warn on every ref. Callers treat a
-    missing key as "cannot verify — skip"."""
+    missing key as "cannot verify — skip" — the same treatment a crash reading
+    one connector's endpoints gets here (contained per connector, so it costs
+    only that connector's set, never every other connector's)."""
     sets: dict[str, set[str]] = {}
     for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
         if not ep_dir.is_dir():
             continue
-        ids: set[str] = set()
-        for ep_json in sorted(ep_dir.glob("*.json")):
-            ids.add(ep_json.stem)
-            try:
-                eid = _read_json(ep_json).get("endpoint_id")
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-                eid = None
-            if isinstance(eid, str) and eid:
-                ids.add(eid)
-        if not ids:
-            continue
         slug_dir = ep_dir.parent.parent  # connectors/<slug>
-        keys = {slug_dir.name}
-        try:
-            cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-            cid = None
-        if isinstance(cid, str) and cid:
-            keys.add(cid)
-        for key in keys:
-            sets[key] = ids
+        with _contained(findings, f"connectors/{slug_dir.name}/definition/endpoints"):
+            ids: set[str] = set()
+            for ep_json in sorted(ep_dir.glob("*.json")):
+                ids.add(ep_json.stem)
+                try:
+                    eid = _read_json(ep_json).get("endpoint_id")
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                    eid = None
+                if isinstance(eid, str) and eid:
+                    ids.add(eid)
+            if ids:
+                keys = {slug_dir.name}
+                try:
+                    cid = _read_json(slug_dir / "definition" / "connector.json").get("connector_id")
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                    cid = None
+                if isinstance(cid, str) and cid:
+                    keys.add(cid)
+                for key in keys:
+                    sets[key] = ids
     return sets
 
 
@@ -484,6 +491,33 @@ def _check_connector_endpoint_refs(streams, connections,
     return findings
 
 
+def _unresolved_pipeline_refs(pipeline_doc: dict, bundle: dict) -> bool:
+    """True if `pipeline_doc` names a stream or connection id that no bundled
+    document declares. An incomplete assembly cannot rule out that a missing
+    reference like this IS the excluded document — so this is the narrow
+    signal deciding whether skipping `validate_pipeline_bundle` below is
+    actually warranted. An exclusion the pipeline never referenced (a stray
+    malformed stream file with no matching entry in `pipeline.streams`, say)
+    cannot be the cause of any `bundle-stream-ref` / `bundle-connection-ref`
+    finding, so on its own it must not cost the referential pass for the rest
+    of a bundle whose own references already resolve cleanly."""
+    from analitiq.validator.pipelines import _base_id
+
+    stream_ids = {_base_id(s.get("stream_id")) for s in bundle["streams"] if isinstance(s, dict)}
+    for ref in pipeline_doc.get("streams") or []:
+        if _base_id(ref) not in stream_ids:
+            return True
+
+    connection_ids = {_base_id(c.get("connection_id")) for c in bundle["connections"] if isinstance(c, dict)}
+    wiring = pipeline_doc.get("connections")
+    refs = [wiring.get("source"), *(wiring.get("destinations") or [])] if isinstance(wiring, dict) else []
+    for ref in refs:
+        if isinstance(ref, str) and _base_id(ref) not in connection_ids:
+            return True
+
+    return False
+
+
 def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> list[dict]:
     from analitiq.validator import validate_pipeline_bundle
     bundle, findings, complete = _assemble_bundle(pipeline_doc, document_path, root)
@@ -493,7 +527,7 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # (require_runnable=False) while the pipeline is a draft, and enforce runnability
     # once it is authored 'active'. Every referential finding stays blocking either way.
     require_runnable = pipeline_doc.get("status") == "active"
-    if complete:
+    if complete or not _unresolved_pipeline_refs(pipeline_doc, bundle):
         # Each of these two is its own unit: a crash in one must not discard the
         # per-connection findings _assemble_bundle already decided above, nor the
         # other unit's result.
@@ -501,23 +535,25 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
             findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
     else:
         # A crash or read error above excluded at least one on-disk member from
-        # the bundle (that finding names which one and why). The published
-        # validator has no way to tell that exclusion from a genuinely missing
-        # document, so running it here would resolve a real reference against a
-        # bundle that is short the very document it names, and report the
-        # reference itself as broken. Referential integrity is not evaluated
-        # against a bundle known to be incomplete, rather than risk that report.
+        # the bundle (that finding names which one and why), AND the pipeline
+        # names a stream or connection id no bundled document resolves. The
+        # published validator has no way to tell "that id is the excluded
+        # document" from "that id was never valid", so running it here would
+        # risk reporting a reference as broken that a crash, not the author,
+        # made unresolvable. Referential integrity is not evaluated against a
+        # bundle this ambiguous, rather than risk that report.
         findings.append(_finding(
             "adapter-crash", "error", "pipeline",
-            "bundle assembly excluded at least one on-disk document; cross-document "
-            "referential integrity was not evaluated against an incomplete bundle."))
+            "bundle assembly excluded at least one on-disk document that pipeline.streams "
+            "or pipeline.connections references; cross-document referential integrity was "
+            "not evaluated against a bundle this incomplete."))
     # Plugin-local aid the published bundle can't make: it receives connector identity
     # only, so scope='connector' endpoint refs go unresolved. The plugin has the
     # downloaded connector endpoint files, so verify those refs here and warn (with an
     # alignment suggestion) rather than error — connectors are trusted, pinned at runtime.
     with _contained(findings, "connector-endpoint-refs"):
         findings.extend(_check_connector_endpoint_refs(
-            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root)))
+            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root, findings)))
     return findings
 
 
@@ -537,7 +573,14 @@ def diagnostics_for(entity: str, document_path: Path, bundle_root: Path | None =
     else:
         findings = _model_findings(entity, doc)
         if entity == "pipeline" and bundle_root is not None:
-            findings = findings + _bundle_findings(doc, document_path, bundle_root)
+            # Its own guarded unit: a crash enriching the bundle (e.g. `doc` is
+            # not an object, so `_bundle_findings`'s own field access on it
+            # raises) must not discard the single-document findings above —
+            # the precise contract-model error a malformed pipeline document
+            # already earned stays in the result alongside the adapter-crash
+            # finding, instead of being replaced by it.
+            with _contained(findings, "pipeline-bundle"):
+                findings.extend(_bundle_findings(doc, document_path, bundle_root))
     return _diagnostics(findings)
 
 

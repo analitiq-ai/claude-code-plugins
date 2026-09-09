@@ -781,6 +781,111 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     assert sum(1 for v in validators if v == "adapter-crash") == 2, diag["findings"]
 
 
+def test_bundle_endpoint_read_crash_preserves_sibling_endpoint(tmp_path, monkeypatch):
+    # a crash reading one endpoint file (e.g. pathologically deep JSON) is its
+    # own per-endpoint unit — it must not abort the endpoints loop before an
+    # independently-readable sibling endpoint reaches the bundle
+    doc = _build_bundle(tmp_path)
+    second_eid = derive_db_endpoint_id(None, "public", "customers")
+    second_endpoint = {**DB_ENDPOINT, "endpoint_id": second_eid,
+                        "database_object": build_database_object(None, "public", "customers")}
+    _write(tmp_path, f"connections/postgresql/definition/endpoints/{second_eid}.json", second_endpoint)
+
+    original = V._read_json
+
+    def boom(path):
+        if path.name == f"{EID}.json":
+            raise TypeError("simulated crash")
+        return original(path)
+
+    monkeypatch.setattr(V, "_read_json", boom)
+    pipeline_doc = json.loads(doc.read_text())
+    bundle, findings, complete = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    assert not complete
+    endpoint_ids = {e["endpoint_id"] for e in bundle["endpoints"]}
+    assert second_eid in endpoint_ids, bundle["endpoints"]  # sibling survived the crash
+    assert EID not in endpoint_ids, bundle["endpoints"]  # the crashed one did not
+    crash = [f for f in findings if f["validator"] == "adapter-crash"]
+    assert len(crash) == 1, findings
+    assert crash[0]["path"] == f"connections/postgresql/definition/endpoints/{EID}.json"
+
+
+def test_bundle_type_map_validated_when_connection_json_unreadable(tmp_path):
+    # the type-map check depends only on the connection's directory, never on
+    # whether connection.json itself parsed — an unreadable connection.json
+    # must not hide a genuinely malformed or legacy type-map file beside it
+    doc = _build_bundle(tmp_path)
+    _write(tmp_path, "connections/postgresql/definition/type-map.json", TYPE_MAP_READ)
+    (tmp_path / "connections/postgresql/connection.json").write_text("{not valid json")
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "document" in validators, diag["findings"]  # connection.json itself unreadable
+    assert "connection-type-map" in validators, diag["findings"]  # legacy filename, still checked
+
+
+def test_bundle_unreferenced_malformed_stream_does_not_hide_unrelated_referential_error(tmp_path):
+    # an orphaned malformed stream file — never named in pipeline.streams —
+    # marks assembly incomplete, but it cannot be the cause of any
+    # bundle-*-ref finding since the pipeline never referenced it; a genuine,
+    # unrelated referential defect elsewhere in the bundle must still surface
+    doc = _build_bundle(tmp_path)
+    (tmp_path / "pipelines/p/streams/orphan.json").write_text("{not valid json")
+    # a second, referenced stream wired to the WRONG source connection
+    bad_stream = {**STREAM, "stream_id": "55555555-5555-4555-8555-555555555555",
+                  "source": {**STREAM["source"],
+                             "endpoint_ref": {**STREAM["source"]["endpoint_ref"], "connection_id": DST}}}
+    _write(tmp_path, "pipelines/p/streams/second.json", bad_stream)
+    pipeline_doc = json.loads(doc.read_text())
+    pipeline_doc["streams"] = [SID, bad_stream["stream_id"]]
+    doc.write_text(json.dumps(pipeline_doc))
+
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "document" in validators, diag["findings"]  # the orphaned malformed stream
+    assert "bundle-connection-ref" in validators, diag["findings"]  # unrelated genuine defect
+
+
+def test_connector_endpoint_sets_crash_isolated_to_one_connector(tmp_path, monkeypatch):
+    # a crash reading one connector's endpoint file must cost only that
+    # connector's endpoint set — every OTHER connector's set, and the
+    # connector-endpoint-ref checks it feeds, must still be computed
+    doc = _build_bundle(tmp_path)
+    _add_wise_endpoint(tmp_path, "transfers")
+    _write(tmp_path, "connectors/postgresql/definition/endpoints/orders.json", {"endpoint_id": "orders"})
+
+    original = V._read_json
+
+    def boom(path):
+        if path.parent.name == "endpoints" and path.parent.parent.parent.name == "postgresql":
+            raise TypeError("simulated crash")
+        return original(path)
+
+    monkeypatch.setattr(V, "_read_json", boom)
+    stream_path = tmp_path / "pipelines/p/streams/orders.json"
+    stream = json.loads(stream_path.read_text())
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo against wise's real "transfers"
+    stream_path.write_text(json.dumps(stream))
+
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    # wise's connector-endpoint-ref check still ran despite postgresql's crash
+    warn = [f for f in diag["findings"] if f["validator"] == "connector-endpoint-ref"]
+    assert len(warn) == 1 and "transfers" in warn[0]["message"], diag["findings"]
+
+
+def test_pipeline_document_error_preserved_when_bundle_enrichment_crashes(tmp_path):
+    # a pipeline document that is not even an object earns its precise
+    # contract-model finding at the single-document stage; with --bundle-root,
+    # _bundle_findings's own field access on that non-dict document crashes,
+    # and that crash must not silently replace the earlier finding
+    doc = _write(tmp_path, "pipelines/p/pipeline.json", [1, 2, 3])
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "contract-model" in validators, diag["findings"]
+    assert "adapter-crash" in validators, diag["findings"]
+
+
 def test_crash_finding_handles_broken_exception_str():
     # a third-party backend can raise an exception class whose own __str__
     # itself raises; _crash_finding must never become a second, unguarded
