@@ -3407,16 +3407,42 @@ def _declares_a_type(node: Any, root: Any = None) -> bool:
     """Whether a resolved node says what kind of value lives there.
 
     `type` is the JSON Schema statement; the `native_type`/`arrow_type` pair is
-    the contract's own, and either answers the question RULE-ENDP-023 asks.
-    `root` resolves a `$ref`/`allOf` branch nested inside `anyOf`/`oneOf` (see
-    `_declared_types`) — pass the same root `node` itself was materialized
-    against.
+    the contract's own; either answers the question RULE-ENDP-023 asks. So does
+    `anyOf`/`oneOf` where EVERY branch answers it by either mechanism — the
+    common nullable idiom (`{"anyOf": [{"type": "string"}, {"type": "null"}]}`)
+    among them — since the value is then provably typed however the union
+    resolves; one branch answering neither way makes the whole union
+    unbounded. A branch can itself need `$ref`/`allOf` resolution first
+    (`materialize_node` does not recurse into `anyOf`/`oneOf` branches on its
+    own), so `root` — the same root `node` was materialized against — resolves
+    each branch before it is inspected; a caller with no root in scope simply
+    cannot recognise a `$ref` branch's type, same as before this recursed.
     """
     if not isinstance(node, dict):
         return False
-    if _declared_types(node, root):
+    if _declared_types(node):
         return True
-    return node.get("native_type") is not None and node.get("arrow_type") is not None
+    if node.get("native_type") is not None and node.get("arrow_type") is not None:
+        return True
+    for key in ("anyOf", "oneOf"):
+        branches = node.get(key)
+        if not isinstance(branches, list) or not branches:
+            continue
+        every_branch_typed = True
+        for branch in branches:
+            resolved_branch = branch
+            if root is not None and isinstance(branch, dict):
+                try:
+                    resolved_branch = materialize_node(branch, root)
+                except SchemaResolutionError:
+                    every_branch_typed = False
+                    break
+            if not _declares_a_type(resolved_branch, root):
+                every_branch_typed = False
+                break
+        if every_branch_typed:
+            return True
+    return False
 
 
 def _validate_response_body_paths(
@@ -4217,23 +4243,15 @@ def _reject_unsatisfiable_branch(branch: Any) -> None:
         )
 
 
-def _declared_types(declaration: Any, root: Any = None) -> set[str] | None:
-    """The `type` values a declaration allows, or ``None`` when it declares none.
+def _declared_types(declaration: Any) -> set[str] | None:
+    """The `type` values a bare declaration allows, or ``None`` when it names none.
 
-    A bare `type` (string or list) is the direct case. Absent that, `anyOf`/
-    `oneOf` — the common nullable idiom (`{"anyOf": [{"type": "string"},
-    {"type": "null"}]}`) among them — declares a type when EVERY branch does:
-    the value is provably one of the union, so the union of their type sets is
-    what this declaration allows. One branch declaring nothing makes the whole
-    union unbounded, so the declaration is treated as declaring none.
-
-    A branch can itself be a `$ref`/`allOf` needing resolution (`{"anyOf":
-    [{"$ref": "#/$defs/T"}, {"type": "null"}]}`) — `materialize_node` is not
-    called recursively into `anyOf`/`oneOf` branches by the walk that produces
-    `declaration` in the first place, so each branch is materialized here
-    against `root` before it is inspected. Callers with no `root` in scope
-    (the `allOf`-contradiction check, whose sources are already materialized
-    on entry) skip this step, matching prior behaviour.
+    Reads only a direct `type` key (string or list) — the JSON Schema
+    vocabulary `_refuse_disjoint_types` intersects to prove a contradiction
+    between already-materialized `allOf`/`$ref` contributors. It does not
+    know about `anyOf`/`oneOf` unions or the contract's own `native_type`/
+    `arrow_type` pair; `_declares_a_type` is the union-and-contract-aware
+    "is this typed at all" question, and recurses through both on its own.
     """
     if not isinstance(declaration, dict):
         return None
@@ -4242,23 +4260,6 @@ def _declared_types(declaration: Any, root: Any = None) -> set[str] | None:
         return {declared}
     if isinstance(declared, list) and all(isinstance(t, str) for t in declared):
         return set(declared)
-    for key in ("anyOf", "oneOf"):
-        branches = declaration.get(key)
-        if isinstance(branches, list) and branches:
-            union: set[str] = set()
-            for branch in branches:
-                resolved_branch = branch
-                if root is not None and isinstance(branch, dict):
-                    try:
-                        resolved_branch = materialize_node(branch, root)
-                    except SchemaResolutionError:
-                        break
-                branch_types = _declared_types(resolved_branch, root)
-                if branch_types is None:
-                    break
-                union |= branch_types
-            else:
-                return union
     return None
 
 

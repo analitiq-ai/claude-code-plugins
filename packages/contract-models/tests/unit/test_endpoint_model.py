@@ -831,13 +831,28 @@ class TestFiltersWiring:
     def test_field_key_typed_via_a_ref_branch_inside_anyof_accepted(self):
         # A branch can itself need $ref resolution before its type is visible
         # — `materialize_node` does not recurse into anyOf/oneOf branches, so
-        # this exercises `_declared_types` resolving one against root itself.
+        # this exercises `_declares_a_type` resolving one against root itself.
         read_op = _filters_read_op(
             {"nullable": {"gt": {"from_param": "minAmount"}}},
             extra_record_props={"nullable": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
         )
         read_op["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
         result = parse_endpoint(_minimal_api_payload(operations={"read": read_op}))
+        assert "nullable" in result.operations.read.filters
+
+    def test_field_key_typed_via_native_arrow_pair_inside_anyof_accepted(self):
+        # A branch typed only by the contract's own native_type/arrow_type
+        # pair (no JSON-Schema `type` key) still counts — the union isn't
+        # limited to bare `type` strings.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op(
+                {"nullable": {"gt": {"from_param": "minAmount"}}},
+                extra_record_props={"nullable": {"anyOf": [
+                    {"native_type": "TIMESTAMP", "arrow_type": "Timestamp(MICROSECOND)"},
+                    {"type": "null"},
+                ]}},
+            ),
+        }))
         assert "nullable" in result.operations.read.filters
 
     def test_template_param_naming_undeclared_param_rejected(self):
