@@ -148,11 +148,16 @@ was raised.
        (`RULE-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
-       offset/`Z` → `Timestamp(<unit>, UTC)`. When researched entries share a
-       native token but differ in zone-awareness — whether they come from
-       different fields or from one field's separate directional entries —
-       give them **distinct** native tokens so each resolves to the right
-       canonical under the read map's first-match-wins rules.
+       offset/`Z` → `Timestamp(<unit>, UTC)`. One native token cannot resolve
+       to two canonicals under the read map's first-match-wins rules: where
+       researched entries are genuinely documented under distinct native
+       tokens (a provider's own `date` vs `date-time`, say) but differ in
+       zone-awareness — whether they come from different fields or from one
+       field's separate directional entries — keep those tokens **distinct**
+       so each resolves to the right canonical. Where entries share the
+       literal same documented token yet differ in zone-awareness, do not
+       invent a second token to split them — that fabricates a `native_type`
+       no research observed; report the collision as a contract gap instead.
      - **Carry each sample onto the node it grounds.** Where a facts entry
        has a `sample_value`, put it verbatim into that node's `examples`, in
        the JSON kind the provider sends — the string `"0"` stays a string. It
