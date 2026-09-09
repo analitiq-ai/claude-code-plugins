@@ -109,8 +109,13 @@ def _crash_finding(path: str, exc: BaseException) -> dict:
     """The shared finding every containment site emits: a guard fired and the
     document was not evaluated for that stage. `str(exc)` is empty for some
     exceptions (a bare `MemoryError()`), so the detail is only appended when
-    there is one, never leaving a dangling `: `."""
-    detail = str(exc)
+    there is one, never leaving a dangling `: `. A third-party backend may
+    raise an exception whose own `__str__` raises — this function must never
+    itself become a second, unguarded crash, so that failure is swallowed too."""
+    try:
+        detail = str(exc)
+    except Exception:
+        detail = ""
     message = f"{type(exc).__name__}: {detail}" if detail else type(exc).__name__
     return _finding("adapter-crash", "error", path, message)
 
@@ -287,9 +292,6 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
         # it must not discard the findings already decided for connections
         # processed earlier in this same loop.
         with _contained(findings, f"connections/{conn_json.parent.name}"):
-            # Connection-scoped type maps are files the engine loads beside the
-            # connection, invisible to the assembled-document bundle — check them here.
-            findings.extend(_connection_type_map_findings(conn_json.parent))
             conn = _read_bundle_member(conn_json, findings)
             if conn is None:
                 continue
@@ -308,6 +310,12 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
                 endpoint.setdefault("connection_id", connection_id)
                 endpoint.setdefault("scope", "connection")
                 endpoints.append(endpoint)
+            # Connection-scoped type maps are files the engine loads beside the
+            # connection, invisible to the assembled-document bundle — check them
+            # here, LAST: a crash here must not cost the connection/endpoints
+            # already appended above their place in the referential check below,
+            # which would otherwise misreport a live connection as unresolved.
+            findings.extend(_connection_type_map_findings(conn_json.parent))
 
     # Connectors supply identity only, and the directory slug already is that
     # identity — so a malformed connector.json is best-effort skipped (its slug
@@ -499,12 +507,18 @@ def main(argv: list[str] | None = None) -> int:
         ensure_deps_or_reexec(__file__)
         bundle_root = Path(args.bundle_root) if args.bundle_root else None
         diagnostics = diagnostics_for(args.entity, Path(args.document), bundle_root)
+        # Serialized inside the guard: a backend finding carrying a
+        # JSON-incompatible value (a malformed message from a validator
+        # regression) must itself become an adapter-crash result, not a
+        # TypeError escaping after the guard has already exited clean.
+        output = json.dumps(diagnostics, indent=2)
+        passed = diagnostics["passed"]
     except Exception as exc:
         print(json.dumps(_diagnostics([_crash_finding("", exc)]), indent=2))
         return 1
 
-    print(json.dumps(diagnostics, indent=2))
-    return 0 if diagnostics["passed"] else 1
+    print(output)
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

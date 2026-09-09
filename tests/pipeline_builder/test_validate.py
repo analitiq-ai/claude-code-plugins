@@ -649,6 +649,57 @@ def test_endpoint_route_crash_before_validate_document_contained(tmp_path, capsy
     assert any(f["validator"] == "adapter-crash" for f in out["findings"]), out["findings"]
 
 
+def test_bundle_type_map_crash_does_not_orphan_connection_from_referential_check(tmp_path, monkeypatch):
+    # a crash in the type-map check for one connection must not cost that
+    # connection its place in the bundle passed to the referential check —
+    # otherwise a live, correctly-referenced connection reads as unresolved
+    # and the adapter-crash finding is joined by false bundle-connection-ref /
+    # bundle-endpoint-ref findings that would send the orchestrator chasing a
+    # reference that was never actually broken
+    doc = _build_bundle(tmp_path)
+
+    def boom(conn_dir):
+        raise TypeError("simulated crash")
+
+    monkeypatch.setattr(V, "_connection_type_map_findings", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    assert "bundle-connection-ref" not in validators, diag["findings"]
+    assert "bundle-endpoint-ref" not in validators, diag["findings"]
+
+
+def test_crash_finding_handles_broken_exception_str():
+    # a third-party backend can raise an exception class whose own __str__
+    # itself raises; _crash_finding must never become a second, unguarded
+    # crash in main()'s except body
+    class Broken(Exception):
+        def __str__(self):
+            raise RuntimeError("broken __str__")
+
+    finding = V._crash_finding("", Broken())
+    assert finding["validator"] == "adapter-crash"
+    assert finding["message"] == "Broken"
+
+
+def test_main_serializes_within_the_outer_guard(tmp_path, monkeypatch, capsys):
+    # a backend finding carrying a JSON-incompatible value (a validator
+    # regression) must itself become an adapter-crash result — json.dumps
+    # raising after the guard has exited clean would reproduce the empty
+    # stdout + traceback failure this fix eliminates
+    p = _write(tmp_path, "connection.json", CONN_PG)
+
+    def bad_diagnostics_for(entity, document_path, bundle_root=None):
+        return {"passed": False, "findings": [{"validator": "contract-model", "severity": "error",
+                                                "path": "", "message": object()}]}
+
+    monkeypatch.setattr(V, "diagnostics_for", bad_diagnostics_for)
+    rc = V.main(["--entity", "connection", "--document", str(p)])
+    out = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert any(f["validator"] == "adapter-crash" for f in out["findings"]), out["findings"]
+
+
 # ---------------------------------------------------------------------------
 # The entity vocabulary, as the agent that drives the CLI states it
 # ---------------------------------------------------------------------------
