@@ -157,11 +157,14 @@ ENGINE_RESTATEMENT_EXEMPTIONS = {
         "above, the verdict semantics beside them are not mechanically "
         "checkable from this repo",
     "skills/connector-builder/references/error-classification.md#Classifying a driver exception (`key_attrs` / `codes`)":
-        "restates analitiq-core's key_attrs match order (the first entry that "
-        "resolves a value wins) and codes' exact-string lookup (no prefix or "
-        "class-level wildcard); neither is enforced by the contract model, "
-        "which types key_attrs as a plain ordered tuple and codes as a plain "
-        "string-keyed map with no order or matching semantics of its own",
+        "restates analitiq-core's key_attrs match order (the first entry "
+        "whose resolved value has a matching codes entry wins; a resolved "
+        "value with no codes entry falls through to the next entry exactly "
+        "as if it had been absent) and codes' exact-string lookup (no prefix "
+        "or class-level wildcard); neither is enforced by the contract "
+        "model, which types key_attrs as a plain ordered tuple and codes as "
+        "a plain string-keyed map with no order or matching semantics of "
+        "its own",
 }
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # WriteOperation.idempotency `in` targets. No prose site restates them: the
@@ -2076,15 +2079,24 @@ def _target_column(section: str) -> set[str]:
         ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
         # The operational-consequence table is an exhaustive per-category
         # verdict listing (every ErrorCategory has an engine verdict) —
-        # exact-match is the right assertion here. The HTTP classification
-        # table (also exhaustive, by the same design) gets its own dedicated
-        # test below instead of joining this list: its expected set must come
-        # from ErrorMap.http's own schema branch, not the codes-derived
-        # EXPECTED_ERROR_CATEGORIES this list's other entries share, and this
-        # parametrize mechanism only takes plain values, not a schema fixture.
+        # exact-match is the right assertion here. The driver-exception
+        # section's category table is the same shape (one row per category,
+        # decision logic rather than a literal-code lookup) and pins the same
+        # way. The HTTP classification table (also exhaustive, by the same
+        # design) gets its own dedicated test below instead of joining this
+        # list: its expected set must come from ErrorMap.http's own schema
+        # branch, not the codes-derived EXPECTED_ERROR_CATEGORIES this list's
+        # other entries share, and this parametrize mechanism only takes
+        # plain values, not a schema fixture.
         (
             "error-classification",
             "Operational consequence",
+            EXPECTED_ERROR_CATEGORIES,
+            set(),
+        ),
+        (
+            "error-classification",
+            "Classifying a driver exception (`key_attrs` / `codes`)",
             EXPECTED_ERROR_CATEGORIES,
             set(),
         ),

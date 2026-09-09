@@ -40,10 +40,14 @@ status number itself:
 | A transient, provider-side condition a retry can resolve | `transient` |
 | The provider or an upstream dependency is unreachable | `unreachable` |
 
-A status whose documented meaning doesn't clearly fit one row — or that the
-docs show occurring across multiple call types with a meaning you cannot
-pin to one row — is left unclassified; record the gap in `notes` on the
-returned `CreatorOutput` rather than guessing.
+A status whose documented meaning doesn't clearly fit one row is left
+unclassified. So is a status the docs document *differently* depending on
+the call (an operation, an endpoint): `error_map.http` carries no
+per-endpoint scoping, so a status with conflicting documented meanings
+cannot be classified without silently applying the wrong one at whichever
+call site the other meaning belonged to. In both cases, record the gap —
+or the conflicting meanings — in `notes` on the returned `CreatorOutput`
+rather than guessing or picking one arbitrarily.
 
 `connector-spec-api/examples/api-key/api-key.example.json`'s `error_map.http`
 block illustrates the shape for a fictional provider, not a set of universal
@@ -54,10 +58,13 @@ connector's values.
 
 ## Classifying a driver exception (`key_attrs` / `codes`)
 
-Ground this half in the driver's own documentation via
-`provider_facts.error_signals` — never fabricate a code the docs don't
-establish. `key_attrs` and `codes` are declared together or not at all
-(`RULE-CTOR-067`).
+Ground this half in whichever source actually documents each fact —
+the driver's own docs for how it exposes a signal, and, for what a
+documented code VALUE means, the driver's docs or the database/server's own
+published catalog (a SQLSTATE table, a vendor error-code reference) when the
+server, not the driver, owns that meaning — via `provider_facts.error_signals`.
+Never fabricate a code the docs don't establish. `key_attrs` and `codes` are
+declared together or not at all (`RULE-CTOR-067`).
 
 1. **Does the driver's exception expose its native code as a plain
    attribute** (a SQLSTATE, an `errno`, a vendor code)? Name that attribute in
@@ -75,6 +82,21 @@ establish. `key_attrs` and `codes` are declared together or not at all
    of the class-name fallback never makes that fallback unreachable — it
    only takes precedence when it actually classifies something. Choose and
    justify the order; there is no separate precedence field.
+4. **Choosing each entry's category** applies the same procedure the HTTP
+   table above teaches, against `error_signals.documented_codes`' recorded
+   meaning instead of a status — see the table below.
+
+| What the recorded meaning establishes | Category |
+|---|---|
+| Credentials or permissions are invalid or insufficient | `auth` |
+| The client is being throttled, or has exceeded a rate or quota limit | `rate_limited` |
+| The statement or connection the connector itself constructed is malformed, or the connector lacks a required setting | `config` |
+| The write's own content was rejected (a constraint violation, a failed validation) | `write_rejected` |
+| A transient condition a retry can resolve (a serialization failure, a deadlock) | `transient` |
+| The server, or a dependency it needs, is unreachable | `unreachable` |
+
+A meaning that doesn't clearly fit one row is left unclassified — omit that
+entry from `codes` and record the gap in `notes`, never guess.
 
 `codes` keys are compared as literal strings — the contract defines no prefix
 or class-level wildcard, so a family of related codes (every value a class of
@@ -87,8 +109,8 @@ owns the omit-vs-null discipline `error_signals` carries.
 SQLSTATE meanings, mapped to categories directly in this reference rather
 than produced by a research pass. It is illustrative, not authoritative:
 ground every entry of an actual connector's `error_map` in that connector's
-own driver's documented facts (via `provider_facts.error_signals`), never by
-copying this or any other connector's values.
+own driver's and server's documented facts (via `provider_facts.error_signals`),
+never by copying this or any other connector's values.
 
 ## Operational consequence
 

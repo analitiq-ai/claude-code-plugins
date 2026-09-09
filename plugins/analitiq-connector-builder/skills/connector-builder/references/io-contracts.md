@@ -134,7 +134,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "documented_http_errors": {
           "type": "object",
-          "description": "Per-status documented meaning, verbatim, from the provider's own API docs (an errors/status-codes reference page, or per-endpoint error notes) — the creator's grounding for `error_map.http` (`references/error-classification.md`). One entry per status the docs describe, in whatever detail they give; never a failure category — that judgment is the creator's, per `references/error-classification.md`'s procedure. No status may be classified in `error_map.http` without a corresponding entry here.",
+          "description": "Per-status documented meaning, verbatim, from the provider's own API docs (an errors/status-codes reference page, or per-endpoint error notes) — the creator's grounding for `error_map.http` (`references/error-classification.md`). One entry per status the docs describe; never a failure category — that judgment is the creator's, per `references/error-classification.md`'s procedure. No status may be classified in `error_map.http` without a corresponding entry here. `error_map.http` carries no per-endpoint scoping, so when the docs establish DIFFERENT meanings for the same status depending on the call (an operation, an endpoint), the entry must say so rather than picking one — record every documented meaning and which call(s) each applies to, verbatim, so the creator can see the conflict and refuse to classify that status generically instead of silently applying whichever meaning happened to be recorded.",
           "additionalProperties": { "type": "string" }
         }
       },
