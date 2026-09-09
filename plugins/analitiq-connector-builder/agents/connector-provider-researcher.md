@@ -160,8 +160,14 @@ the fact the creator needs.
   its classification on both at once — never a category. Ground a code
   VALUE's meaning from whichever source actually defines it: the driver's
   own docs, or, when the database/server itself owns that catalog rather
-  than the driver, the server's own published documentation.) Leave the
-  whole block unset when nothing above is grounded, and report a gap for
+  than the driver, the server's own published documentation. When the
+  connector ships more than one driver and their docs establish DIFFERENT
+  meanings for what would resolve to the same key — most often a shared
+  exception class name — record every meaning and which driver each applies
+  to, never collapse them into one, since the connector-wide classification
+  carries no per-driver scoping and the creator needs to see the conflict to
+  refuse that entry.)
+  Leave the whole block unset when nothing above is grounded, and report a gap for
   anything the docs don't establish (`RULE-CTOR-026`).
 - WebSearch is for locating the official docs only (when the user did not
   supply a URL) — never a source of facts. Every extracted fact must come from

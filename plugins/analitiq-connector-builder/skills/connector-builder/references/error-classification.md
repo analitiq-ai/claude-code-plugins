@@ -41,20 +41,25 @@ status number itself:
 | What the provider's docs establish about this status | Category |
 |---|---|
 | Credentials or permissions are invalid or insufficient | `auth` |
-| The client is being throttled, or has exceeded a rate or quota limit | `rate_limited` |
+| The client is being throttled, or has exceeded a quota the docs document as resetting or lifting during normal operation | `rate_limited` |
 | The request the connector itself constructed is malformed or misconfigured | `config` |
-| A specific write was rejected on its own content (failed validation, conflicts with existing data) — and the docs establish this outcome as write-specific, never shared with a read or discovery call | `write_rejected` |
+| A specific write was rejected on its own content (failed validation, conflicts with existing data) — and the docs establish this outcome as write-specific, never shared with a read call (a discovery-only conflict doesn't apply — `error_map.http` never fires for a discovery/health-check probe, above) | `write_rejected` |
 | A transient, provider-side condition a retry can resolve | `transient` |
 | The provider or an upstream dependency is unreachable | `unreachable` |
 
 A status whose documented meaning doesn't clearly fit one row is left
-unclassified. So is a status the docs document *differently* depending on
-the call (an operation, an endpoint): `error_map.http` carries no
-per-endpoint scoping, so a status with conflicting documented meanings
-cannot be classified without silently applying the wrong one at whichever
-call site the other meaning belonged to. In both cases, record the gap —
-or the conflicting meanings — in `notes` on the returned `CreatorOutput`
-rather than guessing or picking one arbitrarily.
+unclassified — this includes a quota the docs describe as terminal within a
+run (no documented reset short of a plan change or a billing-cycle
+rollover), since `rate_limited` is read by the engine as retryable (below)
+and a terminal quota is not. So is a status the docs document *differently*
+across the calls `error_map.http` actually classifies — a read and a write
+(above); a conflict involving *only* a discovery/health-check probe doesn't
+apply, since that call never reaches `error_map`. `error_map.http` carries
+no per-endpoint scoping, so a status with conflicting documented meanings
+across read and write cannot be classified without silently applying the
+wrong one at whichever call site the other meaning belonged to. In every
+case, record the gap — or the conflicting meanings — in `notes` on the
+returned `CreatorOutput` rather than guessing or picking one arbitrarily.
 
 `connector-spec-api/examples/api-key/api-key.example.json`'s `error_map.http`
 block illustrates the shape for a fictional provider, not a set of universal
@@ -96,14 +101,28 @@ declared together or not at all (`RULE-CTOR-067`).
 | What the recorded meaning establishes | Category |
 |---|---|
 | Credentials or permissions are invalid or insufficient | `auth` |
-| The client is being throttled, or has exceeded a rate or quota limit | `rate_limited` |
+| The client is being throttled, or has exceeded a quota the docs document as resetting or lifting during normal operation | `rate_limited` |
 | The statement or connection the connector itself constructed is malformed, or the connector lacks a required setting | `config` |
 | The write's own content was rejected (a constraint violation, a failed validation) | `write_rejected` |
 | A transient condition a retry can resolve (a serialization failure, a deadlock) | `transient` |
 | The server, or a dependency it needs, is unreachable | `unreachable` |
 
-A meaning that doesn't clearly fit one row is left unclassified — omit that
-entry from `codes` and record the gap in `notes`, never guess.
+A meaning that doesn't clearly fit one row is left unclassified — this
+includes a quota the docs describe as terminal within a run (no documented
+reset short of a plan change or a billing-cycle rollover), for the same
+reason as the HTTP table above. Omit that entry from `codes` and record the
+gap in `notes`, never guess.
+
+A connector may ship more than one driver across its transports
+(`connector-spec-db/spec-driver-selection.md`); when two drivers document
+*different* meanings for what would resolve to the same `codes` key — most
+often a shared exception class name under `__exception_class__`, since
+drivers from different vendors can happen to name a class `OperationalError`
+— `error_map` carries no per-driver scoping, so installing one entry
+silently misclassifies whichever driver's exception the entry wasn't
+grounded from. Omit that entry and record the conflicting per-driver
+meanings in `notes`, exactly as a per-call HTTP conflict is refused above,
+rather than picking one driver's meaning arbitrarily.
 
 `codes` keys are compared as literal strings — the contract defines no prefix
 or class-level wildcard, so a family of related codes (every value a class of
