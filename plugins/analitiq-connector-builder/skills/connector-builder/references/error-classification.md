@@ -23,12 +23,13 @@ its number looks — the same status means different things across providers
 another), and `error_map.http` is read at the HTTP call site, independent of
 `key_attrs`/`codes` (the contract's own `ErrorMap.http` description). In
 `analitiq-core`'s engine, that call site is every read and write HTTP
-request — the same classification path serves both — never a
-discovery/health-check probe, which bypasses `error_map` entirely, and never
-a distinct auth-exchange call, since credentials ride on the read/write
-request itself rather than a separate handshake: an auth failure is
-classified only if and when it surfaces as a status on an actual read or
-write. This is a reading of the engine as it stands, not a contract
+request — the same classification path serves both. A discovery/health-check
+probe bypasses `error_map` entirely. An OAuth2 `token_exchange` back-channel
+request (`spec-auth-flows.md`) is declared in the contract, but the engine
+has no executor for it at all today — no code path performs that call, so
+there is nothing for `error_map.http` to classify there either; a status
+documented for that operation stays ungrounded until the engine implements
+it. This is a reading of the engine as it stands, not a contract
 guarantee — re-verify against the engine before relying on the exact scope.
 So a status's meaning is never separable from what a specific provider's
 docs say it means on the call where it actually occurs. Ground every entry

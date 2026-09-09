@@ -141,9 +141,10 @@ EXPECTED_SQL_BULK_MECHANISMS = {
 EXPECTED_ERROR_CATEGORIES = {
     "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected",
 }
-# plugin-prose.md rung-5 exemption: two sections in error-classification.md
-# restate analitiq-core engine runtime behavior with no model in this repo and
-# no published/vendored artifact to pin against (unlike ErrorCategory itself,
+# plugin-prose.md rung-5 exemption: the sections named below in
+# error-classification.md restate analitiq-core engine runtime behavior with
+# no model in this repo and no published/vendored artifact to pin against
+# (unlike ErrorCategory itself,
 # which this file does pin, above). Declared here per plugin-prose.md's
 # allowlist-entry rung, each stated in the prose as a reading of the engine,
 # not a permanent guarantee (`.claude/rules/engine-behaviour-claims.md`); each
@@ -156,10 +157,11 @@ ENGINE_RESTATEMENT_EXEMPTIONS = {
         "(cdk/cdk/api/verdicts.py's classify_status/failure_facts, called "
         "from cdk/cdk/api/generic.py's read and write paths), while the "
         "health-check probe (cdk/cdk/api/http.py's HttpSender.probe()) "
-        "bypasses error_map entirely and there is no separate auth-exchange "
-        "call site; none of this is enforced by the contract model, which "
-        "types http as a plain status-keyed map with no call-site semantics "
-        "of its own",
+        "bypasses error_map entirely and the engine has no executor at all "
+        "for the contract's OAuth2 token_exchange operation, so there is no "
+        "call for error_map.http to classify there either; none of this is "
+        "enforced by the contract model, which types http as a plain "
+        "status-keyed map with no call-site semantics of its own",
     "skills/connector-builder/references/error-classification.md#Operational consequence":
         "restates analitiq-core's ErrorCategory write/read verdict tables "
         "(DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC); the category "
