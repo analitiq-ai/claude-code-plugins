@@ -1649,8 +1649,13 @@ _KeyAttrsTuple = Annotated[
 # `codes`: keys are open strings — no pattern constraint, since a native
 # code's shape (a SQLSTATE, a numeric vendor code, an arbitrary driver string)
 # is now entirely driver-defined, not family-defined. Non-empty for the same
-# reason as `key_attrs` above.
-_ErrorCodeMap = Annotated[dict[str, ErrorCategory], Field(min_length=1)]
+# reason as `key_attrs` above; each individual key must also be a non-empty
+# string — an empty string is not a native code any driver emits, and the
+# engine's own parser rejects one the same way.
+_ErrorCodeMap = Annotated[
+    dict[Annotated[str, StringConstraints(min_length=1)], ErrorCategory],
+    Field(min_length=1),
+]
 
 
 class ErrorMap(StrictModel):
@@ -1723,10 +1728,10 @@ class ErrorMap(StrictModel):
         default=None,
         description=(
             "Native code (whatever a `key_attrs` read produces) → failure "
-            "category. Keys are open strings — the native code's shape (a "
-            "SQLSTATE, a numeric vendor code, or any other driver-defined "
-            "code) is entirely driver-defined. Declared together with "
-            "`key_attrs`."
+            "category. Keys are open, non-empty strings — the native code's "
+            "shape (a SQLSTATE, a numeric vendor code, or any other "
+            "driver-defined code) is entirely driver-defined. Declared "
+            "together with `key_attrs`."
         ),
     )
     http: _HttpStatusFamily | None = Field(

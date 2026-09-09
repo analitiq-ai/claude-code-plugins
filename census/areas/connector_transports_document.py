@@ -350,11 +350,12 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ),
     ProseObligation(
         model="ErrorMap", field="codes",
-        prose_hash="177caa757622",
+        prose_hash="a2bed0185f26",
         rule_ids=("RULE-CTOR-067",),
         structural=(
-            "keys are open per `_ErrorCodeMap`'s non-empty-dict annotation; "
-            "values by the closed `ErrorCategory` vocabulary"
+            "keys are open, non-empty strings per `_ErrorCodeMap`'s "
+            "non-empty-dict, non-empty-key annotation; values by the closed "
+            "`ErrorCategory` vocabulary"
         ),
     ),
     ProseObligation(

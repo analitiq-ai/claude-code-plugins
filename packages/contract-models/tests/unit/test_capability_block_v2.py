@@ -147,6 +147,7 @@ def test_error_map_accepts(payload):
         ({"key_attrs": ["bad-name!"], "codes": {"x": "auth"}}, "key_attrs entry must be identifier-shaped"),
         ({"key_attrs": [], "codes": {"x": "auth"}}, "key_attrs can't be empty when declared"),
         ({"key_attrs": ["sqlstate"], "codes": {}}, "codes can't be empty when declared"),
+        ({"key_attrs": ["sqlstate"], "codes": {"": "auth"}}, "a codes key can't be an empty string"),
         ({"key_attrs": ["sqlstate"]}, "key_attrs without codes is rejected"),
         ({"codes": {"08": "auth"}}, "codes without key_attrs is rejected"),
         ({"key_attrs": "sqlstate", "codes": {"08": "auth"}}, "key_attrs must be an array, not a bare string"),
