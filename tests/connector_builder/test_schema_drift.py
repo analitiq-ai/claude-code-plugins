@@ -2077,9 +2077,9 @@ def _target_column(section: str) -> set[str]:
         # The operational-consequence table is, by design, an exhaustive
         # per-category verdict listing (every ErrorCategory has an engine
         # verdict) — exact-match is the right assertion here. The HTTP
-        # classification table below is deliberately NOT exhaustive (`400` is
-        # withheld as genuinely provider-ambiguous), so it gets its own
-        # subset-only pin instead of joining this list.
+        # classification table below is deliberately NOT exhaustive (`400`
+        # and `422` are withheld as genuinely provider-ambiguous), so it gets
+        # its own subset-only pin instead of joining this list.
         (
             "error-classification",
             "Operational consequence",
