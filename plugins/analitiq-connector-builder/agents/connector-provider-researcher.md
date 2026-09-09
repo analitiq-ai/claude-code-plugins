@@ -119,11 +119,10 @@ the fact the creator needs.
   and which call(s) each applies to — never collapse them into one, since
   the connector-wide classification carries no per-endpoint scoping and the
   creator needs to see the conflict to refuse classifying that status. Never
-  infer a status's
-  meaning from general HTTP knowledge or another provider's docs; the
-  creator applies `references/error-classification.md`'s procedure to these
-  facts to produce its error classification. Omit a status the docs don't
-  describe (`RULE-CTOR-026`).
+  infer a status's meaning from general HTTP knowledge or another
+  provider's docs; the creator applies `references/error-classification.md`'s
+  procedure to these facts to produce its error classification. Omit a
+  status the docs don't describe (`RULE-CTOR-026`).
 - For databases: ground the driver's TLS surface from its official docs —
   the documented mode values, verbatim, into `tls.supported_modes`, and
   which connect parameter(s) the driver takes TLS through (a single mode

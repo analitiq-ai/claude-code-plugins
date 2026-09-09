@@ -196,7 +196,7 @@ fan-out and returned as `EndpointFacts` (below).
         },
         "error_signals": {
           "type": ["object", "null"],
-          "description": "Documented facts about how the driver's exception(s) expose a native error signal — the creator's grounding for `error_map.key_attrs`/`codes` (`references/error-classification.md`). The researcher reports only what the driver's docs establish exists, verbatim, never a failure category — that judgment is the creator's. Same omit-vs-null discipline as `sql_write_path`: OMIT a fact the docs do not establish (a research gap), and use NULL only where a field admits it to record a documented ABSENCE.",
+          "description": "Documented facts about how the driver's exception(s) expose a native error signal, and what each signal value means — the creator's grounding for `error_map.key_attrs`/`codes` (`references/error-classification.md`). The researcher reports only what the docs establish exists, verbatim, never a failure category — that judgment is the creator's; a signal's meaning is grounded from whichever source actually defines it (the driver's own docs, or the database/server's own published catalog when the server owns that meaning, per `documented_codes` below). Same omit-vs-null discipline as `sql_write_path`: OMIT a fact the docs do not establish (a research gap), and use NULL only where a field admits it to record a documented ABSENCE.",
           "properties": {
             "native_code_attrs": {
               "type": ["array", "null"],
