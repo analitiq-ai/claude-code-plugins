@@ -165,8 +165,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
         ),
     ),
     ProseObligation(
-        model="ErrorMap", waiver=ENGINE_CONDUCT,
-        prose_hash="3ccd8c0c32cb",
+        model="ErrorMap", rule_ids=("RULE-CTOR-067",), waiver=ENGINE_CONDUCT,
+        prose_hash="f2fd8e67b369",
     ),
     # === connector: remaining transport, capability + document sites =========
     ProseObligation(model="AdbcTransport", prose_hash="f6a5cb5e119c", descriptive=True),
@@ -337,20 +337,24 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ErrorMap", field="key_attrs",
         prose_hash="19b70782c691",
+        rule_ids=("RULE-CTOR-067",),
         structural=(
             "entries are pinned by the `_KeyAttrsTuple` identifier-pattern, "
-            "non-empty annotation; the together-with-`codes` rule is "
-            "`_key_attrs_and_codes_together`, mirrored for the published "
-            "schema by `ErrorMap`'s own `model_config`"
+            "non-empty annotation"
+        ),
+        waiver=(
+            "that declared order is read as most-specific-first precedence "
+            "is engine-conduct at classification time, unknowable from the "
+            "document"
         ),
     ),
     ProseObligation(
         model="ErrorMap", field="codes",
         prose_hash="177caa757622",
+        rule_ids=("RULE-CTOR-067",),
         structural=(
             "keys are open per `_ErrorCodeMap`'s non-empty-dict annotation; "
-            "values by the closed `ErrorCategory` vocabulary; the "
-            "together-with-`key_attrs` rule is `_key_attrs_and_codes_together`"
+            "values by the closed `ErrorCategory` vocabulary"
         ),
     ),
     ProseObligation(

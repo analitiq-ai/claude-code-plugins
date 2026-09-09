@@ -5,11 +5,15 @@ normal string literal would mangle into an invalid escape sequence.)
 
 The engine reads all three as driver facts declared on the connector itself.
 The contract models are `extra="forbid"`, so a connector cannot declare any of
-them until they ship here. All three are ADDITIVE — unlike the required shape
-facts of `sql_capabilities` (and unlike `write_unit`'s at-least-one-bound
-rule), absence of a block, a family, or a single cap is legal and means "no
-declared mapping / no declared cap"; an EMPTY block (`{}`) is legal and
-equivalent to omission.
+them until they ship here. `concurrency` and `sql_capabilities.limits` are
+ADDITIVE — absence of the block or of a single cap is legal and means "no
+declared cap"; an EMPTY block (`{}`) is legal and equivalent to omission.
+`error_map` is additive as a whole (absence means no declared mapping) but not
+uniformly inside: `http` keeps that same "empty map is a legal no-op" posture,
+while `key_attrs`/`codes` do not — each requires at least one entry when
+declared (RULE-CTOR-067's reasoning: an empty `codes` map is a second spelling
+of omission that reads like a declared one, the same shape `write_unit`'s
+at-least-one-bound rule guards against elsewhere in this file).
 
 Facts that have to hold and stay held, so they are pinned here:
 
@@ -38,11 +42,17 @@ Facts that have to hold and stay held, so they are pinned here:
    Schema's `type: integer` admits a zero-fraction float (`8.0`) the strict
    model rejects — the safe direction (the authoritative validator is the
    stricter layer). A second candidate edge — Python `jsonschema`'s
-   `re.search`-based patterns letting `$` match before a trailing newline in
-   a family key — is closed at the source: the published patterns carry a
-   true-end `(?![\s\S])` assertion in place of the trailing `$`
+   `re.search`-based patterns letting `$` match before a trailing newline —
+   is closed at the source for `http`'s dict key: the published pattern
+   carries a true-end `(?![\s\S])` assertion in place of the trailing `$`
    (`_closed_true_end_keys`), which is end-of-string in BOTH regex dialects,
    so every schema consumer rejects `"429\n"` exactly as the model does.
+   `key_attrs`' identifier pattern does NOT get this treatment — like every
+   other plain (non-dict-key) `StringConstraints(pattern=...)` field in this
+   contract (e.g. `connector_id`'s `SLUG_PATTERN`), it carries a bare
+   trailing `$`, so a schema-only consumer admits a trailing-newline entry
+   pydantic-core's Rust regex would reject. Consistent with the rest of the
+   contract, not a gap unique to this field.
 """
 from __future__ import annotations
 
@@ -109,6 +119,7 @@ def _external_validator(model) -> Draft202012Validator:
         VALID_ERROR_MAP,
         {},  # empty block declares nothing — legal, ≡ absence
         {"http": {"429": "rate_limited"}},  # http alone
+        {"http": {}},  # empty http map declares nothing — legal, unlike codes
         {"key_attrs": ["sqlstate"], "codes": {"08": "unreachable"}},  # key_attrs+codes alone
         {"key_attrs": ["sqlstate"], "codes": {"08": "unreachable"}, "http": {"500": "transient"}},
         {"key_attrs": ["errno", "vendor_code"], "codes": {"-803": "config"}},  # ordered, multi-attr

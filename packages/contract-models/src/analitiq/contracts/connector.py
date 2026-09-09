@@ -1627,9 +1627,6 @@ _HTTP_STATUS_KEY_PATTERN = r"^[1-5][0-9]{2}$"
 #    `url_template` pattern above, the ECMA-safe form goes in the published
 #    schema only and the Rust `$` (already true-end) is the runtime mirror.
 #
-# The alias stays explicit (not factory-built) so static type checkers keep
-# covering the field; the callable itself stays shared with any future
-# patterned-key family that needs the same schema-parity treatment.
 def _closed_true_end_keys(schema: dict[str, Any]) -> None:
     pattern_props = schema.pop("patternProperties", None)
     if pattern_props:
@@ -1669,11 +1666,13 @@ class ErrorMap(StrictModel):
     an exception, so it is independent of `key_attrs`/`codes`. `key_attrs` and
     `codes` are declared together or not at all: one without the other is
     either unusable (`codes` with nowhere to read a native value from) or a
-    no-op (`key_attrs` with no mapping to apply). Absence of the whole block,
-    or of `http` alone, is legal and means "no declared mapping" for that
-    half. Additive: absence never blocks anything. Connectors declare driver
-    facts only; the engine alone derives verdicts (ack status, failure
-    category, error code) from them.
+    no-op (`key_attrs` with no mapping to apply) — so, unlike `http`, neither
+    may be an empty collection when declared; an empty `codes` map is the same
+    no-op under a different spelling. Absence of the whole block is legal and
+    means "no declared mapping"; an empty `http` map (`{}`) is likewise legal
+    and equivalent to omitting `http` alone. Additive: absence never blocks
+    anything. Connectors declare driver facts only; the engine alone derives
+    verdicts (ack status, failure category, error code) from them.
     """
 
     model_config = ConfigDict(
