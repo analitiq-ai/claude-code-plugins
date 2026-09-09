@@ -95,5 +95,5 @@ not just the statement.
 
 | ID | Rule | Grades | Severity | Checked |
 |---|---|---|---|---|
-| RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
+| RULE-SHRD-002 | A temporal field's declared Arrow type MUST carry a zone only when a real wire sample observed on the direction being declared carries one — a sample observed on the other direction's payload is not evidence for this direction's declaration — and a date-time MUST NOT be defaulted to zone-aware. | `any` | error | — |
 | RULE-SHRD-004 | A default the contract or the connector already declares MUST NOT be copied into an authored document; a value is authored only where the user asked for one. | `any` | warning | — |

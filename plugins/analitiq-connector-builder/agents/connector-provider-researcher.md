@@ -92,9 +92,9 @@ and a temporal field whose docs show no sample value is a gap you report, never
 a zone you assume (`RULE-SHRD-002`) — a date-only wire value (`2024-01-02`) is
 `Date32`, never a `Timestamp`. A sample grounds the entry for the direction whose
 payload carried it, so a field shown in a response and accepted on a write is a
-`read` entry with the value and a `write` entry without one — the missing
-write-side sample is that same gap, never a zone copied across. A sample is copied out of a payload the provider
-publishes, in the kind that payload uses; a value you composed to match the
+`read` entry with the value and a `write` entry without one (`RULE-SHRD-002`).
+A sample is copied out of a payload the provider publishes, in the kind that
+payload uses; a value you composed to match the
 documented type, or one a documentation renderer filled a template with, is not
 evidence and belongs in `notes` as a gap instead. Where the documented type and
 the published sample disagree, record both and say so — that disagreement is
