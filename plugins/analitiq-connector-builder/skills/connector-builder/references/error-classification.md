@@ -64,9 +64,9 @@ carries.
 No engine cookbook classifies a given native code into a category — that
 judgment is left entirely to whoever authors the connector. The verdict below
 is a reading of `analitiq-core`'s engine (its capability-declaration module,
-`DECLARED_WRITE_VERDICTS` / `DECLARED_READ_DETERMINISTIC`), not a permanent
-guarantee neither side pins to the other — re-verify against the engine before
-relying on the exact wording:
+`DECLARED_WRITE_VERDICTS` / `DECLARED_READ_DETERMINISTIC`) — neither side pins
+this fact to the other, so re-verify against the engine before relying on the
+exact wording:
 
 | Verdict | Category |
 |---|---|

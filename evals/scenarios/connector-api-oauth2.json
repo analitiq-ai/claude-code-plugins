@@ -69,10 +69,10 @@
     },
     {
       "doc": "connector",
-      "path": "error_map.http",
-      "present": true,
+      "path": "error_map.http.429",
+      "equals": "rate_limited",
       "rule": "intent",
-      "note": "the generic HTTP classification table always applies to an API connector — proves the new authoring step actually declares the block, not merely recognizes the field"
+      "note": "the generic HTTP classification table always applies to an API connector; a specific correct entry (not just block presence) proves the new authoring step actually applied the table rather than declaring an empty or null block"
     }
   ],
   "artifacts": [

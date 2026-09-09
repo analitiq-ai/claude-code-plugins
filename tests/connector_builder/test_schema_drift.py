@@ -1981,6 +1981,24 @@ def _section(doc: Path, heading: str) -> str:
     return match.group(1)
 
 
+def test_engine_restatement_exemptions_resolve() -> None:
+    """Every `ENGINE_RESTATEMENT_EXEMPTIONS` key must locate a real section.
+
+    Locating only, per `.claude/rules/guards.md`: this does not decide whether
+    the prose still reads as a reading rather than a guarantee — that is a
+    reader's job — it only keeps the declaration from rotting silently. A
+    section renamed or removed while an exemption still claims it would
+    otherwise leave the allowlist entry pointing at nothing, with nothing here
+    to notice.
+    """
+    for key in ENGINE_RESTATEMENT_EXEMPTIONS:
+        relpath, _, heading = key.partition("#")
+        assert heading, f"{key!r}: exemption key carries no '#<heading>' fragment"
+        doc = PLUGIN_ROOT / relpath
+        assert doc.is_file(), f"{key!r}: {relpath} does not exist under {PLUGIN_ROOT}"
+        _section(doc, heading)  # asserts the heading exists
+
+
 _SEPARATOR_ROW = re.compile(r"^\|[\s:|-]+\|$")
 
 
