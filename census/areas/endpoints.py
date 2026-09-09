@@ -109,12 +109,8 @@ PROSE_OBLIGATIONS: tuple[ProseObligation, ...] = (
     ProseObligation(
         model="ResponseExtraction", field="records",
         prose_hash="edb6f6f3bd17",
-        rule_ids=("RULE-ENDP-012",),
-        structural=(
-            "typed RefExpression (never template/literal/function); the "
-            "response.body anchor is enforced by ResponseExtraction._validate "
-            "and mirrored as a pattern in the published schema"
-        ),
+        rule_ids=("RULE-ENDP-012", "RULE-ENDP-073"),
+        structural="typed RefExpression (never template/literal/function)",
     ),
     ProseObligation(
         model="ResponseExtraction", field="schema_",
