@@ -4280,37 +4280,53 @@ def _permits_object(declaration: dict[str, Any]) -> bool:
     tree itself; see that function for why the tree-wide question is not "one
     more marker set to fold and check here".
 
-    `arrow_type`, where present, is the contract's own authoritative type
-    marker and is checked FIRST: `"Object"` is the one spelling that means
-    object-shaped (spec: §Native and Arrow Types — `Object` requires sibling
-    `properties` and can appear with no bare `type` key at all), and every
-    other arrow_type — scalar or parameterized (`Utf8`, `Int64`,
-    `Decimal128(38, 9)`, `List`, `Json`) — is a declared type that excludes
-    object the same as a non-`"object"` bare `type` does. Checking `arrow_type`
-    only when it equals `"Object"` and otherwise falling through to the bare
-    `type` reading is the gap this predicate exists to close: a `$ref` target
-    can carry `native_type`/`arrow_type: "Utf8"` with no bare `type` key at
-    all, and a referencing node's sibling `properties` would otherwise read as
-    "no type declared" and be wrongly trusted.
+    `arrow_type` and a bare `type` key are INTERSECTED when both are present
+    on ``declaration`` — each is an independent assertion about the same
+    instance, so either one excluding `object` excludes it, the same
+    intersection :func:`_fold_permits_object` applies across `$ref`/`allOf`
+    contributors. `_validate_arrow_type_in_json_schema` checks `arrow_type`
+    against its OWN sibling `properties`/`items` shape, but never against a
+    sibling bare `type` — a node declaring `type: "string"` alongside a
+    paired `native_type`/`arrow_type: "Object"` and `properties` passes that
+    walker, and reading `arrow_type` alone here would have trusted the
+    `properties` for an instance the `type` assertion already rules out.
 
-    Absent `arrow_type`, a node permits object when it declares no `type` at
-    all (JSON Schema's own bare-`properties` convention: `type` omitted with
-    `properties` present means object), or when its declared `type` includes
-    `"object"`. A declared `type` that excludes `"object"` does not permit it
-    — `properties` beside a non-object `type` is never reachable from a
-    conforming instance.
+    `arrow_type`, where present, is the contract's own authoritative type
+    marker: `"Object"` is the one spelling that means object-shaped (spec:
+    §Native and Arrow Types — `Object` requires sibling `properties` and can
+    appear with no bare `type` key at all), and every other arrow_type —
+    scalar or parameterized (`Utf8`, `Int64`, `Decimal128(38, 9)`, `List`,
+    `Json`) — is a declared type that excludes object the same as a
+    non-`"object"` bare `type` does. A `$ref` target can carry
+    `native_type`/`arrow_type: "Utf8"` with no bare `type` key at all, and a
+    referencing node's sibling `properties` would otherwise read as "no type
+    declared" and be wrongly trusted — the gap treating a missing `arrow_type`
+    key as "excludes object" (rather than "no opinion") would reopen.
+
+    A node permits object when NEITHER key it declares excludes it: no
+    `arrow_type` and no `type` at all (JSON Schema's own bare-`properties`
+    convention: `type` omitted with `properties` present means object), or a
+    declared `type`/`arrow_type` that each include `"object"`/equal
+    `"Object"`. Either key alone excluding it — `properties` beside a
+    non-object `type`, or beside a non-`"Object"` `arrow_type` — is never
+    reachable from a conforming instance.
     """
+    permits_by_arrow_type = True
     arrow_type = declaration.get("arrow_type")
     if arrow_type is not None:
-        return arrow_type == "Object"
+        permits_by_arrow_type = arrow_type == "Object"
+
+    permits_by_type = True
     declared_type = declaration.get("type")
-    if declared_type is None:
-        return True
     if isinstance(declared_type, str):
-        return declared_type == "object"
-    if isinstance(declared_type, list):
-        return "object" in declared_type
-    return True
+        permits_by_type = declared_type == "object"
+    elif isinstance(declared_type, list):
+        permits_by_type = "object" in declared_type
+    # `declared_type is None`, or neither a string nor a list (malformed —
+    # surfaced elsewhere as an authoring error): no opinion from this key,
+    # `permits_by_type` stays at its default.
+
+    return permits_by_arrow_type and permits_by_type
 
 
 def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:

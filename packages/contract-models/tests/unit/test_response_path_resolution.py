@@ -401,6 +401,25 @@ class TestScalarNodePropertiesAreNotTraversable:
         assert effective_properties(root, root) == {}
         assert materialize_node(root)["properties"] == {}
 
+    def test_a_bare_type_excluding_object_is_not_overruled_by_arrow_type_object(self):
+        # `_validate_arrow_type_in_json_schema` checks `arrow_type` against
+        # its OWN sibling `properties`/`items` shape but never against a
+        # sibling bare `type`, so a node pairing `type: "string"` with
+        # `native_type`/`arrow_type: "Object"` passes that walker — reading
+        # `arrow_type` alone here would trust `properties` for an instance
+        # the `type` assertion already rules out. Both markers are
+        # intersected: either excluding `object` excludes it.
+        node = {
+            "type": "string",
+            "native_type": "text",
+            "arrow_type": "Object",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(node, ["age"])
+
     def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
         # The type marker and the `properties` map can be declared on
         # DIFFERENT sibling `allOf` branches of the same node — `_contributors`
