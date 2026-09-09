@@ -260,13 +260,15 @@ class TestScalarNodePropertiesAreNotTraversable:
         node = {"type": "string", "properties": {"age": {"type": "integer"}}}
         assert effective_properties(node) == {}
 
-    def test_materialize_node_drops_the_properties_key_entirely(self):
-        # Genuinely ABSENT, not an empty dict — `_json_schema_top_level_fields`
-        # tells the two apart ("no properties map" is unknowable-skip; "{}" is
-        # zero declared fields).
+    def test_materialize_node_reports_a_known_empty_properties_map(self):
+        # KNOWN-empty, not genuinely absent — `_json_schema_top_level_fields`
+        # tells the two apart ("no properties map anywhere" is unknowable-skip;
+        # "{}" is zero declared fields), and a scalar node's declared
+        # `properties` is exactly as knowable-empty as an explicit
+        # `properties: {}` would be: no conforming instance carries any of it.
         node = {"type": "string", "properties": {"age": {"type": "integer"}}}
         materialized = materialize_node(node)
-        assert "properties" not in materialized
+        assert materialized["properties"] == {}
 
     def test_ref_to_a_scalar_defs_entry_with_sibling_properties_is_rejected(self):
         # The composed-type case: `node` itself carries no literal `type`, but
@@ -350,12 +352,15 @@ class TestScalarNodePropertiesAreNotTraversable:
         # field resolution) both read `properties` off `materialize_node`
         # through this shared helper, with no walker of their own — proof the
         # fix reached the primitive and not only `resolve_declared_path`'s
-        # per-segment loop.
+        # per-segment loop. Reports a KNOWN-empty set, not `None`: `None` means
+        # "unknowable, skip the check", which would silently let a
+        # `conflict_keys`/`from_input` reference into this scalar node back
+        # through the very check this fix exists to tighten.
         schema = {"type": "string", "properties": {"email": {"type": "string"}}}
-        assert _json_schema_top_level_fields(schema) is None
+        assert _json_schema_top_level_fields(schema) == set()
 
     def test_the_object_permission_check_does_not_leak_across_sibling_nodes(self):
-        # `_composed_type_declaration`'s memo must be FRESH per gate-check, not
+        # `_composed_permits_object`'s memo must be FRESH per gate-check, not
         # threaded across the whole `_contributors` walk the way `_contributors`'
         # own memo is: `BranchA` sits on a `$ref` cycle through `Cycler` and is
         # itself string-typed, so `Cycler`'s composed type is correctly "string"
@@ -394,7 +399,7 @@ class TestScalarNodePropertiesAreNotTraversable:
             "properties": {"age": {"type": "integer"}},
         }
         assert effective_properties(root, root) == {}
-        assert "properties" not in materialize_node(root)
+        assert materialize_node(root)["properties"] == {}
 
     def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
         # The type marker and the `properties` map can be declared on
@@ -402,11 +407,11 @@ class TestScalarNodePropertiesAreNotTraversable:
         # must judge this by the whole node's composed type, not by whichever
         # branch happens to carry `properties` judged in isolation (that
         # branch, alone, declares no type of its own and would default to
-        # "permits object"). `_materialize`'s `merged` already folds every
-        # source's type markers before deciding; `_contributors` must agree.
+        # "permits object"). `_materialize` threads the same tree-wide verdict
+        # through its own recursion; `_contributors` must agree.
         node = {"allOf": [{"type": "string"}, {"properties": {"age": {"type": "integer"}}}]}
         assert effective_properties(node) == {}
-        assert "properties" not in materialize_node(node)
+        assert materialize_node(node)["properties"] == {}
         with pytest.raises(DeclaredPathError, match="'age' is not declared"):
             resolve_declared_path(node, ["age"])
 
@@ -430,7 +435,7 @@ class TestScalarNodePropertiesAreNotTraversable:
             "allOf": [{"type": "string"}],
         }
         assert effective_properties(root, root) == {}
-        assert "properties" not in materialize_node(root)
+        assert materialize_node(root)["properties"] == {}
 
     def test_type_buried_in_a_nested_allof_still_gates_a_sibling_branchs_properties(self):
         # `allOf` nests: a branch may itself carry an `allOf`. The composed
@@ -443,7 +448,49 @@ class TestScalarNodePropertiesAreNotTraversable:
             ],
         }
         assert effective_properties(node) == {}
-        assert "properties" not in materialize_node(node)
+        assert materialize_node(node)["properties"] == {}
+
+    def test_an_excluding_arrow_type_sibling_is_not_overruled_by_a_later_one(self):
+        # `_declared_types`/`_refuse_disjoint_types` only reads a bare `type`
+        # key, so two `allOf` siblings disagreeing over `arrow_type` slip past
+        # that contradiction check — the composed-type fold is the only
+        # remaining place order could still decide the verdict. A
+        # last-source-wins fold let the LATER sibling's `arrow_type: "Object"`
+        # overrule the EARLIER sibling's `arrow_type: "Utf8"` and treated the
+        # later sibling's `properties` as trustworthy, for a node no
+        # conforming instance can ever have both types at once.
+        node = {
+            "allOf": [
+                {"arrow_type": "Utf8"},
+                {"arrow_type": "Object", "properties": {"age": {"type": "integer"}}},
+            ],
+        }
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(node, ["age"])
+
+    def test_an_enclosing_arrow_type_override_rescues_a_scalar_refs_properties(self):
+        # The mirror of the test above: `node`'s OWN `arrow_type` is not one
+        # more contributor to intersect against its `$ref` target — it
+        # OVERRIDES the target, the same "node's own statements win" rule
+        # every other key in this fold follows. Pruning `Scalar`'s `properties`
+        # from ITS OWN local (scalar) type, before `node`'s override to
+        # `"Object"` is applied, discarded them permanently and left `node`
+        # with none even though `node` itself is object-shaped.
+        root = {
+            "$defs": {
+                "Scalar": {
+                    "arrow_type": "Utf8",
+                    "properties": {"age": {"type": "integer"}},
+                },
+            },
+            "$ref": "#/$defs/Scalar",
+            "arrow_type": "Object",
+        }
+        assert resolve_declared_path(root, ["age"], root=root) == {"type": "integer"}
+        assert materialize_node(root)["properties"] == {"age": {"type": "integer"}}
+        assert effective_properties(root, root) == {"age": {"type": "integer"}}
 
 
 # ---------------------------------------------------------------------------

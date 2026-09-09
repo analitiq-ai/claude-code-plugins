@@ -4172,84 +4172,113 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 # declaration wins.
 
 
-def _composed_type_declaration(node: dict[str, Any], root: Any) -> dict[str, Any]:
-    """The `type`/`native_type`/`arrow_type` ``node`` ends up with once its
-    `$ref` target and `allOf` branches are folded in, last source wins.
+def _composed_permits_object(node: dict[str, Any], root: Any) -> bool:
+    """Whether ANY `properties` map in ``node``'s `$ref`/`allOf` tree may be
+    trusted, per :func:`_permits_object`.
 
-    The same source order `_contributors`/`_materialize` use for every other
-    key (`$ref` target, then `allOf` branches, then the node itself),
-    restricted to the type-declaring keys :func:`_permits_object` needs to decide
-    whether ANY `properties` map in ``node``'s `$ref`/`allOf` tree may be
-    trusted — a `properties`-only `allOf` branch permits object judged in
-    isolation, so the type and the `properties` can be declared on different
-    sibling branches of the same node and the verdict still has to come from
-    the WHOLE tree's composed type, not the one branch that happens to carry
-    `properties`. :func:`_property_contributors` calls this exactly once per
-    walk, on the ORIGINAL top-level node, and threads the one verdict down
-    through every recursive `_contributors` call unchanged.
+    `$ref` target and `allOf` siblings are INTERSECTED, not folded
+    last-source-wins the way an ordinary data position is: `allOf` composition
+    means an instance satisfying the whole tree must satisfy every contributor
+    AT ONCE, so one contributor's `arrow_type` excluding `object` excludes it
+    for the whole tree no matter what a sibling declares — last-source-wins
+    folding let a LATER sibling's `arrow_type: "Object"` overrule an EARLIER
+    one's `arrow_type: "Utf8"` (bare `type` conflicts are already caught by
+    `_refuse_disjoint_types`; `arrow_type`/`native_type` conflicts are not, so
+    this is the only place order could still decide the verdict) and offered
+    the excluded sibling's `properties` as trustworthy for a node no
+    conforming instance can ever satisfy. A `properties`-only `allOf` branch
+    permits object judged in isolation, so the type and the `properties` can
+    be declared on different sibling branches of the same node and the
+    verdict still has to come from the WHOLE tree, not the one branch that
+    happens to carry `properties`.
+
+    ``node``'s OWN markers are the one exception to intersection: they
+    OVERRIDE the intersected verdict, same as every other key in this file's
+    shared source order ("$ref target, then allOf branches, then the node
+    itself, own statements win") — see :func:`_fold_permits_object` for why
+    that override is what lets an enclosing `allOf: [{$ref: Base}, {arrow_type:
+    "Object"}]` refinement re-permit a scalar base's `properties`.
+
+    :func:`_property_contributors` calls this exactly once per walk, on the
+    ORIGINAL top-level node, and threads the one verdict down through every
+    recursive `_contributors` call unchanged.
 
     Deliberately a separate walk rather than a call to :func:`materialize_node`:
     that fold is what this predicate exists to gate (whether `properties` is
     trustworthy), so it cannot be the thing consulted to make that decision —
     calling it here would re-enter the property fold this function is upstream
-    of. `type`/`native_type`/`arrow_type` are always scalars or flat lists,
-    never merged sub-schemas, so a plain last-wins overwrite (no
-    :func:`_combine_schema_values` recursion) reproduces the same source order
-    correctly.
+    of.
 
     Memoized only WITHIN this call's own recursion (a fresh memo dict per
     call, never reused across separate calls to this function) via
-    :func:`_fold_type_markers` — a `$ref`/`allOf` DAG with shared `$defs`
+    :func:`_fold_permits_object` — a `$ref`/`allOf` DAG with shared `$defs`
     reached from several branches of the same tree would otherwise re-walk
     the shared subgraph once per branch. `TestCompositionIsLinearNotExponential`
     in `test_response_path_resolution.py` is the regression test pinning that
     a shared diamond stays linear, cyclic or not.
     """
-    return _fold_type_markers(node, root, {}, frozenset())
+    return _fold_permits_object(node, root, {}, frozenset())
 
 
-def _fold_type_markers(
+def _fold_permits_object(
     node: dict[str, Any],
     root: Any,
-    memo: dict[int, dict[str, Any]],
+    memo: dict[int, bool],
     on_path: frozenset[int],
-) -> dict[str, Any]:
-    """:func:`_composed_type_declaration`'s memoized worker for ONE call's
-    own recursion. See that function for why the memo is never shared
-    across separate top-level calls."""
+) -> bool:
+    """:func:`_composed_permits_object`'s memoized worker for ONE call's own
+    recursion. See that function for why the memo is never shared across
+    separate top-level calls, why `$ref`/`allOf` sources are intersected, and
+    why the node's own markers override that intersection instead of joining
+    it."""
     key = id(node)
     cached = memo.get(key)
     if cached is not None:
         return cached
     if key in on_path:
-        return {}
+        return True  # a cycle contributes nothing the second time it is met
     on_path = on_path | {key}
-    composed: dict[str, Any] = {}
+    # `$ref` target and `allOf` siblings are INTERSECTED: `allOf` composition
+    # means an instance must satisfy every one of them at once, so any single
+    # contributor excluding `object` excludes it for the whole tree — this is
+    # what stops a later, order-arbitrary sibling from overruling an earlier
+    # one's exclusion the way a last-source-wins overwrite did.
+    permits = True
     ref = node.get("$ref")
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
-        if isinstance(target, dict):
-            composed.update(_fold_type_markers(target, root, memo, on_path))
+        if isinstance(target, dict) and not _fold_permits_object(target, root, memo, on_path):
+            permits = False
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
-            if isinstance(branch, dict):
-                composed.update(_fold_type_markers(branch, root, memo, on_path))
-    for marker in ("type", "native_type", "arrow_type"):
-        if marker in node:
-            composed[marker] = node[marker]
-    memo[key] = composed
-    return composed
+            if isinstance(branch, dict) and not _fold_permits_object(branch, root, memo, on_path):
+                permits = False
+    # The node's OWN markers are not one more intersected contributor: they
+    # OVERRIDE whatever the `$ref`/`allOf` sources computed, same as every
+    # other key in this file's shared source order ("$ref target, then allOf
+    # branches, then the node itself, own statements win"). Without this, a
+    # node re-declaring `arrow_type: "Object"` over a scalar `$ref` base could
+    # never un-exclude the base's `properties` — the very "enclosing override"
+    # idiom `allOf: [{$ref: Base}, {refinement}]` exists to support, and the
+    # reason this predicate cannot simply intersect everything it sees.
+    own_markers = {m: node[m] for m in ("type", "native_type", "arrow_type") if m in node}
+    if own_markers:
+        permits = _permits_object(own_markers)
+    memo[key] = permits
+    return permits
 
 
 def _permits_object(declaration: dict[str, Any]) -> bool:
     """Whether an ALREADY-COMPOSED declaration allows its `properties` to be
     trusted.
 
-    ``declaration`` must already be composed across `$ref`/`allOf` — either
-    :func:`_composed_type_declaration`'s result, or `_materialize`'s own
-    ``merged`` (which folds the same type-declaring keys the same way as an
-    ordinary last-wins DATA-position merge).
+    ``declaration`` is a single node's own `type`/`native_type`/`arrow_type`
+    keys — never a whole `$ref`/`allOf` tree's contributors folded together.
+    :func:`_fold_permits_object` calls this once per node, on that node's own
+    markers only, and INTERSECTS (ANDs) the per-node verdicts across the
+    tree itself; see that function for why the tree-wide question is not "one
+    more marker set to fold and check here".
 
     `arrow_type`, where present, is the contract's own authoritative type
     marker and is checked FIRST: `"Object"` is the one spelling that means
@@ -4313,14 +4342,14 @@ def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[An
     # tree this call walks, not of whichever branch happens to carry the
     # `properties` key. `type: "string"` on one `allOf` branch and `properties`
     # on a SIBLING branch with no type marker of its own both describe the same
-    # instance: a properties-only branch, `_composed_type_declaration`'d in
+    # instance: a properties-only branch, `_composed_permits_object`'d in
     # isolation, always "permits object" by default, so gating each branch
     # against its OWN composed type alone would never let the sibling's
     # scalar `type` reach it. One verdict, applied uniformly to every
     # `properties` source this walk finds, is what keeps this fold agreeing
-    # with `_materialize`'s `merged`-based gate, which already folds every
-    # source's type markers before deciding.
-    permits_object = _permits_object(_composed_type_declaration(node, root))
+    # with `_materialize`'s own gate, which threads the same tree-wide verdict
+    # through its recursion instead of deciding it per level.
+    permits_object = _composed_permits_object(node, root)
     return _contributors(node, root, {}, set(), permits_object)
 
 
@@ -4615,7 +4644,17 @@ def materialize_node(node: Any, root: Any = None) -> Any:
     """
     if not isinstance(node, dict):
         return node
-    return _materialize(node, node if root is None else root, {}, set())
+    root = node if root is None else root
+    # Computed ONCE, from `node`'s whole `$ref`/`allOf` tree — the same verdict
+    # :func:`_property_contributors` threads through :func:`_contributors`, and
+    # for the same reason: deciding it per RECURSIVE CALL instead let a `$ref`
+    # target's own local (scalar) type prune its `properties` before the
+    # enclosing node's own `allOf` branch — processed only after the target
+    # returns — had a chance to override that type back to `object`. The
+    # target's fold ran and returned first, so the override arrived too late to
+    # rescue properties already discarded from the result it returned.
+    permits_object = _composed_permits_object(node, root)
+    return _materialize(node, root, {}, set(), permits_object)
 
 
 def _materialize(
@@ -4623,6 +4662,7 @@ def _materialize(
     root: Any,
     memo: dict[int, tuple[Any, Any]],
     on_path: set[int],
+    permits_object: bool,
 ) -> Any:
     """Memoized fold. Each node is materialized ONCE and its RESULT reused.
 
@@ -4646,6 +4686,13 @@ def _materialize(
     already on the current path is a cycle: it contributes nothing the second
     time it is met, which is the rule the contract states. The memo holds the
     node beside its result so a freed node's `id()` cannot be reused mid-walk.
+
+    ``permits_object`` is fixed for the whole call (computed once by
+    :func:`materialize_node` from the ORIGINAL top-level node) and threaded
+    down unchanged — never recomputed per `$ref` target or `allOf` branch. See
+    that function for why: recomputing it locally per recursive call let a
+    `$ref` target's own scalar type prune its `properties` before an
+    enclosing `allOf` branch's override was applied.
     """
     key = id(node)
     cached = memo.get(key)
@@ -4660,13 +4707,13 @@ def _materialize(
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
         if isinstance(target, dict):
-            sources.append(_materialize(target, root, memo, on_path))
+            sources.append(_materialize(target, root, memo, on_path, permits_object))
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
             _reject_unsatisfiable_branch(branch)
             if isinstance(branch, dict):
-                sources.append(_materialize(branch, root, memo, on_path))
+                sources.append(_materialize(branch, root, memo, on_path, permits_object))
     sources.append({k: v for k, v in node.items() if k not in ("$ref", "allOf")})
 
     # The same refusal `_compose_declarations` applies to a property name's
@@ -4715,15 +4762,24 @@ def _materialize(
         source["properties"] for source in sources
         if isinstance(source, dict) and isinstance(source.get("properties"), dict)
     ]
-    # `merged` already carries this node's COMPOSED `type`/`native_type`/
-    # `arrow_type` — the ordinary per-key loop above folds them last-wins
-    # across the same `$ref`/`allOf`/own-node sources `properties` is folded
-    # from. A node whose composed type excludes `object` ignores `properties`
-    # under every JSON Schema instance, however many sources declared one —
-    # `properties` inherited from an object-typed `$ref` base is not this
-    # case (the base's own `type` is what `merged` picked up), only a node
-    # that itself materializes to a non-object type is.
-    if own_properties and _permits_object(merged):
+    # `permits_object` is the WHOLE tree's composed verdict, threaded in from
+    # :func:`materialize_node` (see that function and :func:`_property_contributors`
+    # for why it cannot be recomputed from this call's own local `merged`,
+    # which would let a `$ref` target's OWN local type prune its `properties`
+    # before an enclosing override was applied). A node whose composed type
+    # excludes `object` ignores `properties` under every JSON Schema instance,
+    # however many sources declared one — `properties` inherited from an
+    # object-typed `$ref` base is not this case (the base's own type is what
+    # the tree-wide verdict already reflects), only a node whose WHOLE tree
+    # excludes `object` is.
+    if own_properties and not permits_object:
+        # Declared and known-empty, not "no `properties` map anywhere": a
+        # non-object instance carries none of these fields, which is exactly
+        # as knowable as an explicit `properties: {}` and must read the same
+        # to `_json_schema_top_level_fields` — omitting the key here is what
+        # collapsed this case into its unknowable→skip case.
+        merged["properties"] = {}
+    elif own_properties and permits_object:
         # The proof reads the RAW contributors — the same list
         # `_compose_declarations` proves — and NOT the maps hanging off
         # `sources`. Those sources have each already been materialized, and

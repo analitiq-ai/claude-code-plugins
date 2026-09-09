@@ -1333,20 +1333,22 @@ class TestWriteConflictKeys:
         op["input"]["schema"] = {"type": "object"}
         parse_endpoint(self._payload({"upsert": op}))
 
-    def test_conflict_keys_check_skipped_when_input_schema_type_excludes_object(self):
+    def test_conflict_keys_rejected_when_input_schema_type_excludes_object(self):
         # `_json_schema_top_level_fields` folds through the shared
         # `materialize_node` primitive, so a top-level `input.schema` typed
-        # non-object does not see its sibling `properties` map as declaring
-        # any field. A schema this convention calls unknowable is skipped,
-        # not rejected (same as no `properties` map at all — see
+        # non-object sees its sibling `properties` map as declaring a KNOWN
+        # empty field set, not an unknowable one — no conforming instance of a
+        # scalar type has named fields at all, which is knowable with the same
+        # certainty as an explicit `properties: {}` (see
+        # `test_conflict_keys_rejected_when_input_schema_has_empty_properties`
+        # below) and unlike a plain absent `properties` map (see
         # `test_conflict_keys_unchecked_when_input_schema_has_no_properties`
-        # above), so `materialize_node` no longer exposing this field is what
-        # `test_json_schema_top_level_fields_excludes_a_scalar_nodes_properties`
-        # in test_response_path_resolution.py pins directly, not this
-        # `parse_endpoint` call.
+        # above). `test_json_schema_top_level_fields_excludes_a_scalar_nodes_properties`
+        # in test_response_path_resolution.py pins the primitive directly.
         op = self._write_op(conflict_keys=["email"])
         op["input"]["schema"]["type"] = "string"
-        parse_endpoint(self._payload({"upsert": op}))
+        with pytest.raises(ValidationError, match="unknown input.schema fields"):
+            parse_endpoint(self._payload({"upsert": op}))
 
     def test_conflict_keys_rejected_when_input_schema_has_empty_properties(self):
         # An explicit `properties: {}` declares zero fields — distinct from an
