@@ -1,0 +1,33 @@
+id: RULE-ENDP-073
+statement: >
+  A response extraction's `records.ref` MUST be `response.body` or start with
+  `response.body.`.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::ResponseExtraction._validate"
+owners: [connector-plugin, engine]
+targets: [ResponseExtraction]
+fields: [records.ref]
+rationale: >
+  `records` is typed `RefExpression`, whose own `ref: str` field is what this
+  check constrains — the anchor is what makes declared-path resolution against
+  `response.schema` well-defined at all: every downstream reader (the
+  validator, the engine, the conformance kit) walks from `response.body`, and
+  a `ref` outside that shape has nothing to resolve against. `WriteResponse`
+  has no `records` field, so this is a response-only clause and `targets` is
+  `ResponseExtraction` alone, the same shape as RULE-ENDP-005's precedent for
+  a response-only clause on this validator. The raise at
+  `ResponseExtraction._validate` is bare `ValueError`, not
+  `analitiq.contracts.shared.rules::violation`, matching every other raise in
+  this method and its write-side sibling — this record alone is what
+  registers the obligation. The pinned reachability manifest claims a read of
+  both `ResponseExtraction.records` and `RefExpression.ref`, so no
+  `RecordAffirmation` is needed. The JSON-Schema-side mirror
+  (`{"pattern": r"^response\.body(?:\..+)?$"}`) is a bare inline literal,
+  never assigned to a module-level name and never compiled or matched against
+  in Python — the actual Python-side enforcement uses plain string equality
+  and `.startswith()`, not a regex — so `mechanism`/`symbol` are left
+  unclassified rather than extracting a constant with no other consumer.
+status: active
+superseded_by: null
