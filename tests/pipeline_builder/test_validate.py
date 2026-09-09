@@ -707,7 +707,11 @@ def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path
 
     monkeypatch.setattr(V, "_read_json", boom)
     pipeline_doc = json.loads(doc.read_text())
-    bundle, findings = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    bundle, findings, complete = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    # the crash cost only the connector_id alias (the slug is recorded before the
+    # guarded read), but a connection could still name that id rather than the
+    # slug, so assembly is marked incomplete out of caution
+    assert not complete
     validators = [f["validator"] for f in findings]
     assert "adapter-crash" in validators, findings
     crash = [f for f in findings if f["validator"] == "adapter-crash"][0]
@@ -769,6 +773,12 @@ def test_bundle_stream_read_crash_preserves_sibling_stream_and_continues_assembl
     # the connections loop, which runs after the crashed streams loop, still
     # ran and decided its own finding
     assert "connection-type-map" in validators, diag["findings"]
+    # PIPELINE.streams still names the crashed stream's id (it was never
+    # re-authored to drop the reference) — the bundle is short that very
+    # document, so the referential pass that would call this ref unresolved
+    # is skipped rather than blame a reference that was never actually broken
+    assert "bundle-stream-ref" not in validators, diag["findings"]
+    assert sum(1 for v in validators if v == "adapter-crash") == 2, diag["findings"]
 
 
 def test_crash_finding_handles_broken_exception_str():
