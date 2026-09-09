@@ -315,12 +315,8 @@ def _error_category_values(schema: dict) -> set[str] | None:
     inlines it at every usage site instead of giving it one, so there is no
     `$defs.ErrorCategory` to walk to. `codes` is a `dict[str, ErrorCategory]`;
     its value enum renders under the non-null `anyOf` branch's
-    `additionalProperties`. `http` carries the identical enum (same Literal)
-    but under `patternProperties` instead — a differently-shaped node this
-    function does not also walk — so `codes` is the one read here, not an
-    arbitrary choice between equivalents. Same restructure tolerance as
-    `_enum_at`: any missing key, a non-dict node, or a non-list `enum` yields
-    None.
+    `additionalProperties`. Same restructure tolerance as `_enum_at`: any
+    missing key, a non-dict node, or a non-list `enum` yields None.
     """
     node = schema.get("$defs", {}).get("ErrorMap")
     if not isinstance(node, dict):
@@ -337,6 +333,39 @@ def _error_category_values(schema: dict) -> set[str] | None:
         additional = branch.get("additionalProperties")
         if isinstance(additional, dict) and isinstance(additional.get("enum"), list):
             return set(additional["enum"])
+    return None
+
+
+def _http_category_values(schema: dict) -> set[str] | None:
+    """Return the closed `ErrorCategory` vocabulary via `ErrorMap.http`'s value enum.
+
+    `http` is `dict[str, ErrorCategory]` too, but renders under
+    `patternProperties` (a status-code key pattern) rather than `codes`'s
+    `additionalProperties` — a differently-shaped node `_error_category_values`
+    does not walk. `codes` and `http` share the same `ErrorCategory` Literal
+    today, so the two extractors return the same set now; reading `http`'s own
+    branch here, rather than reusing `_error_category_values`, is what catches
+    the day a future contract change gives them different vocabularies. Same
+    restructure tolerance as `_enum_at`.
+    """
+    node = schema.get("$defs", {}).get("ErrorMap")
+    if not isinstance(node, dict):
+        return None
+    http = node.get("properties", {}).get("http")
+    if not isinstance(http, dict):
+        return None
+    branches = http.get("anyOf")
+    if not isinstance(branches, list):
+        return None
+    for branch in branches:
+        if not isinstance(branch, dict):
+            continue
+        pattern_props = branch.get("patternProperties")
+        if not isinstance(pattern_props, dict):
+            continue
+        for value_schema in pattern_props.values():
+            if isinstance(value_schema, dict) and isinstance(value_schema.get("enum"), list):
+                return set(value_schema["enum"])
     return None
 
 
@@ -2083,18 +2112,37 @@ def test_mapper_target_columns_match_the_contract(
     )
 
 
-def test_http_classification_categories_are_valid() -> None:
-    """The HTTP table's Category column names only real `ErrorCategory` members.
+def test_http_classification_categories_are_valid(connector_schema: dict) -> None:
+    """The HTTP table's Category column names only real `ErrorMap.http` members.
+
+    Compared against `http`'s own value enum, not the `codes`-derived
+    `EXPECTED_ERROR_CATEGORIES` constant: `codes` and `http` share one
+    `ErrorCategory` Literal today, but coupling this check to `codes` instead
+    of `http` would miss the day a future contract change gives them
+    different vocabularies (`test_error_categories_match_schema` above already
+    pins `codes`; this pins `http` independently rather than assuming the two
+    stay identical).
 
     Subset, not equality: unlike the exhaustive mappers above, this table
-    deliberately withholds `400` as genuinely provider-ambiguous, so it is not
-    expected to cover every category. What must never happen is the table
-    inventing a category the contract does not have — that check still needs
-    an assertion, or a typo'd or retired category name would sit undetected.
+    deliberately withholds `400`/`422` as genuinely provider-ambiguous, so it
+    is not expected to cover every category. What must never happen is the
+    table inventing a category the contract does not have, or the extraction
+    itself going quietly empty (a deleted or reformatted table would satisfy
+    an empty subset trivially) — both need their own assertion.
     """
+    schema_set = _http_category_values(connector_schema)
+    assert schema_set, _diff_msg(
+        "ErrorMap.http value (ErrorCategory)", schema_set, EXPECTED_ERROR_CATEGORIES,
+        "the contract was restructured; re-point _http_category_values at the new shape.",
+    )
     section = _section(ERROR_CLASSIFICATION, "Classifying an HTTP status")
     documented = _target_column(section)
-    invented = documented - EXPECTED_ERROR_CATEGORIES
+    assert documented, (
+        f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
+        "status: no categories extracted — the table was deleted or "
+        "reformatted, so this guard would have graded nothing."
+    )
+    invented = documented - schema_set
     assert not invented, (
         f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
         f"status names categor{'y' if len(invented) == 1 else 'ies'} the "

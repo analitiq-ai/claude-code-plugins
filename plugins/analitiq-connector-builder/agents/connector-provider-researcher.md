@@ -140,13 +140,14 @@ the fact the creator needs.
   declare its error classification (`references/error-classification.md`)
   into `error_signals` — `error_signals.native_code_attrs` (the exception
   attribute(s) the driver documents as carrying its native error code, or
-  null when the docs establish the exception carries none — the fact that
-  routes the creator to a class-name-keyed classification instead) and
+  null when the docs establish the exception carries none) and
   `error_signals.documented_codes` (the driver's own documented meaning,
-  verbatim, keyed by native-code value when an attribute is named above, or
-  by documented exception class name when it is null — never a category;
-  the creator alone maps meaning to a failure category). Leave the whole
-  block unset when nothing above is grounded, and report a gap for anything
+  verbatim, one entry per signal value grounded — a native-code value for
+  each attribute named above, and/or a documented exception class name when
+  the docs establish a meaningful class hierarchy too, since a connector may
+  ground its classification on both at once — never a category; the
+  creator alone maps meaning to a failure category). Leave the whole block
+  unset when nothing above is grounded, and report a gap for anything
   the docs don't establish
   (`RULE-CTOR-026`).
 - WebSearch is for locating the official docs only (when the user did not

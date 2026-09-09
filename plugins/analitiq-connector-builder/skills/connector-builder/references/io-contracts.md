@@ -200,7 +200,7 @@ fan-out and returned as `EndpointFacts` (below).
             },
             "documented_codes": {
               "type": "object",
-              "description": "The driver's own documented meaning, verbatim, keyed by whichever signal `native_code_attrs` points the creator at: a native-code value (e.g. `\"23505\": \"unique_violation\"`) when an attribute is named, or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) when `native_code_attrs` is null and classification depends on the exception's type instead. Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
+              "description": "The driver's own documented meaning, verbatim, one entry per signal value grounded above — a native-code value (e.g. `\"23505\": \"unique_violation\"`) for anything `native_code_attrs` names, and/or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) for anything worth classifying by the exception's type instead. Both kinds of key may appear in the same map: a driver whose docs ground an attribute AND a meaningful class hierarchy reports both, grounding the creator's mixed `key_attrs` (an attribute plus the `__exception_class__` fallback, `references/error-classification.md`). Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
               "additionalProperties": { "type": "string" }
             }
           }

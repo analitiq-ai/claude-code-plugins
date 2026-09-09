@@ -23,18 +23,20 @@ than trusting this table over the provider's own docs.
 | `403` | `auth` |
 | `429` | `rate_limited` |
 | `409` | `write_rejected` |
-| `422` | `write_rejected` |
 | `500` | `transient` |
 | `502` | `unreachable` |
 | `503` | `unreachable` |
 | `504` | `unreachable` |
 
-`400` is deliberately absent: providers split on its meaning — some use it
-only for a malformed request (a connector-config problem), others for a
-per-record validation failure on a write (a rejected write, not a config
-defect) — so classifying it either way here would be wrong for whichever half
-disagrees. Ground it from the provider's own docs when it matters, or leave
-it unclassified and let the write path's own error surface carry it.
+`400` and `422` are deliberately absent: both can mean either a malformed or
+misconfigured connector request (the endpoint definition itself is wrong —
+a config defect) or a semantically invalid individual record (a rejected
+write), and providers split on which. A connector-generated request missing
+a field the provider's schema requires reads identically to a business
+record missing that same field, so classifying either status here would be
+wrong for whichever meaning the provider actually intends. Ground either
+from the provider's own docs when it matters, or leave it unclassified and
+let the write path's own error surface carry it.
 
 ## Classifying a driver exception (`key_attrs` / `codes`)
 

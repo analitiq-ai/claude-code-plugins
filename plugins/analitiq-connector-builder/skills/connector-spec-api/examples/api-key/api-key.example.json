@@ -49,7 +49,6 @@
       "403": "auth",
       "429": "rate_limited",
       "409": "write_rejected",
-      "422": "write_rejected",
       "500": "transient",
       "502": "unreachable",
       "503": "unreachable",
