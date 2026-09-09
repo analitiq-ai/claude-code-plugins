@@ -154,8 +154,11 @@ was raised.
        tokens (a provider's own `date` vs `date-time`, say) but differ in
        zone-awareness — whether they come from different fields or from one
        field's separate directional entries — keep those tokens **distinct**
-       so each resolves to the right canonical. Where entries share the
-       literal same documented token yet differ in zone-awareness, do not
+       so each resolves to the right canonical. Judge distinctness the way
+       an `exact` read rule matches: case and spacing collapse before
+       comparison (`spec-type-maps.md`'s uppercase rule), so two documented
+       tokens differing only there still collide. Where entries share a
+       token under that comparison yet differ in zone-awareness, do not
        invent a second token to split them — that fabricates a `native_type`
        no research observed; report the collision as a contract gap instead.
      - **Carry each sample onto the node it grounds.** Where a facts entry
