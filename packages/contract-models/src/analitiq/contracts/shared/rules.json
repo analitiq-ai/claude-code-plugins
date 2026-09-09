@@ -5265,7 +5265,7 @@
   },
   {
    "id": "RULE-SHRD-002",
-   "statement": "A temporal field's declared Arrow type MUST carry a zone only when a real wire sample observed on the direction being declared carries one — a sample observed on the other direction's payload is not evidence for this direction's declaration — and a date-time MUST NOT be defaulted to zone-aware.\n",
+   "statement": "A temporal field's declared Arrow type MUST carry a zone only when a real wire sample carries one, and a date-time MUST NOT be defaulted to zone-aware. Where the field's declaration distinguishes a read direction from a write direction, the sample MUST have been observed on the direction being declared — a sample observed on the other direction's payload is not evidence for this direction's declaration.\n",
    "tier": "judgment",
    "severity": "error",
    "scopes": [
@@ -5281,7 +5281,7 @@
    "mechanism": null,
    "symbol": null,
    "fixture_model": null,
-   "rationale": "Both the bare and the zoned spelling are canonical Arrow types the engine grammar admits, so both validate and only the provider's actual wire value decides which is true — and no authored document records that value. A value observed in one direction's payload is not evidence for what the other direction accepts or produces: a field documented once, in a response example, and placed on both a read node and a write node satisfies the narrower rule while declaring the write side's zone on read-side evidence alone, which is the corruption the rule exists to prevent. The common error is assuming zone-awareness because a field is named like an instant, which reinterprets every value the provider sends and shifts it by the destination's offset, silently and uniformly enough that nobody reads it as corruption. \"MUST NOT be defaulted to zone-aware\" is the fallback when a direction has no sample of its own, not a license to reuse the other direction's sample. Catching a wrong call means going back to a captured sample response for that direction, which lives outside every document the connector ships.\n",
+   "rationale": "Both the bare and the zoned spelling are canonical Arrow types the engine grammar admits, so both validate and only the provider's actual wire value decides which is true — and no authored document records that value. Where a resource splits a field's evidence by direction — an API endpoint's read and write payloads are the case this exists for — a value observed in one direction's payload is not evidence for what the other direction accepts or produces: a field documented once, in a response example, and placed on both a read node and a write node satisfies the narrower rule while declaring the write side's zone on read-side evidence alone, which is the corruption the rule exists to prevent. The common error is assuming zone-awareness because a field is named like an instant, which reinterprets every value the provider sends and shifts it by the destination's offset, silently and uniformly enough that nobody reads it as corruption. \"MUST NOT be defaulted to zone-aware\" is the fallback when a direction has no sample of its own, not a license to reuse the other direction's sample. Catching a wrong call means going back to a captured sample for that direction — the payload actually returned for a read, the payload actually submitted for a write — which lives outside every document the connector ships.\n",
    "status": "active",
    "superseded_by": null
   },
