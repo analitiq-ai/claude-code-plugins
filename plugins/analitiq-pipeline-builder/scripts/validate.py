@@ -72,6 +72,7 @@ error finding or an unreadable document, ``2`` on a CLI usage error.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 from pathlib import Path
 
@@ -102,6 +103,31 @@ def _finding(validator: str, severity: str, path: str, message: str) -> dict:
 def _diagnostics(findings: list[dict]) -> dict:
     passed = all(f.get("severity") != "error" for f in findings)
     return {"passed": passed, "findings": findings}
+
+
+def _crash_finding(path: str, exc: BaseException) -> dict:
+    """The shared finding every containment site emits: a guard fired and the
+    document was not evaluated for that stage. `str(exc)` is empty for some
+    exceptions (a bare `MemoryError()`), so the detail is only appended when
+    there is one, never leaving a dangling `: `."""
+    detail = str(exc)
+    message = f"{type(exc).__name__}: {detail}" if detail else type(exc).__name__
+    return _finding("adapter-crash", "error", path, message)
+
+
+@contextlib.contextmanager
+def _contained(findings: list[dict], path: str = ""):
+    """Run one independently-decidable stage. Any exception besides
+    `MemoryError` becomes one `adapter-crash` finding and the walk continues
+    past it. `MemoryError` re-raises: only the outermost guard in `main()`
+    turns it into a finding, so a resource-exhaustion event yields exactly one
+    finding rather than one per in-progress unit."""
+    try:
+        yield
+    except MemoryError:
+        raise
+    except Exception as exc:
+        findings.append(_crash_finding(path, exc))
 
 
 # ---------------------------------------------------------------------------
@@ -257,40 +283,46 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path, root: Path) -> tup
     connections: list[dict] = []
     endpoints: list[dict] = []
     for conn_json in sorted((root / "connections").glob("*/connection.json")):
-        # Connection-scoped type maps are files the engine loads beside the
-        # connection, invisible to the assembled-document bundle — check them here.
-        findings.extend(_connection_type_map_findings(conn_json.parent))
-        conn = _read_bundle_member(conn_json, findings)
-        if conn is None:
-            continue
-        connections.append(conn)
-        connection_id = conn.get("connection_id")
-        for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
-            endpoint = _read_bundle_member(ep_json, findings)
-            if endpoint is None:
+        # One connection is one independently-decidable unit: a crash processing
+        # it must not discard the findings already decided for connections
+        # processed earlier in this same loop.
+        with _contained(findings, f"connections/{conn_json.parent.name}"):
+            # Connection-scoped type maps are files the engine loads beside the
+            # connection, invisible to the assembled-document bundle — check them here.
+            findings.extend(_connection_type_map_findings(conn_json.parent))
+            conn = _read_bundle_member(conn_json, findings)
+            if conn is None:
                 continue
-            # files here are stem-addressed by construction (globbed from
-            # definition/endpoints/), so the published filename gate applies directly
-            findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
-            # Endpoint documents omit connection_id (server-managed); supply the
-            # owning connection's id so the bundle's endpoint-ref check can resolve
-            # connection-scoped references.
-            endpoint.setdefault("connection_id", connection_id)
-            endpoint.setdefault("scope", "connection")
-            endpoints.append(endpoint)
+            connections.append(conn)
+            connection_id = conn.get("connection_id")
+            for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
+                endpoint = _read_bundle_member(ep_json, findings)
+                if endpoint is None:
+                    continue
+                # files here are stem-addressed by construction (globbed from
+                # definition/endpoints/), so the published filename gate applies directly
+                findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
+                # Endpoint documents omit connection_id (server-managed); supply the
+                # owning connection's id so the bundle's endpoint-ref check can resolve
+                # connection-scoped references.
+                endpoint.setdefault("connection_id", connection_id)
+                endpoint.setdefault("scope", "connection")
+                endpoints.append(endpoint)
 
     # Connectors supply identity only, and the directory slug already is that
     # identity — so a malformed connector.json is best-effort skipped (its slug
-    # still counts), not a bundle error.
+    # still counts), not a bundle error. A crash beyond the read errors already
+    # handled below (e.g. a pathologically deep document) is its own unit too.
     connectors: set[str] = set()
     for conn_json in sorted((root / "connectors").glob("*/definition/connector.json")):
         connectors.add(conn_json.parent.parent.name)  # directory slug
-        try:
-            cid = _read_json(conn_json).get("connector_id")
-        except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-            continue
-        if isinstance(cid, str) and cid:
-            connectors.add(cid)
+        with _contained(findings, f"connectors/{conn_json.parent.parent.name}"):
+            try:
+                cid = _read_json(conn_json).get("connector_id")
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                cid = None
+            if isinstance(cid, str) and cid:
+                connectors.add(cid)
 
     bundle = {
         "pipeline": pipeline_doc,
@@ -404,13 +436,18 @@ def _bundle_findings(pipeline_doc: dict, document_path: Path, root: Path) -> lis
     # (require_runnable=False) while the pipeline is a draft, and enforce runnability
     # once it is authored 'active'. Every referential finding stays blocking either way.
     require_runnable = pipeline_doc.get("status") == "active"
-    findings = findings + validate_pipeline_bundle(bundle, require_runnable=require_runnable)
+    # Each of these two is its own unit: a crash in one must not discard the
+    # per-connection findings _assemble_bundle already decided above, nor the
+    # other unit's result.
+    with _contained(findings, "pipeline"):
+        findings.extend(validate_pipeline_bundle(bundle, require_runnable=require_runnable))
     # Plugin-local aid the published bundle can't make: it receives connector identity
     # only, so scope='connector' endpoint refs go unresolved. The plugin has the
     # downloaded connector endpoint files, so verify those refs here and warn (with an
     # alignment suggestion) rather than error — connectors are trusted, pinned at runtime.
-    findings += _check_connector_endpoint_refs(
-        bundle["streams"], bundle["connections"], _connector_endpoint_sets(root))
+    with _contained(findings, "streams"):
+        findings.extend(_check_connector_endpoint_refs(
+            bundle["streams"], bundle["connections"], _connector_endpoint_sets(root)))
     return findings
 
 
@@ -453,14 +490,19 @@ def main(argv: list[str] | None = None) -> int:
                              "Only meaningful with --entity pipeline.")
     args = parser.parse_args(argv)
 
+    # The one guard that must contain everything unconditionally, MemoryError
+    # included — it is reached however deep the failing call is, so it is what
+    # keeps a crash anywhere in the dispatch below from ever reaching the
+    # interpreter's own uncaught-exception handling (a traceback on stderr,
+    # nothing on stdout).
     try:
         ensure_deps_or_reexec(__file__)
-    except RuntimeError as exc:
-        print(json.dumps(_diagnostics([_finding("contract-model", "error", "", str(exc))]), indent=2))
+        bundle_root = Path(args.bundle_root) if args.bundle_root else None
+        diagnostics = diagnostics_for(args.entity, Path(args.document), bundle_root)
+    except Exception as exc:
+        print(json.dumps(_diagnostics([_crash_finding("", exc)]), indent=2))
         return 1
 
-    bundle_root = Path(args.bundle_root) if args.bundle_root else None
-    diagnostics = diagnostics_for(args.entity, Path(args.document), bundle_root)
     print(json.dumps(diagnostics, indent=2))
     return 0 if diagnostics["passed"] else 1
 

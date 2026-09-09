@@ -160,6 +160,9 @@ structurally cannot make:
 - `connection-type-map` — **error**: file-level gates on the connection-scoped
   type maps the engine loads beside `connection.json`. See
   `endpoint-spec/spec-type-map-gaps.md`.
+- `adapter-crash` — **error**: a containment guard inside `scripts/validate.py`
+  fired; the document was not evaluated for that stage. `path` and `message`
+  name which stage crashed and why.
 
 Some findings name the rule they apply, as a leading `[RULE-<AREA>-NNN]` in
 `message`. Quote the id verbatim whenever one is present — `pipeline-spec` and
