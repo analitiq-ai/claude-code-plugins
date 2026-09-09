@@ -147,5 +147,20 @@
     "bulk_load": { "adbc": "adbc_ingest" },
     "stage": { "scope": "temp", "schema": "target", "transactional_ddl": true },
     "limits": { "max_identifier_len": 63 }
+  },
+  "error_map": {
+    "key_attrs": ["sqlstate"],
+    "codes": {
+      "08006": "unreachable",
+      "08001": "unreachable",
+      "28000": "auth",
+      "28P01": "auth",
+      "23505": "write_rejected",
+      "23503": "write_rejected",
+      "40001": "transient",
+      "53300": "rate_limited",
+      "42501": "config",
+      "42601": "config"
+    }
   }
 }

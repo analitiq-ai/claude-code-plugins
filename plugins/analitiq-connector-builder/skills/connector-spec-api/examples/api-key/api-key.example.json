@@ -42,5 +42,19 @@
         "secret": true
       }
     }
+  },
+  "error_map": {
+    "http": {
+      "401": "auth",
+      "403": "auth",
+      "429": "rate_limited",
+      "400": "config",
+      "409": "write_rejected",
+      "422": "write_rejected",
+      "500": "transient",
+      "502": "unreachable",
+      "503": "unreachable",
+      "504": "unreachable"
+    }
   }
 }

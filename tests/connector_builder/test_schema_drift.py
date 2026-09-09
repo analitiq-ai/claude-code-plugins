@@ -134,6 +134,31 @@ EXPECTED_SQL_BULK_MECHANISMS = {
     "sqlalchemy": {"copy_from", "load_data_local_infile", "load_job"},
     "adbc": {"adbc_ingest", "copy_from", "load_data_local_infile", "load_job"},
 }
+# The closed failure-category vocabulary `ErrorMap.codes`/`.http` values are
+# drawn from (capability block v2, `RULE-CTOR-058`). Restated as decision
+# logic in error-classification.md's classification tables — the "mapping
+# logic" exemption, same as enum-mappers.md — so pin it here too.
+EXPECTED_ERROR_CATEGORIES = {
+    "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected",
+}
+# plugin-prose.md rung-5 exemption: error-classification.md's "Operational
+# consequence" table restates analitiq-core engine runtime behavior
+# (DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC in the engine's
+# capability-declaration module) — a fact with no model in this repo and no
+# published/vendored artifact to pin against (unlike ErrorCategory itself,
+# which this file does pin, above). Declared here per plugin-prose.md's
+# allowlist-entry rung: the category *names* in that table are pinned by
+# `test_mapper_target_columns_match_the_contract` above; the verdict
+# semantics beside them (retryable vs. fatal, config-defect vs.
+# write-rejected) are not mechanically checkable from this repo and are
+# stated in the prose as a reading of the engine, not a permanent guarantee
+# (`.claude/rules/engine-behaviour-claims.md`).
+ENGINE_RESTATEMENT_EXEMPTIONS = {
+    "skills/connector-builder/references/error-classification.md#Operational consequence":
+        "restates analitiq-core's ErrorCategory write/read verdict tables; "
+        "no vendored artifact exists for this fact, so it is a declared "
+        "reading rather than a pinned one",
+}
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # WriteOperation.idempotency `in` targets. No prose site restates them: the
 # plugin's documents cite `RULE-ENDP-039`, whose `literal_enum` mechanism prints
@@ -276,6 +301,38 @@ def _pattern_at(schema: dict, *path: str) -> str | None:
         pattern = cand.get("pattern")
         if isinstance(pattern, str):
             return pattern
+    return None
+
+
+def _error_category_values(schema: dict) -> set[str] | None:
+    """Return the closed `ErrorCategory` vocabulary via `ErrorMap.codes`'s value enum.
+
+    `ErrorCategory` is a bare `Literal` alias, not a named `$def` — pydantic
+    inlines it at every usage site instead of giving it one, so there is no
+    `$defs.ErrorCategory` to walk to. `codes` is a `dict[str, ErrorCategory]`;
+    its value enum renders under the non-null `anyOf` branch's
+    `additionalProperties`. `http` carries the identical enum (same Literal)
+    but under `patternProperties` instead — a differently-shaped node this
+    function does not also walk — so `codes` is the one read here, not an
+    arbitrary choice between equivalents. Same restructure tolerance as
+    `_enum_at`: any missing key, a non-dict node, or a non-list `enum` yields
+    None.
+    """
+    node = schema.get("$defs", {}).get("ErrorMap")
+    if not isinstance(node, dict):
+        return None
+    codes = node.get("properties", {}).get("codes")
+    if not isinstance(codes, dict):
+        return None
+    branches = codes.get("anyOf")
+    if not isinstance(branches, list):
+        return None
+    for branch in branches:
+        if not isinstance(branch, dict):
+            continue
+        additional = branch.get("additionalProperties")
+        if isinstance(additional, dict) and isinstance(additional.get("enum"), list):
+            return set(additional["enum"])
     return None
 
 
@@ -438,6 +495,17 @@ def test_auth_types_match_schema(connector_schema: dict) -> None:
         "update the Supported kinds table in "
         "plugins/analitiq-connector-builder/README.md and AuthTypeMapper in "
         "plugins/analitiq-connector-builder/skills/connector-builder/references/enum-mappers.md.",
+    )
+
+
+def test_error_categories_match_schema(connector_schema: dict) -> None:
+    schema_set = _error_category_values(connector_schema)
+    assert schema_set == EXPECTED_ERROR_CATEGORIES, _diff_msg(
+        "ErrorMap.codes value (ErrorCategory)",
+        schema_set,
+        EXPECTED_ERROR_CATEGORIES,
+        "update the classification tables in "
+        "plugins/analitiq-connector-builder/skills/connector-builder/references/error-classification.md.",
     )
 
 
@@ -1882,6 +1950,9 @@ def test_slug_pattern_governs_the_restated_fields(
 ENUM_MAPPERS = (
     PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "enum-mappers.md"
 )
+ERROR_CLASSIFICATION = (
+    PLUGIN_ROOT / "skills" / "connector-builder" / "references" / "error-classification.md"
+)
 DSN_BINDINGS = (
     PLUGIN_ROOT / "skills" / "connector-spec-db" / "spec-dsn-bindings.md"
 )
@@ -1952,6 +2023,22 @@ def _target_column(section: str) -> set[str]:
         ("enum-mappers", "KindMapper", EXPECTED_KINDS, {"nosql", "document"}),
         ("enum-mappers", "AuthTypeMapper", EXPECTED_AUTH_TYPES, set()),
         ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
+        (
+            "error-classification",
+            "Classifying an HTTP status",
+            EXPECTED_ERROR_CATEGORIES,
+            set(),
+        ),
+        # The same closed vocabulary is restated a second time as the target
+        # column of the operational-consequence table (verdict -> category) —
+        # pin that copy too, so a category rename can't leave one of the two
+        # tables stale while the other catches it.
+        (
+            "error-classification",
+            "Operational consequence",
+            EXPECTED_ERROR_CATEGORIES,
+            set(),
+        ),
     ],
 )
 def test_mapper_target_columns_match_the_contract(
@@ -1964,7 +2051,7 @@ def test_mapper_target_columns_match_the_contract(
     left stale in the table an orchestrator classifies against — which is the
     one copy that decides what gets authored.
     """
-    doc = {"enum-mappers": ENUM_MAPPERS}[doc_name]
+    doc = {"enum-mappers": ENUM_MAPPERS, "error-classification": ERROR_CLASSIFICATION}[doc_name]
     section = _section(doc, heading)
     documented = _target_column(section)
     if extra:

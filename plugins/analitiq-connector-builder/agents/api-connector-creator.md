@@ -64,6 +64,7 @@ artifacts, not the plugin's.
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/connection-contract.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/lifecycle-phases.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/metadata-and-versioning.md`
+- `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/error-classification.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/definition-of-done.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector.md`
 - `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/api-endpoint.md`
@@ -117,6 +118,11 @@ artifacts, not the plugin's.
    read-side regex `native_type` literals uppercase (`RULE-TMAP-014`). API
    connectors ship no write map and no package files (`RULE-CTOR-043`):
    return `type_map_write: null` and `package_files: null`.
+7. **Error classification (optional)** — declare the top-level `error_map.http`
+   block straight from `error-classification.md` §Classifying an HTTP status.
+   Adjust only where the provider's own docs document a deviating status
+   meaning, recorded in `notes` — never fabricate an entry the table and the
+   docs disagree on silently.
 
 ## Definition of Done
 

@@ -136,6 +136,16 @@ the fact the creator needs.
   the docs do not establish and report it as a gap (`RULE-CTOR-041`); the
   fragment's own descriptions say which fields admit a null value and what it
   means there.
+- For databases: ground the **error-signal** facts the creator needs to
+  declare its error classification (`references/error-classification.md`)
+  into `error_signals` — `error_signals.native_code_attrs` (the exception
+  attribute(s) the driver documents as carrying its native error code, or
+  null when the docs establish the exception carries none) and
+  `error_signals.documented_codes` (native code → the driver's own
+  documented meaning, verbatim — never a category; the creator alone maps
+  meaning to a failure category). Leave the whole block unset when nothing
+  above is grounded, and report a gap for anything the docs don't establish
+  (`RULE-CTOR-026`).
 - WebSearch is for locating the official docs only (when the user did not
   supply a URL) — never a source of facts. Every extracted fact must come from
   a first-party documentation page fetched with WebFetch; never cite blogs,

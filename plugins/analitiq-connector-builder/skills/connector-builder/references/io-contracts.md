@@ -189,6 +189,22 @@ fan-out and returned as `EndpointFacts` (below).
             }
           }
         },
+        "error_signals": {
+          "type": ["object", "null"],
+          "description": "Documented facts about how the driver's exception(s) expose a native error signal — the creator's grounding for `error_map.key_attrs`/`codes` (`references/error-classification.md`). The researcher reports only what the driver's docs establish exists, verbatim, never a failure category — that judgment is the creator's. Same omit-vs-null discipline as `sql_write_path`: OMIT a fact the docs do not establish (a research gap), and use NULL only where a field admits it to record a documented ABSENCE.",
+          "properties": {
+            "native_code_attrs": {
+              "type": ["array", "null"],
+              "items": { "type": "string" },
+              "description": "Attribute name(s) the driver's exception class documents as carrying its native error code (e.g. `sqlstate`, `pgcode`, `errno`), most-specific first when the docs establish more than one. NULL when the docs establish the exception carries no such attribute at all — the fact that routes the creator to the `__exception_class__` sentinel instead."
+            },
+            "documented_codes": {
+              "type": "object",
+              "description": "Native code → the driver's own documented meaning, verbatim (e.g. `\"23505\": \"unique_violation\"`) — never a failure category; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        },
         "sqlalchemy_driver": {
           "type": "string",
           "description": "The SQLAlchemy 'dialect+driver' for the SQLAlchemy transport, sync or async (e.g. 'postgresql+asyncpg', 'mysql+aiomysql', 'redshift+redshift_connector'); connector-spec-db/spec-driver-selection.md owns which forms are authorable and the sync/async dispatch constraints."

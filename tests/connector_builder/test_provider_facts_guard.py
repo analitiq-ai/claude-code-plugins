@@ -111,8 +111,8 @@ def test_extraction_finds_the_grounding_bullets() -> None:
     # reworded away and its tokens would silently leave the guard. Adding or
     # removing a `- For databases:` bullet is a recorded decision — update
     # this count with it.
-    assert len(bullets) == 3, (
-        f"expected exactly 3 '- For databases:' bullets under '## Hard rules' "
+    assert len(bullets) == 4, (
+        f"expected exactly 4 '- For databases:' bullets under '## Hard rules' "
         f"in {RESEARCHER.relative_to(REPO_ROOT)}, found {len(bullets)} — if the "
         "prose restructured deliberately, update this count."
     )
@@ -162,7 +162,12 @@ def test_provider_facts_database_branch_still_names_the_driver_fields() -> None:
                 "sql_write_path.qualified_statement_targeting",
                 "sql_write_path.temp_table_support",
                 "sql_write_path.transactional_ddl",
-                "sql_write_path.identifier_limits"}
+                "sql_write_path.identifier_limits",
+                # The RESEARCHED subset of error_map's inputs — the category
+                # mapping itself is the creator's decision, never the
+                # researcher's, so it carries no field here.
+                "error_signals", "error_signals.native_code_attrs",
+                "error_signals.documented_codes"}
     missing = sorted(expected - known)
     assert not missing, (
         f"ProviderFacts database branch lost field(s) {missing} — if the "

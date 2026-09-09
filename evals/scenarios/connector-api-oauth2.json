@@ -66,6 +66,13 @@
       "path": "connection_contract.inputs.client_id.storage",
       "equals": "connection.parameters",
       "rule": "RULE-CONN-006"
+    },
+    {
+      "doc": "connector",
+      "path": "error_map.http",
+      "present": true,
+      "rule": "intent",
+      "note": "the generic HTTP classification table always applies to an API connector — proves the new authoring step actually declares the block, not merely recognizes the field"
     }
   ],
   "artifacts": [
