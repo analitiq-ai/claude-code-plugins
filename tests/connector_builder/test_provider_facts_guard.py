@@ -55,35 +55,47 @@ def _provider_facts_schema() -> dict:
     return json.loads(fence.group(1))
 
 
-def _known_fields(schema: dict) -> set[str]:
-    """Dotted property paths from the top level plus both kind branches.
+def _walk_fields(props: dict) -> set[str]:
+    """Dotted property paths for one `properties` object.
 
     Nested object `properties` contribute dotted paths (`tls` and
     `tls.supported_modes` are both known), so a rename inside a sub-object is
-    caught the same as a branch-level one. Api and database branch field
-    names don't collide, so merging both into one set loses nothing a
-    per-branch lookup would have caught.
+    caught the same as a branch-level one.
     """
     fields: set[str] = set()
 
-    def walk(props: dict, prefix: str) -> None:
-        for name, sub in props.items():
+    def walk(node: dict, prefix: str) -> None:
+        for name, sub in node.items():
             fields.add(prefix + name)
             if isinstance(sub, dict):
                 walk(sub.get("properties", {}), f"{prefix}{name}.")
 
-    walk(schema.get("properties", {}), "")
-    seen_kinds = set()
+    walk(props, "")
+    return fields
+
+
+def _branch_fields(schema: dict, kind: str) -> set[str]:
+    """Dotted property paths from the top level plus one kind branch only.
+
+    Per-branch, not merged: a field genuinely on the `api` branch (like
+    `documented_http_errors`) must not validate a `- For databases:` bullet
+    referencing it, and vice versa — merging would let prose ground a field
+    on the wrong `ProviderFacts` variant and still pass.
+    """
+    fields = _walk_fields(schema.get("properties", {}))
     for branch in schema.get("oneOf", []):
         props = branch.get("properties", {})
-        kind = props.get("kind", {}).get("const")
-        if kind in ("api", "database"):
-            seen_kinds.add(kind)
-            walk(props, "")
-    missing_kinds = {"api", "database"} - seen_kinds
-    if missing_kinds:
-        pytest.fail(f"{IO_CONTRACTS}: ProviderFacts has no kind={sorted(missing_kinds)} oneOf branch")
-    return fields
+        if props.get("kind", {}).get("const") == kind:
+            return fields | _walk_fields(props)
+    pytest.fail(f"{IO_CONTRACTS}: ProviderFacts has no kind={kind!r} oneOf branch")
+
+
+def _known_fields(schema: dict) -> set[str]:
+    """Dotted property paths from the top level plus both kind branches,
+    merged. Used only where a field's presence anywhere is what matters
+    (the reverse-anchor test) — see `_branch_fields` for the per-kind check
+    that actually validates the researcher's grounding bullets."""
+    return _branch_fields(schema, "api") | _branch_fields(schema, "database")
 
 
 def _grounding_bullets(prefix: str) -> list[str]:
@@ -148,19 +160,24 @@ def test_extraction_finds_the_grounding_bullets() -> None:
     assert "tls.supported_modes" in tokens
 
 
-def test_prose_grounded_fields_exist_in_provider_facts() -> None:
-    """Every field the researcher prose instructs grounding must exist in the
-    ProviderFacts fragment — a rename landing in only one file fails here in
-    both directions (prose keeps the old name, or prose moves ahead of the
-    fragment)."""
-    known = _known_fields(_provider_facts_schema())
-    tokens = {t for b in _api_bullets() + _database_bullets() for t in _FIELD_TOKEN.findall(b)}
+@pytest.mark.parametrize(
+    "kind, bullets_fn", [("api", _api_bullets), ("database", _database_bullets)]
+)
+def test_prose_grounded_fields_exist_in_provider_facts(kind: str, bullets_fn) -> None:
+    """Every field a kind's researcher bullets instruct grounding must exist
+    on THAT kind's ProviderFacts branch — a rename landing in only one file
+    fails here in both directions (prose keeps the old name, or prose moves
+    ahead of the fragment), and a field genuinely valid on the other branch
+    does not silently validate a bullet naming it on the wrong one."""
+    known = _branch_fields(_provider_facts_schema(), kind)
+    tokens = {t for b in bullets_fn() for t in _FIELD_TOKEN.findall(b)}
     unknown = sorted(tokens - known)
     assert not unknown, (
-        f"researcher prose grounds field(s) {unknown} that the ProviderFacts "
-        f"fragment in {IO_CONTRACTS.name} does not define. Either the fragment "
-        "renamed a field without the prose following, or the prose references "
-        "a field that was never added — fix whichever file is stale."
+        f"researcher bullets for kind={kind!r} ground field(s) {unknown} that "
+        f"ProviderFacts's {kind!r} branch in {IO_CONTRACTS.name} does not "
+        "define. Either the fragment renamed a field without the prose "
+        "following, the prose references a field that was never added, or "
+        "the field belongs to the other kind branch — fix whichever is stale."
     )
 
 

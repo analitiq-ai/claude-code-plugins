@@ -159,7 +159,7 @@
       "23503": "write_rejected",
       "40001": "transient",
       "53300": "rate_limited",
-      "42501": "config",
+      "42501": "auth",
       "42601": "config"
     }
   }

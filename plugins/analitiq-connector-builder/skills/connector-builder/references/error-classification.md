@@ -20,8 +20,8 @@ config error the moment it turns out wrong, not a harmless guess
 No status code is classified from general HTTP knowledge, however familiar
 its number looks — the same status means different things across providers
 (a `409` is a stale read on one API and a rejected duplicate write on
-another), and `http` applies at *any* HTTP call site (a read, a discovery
-probe, an auth exchange, or a write — `io-contracts.md`'s `ProviderFacts.http`
+another), and `error_map.http` applies at *any* HTTP call site (a read, a
+discovery probe, an auth exchange, or a write — the contract's own `ErrorMap.http`
 description), so a status's meaning is never separable from what a specific
 provider's docs say it means on the call where it actually occurs. Ground
 every entry in `provider_facts.documented_http_errors` — never fabricate one
