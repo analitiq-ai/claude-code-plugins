@@ -22,13 +22,19 @@ than trusting this table over the provider's own docs.
 | `401` | `auth` |
 | `403` | `auth` |
 | `429` | `rate_limited` |
-| `400` | `config` |
 | `409` | `write_rejected` |
 | `422` | `write_rejected` |
 | `500` | `transient` |
 | `502` | `unreachable` |
 | `503` | `unreachable` |
 | `504` | `unreachable` |
+
+`400` is deliberately absent: providers split on its meaning — some use it
+only for a malformed request (a connector-config problem), others for a
+per-record validation failure on a write (a rejected write, not a config
+defect) — so classifying it either way here would be wrong for whichever half
+disagrees. Ground it from the provider's own docs when it matters, or leave
+it unclassified and let the write path's own error surface carry it.
 
 ## Classifying a driver exception (`key_attrs` / `codes`)
 

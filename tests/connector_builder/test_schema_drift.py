@@ -141,23 +141,27 @@ EXPECTED_SQL_BULK_MECHANISMS = {
 EXPECTED_ERROR_CATEGORIES = {
     "transient", "config", "auth", "unreachable", "rate_limited", "write_rejected",
 }
-# plugin-prose.md rung-5 exemption: error-classification.md's "Operational
-# consequence" table restates analitiq-core engine runtime behavior
-# (DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC in the engine's
-# capability-declaration module) — a fact with no model in this repo and no
-# published/vendored artifact to pin against (unlike ErrorCategory itself,
+# plugin-prose.md rung-5 exemption: two sections in error-classification.md
+# restate analitiq-core engine runtime behavior with no model in this repo and
+# no published/vendored artifact to pin against (unlike ErrorCategory itself,
 # which this file does pin, above). Declared here per plugin-prose.md's
-# allowlist-entry rung: the category *names* in that table are pinned by
-# `test_mapper_target_columns_match_the_contract` above; the verdict
-# semantics beside them (retryable vs. fatal, config-defect vs.
-# write-rejected) are not mechanically checkable from this repo and are
-# stated in the prose as a reading of the engine, not a permanent guarantee
-# (`.claude/rules/engine-behaviour-claims.md`).
+# allowlist-entry rung, each stated in the prose as a reading of the engine,
+# not a permanent guarantee (`.claude/rules/engine-behaviour-claims.md`); each
+# resolved (file + heading exist) by test_engine_restatement_exemptions_resolve
+# below.
 ENGINE_RESTATEMENT_EXEMPTIONS = {
     "skills/connector-builder/references/error-classification.md#Operational consequence":
-        "restates analitiq-core's ErrorCategory write/read verdict tables; "
-        "no vendored artifact exists for this fact, so it is a declared "
-        "reading rather than a pinned one",
+        "restates analitiq-core's ErrorCategory write/read verdict tables "
+        "(DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC); the category "
+        "*names* are pinned by test_mapper_target_columns_match_the_contract "
+        "above, the verdict semantics beside them are not mechanically "
+        "checkable from this repo",
+    "skills/connector-builder/references/error-classification.md#Classifying a driver exception (`key_attrs` / `codes`)":
+        "restates analitiq-core's key_attrs match order (the first entry that "
+        "resolves a value wins) and codes' exact-string lookup (no prefix or "
+        "class-level wildcard); neither is enforced by the contract model, "
+        "which types key_attrs as a plain ordered tuple and codes as a plain "
+        "string-keyed map with no order or matching semantics of its own",
 }
 EXPECTED_PAGINATION_STYLES = {"offset", "page", "cursor", "link", "keyset"}
 # WriteOperation.idempotency `in` targets. No prose site restates them: the
@@ -2041,16 +2045,12 @@ def _target_column(section: str) -> set[str]:
         ("enum-mappers", "KindMapper", EXPECTED_KINDS, {"nosql", "document"}),
         ("enum-mappers", "AuthTypeMapper", EXPECTED_AUTH_TYPES, set()),
         ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
-        (
-            "error-classification",
-            "Classifying an HTTP status",
-            EXPECTED_ERROR_CATEGORIES,
-            set(),
-        ),
-        # The same closed vocabulary is restated a second time as the target
-        # column of the operational-consequence table (verdict -> category) —
-        # pin that copy too, so a category rename can't leave one of the two
-        # tables stale while the other catches it.
+        # The operational-consequence table is, by design, an exhaustive
+        # per-category verdict listing (every ErrorCategory has an engine
+        # verdict) — exact-match is the right assertion here. The HTTP
+        # classification table below is deliberately NOT exhaustive (`400` is
+        # withheld as genuinely provider-ambiguous), so it gets its own
+        # subset-only pin instead of joining this list.
         (
             "error-classification",
             "Operational consequence",
@@ -2080,6 +2080,25 @@ def test_mapper_target_columns_match_the_contract(
         f"contract-only={sorted(expected - documented)}. The mapper is the only "
         "route from a researched fact to a schema value, so a member missing "
         "here cannot be authored at all."
+    )
+
+
+def test_http_classification_categories_are_valid() -> None:
+    """The HTTP table's Category column names only real `ErrorCategory` members.
+
+    Subset, not equality: unlike the exhaustive mappers above, this table
+    deliberately withholds `400` as genuinely provider-ambiguous, so it is not
+    expected to cover every category. What must never happen is the table
+    inventing a category the contract does not have — that check still needs
+    an assertion, or a typo'd or retired category name would sit undetected.
+    """
+    section = _section(ERROR_CLASSIFICATION, "Classifying an HTTP status")
+    documented = _target_column(section)
+    invented = documented - EXPECTED_ERROR_CATEGORIES
+    assert not invented, (
+        f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
+        f"status names categor{'y' if len(invented) == 1 else 'ies'} the "
+        f"contract does not have: {sorted(invented)}."
     )
 
 

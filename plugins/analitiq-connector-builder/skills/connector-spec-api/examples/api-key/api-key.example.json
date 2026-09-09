@@ -48,7 +48,6 @@
       "401": "auth",
       "403": "auth",
       "429": "rate_limited",
-      "400": "config",
       "409": "write_rejected",
       "422": "write_rejected",
       "500": "transient",

@@ -200,7 +200,7 @@ fan-out and returned as `EndpointFacts` (below).
             },
             "documented_codes": {
               "type": "object",
-              "description": "Native code → the driver's own documented meaning, verbatim (e.g. `\"23505\": \"unique_violation\"`) — never a failure category; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
+              "description": "The driver's own documented meaning, verbatim, keyed by whichever signal `native_code_attrs` points the creator at: a native-code value (e.g. `\"23505\": \"unique_violation\"`) when an attribute is named, or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) when `native_code_attrs` is null and classification depends on the exception's type instead. Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
               "additionalProperties": { "type": "string" }
             }
           }
