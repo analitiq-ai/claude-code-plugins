@@ -420,6 +420,52 @@ class TestScalarNodePropertiesAreNotTraversable:
         with pytest.raises(DeclaredPathError, match="'age' is not declared"):
             resolve_declared_path(node, ["age"])
 
+    def test_an_explicit_null_annotation_does_not_override_an_inherited_exclusion(self):
+        # `_validate_arrow_type_in_json_schema` treats an explicit `null` on
+        # `native_type`/`arrow_type` as "not declared", the same convention
+        # `own_markers` must follow: a sibling `"native_type": null` beside a
+        # `$ref` to a scalar base is not a substantive override and must not
+        # replace the base's inherited exclusion with the vacuous "no markers
+        # at all" default — a bare KEY present with a `None` value is not the
+        # same as the key being absent.
+        root = {
+            "$defs": {"Scalar": {"type": "string"}},
+            "$ref": "#/$defs/Scalar",
+            "native_type": None,
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {}
+        assert materialize_node(root)["properties"] == {}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(root, ["age"], root=root)
+
+    def test_an_own_type_disjoint_from_an_inherited_one_is_rejected_not_overridden(self):
+        # A `$ref` carries no "override the base" license by itself: per
+        # 2020-12, `{"$ref": Base, "type": "object"}` composes to Base's
+        # constraints AND this node's own, so `Base: {type: "string"}` beside
+        # an own `type: "object"` is the same provable contradiction
+        # `materialize_node` already refuses via `_refuse_disjoint_types` — the
+        # own-marker override must be checked against what it would override,
+        # not applied unconditionally, or `resolve_declared_path`/
+        # `effective_properties` resolve a path through a node no instance can
+        # ever have while `materialize_node` refuses the same document.
+        root = {
+            "$defs": {"Scalar": {"type": "string"}},
+            "$ref": "#/$defs/Scalar",
+            "type": "object",
+            "properties": {"age": {"type": "integer"}},
+        }
+        with pytest.raises(DeclarationConflictError, match="conflicting redeclaration"):
+            materialize_node(root)
+        with pytest.raises(DeclarationConflictError, match="conflicting redeclaration"):
+            effective_properties(root, root)
+        # `resolve_declared_path` never lets a `DeclarationConflictError`
+        # escape raw — it re-raises with the segment/index it was resolving
+        # (see the function's own docstring), so the same contradiction
+        # surfaces here as a `DeclaredPathError` instead.
+        with pytest.raises(DeclaredPathError, match="conflicting redeclaration"):
+            resolve_declared_path(root, ["age"], root=root)
+
     def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
         # The type marker and the `properties` map can be declared on
         # DIFFERENT sibling `allOf` branches of the same node — `_contributors`

@@ -4217,26 +4217,34 @@ def _composed_permits_object(node: dict[str, Any], root: Any) -> bool:
     in `test_response_path_resolution.py` is the regression test pinning that
     a shared diamond stays linear, cyclic or not.
     """
-    return _fold_permits_object(node, root, {}, frozenset())
+    permits, _declared = _fold_permits_object(node, root, {}, frozenset())
+    return permits
 
 
 def _fold_permits_object(
     node: dict[str, Any],
     root: Any,
-    memo: dict[int, bool],
+    memo: dict[int, tuple[bool, frozenset[str] | None]],
     on_path: frozenset[int],
-) -> bool:
+) -> tuple[bool, frozenset[str] | None]:
     """:func:`_composed_permits_object`'s memoized worker for ONE call's own
     recursion. See that function for why the memo is never shared across
     separate top-level calls, why `$ref`/`allOf` sources are intersected, and
     why the node's own markers override that intersection instead of joining
-    it."""
+    it.
+
+    Returns ``(permits_object, declared_types)`` — the second element is the
+    bare `type` set this node's WHOLE tree composes to (``None`` when nothing
+    in it asserts one), threaded up so an ANCESTOR node's own bare `type` can
+    be checked against everything it inherits, not just its immediate `$ref`
+    target's OWN direct `type` key.
+    """
     key = id(node)
     cached = memo.get(key)
     if cached is not None:
         return cached
     if key in on_path:
-        return True  # a cycle contributes nothing the second time it is met
+        return True, None  # a cycle contributes nothing the second time it is met
     on_path = on_path | {key}
     # `$ref` target and `allOf` siblings are INTERSECTED: `allOf` composition
     # means an instance must satisfy every one of them at once, so any single
@@ -4244,29 +4252,75 @@ def _fold_permits_object(
     # what stops a later, order-arbitrary sibling from overruling an earlier
     # one's exclusion the way a last-source-wins overwrite did.
     permits = True
+    inherited_types: frozenset[str] | None = None
     ref = node.get("$ref")
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
-        if isinstance(target, dict) and not _fold_permits_object(target, root, memo, on_path):
-            permits = False
+        if isinstance(target, dict):
+            target_permits, target_types = _fold_permits_object(target, root, memo, on_path)
+            if not target_permits:
+                permits = False
+            inherited_types = _intersect_declared_types(inherited_types, target_types)
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
-            if isinstance(branch, dict) and not _fold_permits_object(branch, root, memo, on_path):
-                permits = False
+            if isinstance(branch, dict):
+                branch_permits, branch_types = _fold_permits_object(branch, root, memo, on_path)
+                if not branch_permits:
+                    permits = False
+                inherited_types = _intersect_declared_types(inherited_types, branch_types)
+    # A node's own bare `type` is not exempt from the same intersection
+    # `_refuse_disjoint_types` already proves for `allOf` siblings once
+    # materialized: `{"$ref": Base, "type": "object"}` composes, by 2020-12's
+    # own rules, to `Base`'s constraints AND this node's own — a `$ref`
+    # carries no "override the base" license by itself, only sibling
+    # `allOf`/own-node REFINEMENT that narrows without contradicting does.
+    # `materialize_node` already raises for exactly this document; leaving
+    # this walk silent let `resolve_declared_path`/`effective_properties`
+    # resolve a path through a node no instance can ever have, disagreeing
+    # with the walk that would refuse it.
+    if inherited_types is not None:
+        _refuse_disjoint_types(_MATERIALIZED_NODE, [{"type": sorted(inherited_types)}, node])
     # The node's OWN markers are not one more intersected contributor: they
-    # OVERRIDE whatever the `$ref`/`allOf` sources computed, same as every
-    # other key in this file's shared source order ("$ref target, then allOf
-    # branches, then the node itself, own statements win"). Without this, a
-    # node re-declaring `arrow_type: "Object"` over a scalar `$ref` base could
+    # OVERRIDE the intersected `permits` verdict, same as every other key in
+    # this file's shared source order ("$ref target, then allOf branches,
+    # then the node itself, own statements win"). Without this, a node
+    # re-declaring `arrow_type: "Object"` over a scalar `$ref` base could
     # never un-exclude the base's `properties` — the very "enclosing override"
     # idiom `allOf: [{$ref: Base}, {refinement}]` exists to support, and the
     # reason this predicate cannot simply intersect everything it sees.
-    own_markers = {m: node[m] for m in ("type", "native_type", "arrow_type") if m in node}
+    #
+    # An explicit `null` on any of the three keys is the contract's OWN
+    # "not declared" spelling (`_validate_arrow_type_in_json_schema` reads it
+    # the same way), not a substantive override — `{"$ref": Base, "native_type":
+    # null}` must inherit `Base`'s verdict unchanged, not replace it with the
+    # vacuous "no markers at all" default `_permits_object` returns for an
+    # empty dict.
+    own_markers = {m: node[m] for m in ("type", "native_type", "arrow_type") if node.get(m) is not None}
     if own_markers:
         permits = _permits_object(own_markers)
-    memo[key] = permits
-    return permits
+    declared_types = _intersect_declared_types(inherited_types, _declared_types(node))
+    memo[key] = (permits, declared_types)
+    return permits, declared_types
+
+
+def _intersect_declared_types(
+    inherited: frozenset[str] | None, contributor: set[str] | None
+) -> frozenset[str] | None:
+    """Fold one more bare-`type` set into the running intersection.
+
+    `None` means "asserts no bare `type`" — vacuous, so it never narrows the
+    running set. Two non-`None` sets intersect, the same proof
+    :func:`_refuse_disjoint_types` applies to a materialized node's sources;
+    this is that same intersection computed incrementally, without
+    materializing, so :func:`_fold_permits_object` can check it before
+    deciding whether a node's own markers may override the inherited verdict.
+    """
+    if contributor is None:
+        return inherited
+    if inherited is None:
+        return frozenset(contributor)
+    return inherited & frozenset(contributor)
 
 
 def _permits_object(declaration: dict[str, Any]) -> bool:
