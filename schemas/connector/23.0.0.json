@@ -1920,7 +1920,7 @@
           }
         }
       ],
-      "description": "Driver-fact error classification map.\n\nReads the connector's own caught exception for its native error signal via\n`key_attrs` (an ordered, non-empty tuple of attribute names, most-specific\nfirst \u2014 declared order IS the specificity order \u2014 or the reserved name\n`__exception_class__` to match the exception's class name up its MRO\ninstead of an attribute read) and maps whatever value that produces,\nthrough `codes`, onto the engine's closed failure-category vocabulary.\n`http` maps an HTTP status read at the call site the same way \u2014 never off\nan exception, so it is independent of `key_attrs`/`codes`. `key_attrs` and\n`codes` are declared together or not at all: one without the other is\neither unusable (`codes` with nowhere to read a native value from) or a\nno-op (`key_attrs` with no mapping to apply). Absence of the whole block,\nor of `http` alone, is legal and means \"no declared mapping\" for that\nhalf. Additive: absence never blocks anything. Connectors declare driver\nfacts only; the engine alone derives verdicts (ack status, failure\ncategory, error code) from them.",
+      "description": "Driver-fact error classification map.\n\nReads the connector's own caught exception for its native error signal via\n`key_attrs` (an ordered, non-empty tuple of attribute names, most-specific\nfirst \u2014 declared order IS the specificity order \u2014 or the reserved name\n`__exception_class__` to match the exception's class name up its MRO\ninstead of an attribute read) and maps whatever value that produces,\nthrough `codes`, onto the engine's closed failure-category vocabulary.\n`http` maps an HTTP status read at the call site the same way \u2014 never off\nan exception, so it is independent of `key_attrs`/`codes`. `key_attrs` and\n`codes` are declared together or not at all: one without the other is\neither unusable (`codes` with nowhere to read a native value from) or a\nno-op (`key_attrs` with no mapping to apply) \u2014 so, unlike `http`, neither\nmay be an empty collection when declared; an empty `codes` map is the same\nno-op under a different spelling. Absence of the whole block is legal and\nmeans \"no declared mapping\"; an empty `http` map (`{}`) is likewise legal\nand equivalent to omitting `http` alone. Additive: absence never blocks\nanything. Connectors declare driver facts only; the engine alone derives\nverdicts (ack status, failure category, error code) from them.",
       "properties": {
         "codes": {
           "anyOf": [
@@ -1937,6 +1937,9 @@
                 "type": "string"
               },
               "minProperties": 1,
+              "propertyNames": {
+                "minLength": 1
+              },
               "type": "object"
             },
             {
@@ -1944,7 +1947,7 @@
             }
           ],
           "default": null,
-          "description": "Native code (whatever a `key_attrs` read produces) \u2192 failure category. Keys are open strings \u2014 the native code's shape (a SQLSTATE, a numeric vendor code, or any other driver-defined code) is entirely driver-defined. Declared together with `key_attrs`.",
+          "description": "Native code (whatever a `key_attrs` read produces) \u2192 failure category. Keys are open, non-empty strings \u2014 the native code's shape (a SQLSTATE, a numeric vendor code, or any other driver-defined code) is entirely driver-defined. Declared together with `key_attrs`.",
           "title": "Codes"
         },
         "http": {
