@@ -1,7 +1,8 @@
 id: RULE-ENDP-013
 statement: >
   Every replication cursor field MUST resolve to a field declared in the record
-  shape the operation's response schema describes.
+  shape the operation's response schema describes, onto a node declaring a
+  type.
 tier: advisory
 severity: error
 scopes: [api-endpoint]
@@ -15,6 +16,9 @@ rationale: >
   empty watermark and starts over — with the run reporting success either way.
   It is the rule that stops an author declaring a cursor on a field the provider
   merely mentions in prose, and resolving it against the declared record shape
-  is the only check available before the endpoint runs.
+  is the only check available before the endpoint runs. A field that resolves
+  but whose node declares no type is the same failure one step later: whatever
+  plants the value gets to invent its type, and the watermark comparison either
+  works or raises depending on the row.
 status: active
 superseded_by: null

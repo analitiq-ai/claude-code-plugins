@@ -18,6 +18,13 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
         rationale_sha256="d0b1bea51d12dd2bb4d4226920d1a3acf2d41f42d986adb527bc0a3ae58e466f",
     ),
     RecordAffirmation(
+        "RULE-ENDP-002",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="22d2a0139b271daefab9e0ee27e030e1456bb5e15e3531621d09d7228ef832ae",
+    ),
+    RecordAffirmation(
         "RULE-ENDP-014",
         refs=(
             "endpoints.WriteOperation.conflict_keys",
@@ -59,9 +66,9 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
     RecordAffirmation(
         "RULE-ENDP-055",
         refs=(
-            "endpoints.Param.operators",
+            "endpoints.ReadOperation.filters",
         ),
-        rationale_sha256="9f43b803651c39df93e9e4b673b9c06dc3a33f860d382a7b2f7102f2c4dc375f",
+        rationale_sha256="6ec3610043ff2d8e1f4e444d4291d9e5b2569731949fe7197521f83dbfcc321b",
     ),
     RecordAffirmation(
         "RULE-ENDP-056",
@@ -86,6 +93,34 @@ AFFIRMATIONS: tuple[RecordAffirmation, ...] = (
             "endpoints.ResponseExtraction.metadata",
         ),
         rationale_sha256="b0c2dc7627fb3e6a001fe502f85e900147152a1befc3894da91624dc725d4194",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-068",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="643228e511206d148668d3f9c8e67e26374c326d92fa2356c25465cc760cd812",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-070",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="abf7bcf27565b052f3a085648b7917b08cae3ac911ebb52c19989a09f4eea23e",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-071",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="8aa72de67d6a1605a8b0c73dfef3ab22c251ade5c474bd20111a311681dfcc1c",
+    ),
+    RecordAffirmation(
+        "RULE-ENDP-072",
+        refs=(
+            "endpoints.ReadOperation.filters",
+        ),
+        rationale_sha256="7cf92d15e001498b80a885ea21692c3361e93601617013e82103ec4efe503e31",
     ),
     RecordAffirmation(
         "RULE-PIPE-017",

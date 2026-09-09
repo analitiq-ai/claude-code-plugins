@@ -1312,6 +1312,48 @@ class TestARecordShapeMustDeclareSomething:
         parse_endpoint(self._payload(items))
 
 
+class TestPositionalRecordShapesRejectedUnconditionally:
+    """A positional/tuple records array is refused whether or not replication,
+    filters, or keyset pagination ever asks a record-shape question about a
+    specific field.
+
+    `_validate_record_field_path`/`_validate_cursor_fields_in_record_shape`
+    (via `_require_record_shape_items`) reject it too, but only when called —
+    an ordinary read declaring none of those features never calls them, so
+    the rejection has to live in the unconditional records-schema gate
+    (`_validate_records_in_response_schema`) as well, not only downstream of
+    a feature that happens to be declared.
+    """
+
+    def _payload(self, items=None, prefix_items=None):
+        data = {"type": "array"}
+        if prefix_items is not None:
+            data["prefixItems"] = prefix_items
+            data["items"] = items if items is not None else False
+        else:
+            data["items"] = items
+        return {
+            "$schema": API_SCHEMA_URL,
+            "endpoint_id": "x",
+            "operations": {"read": {
+                "request": {"method": "GET", "path": "/v1/x"},
+                "params": {},
+                "response": {
+                    "records": {"ref": "response.body.data"},
+                    "schema": {"type": "object", "properties": {"data": data}},
+                },
+            }},
+        }
+
+    def test_legacy_tuple_items_rejected_with_no_downstream_feature(self):
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(self._payload(items=[{"type": "object", "properties": {"id": {"type": "string"}}}]))
+
+    def test_prefix_items_rejected_with_no_downstream_feature(self):
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(self._payload(prefix_items=[{"type": "object", "properties": {"id": {"type": "string"}}}]))
+
+
 class TestParamDefaultIsAnExpressionSlot:
     """`params.<name>.default` is an expression tree the resolver evaluates, and
     it was reached by no check at all — not the shape check, not the scope

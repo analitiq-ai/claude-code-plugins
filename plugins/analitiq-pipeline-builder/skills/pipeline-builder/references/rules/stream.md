@@ -11,12 +11,12 @@ build, a restated rule rots in silence.
 Scope: every rule this plugin owns that binds a **`stream`** document, plus the rules that bind every authored document. If you are authoring one, this file is the whole of what you must satisfy — no other rule file in this set applies to it.
 
 **Satisfy every rule in this file.** A clean validation run is not proof they
-all hold: 29 of the 56 below have no validator, so nothing rejects
+all hold: 29 of the 57 below have no validator, so nothing rejects
 a violation and the only thing that catches one is reading for it. Those rows
 carry `—` in the **Checked** column. **Tier** is what kind of obligation a rule
 is, **Grades** the artifact kinds it binds, **Severity** what a violation costs.
 
-In this file: **15** structural · **14** advisory · **16** referential · **5** procedural · **6** judgment.
+In this file: **15** structural · **15** advisory · **16** referential · **5** procedural · **6** judgment.
 
 ## Contents
 
@@ -77,6 +77,7 @@ single field looks wrong.
 | RULE-STRM-014 | A stream source bound to a connector-scoped endpoint MUST NOT declare any read feature the source model reserves for database sources. | `stream` | error | validator |
 | RULE-STRM-015 | A validation rule's field MUST resolve within its own mapping: the first token naming an assignment target the mapping declares, and each later token a field declared beneath the one before it. | `stream` | error | validator |
 | RULE-STRM-021 | A validation rule's value MUST carry the payload shape its type requires. | `stream` | error | — |
+| RULE-STRM-041 | For an API-scope source, no two `filters` entries MUST share the same `field`/`operator` pair. | `stream` | error | validator |
 
 ## Referential
 
@@ -94,7 +95,7 @@ both artifacts, which is more than you are authoring at the moment.
 | RULE-STRM-023 | A stream MUST reproduce every source-endpoint field name exactly as the endpoint document records it, with no case-folding, trimming, quoting or other normalization. | `stream` | error | — |
 | RULE-STRM-024 | An API destination's write mode MUST be one the referenced api-endpoint document declares a write operation for. | `stream` | error | — |
 | RULE-STRM-025 | An API source's replication method MUST be one the referenced endpoint declares in its supported set. | `stream` | error | — |
-| RULE-STRM-026 | A filter on an API source MUST name a read parameter the referenced endpoint declares filterable — one that publishes its own operator set and is not reserved to the runtime. | `stream` | error | — |
+| RULE-STRM-026 | A filter on an API source MUST name a field with an entry for that operator in the referenced endpoint's read operation `filters` map. | `stream` | error | — |
 | RULE-STRM-027 | A filter's value MUST carry the type the referenced field declares, and a membership operator MUST carry an array of such values. | `stream` | error | — |
 | RULE-STRM-028 | An assignment target's arrow_type MUST reproduce the destination column's declared type exactly, its parameters included. | `stream` | error | — |
 | RULE-STRM-029 | A stream source MUST declare a replication policy unless the referenced source endpoint supports full refresh. | `stream` | error | — |

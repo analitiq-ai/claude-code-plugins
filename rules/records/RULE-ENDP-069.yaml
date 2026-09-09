@@ -1,0 +1,19 @@
+id: RULE-ENDP-069
+statement: >
+  Every `${...}` placeholder in a `filters` map template landing MUST begin
+  with a declared resolution scope.
+tier: structural
+severity: error
+scopes: [api-endpoint]
+validator: "analitiq.contracts.endpoints::TemplateFilterLanding._placeholders_qualified"
+owners: [connector-plugin]
+rationale: >
+  The same obligation RULE-ENDP-049 states for the general value-expression
+  `template` form, applied to the `filters` map's own template-landing model
+  — a separate class carrying the identical check, because `filters` needs a
+  destination `param` a bare `TemplateExpression` does not carry. An
+  unqualified placeholder here is the same ambiguity RULE-ENDP-049's
+  rationale describes, now over the value a `filters` entry sends the
+  provider instead of a general request slot.
+status: active
+superseded_by: null

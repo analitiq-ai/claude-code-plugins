@@ -206,7 +206,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"unused": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"unused": {"in": "query", "type": "string", "required": False}},
             )},
         )
         with pytest.raises(ValidationError, match="not referenced"):
@@ -216,7 +216,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"status": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"status": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"status": {"from_param": "status"}}},
             )},
         )
@@ -226,7 +226,7 @@ class TestParamBindingUniqueness:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"a": {"from_param": "p"}, "b": {"from_param": "p"}}},
             )},
         )
@@ -239,8 +239,8 @@ class TestParamBindingUniqueness:
             endpoint_id="x",
             operations={"read": _read_op_with(
                 params={
-                    "qa": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
-                    "qb": {"in": "query", "type": "string", "required": False, "operators": ["eq"]},
+                    "qa": {"in": "query", "type": "string", "required": False},
+                    "qb": {"in": "query", "type": "string", "required": False},
                 },
                 request_extras={"query": {"a": {"from_param": "qa"}, "b": {"from_param": "qb"}}},
             )},
@@ -344,6 +344,39 @@ class TestCursorFieldsInRecordShape:
         with pytest.raises(ValidationError, match="not declared in response.schema record-shape branch"):
             parse_endpoint(self._payload_with_cursor_field("nonexistent", {"id": {"type": "string"}}))
 
+    def test_cursor_field_resolving_to_an_untyped_node_rejected(self):
+        # Present (unlike the case above) but the resolved node declares no
+        # `type` — an incremental watermark compared against it has nothing
+        # to tell it what a valid value looks like (RULE-ENDP-023).
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(self._payload_with_cursor_field("updated_at", {"updated_at": {}}))
+
+    def test_cursor_field_typed_only_via_anyof_accepted(self):
+        # The common nullable idiom — every anyOf branch declares a type, so
+        # the union ({string, null}) is a real, usable type even with no
+        # top-level `type` key.
+        parse_endpoint(self._payload_with_cursor_field(
+            "updated_at",
+            {"updated_at": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+        ))
+
+    def test_cursor_field_with_an_untyped_anyof_branch_rejected(self):
+        # One branch declaring nothing makes the union unbounded — not a
+        # usable type.
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "updated_at",
+                {"updated_at": {"anyOf": [{"type": "string"}, {}]}},
+            ))
+
+    def test_cursor_field_typed_via_a_ref_branch_inside_anyof_accepted(self):
+        payload = self._payload_with_cursor_field(
+            "updated_at",
+            {"updated_at": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
+        )
+        payload["operations"]["read"]["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        parse_endpoint(payload)
+
     def test_dotted_cursor_field_traverses_nested_objects(self):
         parse_endpoint(self._payload_with_cursor_field(
             "metadata.updated_at",
@@ -368,6 +401,29 @@ class TestCursorFieldsInRecordShape:
             }},
         )
         with pytest.raises(ValidationError, match="cannot be verified"):
+            parse_endpoint(payload)
+
+    def test_tuple_form_items_rejected(self):
+        # `items: [...]` (the legacy tuple form) is not supported — `items`
+        # must be a single object schema.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": [
+                        {"type": "object", "properties": {"updated_at": {"type": "string"}}},
+                    ]},
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
             parse_endpoint(payload)
 
 
@@ -505,8 +561,10 @@ class TestCursorMapping:
         assert cm.start_param == "from"
 
     def test_invalid_cursor_field_pattern_rejected(self):
+        # "." is the only reserved character in a record field path — the
+        # segment separator — so an empty segment is the shape still refused.
         with pytest.raises(ValidationError):
-            SingleCursorMapping(cursor_field="0bad_path", param="p", operator="gte")
+            SingleCursorMapping(cursor_field="a..b", param="p", operator="gte")
 
     def test_mixed_form_via_parse_rejected(self):
         # When both forms' fields are present, `Replication._reject_mixed_cursor_forms`
@@ -545,11 +603,15 @@ class TestCursorMapping:
 
 
 class TestParamValidate:
-    def test_controlled_by_and_operators_mutex(self):
-        with pytest.raises(ValidationError, match="must not declare `operators`"):
+    def test_operators_no_longer_a_declarable_field(self):
+        # Filterability moved to the read operation's `filters` map;
+        # `Param` no longer carries a vocabulary of its own, and `extra`
+        # is forbidden so a document still declaring it is refused rather
+        # than silently ignored.
+        with pytest.raises(ValidationError, match="operators"):
             Param(**{
                 "in": "query", "type": "string", "required": False,
-                "controlled_by": "pagination", "operators": ["eq"],
+                "operators": ["eq"],
             })
 
     def test_query_array_requires_style_and_explode(self):
@@ -565,6 +627,400 @@ class TestParamValidate:
                 "in": "body", "type": "object", "required": False,
                 "default": {"from_input": "record"},
             })
+
+
+# ---------------------------------------------------------------------------
+# `filters` map — an operator's landing site on the request
+# ---------------------------------------------------------------------------
+
+
+def _filters_read_op(filters, params=None, extra_query=None, extra_record_props=None):
+    params = dict(params or {})
+    params.setdefault(
+        "minAmount", {"in": "query", "type": "number", "required": False},
+    )
+    query = {"minAmount": {"from_param": "minAmount"}}
+    if extra_query:
+        query.update(extra_query)
+    record_props = {
+        "amount": {"type": "number"},
+        "created": {"type": "string"},
+        "total": {"type": "number"},
+    }
+    if extra_record_props:
+        record_props.update(extra_record_props)
+    return _read_op_with(
+        params=params,
+        request_extras={"query": query},
+        response={
+            "records": {"ref": "response.body"},
+            "schema": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": record_props,
+                },
+            },
+        },
+    ) | {"filters": filters}
+
+
+class TestFiltersWiring:
+    def test_from_param_landing_is_accepted(self):
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op({"amount": {"gt": {"from_param": "minAmount"}}}),
+        }))
+        assert result.operations.read.filters["amount"]["gt"].from_param == "minAmount"
+
+    def test_template_landing_is_accepted(self):
+        # `template` reaches into `stream.*` — the filter's own value — which
+        # `request.query`/`headers` refuse for a `ref`, but this slot must
+        # permit: the value it interpolates IS the filter it is declared on.
+        # Unlike `from_param`, the rendered string — not the filter's raw
+        # value — is what reaches `param`, so `param` still names the
+        # destination.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op({
+                "created": {
+                    "gt": {
+                        "param": "minAmount",
+                        "template": "${stream.filters.created.value}",
+                    },
+                },
+            }),
+        }))
+        landing = result.operations.read.filters["created"]["gt"]
+        assert landing.param == "minAmount"
+        assert landing.template == "${stream.filters.created.value}"
+
+    def test_operator_with_no_landing_form_rejected(self):
+        # Neither `from_param` nor `template` — the silent wrong-rows case
+        # this map exists to close, refused structurally rather than parsing
+        # as an operator with nowhere to land.
+        with pytest.raises(ValidationError, match="union_tag_not_found"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({"amount": {"gt": {}}}),
+            }))
+
+    def test_operator_outside_vocabulary_rejected(self):
+        with pytest.raises(ValidationError, match="literal_error"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"amount": {"like": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_field_key_with_an_empty_segment_rejected(self):
+        # "." is the only reserved character — the path separator between
+        # segments — so an empty segment either side of one is the shape
+        # this pattern still refuses.
+        with pytest.raises(ValidationError):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"a..b": {"gt": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_field_key_with_a_provider_owned_name_accepted(self):
+        # A response property is a legal JSON key however it is spelled —
+        # `created-at`, `@timestamp` — and RECORD_FIELD_PATH_PATTERN reserves
+        # "." as the segment separator and "}" (template-addressability, see
+        # the next test), so either resolves against a response schema that
+        # declares it.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op(
+                {"created-at": {"gt": {"from_param": "minAmount"}}},
+                extra_record_props={"created-at": {"type": "string"}},
+            ),
+        }))
+        assert "created-at" in result.operations.read.filters
+
+    def test_field_key_against_tuple_form_items_rejected(self):
+        # `items: [...]` (the legacy tuple form) is not supported — `items`
+        # must be a single object schema.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"minAmount": {"from_param": "minAmount"}}},
+                "params": {"minAmount": {"in": "query", "type": "number", "required": False}},
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": [
+                        {"type": "object", "properties": {"created": {"type": "string"}}},
+                    ]},
+                },
+                "filters": {"created": {"gt": {"from_param": "minAmount"}}},
+            }},
+        )
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(payload)
+
+    def test_field_key_against_prefix_items_rejected(self):
+        # `prefixItems` (positional/tuple) is refused the same as the
+        # legacy `items: [...]` form — a records array is a page of rows,
+        # every row the same shape.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"minAmount": {"from_param": "minAmount"}}},
+                "params": {"minAmount": {"in": "query", "type": "number", "required": False}},
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "type": "array",
+                        "prefixItems": [
+                            {"type": "object", "properties": {"created": {"type": "string"}}},
+                        ],
+                        "items": False,
+                    },
+                },
+                "filters": {"created": {"gt": {"from_param": "minAmount"}}},
+            }},
+        )
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(payload)
+
+    def test_field_key_containing_a_closing_brace_rejected(self):
+        # `${stream.filters.<field>.value}` (RULE-ENDP-072) embeds the field
+        # name inside a `${...}` placeholder whose extraction regex stops at
+        # the first "}" — a field named "a}b" would truncate every
+        # placeholder built from it to "a", so the key pattern refuses "}"
+        # even though it is otherwise a legal JSON property character.
+        with pytest.raises(ValidationError):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"a}b": {"gt": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_field_key_not_declared_in_record_shape_rejected(self):
+        # Shape-valid (matches RECORD_FIELD_PATH_PATTERN) but the response
+        # schema's record never declares it — RULE-ENDP-068, the same
+        # existence check `pagination.keyset.order_by_field` gets, closing
+        # the class of defect a shape-only check leaves open.
+        with pytest.raises(ValidationError, match="not declared in the response.schema"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"updatedAt": {"gt": {"from_param": "minAmount"}}}
+                ),
+            }))
+
+    def test_field_key_resolving_to_an_untyped_node_rejected(self):
+        # The key exists in the record shape (unlike the case above) but the
+        # node it resolves to declares no `type` — RULE-ENDP-023's "onto a
+        # node declaring a type" half, reused here for a `filters` target the
+        # same way it already covers `pagination.keyset.order_by_field`.
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"untyped": {"gt": {"from_param": "minAmount"}}},
+                    extra_record_props={"untyped": {}},
+                ),
+            }))
+
+    def test_field_key_typed_only_via_anyof_accepted(self):
+        # The common nullable idiom — every anyOf branch declares a type.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op(
+                {"nullable": {"gt": {"from_param": "minAmount"}}},
+                extra_record_props={"nullable": {"anyOf": [{"type": "string"}, {"type": "null"}]}},
+            ),
+        }))
+        assert "nullable" in result.operations.read.filters
+
+    def test_field_key_typed_via_a_ref_branch_inside_anyof_accepted(self):
+        # A branch can itself need $ref resolution before its type is visible
+        # — `materialize_node` does not recurse into anyOf/oneOf branches, so
+        # this exercises `_declares_a_type` resolving one against root itself.
+        read_op = _filters_read_op(
+            {"nullable": {"gt": {"from_param": "minAmount"}}},
+            extra_record_props={"nullable": {"anyOf": [{"$ref": "#/$defs/T"}, {"type": "null"}]}},
+        )
+        read_op["response"]["schema"]["$defs"] = {"T": {"type": "string"}}
+        result = parse_endpoint(_minimal_api_payload(operations={"read": read_op}))
+        assert "nullable" in result.operations.read.filters
+
+    def test_field_key_typed_via_native_arrow_pair_inside_anyof_accepted(self):
+        # A branch typed only by the contract's own native_type/arrow_type
+        # pair (no JSON-Schema `type` key) still counts — the union isn't
+        # limited to bare `type` strings.
+        result = parse_endpoint(_minimal_api_payload(operations={
+            "read": _filters_read_op(
+                {"nullable": {"gt": {"from_param": "minAmount"}}},
+                extra_record_props={"nullable": {"anyOf": [
+                    {"native_type": "TIMESTAMP", "arrow_type": "Timestamp(MICROSECOND)"},
+                    {"type": "null"},
+                ]}},
+            ),
+        }))
+        assert "nullable" in result.operations.read.filters
+
+    def test_field_key_with_a_recursive_anyof_alias_rejected_not_crashed(self):
+        # A branch $ref'ing back to a $defs entry that contains the same
+        # anyOf is a valid Draft 2020-12 shape materialize_node does not
+        # collapse on its own (it isn't a $ref/allOf cycle). The recursive
+        # branch can never independently prove typed, so the whole
+        # declaration is rejected as untyped — the point is that this
+        # raises the ordinary ValidationError, not RecursionError.
+        read_op = _filters_read_op(
+            {"nullable": {"gt": {"from_param": "minAmount"}}},
+            extra_record_props={"nullable": {"anyOf": [{"$ref": "#/$defs/Node"}, {"type": "null"}]}},
+        )
+        read_op["response"]["schema"]["$defs"] = {
+            "Node": {"anyOf": [{"$ref": "#/$defs/Node"}, {"type": "string"}]},
+        }
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(_minimal_api_payload(operations={"read": read_op}))
+
+    def test_template_param_naming_undeclared_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-070\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {"param": "nonexistent", "template": "${stream.filters.created.value}"},
+                    },
+                }),
+            }))
+
+    def test_template_param_naming_a_controlled_by_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-002\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"created": {
+                        "gt": {"param": "cursor", "template": "${stream.filters.created.value}"},
+                    }},
+                    params={
+                        "cursor": {
+                            "in": "query", "type": "string", "required": False,
+                            "controlled_by": "pagination",
+                        },
+                    },
+                    extra_query={"cursor": {"from_param": "cursor"}},
+                ),
+            }))
+
+    def test_template_placeholder_unscoped_rejected(self):
+        with pytest.raises(ValidationError, match="known resolution scope"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {"gt": {"param": "minAmount", "template": "${bogus}"}},
+                }),
+            }))
+
+    def test_template_response_ref_rejected(self):
+        # A request is built before the response exists — the identical
+        # never-has-a-value defect `_validate_response_body_paths` refuses
+        # for request.query/headers/body, now reached through `filters`.
+        # The current-value placeholder is present too, so RULE-ENDP-072
+        # passes and this is graded on the response ref alone.
+        with pytest.raises(ValidationError, match="request is built before the response exists"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {
+                            "param": "minAmount",
+                            "template": "${response.body.total}${stream.filters.created.value}",
+                        },
+                    },
+                }),
+            }))
+
+    def test_template_with_no_current_value_placeholder_rejected(self):
+        # A constant template names no placeholder at all, so RULE-ENDP-069's
+        # scope check has nothing to refuse it on. Every value for this
+        # field/operator would render the identical request; RULE-ENDP-072
+        # is what refuses it.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {"gt": {"param": "minAmount", "template": "status:active"}},
+                }),
+            }))
+
+    def test_template_referencing_a_different_fields_value_rejected(self):
+        # `stream.filters.total.value` is a known placeholder, so it clears
+        # RULE-ENDP-069's scope check — but it is the total field's own
+        # value, not the created field/operator entry this landing is
+        # declared on.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {
+                            "param": "minAmount",
+                            "template": "${stream.filters.total.value}",
+                        },
+                    },
+                }),
+            }))
+
+    def test_template_with_extra_filters_reference_rejected(self):
+        # The required placeholder is present, so the "must interpolate the
+        # current value" half is satisfied — but a second stream.filters.*
+        # reference (a typo'd field here) is a real dependency nothing
+        # resolves: RULE-ENDP-069 accepts it as a known scope, and the
+        # resolver substitutes "" for the unresolved reference at run time.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-072\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "created": {
+                        "gt": {
+                            "param": "minAmount",
+                            "template": "${stream.filters.created.value}-${stream.filters.typo.value}",
+                        },
+                    },
+                }),
+            }))
+
+    def test_from_param_naming_undeclared_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-070\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"amount": {"gt": {"from_param": "nonexistent"}}}
+                ),
+            }))
+
+    def test_from_param_naming_a_controlled_by_param_rejected(self):
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-002\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"amount": {"gt": {"from_param": "cursor"}}},
+                    params={
+                        "cursor": {
+                            "in": "query", "type": "string", "required": False,
+                            "controlled_by": "pagination",
+                        },
+                    },
+                    extra_query={"cursor": {"from_param": "cursor"}},
+                ),
+            }))
+
+    def test_two_operators_on_one_field_landing_on_the_same_param_rejected(self):
+        # Before `filters` existed, nothing checked this: an author could
+        # write `contains`, `starts_with` and `eq` filters that all bound to
+        # the identical request — the read-wrong-rows defect this map closes.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-071\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "amount": {
+                        "gt": {"from_param": "minAmount"},
+                        "gte": {"from_param": "minAmount"},
+                    },
+                }),
+            }))
+
+    def test_two_fields_landing_on_the_same_param_rejected(self):
+        # A param carries one value. Two DIFFERENT fields landing on the
+        # same one is the identical ambiguity RULE-ENDP-071 refuses within
+        # one field — only one of the two predicates can ever be honoured,
+        # and the run reads as if the other were never declared.
+        with pytest.raises(ValidationError, match=r"\[RULE-ENDP-071\]"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op({
+                    "amount": {"gt": {"from_param": "minAmount"}},
+                    "total": {"gt": {"from_param": "minAmount"}},
+                }),
+            }))
 
 
 # ---------------------------------------------------------------------------
@@ -1991,7 +2447,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "rogue": 1}}},
             )},
         )
@@ -2002,7 +2458,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "secrets.api_key", "rogue": 1}}},
             )},
         )
@@ -2013,7 +2469,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "x", "template": "y"}}},
             )},
         )
@@ -2025,7 +2481,7 @@ class TestExpressionShapeValidation:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"from_param": "p", "x-vendor": "wise"}}},
             )},
         )
@@ -2042,7 +2498,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"h": {"in": "header", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"h": {"in": "header", "type": "string", "required": False}},
                 request_extras={"headers": {"X-Token": {"ref": "stream.api_key"}}},
             )},
         )
@@ -2053,7 +2509,7 @@ class TestDisallowedDynamicRefs:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"p": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"p": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"foo": {"ref": "state.last_run"}}},
             )},
         )
@@ -2420,7 +2876,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"region": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"region": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {
                     "region": {"from_param": "region"},
                     "lookup": {
@@ -2469,7 +2925,7 @@ class TestFunctionExpressionInRequestBindings:
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": _read_op_with(
-                params={"r": {"in": "query", "type": "string", "required": False, "operators": ["eq"]}},
+                params={"r": {"in": "query", "type": "string", "required": False}},
                 request_extras={"query": {"q": {
                     "function": "lookup",
                     "input": {"from_param": "r", "rogue": 1},
@@ -2498,29 +2954,18 @@ class TestFunctionExpressionInRequestBindings:
 # ---------------------------------------------------------------------------
 
 
-class TestRecordsArrayItemsTupleForm:
-    def test_tuple_items_with_cursor_field_in_every_position_accepted(self):
-        payload = _minimal_api_payload(
-            endpoint_id="x",
-            operations={"read": {
-                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
-                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
-                "replication": {
-                    "supported_methods": ["incremental"],
-                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
-                },
-                "response": {
-                    "records": {"ref": "response.body"},
-                    "schema": {"type": "array", "items": [
-                        {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-                        {"type": "object", "properties": {"updated_at": {"type": "string"}}},
-                    ]},
-                },
-            }},
-        )
-        parse_endpoint(payload)
+class TestRecordsArrayItemsRejectsPositionalShapes:
+    """`items` must be a single object schema — no positional/tuple form.
 
-    def test_tuple_items_with_non_dict_position_rejected(self):
+    A records array is a page of API rows: every row the same shape. There
+    is no "row 0 looks different from row 1" case to support, so both the
+    pre-2020-12 tuple form (`items: [...]`, plus its `additionalItems`
+    partner) and its Draft 2020-12 replacement (`prefixItems`) are refused
+    outright, on every record-shape check that reads the records array
+    (`cursor_field`, a `filters` map key, `keyset.order_by_field`).
+    """
+
+    def test_tuple_items_rejected(self):
         payload = _minimal_api_payload(
             endpoint_id="x",
             operations={"read": {
@@ -2533,13 +2978,56 @@ class TestRecordsArrayItemsTupleForm:
                 "response": {
                     "records": {"ref": "response.body"},
                     "schema": {"type": "array", "items": [
-                        True,
                         {"type": "object", "properties": {"updated_at": {"type": "string"}}},
                     ]},
                 },
             }},
         )
-        with pytest.raises(ValidationError, match="not an object schema"):
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
+            parse_endpoint(payload)
+
+    def test_boolean_items_rejected(self):
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": True},
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="cannot be verified"):
+            parse_endpoint(payload)
+
+    def test_prefix_items_rejected(self):
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"u": {"from_param": "u"}}},
+                "params": {"u": {"in": "query", "type": "string", "required": False, "controlled_by": "replication"}},
+                "replication": {
+                    "supported_methods": ["incremental"],
+                    "cursor_mappings": [{"cursor_field": "updated_at", "param": "u", "operator": "gte"}],
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {
+                        "type": "array",
+                        "prefixItems": [
+                            {"type": "object", "properties": {"updated_at": {"type": "string"}}},
+                        ],
+                        "items": False,
+                    },
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="positional/tuple shape"):
             parse_endpoint(payload)
 
 
