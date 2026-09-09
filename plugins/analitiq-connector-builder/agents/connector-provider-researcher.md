@@ -102,8 +102,8 @@ the fact the creator needs.
 
 ## Hard rules
 
-<!-- Maintainers: in the `- For databases:` bullets below, backticked
-     snake_case tokens (dotted or not, e.g. `sqlalchemy_driver`,
+<!-- Maintainers: in the `- For APIs:` and `- For databases:` bullets below,
+     backticked snake_case tokens (dotted or not, e.g. `sqlalchemy_driver`,
      `tls.supported_modes`) are pinned to the ProviderFacts fragment in
      references/io-contracts.md by
      tests/connector_builder/test_provider_facts_guard.py — renaming a
@@ -111,6 +111,14 @@ the fact the creator needs.
 
 - Do not return prose summaries. The orchestrator expects the JSON block only,
   optionally followed by a short list of doc URLs.
+- For APIs: ground every status the provider's own docs describe into
+  `documented_http_errors` — the documented meaning, verbatim, one entry per
+  status (an errors/status-codes reference page, or per-endpoint error
+  notes). Never infer a status's meaning from general HTTP knowledge or
+  another provider's docs; the creator applies
+  `references/error-classification.md`'s procedure to these facts to
+  produce its error classification. Omit a status the docs don't describe
+  (`RULE-CTOR-026`).
 - For databases: ground the driver's TLS surface from its official docs —
   the documented mode values, verbatim, into `tls.supported_modes`, and
   which connect parameter(s) the driver takes TLS through (a single mode
@@ -141,15 +149,16 @@ the fact the creator needs.
   into `error_signals` — `error_signals.native_code_attrs` (the exception
   attribute(s) the driver documents as carrying its native error code, or
   null when the docs establish the exception carries none) and
-  `error_signals.documented_codes` (the driver's own documented meaning,
-  verbatim, one entry per signal value grounded — a native-code value for
-  each attribute named above, and/or a documented exception class name when
-  the docs establish a meaningful class hierarchy too, since a connector may
-  ground its classification on both at once — never a category; the
-  creator alone maps meaning to a failure category). Leave the whole block
-  unset when nothing above is grounded, and report a gap for anything
-  the docs don't establish
-  (`RULE-CTOR-026`).
+  `error_signals.documented_codes` (the documented meaning, verbatim, one
+  entry per signal value grounded — a native-code value for each attribute
+  named above, and/or a documented exception class name when the docs
+  establish a meaningful class hierarchy too, since a connector may ground
+  its classification on both at once — never a category. Ground a code
+  VALUE's meaning from whichever source actually defines it: the driver's
+  own docs, or, when the database/server itself owns that catalog rather
+  than the driver, the server's own published documentation.) Leave the
+  whole block unset when nothing above is grounded, and report a gap for
+  anything the docs don't establish (`RULE-CTOR-026`).
 - WebSearch is for locating the official docs only (when the user did not
   supply a URL) — never a source of facts. Every extracted fact must come from
   a first-party documentation page fetched with WebFetch; never cite blogs,

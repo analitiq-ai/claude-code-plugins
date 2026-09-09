@@ -9,34 +9,48 @@ kind-agnostic). Declare only from grounded facts; an ungrounded category is a
 config error the moment it turns out wrong, not a harmless guess
 (`RULE-CTOR-026`).
 
+## Contents
+
+- Classifying an HTTP status
+- Classifying a driver exception (`key_attrs` / `codes`)
+- Operational consequence
+
 ## Classifying an HTTP status
 
-HTTP status semantics are close to universal, so classify straight from this
-table rather than researching each provider from scratch. A provider that
-documents different semantics for a status below is the exception, not the
-rule — record the deviation in `notes` on the returned `CreatorOutput` rather
-than trusting this table over the provider's own docs.
+No status code is classified from general HTTP knowledge, however familiar
+its number looks — the same status means different things across providers
+(a `409` is a stale read on one API and a rejected duplicate write on
+another), and `http` applies at *any* HTTP call site (a read, a discovery
+probe, an auth exchange, or a write — `io-contracts.md`'s `ProviderFacts.http`
+description), so a status's meaning is never separable from what a specific
+provider's docs say it means on the call where it actually occurs. Ground
+every entry in `provider_facts.documented_http_errors` — never fabricate one
+the docs don't establish, and never carry an entry over from another
+connector.
 
-| HTTP status | Category |
+Apply this procedure to what the docs say about each status, not to the
+status number itself:
+
+| What the provider's docs establish about this status | Category |
 |---|---|
-| `401` | `auth` |
-| `403` | `auth` |
-| `429` | `rate_limited` |
-| `409` | `write_rejected` |
-| `500` | `transient` |
-| `502` | `unreachable` |
-| `503` | `unreachable` |
-| `504` | `unreachable` |
+| Credentials or permissions are invalid or insufficient | `auth` |
+| The client is being throttled, or has exceeded a rate or quota limit | `rate_limited` |
+| The request the connector itself constructed is malformed or misconfigured | `config` |
+| A specific write was rejected on its own content (failed validation, conflicts with existing data) — and the docs establish this outcome as write-specific, never shared with a read or discovery call | `write_rejected` |
+| A transient, provider-side condition a retry can resolve | `transient` |
+| The provider or an upstream dependency is unreachable | `unreachable` |
 
-`400` and `422` are deliberately absent: both can mean either a malformed or
-misconfigured connector request (the endpoint definition itself is wrong —
-a config defect) or a semantically invalid individual record (a rejected
-write), and providers split on which. A connector-generated request missing
-a field the provider's schema requires reads identically to a business
-record missing that same field, so classifying either status here would be
-wrong for whichever meaning the provider actually intends. Ground either
-from the provider's own docs when it matters, or leave it unclassified and
-let the write path's own error surface carry it.
+A status whose documented meaning doesn't clearly fit one row — or that the
+docs show occurring across multiple call types with a meaning you cannot
+pin to one row — is left unclassified; record the gap in `notes` on the
+returned `CreatorOutput` rather than guessing.
+
+`connector-spec-api/examples/api-key/api-key.example.json`'s `error_map.http`
+block illustrates the shape for a fictional provider, not a set of universal
+meanings. Ground every entry of an actual connector's `error_map.http` in
+that connector's own provider's documented behavior (via
+`provider_facts.documented_http_errors`), never by copying this or any other
+connector's values.
 
 ## Classifying a driver exception (`key_attrs` / `codes`)
 
@@ -54,18 +68,27 @@ establish. `key_attrs` and `codes` are declared together or not at all
    reading an attribute.
 3. **Declaring more than one signal** — an attribute read together with the
    class-name fallback, say — means `key_attrs`'s own declared order decides
-   which wins: the contract reads the entries most-specific first, and the
-   first one that resolves a value wins. Choose and justify that order; there
-   is no separate precedence field.
+   which wins: the entries are tried most-specific first, and the first one
+   whose resolved value has a matching `codes` entry wins. An attribute that
+   is present but whose value has no `codes` entry falls through to the next
+   `key_attrs` entry exactly as if it had been absent, so an attribute ahead
+   of the class-name fallback never makes that fallback unreachable — it
+   only takes precedence when it actually classifies something. Choose and
+   justify the order; there is no separate precedence field.
 
 `codes` keys are compared as literal strings — the contract defines no prefix
 or class-level wildcard, so a family of related codes (every value a class of
 SQL exception can take, say) is enumerated one key per value, never
-represented by a shared prefix. See
+represented by a shared prefix. `io-contracts.md`'s `ProviderFacts` fragment
+owns the omit-vs-null discipline `error_signals` carries.
+
 `connector-spec-db/examples/postgresql-adbc/postgresql-adbc.example.json`'s
-`error_map` block for a grounded worked example, and `io-contracts.md`'s
-`ProviderFacts` fragment for the omit-vs-null discipline `error_signals`
-carries.
+`error_map` block illustrates the shape — real, PostgreSQL-documented
+SQLSTATE meanings, mapped to categories directly in this reference rather
+than produced by a research pass. It is illustrative, not authoritative:
+ground every entry of an actual connector's `error_map` in that connector's
+own driver's documented facts (via `provider_facts.error_signals`), never by
+copying this or any other connector's values.
 
 ## Operational consequence
 

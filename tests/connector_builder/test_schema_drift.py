@@ -2074,12 +2074,14 @@ def _target_column(section: str) -> set[str]:
         ("enum-mappers", "KindMapper", EXPECTED_KINDS, {"nosql", "document"}),
         ("enum-mappers", "AuthTypeMapper", EXPECTED_AUTH_TYPES, set()),
         ("enum-mappers", "TransportTypeMapper", EXPECTED_TRANSPORT_TYPES, set()),
-        # The operational-consequence table is, by design, an exhaustive
-        # per-category verdict listing (every ErrorCategory has an engine
-        # verdict) — exact-match is the right assertion here. The HTTP
-        # classification table below is deliberately NOT exhaustive (`400`
-        # and `422` are withheld as genuinely provider-ambiguous), so it gets
-        # its own subset-only pin instead of joining this list.
+        # The operational-consequence table is an exhaustive per-category
+        # verdict listing (every ErrorCategory has an engine verdict) —
+        # exact-match is the right assertion here. The HTTP classification
+        # table (also exhaustive, by the same design) gets its own dedicated
+        # test below instead of joining this list: its expected set must come
+        # from ErrorMap.http's own schema branch, not the codes-derived
+        # EXPECTED_ERROR_CATEGORIES this list's other entries share, and this
+        # parametrize mechanism only takes plain values, not a schema fixture.
         (
             "error-classification",
             "Operational consequence",
@@ -2112,8 +2114,8 @@ def test_mapper_target_columns_match_the_contract(
     )
 
 
-def test_http_classification_categories_are_valid(connector_schema: dict) -> None:
-    """The HTTP table's Category column names only real `ErrorMap.http` members.
+def test_http_classification_table_matches_the_contract(connector_schema: dict) -> None:
+    """The HTTP table's Category column must be exactly `ErrorMap.http`'s vocabulary.
 
     Compared against `http`'s own value enum, not the `codes`-derived
     `EXPECTED_ERROR_CATEGORIES` constant: `codes` and `http` share one
@@ -2123,12 +2125,12 @@ def test_http_classification_categories_are_valid(connector_schema: dict) -> Non
     pins `codes`; this pins `http` independently rather than assuming the two
     stay identical).
 
-    Subset, not equality: unlike the exhaustive mappers above, this table
-    deliberately withholds `400`/`422` as genuinely provider-ambiguous, so it
-    is not expected to cover every category. What must never happen is the
-    table inventing a category the contract does not have, or the extraction
-    itself going quietly empty (a deleted or reformatted table would satisfy
-    an empty subset trivially) — both need their own assertion.
+    Exact match, not subset: this table is a decision procedure ("what the
+    docs establish about this status" -> category), one row per category, not
+    a lookup keyed by literal status codes — so, like the operational-
+    consequence table, it is exhaustive by design and a missing or invented
+    row is equally wrong. A non-empty check on both sides guards against a
+    deleted or reformatted table passing vacuously.
     """
     schema_set = _http_category_values(connector_schema)
     assert schema_set, _diff_msg(
@@ -2137,16 +2139,11 @@ def test_http_classification_categories_are_valid(connector_schema: dict) -> Non
     )
     section = _section(ERROR_CLASSIFICATION, "Classifying an HTTP status")
     documented = _target_column(section)
-    assert documented, (
+    assert documented == schema_set, (
         f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
-        "status: no categories extracted — the table was deleted or "
-        "reformatted, so this guard would have graded nothing."
-    )
-    invented = documented - schema_set
-    assert not invented, (
-        f"{ERROR_CLASSIFICATION.relative_to(REPO_ROOT)} §Classifying an HTTP "
-        f"status names categor{'y' if len(invented) == 1 else 'ies'} the "
-        f"contract does not have: {sorted(invented)}."
+        f"status maps onto different members than ErrorMap.http — "
+        f"prose-only={sorted(documented - schema_set)} "
+        f"contract-only={sorted(schema_set - documented)}."
     )
 
 

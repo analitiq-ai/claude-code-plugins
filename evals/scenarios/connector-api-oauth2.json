@@ -72,7 +72,7 @@
       "path": "error_map.http.429",
       "equals": "rate_limited",
       "rule": "intent",
-      "note": "the generic HTTP classification table always applies to an API connector; a specific correct entry (not just block presence) proves the new authoring step actually applied the table rather than declaring an empty or null block"
+      "note": "Xero's own API docs document 429 as rate limiting, so a grounded pass should classify it correctly; a specific correct entry (not just block presence) proves the new authoring step actually applied error-classification.md's procedure to researched facts rather than declaring an empty or null block"
     }
   ],
   "artifacts": [

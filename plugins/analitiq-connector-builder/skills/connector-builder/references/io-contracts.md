@@ -131,6 +131,11 @@ fan-out and returned as `EndpointFacts` (below).
             "max_requests": { "type": "integer" },
             "time_window_seconds": { "type": "integer" }
           }
+        },
+        "documented_http_errors": {
+          "type": "object",
+          "description": "Per-status documented meaning, verbatim, from the provider's own API docs (an errors/status-codes reference page, or per-endpoint error notes) — the creator's grounding for `error_map.http` (`references/error-classification.md`). One entry per status the docs describe, in whatever detail they give; never a failure category — that judgment is the creator's, per `references/error-classification.md`'s procedure. No status may be classified in `error_map.http` without a corresponding entry here.",
+          "additionalProperties": { "type": "string" }
         }
       },
       "required": ["auth_model"]
@@ -200,7 +205,7 @@ fan-out and returned as `EndpointFacts` (below).
             },
             "documented_codes": {
               "type": "object",
-              "description": "The driver's own documented meaning, verbatim, one entry per signal value grounded above — a native-code value (e.g. `\"23505\": \"unique_violation\"`) for anything `native_code_attrs` names, and/or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) for anything worth classifying by the exception's type instead. Both kinds of key may appear in the same map: a driver whose docs ground an attribute AND a meaningful class hierarchy reports both, grounding the creator's mixed `key_attrs` (an attribute plus the `__exception_class__` fallback, `references/error-classification.md`). Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
+              "description": "The documented meaning, verbatim, from whichever source actually defines it — the driver's own docs for how it exposes a signal, or, for what a given code VALUE means, the database/server's own published documentation when the server (not the driver) owns that catalog (e.g. a SQLSTATE class). One entry per signal value grounded above: a native-code value (e.g. `\"23505\": \"unique_violation\"`) for anything `native_code_attrs` names, and/or a documented exception class name (e.g. `\"IntegrityError\": \"constraint violation\"`) for anything worth classifying by the exception's type instead. Both kinds of key may appear in the same map: a driver whose docs ground an attribute AND a meaningful class hierarchy reports both, grounding the creator's mixed `key_attrs` (an attribute plus the `__exception_class__` fallback, `references/error-classification.md`). Never a failure category either way; the creator applies `references/error-classification.md`'s procedure to produce `error_map.codes`.",
               "additionalProperties": { "type": "string" }
             }
           }

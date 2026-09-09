@@ -119,10 +119,10 @@ artifacts, not the plugin's.
    connectors ship no write map and no package files (`RULE-CTOR-043`):
    return `type_map_write: null` and `package_files: null`.
 7. **Error classification (optional)** — declare the top-level `error_map.http`
-   block straight from `error-classification.md` §Classifying an HTTP status.
-   Adjust only where the provider's own docs document a deviating status
-   meaning, recorded in `notes` — never fabricate an entry the table and the
-   docs disagree on silently.
+   block by applying `error-classification.md` §Classifying an HTTP status'
+   procedure to `provider_facts.documented_http_errors`. Every entry must
+   trace to a status the researcher grounded there; omit a status nothing
+   grounds, and record any gap in `notes` — never fabricate an entry.
 
 ## Definition of Done
 
