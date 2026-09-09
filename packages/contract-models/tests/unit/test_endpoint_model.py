@@ -855,6 +855,23 @@ class TestFiltersWiring:
         }))
         assert "nullable" in result.operations.read.filters
 
+    def test_field_key_with_a_recursive_anyof_alias_rejected_not_crashed(self):
+        # A branch $ref'ing back to a $defs entry that contains the same
+        # anyOf is a valid Draft 2020-12 shape materialize_node does not
+        # collapse on its own (it isn't a $ref/allOf cycle). The recursive
+        # branch can never independently prove typed, so the whole
+        # declaration is rejected as untyped — the point is that this
+        # raises the ordinary ValidationError, not RecursionError.
+        read_op = _filters_read_op(
+            {"nullable": {"gt": {"from_param": "minAmount"}}},
+            extra_record_props={"nullable": {"anyOf": [{"$ref": "#/$defs/Node"}, {"type": "null"}]}},
+        )
+        read_op["response"]["schema"]["$defs"] = {
+            "Node": {"anyOf": [{"$ref": "#/$defs/Node"}, {"type": "string"}]},
+        }
+        with pytest.raises(ValidationError, match="declares no `type`"):
+            parse_endpoint(_minimal_api_payload(operations={"read": read_op}))
+
     def test_template_param_naming_undeclared_param_rejected(self):
         with pytest.raises(ValidationError, match=r"\[RULE-ENDP-070\]"):
             parse_endpoint(_minimal_api_payload(operations={

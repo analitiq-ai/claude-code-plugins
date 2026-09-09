@@ -3418,26 +3418,52 @@ def _declares_a_type(node: Any, root: Any = None) -> bool:
     each branch before it is inspected; a caller with no root in scope simply
     cannot recognise a `$ref` branch's type, same as before this recursed.
     """
+    return _declares_a_type_walk(node, root, set())
+
+
+def _declares_a_type_walk(node: Any, root: Any, on_path: set[int]) -> bool:
+    """`_declares_a_type`'s own recursion, tracking `anyOf`/`oneOf` branches
+    already on the current path.
+
+    A recursive alias (a branch `$ref`erring to a `$defs` entry that contains
+    that same `anyOf`/`oneOf`) is a valid Draft 2020-12 shape `materialize_node`
+    does not collapse on its own — it is not a `$ref`/`allOf` cycle, the only
+    kind that function's own memoization catches, and each top-level call to it
+    folds through a fresh memo, so its result has a new identity every time
+    even for the same `$ref` target. `on_path` therefore tracks each RAW
+    branch (before materializing it) rather than the materialized result — the
+    raw branch is the same object every time this exact schema position is
+    reached, so a second visit is a real cycle. Revisiting it contributes
+    nothing, the same rule `_materialize`'s own `on_path` applies to a
+    `$ref`/`allOf` cycle, rather than recursing until `RecursionError`.
+    """
     if not isinstance(node, dict):
         return False
     if _declared_types(node):
         return True
     if node.get("native_type") is not None and node.get("arrow_type") is not None:
         return True
-    for key in ("anyOf", "oneOf"):
-        branches = node.get(key)
+    for branch_key in ("anyOf", "oneOf"):
+        branches = node.get(branch_key)
         if not isinstance(branches, list) or not branches:
             continue
         every_branch_typed = True
         for branch in branches:
+            if not isinstance(branch, dict):
+                every_branch_typed = False
+                break
+            branch_id = id(branch)
+            if branch_id in on_path:
+                every_branch_typed = False
+                break
             resolved_branch = branch
-            if root is not None and isinstance(branch, dict):
+            if root is not None:
                 try:
                     resolved_branch = materialize_node(branch, root)
                 except SchemaResolutionError:
                     every_branch_typed = False
                     break
-            if not _declares_a_type(resolved_branch, root):
+            if not _declares_a_type_walk(resolved_branch, root, on_path | {branch_id}):
                 every_branch_typed = False
                 break
         if every_branch_typed:
