@@ -150,6 +150,16 @@ EXPECTED_ERROR_CATEGORIES = {
 # resolved (file + heading exist) by test_engine_restatement_exemptions_resolve
 # below.
 ENGINE_RESTATEMENT_EXEMPTIONS = {
+    "skills/connector-builder/references/error-classification.md#Classifying an HTTP status":
+        "restates analitiq-core's error_map.http call-site coverage — read "
+        "and write HTTP requests both classify through the same path "
+        "(cdk/cdk/api/verdicts.py's classify_status/failure_facts, called "
+        "from cdk/cdk/api/generic.py's read and write paths), while the "
+        "health-check probe (cdk/cdk/api/http.py's HttpSender.probe()) "
+        "bypasses error_map entirely and there is no separate auth-exchange "
+        "call site; none of this is enforced by the contract model, which "
+        "types http as a plain status-keyed map with no call-site semantics "
+        "of its own",
     "skills/connector-builder/references/error-classification.md#Operational consequence":
         "restates analitiq-core's ErrorCategory write/read verdict tables "
         "(DECLARED_WRITE_VERDICTS / DECLARED_READ_DETERMINISTIC); the category "

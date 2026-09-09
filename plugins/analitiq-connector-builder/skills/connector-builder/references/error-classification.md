@@ -20,13 +20,20 @@ config error the moment it turns out wrong, not a harmless guess
 No status code is classified from general HTTP knowledge, however familiar
 its number looks — the same status means different things across providers
 (a `409` is a stale read on one API and a rejected duplicate write on
-another), and `error_map.http` applies at *any* HTTP call site (a read, a
-discovery probe, an auth exchange, or a write — the contract's own `ErrorMap.http`
-description), so a status's meaning is never separable from what a specific
-provider's docs say it means on the call where it actually occurs. Ground
-every entry in `provider_facts.documented_http_errors` — never fabricate one
-the docs don't establish, and never carry an entry over from another
-connector.
+another), and `error_map.http` is read at the HTTP call site, independent of
+`key_attrs`/`codes` (the contract's own `ErrorMap.http` description). In
+`analitiq-core`'s engine, that call site is every read and write HTTP
+request — the same classification path serves both — never a
+discovery/health-check probe, which bypasses `error_map` entirely, and never
+a distinct auth-exchange call, since credentials ride on the read/write
+request itself rather than a separate handshake: an auth failure is
+classified only if and when it surfaces as a status on an actual read or
+write. This is a reading of the engine as it stands, not a contract
+guarantee — re-verify against the engine before relying on the exact scope.
+So a status's meaning is never separable from what a specific provider's
+docs say it means on the call where it actually occurs. Ground every entry
+in `provider_facts.documented_http_errors` — never fabricate one the docs
+don't establish, and never carry an entry over from another connector.
 
 Apply this procedure to what the docs say about each status, not to the
 status number itself:
