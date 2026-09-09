@@ -383,6 +383,16 @@ class TestCursorFieldsInRecordShape:
             {"metadata": {"type": "object", "properties": {"updated_at": {"type": "string"}}}},
         ))
 
+    def test_cursor_field_traversing_a_scalar_node_is_rejected(self):
+        # `metadata` is declared `type: "string"`, so its sibling `properties`
+        # map is never reachable from a conforming instance — the watermark
+        # path must be refused rather than silently resolving into it.
+        with pytest.raises(ValidationError, match="not declared in response.schema record-shape branch"):
+            parse_endpoint(self._payload_with_cursor_field(
+                "metadata.updated_at",
+                {"metadata": {"type": "string", "properties": {"updated_at": {"type": "string"}}}},
+            ))
+
     def test_items_missing_rejected(self):
         # `items` not declared on the array — cursor field cannot be verified.
         payload = _minimal_api_payload(
@@ -815,6 +825,20 @@ class TestFiltersWiring:
                 "read": _filters_read_op(
                     {"untyped": {"gt": {"from_param": "minAmount"}}},
                     extra_record_props={"untyped": {}},
+                ),
+            }))
+
+    def test_field_key_traversing_a_scalar_node_is_rejected(self):
+        # The record's `profile` field is declared `type: "string"` but
+        # carries a sibling `properties` map — no conforming response record
+        # can ever carry a `profile.age` shape, so the path must not resolve.
+        with pytest.raises(ValidationError, match="not declared in the response.schema"):
+            parse_endpoint(_minimal_api_payload(operations={
+                "read": _filters_read_op(
+                    {"profile.age": {"gt": {"from_param": "minAmount"}}},
+                    extra_record_props={
+                        "profile": {"type": "string", "properties": {"age": {"type": "integer"}}},
+                    },
                 ),
             }))
 
@@ -1307,6 +1331,21 @@ class TestWriteConflictKeys:
         # to check against — membership is unknowable, not violated.
         op = self._write_op(conflict_keys=["anything"])
         op["input"]["schema"] = {"type": "object"}
+        parse_endpoint(self._payload({"upsert": op}))
+
+    def test_conflict_keys_check_skipped_when_input_schema_type_excludes_object(self):
+        # `_json_schema_top_level_fields` folds through the shared
+        # `materialize_node` primitive, so a top-level `input.schema` typed
+        # non-object does not see its sibling `properties` map as declaring
+        # any field. A schema this convention calls unknowable is skipped,
+        # not rejected (same as no `properties` map at all — see
+        # `test_conflict_keys_unchecked_when_input_schema_has_no_properties`
+        # above), so `materialize_node` no longer exposing this field is what
+        # `test_json_schema_top_level_fields_excludes_a_scalar_nodes_properties`
+        # in test_response_path_resolution.py pins directly, not this
+        # `parse_endpoint` call.
+        op = self._write_op(conflict_keys=["email"])
+        op["input"]["schema"]["type"] = "string"
         parse_endpoint(self._payload({"upsert": op}))
 
     def test_conflict_keys_rejected_when_input_schema_has_empty_properties(self):
@@ -2650,6 +2689,31 @@ class TestPaginationStrategies:
             }},
         )
         with pytest.raises(ValidationError):
+            parse_endpoint(payload)
+
+    def test_keyset_order_by_field_traversing_a_scalar_node_is_rejected(self):
+        # `sort` is declared `type: "string"` with a sibling `properties` map
+        # — the same scalar-node-traversal defect the `filters` map and
+        # `cursor_field` are checked for, on the third named call site.
+        payload = _minimal_api_payload(
+            endpoint_id="x",
+            operations={"read": {
+                "request": {"method": "GET", "path": "/v1/x", "query": {"after": {"from_param": "after"}}},
+                "params": {"after": {"in": "query", "type": "string", "required": False, "controlled_by": "pagination"}},
+                "pagination": {
+                    "type": "keyset",
+                    "keyset": {"param": "after", "order_by_field": "sort.key"},
+                    "stop_when": {"empty": {"ref": "response.records"}},
+                },
+                "response": {
+                    "records": {"ref": "response.body"},
+                    "schema": {"type": "array", "items": {"type": "object", "properties": {
+                        "sort": {"type": "string", "properties": {"key": {"type": "string"}}},
+                    }}},
+                },
+            }},
+        )
+        with pytest.raises(ValidationError, match="not declared in the response.schema"):
             parse_endpoint(payload)
 
     @staticmethod

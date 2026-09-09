@@ -29,7 +29,9 @@ from analitiq.contracts.endpoints import (
     _REQUEST_EXPRESSION_SLOTS,
     DeclarationConflictError,
     DeclaredPathError,
+    _json_schema_top_level_fields,
     effective_properties,
+    materialize_node,
     parse_endpoint,
     resolve_declared_path,
     resolve_local_pointer,
@@ -239,6 +241,209 @@ class TestEffectivePropertiesAllOf:
         }
         with pytest.raises(DeclaredPathError, match="conflicting redeclaration"):
             resolve_declared_path(root, ["a"])
+
+
+# ---------------------------------------------------------------------------
+# A node's `properties` is trustworthy only when its OWN composed type
+# permits `object` — `properties` beside a non-object `type` is ignored by
+# every conforming JSON Schema instance, so it is not a real contributor.
+# ---------------------------------------------------------------------------
+
+
+class TestScalarNodePropertiesAreNotTraversable:
+    def test_inline_scalar_node_with_properties_is_not_declared(self):
+        node = {"type": "string", "properties": {"age": {"type": "integer"}}}
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(node, ["age"])
+
+    def test_effective_properties_excludes_a_scalar_nodes_properties(self):
+        node = {"type": "string", "properties": {"age": {"type": "integer"}}}
+        assert effective_properties(node) == {}
+
+    def test_materialize_node_drops_the_properties_key_entirely(self):
+        # Genuinely ABSENT, not an empty dict — `_json_schema_top_level_fields`
+        # tells the two apart ("no properties map" is unknowable-skip; "{}" is
+        # zero declared fields).
+        node = {"type": "string", "properties": {"age": {"type": "integer"}}}
+        materialized = materialize_node(node)
+        assert "properties" not in materialized
+
+    def test_ref_to_a_scalar_defs_entry_with_sibling_properties_is_rejected(self):
+        # The composed-type case: `node` itself carries no literal `type`, but
+        # its `$ref` target is scalar — the check must read the COMPOSED type,
+        # not `node`'s own bare `type` key.
+        root = {
+            "$defs": {"Str": {"type": "string"}},
+            "$ref": "#/$defs/Str",
+            "properties": {"age": {"type": "integer"}},
+        }
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(root, ["age"])
+
+    def test_a_filters_style_dotted_path_through_a_scalar_node_is_rejected(self):
+        # A two-segment dotted path, the shape a `filters` map key takes.
+        schema = {
+            "type": "object",
+            "properties": {
+                "profile": {"type": "string", "properties": {"age": {"type": "integer"}}},
+            },
+        }
+        with pytest.raises(DeclaredPathError, match="'age' is not declared") as excinfo:
+            resolve_declared_path(schema, ["profile", "age"])
+        assert excinfo.value.segment == "age"
+        assert excinfo.value.index == 1
+
+    def test_no_type_key_at_all_still_permits_properties(self):
+        # JSON Schema's own convention: `type` omitted with `properties`
+        # present means object. Must keep resolving — the regression case for
+        # every ordinary record shape already validating today.
+        node = {"properties": {"age": {"type": "integer"}}}
+        assert resolve_declared_path(node, ["age"]) == {"type": "integer"}
+
+    def test_type_object_still_permits_properties(self):
+        node = {"type": "object", "properties": {"age": {"type": "integer"}}}
+        assert resolve_declared_path(node, ["age"]) == {"type": "integer"}
+
+    def test_type_list_including_object_still_permits_properties(self):
+        node = {"type": ["object", "null"], "properties": {"age": {"type": "integer"}}}
+        assert resolve_declared_path(node, ["age"]) == {"type": "integer"}
+
+    def test_arrow_type_object_with_no_bare_type_key_still_permits_properties(self):
+        # The contract's own structural-record marker, per the fixtures in
+        # test_endpoint_model.py — `arrow_type: "Object"` can appear with no
+        # bare `type` key at all.
+        node = {
+            "native_type": "record",
+            "arrow_type": "Object",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert resolve_declared_path(node, ["age"]) == {"type": "integer"}
+
+    def test_object_type_inherited_through_ref_still_permits_properties(self):
+        # A node reached through a `$ref` to an OBJECT-typed base, refining it
+        # with its own sibling `properties`, is the canonical
+        # `allOf: [{$ref: Base}, {refinement}]` idiom and must keep resolving.
+        root = {
+            "$defs": {"Base": {"type": "object", "properties": {"id": {"type": "string"}}}},
+            "$ref": "#/$defs/Base",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert resolve_declared_path(root, ["id"]) == {"type": "string"}
+        assert resolve_declared_path(root, ["age"]) == {"type": "integer"}
+
+    def test_disjoint_type_refusal_across_allof_branches_is_unaffected(self):
+        # `_permits_object` gates whether `properties` is trusted; it does not
+        # fold into or replace `_refuse_disjoint_types`: an `allOf` branch
+        # declaring `object` beside one declaring `array` is still a provable
+        # contradiction.
+        node = {
+            "allOf": [
+                {"type": "object", "properties": {"age": {"type": "integer"}}},
+                {"type": "array"},
+            ],
+        }
+        with pytest.raises(DeclarationConflictError, match="conflicting redeclaration"):
+            materialize_node(node)
+
+    def test_json_schema_top_level_fields_excludes_a_scalar_nodes_properties(self):
+        # The write-side siblings (`conflict_keys` membership, `from_input`
+        # field resolution) both read `properties` off `materialize_node`
+        # through this shared helper, with no walker of their own — proof the
+        # fix reached the primitive and not only `resolve_declared_path`'s
+        # per-segment loop.
+        schema = {"type": "string", "properties": {"email": {"type": "string"}}}
+        assert _json_schema_top_level_fields(schema) is None
+
+    def test_the_object_permission_check_does_not_leak_across_sibling_nodes(self):
+        # `_composed_type_declaration`'s memo must be FRESH per gate-check, not
+        # threaded across the whole `_contributors` walk the way `_contributors`'
+        # own memo is: `BranchA` sits on a `$ref` cycle through `Cycler` and is
+        # itself string-typed, so `Cycler`'s composed type is correctly "string"
+        # once BranchA fully resolves — but computed WHILE BranchA is still
+        # "on path" (mid-resolution), the cycle rule truncates that contribution
+        # to nothing. A memo shared across BOTH `BranchA`'s and `BranchB`'s gate
+        # checks caches that truncated `{}` for `Cycler` and serves it, wrongly,
+        # to `BranchB` — which never had BranchA on ITS path — making a
+        # string-typed node's `properties` look untyped and therefore
+        # trustworthy. `leakB` must be excluded exactly like `leakA` is.
+        defs = {
+            "BranchA": {
+                "$ref": "#/$defs/Cycler",
+                "type": "string",
+                "properties": {"leakA": {"type": "integer"}},
+            },
+            "Cycler": {"$ref": "#/$defs/BranchA"},
+            "BranchB": {
+                "$ref": "#/$defs/Cycler",
+                "properties": {"leakB": {"type": "integer"}},
+            },
+        }
+        node = {"allOf": [{"$ref": "#/$defs/BranchA"}, {"$ref": "#/$defs/BranchB"}]}
+        root = {"$defs": defs, "type": "object", "properties": {"n": node}}
+        assert effective_properties(node, root) == {}
+
+    def test_a_non_object_arrow_type_with_no_bare_type_key_does_not_permit_properties(self):
+        # `arrow_type` is the contract's own type marker and stands in for a
+        # bare `type` key — a scalar `arrow_type` (`Utf8`, here reached through
+        # a `$ref` so no OTHER walker's same-dict sibling check catches it
+        # first) must not be read as "no type declared" just because there is
+        # no literal `type` key on the composed node.
+        root = {
+            "$defs": {"Str": {"native_type": "text", "arrow_type": "Utf8"}},
+            "$ref": "#/$defs/Str",
+            "properties": {"age": {"type": "integer"}},
+        }
+        assert effective_properties(root, root) == {}
+        assert "properties" not in materialize_node(root)
+
+    def test_type_on_one_allof_branch_gates_properties_on_a_sibling_branch(self):
+        # The type marker and the `properties` map can be declared on
+        # DIFFERENT sibling `allOf` branches of the same node — `_contributors`
+        # must judge this by the whole node's composed type, not by whichever
+        # branch happens to carry `properties` judged in isolation (that
+        # branch, alone, declares no type of its own and would default to
+        # "permits object"). `_materialize`'s `merged` already folds every
+        # source's type markers before deciding; `_contributors` must agree.
+        node = {"allOf": [{"type": "string"}, {"properties": {"age": {"type": "integer"}}}]}
+        assert effective_properties(node) == {}
+        assert "properties" not in materialize_node(node)
+        with pytest.raises(DeclaredPathError, match="'age' is not declared"):
+            resolve_declared_path(node, ["age"])
+
+    def test_object_type_on_one_allof_branch_still_permits_properties_on_a_sibling(self):
+        # An object-typed sibling branch must still let a `properties`-only
+        # sibling branch resolve — the common `allOf: [{type: object}, {ref:
+        # Mixin}]` idiom, spelled with `properties` inline instead of via a
+        # `$ref` mixin.
+        node = {"allOf": [{"type": "object"}, {"properties": {"age": {"type": "integer"}}}]}
+        assert resolve_declared_path(node, ["age"]) == {"type": "integer"}
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+
+    def test_type_on_a_sibling_allof_branch_gates_a_refs_own_properties(self):
+        # The same split as the two tests above, with the `properties` map
+        # reached through the `$ref` target instead of an inline `allOf`
+        # branch — the composed-type verdict must gate every source's
+        # `properties`, not only an inline branch's.
+        root = {
+            "$defs": {"HasProps": {"properties": {"age": {"type": "integer"}}}},
+            "$ref": "#/$defs/HasProps",
+            "allOf": [{"type": "string"}],
+        }
+        assert effective_properties(root, root) == {}
+        assert "properties" not in materialize_node(root)
+
+    def test_type_buried_in_a_nested_allof_still_gates_a_sibling_branchs_properties(self):
+        # `allOf` nests: a branch may itself carry an `allOf`. The composed
+        # type has to be folded through that nesting too, not only the
+        # top-level branch list.
+        node = {
+            "allOf": [
+                {"allOf": [{"type": "string"}]},
+                {"properties": {"age": {"type": "integer"}}},
+            ],
+        }
+        assert effective_properties(node) == {}
+        assert "properties" not in materialize_node(node)
 
 
 # ---------------------------------------------------------------------------

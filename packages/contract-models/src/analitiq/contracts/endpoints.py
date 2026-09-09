@@ -4172,6 +4172,118 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
 # declaration wins.
 
 
+def _composed_type_declaration(node: dict[str, Any], root: Any) -> dict[str, Any]:
+    """The `type`/`native_type`/`arrow_type` ``node`` ends up with once its
+    `$ref` target and `allOf` branches are folded in, last source wins.
+
+    The same source order `_contributors`/`_materialize` use for every other
+    key (`$ref` target, then `allOf` branches, then the node itself),
+    restricted to the type-declaring keys :func:`_permits_object` needs to decide
+    whether ANY `properties` map in ``node``'s `$ref`/`allOf` tree may be
+    trusted — a `properties`-only `allOf` branch permits object judged in
+    isolation, so the type and the `properties` can be declared on different
+    sibling branches of the same node and the verdict still has to come from
+    the WHOLE tree's composed type, not the one branch that happens to carry
+    `properties`. :func:`_property_contributors` calls this exactly once per
+    walk, on the ORIGINAL top-level node, and threads the one verdict down
+    through every recursive `_contributors` call unchanged.
+
+    Deliberately a separate walk rather than a call to :func:`materialize_node`:
+    that fold is what this predicate exists to gate (whether `properties` is
+    trustworthy), so it cannot be the thing consulted to make that decision —
+    calling it here would re-enter the property fold this function is upstream
+    of. `type`/`native_type`/`arrow_type` are always scalars or flat lists,
+    never merged sub-schemas, so a plain last-wins overwrite (no
+    :func:`_combine_schema_values` recursion) reproduces the same source order
+    correctly.
+
+    Memoized only WITHIN this call's own recursion (a fresh memo dict per
+    call, never reused across separate calls to this function) via
+    :func:`_fold_type_markers` — a `$ref`/`allOf` DAG with shared `$defs`
+    reached from several branches of the same tree would otherwise re-walk
+    the shared subgraph once per branch. `TestCompositionIsLinearNotExponential`
+    in `test_response_path_resolution.py` is the regression test pinning that
+    a shared diamond stays linear, cyclic or not.
+    """
+    return _fold_type_markers(node, root, {}, frozenset())
+
+
+def _fold_type_markers(
+    node: dict[str, Any],
+    root: Any,
+    memo: dict[int, dict[str, Any]],
+    on_path: frozenset[int],
+) -> dict[str, Any]:
+    """:func:`_composed_type_declaration`'s memoized worker for ONE call's
+    own recursion. See that function for why the memo is never shared
+    across separate top-level calls."""
+    key = id(node)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached
+    if key in on_path:
+        return {}
+    on_path = on_path | {key}
+    composed: dict[str, Any] = {}
+    ref = node.get("$ref")
+    if isinstance(ref, str):
+        target = resolve_schema_ref(root, ref)
+        if isinstance(target, dict):
+            composed.update(_fold_type_markers(target, root, memo, on_path))
+    branches = node.get("allOf")
+    if isinstance(branches, list):
+        for branch in branches:
+            if isinstance(branch, dict):
+                composed.update(_fold_type_markers(branch, root, memo, on_path))
+    for marker in ("type", "native_type", "arrow_type"):
+        if marker in node:
+            composed[marker] = node[marker]
+    memo[key] = composed
+    return composed
+
+
+def _permits_object(declaration: dict[str, Any]) -> bool:
+    """Whether an ALREADY-COMPOSED declaration allows its `properties` to be
+    trusted.
+
+    ``declaration`` must already be composed across `$ref`/`allOf` — either
+    :func:`_composed_type_declaration`'s result, or `_materialize`'s own
+    ``merged`` (which folds the same type-declaring keys the same way as an
+    ordinary last-wins DATA-position merge).
+
+    `arrow_type`, where present, is the contract's own authoritative type
+    marker and is checked FIRST: `"Object"` is the one spelling that means
+    object-shaped (spec: §Native and Arrow Types — `Object` requires sibling
+    `properties` and can appear with no bare `type` key at all), and every
+    other arrow_type — scalar or parameterized (`Utf8`, `Int64`,
+    `Decimal128(38, 9)`, `List`, `Json`) — is a declared type that excludes
+    object the same as a non-`"object"` bare `type` does. Checking `arrow_type`
+    only when it equals `"Object"` and otherwise falling through to the bare
+    `type` reading is the gap this predicate exists to close: a `$ref` target
+    can carry `native_type`/`arrow_type: "Utf8"` with no bare `type` key at
+    all, and a referencing node's sibling `properties` would otherwise read as
+    "no type declared" and be wrongly trusted.
+
+    Absent `arrow_type`, a node permits object when it declares no `type` at
+    all (JSON Schema's own bare-`properties` convention: `type` omitted with
+    `properties` present means object), or when its declared `type` includes
+    `"object"`. A declared `type` that excludes `"object"` does not permit it
+    — `properties` beside a non-object `type` is never reachable from a
+    conforming instance.
+    """
+    arrow_type = declaration.get("arrow_type")
+    if arrow_type is not None:
+        return arrow_type == "Object"
+    declared_type = declaration.get("type")
+    if declared_type is None:
+        return True
+    if isinstance(declared_type, str):
+        return declared_type == "object"
+    if isinstance(declared_type, list):
+        return "object" in declared_type
+    return True
+
+
 def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[Any]]:
     """Every UNCONDITIONAL declaration of each property name, LOWEST precedence
     first.
@@ -4197,7 +4309,19 @@ def _property_contributors(node: dict[str, Any], root: Any) -> dict[str, list[An
     the first occurrence is NOT safe and was one of the three bugs above; the
     inline comment at the dedup states the failure.
     """
-    return _contributors(node, root, {}, set())
+    # Computed ONCE, from `node` — the composed type of the WHOLE `$ref`/`allOf`
+    # tree this call walks, not of whichever branch happens to carry the
+    # `properties` key. `type: "string"` on one `allOf` branch and `properties`
+    # on a SIBLING branch with no type marker of its own both describe the same
+    # instance: a properties-only branch, `_composed_type_declaration`'d in
+    # isolation, always "permits object" by default, so gating each branch
+    # against its OWN composed type alone would never let the sibling's
+    # scalar `type` reach it. One verdict, applied uniformly to every
+    # `properties` source this walk finds, is what keeps this fold agreeing
+    # with `_materialize`'s `merged`-based gate, which already folds every
+    # source's type markers before deciding.
+    permits_object = _permits_object(_composed_type_declaration(node, root))
+    return _contributors(node, root, {}, set(), permits_object)
 
 
 def _contributors(
@@ -4205,8 +4329,17 @@ def _contributors(
     root: Any,
     memo: dict[int, tuple[Any, dict[str, list[Any]]]],
     on_path: set[int],
+    permits_object: bool,
 ) -> dict[str, list[Any]]:
-    """Memoized worker. See :func:`_materialize` for the memo/cycle scheme."""
+    """Memoized worker. See :func:`_materialize` for the memo/cycle scheme.
+
+    ``permits_object`` is fixed for the whole walk (computed once by
+    :func:`_property_contributors` from the ORIGINAL top-level node) and
+    threaded down unchanged — never recomputed per `$ref` target or `allOf`
+    branch. See the comment there for why: it must reflect the composed type
+    of the whole `$ref`/`allOf` tree, not of whichever branch is currently
+    being visited.
+    """
     key = id(node)
     cached = memo.get(key)
     if cached is not None:
@@ -4220,15 +4353,19 @@ def _contributors(
     if isinstance(ref, str):
         target = resolve_schema_ref(root, ref)
         if isinstance(target, dict):
-            sources.append(_contributors(target, root, memo, on_path))
+            sources.append(_contributors(target, root, memo, on_path, permits_object))
     branches = node.get("allOf")
     if isinstance(branches, list):
         for branch in branches:
             _reject_unsatisfiable_branch(branch)
             if isinstance(branch, dict):
-                sources.append(_contributors(branch, root, memo, on_path))
+                sources.append(_contributors(branch, root, memo, on_path, permits_object))
     own = node.get("properties")
-    if isinstance(own, dict):
+    # `properties` is ignored by every JSON Schema instance whose composed
+    # `type` excludes `object` — a `{"type": "string", "properties": {...}}`
+    # node's `properties` map describes a shape no conforming instance can
+    # ever carry, so it is not a real contributor.
+    if isinstance(own, dict) and permits_object:
         sources.append({name: [declaration] for name, declaration in own.items()})
 
     contributors: dict[str, list[Any]] = {}
@@ -4578,7 +4715,15 @@ def _materialize(
         source["properties"] for source in sources
         if isinstance(source, dict) and isinstance(source.get("properties"), dict)
     ]
-    if own_properties:
+    # `merged` already carries this node's COMPOSED `type`/`native_type`/
+    # `arrow_type` — the ordinary per-key loop above folds them last-wins
+    # across the same `$ref`/`allOf`/own-node sources `properties` is folded
+    # from. A node whose composed type excludes `object` ignores `properties`
+    # under every JSON Schema instance, however many sources declared one —
+    # `properties` inherited from an object-typed `$ref` base is not this
+    # case (the base's own `type` is what `merged` picked up), only a node
+    # that itself materializes to a non-object type is.
+    if own_properties and _permits_object(merged):
         # The proof reads the RAW contributors — the same list
         # `_compose_declarations` proves — and NOT the maps hanging off
         # `sources`. Those sources have each already been materialized, and
