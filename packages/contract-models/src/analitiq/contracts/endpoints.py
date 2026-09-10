@@ -4344,8 +4344,11 @@ def _union_permits_object(
     and nested unions all permit.
 
     A boolean `true` branch matches anything, including an object. `false`
-    matches nothing and is simply not an alternative. A branch this fold cannot
-    decide proves nothing and leaves the union permitting.
+    matches nothing and is simply not an alternative — so a list whose branches
+    are ALL `false` offers an instance no alternative at all and refuses, while
+    an empty list is malformed rather than impossible and proves nothing. A
+    branch this fold cannot decide proves nothing and leaves the union
+    permitting.
 
     `oneOf` folds identically. Its exactly-one requirement can make an object
     match two branches and so satisfy neither, but deciding that means deciding
@@ -4353,7 +4356,7 @@ def _union_permits_object(
     gate does not do. Permitting is the direction that never rejects a working
     document.
     """
-    proven_impossible: list[bool] = []
+    alternatives: list[bool] = []
     for branch in branches:
         if branch is True:
             return True
@@ -4361,10 +4364,12 @@ def _union_permits_object(
             continue
         if not isinstance(branch, dict):
             return True
-        proven_impossible.append(
+        alternatives.append(
             _permits_object(_fold_type_evidence(branch, root, memo, on_path))
         )
-    return any(proven_impossible) if proven_impossible else True
+    if alternatives:
+        return any(alternatives)
+    return not branches
 
 
 def _intersect_declared_types(

@@ -501,6 +501,21 @@ class TestScalarNodePropertiesAreNotTraversable:
         }
         assert effective_properties(node) == {}
 
+    def test_a_union_of_only_false_branches_leaves_no_alternative(self):
+        # `false` matches nothing, so a list offering only `false` offers an
+        # instance no alternative at all — proven to exclude object, unlike a
+        # single `false` beside a branch that can still match.
+        node = {"anyOf": [False], "properties": {"age": {"type": "integer"}}}
+        assert effective_properties(node) == {}
+        assert materialize_node(node)["properties"] == {}
+
+    def test_an_empty_union_list_proves_nothing(self):
+        # An empty `anyOf` is malformed rather than impossible. Nothing here
+        # can prove exclusion from it, and refusing on non-proof is what
+        # rejects working documents.
+        node = {"anyOf": [], "properties": {"age": {"type": "integer"}}}
+        assert effective_properties(node) == {"age": {"type": "integer"}}
+
     def test_an_unsatisfiable_union_branch_does_not_refuse_the_document(self):
         # A branch whose own composition leaves no kind of value is simply an
         # alternative no instance takes. The union still has its object branch,
