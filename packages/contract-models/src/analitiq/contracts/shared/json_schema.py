@@ -1,93 +1,97 @@
 """Reading an embedded JSON Schema: pointers, composition, declared-path queries.
 
-Resolving an RFC 6901 pointer, folding `$ref` and `allOf` into the node they
-compose, and asking a composed node what it declares all live here. The walks
-that grade an embedded schema against the endpoint contract's own rules stay
-beside the models that call them, in `analitiq.contracts.endpoints`. The
-endpoint document is not imported here and its error dialect is not spoken
-here: callers own the rule ids and the messages an author reads, and this
-module answers in JSON Schema terms, raising :class:`SchemaResolutionError`
-where it refuses to answer — a contradiction it can prove, or a path the
-document does not unconditionally declare. The contract facts it carries are
-the type markers in ``_CONTRACT_TYPE_MARKERS`` and what they spell: an
-explicit `null` marker is "not declared", a node carrying every marker is
-typed, and an `arrow_type` other than `Object` rules out an object-shaped
-node. The one concession to callers is that a materialized node keeps an
-explicit empty `properties` map, so a caller can tell "zero declared fields"
-from "unknowable".
+**What lives here.** Resolving an RFC 6901 pointer inside one document
+(:func:`resolve_local_pointer`, :func:`resolve_schema_ref`); folding a node
+together with the `$ref` target and `allOf` branches that unconditionally
+apply to it (:func:`composed_schema_keys`, :func:`materialize_node`,
+:func:`effective_properties`); and the questions asked of the composed
+result — whether a dotted path is declared (:func:`resolve_declared_path`),
+whether a node is typed (:func:`_declares_a_type`), whether an instance can be
+an object (:func:`_composed_permits_object`). The walks that check an embedded
+schema position by position against the endpoint contract's rules, and the
+record-shape and `from_input` queries built on these functions, stay beside
+the models that call them in `analitiq.contracts.endpoints`. Nothing here
+imports that module: a refusal is raised as :class:`SchemaResolutionError`
+carrying the diagnosis, and the caller frames it with its site and the rule
+an author reads. The contract's type markers are the one thing this module
+knows beyond JSON Schema: an explicit `null` on `native_type` or `arrow_type`
+spells "not declared" and cannot overwrite an inherited value, a node
+carrying every marker is typed, and an `arrow_type` other than `Object` rules
+out an object-shaped node.
 
-**Structural positions.** A walk descends only through the keywords in
-``JSON_SCHEMA_SUBSCHEMA_KEYS`` (maps of schemas), ``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS``
-(lists of schemas) and ``JSON_SCHEMA_SINGLE_SCHEMA_KEYS`` (one schema) — never
-through `default`, `examples`, `const` or `enum`, which legally carry user data
-shaped exactly like a schema. The sets are the vocabulary every reader of an
-embedded schema shares, in this package and in `analitiq.validator`; a position
-one reader misses is a subtree nothing checked.
+**Structural positions.** ``JSON_SCHEMA_SUBSCHEMA_KEYS`` (maps of schemas),
+``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS`` (lists of schemas) and
+``JSON_SCHEMA_SINGLE_SCHEMA_KEYS`` (one schema) are the positions a schema can
+hold another schema in. They are the vocabulary every reader of an embedded
+schema shares: the position walks in `analitiq.contracts.endpoints` and
+`analitiq.validator`, :func:`resolve_schema_ref`, which lets a pointer land
+only in one of them, and :func:`_position_kind`, which decides how a merged
+value is treated. `default`, `examples`, `const` and `enum` are never among
+them; they carry user data that may be shaped exactly like a schema.
 
-**Composition, and why order is part of the answer.** The schema a
-composition walks is a DAG with back-edges, not a tree: `$defs` entries are
-reached from several places, `allOf` multiplies the routes, and a recursive
-`$defs` is legal and common. Every fold reads its sources in ONE order — the
-`$ref` target, then the `allOf` branches in document order, then the node
-itself — with the last contributor winning for scalar and list values;
-object values merge, and `type` INTERSECTS, because `$ref` and `allOf` are
-intersections in 2020-12 (:func:`composed_schema_keys`). Flattening that into
-a single pre-order and reversing it inverts precedence between a direct later
-branch and a transitively reached contributor of an earlier one, so a nearby
-`allOf` override silently loses to a distant base and nothing here raises.
-:func:`_contributors` and :func:`_materialize` are one fold
-seen from two angles — one keeps each name's declarations as a list, the
-other folds them into a value — and they disagree, silently, the moment they
-are computed differently.
+**Composition.** A schema is a DAG with back-edges, not a tree: `$defs`
+entries are reached from several places, `allOf` multiplies the routes, and a
+recursive `$defs` is legal. Three folds walk it, each following the `$ref`
+target and the `allOf` branches and nothing else: :func:`_compose_schema_keys`
+(a node's own keys, `properties` left out), :func:`_contributors` (every
+declaration of each property name) and :func:`_materialize` (the node with
+`$ref` and `allOf` consumed, its `properties` composed per name). All three
+read their sources in ONE order — `$ref` target, then `allOf` branches in
+document order, then the node itself — and precedence follows that order:
+`_contributors` lists a name's declarations lowest first, a scalar or list
+value is the last source's, an object value merges the sources
+(:func:`_combine_schema_values`), and `type` intersects in the keys fold
+because `$ref` and `allOf` are intersections. Order is part of the answer:
+flattening the fold into one pre-order and reversing it inverts precedence
+between a direct later branch and a transitively reached contributor of an
+earlier one, so a nearby `allOf` override silently loses to a distant base and
+nothing here raises. The folds are one fold seen from several angles, and they
+disagree, silently, the moment they are computed differently.
 
-**The fold's memo and cycle scheme.** Expanding each route separately is
-exponential in depth. The fold is memoised on its RESULT, keyed by node
-identity with the node held beside its result so a freed identity cannot be
-reused mid-walk, and it carries a separate `on_path` set. The memo and the
-on-path set answer different questions: a node already VISITED returns its
-cached result, while a
-node on the CURRENT path contributes nothing — a cycle contributes nothing the
-second time it is met. Memoising per node while refusing to cache any result
-computed under a cycle does not work: the "under a cycle" flag propagates to
-every ancestor, so one back-edge leaves the whole walk uncached and
-exponential again, slower than no memo at all because it also pays for the
-bookkeeping. Memoising the result
-reproduces the fold exactly on an acyclic document and visits each node once,
-so cyclic and acyclic cost the same.
+**Memo and cycles.** Each fold is memoised on its RESULT, keyed by node
+identity with the node held beside the result so a freed identity cannot be
+reused mid-walk, and carries a separate `on_path` set. The memo and the set
+answer different questions: a node already VISITED returns its result, a node
+on the CURRENT path contributes nothing. That reproduces the fold exactly on
+an acyclic document, visits each node once, and makes a cyclic document cost
+the same as an acyclic one. Refusing to cache anything computed under a cycle
+is not an alternative: the refusal reaches every ancestor of the back-edge
+and the walk is exponential again. A memo belongs to one walk —
+:func:`_property_contributors` starts a fresh one on every call, and
+:func:`materialize_node` shares its keys memo between the fold and the object
+gate so the two cannot report different types for one document.
 
-**Walks that are not the fold.** :func:`_composed_unions` enumerates the
-`anyOf`/`oneOf` lists a node inherits through `$ref` and `allOf`, and keeps a
-VISITED set with no memo: every union must hold, so yielding a shared node's
-unions once is enough, and visiting each node once is what keeps a `$defs`
-subgraph reached from several branches linear rather than exponential.
-:func:`_declares_a_type_walk` descends `anyOf`/`oneOf` branches asking whether
-every branch is typed, materialising each branch first when a root is in
-hand; it tracks the RAW
-branch object on its path, because every materialization builds a fresh memo,
-so a materialised result has a new identity each time and a recursive alias
-through a union is a cycle the fold's own guard never sees.
+**Walks that are not the fold.** :func:`_composed_unions` yields the
+`anyOf`/`oneOf` lists a node inherits through `$ref` and `allOf`, with a
+VISITED set and no memo: every union must hold, so yielding a shared node's
+unions once is enough, and that is also what keeps a `$defs` subgraph reached
+from several branches linear. :func:`_declares_a_type_walk` descends
+`anyOf`/`oneOf` branches asking whether every branch is typed, materialising
+a branch first when a root is in hand; it keeps the RAW branch object on its
+path, because each materialization builds a fresh memo and so a materialised
+result has a new identity every time, which would hide a recursive alias
+through a union from the fold's own guard.
 
 **Declared-path resolution.** ONE algorithm answers "does this dotted path
-address something the document declares?" for every caller that asks —
-:func:`resolve_declared_path` and :func:`effective_properties`, each over
+address something the document declares?" — :func:`resolve_declared_path`
+for one path and :func:`effective_properties` for a whole node, each over
 :func:`_property_contributors` and :func:`_compose_declarations`. A segment
-resolves when the current node declares it under `properties`, counting the
-declarations `allOf` branches and an in-document `$ref` target contribute,
-because those always apply. It deliberately does NOT guess: `anyOf` /
-`oneOf` / `if`-`then`-`else` / `patternProperties` / a dict-valued
-`additionalProperties` may or may not declare a field depending on the
-instance, and picking a branch would make the answer depend on authoring
-order — so when a segment is absent and one of those keywords is present, the
-path is reported as not statically resolvable, with the fix named.
-MONOTONICITY is the load-bearing property, and the ambiguity check is ordered
-to preserve it: it runs ONLY when the segment was not found, so a node that
-declares both `properties.next` and a `oneOf` still resolves `next` through
-`properties`. The refusals are the contradictions composition can PROVE:
-disjoint `type` sets contributed for one name (:func:`_compose_declarations`,
-:func:`_refuse_disjoint_types`), and an `allOf` branch that is the boolean
-schema `false` (:func:`_reject_unsatisfiable_branch`, reached from every
-fold). `allOf` refinement — a branch narrowing a base declaration — is the
-idiom `allOf` exists for, so it composes rather than failing.
+resolves when one of the node's unconditional contributors declares it under
+`properties`; several declarations compose as `allOf`, the refinement idiom,
+and only a contradiction composition can PROVE is refused — a branch that is
+the boolean schema `false` (:func:`_reject_unsatisfiable_branch`) or `type`
+sets with an empty intersection (:func:`_refuse_disjoint_types`). The
+algorithm does not guess: the keywords in ``_CONDITIONAL_DECLARATION_KEYWORDS``,
+a schema-valued catch-all in ``_SCHEMA_VALUED_CATCHALL_KEYWORDS``, and a
+`$ref` that did not resolve may or may not declare a name depending on the
+instance, so a segment one of them might declare is reported as not
+statically resolvable, with the fix named, rather than picked from a branch.
+That check runs ONLY after the segment was not found, which keeps resolution
+monotone: a node declaring `properties.next` beside a `oneOf` still resolves
+`next`. The one deliberate narrowing is the object gate
+(:func:`_composed_permits_object`): a node whose composed declaration
+excludes an object instance contributes no properties, so a name written
+under its `properties` is not found.
 """
 
 from __future__ import annotations
@@ -99,9 +103,10 @@ from urllib.parse import unquote
 
 
 # Sentinel for "key absent", distinct from a key present with value null: a
-# pointer can legitimately land on a JSON null.
-# `analitiq.contracts.endpoints._validate_arrow_type_in_json_schema` reads the
-# same sentinel off a type marker for the same reason.
+# pointer can legitimately land on a JSON null, and `resolve_local_pointer`
+# answers with this rather than `None` so that
+# `analitiq.contracts.endpoints._validate_schema_refs` can tell a dangling
+# pointer from one that found `null`.
 _MISSING = object()
 
 
@@ -151,8 +156,8 @@ class DeclarationConflictError(SchemaResolutionError):
     """Contributors for one name cannot all hold. Carries NO path coordinates.
 
     Raised wherever composition proves a contradiction — `_refuse_disjoint_types`
-    (from every fold and per-name merge that composes declarations) and
-    `_reject_unsatisfiable_branch` (from every fold).
+    (its callers are listed on it) and `_reject_unsatisfiable_branch` (from
+    every fold).
     Each inspects a node or a name; none knows where it sits in anyone's path.
     :func:`resolve_declared_path` catches every one of them and re-raises a
     :class:`DeclaredPathError` carrying the segment it was resolving, so a
@@ -303,13 +308,14 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
     """Resolve an in-document `$ref` that lands on a SCHEMA, or ``_MISSING``.
 
     :func:`resolve_local_pointer` restricted to pointers that stay inside
-    schema positions — the same ``JSON_SCHEMA_*_KEYS`` inventory every walk
-    over an embedded schema recurses through, plus the `$defs`/`definitions`
-    maps.
+    schema positions — the ``JSON_SCHEMA_*_KEYS`` inventory: a map of schemas
+    (`$defs`, `properties`, …), a list of schemas, or one schema.
 
-    Why the restriction is load-bearing: no walk descends into `default`,
-    `examples`, `const` or `enum`, because those carry arbitrary user data that
-    may be shaped exactly like a schema. A pointer such as
+    Why the restriction is load-bearing: the walks that check an embedded
+    schema position by position (in `analitiq.contracts.endpoints` and
+    `analitiq.validator`) never descend into `default`, `examples`, `const` or
+    `enum`, because those carry arbitrary user data that may be shaped exactly
+    like a schema. A pointer such as
     `#/properties/x/default` would therefore reach a subtree that nothing ever
     annotation-checked and no type map ever covered — and declared-path
     resolution would then hand that unvalidated node to its callers as if it
@@ -498,8 +504,8 @@ def _composed_permits_object(
 ) -> bool:
     """Whether ``node``'s `properties` map describes fields an instance can
     actually carry — the gate `resolve_declared_path`/`effective_properties`
-    (via :func:`_property_contributors`) and `materialize_node` (via
-    :func:`_materialize`) both put in front of `properties`.
+    (via :func:`_property_contributors`) and :func:`materialize_node` (on the
+    finished node, at its own entry) both put in front of `properties`.
 
     JSON Schema applies `properties` only to object instances, so
     `{"type": "string", "properties": {"age": …}}` describes a string and
@@ -763,8 +769,8 @@ def _compose_declarations(key: str, declarations: list[Any]) -> Any:
     sets are disjoint cannot both hold, so nothing satisfies the intersection
     and no answer about the field is honest. Proof is required — mere
     inequality is not a contradiction — because rejecting on difference alone
-    would break monotonicity: a path a `properties`-only walk resolves must
-    still resolve here, to the same node.
+    would refuse the refinement idiom above, which a `properties`-only reading
+    of the same document accepts.
     """
     if not declarations:
         # Unreachable via `_property_contributors`, which only creates a bucket
@@ -800,8 +806,8 @@ def _refuse_disjoint_types(where: str, sources: list[Any]) -> None:
     :func:`_materialize`) — so that they agree: composing and materializing
     are the same intersection seen from two directions, and a rule enforced by
     only one of them is a gate the other walks past. Proof is required — mere
-    inequality is not a contradiction — or monotonicity breaks: a path a
-    `properties`-only walk resolves must still resolve here, to the same node.
+    inequality is not a contradiction — or the `allOf` refinement idiom
+    (:func:`_compose_declarations`) would be refused.
 
     Raises :class:`DeclarationConflictError`, which carries no path coordinates:
     every caller inspects a node or a name and none knows where it sits in
@@ -881,8 +887,8 @@ def _combine_schema_values(
     shape whose fields came from an inline `properties` map lost them to an
     `allOf` branch, silently changing the enumerated column set.
 
-    Everything else — scalars AND lists — is last-wins. That is the pre-existing
-    behaviour and it is genuinely lossy for `required` and `enum`, whose true
+    Everything else — scalars AND lists — is last-wins. That is genuinely lossy
+    for `required` and `enum`, whose true
     intersection this does not compute. The one lossy case that could produce a
     confidently-wrong answer, mutually exclusive `type` sets, is refused
     outright by :func:`_refuse_disjoint_types` before any merging happens.
