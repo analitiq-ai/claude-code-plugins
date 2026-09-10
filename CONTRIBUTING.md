@@ -11,7 +11,9 @@ Read first, in this order:
   directory ships verbatim to every user who installs the plugin.
 
 This document carries only what those do not: **how a class of defect gets
-closed.** Two rules — one for filing, one for closing.
+closed**, and **what a PR owes the release when it narrows a verdict.** Two
+rules for the first — one for filing, one for closing — and one section for
+the second.
 
 ## The consolidation rule
 
@@ -126,6 +128,28 @@ quietly, that gap shipped with a test recording it
 (`test_literal_expression_bypasses_the_bound`) and an issue that stayed open on
 purpose. The narrowing was deliberate, so the residue was written down.
 
+## A PR that narrows a verdict says so
+
+*Applies at PR-authoring time — when a change touches what the validator
+rejects.*
+
+`.claude/rules/validator-verdict-stability.md` is the policy: within a major
+version of `analitiq-validator` and `analitiq-contract-models`, a document that
+passes keeps passing, so any change after which the validator rejects a
+document the current release accepts — a check promoted to `error`, a model
+constraint tightened, a hole closed — is a major bump of both packages. Two
+things follow for the PR:
+
+- **Its description says which side it lands on.** "Fix" is not a side: a
+  narrowing is a narrowing whatever it is called, and the diff shows the
+  constraint, not whether a document the published release accepts now fails.
+- **The release that carries it is a major.** The change merges like any
+  other; what it binds is the next package release, cut as a major of both
+  packages.
+
+The third clause above already binds a narrowing PR to record what it left
+wide. This binds it to say what it took.
+
 ## Where these bind in the PR loop
 
 `CLAUDE.md` → **PR Review Process** is the loop.
@@ -137,6 +161,9 @@ purpose. The narrowing was deliberate, so the residue was written down.
 - **Closing** — the PR body. Any PR that claims to close an issue states which
   clause above it satisfies, and any PR that narrows a rule records what it left
   wide, per the third clause.
+- **Narrowing** — the PR body. Any PR after which the validator rejects a
+  document the current release accepts says so, per the section above, and the
+  next package release is cut as a major.
 
 Issue references above are cited as of 2026-08 and describe the state at the
 time each case was written down; open issues named here may since have closed.
