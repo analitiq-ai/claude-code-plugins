@@ -12,31 +12,33 @@ schema position by position against the endpoint contract's rules, and the
 record-shape and `from_input` queries built on these functions, stay beside
 the models that call them in `analitiq.contracts.endpoints`. Nothing here
 imports that module: a refusal is raised as :class:`SchemaResolutionError`
-carrying the diagnosis, and the caller frames it with its site and the rule
-an author reads. The contract's type markers are the one thing this module
-knows beyond JSON Schema: an explicit `null` on `native_type` or `arrow_type`
-spells "not declared" and cannot overwrite an inherited value, a node
-carrying every marker is typed, and an `arrow_type` other than `Object` rules
-out an object-shaped node.
+carrying the diagnosis, and the caller frames it with its site and the spec
+section an author reads. Beyond JSON Schema it reads the contract's type
+markers, `native_type` and `arrow_type`: the keys fold drops a node's own
+explicit `null` marker so it does not overwrite one inherited from the `$ref`
+target or an `allOf` branch, a node carrying every marker is typed, and an
+`arrow_type` other than `Object` rules out an object-shaped node.
 
 **Structural positions.** ``JSON_SCHEMA_SUBSCHEMA_KEYS`` (maps of schemas),
 ``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS`` (lists of schemas) and
 ``JSON_SCHEMA_SINGLE_SCHEMA_KEYS`` (one schema) are the positions a schema can
 hold another schema in. They are the vocabulary every reader of an embedded
 schema shares: the position walks in `analitiq.contracts.endpoints` and
-`analitiq.validator`, :func:`resolve_schema_ref`, which lets a pointer land
-only in one of them, and :func:`_position_kind`, which decides how a merged
-value is treated. `default`, `examples`, `const` and `enum` are never among
+`analitiq.validator`, :func:`resolve_schema_ref`, which follows a pointer
+below the root only through them and never across a conditional keyword, and
+:func:`_position_kind`, which reads the map and single-schema sets to decide
+how a merged value is treated. `default`, `examples`, `const` and `enum` are
+never among
 them; they carry user data that may be shaped exactly like a schema.
 
 **Composition.** A schema is a DAG with back-edges, not a tree: `$defs`
 entries are reached from several places, `allOf` multiplies the routes, and a
-recursive `$defs` is legal. Three folds walk it, each following the `$ref`
-target and the `allOf` branches and nothing else: :func:`_compose_schema_keys`
+recursive `$defs` is legal. The folds that walk it, each following the `$ref`
+target and the `allOf` branches and nothing else, are :func:`_compose_schema_keys`
 (a node's own keys, `properties` left out), :func:`_contributors` (every
 declaration of each property name) and :func:`_materialize` (the node with
-`$ref` and `allOf` consumed, its `properties` composed per name). All three
-read their sources in ONE order — `$ref` target, then `allOf` branches in
+`$ref` and `allOf` consumed, its `properties` composed per name). Every fold
+reads its sources in ONE order — `$ref` target, then `allOf` branches in
 document order, then the node itself — and precedence follows that order:
 `_contributors` lists a name's declarations lowest first, a scalar or list
 value is the last source's, an object value merges the sources
@@ -56,10 +58,11 @@ on the CURRENT path contributes nothing. That reproduces the fold exactly on
 an acyclic document, visits each node once, and makes a cyclic document cost
 the same as an acyclic one. Refusing to cache anything computed under a cycle
 is not an alternative: the refusal reaches every ancestor of the back-edge
-and the walk is exponential again. A memo belongs to one walk —
-:func:`_property_contributors` starts a fresh one on every call, and
-:func:`materialize_node` shares its keys memo between the fold and the object
-gate so the two cannot report different types for one document.
+and the walk is exponential again. A memo belongs to one walk:
+:func:`_property_contributors` starts a fresh contributors memo on every
+call, while the keys memo :func:`materialize_node` creates is shared by its
+fold, its object gate and the contributor walk the fold runs, so all of them
+read one composed declaration per node.
 
 **Walks that are not the fold.** :func:`_composed_unions` yields the
 `anyOf`/`oneOf` lists a node inherits through `$ref` and `allOf`, with a
@@ -81,14 +84,15 @@ resolves when one of the node's unconditional contributors declares it under
 and only a contradiction composition can PROVE is refused — a branch that is
 the boolean schema `false` (:func:`_reject_unsatisfiable_branch`) or `type`
 sets with an empty intersection (:func:`_refuse_disjoint_types`). The
-algorithm does not guess: the keywords in ``_CONDITIONAL_DECLARATION_KEYWORDS``,
-a schema-valued catch-all in ``_SCHEMA_VALUED_CATCHALL_KEYWORDS``, and a
-`$ref` that did not resolve may or may not declare a name depending on the
-instance, so a segment one of them might declare is reported as not
-statically resolvable, with the fix named, rather than picked from a branch.
+algorithm does not guess: the keywords in ``_CONDITIONAL_DECLARATION_KEYWORDS``
+and a schema-valued catch-all in ``_SCHEMA_VALUED_CATCHALL_KEYWORDS`` may or
+may not declare a name depending on the instance, and a `$ref` that did not
+resolve may declare anything; a segment one of them might declare is reported
+as not statically resolvable, with the fix named, rather than picked from a
+branch.
 That check runs ONLY after the segment was not found, which keeps resolution
 monotone: a node declaring `properties.next` beside a `oneOf` still resolves
-`next`. The one deliberate narrowing is the object gate
+`next`. A deliberate narrowing is the object gate
 (:func:`_composed_permits_object`): a node whose composed declaration
 excludes an object instance contributes no properties, so a name written
 under its `properties` is not found.
@@ -308,8 +312,9 @@ def resolve_schema_ref(root: Any, ref: str) -> Any:
     """Resolve an in-document `$ref` that lands on a SCHEMA, or ``_MISSING``.
 
     :func:`resolve_local_pointer` restricted to pointers that stay inside
-    schema positions — the ``JSON_SCHEMA_*_KEYS`` inventory: a map of schemas
-    (`$defs`, `properties`, …), a list of schemas, or one schema.
+    schema positions — a map of schemas (``JSON_SCHEMA_SUBSCHEMA_KEYS``), a list
+    of schemas (``JSON_SCHEMA_LIST_OF_SCHEMA_KEYS``) or one schema
+    (``JSON_SCHEMA_SINGLE_SCHEMA_KEYS``).
 
     Why the restriction is load-bearing: the walks that check an embedded
     schema position by position (in `analitiq.contracts.endpoints` and
@@ -504,8 +509,9 @@ def _composed_permits_object(
 ) -> bool:
     """Whether ``node``'s `properties` map describes fields an instance can
     actually carry — the gate `resolve_declared_path`/`effective_properties`
-    (via :func:`_property_contributors`) and :func:`materialize_node` (on the
-    finished node, at its own entry) both put in front of `properties`.
+    (via :func:`_property_contributors`) and :func:`materialize_node` (after
+    its fold returns, judging the node it was asked about) both put in front of
+    `properties`.
 
     JSON Schema applies `properties` only to object instances, so
     `{"type": "string", "properties": {"age": …}}` describes a string and
