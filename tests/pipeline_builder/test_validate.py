@@ -856,6 +856,62 @@ def test_bundle_connector_loop_crash_preserves_other_connector_identity(tmp_path
     assert "wise-live" in bundle["connectors"], bundle["connectors"]
 
 
+def test_connector_endpoint_sets_directory_probe_crash_isolated_to_one_connector(tmp_path, monkeypatch):
+    # the is_dir() probe is inside the per-connector guard, not before it — a
+    # crash there must cost only that connector's endpoint set, not every
+    # connector processed after it in the same loop, and not (by extension)
+    # every other connector's connector-endpoint-ref check
+    doc = _build_bundle(tmp_path)
+    _add_wise_endpoint(tmp_path, "transfers")
+    # give postgresql a downloaded connector endpoint set too, so its
+    # directory is actually globbed and its is_dir() probe actually runs
+    _write(tmp_path, "connectors/postgresql/definition/endpoints/realid.json", {"endpoint_id": "realid"})
+    stream_path = tmp_path / "pipelines/p/streams/orders.json"
+    stream = json.loads(stream_path.read_text())
+    stream["source"]["endpoint_ref"]["endpoint_id"] = "transferz"  # typo -> warning if wise's set survives
+    stream_path.write_text(json.dumps(stream))
+
+    original_is_dir = Path.is_dir
+
+    def boom(self):
+        if self.parent.parent.name == "postgresql":
+            raise TypeError("simulated crash")
+        return original_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", boom)
+    diag = V.diagnostics_for("pipeline", doc, bundle_root=tmp_path)
+    validators = [f["validator"] for f in diag["findings"]]
+    assert "adapter-crash" in validators, diag["findings"]
+    # wise, sorted after postgresql, still gets its endpoint set built and warns
+    assert any(f["validator"] == "connector-endpoint-ref" and "transfers" in f["message"]
+               for f in diag["findings"]), diag["findings"]
+
+
+def test_bundle_connections_section_crash_preserves_streams_and_reaches_connectors(tmp_path, monkeypatch):
+    # a failure enumerating the connections/ directory itself (not a single
+    # connection's own read) must not abort _assemble_bundle before it can
+    # return what the streams section already decided, nor before the
+    # connectors section gets its own turn afterward
+    doc = _build_bundle(tmp_path)
+
+    original_glob = Path.glob
+
+    def boom(self, pattern):
+        if self.name == "connections" and pattern == "*/connection.json":
+            raise TypeError("simulated crash")
+        return original_glob(self, pattern)
+
+    monkeypatch.setattr(Path, "glob", boom)
+    pipeline_doc = json.loads(doc.read_text())
+    bundle, findings, complete, crashed = V._assemble_bundle(pipeline_doc, doc, tmp_path)
+    assert not complete
+    assert crashed
+    crash = [f for f in findings if f["validator"] == "adapter-crash" and f["path"] == "connections"]
+    assert crash, findings
+    assert bundle["streams"], bundle["streams"]  # the earlier section's result survived
+    assert bundle["connectors"], bundle["connectors"]  # the later section still ran
+
+
 def test_bundle_pipeline_validator_crash_preserves_other_unit_result(tmp_path, monkeypatch):
     # the "pipeline" guarded unit (validate_pipeline_bundle) is not the only
     # unit _bundle_findings decides — a crash in it must not discard the

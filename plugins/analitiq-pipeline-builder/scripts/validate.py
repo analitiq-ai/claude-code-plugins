@@ -310,80 +310,96 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     complete = True
     crashed = False
 
+    # Each section below is wrapped in its own outer guard too, not just each
+    # item within it: `sorted(...glob(...))` itself materializes the whole
+    # listing before the loop even starts, so a filesystem failure enumerating
+    # it (a vanished directory, a permission error) would otherwise escape
+    # every per-item guard and abort this whole function before it could
+    # return what earlier sections already decided.
+
     streams: list[dict] = []
-    for p in sorted((document_path.parent / "streams").glob("*.json")):
-        # One stream is one independently-decidable unit, same as one connection
-        # or one connector below: a crash reading it (e.g. a pathologically deep
-        # document) must not discard the streams already appended above.
-        doc = None
-        with _contained(findings, f"streams/{p.name}") as outcome:
-            doc = _read_bundle_member(p, findings)
-            if doc is not None:
-                streams.append(doc)
-        if outcome.crashed:
-            crashed = True
-        if outcome.crashed or doc is None:
-            complete = False
+    with _contained(findings, "streams") as section:
+        for p in sorted((document_path.parent / "streams").glob("*.json")):
+            # One stream is one independently-decidable unit, same as one
+            # connection or one connector below: a crash reading it (e.g. a
+            # pathologically deep document) must not discard the streams
+            # already appended above.
+            doc = None
+            with _contained(findings, f"streams/{p.name}") as outcome:
+                doc = _read_bundle_member(p, findings)
+                if doc is not None:
+                    streams.append(doc)
+            if outcome.crashed:
+                crashed = True
+            if outcome.crashed or doc is None:
+                complete = False
+    if section.crashed:
+        crashed = True
+        complete = False
 
     connections: list[dict] = []
     endpoints: list[dict] = []
-    for conn_json in sorted((root / "connections").glob("*/connection.json")):
-        # One connection is one independently-decidable unit: a crash processing
-        # it must not discard the findings already decided for connections
-        # processed earlier in this same loop. Reading the connection is the
-        # part that can exclude a bundle member, so only a crash here (or one
-        # from a per-endpoint guard below, which reports through its own site)
-        # marks assembly incomplete.
-        conn = None
-        with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
-            conn = _read_bundle_member(conn_json, findings)
-            if conn is not None:
-                connections.append(conn)
-                connection_id = conn.get("connection_id")
-                for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
-                    # One endpoint is its own independently-decidable unit, same
-                    # as one stream or connection above: a crash reading it
-                    # (e.g. a pathologically deep document) must not abort the
-                    # loop and cost its siblings their place in the bundle —
-                    # each gets its own guard rather than sharing the
-                    # connection-level one above.
-                    ep_site = f"connections/{conn_json.parent.name}/definition/endpoints/{ep_json.name}"
-                    endpoint = None
-                    with _contained(findings, ep_site) as ep_outcome:
-                        endpoint = _read_bundle_member(ep_json, findings)
-                    if ep_outcome.crashed:
-                        crashed = True
-                    if ep_outcome.crashed or endpoint is None:
-                        complete = False
-                        continue
-                    # Endpoint documents omit connection_id (server-managed); supply the
-                    # owning connection's id so the bundle's endpoint-ref check can resolve
-                    # connection-scoped references.
-                    endpoint.setdefault("connection_id", connection_id)
-                    endpoint.setdefault("scope", "connection")
-                    endpoints.append(endpoint)
-                    # files here are stem-addressed by construction (globbed from
-                    # definition/endpoints/), so the published filename gate applies
-                    # directly. The gate is its own guard too, run LAST: the
-                    # endpoint is already in the bundle by this point, so a crash
-                    # here costs only this one finding, not the bundle's completeness.
-                    with _contained(findings, ep_site):
-                        findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
-        if outcome.crashed:
-            crashed = True
-        if outcome.crashed or conn is None:
-            complete = False
-        # Connection-scoped type maps are files the engine loads beside the
-        # connection, invisible to the assembled-document bundle, and depend
-        # only on conn_json.parent — never on whether connection.json itself
-        # parsed — so they are checked unconditionally: a crash inside is
-        # contained per-direction by _connection_type_map_findings itself, so
-        # this outer guard is a backstop, never costs the bundle's completeness
-        # (which would otherwise misreport a live connection as unresolved),
-        # and a genuinely malformed or legacy type-map file is still reported
-        # even when connection.json itself is unreadable.
-        with _contained(findings, f"connections/{conn_json.parent.name}"):
-            _connection_type_map_findings(conn_json.parent, findings)
+    with _contained(findings, "connections") as section:
+        for conn_json in sorted((root / "connections").glob("*/connection.json")):
+            # One connection is one independently-decidable unit: a crash
+            # processing it must not discard the findings already decided for
+            # connections processed earlier in this same loop. Reading the
+            # connection is the part that can exclude a bundle member, so only
+            # a crash here (or one from a per-endpoint guard below, which
+            # reports through its own site) marks assembly incomplete.
+            conn = None
+            with _contained(findings, f"connections/{conn_json.parent.name}") as outcome:
+                conn = _read_bundle_member(conn_json, findings)
+                if conn is not None:
+                    connections.append(conn)
+                    connection_id = conn.get("connection_id")
+                    for ep_json in sorted((conn_json.parent / "definition" / "endpoints").glob("*.json")):
+                        # One endpoint is its own independently-decidable unit, same
+                        # as one stream or connection above: a crash reading it
+                        # (e.g. a pathologically deep document) must not abort the
+                        # loop and cost its siblings their place in the bundle —
+                        # each gets its own guard rather than sharing the
+                        # connection-level one above.
+                        ep_site = f"connections/{conn_json.parent.name}/definition/endpoints/{ep_json.name}"
+                        endpoint = None
+                        with _contained(findings, ep_site) as ep_outcome:
+                            endpoint = _read_bundle_member(ep_json, findings)
+                        if ep_outcome.crashed:
+                            crashed = True
+                        if ep_outcome.crashed or endpoint is None:
+                            complete = False
+                            continue
+                        # Endpoint documents omit connection_id (server-managed); supply the
+                        # owning connection's id so the bundle's endpoint-ref check can resolve
+                        # connection-scoped references.
+                        endpoint.setdefault("connection_id", connection_id)
+                        endpoint.setdefault("scope", "connection")
+                        endpoints.append(endpoint)
+                        # files here are stem-addressed by construction (globbed from
+                        # definition/endpoints/), so the published filename gate applies
+                        # directly. The gate is its own guard too, run LAST: the
+                        # endpoint is already in the bundle by this point, so a crash
+                        # here costs only this one finding, not the bundle's completeness.
+                        with _contained(findings, ep_site):
+                            findings.extend(endpoint_filename_findings(endpoint, ep_json.name))
+            if outcome.crashed:
+                crashed = True
+            if outcome.crashed or conn is None:
+                complete = False
+            # Connection-scoped type maps are files the engine loads beside the
+            # connection, invisible to the assembled-document bundle, and depend
+            # only on conn_json.parent — never on whether connection.json itself
+            # parsed — so they are checked unconditionally: a crash inside is
+            # contained per-direction by _connection_type_map_findings itself, so
+            # this outer guard is a backstop, never costs the bundle's completeness
+            # (which would otherwise misreport a live connection as unresolved),
+            # and a genuinely malformed or legacy type-map file is still reported
+            # even when connection.json itself is unreadable.
+            with _contained(findings, f"connections/{conn_json.parent.name}"):
+                _connection_type_map_findings(conn_json.parent, findings)
+    if section.crashed:
+        crashed = True
+        complete = False
 
     # Connectors supply identity only, and the directory slug already is that
     # identity — so a malformed connector.json is best-effort skipped (its slug
@@ -393,18 +409,22 @@ def _assemble_bundle(pipeline_doc: dict, document_path: Path,
     # recorded) — but a connection naming that id rather than the slug would
     # then wrongly read as unresolved, so it still marks the bundle incomplete.
     connectors: set[str] = set()
-    for conn_json in sorted((root / "connectors").glob("*/definition/connector.json")):
-        connectors.add(conn_json.parent.parent.name)  # directory slug
-        with _contained(findings, f"connectors/{conn_json.parent.parent.name}") as outcome:
-            try:
-                cid = _read_json(conn_json).get("connector_id")
-            except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
-                cid = None
-            if isinstance(cid, str) and cid:
-                connectors.add(cid)
-        if outcome.crashed:
-            crashed = True
-            complete = False
+    with _contained(findings, "connectors") as section:
+        for conn_json in sorted((root / "connectors").glob("*/definition/connector.json")):
+            connectors.add(conn_json.parent.parent.name)  # directory slug
+            with _contained(findings, f"connectors/{conn_json.parent.parent.name}") as outcome:
+                try:
+                    cid = _read_json(conn_json).get("connector_id")
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+                    cid = None
+                if isinstance(cid, str) and cid:
+                    connectors.add(cid)
+            if outcome.crashed:
+                crashed = True
+                complete = False
+    if section.crashed:
+        crashed = True
+        complete = False
 
     bundle = {
         "pipeline": pipeline_doc,
@@ -433,10 +453,10 @@ def _connector_endpoint_sets(root: Path, findings: list[dict]) -> dict[str, set[
     only that connector's set, never every other connector's)."""
     sets: dict[str, set[str]] = {}
     for ep_dir in sorted(root.glob("connectors/*/definition/endpoints")):
-        if not ep_dir.is_dir():
-            continue
         slug_dir = ep_dir.parent.parent  # connectors/<slug>
         with _contained(findings, f"connectors/{slug_dir.name}/definition/endpoints"):
+            if not ep_dir.is_dir():
+                continue
             ids: set[str] = set()
             for ep_json in sorted(ep_dir.glob("*.json")):
                 ids.add(ep_json.stem)
