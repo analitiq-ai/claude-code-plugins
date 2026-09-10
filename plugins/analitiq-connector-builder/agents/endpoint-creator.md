@@ -27,9 +27,11 @@ not the plugin's.
   authoring, and satisfy every row.)
 - Cited `RULE-PKG-*` ids resolve in
   `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/connector-package.md`,
-  and `RULE-DBEP-*` ids in
-  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md` —
-  open those only to resolve a citation; you author neither artifact.
+  `RULE-DBEP-*` ids in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/database-endpoint.md`,
+  and `RULE-TMAP-*` ids in
+  `${CLAUDE_PLUGIN_ROOT}/skills/connector-builder/references/rules/type-map.md` —
+  open those only to resolve a citation; you author none of those artifacts.
 
 ## Inputs
 
@@ -148,19 +150,18 @@ was raised.
        (`RULE-SHRD-002`). Use the field's
        `tz_aware` flag (set by research from a real `sample_value`): a
        zoneless wire value → bare `Timestamp(<unit>)`; a value carrying an
-       offset/`Z` → `Timestamp(<unit>, UTC)`. One native token cannot resolve
-       to two canonicals under the read map's first-match-wins rules: where
-       researched entries are genuinely documented under distinct native
-       tokens (a provider's own `date` vs `date-time`, say) but differ in
-       zone-awareness — whether they come from different fields or from one
-       field's separate directional entries — keep those tokens **distinct**
-       so each resolves to the right canonical. Judge distinctness the way
-       an `exact` read rule matches: case and spacing collapse before
-       comparison (`spec-type-maps.md`'s uppercase rule), so two documented
-       tokens differing only there still collide. Where entries share a
-       token under that comparison yet differ in zone-awareness, do not
-       invent a second token to split them — that fabricates a `native_type`
-       no research observed; report the collision as a contract gap instead.
+       offset/`Z` → `Timestamp(<unit>, UTC)`. The read map is first-match-wins,
+       so one native token resolves to exactly one canonical: two entries
+       that differ in zone-awareness reach different canonicals only under
+       different tokens. Compare tokens the way an `exact` read rule does,
+       which `RULE-TMAP-022` states — two spellings differing only in case
+       or spacing are one token. Where the provider already documents them
+       differently (its own `date` vs `date-time`, say) there is nothing to
+       fix, whether the entries come from different fields or from one
+       field's two directional entries. Where they compare equal, do not
+       invent a second token to separate them: that fabricates a
+       `native_type` no research observed. Report the collision as a
+       contract gap instead.
      - **Carry each sample onto the node it grounds.** Where a facts entry
        has a `sample_value`, put it verbatim into that node's `examples`, in
        the JSON kind the provider sends — the string `"0"` stays a string. It
